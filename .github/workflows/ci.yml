@@ -103,6 +103,15 @@ jobs:
           name: clean-setup-linux
           path: target/clean-setup-linux.json
           if-no-files-found: warn
+      - name: Compare Agent status with independent MCP witnesses
+        run: python3 scripts/verify-sou18-status.py --run --repo . --agentfw target/debug/agentfw --expected-commit "${{ github.sha }}" --output "${{ runner.temp }}/sou18-status"
+      - name: Retain initial status and MCP evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou18-status-linux
+          path: ${{ runner.temp }}/sou18-status/results.json
+          if-no-files-found: warn
       - name: Run isolated Gateway binary acceptance
         run: python3 scripts/self-hosted-local-acceptance.py --gateway target/debug/llm-firewall --artifact-label "$GITHUB_SHA" --out target/local-gateway-evidence.json
       - name: Retain isolated Gateway acceptance evidence
@@ -171,6 +180,15 @@ jobs:
           name: clean-setup-macos
           path: target/clean-setup-macos.json
           if-no-files-found: warn
+      - name: Compare Agent status with independent MCP witnesses
+        run: python3 scripts/verify-sou18-status.py --run --repo . --agentfw target/debug/agentfw --expected-commit "${{ github.sha }}" --output "${{ runner.temp }}/sou18-status"
+      - name: Retain initial status and MCP evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou18-status-macos
+          path: ${{ runner.temp }}/sou18-status/results.json
+          if-no-files-found: warn
 
   # The optional ML stack is not compiled by the default-feature job.
   all-features:
@@ -211,6 +229,15 @@ jobs:
         with:
           name: clean-setup-windows
           path: target/clean-setup-windows.json
+          if-no-files-found: warn
+      - name: Compare Agent status with independent MCP witnesses
+        run: python scripts/verify-sou18-status.py --run --repo . --agentfw target/debug/agentfw.exe --expected-commit "${{ github.sha }}" --output "${{ runner.temp }}/sou18-status"
+      - name: Retain initial status and MCP evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou18-status-windows
+          path: ${{ runner.temp }}/sou18-status/results.json
           if-no-files-found: warn
       - name: Disposable Windows Agent acceptance
         run: ./scripts/windows-agent-acceptance.ps1 -EvidencePath target/windows-agent-acceptance.json
