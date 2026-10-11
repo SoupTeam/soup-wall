@@ -56,14 +56,15 @@ def write_json(path: Path, record: dict) -> None:
     path.write_text(json.dumps(record, indent=2, allow_nan=False) + '\n', encoding='utf-8')
 
 
-def validate_dataset(record: dict) -> dict[str, list[dict]]:
-    if not isinstance(record, dict) or record.get('format') != 'soup-wall/classifier-dataset/1':
+def validate_dataset(record: dict, *, split_names=SPLITS,
+                     format_name='soup-wall/classifier-dataset/1') -> dict[str, list[dict]]:
+    if not isinstance(record, dict) or record.get('format') != format_name:
         raise ValueError('unsupported experimental dataset format')
     rows = record.get('cases')
     if not isinstance(rows, list) or not rows or len(rows) > 10000:
         raise ValueError('dataset must contain 1..10000 cases')
     ids, families, identities = set(), {}, {}
-    splits = {s: [] for s in SPLITS}
+    splits = {s: [] for s in split_names}
     for row in rows:
         required = {'id', 'family', 'split', 'input', 'labels'}
         if not isinstance(row, dict) or not required <= set(row) or set(row) - required - {'accepted_outputs'}:
@@ -71,7 +72,7 @@ def validate_dataset(record: dict) -> dict[str, list[dict]]:
         case_id, family, split = row['id'], row['family'], row['split']
         if not isinstance(case_id, str) or not case_id or case_id in ids:
             raise ValueError('case identifiers must be unique nonempty strings')
-        if not isinstance(family, str) or not family or split not in SPLITS:
+        if not isinstance(family, str) or not family or split not in split_names:
             raise ValueError('family and explicit split required')
         if family in families and families[family] != split:
             raise ValueError('tool family leaked across splits')
@@ -83,8 +84,8 @@ def validate_dataset(record: dict) -> dict[str, list[dict]]:
         ids.add(case_id)
         families[family], identities[identity] = split, split
         splits[split].append(row)
-    if any(not splits[s] for s in SPLITS):
-        raise ValueError('nonempty train, calibration and holdout splits required')
+    if any(not splits[s] for s in split_names):
+        raise ValueError('nonempty ' + ', '.join(split_names) + ' splits required')
     return splits
 
 
