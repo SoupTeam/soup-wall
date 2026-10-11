@@ -65,7 +65,8 @@ checkout.
 Reviewed aggregates and explanatory records are retained under
 [operation evidence](operations/evidence) and
 [benchmark evidence](benchmarks/evidence). Useful entry points include the
-[Claude Code stdio MCP proof](benchmarks/evidence/CLAUDE_MCP_STDIO_2026-10-05.md),
+[Claude Code stdio MCP proof (2026-10-05)](benchmarks/evidence/CLAUDE_MCP_STDIO_2026-10-05.md),
+[actual Claude Code host acceptance proof (2026-10-11, SOU-8)](benchmarks/evidence/CLAUDE_MCP_STDIO_2026-10-11.md),
 [native runtime checkpoint](benchmarks/evidence/agentdojo-native-fixture-2026-10-05.md),
 [Windows AWS-LC and Keycloak checkpoint](operations/evidence/SAML_PROVIDER_2026-10-06.md),
 [historical Keycloak checkpoint](operations/evidence/KEYCLOAK_SAML_2026-10-05.md) and

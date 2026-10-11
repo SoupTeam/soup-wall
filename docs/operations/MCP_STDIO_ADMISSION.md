@@ -557,14 +557,18 @@ loopback port.
 
 ```sh
 npm install --prefix target/claude-code @anthropic-ai/claude-code
+# With test double:
 python3 scripts/mcp-admission-demo.py
+# With real Task 1 rule baseline (SOU-8 intended-host acceptance):
+python3 scripts/mcp-admission-demo.py --classifier rule-baseline --out target/sou-22-real-baseline.json
 ```
 
 This mode also checks that executed frames carry Claude's own `tool_use` ids and
 original arguments and that the injected marker never appeared in any model
 request. It records the Claude Code version and observed call metadata keys. The
 daemon-outage case and per-call latency are scripted-only. MCP host release does
-not attest what a model later observes. The Windows actual-host check below
+not attest what a model later observes. See the [2026-10-11 actual host proof (SOU-8)](../benchmarks/evidence/CLAUDE_MCP_STDIO_2026-10-11.md)
+for the completed real-baseline acceptance run. The Windows actual-host check below
 remains the separate Windows evidence.
 
 ## Reproducible Claude Code check
@@ -611,4 +615,5 @@ Those require an operator-selected model, access and spend budget.
 
 The [2026-10-05 committed-source proof](../benchmarks/evidence/CLAUDE_MCP_STDIO_2026-10-05.md)
 records the actual matched control/protected pair, successful useful completion,
-preserved incomplete attempts and cleanup limits.
+preserved incomplete attempts and cleanup limits. The [2026-10-11 actual host proof (SOU-8)](../benchmarks/evidence/CLAUDE_MCP_STDIO_2026-10-11.md)
+records the completed real-baseline and actual Claude Code host acceptance run.
