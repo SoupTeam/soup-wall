@@ -49,6 +49,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [SOU-17 verification](benchmarks/sou17_verification.md) | Failure, overlap, replay and native witnesses; exact-source reproduction and code-scanning triage |
 | [Native admission](benchmarks/native-admission.md) | Installed tool semantics, invocation binding and result/context contracts |
 | [Corpus documentation](../crates/bench/corpora/README.md) | Versioned synthetic agent-session labels and provenance |
+| [SOU-13 family-held-out pilot](benchmarks/sou13/README.md) | Candidate CP1/CP2 source, public data-free checks, private validation procedure and acceptance status (no released data or gold labels) |
 
 ## Status and retained evidence
 

@@ -1,0 +1,18 @@
+# SOU-13 private artifacts. Source, schema and tests stay tracked; datasets, review
+# working files, sealed/custodian material and signatures are never committed here.
+# Scoped to eval/sou13/ (the root /data rule is anchored and does not reach this directory).
+/data/
+/review/
+/cp2/
+/cp2_sealed/
+/handoff/
+/RESTRICTED*/
+/docs/
+*.jsonl
+*.csv
+*.zip
+*.sig
+allowed_signers
+anchor*.json
+freeze_attempts.jsonl
+__pycache__/

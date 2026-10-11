@@ -3,3 +3,10 @@ models/**/*.bin filter=lfs diff=lfs merge=lfs -text
 
 # Preserve the pinned upstream package bytes on every platform.
 vendor/kryptering/** text eol=lf
+
+# SOU-13 sources are pinned by raw-byte SHA-256 (CP1 freeze, CP2 dev handoff): no platform conversion.
+eval/sou13/** text eol=lf
+# These three were frozen with CRLF line endings (one is raw-byte pinned): store their bytes verbatim.
+eval/sou13/schema/case.schema.cp1-fix1.json -text whitespace=cr-at-eol
+eval/sou13/schema/case.schema.json -text whitespace=cr-at-eol
+eval/sou13/sou13/cases.py -text whitespace=cr-at-eol

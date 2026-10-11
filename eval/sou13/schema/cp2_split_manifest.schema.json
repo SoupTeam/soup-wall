@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sou13-cp2-split-manifest",
+  "title": "SOU-13 CP2 family split manifest (DRAFT)",
+  "description": "Documentation schema. Enforcement: sou13cp2/splits.py manifest_errors (sha256, determinism against (taxonomy, salt, ratios), exposure policy, partition, not frozen).",
+  "type": "object",
+  "required": ["manifest_kind", "status", "frozen", "algorithm", "salt", "ratios", "exposure_policy", "taxonomy_sha256",
+               "contract", "groups", "family_split", "family_group", "alias_group_split", "template_split", "weights",
+               "split_summary", "labels_in_manifest", "manifest_sha256"],
+  "properties": {
+    "status": {"const": "DRAFT"},
+    "frozen": {"const": false, "description": "Freeze only after the full candidate dataset is built and validated."},
+    "algorithm": {"const": "cp2-family-split-v1"},
+    "labels_in_manifest": {"const": false},
+    "groups": {"type": "array", "items": {"type": "object",
+      "required": ["leakage_group_id", "families", "behavior_classes", "exposure", "allowed_splits", "weight", "hash_key", "split", "assignment_reason"]}},
+    "family_split": {"type": "object", "additionalProperties": {"enum": ["train", "validation", "calibration", "test"]}},
+    "manifest_sha256": {"type": "string", "description": "sha256 of the canonical JSON of every other key."}
+  }
+}

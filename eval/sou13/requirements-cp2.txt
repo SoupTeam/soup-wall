@@ -1,0 +1,2 @@
+# CP2 validation dependency (Draft 2020-12 JSON Schema); same version as the 2026-10-10 technical review
+jsonschema==4.25.1
