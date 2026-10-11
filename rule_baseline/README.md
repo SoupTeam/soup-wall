@@ -20,9 +20,20 @@ as data. The second command currently exits 1: the frozen core/challenge sets
 produce 49/55 scored matches, six classification mismatches and zero scored
 technical errors; three pending cases remain unscored. These synthetic fixtures
 are diagnostic regressions, not held-out accuracy or production security evidence.
-The historical labels are not changed to make the classifier pass. CI runs all
-54 unit regressions and the frozen core regression suite explicitly. Challenge
+The historical labels are not changed to make the classifier pass. CI runs every unit
+regression in this directory and the frozen core regression suite explicitly. Challenge
 mismatches remain recorded for review instead of being presented as passed cases.
+
+## Reply envelope (SOU-14, interface step)
+
+The semantic core is `actions` plus the independent Boolean `unknown`. Additional fields are
+descriptive and bounded: `evidence` (at most eight `{action, source, weight, detail}` rows that never
+echo argument values), `definition_estimate` (what the tool name and schema alone suggest, kept distinct
+from the invocation result) with `definition_invocation_diff`, flags, and `failure`. A technical failure
+is `status="error"` with `failure.code` of `classifier_invalid` or `classifier_internal_error`;
+`classifier_timeout` is raised by the daemon. It is never a valid unknown classification. The file stays a
+single stdlib-only source because the daemon executes one verified snapshot; it never imports siblings.
+Replies are bounded to 12 KiB and input lines to 1 MiB.
 
 ## Interface and remaining integration work
 
