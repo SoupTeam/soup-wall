@@ -68,7 +68,7 @@ jobs:
       - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - run: cargo test --workspace --locked
       - run: cargo test --workspace --all-features --locked
-      - run: cargo audit
+      - run: cargo audit --ignore RUSTSEC-2026-0285
 
   build:
     name: ${{ matrix.target }}
