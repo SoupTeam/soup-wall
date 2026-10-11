@@ -494,6 +494,8 @@ def _schema_violation(args: Any, schema: Any) -> bool:
     for key, value in args.items():
         declared = props.get(key)
         kind = declared.get("type") if isinstance(declared, dict) else None
+        if not isinstance(kind, str):
+            continue  # Union/composite types are outside this shallow diagnostic check.
         if kind in ("integer", "number"):
             if isinstance(value, bool) or not isinstance(value, (int, float)) or (kind == "integer" and isinstance(value, float) and not value.is_integer()):
                 return True
