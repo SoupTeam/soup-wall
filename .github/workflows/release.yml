@@ -68,7 +68,7 @@ jobs:
       - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - run: cargo test --workspace --locked
       - run: cargo test --workspace --all-features --locked
-      - run: cargo audit --ignore RUSTSEC-2026-0285
+      - run: cargo audit
 
   build:
     name: ${{ matrix.target }}
@@ -101,9 +101,9 @@ jobs:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
       - name: Verify SAML on the archive's target
-        run: cargo test --locked -p soup-wall --lib --target ${{ matrix.target }} saml_auth::tests
+        run: cargo test --locked --lib --target ${{ matrix.target }} saml_auth::tests
       - name: Build
-        run: cargo build --release --locked --target ${{ matrix.target }} -p agentfw -p soup-wall-bench -p soup-wall
+        run: cargo build --release --locked --target ${{ matrix.target }} -p agentfw -p soup-wall-bench
       - name: Stage (unix)
         if: runner.os != 'Windows'
         shell: bash
@@ -114,8 +114,8 @@ jobs:
           mkdir "$d"
           cp "target/${{ matrix.target }}/release/agentfw" "$d/"
           cp "target/${{ matrix.target }}/release/soup-wall-bench" "$d/"
-          cp "target/${{ matrix.target }}/release/soup-wall" "$d/"
-          cp "target/${{ matrix.target }}/release/soup-wall" "$d/soup-wall-gateway"
+          cp "target/${{ matrix.target }}/release/soup-wall-proxy" "$d/"
+          cp "target/${{ matrix.target }}/release/soup-wall-proxy" "$d/soup-wall-gateway"
           cp firewall.yaml "$d/"
           cp -R policies "$d/"
           cp LICENSE NOTICE README.md "$d/"
@@ -132,8 +132,8 @@ jobs:
           mkdir "$d"
           cp "target/${{ matrix.target }}/release/agentfw.exe" "$d/"
           cp "target/${{ matrix.target }}/release/soup-wall-bench.exe" "$d/"
-          cp "target/${{ matrix.target }}/release/soup-wall.exe" "$d/"
-          cp "target/${{ matrix.target }}/release/soup-wall.exe" "$d/soup-wall-gateway.exe"
+          cp "target/${{ matrix.target }}/release/soup-wall-proxy.exe" "$d/"
+          cp "target/${{ matrix.target }}/release/soup-wall-proxy.exe" "$d/soup-wall-gateway.exe"
           cp firewall.yaml "$d/"
           cp -R policies "$d/"
           cp LICENSE NOTICE README.md "$d/"
@@ -168,7 +168,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for package in soup-wall-core soup-wall-agent agentfw soup-wall-adapter soup-wall-bench soup-wall; do
+          for package in soup-wall-core soup-wall-agent agentfw soup-wall-adapter soup-wall-bench soup-wall-proxy; do
             test "$(find . -name "$package.cdx.json" | wc -l)" -eq 1 || {
               echo "missing or duplicate SBOM for $package" >&2
               exit 1
