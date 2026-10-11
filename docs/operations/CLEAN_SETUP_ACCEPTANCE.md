@@ -1,9 +1,12 @@
 # Clean setup, status and scanning preparation
 
-This procedure implements the independent preparation for
+This procedure implements independent preparation and bounded initial-path verification for
 [SOU-18](https://linear.app/soup-wall/issue/SOU-18/task-12-verify-clean-setup-and-actual-active-protection-status)
 (F02, U01, U04 and F06/L02). It reuses the existing Agent and fixture build.
 It does not introduce another classifier, MCP harness or admission contract.
+
+See the dated [initial-path results](evidence/SOU18_INITIAL_PATH_2026-10-11.md)
+for the measured candidate, platform limits and remaining administrator work.
 
 ## Disposable installation and status checks
 
@@ -91,29 +94,94 @@ it executes the staged binary there. The normal fixture baseline is unchanged.
 
 Existing Linux, macOS and Windows CI jobs also run the setup script and retain
 separate artifacts. Their addition is not evidence that those jobs passed.
-The accepted OS/architecture matrix remains owned by SOU-10; record every
-missing target as unverified rather than expanding coverage from a container pass.
+Use the reviewed [SOU-10 support matrix](../../contract/updated_contract2.md).
+Record every missing target as unverified rather than expanding coverage from a
+container pass. Linux container evidence and native OS evidence remain separate.
+
+### Compare status with actual MCP execution
+
+The [status witness probe](../../scripts/verify-sou18-status.py) reuses the
+accepted demonstration server, production collector and real rule baseline.
+It requires a clean, exact candidate checkout and its separately built Agent.
+Keep the build command, lockfile/toolchain and matching binary hash as provenance.
+The output must be a new directory outside that checkout; the probe reserves it
+before starting fixtures. With no `--run`, it starts no processes.
+
+```sh
+CANDIDATE_DIR=/absolute/path/to/clean/candidate
+CANDIDATE_SHA=$(git -C "$CANDIDATE_DIR" rev-parse HEAD)
+python3 scripts/verify-sou18-status.py --run \
+  --repo "$CANDIDATE_DIR" --agentfw "$CANDIDATE_DIR/target/debug/agentfw" \
+  --expected-commit "$CANDIDATE_SHA" \
+  --output /absolute/path/outside/candidate/new-status-run
+```
+
+On Windows use `python`, the `.exe` binary and an explicit checkout SHA. The
+Linux, macOS and Windows CI jobs supply their actual checkout SHA and retain
+`sou18-status-*` JSON artifacts, including failures. Read their recorded platform
+and outcome before claiming native coverage.
+
+| State / case | Independent requirement |
+| --- | --- |
+| Enforcing, benign read | Preflight exit 0; exactly one original executor frame; original useful result and ID delivered |
+| Enforcing, Deny or Ask | Preflight exit 0; correlated policy refusal; zero executor frames and receiver deliveries |
+| Enforcing, result withheld | Tool executes once; the server produces the marker; the client receives a refusal without it |
+| Daemon stopped | Preflight exit 2; existing collector refuses; no new execution or result |
+| Daemon recovered | Preflight exit 0; a fresh session executes a useful read and delivers the original result |
+| Shadow daemon | Preflight exit 4; native collector refuses; no execution or result |
+
+Native registry configuration requires enforcement. The shadow case therefore
+uses a valid shadow configuration with native admission disabled. It does not
+claim a native enforcing session can operate in shadow mode. The final ledger
+is reconciled after the collectors stop; the original inventory file and empty
+receiver are checked independently. Owned temporary profiles and processes are
+removed, including on ordinary failures. Forced termination can still require
+manual cleanup of the owned OS-temporary `sou18-status-*` directory.
+
+Results bind source before/after, binary, classifier, fixture, schema, policy,
+profile and configuration hashes. The recorded frames contain only synthetic
+local data, and fixture credentials must not appear in retained JSON.
+`initial_path_verified` covers only these seven cases. Generic SOU-15 acceptance
+stays pending; actual Claude/Codex and arbitrary servers are not certified.
+Exit 0 means the bounded probe passed, 1 means a witness mismatch, and 2 means
+incomplete evidence or an invalid run request.
+
+`install_and_daemon_ready_ms` and `install_and_mcp_connect_ms` measure installation
+of the supplied binary into a disposable profile through daemon readiness and
+MCP discovery respectively. They exclude source compilation, downloads and
+system-wide installation. Retain build duration separately, with cache state.
+Per-case request times are individual observations, not warm percentiles.
+
+For warm overhead, reuse the [paired SOU-17 measurement](../../scripts/measure-sou17-latency.py)
+on the same clean candidate and binary (native Linux/macOS):
+
+```sh
+python3 "$CANDIDATE_DIR/scripts/measure-sou17-latency.py" \
+  --repo "$CANDIDATE_DIR" --agentfw "$CANDIDATE_DIR/target/debug/agentfw" \
+  --expected-commit "$CANDIDATE_SHA" --pairs 30 \
+  --output /absolute/path/outside/candidate/new-latency-run
+```
+
+It excludes one warmup pair and compares identical useful reads in persistent
+direct/protected sessions. Preserve raw pairs and p50/p95, not just averages.
+Its direct server is an unprotected measurement control. Windows latency is
+explicitly unsupported by that POSIX probe; do not substitute CLI timings.
 
 ### What still requires the integrated candidate
 
-The script always reports `protection_verified=false`. Daemon posture alone
+The disposable installation script always reports `protection_verified=false`. Daemon posture alone
 cannot establish that any host call was protected. The HTTP hook can fail open;
 direct MCP server launches bypass native admission. See
 [the existing MCP boundary](MCP_STDIO_ADMISSION.md).
 
-Use the reviewed initial harness and the same pinned SOU-15 candidate as SOU-17
-for the remaining acceptance. Record actual binary/config/policy/classifier/profile
-revisions and the supported host, transport, schemas and result content.
-Compare displayed posture with independent server/file/receiver observations:
-Allow executes and returns a checked result; Deny/Ask do not execute; daemon
-loss does not forward a protected call; recovery allows a fresh valid call.
-Track execution and result release separately. List direct unprotected paths.
-Run the existing real-Claude acceptance separately when available.
-
-For MCP overhead, warm the same supported call and measure direct versus
-protected execution on declared hardware with the same inputs. Preserve sample
-counts, raw durations, p50/p95 and failures. Set limits from the reviewed SOU-10
-protocol. Do not substitute the preflight timings above for this measurement.
+The seven-case probe verifies the accepted initial path. Repeat it and the
+paired measurement on the same final SOU-15 candidate used by SOU-17, and review
+the generic action/resource matrix separately. A selected-fixture pass does not
+resolve unsupported resource execution or unknown/mixed mappings. Record the
+supported host, transport, schemas, result content and unprotected paths for that
+candidate. Run the existing real-Claude acceptance separately when available.
+Any numeric performance gate must come from an accepted team protocol; the
+current measurement does not invent one.
 
 ## Read-only GitHub scanning audit
 
@@ -186,7 +254,8 @@ including `not_run`; conversion never runs those cases or changes GitHub setting
 
 ### Administrator configuration and live gate evidence
 
-Coordinate with @winux125; @manettibenetti coordinates PR review. The
+Coordinate repository settings with @winux125 and follow the current SOU-18
+implementation review requirements. The
 [disabled ruleset example](../../deploy/github-code-scanning-ruleset.example.json)
 targets `main`, requires CodeQL, High-or-higher security alerts and error-level
 alerts. It is an additive example, not a replacement for existing review/status
