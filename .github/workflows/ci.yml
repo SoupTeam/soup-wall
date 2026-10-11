@@ -39,6 +39,24 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install Linux sandbox runtime
         run: sudo apt-get update && sudo apt-get install --no-install-recommends -y bubblewrap
+      - name: Retain focused provenance-overflow regressions
+        run: |
+          set -o pipefail
+          mkdir -p target/provenance-overflow
+          {
+            git rev-parse HEAD
+            rustc --version
+            cargo test --locked -p soup-wall-agent incomplete_marker -- --nocapture
+            cargo test --locked -p soup-wall-agent zero_capacity_marks -- --nocapture
+            cargo test --locked -p soup-wall-agent --test provenance_overflow -- --nocapture
+          } 2>&1 | tee target/provenance-overflow/results.log
+      - name: Upload focused provenance-overflow evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: provenance-overflow
+          path: target/provenance-overflow/results.log
+          if-no-files-found: error
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
