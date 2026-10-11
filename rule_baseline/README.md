@@ -33,7 +33,9 @@ from the invocation result) with `definition_invocation_diff`, flags, and `failu
 is `status="error"` with `failure.code` of `classifier_invalid` or `classifier_internal_error`;
 `classifier_timeout` is raised by the daemon. It is never a valid unknown classification. The file stays a
 single stdlib-only source because the daemon executes one verified snapshot; it never imports siblings.
-Replies are bounded to 12 KiB and input lines to 1 MiB.
+Replies are bounded to 12 KiB. UTF-8 JSON input is bounded to 1 MiB excluding the newline;
+invalid UTF-8 is a technical failure. An oversized or malformed frame is refused and the next
+frame can still be processed.
 
 ## Interface and remaining integration work
 

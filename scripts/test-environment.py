@@ -28,12 +28,17 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 SUITES = (
     ("soup-wall-agent", "scenarios"),
+    ("soup-wall-adapter", "enforcement_pipeline"),
+    ("soup-wall-adapter", "resilience_tests"),
+    ("soup-wall-adapter", "schema_validation"),
+    ("soup-wall-adapter", "attack_scenarios"),
     ("agentfw", "mcp_admission"),
     ("agentfw", "native_endpoint"),
     ("agentfw", "judge_endpoint"),
 )
 LIMITATIONS = [
-    "Existing custom-policy/local fixtures only; no agreed new ToolCallEvent integration yet.",
+    "Shared adapter runner diagnostics and native/MCP fixtures are separate test surfaces.",
+    "attack_results.json uses baseline_stub; real-classifier quality requires the separate Task 1 evaluation.",
     "Judge failures use deterministic HTTP mocks, not a trained/live classifier.",
     "No external model calls, model weights, GPU or provider credentials.",
     "MCP call execution is witnessed by the fixture server ledger; result release by client stdout.",
@@ -95,7 +100,7 @@ def classify_test(result, output):
     label, passed, failed, ignored = summaries[0]
     passed, failed, ignored = int(passed), int(failed), int(ignored)
     if passed + failed + ignored != 1:
-        return "error"  # An empty/misfiltered invocation is never a pass.
+        return "error"
     if ignored == 1 or re.search(r"(?im)(?:^|\.\.\.\s)(?:skipping\b|SKIP:)", output):
         return "skip" if result["exit_code"] == 0 else "error"
     if result["exit_code"] == 0 and label == "ok" and passed == 1:
@@ -254,8 +259,6 @@ def host_environment():
               "host_python": platform.python_version(), "host_kernel": kernel,
               "wsl_detected": wsl}
     if wsl:
-        # Detection is not proof of WSL generation; record `wsl --list --verbose`
-        # separately on Windows. Do not collect the rest of the host environment.
         result["wsl_distribution"] = os.environ.get("WSL_DISTRO_NAME", "unknown")
     return result
 
@@ -316,7 +319,6 @@ def host_run(args):
         report["environment"].update(image_id=image, network="none", cpus=2, memory="2g",
                                       readonly_root=True, capabilities="none")
         container_attempted = True
-        # Only the fresh output directory is mounted. No source, profile, tokens or Docker socket.
         run = command(["docker", "run", "--name", name, "--platform", selected,
                        "--network=none", "--read-only", "--cap-drop=ALL",
                        "--security-opt=no-new-privileges:true", "--pids-limit=256",
@@ -366,7 +368,6 @@ def host_run(args):
                   file=sys.stderr, flush=True)
             log = out / str(case.get("log", ""))
             if log.parent.resolve() == out.resolve() and log.is_file():
-                # These are owned synthetic fixture logs, already retained in CI artifacts.
                 print("\n".join(log.read_text(encoding="utf-8", errors="replace")[-8192:].splitlines()[-24:]),
                       file=sys.stderr, flush=True)
     if report.get("error"):

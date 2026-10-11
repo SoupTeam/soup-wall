@@ -581,19 +581,22 @@ def classify(event: Any) -> dict[str, Any]:
 
 
 def main() -> int:
+    # The daemon's limit applies to UTF-8 JSON bytes, excluding the line delimiter.
+    stream = sys.stdin.buffer
     while True:
-        line = sys.stdin.readline(MAX_INPUT_BYTES + 1)
+        line = stream.readline(MAX_INPUT_BYTES + 2)
         if not line:
             return 0
-        if len(line) > MAX_INPUT_BYTES and not line.endswith("\n"):
-            while line and not line.endswith("\n"):  # drain the rest of the oversized line
-                line = sys.stdin.readline(MAX_INPUT_BYTES)
+        payload = line[:-1] if line.endswith(b"\n") else line
+        if len(payload) > MAX_INPUT_BYTES:
+            while line and not line.endswith(b"\n"):  # drain the oversized frame
+                line = stream.readline(MAX_INPUT_BYTES + 2)
             result = _error("invalid_input: input line exceeds the size limit")
-        elif line.strip():
+        elif payload.strip():
             try:
-                result = classify(json.loads(line))
-            except (ValueError, RecursionError):
-                result = _error("invalid_input: not valid JSON")
+                result = classify(json.loads(payload.decode("utf-8")))
+            except (ValueError, UnicodeError, RecursionError):
+                result = _error("invalid_input: not valid UTF-8 JSON")
         else:
             continue
         print(json.dumps(result, ensure_ascii=False))

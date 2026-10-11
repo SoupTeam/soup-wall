@@ -46,6 +46,62 @@ The Gateway inspects request and response traffic and applies its text policy. A
 
 The Console does not currently distribute Agent policy automatically. `soup-wall-adapter` defines a versioned contract for that integration, and the [roadmap](ROADMAP.md) tracks the work. Keep Agent and Gateway policies explicit until a tested rollout path exists.
 
+## Incomplete session provenance
+
+The [taint tracker](../crates/agent/src/taint.rs) retains at most `cap`
+fingerprint entries and `cap` distinctive URL/path entries per active session,
+with independently bounded FIFO queues. Eviction from either index sets a
+sticky `incomplete` boolean. With `cap = 0`, any recorded untrusted input sets
+it immediately, including input too short to fingerprint. Trusted input does
+not set or clear it. This marker adds one boolean per session, with no discarded
+text, fabricated source, eviction list or growing counter. Existing retained
+literal/provenance string sizes and the number of active sessions are not a
+global byte bound; hosts must bound input sizes and close ended sessions.
+
+`TaintTracker::is_incomplete`, `AgentFirewall::provenance_incomplete`,
+`Signals::provenance_incomplete` and `Outcome::provenance_incomplete` expose
+the state. `check()` still reports only retained, matching evidence; `None`
+does not establish clean provenance. `is_empty()` is false while history is
+incomplete, even with zero retained entries. This does not claim perfect
+provenance below capacity: existing extraction/fingerprint limits remain.
+
+After ordinary policy evaluation, incomplete history imposes an **Ask floor**
+on tool calls classified at least `SideEffecting` (including Network,
+PrivilegeChanging and Destructive) or touching a sensitive path, even if
+classified ReadOnly. Allow and Escalate become Ask, with no judge fallback and
+reason `taint-history-incomplete`; an existing Ask or hard Deny keeps its
+original verdict and reason. A retained mark can still trigger a stronger Deny.
+The floor applies to both normal and native inspection, including custom Allow
+policies. It does not synthesize a taint source for discarded evidence. Ordinary
+nonsensitive ReadOnly calls and unrelated sessions keep their policy behavior.
+
+An Ask is not an execution grant: consumers retain their existing confirmation
+and enforcement requirements. Confirming one action does not clear the marker.
+Native result preview does not record withheld content; admitting an untrusted
+result does. A repeated SessionStart on the same active session does not reset
+history. SessionEnd deletes that session's evidence and marker; a new session
+starts empty. A safe reset requires the host to discard the old model context,
+pending calls and derived plans before ending it and starting a fresh session.
+Renaming a session, restarting a daemon or emitting SessionEnd while reusing the
+old context is not a safe reset. This component cannot attest host context disposal.
+
+### Focused reproduction
+
+```sh
+cargo test --locked -p soup-wall-agent incomplete_marker -- --nocapture
+cargo test --locked -p soup-wall-agent zero_capacity_marks -- --nocapture
+cargo test --locked -p soup-wall-agent --test provenance_overflow -- --nocapture
+cargo test --locked -p soup-wall-agent
+```
+
+The [synthetic regressions](../crates/agent/tests/provenance_overflow.rs) cover
+early prose/URL/path reuse after eviction, zero capacity, benign below-capacity
+work, unaffected peer sessions, trusted input, duplicate starts, end/new-session
+behavior, withheld/admitted native results and hard-Deny/judge precedence.
+Tracker unit tests assert both map and queue bounds through repeated overflow.
+These are component checks, not certification of the complete Phase 2 runtime.
+The existing CI test job retains the focused test log as an artifact.
+
 ## Where to work next
 
 Add a detector in `crates/core`, an agent decision rule in `crates/agent`, or a provider adapter in `crates/proxy`. For every enforcement change, add a test for the unsafe action and a benign case that should still succeed. Run the [full workspace checks](../CONTRIBUTING.md) and the relevant policy regression corpus before changing a default.

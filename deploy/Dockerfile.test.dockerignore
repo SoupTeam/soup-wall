@@ -1,5 +1,3 @@
-# This Dockerfile-specific allowlist retains fixture sources omitted by the
-# production .dockerignore. No Git metadata, home directories or model assets.
 **
 !Cargo.toml
 !Cargo.lock
@@ -17,6 +15,11 @@
 !crates/agent/policies/agent-default.yaml
 !crates/agent/tests/
 !crates/agent/tests/scenarios.rs
+!crates/adapter/tests/
+!crates/adapter/tests/enforcement_pipeline.rs
+!crates/adapter/tests/resilience_tests.rs
+!crates/adapter/tests/schema_validation.rs
+!crates/adapter/tests/attack_scenarios.rs
 !crates/agentfw/tests/
 !crates/agentfw/tests/mcp_admission.rs
 !crates/agentfw/tests/native_endpoint.rs

@@ -21,9 +21,10 @@ BOOTSTRAP = (
 )
 
 
-def run_script(stdin: str) -> list:
+def run_script(stdin: str | bytes) -> list:
     out = subprocess.run([sys.executable, "-I", "-u", "-c", BOOTSTRAP, os.path.join(HERE, "rule_baseline.py")],
-                         input=stdin, capture_output=True, text=True, timeout=20, check=True)
+                         input=stdin.encode("utf-8") if isinstance(stdin, str) else stdin,
+                         capture_output=True, timeout=20, check=True)
     return [json.loads(line) for line in out.stdout.splitlines()]
 
 
@@ -159,6 +160,39 @@ class ProcessInterface(unittest.TestCase):
         big = json.dumps({"tool_name": "read_file", "raw_arguments": {"path": "a" * (1024 * 1024 + 10)}})
         ok = json.dumps({"tool_name": "read_file", "raw_arguments": {"path": "a"}})
         first, second = run_script(big + "\n" + ok + "\n")
+        self.assertEqual(first["failure"]["code"], "classifier_invalid")
+        self.assertEqual((second["status"], second["actions"]), ("ok", ["read"]))
+
+    def test_unicode_input_limit_counts_utf8_bytes(self):
+        big = json.dumps({"tool_name": "read_file", "raw_arguments": {"path": "ж" * 700000}},
+                         ensure_ascii=False)
+        self.assertLess(len(big), rule_baseline.MAX_INPUT_BYTES)
+        self.assertGreater(len(big.encode("utf-8")), rule_baseline.MAX_INPUT_BYTES)
+        good = json.dumps({"tool_name": "read_file", "raw_arguments": {"path": "a"}})
+        first, second = run_script(big + "\n" + good + "\n")
+        self.assertEqual(first["failure"]["code"], "classifier_invalid")
+        self.assertEqual((second["status"], second["actions"]), ("ok", ["read"]))
+
+    def test_exact_byte_limit_is_accepted_with_or_without_newline(self):
+        good = json.dumps({"tool_name": "read_file", "raw_arguments": {"path": "a"}}).encode()
+        payload = good + b" " * (rule_baseline.MAX_INPUT_BYTES - len(good))
+        for delimiter in (b"\n", b""):
+            with self.subTest(delimiter=delimiter):
+                (result,) = run_script(payload + delimiter)
+                self.assertEqual((result["status"], result["actions"]), ("ok", ["read"]))
+
+    def test_one_byte_above_limit_is_refused_even_at_eof(self):
+        good = json.dumps({"tool_name": "read_file", "raw_arguments": {"path": "a"}}).encode()
+        payload = good + b" " * (rule_baseline.MAX_INPUT_BYTES + 1 - len(good))
+        for delimiter in (b"\n", b""):
+            with self.subTest(delimiter=delimiter):
+                (result,) = run_script(payload + delimiter)
+                self.assertEqual(result["failure"]["code"], "classifier_invalid")
+
+    def test_invalid_utf8_is_a_failure_and_stream_continues(self):
+        invalid = b'{"tool_name":"read_file","raw_arguments":{"path":"\xff"}}'
+        good = json.dumps({"tool_name": "read_file", "raw_arguments": {"path": "a"}}).encode()
+        first, second = run_script(invalid + b"\n" + good + b"\n")
         self.assertEqual(first["failure"]["code"], "classifier_invalid")
         self.assertEqual((second["status"], second["actions"]), ("ok", ["read"]))
 

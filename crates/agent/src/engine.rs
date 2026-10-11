@@ -18,7 +18,7 @@ use crate::facet::{facets, Facet};
 use crate::policy::{AgentDecision, AgentPolicySet, Signals, Verdict};
 use crate::taint::{TaintMark, TaintTracker};
 
-/// Default per-session fingerprint cap (~80 KB at 8 bytes each).
+/// Default per-session entry cap for each provenance index (not a byte limit).
 pub const DEFAULT_TAINT_CAP: usize = 10_000;
 
 /// The full result for one event: the verdict plus everything that produced it.
@@ -30,6 +30,8 @@ pub struct Outcome {
     pub message: Option<String>,
     pub findings: Vec<(Facet, Finding)>,
     pub taint: Option<TaintMark>,
+    /// Sticky loss state, independent of whether retained evidence still matches.
+    pub provenance_incomplete: bool,
     pub risk_score: u8,
     pub egress_hosts: Vec<String>,
     /// Set only when `verdict` is `Escalate` — what to do if no judge answers.
@@ -116,6 +118,10 @@ impl AgentFirewall {
         self.taint.len(session)
     }
 
+    pub fn provenance_incomplete(&self, session: &str) -> bool {
+        self.taint.is_incomplete(session)
+    }
+
     /// Return whether every extracted destination is explicitly present in the
     /// policy egress allowlist. Typed network adapters use this after the normal
     /// verdict so a permissive `default: allow` policy cannot accidentally turn
@@ -173,7 +179,12 @@ impl AgentFirewall {
                 self.authority.end_session(&ev.session);
                 return Self::allow();
             }
-            EventKind::SessionStart => return Self::allow(),
+            EventKind::SessionStart => {
+                // A repeated start must not erase an existing context's loss state.
+                let mut outcome = Self::allow();
+                outcome.provenance_incomplete = self.taint.is_incomplete(&ev.session);
+                return outcome;
+            }
             _ => {}
         }
 
@@ -267,7 +278,9 @@ impl AgentFirewall {
             _ => {}
         }
 
-        // 3. Policy decides.
+        signals.provenance_incomplete = self.taint.is_incomplete(&ev.session);
+
+        // 3. Policy decides, including the incomplete-history safety floor.
         let AgentDecision {
             verdict,
             rule,
@@ -281,6 +294,7 @@ impl AgentFirewall {
             message,
             findings,
             taint: signals.taint,
+            provenance_incomplete: signals.provenance_incomplete,
             risk_score,
             egress_hosts: signals.egress_hosts,
             fallback,
@@ -344,6 +358,7 @@ impl AgentFirewall {
             message,
             findings,
             taint: None,
+            provenance_incomplete: false,
             risk_score,
             egress_hosts: vec![],
             fallback,
@@ -376,6 +391,7 @@ impl AgentFirewall {
             message: None,
             findings: Vec::new(),
             taint: None,
+            provenance_incomplete: false,
             risk_score: 0,
             egress_hosts: Vec::new(),
             fallback: None,
@@ -400,6 +416,7 @@ mod tests {
             message: Some("internal policy text".into()),
             findings: Vec::new(),
             taint: None,
+            provenance_incomplete: false,
             risk_score: 71,
             egress_hosts: vec!["example.invalid".into()],
             fallback: None,
