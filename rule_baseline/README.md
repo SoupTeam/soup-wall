@@ -37,6 +37,26 @@ Replies are bounded to 12 KiB. UTF-8 JSON input is bounded to 1 MiB excluding th
 invalid UTF-8 is a technical failure. An oversized or malformed frame is refused and the next
 frame can still be processed.
 
+## Generalization to unfamiliar tools (SOU-14, step 2)
+
+Rules for tools without a per-name rule read whole tokens of argument keys (`invite_email` is a
+recipient, `group_by` is not a permission), the action words of the tool name, and the declared schema:
+
+- A recipient key plus a different content key is `send_data`; a local path sent to a URL or recipient
+  with no inline content is also `read`; a `source`/`src` argument is `read`.
+- `share`, `invite`, access nouns (`sharing`, `visibility`, `member`) and `principal`/`role` arguments are
+  `change_permissions`; removing a member is an access change, not a delete.
+- Partial knowledge is `unknown` with the proven actions kept: a category guessed from a noun alone and not
+  supported by the arguments, a compound name (`a_and_b`) with an unrecognised part, an argument that names
+  code to run (`plugin`, `callback`, `*processor`), and arguments that violate the declared schema
+  (`args_schema_violation`, checked against `pinned_schema` first).
+- Not claimed: a tool that only receives text is not proven to have no effect (`text_stats` stays unknown),
+  and `dry_run=true` is reported as `dry_run_declared` while the write is still reported.
+
+An unfamiliar name such as `quartz_17` is classified from its arguments, not refused. These rules are
+heuristics; the measured effect, including errors, abstentions and the data they were developed on, is
+reported with the evaluation and not claimed here.
+
 ## Interface and remaining integration work
 
 `classify(input)` is the local Python interface consumed by the
