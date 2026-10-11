@@ -140,19 +140,18 @@ fn literals(text: &str) -> Vec<String> {
 
 #[derive(Debug, Default)]
 struct SessionTaint {
+    /// Sticky, content-free loss marker; cleared only by ending this session.
+    incomplete: bool,
     /// fingerprint -> mark
     marks: HashMap<u64, TaintMark>,
     /// insertion order, for FIFO eviction (oldest fingerprint evicted first —
     /// *not* LRU/least-recently-used, nothing here is touched on read).
-    /// This is a known weakness for long sessions: the poisoned page that
-    /// starts a session is exactly the entry evicted first as the session
-    /// grows, so a long enough session can forget the injection before its
-    /// payload fires. Evaluate this limit against real session-length data.
+    /// Eviction sets `incomplete`: no later miss can establish clean provenance.
     order: VecDeque<u64>,
     /// distinctive literal -> mark, matched by containment at any length.
     /// Stored lowercase — see `literals()`.
     literals: HashMap<String, TaintMark>,
-    /// insertion order, for FIFO eviction. Same caveat as `order` above.
+    /// insertion order, for FIFO eviction. Also sets `incomplete`.
     literal_order: VecDeque<String>,
 }
 
@@ -164,7 +163,9 @@ pub struct TaintTracker {
 }
 
 impl TaintTracker {
-    /// `cap` is the maximum fingerprints retained per session (~8 bytes each).
+    /// `cap` bounds each of the fingerprint and literal entry counts per session.
+    /// Keys, queues and provenance metadata add storage beyond fingerprint bytes.
+    /// Zero retains no evidence and marks every untrusted record incomplete.
     pub fn new(cap: usize) -> Self {
         Self {
             cap,
@@ -185,6 +186,10 @@ impl TaintTracker {
             return;
         }
         let entry = self.sessions.entry(session.to_string()).or_default();
+        if self.cap == 0 {
+            entry.incomplete = true;
+            return;
+        }
         for fp in fingerprints(text) {
             match entry.marks.get_mut(&fp) {
                 Some(existing) => {
@@ -207,6 +212,7 @@ impl TaintTracker {
                     while entry.order.len() > self.cap {
                         if let Some(old) = entry.order.pop_front() {
                             entry.marks.remove(&old);
+                            entry.incomplete = true;
                         }
                     }
                 }
@@ -236,6 +242,7 @@ impl TaintTracker {
                     while entry.literal_order.len() > self.cap {
                         if let Some(old) = entry.literal_order.pop_front() {
                             entry.literals.remove(&old);
+                            entry.incomplete = true;
                         }
                     }
                 }
@@ -252,6 +259,7 @@ impl TaintTracker {
     /// - **Literals**, by containment at any length. Catches the short high-signal
     ///   strings — a bare exfil URL, a credential path — that winnowing cannot see
     ///   at all, because it guarantees nothing below 39 characters.
+    /// A miss is not proof of clean provenance; also inspect `is_incomplete()`.
     pub fn check(&self, session: &str, text: &str) -> Option<TaintMark> {
         let entry = self.sessions.get(session)?;
 
@@ -296,20 +304,22 @@ impl TaintTracker {
 
     /// Distinctive literals currently retained for a session. Separate from
     /// `len()`, which counts fingerprints — the two are capped independently, so
-    /// total retained state is bounded by `2 * cap` per session.
+    /// retained evidence entries are bounded by `2 * cap` per session (not bytes).
     pub fn literal_len(&self, session: &str) -> usize {
         self.sessions.get(session).map_or(0, |s| s.literals.len())
     }
 
-    /// True only when *neither* fingerprints nor literals are retained for the
-    /// session. Delegating to `len() == 0` alone was wrong: a short literal-only
-    /// hit (e.g. a bare exfil URL, too short to fingerprint) leaves `len() == 0`
-    /// while `check()` still reports taint — callers gating on `is_empty()` must
-    /// not treat that state as "nothing recorded."
+    /// Evidence has been evicted, or tracking was disabled for untrusted input.
+    /// This fixed-size marker contains no source, content or growing counter.
+    pub fn is_incomplete(&self, session: &str) -> bool {
+        self.sessions.get(session).is_some_and(|s| s.incomplete)
+    }
+
+    /// No retained evidence and no sticky loss marker.
     pub fn is_empty(&self, session: &str) -> bool {
         self.sessions
             .get(session)
-            .is_none_or(|s| s.marks.is_empty() && s.literals.is_empty())
+            .is_none_or(|s| !s.incomplete && s.marks.is_empty() && s.literals.is_empty())
     }
 }
 
@@ -325,6 +335,49 @@ mod tests {
         Provenance::Network {
             host: "evil.com".into(),
         }
+    }
+
+    #[test]
+    fn incomplete_marker_is_sticky_and_bounded_for_both_fifo_indexes() {
+        let mut prose = TaintTracker::new(4);
+        prose.record("s", 1, &net(), POISON);
+        assert!(prose.is_incomplete("s"));
+        let mut urls = TaintTracker::new(1);
+        urls.record("s", 1, &net(), "https://old.io/x");
+        assert!(!urls.is_incomplete("s"));
+        assert_eq!(urls.len("s"), 0);
+        for seq in 2..1000 {
+            urls.record("s", seq, &net(), &format!("https://h{seq}.io/x"));
+            let state = &urls.sessions["s"];
+            assert!(state.marks.len() <= 1 && state.order.len() <= 1);
+            assert!(state.literals.len() <= 1 && state.literal_order.len() <= 1);
+        }
+        assert_eq!(std::mem::size_of::<bool>(), 1);
+        assert!(urls.is_incomplete("s"));
+        assert!(urls.check("s", "https://old.io/x").is_none());
+        urls.record("s", 1000, &Provenance::UserPrompt, "trusted");
+        urls.end_session("peer");
+        assert!(urls.is_incomplete("s"));
+        urls.end_session("s");
+        assert!(urls.is_empty("s"));
+        assert!(!urls.is_incomplete("s"));
+        assert!(urls.sessions.is_empty());
+    }
+
+    #[test]
+    fn zero_capacity_marks_even_unfingerprintable_input_without_retaining_it() {
+        let mut tracker = TaintTracker::new(0);
+        tracker.record("trusted", 1, &Provenance::UserPrompt, "hello");
+        assert!(tracker.is_empty("trusted"));
+        for text in ["", "short", POISON, "https://old.io/x", "/etc/passwd"] {
+            tracker.record("s", 1, &net(), text);
+            assert!(tracker.is_incomplete("s"));
+            assert!(!tracker.is_empty("s"));
+            assert_eq!(tracker.len("s"), 0);
+            assert_eq!(tracker.literal_len("s"), 0);
+            assert!(tracker.check("s", text).is_none());
+        }
+        assert_eq!(tracker.sessions.len(), 1);
     }
 
     #[test]

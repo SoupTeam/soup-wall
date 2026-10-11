@@ -34,8 +34,10 @@ Repository facts:
 - The known unknown-host/tainted-fallback precedence defect has been corrected
   with hook/native regressions. A wider policy overlap matrix remains open.
 - The [taint tracker](../crates/agent/src/taint.rs) bounds retained history with
-  FIFO eviction. Long-session loss of earlier provenance is a documented limit
-  that needs explicit runtime acceptance.
+  FIFO eviction and a sticky, content-free incomplete-history marker. Protected
+  tool calls receive at least Ask after eviction; hard Deny is preserved. See
+  [memory bounds and safe reset](ARCHITECTURE.md#incomplete-session-provenance).
+  Full runtime acceptance and host context disposal remain separate requirements.
 - Console policy approval, activation, rollback and webhook queues exist. They
   do not prove that a local Agent received or applied a policy.
 - Local installation, host, identity, storage, encrypted restore and monitoring
