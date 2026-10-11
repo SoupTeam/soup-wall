@@ -70,3 +70,33 @@ all 60, and all 18 real MCP admission tests, without failures or ignores:
 
 The [resilience reproduction and evidence report](task3_resilience.md) also covers
 real MCP daemon outages, admission timeouts and result withholding.
+## Shared Native Evaluation
+
+The [11 October shared-run report](evidence/task3_report.md) adds actual local request measurements and explicit false-block accounting to the historical in-memory results above. It distinguishes the real Python baseline from the adapter stub. Source, byte-level witnesses, failures and unsupported cases remain in its dated receipt.
+
+Run the shared fixture suite from Ubuntu/WSL2 or Linux with Docker available:
+
+```sh
+python3 scripts/test-environment.py --platform linux/amd64
+python3 -m unittest discover -s scripts/tests -p 'test_mcp_bench.py' -v
+```
+
+The launcher includes enforcement_pipeline, resilience_tests, schema_validation and attack_scenarios in addition to the existing Agent/native/MCP/judge fixtures. It saves a new directory under target/test-environment; inspect both results.json and attack_results.json. The latter is a baseline_stub runner-policy diagnostic, not real-model evaluation. Classification mismatches are reportable outcomes; unauthorized dispatch is a test failure.
+
+For real-baseline timing, keep the measurement script in the proposed checkout and use a separate clean runtime checkout. The evaluator rejects changed tracked runtime source or the wrong commit, and never overwrites an existing results directory:
+
+```sh
+git clone --no-hardlinks . target/task3-runtime-source
+git -C target/task3-runtime-source checkout --detach e4c9da71019befb46b0f3223c22a7056acea8f02
+cargo build --locked --manifest-path target/task3-runtime-source/Cargo.toml -p agentfw
+python3 scripts/mcp-bench.py \
+  --repo target/task3-runtime-source \
+  --agentfw target/task3-runtime-source/target/debug/agentfw \
+  --expected-commit e4c9da71019befb46b0f3223c22a7056acea8f02 \
+  --out target/task3-measurements-$(date -u +%Y%m%dT%H%M%SZ) \
+  --samples 300 --warmup 5 --repeats 3
+```
+
+These direct Linux commands reproduce the method, not identical timings or the recorded container environment. To recreate the measured QA environment, extract the raw evidence archive, build source/Dockerfile.qa as soup-wall-task3-tools:1.98.1, and use its commands/runtime.txt. Dependency/toolchain setup needs network access; the measured runtime container uses network none, four CPUs, 6 GiB, non-root UID 1000, no capabilities and no-new-privileges. CARGO_HOME is a prepopulated owned target/cargo-home cache. No provider/model call is used. Container paths in the recorded command are mount aliases; substitute disposable local source/output/candidate directories.
+
+The nine runtime scenarios use original native JSON-RPC frames and existing local fixture servers. Every latency batch verifies complete post-stop executor/result streams, including warmups and the initialization replies. Missing, additional or changed bytes, a refused execution/delivery, source/binary change or scenario mismatch returns nonzero. The reported percentiles use nearest-rank, and expected Ask interruptions remain distinct from unexpected false blocks.
