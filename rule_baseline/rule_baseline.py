@@ -3,8 +3,14 @@
 
 Input : {"tool_name", "raw_arguments", "server_id"?, "tool_description"?,
           "tool_schema"?, "pinned_schema"?}
-Output: {"status": ok|unknown|error, "actions": [...], "unknown": bool, "confidence", "uncertainty",
-         "reason_codes": [...], "reason", "scores", flags...}
+Output: core   {"actions": [...], "unknown": bool}  (the approved contract's semantic result)
+        extras {"status": ok|unknown|error, "confidence", "uncertainty", "reason", "reason_codes",
+                "scores", "evidence": [{action, source, weight, detail}], flags...,
+                "definition_estimate": {actions, unknown, sources}  # name + schema only, no arguments
+                "definition_invocation_diff": bool                  # estimate vs actual-argument result
+                "failure": null | {"code": classifier_invalid|classifier_timeout|classifier_internal_error}}
+Technical failures use status "error" plus a `failure` code and are never a valid classification.
+The module is a single stdlib-only file because the daemon executes it as one source snapshot.
 
 Principles
 - The tool description is UNTRUSTED. It never adds or removes a category. It is
@@ -30,6 +36,11 @@ CATEGORIES = ("read", "write", "delete", "send_data", "change_permissions")
 UNKNOWN = "unknown"
 THRESHOLD = 0.5
 MAX_DEPTH, MAX_LEAVES, MAX_LEAF_CHARS, MAX_DESC_CHARS = 6, 200, 4096, 2000
+# Output envelope bounds. The Rust bridge reads at most 16 KiB of reply and a reason of 1..1024 bytes.
+INTERFACE = "sw-classifier-core/0.4"
+MAX_NAME_CHARS, MAX_INPUT_BYTES, MAX_REASON_CHARS = 256, 1024 * 1024, 1000
+MAX_EVIDENCE, MAX_CODES, MAX_REPLY_BYTES = 8, 24, 12 * 1024
+FAILURE_CODES = ("classifier_invalid", "classifier_timeout", "classifier_internal_error")
 
 # ---------------------------------------------------------------- name vocab
 def _vocab(cat: str, words: str, weight: float = 0.7) -> dict[str, tuple[str, float]]:
@@ -396,7 +407,8 @@ def _schema_evidence(schema: Any, ev) -> None:
 RO_CLAIM = re.compile(r"\b(?:read[- ]?only|only reads?|does not (?:modify|write|delete|send|change)"
                       r"|no side[- ]effects?|harmless|safe|just (?:reads?|views?|lists?))\b", I)
 INJECT = re.compile(r"ignore (?:all |any |previous |prior |the )*(?:security|instructions?|checks?|polic(?:y|ies)|rules?)"
-                    r"|do not (?:ask|warn|confirm)|(?:already|pre-?)approved|bypass|disable (?:security|checks)"
+                    r"|do not (?:ask|warn|confirm|log|report)|(?:already|pre-?)approved|bypass|disable (?:security|checks)"
+                    r"|ignore (?:all |any |the )?restrictions?|override (?:the |all )?(?:polic(?:y|ies)|rules?|restrictions?)"
                     r"|you must (?:call|run|send)|system prompt", I)
 
 
@@ -407,19 +419,61 @@ def _canon(obj: Any) -> str:
         return repr(obj)
 
 
-def _error(reason: str) -> dict[str, Any]:
-    return {"status": "error", "actions": [], "unknown": True, "confidence": 0.0, "uncertainty": 1.0,
-            "reason_codes": ["invalid_input"], "reason": reason, "scores": {},
+def _error(reason: str, code: str = "classifier_invalid") -> dict[str, Any]:
+    """Technical failure (D06): never a semantic classification and never a policy input."""
+    assert code in FAILURE_CODES
+    return {"status": "error", "interface": INTERFACE, "failure": {"code": code, "detail": reason[:200]},
+            "actions": [], "unknown": True, "confidence": 0.0, "uncertainty": 1.0,
+            "reason_codes": ["invalid_input" if code == "classifier_invalid" else code],
+            "reason": reason[:MAX_REASON_CHARS] or code, "scores": {}, "evidence": [],
+            "definition_estimate": {"actions": [], "unknown": True, "sources": []},
             "description_conflict": False, "description_suspicious": False,
             "name_conflict": False, "schema_mismatch": False, "truncated": False}
 
 
-def classify(event: Any) -> dict[str, Any]:
+def _bound(out: dict[str, Any]) -> dict[str, Any]:
+    """Keep every reply inside the bridge limits without changing the semantic core."""
+    out["reason"] = (str(out.get("reason") or "no reason").replace("\n", " "))[:MAX_REASON_CHARS]
+    out["reason_codes"] = [str(c)[:64] for c in out.get("reason_codes", [])][:MAX_CODES]
+    out["evidence"] = out.get("evidence", [])[:MAX_EVIDENCE]
+    if len(json.dumps(out, ensure_ascii=False).encode()) > MAX_REPLY_BYTES:
+        out["evidence"], out["scores"] = [], {}
+    return out
+
+
+def _evidence_list(evid: dict[str, list[tuple[float, str, str]]], included: list[str]) -> list[dict[str, Any]]:
+    """Bounded, structured evidence for the included actions; never echoes argument values."""
+    rows = sorted(((w, c, src, detail) for c in included for w, src, detail in evid.get(c, [])), reverse=True)
+    return [{"action": c, "source": src, "weight": round(w, 2), "detail": detail[:160]}
+            for w, c, src, detail in rows[:MAX_EVIDENCE]]
+
+
+def _definition_estimate(evid: dict[str, list[tuple[float, str, str]]]) -> dict[str, Any]:
+    """What the tool DEFINITION alone suggests (name and schema); arguments are not consulted.
+
+    This is an estimate about the tool, kept distinct from the invocation result, which also
+    uses the actual arguments. A disagreement is reported as `definition_invocation_diff`.
+    """
+    scores: dict[str, float] = {}
+    for cat, items in evid.items():
+        p = 1.0
+        for w, src, _ in items:
+            if src in ("name", "schema"):
+                p *= 1 - w
+        if p < 1.0:
+            scores[cat] = min(1 - p, 0.99)
+    actions = [c for c in CATEGORIES if scores.get(c, 0) >= THRESHOLD]
+    return {"actions": actions, "unknown": not actions, "sources": ["name", "schema"]}
+
+
+def _classify(event: Any) -> dict[str, Any]:
     if not isinstance(event, dict):
         return _error("invalid_input: event must be an object")
     name = event.get("tool_name")
     if not isinstance(name, str) or not name.strip():
         return _error("invalid_input: tool_name must be a non-empty string")
+    if len(name) > MAX_NAME_CHARS:
+        return _error("invalid_input: tool_name exceeds the length limit")
     args = event.get("raw_arguments")
     if isinstance(args, str):
         try:
@@ -452,6 +506,7 @@ def classify(event: Any) -> dict[str, Any]:
     mismatch = pinned is not None and declared is not None and _canon(declared) != _canon(pinned)
     _schema_evidence(pinned if pinned is not None else declared, ev)
 
+    estimate = _definition_estimate(evid)  # before name-only read evidence may be dropped below
     name_conflict = name_cats == {"read"} and bool(arg_cats & {"write", "delete", "send_data", "change_permissions"})
     if name_conflict:  # a read-like name does not prove read-only: drop name-only read evidence
         evid["read"] = [i for i in evid["read"] if i[1] != "name"]
@@ -476,18 +531,25 @@ def classify(event: Any) -> dict[str, Any]:
         "truncated": walk.truncated,
     }
     out: dict[str, Any] = dict(flags)
+
+    def seal(result: dict[str, Any]) -> dict[str, Any]:
+        result.update(interface=INTERFACE, failure=None, evidence=_evidence_list(evid, result["actions"]),
+                      definition_estimate=estimate,
+                      definition_invocation_diff=set(estimate["actions"]) != set(result["actions"]))
+        return _bound(result)
+
     if not included and ev.noop and walk.unmatched == 0 and not walk.truncated:
         # D07: every examined command is a proven no-op -> no actions, nothing unknown
         out.update(status="ok", actions=[], unknown=False, confidence=0.9, uncertainty=0.1,
                    reason_codes=["proven_noop"] + [k for k, v in flags.items() if v],
                    reason="all commands are proven no-ops (echo/printf/true/false/:/sleep)", scores=scores)
-        return out
+        return seal(out)
     if not included:
         out.update(status="unknown", actions=[], unknown=True, confidence=0.0, uncertainty=1.0,
                    reason_codes=["no_rule_matched"] + [k for k, v in flags.items() if v],
                    reason="no rule matched; weak signals: " + (", ".join(f"{c}={s}" for c, s in scores.items()) or "none"),
                    scores=scores)
-        return out
+        return seal(out)
     confidence = min(scores[c] for c in included)
     if walk.truncated:
         confidence = min(confidence, 0.2)
@@ -505,18 +567,39 @@ def classify(event: Any) -> dict[str, Any]:
                (["name_conflict"] if flags["name_conflict"] else []),
                reason="; ".join(f"{s}: {d}" for _, s, d in top) + ("; input truncated" if walk.truncated else ""),
                scores=scores)
-    return out
+    return seal(out)
+
+
+def classify(event: Any) -> dict[str, Any]:
+    """Public entry point. Never raises: a crash is a technical failure, not a classification."""
+    try:
+        return _classify(event)
+    except RecursionError:
+        return _error("invalid_input: nesting exceeds the supported depth")
+    except Exception as exc:  # noqa: BLE001 - failure channel must not leak a traceback
+        return _error(f"unexpected {type(exc).__name__}", "classifier_internal_error")
 
 
 def main() -> int:
-    for line in sys.stdin:
-        if line.strip():
+    # The daemon's limit applies to UTF-8 JSON bytes, excluding the line delimiter.
+    stream = sys.stdin.buffer
+    while True:
+        line = stream.readline(MAX_INPUT_BYTES + 2)
+        if not line:
+            return 0
+        payload = line[:-1] if line.endswith(b"\n") else line
+        if len(payload) > MAX_INPUT_BYTES:
+            while line and not line.endswith(b"\n"):  # drain the oversized frame
+                line = stream.readline(MAX_INPUT_BYTES + 2)
+            result = _error("invalid_input: input line exceeds the size limit")
+        elif payload.strip():
             try:
-                result = classify(json.loads(line))
-            except ValueError:
-                result = _error("invalid_input: not valid JSON")
-            print(json.dumps(result, ensure_ascii=False))
-    return 0
+                result = classify(json.loads(payload.decode("utf-8")))
+            except (ValueError, UnicodeError, RecursionError):
+                result = _error("invalid_input: not valid UTF-8 JSON")
+        else:
+            continue
+        print(json.dumps(result, ensure_ascii=False))
 
 
 if __name__ == "__main__":
