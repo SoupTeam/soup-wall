@@ -259,6 +259,7 @@ impl TaintTracker {
     /// - **Literals**, by containment at any length. Catches the short high-signal
     ///   strings — a bare exfil URL, a credential path — that winnowing cannot see
     ///   at all, because it guarantees nothing below 39 characters.
+    ///
     /// A miss is not proof of clean provenance; also inspect `is_incomplete()`.
     pub fn check(&self, session: &str, text: &str) -> Option<TaintMark> {
         let entry = self.sessions.get(session)?;
