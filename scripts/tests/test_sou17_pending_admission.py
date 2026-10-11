@@ -237,7 +237,7 @@ class FinalLedgerReconciliation(unittest.TestCase):
         def cleanup(_harness):
             # The refusal was already read and its immediate ledger snapshot was
             # empty. The executor records this late entry only during shutdown.
-            with fixture["stack"].ledger.open("a") as stream:
+            with fixture["stack"].ledger.open("a", encoding="utf-8", newline="") as stream:
                 stream.write(late_bytes)
             return 0
 
