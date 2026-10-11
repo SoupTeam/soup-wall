@@ -55,6 +55,8 @@ impl TaintSource {
 pub struct Signals {
     pub action_class: Option<ActionClass>,
     pub taint: Option<TaintMark>,
+    /// Retained provenance was lost; no source attribution is implied.
+    pub provenance_incomplete: bool,
     pub findings: Vec<(Facet, Finding)>,
     pub risk_score: u8,
     pub egress_hosts: Vec<String>,
@@ -218,8 +220,27 @@ impl AgentPolicySet {
         Ok(p)
     }
 
-    /// First matching rule wins; otherwise the default verdict.
+    /// First matching rule/default, tightened by the incomplete-history Ask floor.
     pub fn evaluate(&self, s: &Signals) -> AgentDecision {
+        let decision = self.evaluate_rules(s);
+        let protected = s
+            .action_class
+            .is_some_and(|a| a >= ActionClass::SideEffecting || s.touches_sensitive_path);
+        if s.provenance_incomplete
+            && protected
+            && matches!(decision.verdict, Verdict::Allow | Verdict::Escalate)
+        {
+            return AgentDecision {
+                verdict: Verdict::Ask,
+                rule: Some("taint-history-incomplete".into()),
+                message: Some("Session provenance was discarded; review this action or start a fresh context.".into()),
+                fallback: None,
+            };
+        }
+        decision
+    }
+
+    fn evaluate_rules(&self, s: &Signals) -> AgentDecision {
         for rule in &self.agent_policies {
             if self.matches(&rule.when, s) {
                 return AgentDecision {
