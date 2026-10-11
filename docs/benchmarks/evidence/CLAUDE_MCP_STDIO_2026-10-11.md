@@ -48,7 +48,7 @@ All 9 test scenarios were evaluated identically across both harnesses:
 ## Provenance and digests
 
 - Source commit: `91a401a03b9f4a44f5f341c83c53a25e7d6e527f`
-- Platform: `Darwin 25.3.0 arm64` (macOS 15) / Python `3.14.8`
+- Platform: `Darwin 25.3.0 arm64` (as recorded by the runner) / Python `3.14.8`
 - Claude Code version: `2.1.296`
 - Agent binary SHA-256 (`agentfw`): `1fef946dbf1f0c7d832b6de866f58637f8bd55d466b961f57f259a36ff413c30`
 - Registry SHA-256: `a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d`
@@ -64,13 +64,16 @@ All 9 test scenarios were evaluated identically across both harnesses:
 
 ## Reproduction
 
-Install Claude Code locally and run the demonstration:
+Use a disposable checkout of the recorded source, install the recorded Claude Code version locally and run the demonstration:
 
 ```sh
-npm install --prefix target/claude-code @anthropic-ai/claude-code
+git checkout --detach 91a401a03b9f4a44f5f341c83c53a25e7d6e527f
+npm install --prefix target/claude-code @anthropic-ai/claude-code@2.1.296
 cargo build --locked -p agentfw
 python3 scripts/mcp-admission-demo.py --classifier rule-baseline --out target/sou-22-real-baseline.json
 ```
+
+Check both `scripted.status` and `claude_host.status` in the output: they must be `passed` for this acceptance. The runner can exit successfully when Claude Code is absent and the host section is `skipped`; that establishes only the scripted checks. A rerun produces a separate environment/binary receipt and does not overwrite this historical evidence.
 
 ## Boundaries and limits
 

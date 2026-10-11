@@ -174,6 +174,11 @@ This workflow grants no tool execution permissions or production acceptance.
 
 ### SOU-13 handoff prerequisites
 
+When the test inputs and gold are withheld from the model author, use the
+[separate custodian CLI](#separate-development-and-custodian-data) below. The older
+`pilot train/evaluate` commands require a combined three-split dataset; they do
+not implement that data-custody arrangement.
+
 The 10 October checkpoint contains only provisional development fixtures. It
 does not supply approved pilot data, a final dataset license or frozen family
 manifests. A technical review of these fixtures does not invent human sign-off.
@@ -224,6 +229,113 @@ source/model/dataset hashes and peak process RSS. Traced Python allocation and
 process RSS are distinct measurements. No GPU, external API or executor is used.
 Zero API spend does not mean local CPU use is free. Policy outcomes and execution
 enforcement are not measured.
+
+### Separate development and custodian data
+
+The `custodian` CLI addresses the SOU-13 handoff that contains development data
+only. Train accepts no test file, test labels or run authorization. The independent
+custodian receives the frozen model and training report, holds the test data,
+reviews the linked provenance and performs the single comparison. Neither CLI
+changes the shared runtime contract or grants tool execution authority.
+
+After human review and dataset-license approval, the development export has
+`format: "soup-wall/classifier-development-dataset/1"` and `cases` with the same
+row fields as the earlier local dataset: `id`, `family`, `split`, `input`, `labels`
+and optional evaluation-only `accepted_outputs`. Nonempty `train`, `validation`
+and `calibration` splits are required. Validation is retained for partition and
+provenance checks only; it supplies neither fitting nor threshold supervision.
+Test rows are rejected, even if supplied accidentally. This command has no smoke
+mode; its unit tests use explicitly artificial review records and toy data only.
+
+For the SOU-13 separated JSONL exports, join labels and model inputs by matching
+ID, verify input hashes and mask agreement, and copy true/false/null action targets
+and separate unknown directly. Use the reviewed leakage group as `family` so
+aliases and related templates remain in one split. Copy only the original `input`
+into inference data; IDs, family, split, gold, traces and rationale are not model
+features. Exclude pending, admission-rejection and technical-error rows. A
+provisional directory named `pilot` is not data approval. The final release must
+review the export and its digest; do not automatically convert the provisional
+11 October checkpoint into approved training data.
+
+The separate development approval is a bounded JSON object with exactly:
+
+```json
+{
+  "format": "soup-wall/classifier-development-approval/1",
+  "approval_reference": "<actual development labels/license review>",
+  "source": "<reviewed development export origin>",
+  "license": "<approved dataset license>",
+  "dataset_sha256": "<exact development JSON bytes>",
+  "split_manifest_sha256": "<reviewed frozen public split manifest identity>",
+  "holdout_id": "<custodian's stable identity for the withheld test>"
+}
+```
+
+Use the same reviewed public manifest digest convention on both sides (for
+example its verified canonical `manifest_sha256`, rather than mixing it with the
+file-byte digest). The custodian validates the original four-way manifests and
+hidden assignments; the CLI's digest assertion cannot establish that review.
+
+```sh
+python -m experiments.local_classifier.custodian train \
+  --development-dataset /path/to/reviewed-development.json \
+  --development-approval /path/to/development-review.json \
+  --seed 42 --dimensions 512 --epochs 60 \
+  --output-dir target/reviewed-linear
+```
+
+The model author passes `model.json`, `training.json`, their model digest, the
+development export/review and the pinned source/configuration to the custodian.
+The custodian's separate test export uses
+`format: "soup-wall/classifier-holdout-dataset/1"`, identical row fields and only
+nonempty `holdout` rows. Its approval has exactly the development-approval fields
+above, with `format: "soup-wall/classifier-holdout-approval/1"`, its own source,
+review reference and test-export `dataset_sha256`, plus
+`development_approval_sha256` binding the exact development review file bytes.
+`split_manifest_sha256` and `holdout_id` must match the development approval.
+These are experimental bookkeeping formats, not implementation contracts between
+adapter, classifier, policy and executor.
+
+The existing external run authorization and ledger format remains unchanged.
+For this path its `dataset_sha256` binds the custodian's reviewed **holdout export**,
+while model provenance separately binds the development export/review. The run's
+`holdout_id` must match both approvals. Freeze and review the same baseline source
+bytes before evaluation, using an exact Git blob when platform newline conversion
+could change the recorded digest.
+
+```sh
+# Run only by the independent test custodian after model and run review.
+python -m experiments.local_classifier.custodian evaluate \
+  --development-dataset /custodian/reviewed-development.json \
+  --development-approval /custodian/development-review.json \
+  --holdout-dataset /custodian/reviewed-test.json \
+  --holdout-approval /custodian/test-review.json \
+  --model-dir /custodian/frozen-model \
+  --baseline-path /custodian/frozen-baseline \
+  --run-authorization /custodian/run.json \
+  --run-ledger-dir /custodian/shared-run-ledger
+```
+
+Before first prediction, evaluation rejects changed model provenance, mismatched
+review/manifest/test identities and shared case IDs, families or semantic inputs
+across development and holdout. Description-only differences do not bypass the
+duplicate check. These exact checks do not detect every near-duplicate template;
+family review remains required. The custodian reads reviewed gold for validation
+but must not disclose it to the model author before freezing the experiment.
+
+The same external identity is reserved before inference and remains consumed on
+failure or after copying model artifacts. Receipt and result hashes are retained.
+Report per-label errors/denominators, unknown, coverage, mixed actions, latency,
+RAM and all source/data/model hashes; independently review continue/revise/reject.
+Files and review references assert provenance without authenticating a reviewer.
+The custodian must retain and control the ledger and stable identities. This
+preparation establishes no actual SOU-13 training result or held-out quality metric.
+
+```sh
+python -m unittest experiments.local_classifier.test_model \
+  experiments.local_classifier.test_ledger \
+  experiments.local_classifier.test_custodian -v
+```
 
 ## Dated evidence and recommendation
 

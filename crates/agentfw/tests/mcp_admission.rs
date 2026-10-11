@@ -669,9 +669,22 @@ impl Fixture {
 
     async fn restart_daemon(&mut self) {
         self.stop_daemon().await;
-        let listener = tokio::net::TcpListener::bind(("127.0.0.1", self.port))
-            .await
-            .unwrap();
+        // Axum's shutdown notification can precede the final connection/socket
+        // drop. Keep the original endpoint and all restart assertions, but bound
+        // the wait for OS teardown instead of racing an immediate rebind.
+        let listener = tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                match tokio::net::TcpListener::bind(("127.0.0.1", self.port)).await {
+                    Ok(listener) => return listener,
+                    Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => {
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                    }
+                    Err(error) => panic!("fixture daemon rebind failed: {error}"),
+                }
+            }
+        })
+        .await
+        .expect("fixture daemon port must be released after shutdown");
         self.daemon_faults = Arc::new(DaemonFaults::default());
         let (daemon, shutdown) = start_daemon(
             listener,
