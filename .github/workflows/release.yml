@@ -101,9 +101,9 @@ jobs:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
       - name: Verify SAML on the archive's target
-        run: cargo test --locked -p llm-firewall --lib --target ${{ matrix.target }} saml_auth::tests
+        run: cargo test --locked -p soup-wall --lib --target ${{ matrix.target }} saml_auth::tests
       - name: Build
-        run: cargo build --release --locked --target ${{ matrix.target }} -p agentfw -p soup-wall-bench -p llm-firewall
+        run: cargo build --release --locked --target ${{ matrix.target }} -p agentfw -p soup-wall-bench -p soup-wall
       - name: Stage (unix)
         if: runner.os != 'Windows'
         shell: bash
@@ -114,8 +114,8 @@ jobs:
           mkdir "$d"
           cp "target/${{ matrix.target }}/release/agentfw" "$d/"
           cp "target/${{ matrix.target }}/release/soup-wall-bench" "$d/"
-          cp "target/${{ matrix.target }}/release/llm-firewall" "$d/"
-          cp "target/${{ matrix.target }}/release/llm-firewall" "$d/soup-wall-gateway"
+          cp "target/${{ matrix.target }}/release/soup-wall" "$d/"
+          cp "target/${{ matrix.target }}/release/soup-wall" "$d/soup-wall-gateway"
           cp firewall.yaml "$d/"
           cp -R policies "$d/"
           cp LICENSE NOTICE README.md "$d/"
@@ -132,8 +132,8 @@ jobs:
           mkdir "$d"
           cp "target/${{ matrix.target }}/release/agentfw.exe" "$d/"
           cp "target/${{ matrix.target }}/release/soup-wall-bench.exe" "$d/"
-          cp "target/${{ matrix.target }}/release/llm-firewall.exe" "$d/"
-          cp "target/${{ matrix.target }}/release/llm-firewall.exe" "$d/soup-wall-gateway.exe"
+          cp "target/${{ matrix.target }}/release/soup-wall.exe" "$d/"
+          cp "target/${{ matrix.target }}/release/soup-wall.exe" "$d/soup-wall-gateway.exe"
           cp firewall.yaml "$d/"
           cp -R policies "$d/"
           cp LICENSE NOTICE README.md "$d/"
@@ -168,7 +168,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for package in soup-wall-core soup-wall-agent agentfw soup-wall-adapter soup-wall-bench llm-firewall; do
+          for package in soup-wall-core soup-wall-agent agentfw soup-wall-adapter soup-wall-bench soup-wall; do
             test "$(find . -name "$package.cdx.json" | wc -l)" -eq 1 || {
               echo "missing or duplicate SBOM for $package" >&2
               exit 1
@@ -222,7 +222,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           sbom: true
-          provenance: mode=max
+          provenance: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
           outputs: type=docker,dest=/tmp/soup-wall-image.tar
