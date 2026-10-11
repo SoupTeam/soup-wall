@@ -72,7 +72,10 @@ fn evicted_early_prose_url_and_path_cannot_become_clean_effectful_calls() {
             assert_eq!(out.verdict, Verdict::Ask);
             assert_eq!(out.rule.as_deref(), Some("taint-history-incomplete"));
             assert!(out.provenance_incomplete);
-            assert!(out.taint.is_none(), "discarded source must not be fabricated");
+            assert!(
+                out.taint.is_none(),
+                "discarded source must not be fabricated"
+            );
             assert_eq!(out.fallback, None);
             assert_eq!(
                 out.adapter_response("p").reason_codes,
