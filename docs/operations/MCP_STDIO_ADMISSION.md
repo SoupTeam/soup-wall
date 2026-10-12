@@ -493,7 +493,7 @@ pre-merge run. This recheck does not claim a GitHub CI outcome.
 
 The collector composes baseline predictions with operator-installed semantics. Delete and permission changes are denied; high uncertainty requires confirmation. Composed Deny and unconfirmed Ask return correlated refusals **before** native call admission, so repeated refusals cannot reserve the session's 64 live slots. A composed Allow still requires native policy admission. Legacy permitted reads and sends preserve original call/result bytes.
 
-Current mapping accepts supported singleton classifications. Unknown and mixed outputs fail closed as `unsupported_classification_mapping` before production policy. They are not successful classification or ordinary policy decisions. Generic classification (SOU-14) and full integration acceptance remain outstanding.
+All five valid classifier reply shapes reach production policy: single action, mixed actions, partial unknown, full unknown and empty actions with `unknown: false`. Invalid scores or actions, including duplicate action labels, fail before policy and execution. Production Deny and unconfirmed Ask keep the call blocked; an Allow still requires native admission against the operator-installed registry. An empty predicted action set does not independently prove that the tool has no effects. The resource execution limitations below still apply, and final integration acceptance remains outstanding.
 
 ### Resources and execution
 
