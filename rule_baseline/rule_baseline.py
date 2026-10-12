@@ -56,13 +56,16 @@ VERBS.update(_vocab("delete", "delete remove rm rmdir unlink drop truncate erase
                     "clear trash shred uninstall discard"))
 VERBS.update(_vocab("send_data", "send post upload publish forward reply transmit push broadcast notify"))
 VERBS.update(_vocab("send_data", "submit", 0.55))
+VERBS.update(_vocab("send_data", "mailer emailer sender notifier uploader publisher poster", 0.7))  # agent nouns
 VERBS.update(_vocab("change_permissions", "chmod chown chgrp grant revoke promote demote elevate sudo "
                     "setfacl icacls", 0.8))
+VERBS.update(_vocab("change_permissions", "share unshare invite", 0.55))
+VERBS.update(_vocab("write", "enable disable toggle", 0.55))
 # Nouns: only count when the name has no verb at all.
 SEND_NOUNS = set("email mail message sms slack discord webhook notification tweet".split())
 # Nouns that retarget a mutation verb: set_permissions, remove_role, revoke_access.
-PERM_NOUNS = set("permission permissions perm perms role roles acl privilege privileges access grants ownership".split())
-GENERIC_WRITE = set("set update add modify edit create put save replace apply patch store".split())
+PERM_NOUNS = set("permission permissions perm perms role roles acl privilege privileges access grants ownership sharing visibility member members".split())
+GENERIC_WRITE = set("set update add modify edit create put save replace apply patch store enable disable toggle".split())
 DELETE_VERBS = {w for w, (c, _) in VERBS.items() if c == "delete"}
 READ_VERBS = {w for w, (c, _) in VERBS.items() if c == "read"}
 
@@ -263,6 +266,17 @@ EDIT_KEYS = set("content text data contents lines new_string old_string patch".s
 PERM_KEYS = set("permission permissions access_level role roles acl privilege privileges grant owner group".split())
 ACTION_KEYS = {"action", "operation", "op", "verb"}
 DATA_KEYS = CONTENT_KEYS | EDIT_KEYS
+# Whole-token matching ("invite_email" -> email) uses only tokens that are unambiguous inside a key.
+RECIPIENT_TOK = {"recipient", "recipients", "email", "emails", "address", "phone", "channel", "invitee"}
+URL_TOK = {"url", "uri", "endpoint", "webhook", "href"}
+PATH_TOK = {"path", "file", "filename", "filepath", "directory", "dir"}
+CONTENT_TOK = {"body", "message", "text", "content", "subject", "html", "attachment", "attachments", "payload"}
+EDIT_TOK = {"content", "contents", "text", "lines", "patch"}
+PERM_TOK = {"permission", "permissions", "role", "roles", "acl", "privilege", "privileges",
+            "principal", "grantee", "invitee", "assignee"}
+INLINE_TOK = {"body", "content", "contents", "text", "data", "payload", "html", "lines"}
+SOURCE_TOK = {"source", "src"}
+OPAQUE_ARG_TOK = {"plugin", "callback", "hook", "handler", "middleware", "extension"}
 ATTACH_PATH = re.compile(r"attachments?_(?:path|paths|file|files)")
 MODE_KEYS = {"mode", "method"}  # may also carry an action word (e.g. mode="purge")
 MODE_OCTAL = re.compile(r"^[0-7]{3,4}$|^[ugoa]*[+\-=][rwxXst]+$")
@@ -315,44 +329,138 @@ def _tokens(text: str) -> list[str]:
     return [t for t in re.split(r"[^A-Za-z0-9]+", text.lower()) if t]
 
 
-def _name_evidence(tool_name: str, ev) -> None:
+def _kmatch(keys: set[str], exact: set[str], tokens: set[str]) -> set[str]:
+    """Keys equal to a vocabulary entry or containing a vocabulary token (invite_email -> email)."""
+    return {k for k in keys if k in exact or any(t in tokens for t in _tokens(k))}
+
+
+def _distinct(a: set[str], b: set[str]) -> bool:
+    """True when two roles are played by different keys (one key such as `email_subject` is not both)."""
+    return any(x != y for x in a for y in b)
+
+
+COMPOUND_TOKENS = {"and", "then"}
+# Containers whose effects are defined by the (parsed) arguments rather than by the name.
+# Names that say only "run something": the thing that runs is not in the arguments. Workflow-style
+# names (batch, pipeline, ...) are different: their steps are read one by one.
+BARE_RUNNERS = {"run", "call"}
+KNOWN_RUNNERS = SHELL_TOKENS | OPAQUE_TOKENS | {"run", "call", "invoke", "workflow", "batch", "pipeline", "sequence"}
+
+
+def _unresolved_compound(toks: list[str], runner_resolved: bool = False) -> bool:
+    """True for a compound name (`notify_and_render`) in which some part has no recognised action word.
+
+    Only compound names are judged this way: an unfamiliar single name such as `quartz_17` is legitimate
+    and its effects are read from the arguments instead.
+    """
+    parts, cur = [], []
+    for t in toks:
+        if t in COMPOUND_TOKENS:
+            parts.append(cur)
+            cur = []
+        else:
+            cur.append(t)
+    parts.append(cur)
+    parts = [p for p in parts if p]
+    # A runner clause (`run`, `call`, `workflow`, ...) is resolved only by invocation evidence: a visible shell
+    # command or parsed steps. Recognising the word is not knowing what it runs.
+    return len(parts) > 1 and any(
+        not any(t in VERBS or (runner_resolved and t in KNOWN_RUNNERS) for t in part) for part in parts)
+
+
+DATA_NOUNS = set(("file files folder folders directory directories dir document documents doc docs record records row rows "
+                  "table tables database db bucket object objects message messages email emails ticket tickets issue issues "
+                  "page pages repo repository branch key keys secret secrets backup backups log logs volume snapshot snapshots "
+                  "entry entries item items data content text blob blobs asset assets image images note notes comment comments").split())
+
+
+def _verb_object(toks: list[str], i: int) -> str:
+    """What the verb at toks[i] is applied to: "permission", "ambiguous" or "other".
+
+    The object is the run of tokens after the verb up to the next verb; when nothing follows it
+    ("permission_delete"), the run of tokens before it is used. "delete_file_and_remove_member": the
+    object of "delete" is a file and "member" belongs to "remove". "delete_member_file" names both an
+    access noun and a data noun in one clause, so the target is ambiguous and nothing is dropped.
+    """
+    def span(rng):
+        out = []
+        for j in rng:
+            if toks[j] in VERBS:
+                break
+            if toks[j] not in COMPOUND_TOKENS:
+                out.append(toks[j])
+        return out
+    after = span(range(i + 1, len(toks)))
+    obj = after or span(range(i - 1, -1, -1))
+    has_perm = any(t in PERM_NOUNS for t in obj)
+    if has_perm and any(t in DATA_NOUNS for t in obj):
+        return "ambiguous"
+    return "permission" if has_perm else "other"
+
+
+def _name_evidence(tool_name: str, ev, runner_resolved: bool = False) -> tuple[set[str], bool]:
+    """Emit name evidence. Returns (categories inferred from nouns alone, compound name not fully resolved)."""
     if tool_name in BUILTIN:
         ev(BUILTIN[tool_name], 0.95, "name", f"known built-in tool {tool_name}")
-        return
+        return set(), False
     last = tool_name.split("__")[-1]
     toks = _tokens(last)
     verbs = [t for t in toks if t in VERBS]
     perm_noun = any(t in PERM_NOUNS for t in toks)
-    for t in verbs:
+    retargeted = ambiguous = False
+    for i, t in enumerate(toks):
+        if t not in VERBS:
+            continue
         cat, w = VERBS[t]
         if perm_noun and (t in GENERIC_WRITE or t in DELETE_VERBS):
-            continue  # retargeted below
+            target = _verb_object(toks, i)
+            if target == "permission":
+                retargeted = True  # "remove user access" changes permissions; it does not delete a file
+                continue
+            if target == "ambiguous":
+                retargeted = ambiguous = True  # keep the verb's own effect and add the access change
         ev(cat, w, "name", f"name token '{t}'")
+    noun_cats: set[str] = set()
     if perm_noun:
-        if any(t in GENERIC_WRITE or t in DELETE_VERBS for t in toks):
+        if retargeted:
             ev("change_permissions", 0.75, "name", "permission noun with a mutation verb")
         elif not verbs:
             ev("change_permissions", 0.55, "name", "permission noun")
+            noun_cats.add("change_permissions")
     elif not verbs and any(t in SEND_NOUNS for t in toks):
         ev("send_data", 0.5, "name", "messaging noun without a verb")
+        noun_cats.add("send_data")
+    return noun_cats, ambiguous or _unresolved_compound(toks, runner_resolved)
 
 
 def _arg_evidence(w: _Walk, ev) -> None:
     keys, sc = w.keys, w.scalars
-    if keys & RECIPIENT_KEYS and keys & CONTENT_KEYS:
+    rec = _kmatch(keys, RECIPIENT_KEYS, RECIPIENT_TOK)
+    con = _kmatch(keys, CONTENT_KEYS, CONTENT_TOK)
+    urls = _kmatch(keys, URL_KEYS, URL_TOK)
+    paths = _kmatch(keys, PATH_KEYS, PATH_TOK)
+    edit = _kmatch(keys, EDIT_KEYS, EDIT_TOK)
+    if _distinct(rec, con):
         ev("send_data", 0.7, "args", "recipient plus content arguments")
     method = str(sc.get("method", "")).upper()
-    if keys & URL_KEYS:
-        if keys & CONTENT_KEYS or method in {"POST", "PUT", "PATCH"}:
+    if urls:
+        if _distinct(urls, con) or method in {"POST", "PUT", "PATCH"}:
             ev("send_data", 0.75, "args", "URL with body or write method")
         elif method == "DELETE":
             ev("delete", 0.7, "args", "HTTP DELETE")
         else:
             ev("read", 0.55, "args", "URL without a body")
-    if keys & PATH_KEYS and keys & EDIT_KEYS:
+    if _distinct(paths, edit):
         ev("write", 0.7, "args", "path plus content arguments")
-    if keys & PERM_KEYS:
+    if _kmatch(keys, PERM_KEYS, PERM_TOK):
         ev("change_permissions", 0.65, "args", "permission/role argument")
+    for k, v in sc.items():
+        if v is True and any(t in DELETE_VERBS for t in _tokens(str(k))):
+            ev("delete", 0.6, "args", f"flag {k}=true")  # e.g. {"delete": true} on a generic tool
+    if _kmatch(keys, set(), SOURCE_TOK):
+        ev("read", 0.55, "args", "source resource argument")
+    if any(set(_tokens(k)) & OPAQUE_ARG_TOK or any(t.endswith("processor") for t in _tokens(k)) for k in keys):
+        w.unmatched += 1  # an argument that names code to run: its effects are not visible here
     mode = sc.get("mode")
     for k, v in w.leaves:
         if k == "mode":
@@ -380,7 +488,10 @@ def _arg_evidence(w: _Walk, ev) -> None:
     shell_keys = keys & SHELL_KEYS
     if shell_keys:
         text = " ".join(v for k, v in w.leaves if k in shell_keys)
-        w.unmatched += _shell(text, ev)
+        if text.strip():
+            w.unmatched += _shell(text, ev)
+        else:
+            w.unmatched += 1  # A command key without inspectable text does not resolve a runner.
     for child in w.children:
         _arg_evidence(child, ev)
         w.unmatched += child.unmatched
@@ -410,6 +521,37 @@ INJECT = re.compile(r"ignore (?:all |any |previous |prior |the )*(?:security|ins
                     r"|do not (?:ask|warn|confirm|log|report)|(?:already|pre-?)approved|bypass|disable (?:security|checks)"
                     r"|ignore (?:all |any |the )?restrictions?|override (?:the |all )?(?:polic(?:y|ies)|rules?|restrictions?)"
                     r"|you must (?:call|run|send)|system prompt", I)
+
+
+_JSON_TYPES = {"string": str, "boolean": bool, "object": dict, "array": list}
+
+
+def _schema_violation(args: Any, schema: Any) -> bool:
+    """Shallow, bounded check of top-level arguments against a closed object schema.
+
+    Unsupported or open schemas are not checked. This never rewrites arguments; it only reports drift.
+    """
+    if not isinstance(schema, dict) or not isinstance(args, dict) or schema.get("type") != "object":
+        return False
+    props = schema.get("properties")
+    if not isinstance(props, dict):
+        return False
+    required = schema.get("required")
+    if isinstance(required, list) and any(isinstance(r, str) and r not in args for r in required):
+        return True
+    if schema.get("additionalProperties") is False and any(k not in props for k in args):
+        return True
+    for key, value in args.items():
+        declared = props.get(key)
+        kind = declared.get("type") if isinstance(declared, dict) else None
+        if not isinstance(kind, str):
+            continue  # Union/composite types are outside this shallow diagnostic check.
+        if kind in ("integer", "number"):
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or (kind == "integer" and isinstance(value, float) and not value.is_integer()):
+                return True
+        elif kind in _JSON_TYPES and not isinstance(value, _JSON_TYPES[kind]):
+            return True
+    return False
 
 
 def _canon(obj: Any) -> str:
@@ -493,7 +635,7 @@ def _classify(event: Any) -> dict[str, Any]:
     walk.go(args)
     if isinstance(args, str):
         walk.leaves.append(("", args[:MAX_LEAF_CHARS]))
-    _name_evidence(name, ev)
+    noun_cats, compound_unresolved = _name_evidence(name, ev, bool(walk.keys & SHELL_KEYS or walk.children))
     name_cats = {c for c, items in evid.items() if any(s == "name" for _, s, _ in items)}
     before = {c: len(v) for c, v in evid.items()}
     _arg_evidence(walk, ev)
@@ -501,6 +643,23 @@ def _classify(event: Any) -> dict[str, Any]:
         walk.unmatched += _shell(" ".join(v for _, v in walk.leaves), ev)
     if set(_tokens(name.split("__")[-1])) & OPAQUE_TOKENS and not (walk.keys & SHELL_KEYS):
         walk.unmatched += 1  # effects hidden behind a callback/plugin: partial unknown
+    if compound_unresolved:
+        walk.unmatched += 1  # one part of a compound tool name is not recognised
+    last_toks = _tokens(name.split("__")[-1])
+    if (any(t in BARE_RUNNERS for t in last_toks) and not any(t in VERBS for t in last_toks)
+            and not set(last_toks) & (KNOWN_RUNNERS - BARE_RUNNERS) and not walk.children
+            and not (walk.keys & SHELL_KEYS)):
+        walk.unmatched += 1  # a generic runner: what it runs is not in its arguments, so its effects are open
+    for cat in noun_cats:  # a category guessed from a noun alone must be corroborated by the arguments
+        if not any(src in ("args", "shell") and w >= THRESHOLD for w, src, _ in evid.get(cat, [])):
+            walk.unmatched += 1
+    sends = max((x[0] for x in evid.get("send_data", [])), default=0.0)
+    if sends >= THRESHOLD and _kmatch(walk.keys, PATH_KEYS, PATH_TOK) and not _kmatch(walk.keys, set(), INLINE_TOK):
+        ev("read", 0.6, "args", "local path argument sent outward")
+    violation = _schema_violation(args, event.get("pinned_schema") if event.get("pinned_schema") is not None
+                                  else event.get("tool_schema"))
+    if violation:
+        walk.unmatched += 1  # arguments do not match the declared schema: effects not fully known
     arg_cats = {c for c, items in evid.items() if any(s in ("args", "shell") for _, s, _ in items)}
     declared, pinned = event.get("tool_schema"), event.get("pinned_schema")
     mismatch = pinned is not None and declared is not None and _canon(declared) != _canon(pinned)
@@ -528,6 +687,8 @@ def _classify(event: Any) -> dict[str, Any]:
         "description_suspicious": bool(INJECT.search(desc)),
         "name_conflict": name_conflict,
         "schema_mismatch": mismatch,
+        "args_schema_violation": violation,
+        "dry_run_declared": any(walk.scalars.get(k) is True for k in ("dry_run", "dryrun", "dry-run")),
         "truncated": walk.truncated,
     }
     out: dict[str, Any] = dict(flags)

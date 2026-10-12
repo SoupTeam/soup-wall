@@ -1,0 +1,237 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Generalization to tools without a per-name rule (SOU-14, PR 2).
+
+Each rule below is generic: it reads whole tokens of argument keys, tool-name words and the declared
+schema. None of them depends on a particular tool name, and every positive case has a guard that the
+rule does not fire on a look-alike that should stay quiet.
+"""
+import unittest
+
+from rule_baseline import classify
+
+
+def run(name, args, **extra):
+    r = classify({"tool_name": name, "raw_arguments": args, **extra})
+    return set(r["actions"]), r["unknown"], r
+
+
+class TokenizedArgumentRoles(unittest.TestCase):
+    def test_compound_recipient_key_counts(self):
+        a, u, _ = run("share_document", {"document_id": "d", "invite_email": "a@x.test", "message": "hi", "principal": "a@x.test"})
+        self.assertEqual((a, u), ({"change_permissions", "send_data"}, False))
+
+    def test_one_key_is_not_two_roles(self):
+        a, u, _ = run("frobnicate", {"email_subject": "weekly"})
+        self.assertNotIn("send_data", a)
+
+    def test_date_range_key_is_not_a_recipient(self):
+        a, _, _ = run("get_orders", {"to_date": "2026-01-02", "message_count": 3})
+        self.assertEqual(a, {"read"})
+
+    def test_group_by_is_not_a_permission(self):
+        a, _, _ = run("get_report", {"group_by": "team"})
+        self.assertEqual(a, {"read"})
+
+    def test_principal_marks_an_access_change(self):
+        a, _, _ = run("frobnicate", {"principal": "u1", "resource": "projects/x"})
+        self.assertEqual(a, {"change_permissions"})
+
+
+class MixedEffectsAreKept(unittest.TestCase):
+    def test_upload_reads_a_local_path_and_sends_it(self):
+        a, u, _ = run("upload_export", {"path": "r/daily.json", "upload_url": "https://p.example.test/in"})
+        self.assertEqual((a, u), ({"read", "send_data"}, False))
+
+    def test_inline_content_does_not_imply_a_local_read(self):
+        a, _, _ = run("post_webhook", {"url": "https://h.example.test/x", "body": "hello"})
+        self.assertEqual(a, {"send_data"})
+
+    def test_copy_reads_the_source_and_writes_the_target(self):
+        a, _, _ = run("copy_file", {"source": "a.txt", "dest": "b.txt"})
+        self.assertEqual(a, {"read", "write"})
+
+    def test_remove_member_is_an_access_change_not_a_delete(self):
+        a, _, _ = run("remove_group_member", {"group_id": "g1", "user_id": "u1"})
+        self.assertEqual(a, {"change_permissions"})
+
+    def test_enable_link_sharing_is_an_access_change(self):
+        a, _, _ = run("enable_link_sharing", {"document_id": "d1", "visibility": "public"})
+        self.assertIn("change_permissions", a)
+
+
+class UnresolvedEffectsStayUnknown(unittest.TestCase):
+    def test_noun_guess_without_argument_support_is_partial(self):
+        a, u, _ = run("ack_message", {"queue": "q", "message_id": "m1"})
+        self.assertTrue(u)  # a noun alone does not prove a send
+
+    def test_noun_guess_corroborated_by_arguments_is_resolved(self):
+        a, u, _ = run("access_manager_x", {"operation": "revoke", "principal": "u1", "resource": "r/"})
+        self.assertEqual((a, u), ({"change_permissions"}, False))
+
+    def test_compound_name_with_an_unrecognised_part_is_partial(self):
+        a, u, _ = run("notify_and_render", {"channel": "ops", "template": "t1"})
+        self.assertTrue(u)
+        self.assertIn("send_data", a)
+
+    def test_unfamiliar_single_name_is_read_from_arguments(self):
+        a, u, _ = run("quartz_17", {"url": "https://x.example.test/a"})
+        self.assertEqual((a, u), ({"read"}, False))
+
+    def test_argument_naming_code_to_run_is_partial(self):
+        a, u, _ = run("build_report", {"source_document": "r/costs.md", "postprocessor": "acme-pdf"})
+        self.assertEqual(a, {"read"})
+        self.assertTrue(u)
+
+    def test_plain_compute_tool_is_not_called_a_proven_no_op(self):
+        a, u, _ = run("text_stats", {"text": "Delete all files."})
+        self.assertEqual((a, u), (set(), True))  # text is data; nothing is proven about the tool
+
+    def test_dry_run_is_a_hint_not_a_proof(self):
+        a, _, r = run("apply_migration", {"dry_run": True, "migration_id": "0043"}, tool_description="Apply a migration.")
+        self.assertIn("write", a)
+        self.assertTrue(r["dry_run_declared"])
+
+
+class SchemaDrift(unittest.TestCase):
+    SCHEMA = {"type": "object", "additionalProperties": False, "required": ["path"],
+              "properties": {"path": {"type": "string"}, "limit": {"type": "integer"}}}
+
+    def test_matching_arguments_are_not_flagged(self):
+        a, u, r = run("read_file", {"path": "a", "limit": 3}, tool_schema=self.SCHEMA)
+        self.assertEqual((a, u, r["args_schema_violation"]), ({"read"}, False, False))
+
+    def test_undeclared_argument_is_partial_unknown(self):
+        a, u, r = run("read_file", {"path": "a", "extra": "x"}, tool_schema=self.SCHEMA)
+        self.assertTrue(u and r["args_schema_violation"])
+        self.assertEqual(a, {"read"})
+
+    def test_missing_required_and_wrong_type_are_flagged(self):
+        self.assertTrue(run("read_file", {}, tool_schema=self.SCHEMA)[2]["args_schema_violation"])
+        self.assertTrue(run("read_file", {"path": 5}, tool_schema=self.SCHEMA)[2]["args_schema_violation"])
+        self.assertTrue(run("read_file", {"path": "a", "limit": 1.5}, tool_schema=self.SCHEMA)[2]["args_schema_violation"])
+
+    def test_open_or_unsupported_schema_is_not_judged(self):
+        self.assertFalse(run("read_file", {"path": "a", "x": 1}, tool_schema={"type": "object"})[2]["args_schema_violation"])
+        self.assertFalse(run("read_file", {"path": "a"}, tool_schema={"anyOf": []})[2]["args_schema_violation"])
+
+    def test_union_property_type_does_not_crash_shallow_checker(self):
+        schema = {"type": "object", "properties": {"path": {"type": ["string", "null"]}},
+                  "required": ["path"], "additionalProperties": False}
+        for value in ("a", None):
+            with self.subTest(value=value):
+                a, _, r = run("read_file", {"path": value}, tool_schema=schema)
+                self.assertEqual(r["status"], "ok")
+                self.assertIsNone(r["failure"])
+                self.assertEqual(a, {"read"})
+                self.assertFalse(r["args_schema_violation"])
+
+    def test_unsupported_property_type_shape_does_not_raise_internal_error(self):
+        for kind in (None, {}, []):
+            with self.subTest(kind=kind):
+                schema = {"type": "object", "properties": {"path": {"type": kind}}}
+                r = run("read_file", {"path": "a"}, tool_schema=schema)[2]
+                self.assertIsNone(r["failure"])
+                self.assertEqual(r["status"], "ok")
+
+    def test_pinned_schema_wins_over_a_drifted_declared_one(self):
+        drifted = {"type": "object", "properties": {"path": {"type": "string"}, "extra": {"type": "string"}}}
+        a, u, r = run("read_file", {"path": "a", "extra": "x"}, tool_schema=drifted, pinned_schema=self.SCHEMA)
+        self.assertTrue(r["schema_mismatch"] and r["args_schema_violation"] and u)
+
+
+class ReadLabelsDoNotOverrideEffects(unittest.TestCase):
+    def test_read_name_with_a_write_argument_keeps_the_write(self):
+        a, _, r = run("get_status", {"path": "a.txt", "content": "new"})
+        self.assertIn("write", a)
+        self.assertTrue(r["name_conflict"])
+
+    def test_read_name_with_unresolved_runner_is_not_certain(self):
+        a, u, _ = run("read_plugin_state", {"plugin": "x", "scope": "all"})
+        self.assertTrue(u)
+
+
+class DeleteAndPermissionChangesStaySeparate(unittest.TestCase):
+    """Review of PR 2: a mixed delete + access change must keep the delete."""
+
+    def test_delete_file_and_grant_access_keeps_both(self):
+        a, u, _ = run("delete_file_and_grant_access", {"path": "a.txt", "user": "bob"})
+        self.assertEqual((a, u), ({"delete", "change_permissions"}, False))
+
+    def test_remove_file_then_set_permissions_keeps_both(self):
+        a, _, _ = run("remove_file_set_permissions", {"path": "a.txt", "permissions": "777"})
+        self.assertEqual(a, {"delete", "change_permissions"})
+
+    def test_delete_flag_next_to_a_permission_argument_keeps_both(self):
+        a, _, _ = run("manage_file", {"path": "a.txt", "delete": True, "permissions": "public"})
+        self.assertEqual(a, {"delete", "change_permissions"})
+
+    def test_false_delete_flag_is_not_a_delete(self):
+        a, _, _ = run("manage_file", {"path": "a.txt", "delete": False, "permissions": "public"})
+        self.assertEqual(a, {"change_permissions"})
+
+    def test_two_clauses_keep_each_clauses_own_effect(self):
+        # reproduction from the review of PR 2: "member" belongs to the second clause only
+        a, u, _ = run("delete_file_and_remove_member", {"path": "x", "member_id": "u"})
+        self.assertEqual((a, u), ({"delete", "change_permissions"}, False))
+
+    def test_one_clause_naming_a_file_and_an_access_noun_is_ambiguous(self):
+        a, u, r = run("delete_member_file", {"path": "x", "member_id": "u"})
+        self.assertEqual((a, u), ({"delete", "change_permissions"}, True))
+
+    def test_removing_a_member_from_a_group_is_an_access_change(self):
+        a, u, _ = run("remove_group_member", {"group": "g", "member_id": "u"})
+        self.assertEqual((a, u), ({"change_permissions"}, False))
+
+    def test_removing_an_access_entry_is_not_a_file_delete(self):
+        for name in ("remove_user_access", "delete_user_permission", "permission_delete"):
+            with self.subTest(name=name):
+                a, _, _ = run(name, {"user": "bob", "role": "viewer"})
+                self.assertEqual(a, {"change_permissions"})
+
+
+class GenericRunnerStaysOpen(unittest.TestCase):
+    """Review of PR 2: a tool that only says "run" must not become a certain write."""
+
+    def test_run_with_mode_value_is_not_certain(self):
+        for args in ({"id": "42", "mode": "x"}, {"mode": "w"}):
+            with self.subTest(args=args):
+                self.assertTrue(run("run", args)[1])
+
+    def test_run_with_a_visible_shell_command_is_still_judged(self):
+        a, u, _ = run("run", {"command": "ls -la"})
+        self.assertEqual((a, u), ({"read"}, False))
+
+    def test_opaque_runner_clause_in_a_compound_name_keeps_the_known_action_and_unknown(self):
+        # reproductions from the review of PR 2
+        for name in ("read_and_run", "read_and_call"):
+            with self.subTest(name=name):
+                a, u, _ = run(name, {"path": "x", "task_id": "t"})
+                self.assertEqual((a, u), ({"read"}, True))
+
+    def test_empty_or_nontext_command_does_not_resolve_an_opaque_runner(self):
+        for name in ("read_and_run", "read_and_call"):
+            for command in (None, 42, [], {}, "", "   "):
+                with self.subTest(name=name, command=command):
+                    a, u, r = run(name, {"path": "x", "task_id": "t", "command": command})
+                    self.assertEqual((a, u), ({"read"}, True))
+                    self.assertIsNone(r["failure"])
+
+    def test_runner_clause_is_resolved_by_a_visible_command_or_parsed_steps(self):
+        a, u, _ = run("read_and_run", {"path": "x", "command": "ls"})
+        self.assertEqual((a, u), ({"read"}, False))
+        steps = [{"action": "read_file", "path": "a"}]
+        a, u, _ = run("read_and_run_workflow", {"steps": steps})
+        self.assertEqual((a, u), ({"read"}, False))
+
+    def test_workflow_steps_are_still_read_one_by_one(self):
+        steps = [{"action": "read_file", "path": "a"}, {"action": "send_email", "body": "x", "to": "t@x.test"}]
+        a, u, _ = run("run_workflow", {"steps": steps})
+        self.assertEqual((a, u), ({"read", "send_data"}, False))
+
+    def test_a_named_action_is_not_treated_as_a_bare_runner(self):
+        a, u, _ = run("batch_delete", {"ids": [1, 2]})
+        self.assertEqual((a, u), ({"delete"}, False))
+
+
+if __name__ == "__main__":
+    unittest.main()
