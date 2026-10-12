@@ -1,0 +1,77 @@
+name: Gate Validator CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - feature/*
+
+jobs:
+  validate-gate-matrix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: SOU-26 Positive and Failure Matrix
+        shell: bash
+        run: |
+          mkdir -p tests
+          cd tests
+          MANIFEST="candidate-manifest.json"
+          cat <<EOF > "$MANIFEST"
+          {
+            "tag": "v0.3.0",
+            "source_sha": "dummy_sha",
+            "checksums": ["hash1  file1", "hash2  file2"]
+          }
+          EOF
+          
+          chmod +x ../scripts/validate_candidate.sh
+
+          echo "--- Test 1: Missing approval file ---"
+          if ../scripts/validate_candidate.sh "missing.json" "$MANIFEST"; then exit 1; fi
+
+          echo "--- Test 2: Decision rejected ---"
+          cat <<EOF > rec_rej.json
+          {"decision": "rejected", "source_sha": "dummy_sha", "checksums": ["hash1  file1", "hash2  file2"], "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
+          EOF
+          if ../scripts/validate_candidate.sh rec_rej.json "$MANIFEST"; then exit 1; fi
+
+          echo "--- Test 3: Approved but missing product gate ---"
+          cat <<EOF > rec_missing_gate.json
+          {"decision": "approved", "source_sha": "dummy_sha", "checksums": ["hash1  file1", "hash2  file2"], "evidence_ref": "https://ref", "gates": {"operator": "passed", "license": "passed"}}
+          EOF
+          if ../scripts/validate_candidate.sh rec_missing_gate.json "$MANIFEST"; then exit 1; fi
+
+          echo "--- Test 4: Approved but operator gate failed ---"
+          cat <<EOF > rec_failed_gate.json
+          {"decision": "approved", "source_sha": "dummy_sha", "checksums": ["hash1  file1", "hash2  file2"], "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "failed", "license": "passed"}}
+          EOF
+          if ../scripts/validate_candidate.sh rec_failed_gate.json "$MANIFEST"; then exit 1; fi
+          
+          echo "--- Test 5: Approved but license gate skipped ---"
+          cat <<EOF > rec_skipped_gate.json
+          {"decision": "approved", "source_sha": "dummy_sha", "checksums": ["hash1  file1", "hash2  file2"], "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "skipped"}}
+          EOF
+          if ../scripts/validate_candidate.sh rec_skipped_gate.json "$MANIFEST"; then exit 1; fi
+
+          echo "--- Test 6: Wrong source SHA ---"
+          cat <<EOF > rec_sha.json
+          {"decision": "approved", "source_sha": "badsha", "checksums": ["hash1  file1", "hash2  file2"], "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
+          EOF
+          if ../scripts/validate_candidate.sh rec_sha.json "$MANIFEST"; then exit 1; fi
+
+          echo "--- Test 7: Changed artifact ---"
+          cat <<EOF > rec_hash.json
+          {"decision": "approved", "source_sha": "dummy_sha", "checksums": ["badhash  file1", "hash2  file2"], "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
+          EOF
+          if ../scripts/validate_candidate.sh rec_hash.json "$MANIFEST"; then exit 1; fi
+
+          echo "--- Test 8: Successful exact-candidate ---"
+          cat <<EOF > rec_good.json
+          {"decision": "approved", "source_sha": "dummy_sha", "checksums": ["hash1  file1", "hash2  file2"], "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
+          EOF
+          ../scripts/validate_candidate.sh rec_good.json "$MANIFEST"
+          
+          echo "All SOU-26 validator tests passed successfully!"
