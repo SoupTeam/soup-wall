@@ -40,12 +40,14 @@ Only counts and error messages are printed, never label values.
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 ACTIONS = ('read', 'write', 'delete', 'send_data', 'change_permissions')
 DEV_SPLITS = ('train', 'validation', 'calibration')
@@ -94,11 +96,51 @@ def mask_ok(labels):
     return all(labels['known_mask'][a] == int(labels['per_action_targets'][a] is not None) for a in ACTIONS)
 
 
+def is_link(path):
+    """Include dangling symlinks and Windows directory junctions/reparse points."""
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return False
+    return stat.S_ISLNK(info.st_mode) or bool(getattr(info, 'st_file_attributes', 0) & 0x400)
+
+
+def export_path(root, rel):
+    """Resolve a canonical relative export member before any content read."""
+    if (not isinstance(rel, str) or not rel or '\\' in rel or ':' in rel
+            or PurePosixPath(rel).is_absolute() or '..' in PurePosixPath(rel).parts
+            or PurePosixPath(rel).as_posix() != rel):
+        raise ValueError('path must be a canonical relative export member')
+    root = root.resolve()
+    target = root / rel
+    for part in (target, *target.parents):
+        if part == root:
+            break
+        if is_link(part):
+            raise ValueError('symlink or reparse point is not an export member')
+    if not inside(target, root):
+        raise ValueError('path leaves the export directory')
+    return target
+
+
 def file_errors(root, man):
     e = []
     listed = man.get('files_sha256') or {}
-    present = {p.relative_to(root).as_posix() for p in root.rglob('*')
-               if p.is_file() and '__pycache__' not in p.parts}
+    if not isinstance(listed, dict):
+        return ['manifest: files_sha256 must be an object']
+    present = set()
+    for directory, dirs, files in os.walk(root, followlinks=False):
+        for name in list(dirs):
+            path = Path(directory) / name
+            if is_link(path):
+                e.append(f'{path.relative_to(root).as_posix()}: symlink or reparse point')
+                dirs.remove(name)
+        for name in files:
+            path = Path(directory) / name
+            rel = path.relative_to(root).as_posix()
+            present.add(rel)
+            if is_link(path):
+                e.append(f'{rel}: symlink or reparse point')
     for rel in sorted(present | set(listed)):
         parts = [x.lower() for x in Path(rel).parts]
         if parts[-1] in TEST_NAMES or set(parts[:-1]) & TEST_DIRS:
@@ -106,8 +148,24 @@ def file_errors(root, man):
     for rel in sorted(present - set(listed) - {MANIFEST}):
         e.append(f'{rel}: not listed in {MANIFEST}')
     for rel, digest in sorted(listed.items()):
-        if not (root / rel).is_file() or fsha(root / rel) != digest:
+        try:
+            member = export_path(root, rel)
+        except ValueError as exc:
+            e.append(f'{rel}: {exc}')
+            continue
+        if not member.is_file() or fsha(member) != digest:
             e.append(f'{rel}: missing or digest mismatch')
+    references = [item.get('file') if isinstance(item, dict) else None for item in man.get('addenda', [])]
+    if isinstance(man.get('authorization'), dict):
+        references.append(man['authorization'].get('file'))
+    for rel in references:
+        try:
+            export_path(root, rel)
+        except ValueError as exc:
+            e.append(f'manifest reference {rel}: {exc}')
+            continue
+        if rel not in listed:
+            e.append(f'manifest reference {rel}: not listed in files_sha256')
     return e
 
 
@@ -331,7 +389,11 @@ def statement_digest(a):
 
 def verify(root, expect_manifest_sha256=None, statement_args=None):
     root = Path(root)
-    mpath = root / MANIFEST
+    try:
+        mpath = export_path(root, MANIFEST)
+    except ValueError as exc:
+        return {'result': 'FAIL', 'errors': [f'{MANIFEST}: {exc}'], 'self_consistency': 'FAIL',
+                'anchored_integrity': 'FAIL'}
     if not mpath.is_file():
         return {'result': 'FAIL', 'errors': [f'missing {MANIFEST}'], 'self_consistency': 'FAIL',
                 'anchored_integrity': 'FAIL'}
