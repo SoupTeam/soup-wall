@@ -11,11 +11,28 @@ safe local fixtures. Owner: konung3; PR review coordinator: Nari_Ab.
 On that historical preparation base, Native/MCP fixtures and the adapter runner
 were tested separately; those results did not establish the integrated milestone.
 The current candidate below adds production classification/policy gating and
-resource receipt authorization, while generic classification and constrained
-resource execution remain unfinished. No competing test-local pipeline replaces
+resource receipt authorization and all five generic classifier reply shapes.
+Constrained resource execution remains unfinished. No competing test-local pipeline replaces
 those production components.
 
-## Current candidate recheck — 2026-10-11
+## Current candidate recheck — 2026-10-12
+
+The [main 45b611a recheck](evidence/sou17_candidate_45b611a_2026-10-12.md) verifies
+PR #82's actual five-shape production policy routing: 107 existing regressions,
+a strict 15-case generic profile, 64-refusal continuation and useful authorized
+mixed-action send. Invalid replies remain distinct from semantic policy refusals.
+The strict profile checks final executor/receiver ledgers, complete client/server
+transcripts and native call/result binding; its 26 grader regressions reject false
+passes. The existing native macOS CI job runs it on the exact source and retains
+raw results. The report includes paired 30-read latency, false interruptions,
+failures/skips, hashes and reproducible commands. **SOU-17 stays open** for SOU-15's
+reviewed constrained resource executor and exact-candidate final acceptance.
+
+[October 12 CodeQL follow-up](../operations/evidence/CODE_SCANNING_TRIAGE_2026-10-12.md)
+confirms zero open / 81 closed main alerts, individual justified fixture dismissals
+and a working exact-source Rust scan. This does not establish runtime enforcement.
+
+## Historical candidate recheck — 2026-10-11
 
 The [main 9b055a6 recheck](evidence/sou17_candidate_9b055a6_2026-10-11.md)
 adds production-classifier lifecycle checks, pending-admission cancellation and

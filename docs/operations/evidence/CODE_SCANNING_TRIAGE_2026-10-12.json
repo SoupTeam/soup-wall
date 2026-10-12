@@ -1,0 +1,547 @@
+{
+  "schema_version": "sou17-code-scanning-triage/0.1",
+  "observed_on": "2026-10-12",
+  "observation_timezone": "Asia/Almaty",
+  "repository": "https://github.com/SoupTeam/soup-wall",
+  "status": "current scoped inventory, maintainer-justified dispositions and working exact-candidate Rust analysis verified",
+  "source_review_commit": "45b611a36834533b9d17d12d6b9a1357a3843457",
+  "source_review_clean_tracked": true,
+  "access": {
+    "linear": "authorized connector reads of SOU-17/SOU-18 comments preserved as dated review evidence",
+    "github_security": "authorized authenticated GitHub UI; current main inventory and all six individual activity pages reread",
+    "current_inventory_verified": true,
+    "security_settings_or_alert_mutations_performed": false
+  },
+  "open_alert_count": 0,
+  "closed_alert_count_observed": 81,
+  "open_severity_counts": {},
+  "analyzed_branch": "main",
+  "analyzed_commit": "45b611a36834533b9d17d12d6b9a1357a3843457",
+  "current_scan_status": "working as expected; exact candidate Rust configuration verified",
+  "initial_inventory": {
+    "date": "2026-10-11",
+    "source": "CODE_SCANNING_TRIAGE_2026-10-11.json",
+    "scope": "is:open branch:main",
+    "open_alert_count": 6,
+    "closed_alert_count": 74,
+    "severity_counts": {
+      "critical": 6
+    },
+    "analyzed_commit": "9b055a6d97166a9b3f9347c45c305038c331cfcf",
+    "analysis_status": "working as expected; exact reviewed main revision",
+    "scanner": {
+      "tool": "CodeQL",
+      "setup": "Default setup",
+      "analysis_status": "working as expected",
+      "last_scan_date": "2026-10-11",
+      "tool_version": "2.27.2",
+      "category": "/language:rust",
+      "extensions": {
+        "codeql/rust-queries": "0.1.44",
+        "codeql/rust-all": "0.2.23",
+        "codeql/threat-models": "1.0.59"
+      },
+      "languages_shown": [
+        "rust",
+        "python",
+        "actions"
+      ],
+      "observed_last_scan_commits": {
+        "rust": "9b055a6d97166a9b3f9347c45c305038c331cfcf",
+        "python": "9b055a6d97166a9b3f9347c45c305038c331cfcf",
+        "actions": "9b055a6d97166a9b3f9347c45c305038c331cfcf"
+      },
+      "rust_matches_source_review_commit": true,
+      "status_url": "https://github.com/SoupTeam/soup-wall/security/code-scanning/tools/CodeQL/status/configurations/automatic/2b7122206b8ac86cd7b88fd927bd502861908b2a6bfb3dfdcf2968009cb71086",
+      "analysis_followup": "Authorized UI follow-up shows a completed working Rust scan of the exact reviewed main revision; six alerts remain open."
+    }
+  },
+  "maintainer_review": {
+    "issue": "SOU-17",
+    "issue_url": "https://linear.app/soup-wall/issue/SOU-17/task-11-independently-verify-failure-overlap-and-replay-behavior",
+    "comment_id": "988e827e-d81e-4075-8ecb-443007074471",
+    "created_at_utc": "2026-10-11T07:38:40.480Z",
+    "actor": "Baubek Serikbay",
+    "stated_role": "maintainer",
+    "reviewed_commit": "91a401a03b9f4a44f5f341c83c53a25e7d6e527f",
+    "assessment": "maintainer technical review supports false-positive disposition for production-secret defects at all six locations",
+    "rationale": "Deterministic PBKDF2 known-answer/provider-parity test inputs with fixed expected outputs and deliberate FIPS checks; negative UnsupportedAlgorithm/refusal tests before credential use; separate Cargo integration-test targets. No production remediation identified.",
+    "action_performed": "assessment only; comment reports no dismissal or security-setting change"
+  },
+  "subsequent_individual_refresh": {
+    "issue": "SOU-17",
+    "issue_url": "https://linear.app/soup-wall/issue/SOU-17/task-11-independently-verify-failure-overlap-and-replay-behavior",
+    "comment_id": "6fff57c3-b72a-40ac-bc07-f3770bed2347",
+    "created_at_utc": "2026-10-11T07:43:28.297Z",
+    "actor": "Baubek Serikbay",
+    "reported_access": "authenticated live GitHub UI after user sign-in",
+    "reported_open_alert_count": 6,
+    "reported_closed_alert_count": 74,
+    "reported_branch": "main",
+    "reported_alert_source_commit": "91a401a03b9f4a44f5f341c83c53a25e7d6e527f",
+    "reported_individual_alerts": [
+      85,
+      86,
+      87,
+      88,
+      89,
+      90
+    ],
+    "reported_state": "all six remained open; no disposition changed by that check"
+  },
+  "later_reported_aggregate": {
+    "issue": "SOU-18",
+    "issue_url": "https://linear.app/soup-wall/issue/SOU-18/task-12-verify-clean-setup-and-actual-active-protection-status",
+    "comment_id": "8982bba4-5583-4cc3-9b10-a536cedb029b",
+    "created_at_utc": "2026-10-11T09:54:16.680Z",
+    "actor": "Baubek Serikbay",
+    "reported_access": "authenticated live Code Scanning view",
+    "reported_open_alert_count": 0,
+    "reported_closed_alert_count": 80,
+    "reported_scope": "Code Scanning overview; exact filter/branch and analyzed commit not supplied in the comment",
+    "reported_action": "review itself changed no alerts or settings",
+    "individual_disposition_records_supplied": false,
+    "interpretation": "This is a reported historical aggregate change, not an independently verified current inventory or evidence of six source fixes."
+  },
+  "alerts": [
+    {
+      "number": 85,
+      "url": "https://github.com/SoupTeam/soup-wall/security/code-scanning/85",
+      "rule_id": "rust/hard-coded-cryptographic-value",
+      "rule_name": "Hard-coded cryptographic value",
+      "historical_severity": "critical",
+      "path": "vendor/kryptering/tests/provider_baseline.rs",
+      "line": 165,
+      "source_review_commit": "45b611a36834533b9d17d12d6b9a1357a3843457",
+      "source_url": "https://github.com/SoupTeam/soup-wall/blob/45b611a36834533b9d17d12d6b9a1357a3843457/vendor/kryptering/tests/provider_baseline.rs#L165",
+      "file_sha256": "70755b1ffd48ba145a7689b0a0572fc8be4d833c35dd419528a14fc9ad212fce",
+      "matches_initial_triage_bytes": true,
+      "test_function": "kdfs_match_known_answers",
+      "assessment": "maintainer-reviewed false positive for a production hard-coded-secret defect",
+      "rationale": "PBKDF2 known-answer input with fixed expected bytes; FIPS mode rejects undersized parameters.",
+      "assessment_review_comment_id": "988e827e-d81e-4075-8ecb-443007074471",
+      "assessment_review_actor": "Baubek Serikbay",
+      "assessment_review_commit": "91a401a03b9f4a44f5f341c83c53a25e7d6e527f",
+      "last_individually_reported_state": "dismissed",
+      "last_individually_reported_analyzed_commit": "45b611a36834533b9d17d12d6b9a1357a3843457",
+      "current_github_state": "dismissed",
+      "current_state_verified": true,
+      "current_severity": "critical",
+      "current_assignee": null,
+      "current_analyzed_branch": "main",
+      "current_analyzed_commit": "45b611a36834533b9d17d12d6b9a1357a3843457",
+      "current_analysis_status": "exact-source alert link; Rust default setup working as expected",
+      "closure_reason": "used in tests",
+      "closure_actor": "winux125",
+      "closure_time": "2026-10-11T14:01+05:00",
+      "fix_commit": null,
+      "current_assignee_verified": true,
+      "closure_date": "2026-10-11",
+      "closure_time_precision": "minute",
+      "disposition": "independently verified dismissal as used in tests; no production source fix",
+      "current_activity_evidence_file": "alert-85.txt",
+      "closure_rationale_support": "Matches the prior maintainer technical review: deterministic PBKDF2 known-answer/provider-parity fixtures and deliberate UnsupportedAlgorithm/FIPS refusal tests; separate integration-test targets.",
+      "previous_individual_observation_comment_id": "6fff57c3-b72a-40ac-bc07-f3770bed2347",
+      "latest_individual_observation": "authorized authenticated GitHub UI on 2026-10-12; complete activity snapshot identified in current_activity_evidence_file"
+    },
+    {
+      "number": 86,
+      "url": "https://github.com/SoupTeam/soup-wall/security/code-scanning/86",
+      "rule_id": "rust/hard-coded-cryptographic-value",
+      "rule_name": "Hard-coded cryptographic value",
+      "historical_severity": "critical",
+      "path": "vendor/kryptering/tests/provider_baseline.rs",
+      "line": 193,
+      "source_review_commit": "45b611a36834533b9d17d12d6b9a1357a3843457",
+      "source_url": "https://github.com/SoupTeam/soup-wall/blob/45b611a36834533b9d17d12d6b9a1357a3843457/vendor/kryptering/tests/provider_baseline.rs#L193",
+      "file_sha256": "70755b1ffd48ba145a7689b0a0572fc8be4d833c35dd419528a14fc9ad212fce",
+      "matches_initial_triage_bytes": true,
+      "test_function": "kdfs_match_known_answers",
+      "assessment": "maintainer-reviewed false positive for a production hard-coded-secret defect",
+      "rationale": "Compliant PBKDF2 known-answer input; fixed expected output, independently documented Python hashlib comparison.",
+      "assessment_review_comment_id": "988e827e-d81e-4075-8ecb-443007074471",
+      "assessment_review_actor": "Baubek Serikbay",
+      "assessment_review_commit": "91a401a03b9f4a44f5f341c83c53a25e7d6e527f",
+      "last_individually_reported_state": "dismissed",
+      "last_individually_reported_analyzed_commit": "45b611a36834533b9d17d12d6b9a1357a3843457",
+      "current_github_state": "dismissed",
+      "current_state_verified": true,
+      "current_severity": "critical",
+      "current_assignee": null,
+      "current_analyzed_branch": "main",
+      "current_analyzed_commit": "45b611a36834533b9d17d12d6b9a1357a3843457",
+      "current_analysis_status": "exact-source alert link; Rust default setup working as expected",
+      "closure_reason": "used in tests",
+      "closure_actor": "winux125",
+      "closure_time": null,
+      "fix_commit": null,
+      "current_assignee_verified": true,
+      "closure_date": "2026-10-11",
+      "closure_time_precision": "date",
+      "disposition": "independently verified dismissal as used in tests; no production source fix",
+      "current_activity_evidence_file": "alert-86-complete.txt",
+      "closure_rationale_support": "Matches the prior maintainer technical review: deterministic PBKDF2 known-answer/provider-parity fixtures and deliberate UnsupportedAlgorithm/FIPS refusal tests; separate integration-test targets.",
+      "previous_individual_observation_comment_id": "6fff57c3-b72a-40ac-bc07-f3770bed2347",
+      "latest_individual_observation": "authorized authenticated GitHub UI on 2026-10-12; complete activity snapshot identified in current_activity_evidence_file"
+    },
+    {
+      "number": 87,
+      "url": "https://github.com/SoupTeam/soup-wall/security/code-scanning/87",
+      "rule_id": "rust/hard-coded-cryptographic-value",
+      "rule_name": "Hard-coded cryptographic value",
+      "historical_severity": "critical",
+      "path": "vendor/kryptering/tests/provider_baseline.rs",
+      "line": 524,
+      "source_review_commit": "45b611a36834533b9d17d12d6b9a1357a3843457",
+      "source_url": "https://github.com/SoupTeam/soup-wall/blob/45b611a36834533b9d17d12d6b9a1357a3843457/vendor/kryptering/tests/provider_baseline.rs#L524",
+      "file_sha256": "70755b1ffd48ba145a7689b0a0572fc8be4d833c35dd419528a14fc9ad212fce",
+      "matches_initial_triage_bytes": true,
+      "test_function": "unsupported_operations_are_reported_before_key_parsing",
+      "assessment": "maintainer-reviewed false positive for a production hard-coded-secret defect",
+      "rationale": "Negative RustCrypto test asserts UnsupportedAlgorithm before input parsing; no credential is installed.",
+      "assessment_review_comment_id": "988e827e-d81e-4075-8ecb-443007074471",
+      "assessment_review_actor": "Baubek Serikbay",
+      "assessment_review_commit": "91a401a03b9f4a44f5f341c83c53a25e7d6e527f",
+      "last_individually_reported_state": "dismissed",
+      "last_individually_reported_analyzed_commit": "45b611a36834533b9d17d12d6b9a1357a3843457",
+      "current_github_state": "dismissed",
+      "current_state_verified": true,
+      "current_severity": "critical",
+      "current_assignee": null,
+      "current_analyzed_branch": "main",
+      "current_analyzed_commit": "45b611a36834533b9d17d12d6b9a1357a3843457",
+      "current_analysis_status": "exact-source alert link; Rust default setup working as expected",
+      "closure_reason": "used in tests",
+      "closure_actor": "winux125",
+      "closure_time": null,
+      "fix_commit": null,
+      "current_assignee_verified": true,
+      "closure_date": "2026-10-11",
+      "closure_time_precision": "date",
+      "disposition": "independently verified dismissal as used in tests; no production source fix",
+      "current_activity_evidence_file": "alert-87-complete.txt",
+      "closure_rationale_support": "Matches the prior maintainer technical review: deterministic PBKDF2 known-answer/provider-parity fixtures and deliberate UnsupportedAlgorithm/FIPS refusal tests; separate integration-test targets.",
+      "previous_individual_observation_comment_id": "6fff57c3-b72a-40ac-bc07-f3770bed2347",
+      "latest_individual_observation": "authorized authenticated GitHub UI on 2026-10-12; complete activity snapshot identified in current_activity_evidence_file"
+    },
+    {
+      "number": 88,
+      "url": "https://github.com/SoupTeam/soup-wall/security/code-scanning/88",
+      "rule_id": "rust/hard-coded-cryptographic-value",
+      "rule_name": "Hard-coded cryptographic value",
+      "historical_severity": "critical",
+      "path": "vendor/kryptering/tests/provider_baseline.rs",
+      "line": 549,
+      "source_review_commit": "45b611a36834533b9d17d12d6b9a1357a3843457",
+      "source_url": "https://github.com/SoupTeam/soup-wall/blob/45b611a36834533b9d17d12d6b9a1357a3843457/vendor/kryptering/tests/provider_baseline.rs#L549",
+      "file_sha256": "70755b1ffd48ba145a7689b0a0572fc8be4d833c35dd419528a14fc9ad212fce",
+      "matches_initial_triage_bytes": true,
+      "test_function": "unsupported_operations_are_reported_before_key_parsing",
+      "assessment": "maintainer-reviewed false positive for a production hard-coded-secret defect",
+      "rationale": "Negative FIPS test asserts refusal of SHA-1 PBKDF2 before parameter validation.",
+      "assessment_review_comment_id": "988e827e-d81e-4075-8ecb-443007074471",
+      "assessment_review_actor": "Baubek Serikbay",
+      "assessment_review_commit": "91a401a03b9f4a44f5f341c83c53a25e7d6e527f",
+      "last_individually_reported_state": "dismissed",
+      "last_individually_reported_analyzed_commit": "45b611a36834533b9d17d12d6b9a1357a3843457",
+      "current_github_state": "dismissed",
+      "current_state_verified": true,
+      "current_severity": "critical",
+      "current_assignee": null,
+      "current_analyzed_branch": "main",
+      "current_analyzed_commit": "45b611a36834533b9d17d12d6b9a1357a3843457",
+      "current_analysis_status": "exact-source alert link; Rust default setup working as expected",
+      "closure_reason": "used in tests",
+      "closure_actor": "winux125",
+      "closure_time": null,
+      "fix_commit": null,
+      "current_assignee_verified": true,
+      "closure_date": "2026-10-11",
+      "closure_time_precision": "date",
+      "disposition": "independently verified dismissal as used in tests; no production source fix",
+      "current_activity_evidence_file": "alert-88-complete.txt",
+      "closure_rationale_support": "Matches the prior maintainer technical review: deterministic PBKDF2 known-answer/provider-parity fixtures and deliberate UnsupportedAlgorithm/FIPS refusal tests; separate integration-test targets.",
+      "previous_individual_observation_comment_id": "6fff57c3-b72a-40ac-bc07-f3770bed2347",
+      "latest_individual_observation": "authorized authenticated GitHub UI on 2026-10-12; complete activity snapshot identified in current_activity_evidence_file"
+    },
+    {
+      "number": 89,
+      "url": "https://github.com/SoupTeam/soup-wall/security/code-scanning/89",
+      "rule_id": "rust/hard-coded-cryptographic-value",
+      "rule_name": "Hard-coded cryptographic value",
+      "historical_severity": "critical",
+      "path": "vendor/kryptering/tests/provider_parity.rs",
+      "line": 502,
+      "source_review_commit": "45b611a36834533b9d17d12d6b9a1357a3843457",
+      "source_url": "https://github.com/SoupTeam/soup-wall/blob/45b611a36834533b9d17d12d6b9a1357a3843457/vendor/kryptering/tests/provider_parity.rs#L502",
+      "file_sha256": "29afd20f093375a539bb2efd8b0818bd6017671c966001be396bdafc0ad3889f",
+      "matches_initial_triage_bytes": true,
+      "test_function": "kdfs_match_rfc_vectors",
+      "assessment": "maintainer-reviewed false positive for a production hard-coded-secret defect",
+      "rationale": "Fixed PBKDF2 expected outputs check provider parity; FIPS mode rejects undersized parameters.",
+      "assessment_review_comment_id": "988e827e-d81e-4075-8ecb-443007074471",
+      "assessment_review_actor": "Baubek Serikbay",
+      "assessment_review_commit": "91a401a03b9f4a44f5f341c83c53a25e7d6e527f",
+      "last_individually_reported_state": "dismissed",
+      "last_individually_reported_analyzed_commit": "45b611a36834533b9d17d12d6b9a1357a3843457",
+      "current_github_state": "dismissed",
+      "current_state_verified": true,
+      "current_severity": "critical",
+      "current_assignee": null,
+      "current_analyzed_branch": "main",
+      "current_analyzed_commit": "45b611a36834533b9d17d12d6b9a1357a3843457",
+      "current_analysis_status": "exact-source alert link; Rust default setup working as expected",
+      "closure_reason": "used in tests",
+      "closure_actor": "winux125",
+      "closure_time": null,
+      "fix_commit": null,
+      "current_assignee_verified": true,
+      "closure_date": "2026-10-11",
+      "closure_time_precision": "date",
+      "disposition": "independently verified dismissal as used in tests; no production source fix",
+      "current_activity_evidence_file": "alert-89-complete.txt",
+      "closure_rationale_support": "Matches the prior maintainer technical review: deterministic PBKDF2 known-answer/provider-parity fixtures and deliberate UnsupportedAlgorithm/FIPS refusal tests; separate integration-test targets.",
+      "previous_individual_observation_comment_id": "6fff57c3-b72a-40ac-bc07-f3770bed2347",
+      "latest_individual_observation": "authorized authenticated GitHub UI on 2026-10-12; complete activity snapshot identified in current_activity_evidence_file"
+    },
+    {
+      "number": 90,
+      "url": "https://github.com/SoupTeam/soup-wall/security/code-scanning/90",
+      "rule_id": "rust/hard-coded-cryptographic-value",
+      "rule_name": "Hard-coded cryptographic value",
+      "historical_severity": "critical",
+      "path": "vendor/kryptering/tests/provider_parity.rs",
+      "line": 532,
+      "source_review_commit": "45b611a36834533b9d17d12d6b9a1357a3843457",
+      "source_url": "https://github.com/SoupTeam/soup-wall/blob/45b611a36834533b9d17d12d6b9a1357a3843457/vendor/kryptering/tests/provider_parity.rs#L532",
+      "file_sha256": "29afd20f093375a539bb2efd8b0818bd6017671c966001be396bdafc0ad3889f",
+      "matches_initial_triage_bytes": true,
+      "test_function": "kdfs_match_rfc_vectors",
+      "assessment": "maintainer-reviewed false positive for a production hard-coded-secret defect",
+      "rationale": "Compliant PBKDF2 parameter variants check fixed expected outputs across providers.",
+      "assessment_review_comment_id": "988e827e-d81e-4075-8ecb-443007074471",
+      "assessment_review_actor": "Baubek Serikbay",
+      "assessment_review_commit": "91a401a03b9f4a44f5f341c83c53a25e7d6e527f",
+      "last_individually_reported_state": "dismissed",
+      "last_individually_reported_analyzed_commit": "45b611a36834533b9d17d12d6b9a1357a3843457",
+      "current_github_state": "dismissed",
+      "current_state_verified": true,
+      "current_severity": "critical",
+      "current_assignee": null,
+      "current_analyzed_branch": "main",
+      "current_analyzed_commit": "45b611a36834533b9d17d12d6b9a1357a3843457",
+      "current_analysis_status": "exact-source alert link; Rust default setup working as expected",
+      "closure_reason": "used in tests",
+      "closure_actor": "winux125",
+      "closure_time": null,
+      "fix_commit": null,
+      "current_assignee_verified": true,
+      "closure_date": "2026-10-11",
+      "closure_time_precision": "date",
+      "disposition": "independently verified dismissal as used in tests; no production source fix",
+      "current_activity_evidence_file": "alert-90-complete.txt",
+      "closure_rationale_support": "Matches the prior maintainer technical review: deterministic PBKDF2 known-answer/provider-parity fixtures and deliberate UnsupportedAlgorithm/FIPS refusal tests; separate integration-test targets.",
+      "previous_individual_observation_comment_id": "6fff57c3-b72a-40ac-bc07-f3770bed2347",
+      "latest_individual_observation": "authorized authenticated GitHub UI on 2026-10-12; complete activity snapshot identified in current_activity_evidence_file"
+    }
+  ],
+  "shared_source_evidence": [
+    {
+      "path": "Cargo.toml",
+      "observation": "The application workspace excludes vendor/kryptering as a member; its library remains an application dependency."
+    },
+    {
+      "path": "vendor/kryptering/Cargo.toml",
+      "lines": [
+        99,
+        119,
+        124
+      ],
+      "observation": "Production library is src/lib.rs; affected files are separate integration-test targets."
+    },
+    {
+      "path": "vendor/kryptering/src/lib.rs",
+      "observation": "Source search found no production import/include of the affected test files."
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "observation": "Release packaging retains binaries and the vendor licence, not these integration-test targets."
+    }
+  ],
+  "confirmed_code_scanning_defects": [],
+  "remediation_issues": [],
+  "fix_prs": [],
+  "dismissals_performed_by_this_verification": [],
+  "remediation_rescan": {
+    "status": "no_source_remediation_required_for_reviewed_fixture_findings",
+    "fix_commit": null,
+    "analysis_url": null,
+    "limitation": "The working exact-candidate analysis is verified after justified test-fixture dismissals. It is not a scan of a production remediation commit; no such fix was identified or performed."
+  },
+  "review_coordination": {
+    "triage_and_verification_owner": "konung3",
+    "pr_review_coordinator": "Nari_Ab",
+    "technical_assessment_recorded_by": "Baubek Serikbay, maintainer, in SOU-17",
+    "configuration_and_live_merge_gate_owner": "userarlan / SOU-18",
+    "future_confirmed_fix_owner": "affected implementation owner, to be named only if a defect is confirmed"
+  },
+  "pending_actions": [
+    {
+      "owner": "konung3",
+      "action": "Retain this scoped inventory/disposition and exact-source analysis evidence with the final runtime report. A relevant later code change requires affected checks on its new revision; revisit any new open finding."
+    },
+    {
+      "owner": "userarlan / SOU-18",
+      "action": "Provide separately verified scan/check configuration and live merge-gate behavior; this report does not activate or certify repository-admin settings."
+    }
+  ],
+  "limits": [
+    "Current observed inventory is scoped to is:open branch:main (zero open, 81 closed); unscanned branches and every other historical closed finding are not certified.",
+    "All six original Critical fixture alerts were individually reread and are dismissed by winux125 as used in tests. Technical rationale and source hashes agree with their recorded maintainer review.",
+    "The exact candidate Rust scan is working as expected. Python/Actions sidebar revisions match, but their individual status pages were not verified here.",
+    "Dismissals, a zero-open inventory and static-analysis success do not establish native/MCP enforcement effectiveness or an active merge-protection rule.",
+    "No source fix, new alert dismissal, permission expansion or security setting mutation was performed by this verification; source fixture bytes remain unchanged."
+  ],
+  "environment_history": [
+    {
+      "phase": "initial October 12 security reread",
+      "status": "blocked",
+      "reason": "ERR_NAME_NOT_RESOLVED on security UI, even after Git source fetching recovered",
+      "resolved": true
+    },
+    {
+      "phase": "later October 12 authorized security reread",
+      "status": "completed",
+      "observation": "Live access restored in the same selected browser; no new permissions or settings changes were made."
+    }
+  ],
+  "scanner": {
+    "tool": "CodeQL",
+    "setup": "Default setup",
+    "analysis_status": "working as expected",
+    "analyzed_commit": "45b611a36834533b9d17d12d6b9a1357a3843457",
+    "last_scan_date": "2026-10-12",
+    "last_scan_time_as_displayed": "14:50 Asia/Almaty; minute precision, observed by the coordinating agent",
+    "category": "/language:rust",
+    "tool_version": "2.27.2",
+    "extensions": {
+      "codeql/rust-queries": "0.1.44",
+      "codeql/rust-all": "0.2.23",
+      "codeql/threat-models": "1.0.59"
+    },
+    "languages_shown": [
+      "rust",
+      "python",
+      "actions"
+    ],
+    "observed_last_scan_commits": {
+      "rust": "45b611a36834533b9d17d12d6b9a1357a3843457",
+      "python": "45b611a36834533b9d17d12d6b9a1357a3843457",
+      "actions": "45b611a36834533b9d17d12d6b9a1357a3843457"
+    },
+    "individual_status_page_verified": {
+      "rust": true,
+      "python": false,
+      "actions": false
+    },
+    "scope_limit": "Python/Actions matching revisions are visible in the Rust configuration sidebar; their individual status pages were not inspected in this report.",
+    "status_url": "https://github.com/SoupTeam/soup-wall/security/code-scanning/tools/CodeQL/status/configurations/automatic/2b7122206b8ac86cd7b88fd927bd502861908b2a6bfb3dfdcf2968009cb71086"
+  },
+  "dismissals_verified": [
+    {
+      "number": 85,
+      "url": "https://github.com/SoupTeam/soup-wall/security/code-scanning/85",
+      "actor": "winux125",
+      "reason": "used in tests",
+      "date": "2026-10-11",
+      "observed_on": "2026-10-12",
+      "performed_by_this_verification": false
+    },
+    {
+      "number": 86,
+      "url": "https://github.com/SoupTeam/soup-wall/security/code-scanning/86",
+      "actor": "winux125",
+      "reason": "used in tests",
+      "date": "2026-10-11",
+      "observed_on": "2026-10-12",
+      "performed_by_this_verification": false
+    },
+    {
+      "number": 87,
+      "url": "https://github.com/SoupTeam/soup-wall/security/code-scanning/87",
+      "actor": "winux125",
+      "reason": "used in tests",
+      "date": "2026-10-11",
+      "observed_on": "2026-10-12",
+      "performed_by_this_verification": false
+    },
+    {
+      "number": 88,
+      "url": "https://github.com/SoupTeam/soup-wall/security/code-scanning/88",
+      "actor": "winux125",
+      "reason": "used in tests",
+      "date": "2026-10-11",
+      "observed_on": "2026-10-12",
+      "performed_by_this_verification": false
+    },
+    {
+      "number": 89,
+      "url": "https://github.com/SoupTeam/soup-wall/security/code-scanning/89",
+      "actor": "winux125",
+      "reason": "used in tests",
+      "date": "2026-10-11",
+      "observed_on": "2026-10-12",
+      "performed_by_this_verification": false
+    },
+    {
+      "number": 90,
+      "url": "https://github.com/SoupTeam/soup-wall/security/code-scanning/90",
+      "actor": "winux125",
+      "reason": "used in tests",
+      "date": "2026-10-11",
+      "observed_on": "2026-10-12",
+      "performed_by_this_verification": false
+    }
+  ],
+  "local_evidence": {
+    "handling": "Sanitized summary and local SHA-256 manifest only. Authenticated navigation/account details and fixture literals in raw snapshots are not committed. Loading-only initial alert pages are excluded.",
+    "files": [
+      {
+        "path": "target/sou17-pr82-2026-10-12/code-scanning/inventory.txt",
+        "sha256": "90d1ed8081744226d7ea70d2479412b4a14a4fa348418be0f54ada39414bf4a0"
+      },
+      {
+        "path": "target/sou17-pr82-2026-10-12/code-scanning/closed-inventory.txt",
+        "sha256": "d445ef492b480b98c3a1f0031b92d4306f10a76a430f349f419b0e7c01e2f7ad"
+      },
+      {
+        "path": "target/sou17-pr82-2026-10-12/code-scanning/alert-85.txt",
+        "sha256": "b1c1cfaa19672bcb5c5a185042c891e93dcfd07ffb8c823e2c87fac8f73af108"
+      },
+      {
+        "path": "target/sou17-pr82-2026-10-12/code-scanning/alert-86-complete.txt",
+        "sha256": "090841f6b3c02652900f04200af25aa8232b5d7d029dceae34dd2584c0a53021"
+      },
+      {
+        "path": "target/sou17-pr82-2026-10-12/code-scanning/alert-87-complete.txt",
+        "sha256": "60bbb4752d61ec98561c3ba40a25aa2aaac211307d870d51c11873ed0cba073c"
+      },
+      {
+        "path": "target/sou17-pr82-2026-10-12/code-scanning/alert-88-complete.txt",
+        "sha256": "2c6807bc8488787656e410a999825b52e4fe32f5ae2024aea185ee69d504fdec"
+      },
+      {
+        "path": "target/sou17-pr82-2026-10-12/code-scanning/alert-89-complete.txt",
+        "sha256": "3971736c9443cda9a91c70e4296ea454019a8745a943294601d8a44bd7e48948"
+      },
+      {
+        "path": "target/sou17-pr82-2026-10-12/code-scanning/alert-90-complete.txt",
+        "sha256": "0ce0237c73b5b86a98933789d0ff983bcb7cca7b0c4fb188f7f8ed40c49305e2"
+      },
+      {
+        "path": "target/sou17-pr82-2026-10-12/code-scanning/rust-status.txt",
+        "sha256": "d605e03e978ff34e11decfb56436a6f01c7256fc48ee3a774370380a7a003e86"
+      }
+    ]
+  }
+}

@@ -177,6 +177,16 @@ jobs:
           } > target/task3-resilience/environment.log
       - name: Retain exact-source SOU-17 regression outcomes
         run: python3 scripts/verify-sou17.py --expected-commit "$GITHUB_SHA" --out target/task3-resilience/verification
+      - name: Verify generic classifier shapes at the execution boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOU17_BINARY_SHA="$(python3 -c 'import hashlib, pathlib; print(hashlib.sha256(pathlib.Path("target/debug/agentfw").read_bytes()).hexdigest())')"
+          python3 scripts/verify-sou17-generic-boundary.py \
+            --repo "$PWD" --agentfw target/debug/agentfw \
+            --expected-commit "$GITHUB_SHA" \
+            --expected-binary-sha256 "$SOU17_BINARY_SHA" \
+            --output target/task3-resilience/generic-boundary
       - name: Retain native macOS resilience evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -185,6 +195,7 @@ jobs:
           path: |
             target/task3-resilience/environment.log
             target/task3-resilience/verification/
+            target/task3-resilience/generic-boundary/
           if-no-files-found: warn
           retention-days: 14
       - name: Disposable Agent setup and daemon status
