@@ -1,0 +1,260 @@
+# SOU-27 initial conservative permissive-policy proposal, subject to maintainer review.
+# These identifiers are not a blanket approval of every dependency.
+# The checker fails any new/unknown expression not meeting a full SPDX branch.
+allowed_licenses = [
+  "0BSD", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "BSL-1.0",
+  "CC0-1.0", "ISC", "MIT", "MIT-0", "Unicode-3.0", "Unicode-DFS-2016", "Zlib",
+]
+# WITH is *not* silently ignored. List reviewed whole expression pairs here.
+allowed_with_exceptions = []
+
+[workspace]
+expected_member_count = 6
+expected_member_names = ["soup-wall-core", "soup-wall-agent", "agentfw", "soup-wall-adapter", "soup-wall-bench", "llm-firewall"]
+vendored_package = "kryptering"
+vendored_version = "0.6.0"
+vendored_manifest = "vendor/kryptering/Cargo.toml"
+vendored_license = "BSD-2-Clause"
+
+# EXACT-ARCHIVE, version-specific exceptions. Each is pinned to Cargo.lock's
+# registry checksum plus verbatim source LICENSE text (and extra notices).
+# These are NOT a global allowance for slash expressions or CDLA data licenses.
+# See policy/third-party-notices/README.md and docs/PROVENANCE.md.
+
+[[package_exceptions]]
+name = "base64"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+license = "MIT/Apache-2.0"
+selected_license = "MIT"
+cargo_lock_checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
+reason = "Published crate metadata uses legacy non-SPDX slash wording; exact crate archive contains MIT license text supporting an MIT option. Notices were copied unchanged; not a general slash normalization or approval of new versions."
+notice_path = "policy/third-party-notices/base64-0.13.1/LICENSE-MIT"
+notice_sha256 = "0dd882e53de11566d50f8e8e2d5a651bcf3fabee4987d70f306233cf39094ba7"
+
+[[package_exceptions]]
+name = "enum-as-inner"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+license = "MIT/Apache-2.0"
+selected_license = "MIT"
+cargo_lock_checksum = "a1e6a265c649f3f5979b601d26f1d05ada116434c87741c9493cb56218f76cbc"
+reason = "Published crate metadata uses legacy non-SPDX slash wording; exact crate archive contains MIT license text supporting an MIT option. Notices were copied unchanged; not a general slash normalization or approval of new versions."
+notice_path = "policy/third-party-notices/enum-as-inner-0.6.1/LICENSE-MIT"
+notice_sha256 = "10d73bf26900fa6dd6f2613bb962b7bd8fa1e66618fcf0f9f899aa071a4ee200"
+[[package_exceptions.supplemental_notices]]
+path = "policy/third-party-notices/enum-as-inner-0.6.1/copyright.txt"
+sha256 = "b54db71f7d0b1f62c8c1b6b297347b81f7c217b4ce7e58223a20d2275535cd17"
+
+[[package_exceptions]]
+name = "fallible-iterator"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+license = "MIT/Apache-2.0"
+selected_license = "MIT"
+cargo_lock_checksum = "4443176a9f2c162692bd3d352d745ef9413eec5782a80d8fd6f8a1ac692a07f7"
+reason = "Published crate metadata uses legacy non-SPDX slash wording; exact crate archive contains MIT license text supporting an MIT option. Notices were copied unchanged; not a general slash normalization or approval of new versions."
+notice_path = "policy/third-party-notices/fallible-iterator-0.2.0/LICENSE-MIT"
+notice_sha256 = "0816e154b159ba255c563f7c8c7df5bbb8cc5fc96f5ab8cf9f4743b4f41fe7eb"
+
+[[package_exceptions]]
+name = "fallible-iterator"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+license = "MIT/Apache-2.0"
+selected_license = "MIT"
+cargo_lock_checksum = "2acce4a10f12dc2fb14a218589d4f1f62ef011b2d0cc4b3cb1bba8e94da14649"
+reason = "Published crate metadata uses legacy non-SPDX slash wording; exact crate archive contains MIT license text supporting an MIT option. Notices were copied unchanged; not a general slash normalization or approval of new versions."
+notice_path = "policy/third-party-notices/fallible-iterator-0.3.0/LICENSE-MIT"
+notice_sha256 = "0816e154b159ba255c563f7c8c7df5bbb8cc5fc96f5ab8cf9f4743b4f41fe7eb"
+
+[[package_exceptions]]
+name = "fallible-streaming-iterator"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+license = "MIT/Apache-2.0"
+selected_license = "MIT"
+cargo_lock_checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
+reason = "Published crate metadata uses legacy non-SPDX slash wording; exact crate archive contains MIT license text supporting an MIT option. Notices were copied unchanged; not a general slash normalization or approval of new versions."
+notice_path = "policy/third-party-notices/fallible-streaming-iterator-0.1.9/LICENSE-MIT"
+notice_sha256 = "8dcec5569a9be5b0e086c80faed6f1aefa670af0ec29cecc2f714303096887e0"
+
+[[package_exceptions]]
+name = "fnv"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+license = "Apache-2.0 / MIT"
+selected_license = "MIT"
+cargo_lock_checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
+reason = "Published crate metadata uses legacy non-SPDX slash wording; exact crate archive contains MIT license text supporting an MIT option. Notices were copied unchanged; not a general slash normalization or approval of new versions."
+notice_path = "policy/third-party-notices/fnv-1.0.7/LICENSE-MIT"
+notice_sha256 = "65fdb6c76cd61612070c066eec9ecdb30ee74fb27859d0d9af58b9f499fd0c3e"
+
+[[package_exceptions]]
+name = "ident_case"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+license = "MIT/Apache-2.0"
+selected_license = "MIT"
+cargo_lock_checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
+reason = "Published crate metadata uses legacy non-SPDX slash wording; exact crate archive contains MIT license text supporting an MIT option. Notices were copied unchanged; not a general slash normalization or approval of new versions."
+notice_path = "policy/third-party-notices/ident_case-1.0.1/LICENSE"
+notice_sha256 = "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
+
+[[package_exceptions]]
+name = "minimal-lexical"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+license = "MIT/Apache-2.0"
+selected_license = "MIT"
+cargo_lock_checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
+reason = "Published crate metadata uses legacy non-SPDX slash wording; exact crate archive contains MIT license text supporting an MIT option. Notices were copied unchanged; not a general slash normalization or approval of new versions."
+notice_path = "policy/third-party-notices/minimal-lexical-0.2.1/LICENSE-MIT"
+notice_sha256 = "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+[[package_exceptions.supplemental_notices]]
+path = "policy/third-party-notices/minimal-lexical-0.2.1/LICENSE.md"
+sha256 = "dbe1fff0fb1314b6af94f161511406275cf01c5a32441fbf24528a57a051d599"
+
+[[package_exceptions]]
+name = "rayon-cond"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+license = "Apache-2.0/MIT"
+selected_license = "MIT"
+cargo_lock_checksum = "2964d0cf57a3e7a06e8183d14a8b527195c706b7983549cd5462d5aa3747438f"
+reason = "Published crate metadata uses legacy non-SPDX slash wording; exact crate archive contains MIT license text supporting an MIT option. Notices were copied unchanged; not a general slash normalization or approval of new versions."
+notice_path = "policy/third-party-notices/rayon-cond-0.4.0/LICENSE-MIT"
+notice_sha256 = "27995d58ad5c1145c1a8cd86244ce844886958a35eb2b78c6b772748669999ac"
+
+[[package_exceptions]]
+name = "same-file"
+version = "1.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+license = "Unlicense/MIT"
+selected_license = "MIT"
+cargo_lock_checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
+reason = "Published crate metadata uses legacy non-SPDX slash wording; exact crate archive contains MIT license text supporting an MIT option. Notices were copied unchanged; not a general slash normalization or approval of new versions."
+notice_path = "policy/third-party-notices/same-file-1.0.6/LICENSE-MIT"
+notice_sha256 = "cb3c929a05e6cbc9de9ab06a4c57eeb60ca8c724bef6c138c87d3a577e27aa14"
+[[package_exceptions.supplemental_notices]]
+path = "policy/third-party-notices/same-file-1.0.6/COPYING"
+sha256 = "01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f"
+
+[[package_exceptions]]
+name = "serde_plain"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+license = "MIT/Apache-2.0"
+selected_license = "MIT"
+cargo_lock_checksum = "9ce1fc6db65a611022b23a0dec6975d63fb80a302cb3388835ff02c097258d50"
+reason = "Published crate metadata uses legacy non-SPDX slash wording; exact crate archive contains MIT license text supporting an MIT option. Notices were copied unchanged; not a general slash normalization or approval of new versions."
+notice_path = "policy/third-party-notices/serde_plain-1.0.2/LICENSE-MIT"
+notice_sha256 = "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb"
+
+[[package_exceptions]]
+name = "serde_urlencoded"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+license = "MIT/Apache-2.0"
+selected_license = "MIT"
+cargo_lock_checksum = "d3491c14715ca2294c4d6a88f15e84739788c1d030eed8c110436aafdaa2f3fd"
+reason = "Published crate metadata uses legacy non-SPDX slash wording; exact crate archive contains MIT license text supporting an MIT option. Notices were copied unchanged; not a general slash normalization or approval of new versions."
+notice_path = "policy/third-party-notices/serde_urlencoded-0.7.1/LICENSE-MIT"
+notice_sha256 = "b9eb266294324f672cbe945fe8f2e32f85024f0d61a1a7d14382cdde0ac44769"
+
+[[package_exceptions]]
+name = "stringprep"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+license = "MIT/Apache-2.0"
+selected_license = "MIT"
+cargo_lock_checksum = "7b4df3d392d81bd458a8a621b8bffbd2302a12ffe288a9d931670948749463b1"
+reason = "Published crate metadata uses legacy non-SPDX slash wording; exact crate archive contains MIT license text supporting an MIT option. Notices were copied unchanged; not a general slash normalization or approval of new versions."
+notice_path = "policy/third-party-notices/stringprep-0.1.5/LICENSE-MIT"
+notice_sha256 = "a07450fd4496cb8b58466e6d529f1f502444eee4a235659337e9194d694739d6"
+
+[[package_exceptions]]
+name = "unicode-normalization-alignments"
+version = "0.1.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+license = "MIT/Apache-2.0"
+selected_license = "MIT"
+cargo_lock_checksum = "43f613e4fa046e69818dd287fdc4bc78175ff20331479dab6e1b0f98d57062de"
+reason = "Published crate metadata uses legacy non-SPDX slash wording; exact crate archive contains MIT license text supporting an MIT option. Notices were copied unchanged; not a general slash normalization or approval of new versions."
+notice_path = "policy/third-party-notices/unicode-normalization-alignments-0.1.12/LICENSE-MIT"
+notice_sha256 = "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0"
+[[package_exceptions.supplemental_notices]]
+path = "policy/third-party-notices/unicode-normalization-alignments-0.1.12/COPYRIGHT"
+sha256 = "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d"
+
+[[package_exceptions]]
+name = "unicode-properties"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+license = "MIT/Apache-2.0"
+selected_license = "MIT"
+cargo_lock_checksum = "7df058c713841ad818f1dc5d3fd88063241cc61f49f5fbea4b951e8cf5a8d71d"
+reason = "Published crate metadata uses legacy non-SPDX slash wording; exact crate archive contains MIT license text supporting an MIT option. Notices were copied unchanged; not a general slash normalization or approval of new versions."
+notice_path = "policy/third-party-notices/unicode-properties-0.1.4/LICENSE-MIT"
+notice_sha256 = "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0"
+[[package_exceptions.supplemental_notices]]
+path = "policy/third-party-notices/unicode-properties-0.1.4/COPYRIGHT"
+sha256 = "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d"
+
+[[package_exceptions]]
+name = "vcpkg"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+license = "MIT/Apache-2.0"
+selected_license = "MIT"
+cargo_lock_checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
+reason = "Published crate metadata uses legacy non-SPDX slash wording; exact crate archive contains MIT license text supporting an MIT option. Notices were copied unchanged; not a general slash normalization or approval of new versions."
+notice_path = "policy/third-party-notices/vcpkg-0.2.15/LICENSE-MIT"
+notice_sha256 = "016d20f335060a70e79d9fcf8dfaa6201114d65d592211f4bdfb8ae9ca2bc1dc"
+
+[[package_exceptions]]
+name = "version_check"
+version = "0.9.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+license = "MIT/Apache-2.0"
+selected_license = "MIT"
+cargo_lock_checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+reason = "Published crate metadata uses legacy non-SPDX slash wording; exact crate archive contains MIT license text supporting an MIT option. Notices were copied unchanged; not a general slash normalization or approval of new versions."
+notice_path = "policy/third-party-notices/version_check-0.9.5/LICENSE-MIT"
+notice_sha256 = "b7e650f3fce5c53249d1cdc608b54df156a97edd636cf9d23498d0cfe7aec63e"
+
+[[package_exceptions]]
+name = "walkdir"
+version = "2.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+license = "Unlicense/MIT"
+selected_license = "MIT"
+cargo_lock_checksum = "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b"
+reason = "Published crate metadata uses legacy non-SPDX slash wording; exact crate archive contains MIT license text supporting an MIT option. Notices were copied unchanged; not a general slash normalization or approval of new versions."
+notice_path = "policy/third-party-notices/walkdir-2.5.0/LICENSE-MIT"
+notice_sha256 = "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f"
+[[package_exceptions.supplemental_notices]]
+path = "policy/third-party-notices/walkdir-2.5.0/COPYING"
+sha256 = "01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f"
+
+[[package_exceptions]]
+name = "webpki-roots"
+version = "1.0.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+license = "CDLA-Permissive-2.0"
+selected_license = "CDLA-Permissive-2.0"
+cargo_lock_checksum = "7dcd9d09a39985f5344844e66b0c530a33843579125f23e21e9f0f220850f22a"
+reason = "CDLA-Permissive-2.0 governs the included CCADB-derived root certificate data; the exact full license is preserved and its section 2.1 requires sharing the license text with shared data. Technical, package-scoped review only; maintainer must confirm redistribution and release notices."
+notice_path = "policy/third-party-notices/webpki-roots-1.0.9/LICENSE"
+notice_sha256 = "e271993808fec50ab29350b39539cdec611a9103f827e0aa26d61da70e2d33f8"
+
+[[package_exceptions]]
+name = "wiremock"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+license = "MIT/Apache-2.0"
+selected_license = "MIT"
+cargo_lock_checksum = "08db1edfb05d9b3c1542e521aea074442088292f00b5f28e435c714a98f85031"
+reason = "Published crate metadata uses legacy non-SPDX slash wording; exact crate archive contains MIT license text supporting an MIT option. Notices were copied unchanged; not a general slash normalization or approval of new versions."
+notice_path = "policy/third-party-notices/wiremock-0.6.5/LICENSE-MIT"
+notice_sha256 = "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
