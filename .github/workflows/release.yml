@@ -9,8 +9,6 @@ name: release
 on:
   push:
     tags: ["v*"]
-  # Re-runnable against a tag that is already pushed, so a single stuck runner
-  # does not cost a re-tag.
   workflow_dispatch:
     inputs:
       tag:
@@ -22,10 +20,15 @@ on:
         required: false
         type: boolean
         default: true
+      acceptance_record:
+        description: "External JSON acceptance record (decision, source_sha, checksums)"
+        required: false
+        type: string
 
 env:
   TAG: ${{ inputs.tag || github.ref_name }}
-  DRY_RUN: ${{ inputs.dry_run || (github.event_name == 'workflow_dispatch' && 'true') || 'false' }}
+  # Explicit evaluation to prevent falsy 'false' from triggering default 'true'
+  DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
 
 permissions:
   contents: read
@@ -222,10 +225,10 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           sbom: true
-          provenance: false
+          provenance: mode=max
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          outputs: type=docker,dest=/tmp/soup-wall-image.tar
+          outputs: type=oci,dest=/tmp/soup-wall-image.tar
       - uses: actions/upload-artifact@v7
         with:
           name: dist-container
@@ -242,13 +245,12 @@ jobs:
       contents: write
       packages: write
     steps:
-      - name: Strict Acceptance Gate
+      - name: Strict Acceptance Gate (Job Results)
         run: |
           if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}" == "true" ]]; then
             echo "CRITICAL: Missing, failed, cancelled, or skipped acceptance blocks publication!" >&2
             exit 1
           fi
-          echo "All prerequisite checks passed."
 
       - uses: actions/checkout@v7
         with:
@@ -269,9 +271,7 @@ jobs:
         run: |
           set -euo pipefail
           cd dist
-          mv soup-wall-image.tar ../soup-wall-image.tar
-          sha256sum -- * > ../SHA256SUMS
-          mv ../SHA256SUMS .
+          sha256sum -- * > SHA256SUMS
           
           cat <<EOF > candidate-manifest.json
           {
@@ -283,20 +283,108 @@ jobs:
           cat candidate-manifest.json
           cat SHA256SUMS
 
+      - name: Create Candidate Validator
+        shell: bash
+        run: |
+          cat << 'EOF' > validate_candidate.sh
+          #!/bin/bash
+          set -euo pipefail
+          RECORD=$1
+          MANIFEST=$2
+          
+          if [ ! -f "$RECORD" ]; then
+            echo "CRITICAL: Missing acceptance record ($RECORD)"
+            exit 1
+          fi
+          
+          DECISION=$(jq -r '.decision // "none"' "$RECORD")
+          if [ "$DECISION" != "approved" ]; then
+            echo "CRITICAL: Candidate unapproved (decision: $DECISION)"
+            exit 1
+          fi
+          
+          REC_SHA=$(jq -r '.source_sha' "$RECORD")
+          MAN_SHA=$(jq -r '.source_sha' "$MANIFEST")
+          if [ "$REC_SHA" != "$MAN_SHA" ]; then
+            echo "CRITICAL: Source SHA mismatch! Expected $MAN_SHA, got$REC_SHA"
+            exit 1
+          fi
+          
+          REC_HASHES=$(jq -c '.checksums \vert{} sort' "$RECORD")
+          MAN_HASHES=$(jq -c '.checksums \vert{} sort' "$MANIFEST")
+          if [ "$REC_HASHES" != "$MAN_HASHES" ]; then
+            echo "CRITICAL: Artifact checksums mismatch (including OCI image identity)!"
+            exit 1
+          fi
+          
+          echo "SUCCESS: Product acceptance validated for exact candidate."
+          EOF
+          chmod +x validate_candidate.sh
+
+      - name: Gate Tests & Integrity Check (Dry Run)
+        if: env.DRY_RUN == 'true'
+        shell: bash
+        run: |
+          echo "Verifying local candidate checksums..."
+          cd dist
+          sha256sum -c SHA256SUMS
+          
+          MANIFEST="candidate-manifest.json"
+          echo "Running SOU-26 negative/positive tests..."
+          
+          echo "--- Test 1: Missing approval file ---"
+          if ../validate_candidate.sh "missing.json" "$MANIFEST"; then exit 1; fi
+          
+          echo "--- Test 2: Failed/skipped gate (unapproved) ---"
+          jq '. + {decision: "rejected"}' "$MANIFEST" > rec_rej.json
+          if ../validate_candidate.sh rec_rej.json "$MANIFEST"; then exit 1; fi
+          
+          echo "--- Test 3: Wrong source SHA ---"
+          jq '. + {decision: "approved", source_sha: "badsha"}' "$MANIFEST" > rec_sha.json
+          if ../validate_candidate.sh rec_sha.json "$MANIFEST"; then exit 1; fi
+          
+          echo "--- Test 4: Changed artifact (SBOM/Archive/Container hash mismatch) ---"
+          jq '. + {decision: "approved", checksums: ["badhash  archive.tar.gz"]}' "$MANIFEST" > rec_hash.json
+          if ../validate_candidate.sh rec_hash.json "$MANIFEST"; then exit 1; fi
+          
+          echo "--- Test 5: Successful exact-candidate ---"
+          jq '. + {decision: "approved"}' "$MANIFEST" > rec_good.json
+          ../validate_candidate.sh rec_good.json "$MANIFEST"
+          
+          echo "All SOU-26 validator tests passed successfully!"
+
+      - name: SOU-26 Product Evidence Gate
+        shell: bash
+        env:
+          ACCEPTANCE_RECORD: ${{ inputs.acceptance_record }}
+        run: |
+          cd dist
+          MANIFEST="candidate-manifest.json"
+          
+          if [ -z "$ACCEPTANCE_RECORD" ]; then
+             echo "CRITICAL: No external acceptance record provided. Missing/unapproved decision fails closed."
+             exit 1
+          fi
+          
+          echo "$ACCEPTANCE_RECORD" > external-acceptance.json
+          ../validate_candidate.sh external-acceptance.json "$MANIFEST"
+
       - name: Load and Push Container
         if: env.DRY_RUN != 'true'
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-          docker load -i ../soup-wall-image.tar
           IMAGE_NAME="ghcr.io/${GITHUB_REPOSITORY,,}"
-          docker push "$IMAGE_NAME:${TAG}"
+          
+          skopeo copy oci-archive:dist/soup-wall-image.tar docker://$IMAGE_NAME:${TAG}
           if [[ "${TAG}" != *-* ]]; then
-            docker push "$IMAGE_NAME:latest"
+            skopeo copy oci-archive:dist/soup-wall-image.tar docker://$IMAGE_NAME:latest
           fi
 
-      - name: Dry Run - Container
+      - name: Dry Run - Container Identity Verification
         if: env.DRY_RUN == 'true'
-        run: echo "[DRY RUN] Would push loaded container image from ../soup-wall-image.tar to GHCR"
+        run: |
+          echo "[DRY RUN] Verifying OCI image identity and manifest integrity without pushing..."
+          skopeo inspect oci-archive:dist/soup-wall-image.tar
 
       - name: Publish GitHub Release
         if: env.DRY_RUN != 'true'
@@ -315,4 +403,4 @@ jobs:
 
       - name: Dry Run - GitHub Release
         if: env.DRY_RUN == 'true'
-        run: echo "[DRY RUN] Would publish GitHub release for ${TAG} with artifacts in dist/"
+        run: echo "[DRY RUN] Would publish GitHub release for ${TAG} with validated artifacts in dist/"
