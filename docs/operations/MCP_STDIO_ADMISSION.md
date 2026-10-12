@@ -124,14 +124,16 @@ profile; the reviewed SOU-10 contract defines the generic target. It changes
 neither the MCP frames nor `sw-native/1`.
 
 - A single action maps to `ReadOnly`, `SideEffecting`, `Destructive`, `Network`
-  or `PrivilegeChanging`. The result is evidence only: the daemon still
-  authorizes against the trusted registry class, so a lower or higher label
-  cannot change restrictions. A difference is recorded as `baseline_mismatch`.
-- Mixed actions, an empty action list and `unknown: true` return
-  `unsupported_classification_mapping` until their policy semantics are agreed.
-- Timeout (2 s), crash, error and invalid scores or actions are technical
-  failures. Like an unsupported mapping, they answer the host with a JSON-RPC
-  error that keeps the original id and says "policy not reached". The call never
+  or `PrivilegeChanging` for backwards-compatible telemetry and baseline comparison.
+- All valid classifications (including multi-action, unknown and empty action lists)
+  reach production policy authoritatively (`policy: reached`, `failure: null`):
+  - Hard `Deny` (`policy_denied`) on destructive (`delete`), unauthorized egress (`send_data` without declared egress / network baseline), privilege changes (`change_permissions`), or writes on `ReadOnly` baseline.
+  - Fail-closed `Ask` (`policy_unconfirmed_ask`) on `unknown: true`, high uncertainty (>= 0.8) or headless writes.
+  - Permitted actions (e.g. `read`, authorized egress `send_data`, empty actions/no-ops) evaluate to `Allow` and execute.
+  - In all `Deny` and unconfirmed `Ask` verdicts, zero-execution fail-closed withholding is enforced with non-execution witnesses.
+- Timeout (2 s), crash, error and invalid scores (non-finite or out of [0, 1]) are technical
+  failures. They answer the host with a JSON-RPC
+  error that keeps the original id and says "policy not reached" (`policy: not_reached`). The call never
   reaches the daemon or the server, the session continues, and a later call is
   admitted afresh. Missing discovery state still terminates the collector.
 
@@ -173,9 +175,9 @@ embedded in the integration tests; missing source fails the fixture build.
 failures (`classifier_error`, policy not reached) with zero forwarding. Input is
 bounded to 1 MiB and output to 16 KiB. The subprocess is killed and reaped after
 1.5 seconds, within the collector's existing two-second classification deadline.
-Invalid scores are refused by the existing mapping validator. Valid unknown and
-mixed classifications retain the candidate harness's explicit unsupported-mapping
-refusal; this increment does not claim acceptance of a final shared contract.
+Invalid scores are refused by the classifier score validator. Valid unknown and
+mixed classifications reach production policy authoritatively; unconfirmed Ask and Deny
+verdicts fail closed with zero server execution.
 Test and real classifier settings cannot be combined. Test doubles remain debug-only;
 the real adapter is also available in release builds.
 
@@ -526,8 +528,9 @@ server's execution ledger, a loopback receiver and the note files.
 | `send_http` and unfamiliar `publish_report` with benign data | Allow | The receiver records exactly one delivery each |
 | `send_http` with a synthetic secret, also with an understated `read` classification | Deny before execution | Ledger and receiver unchanged |
 | `delete_note` | Deny before execution | Ledger unchanged; the note still exists |
-| `send_http` containing an email address | Ask, held without an approval path | Ledger and receiver unchanged |
-| Classifier timeout, crash, invalid scores, `unknown`, mixed actions | Policy not reached | Ledger and receiver unchanged |
+| Classifier timeout, crash, invalid scores | Policy not reached | Ledger and receiver unchanged |
+| Unknown classification (`unknown: true`) | Ask, held without an approval path (`policy_unconfirmed_ask`) | Ledger and receiver unchanged |
+| Unauthorized mixed classification | Deny before execution (`policy_denied`) | Ledger and receiver unchanged |
 | `read_document` returning an injection | Executed, result withheld | Ledger grows; the harness never receives the marker |
 | Follow-up `read_document`, then daemon outage | Allow, then fail closed | Work continues; after the outage the collector exits and the ledger is unchanged |
 

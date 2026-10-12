@@ -315,9 +315,9 @@ fn baseline_action(class: ActionClass) -> &'static str {
     }
 }
 
-/// Candidate singleton mapping. Mixed actions and `unknown` stay unsupported
-/// until Teams 1, 2 and 3 agree their policy semantics; there is no numeric maximum.
-fn map_classification(result: &Classification) -> Result<ActionClass, &'static str> {
+/// Single action mapping to ActionClass for backwards-compatible telemetry and baseline comparison.
+/// Mixed actions, unknown, and no-actions return `Ok(None)`.
+fn map_classification(result: &Classification) -> Result<Option<ActionClass>, &'static str> {
     let valid = result.confidence.is_finite()
         && (0.0..=1.0).contains(&result.confidence)
         && result.uncertainty.is_finite()
@@ -334,14 +334,14 @@ fn map_classification(result: &Classification) -> Result<ActionClass, &'static s
         return Err("classifier_invalid");
     }
     match (result.unknown, result.actions.as_slice()) {
-        (false, [action]) => Ok(match action.as_str() {
+        (false, [action]) => Ok(Some(match action.as_str() {
             "read" => ActionClass::ReadOnly,
             "write" => ActionClass::SideEffecting,
             "delete" => ActionClass::Destructive,
             "send_data" => ActionClass::Network,
             _ => ActionClass::PrivilegeChanging,
-        }),
-        _ => Err("unsupported_classification_mapping"),
+        })),
+        _ => Ok(None),
     }
 }
 
@@ -793,6 +793,13 @@ impl<'a> Collector<'a> {
         } else {
             Err(mapped.err().unwrap_or("classifier_unavailable"))
         };
+        let mapped_class = mapped.ok().flatten();
+        let policy_reached = prod_eval.is_ok();
+        let failure = if policy_reached {
+            None
+        } else {
+            prod_eval.err()
+        };
         eprintln!(
             "{}",
             json!({"event":"mcp_classification","contract_version":CLASSIFICATION_CONTRACT,
@@ -804,8 +811,8 @@ impl<'a> Collector<'a> {
             "classification":result.as_ref().map(|result| json!({"actions":result.actions,"unknown":result.unknown,
                 "confidence":result.confidence,"uncertainty":result.uncertainty,
                 "reason_sha256":sha(result.reason.as_bytes())})),
-            "mapped_action_class":mapped.ok(),"trusted_baseline":baseline,
-            "baseline_mismatch":mapped.ok().map(|class| class != baseline),
+            "mapped_action_class":mapped_class,"trusted_baseline":baseline,
+            "baseline_mismatch":mapped_class.map(|class| class != baseline),
             "adapter_verdict":adapter_eval.as_ref().map(|(v, _)| match v {
                 AdapterVerdict::Allow => "allow",
                 AdapterVerdict::Ask => "ask",
@@ -817,12 +824,9 @@ impl<'a> Collector<'a> {
                 Ok(ProductionVerdict::Deny) => "deny",
                 Err(e) => *e,
             },
-            "policy":if mapped.is_ok() { "reached" } else { "not_reached" },
-            "failure":mapped.err(),"latency_us":started.elapsed().as_micros()})
+            "policy":if policy_reached { "reached" } else { "not_reached" },
+            "failure":failure,"latency_us":started.elapsed().as_micros()})
         );
-        if let Err(f) = mapped {
-            return Ok(Err(f));
-        }
         match prod_eval {
             Ok(v) => Ok(Ok(v)),
             Err(failure) => Ok(Err(failure)),
@@ -1767,6 +1771,55 @@ mod input_identity_tests {
 
         // read -> Allow
         let cl = make_cl(vec!["read"], false, 0.05);
+        assert_eq!(
+            compose_production_policy(&cl, ActionClass::ReadOnly, false).unwrap(),
+            ProductionVerdict::Allow
+        );
+
+        // mixed: read + delete -> hard Deny
+        let cl = make_cl(vec!["read", "delete"], false, 0.05);
+        assert_eq!(
+            compose_production_policy(&cl, ActionClass::ReadOnly, false).unwrap(),
+            ProductionVerdict::Deny
+        );
+
+        // mixed: read + change_permissions -> hard Deny
+        let cl = make_cl(vec!["read", "change_permissions"], false, 0.05);
+        assert_eq!(
+            compose_production_policy(&cl, ActionClass::ReadOnly, false).unwrap(),
+            ProductionVerdict::Deny
+        );
+
+        // mixed: read + authorized send_data -> Allow
+        let cl = make_cl(vec!["read", "send_data"], false, 0.05);
+        assert_eq!(
+            compose_production_policy(&cl, ActionClass::Network, true).unwrap(),
+            ProductionVerdict::Allow
+        );
+
+        // mixed: read + unauthorized send_data -> Deny
+        let cl = make_cl(vec!["read", "send_data"], false, 0.05);
+        assert_eq!(
+            compose_production_policy(&cl, ActionClass::ReadOnly, false).unwrap(),
+            ProductionVerdict::Deny
+        );
+
+        // actions plus unknown: read + unknown -> Ask
+        let cl = make_cl(vec!["read"], true, 0.05);
+        assert_eq!(
+            compose_production_policy(&cl, ActionClass::ReadOnly, false).unwrap(),
+            ProductionVerdict::Ask
+        );
+
+        // hard-deny takes precedence over unknown: delete + unknown -> hard Deny
+        let cl = make_cl(vec!["delete"], true, 0.05);
+        assert_eq!(
+            compose_production_policy(&cl, ActionClass::ReadOnly, false).unwrap(),
+            ProductionVerdict::Deny
+        );
+
+        // proven no-op (D07): empty actions, unknown=false -> Allow
+        let cl = make_cl(vec![], false, 0.05);
         assert_eq!(
             compose_production_policy(&cl, ActionClass::ReadOnly, false).unwrap(),
             ProductionVerdict::Allow
