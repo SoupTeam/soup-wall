@@ -103,7 +103,8 @@ def load_approved(dataset: Path, approval: Path) -> tuple[dict, dict]:
 
 
 def reserve_reviewed_run(authorization_path: Path, ledger_dir: Path, model_dir: Path,
-                         dataset_hash: str, model_hash: str, baseline_hash: str) -> tuple[Path, dict]:
+                         dataset_hash: str, model_hash: str, baseline_hash: str,
+                         additional_classifiers: dict[str, str] | None = None) -> tuple[Path, dict]:
     """Consume a custodian-issued run in a shared ledger before holdout inference.
 
     JSON records assert review; they do not authenticate the reviewer. The custodian
@@ -118,6 +119,8 @@ def reserve_reviewed_run(authorization_path: Path, ledger_dir: Path, model_dir: 
     authorization, authorization_hash = read_json(authorization_path, 16384)
     required = {'format', 'run_id', 'holdout_id', 'approval_reference',
                 'dataset_sha256', 'model_sha256', 'baseline_sha256'}
+    if additional_classifiers:
+        required.add('additional_classifiers')
     if set(authorization) != required or authorization['format'] != 'soup-wall/classifier-run-authorization/1':
         raise ValueError('unsupported or incomplete external run authorization')
     for key in ('run_id', 'holdout_id', 'approval_reference'):
@@ -129,6 +132,12 @@ def reserve_reviewed_run(authorization_path: Path, ledger_dir: Path, model_dir: 
         value = authorization[key]
         if not isinstance(value, str) or not re.fullmatch('[0-9a-f]{64}', value) or value != expected:
             raise ValueError('run authorization does not match frozen ' + key)
+    if additional_classifiers:
+        recorded = authorization['additional_classifiers']
+        if (not isinstance(recorded, dict) or recorded != additional_classifiers
+                or any(not isinstance(value, str) or not re.fullmatch('[0-9a-f]{64}', value)
+                       for value in recorded.values())):
+            raise ValueError('run authorization must bind every additional classifier exactly')
     # The holdout identity is issued by the custodian and stays fixed even when a
     # caller copies artifacts, changes run_id or rebuilds a dataset wrapper/model.
     key = hashlib.sha256(authorization['holdout_id'].encode('utf-8')).hexdigest()
@@ -227,12 +236,31 @@ def check_accepted_outputs(row: dict) -> None:
 
 def evaluate(rows: list[dict], classify) -> dict:
     results, latencies = [], []
-    per_label = {a: {'known': 0, 'positive': 0, 'negative': 0, 'fn': 0, 'fp': 0} for a in ACTIONS}
-    unknown = {'known': 0, 'lost_unknown': 0, 'false_unknown': 0}
+    per_label = {a: {'eligible_known': 0, 'eligible_positive': 0, 'eligible_negative': 0,
+                     'known': 0, 'positive': 0, 'negative': 0, 'fn': 0, 'fp': 0,
+                     'missed_when_unknown_false': 0} for a in ACTIONS}
+    unknown = {'eligible_known': 0, 'eligible_positive': 0, 'eligible_negative': 0,
+               'known': 0, 'positive': 0, 'negative': 0, 'lost_unknown': 0, 'false_unknown': 0}
+    risky = set(ACTIONS) - {'read'}
+    critical = {'eligible_positive_calls': 0, 'scored_positive_calls': 0,
+                'missed_calls_when_unknown_false': 0}
+    retention = {'eligible_cases': 0, 'scored_cases': 0, 'all_known_positive_actions_retained': 0}
     valid = abstentions = exact = fully_annotated = mixed = mixed_exact = 0
     contract_scored = contract_matches = 0
     for row in rows:
         check_accepted_outputs(row)
+        gold = row['labels']
+        expected = [a for a in ACTIONS if gold[a] is True]
+        for a in ACTIONS:
+            if gold[a] is not None:
+                per_label[a]['eligible_known'] += 1
+                per_label[a]['eligible_positive' if gold[a] else 'eligible_negative'] += 1
+        if gold['unknown'] is not None:
+            unknown['eligible_known'] += 1
+            unknown['eligible_positive' if gold['unknown'] else 'eligible_negative'] += 1
+        has_risky_positive = bool(risky.intersection(expected))
+        critical['eligible_positive_calls'] += int(has_risky_positive)
+        retention['eligible_cases'] += int(len(expected) > 1)
         start = time.perf_counter()
         try:
             # Nothing from id/family/split/gold labels reaches inference.
@@ -245,7 +273,12 @@ def evaluate(rows: list[dict], classify) -> dict:
         latencies.append((time.perf_counter() - start) * 1000)
         valid += 1
         abstentions += int(out['unknown'])
-        gold = row['labels']
+        critical['scored_positive_calls'] += int(has_risky_positive)
+        critical['missed_calls_when_unknown_false'] += int(
+            not out['unknown'] and bool((risky.intersection(expected)) - set(out['actions'])))
+        if len(expected) > 1:
+            retention['scored_cases'] += 1
+            retention['all_known_positive_actions_retained'] += int(set(expected) <= set(out['actions']))
         for a in ACTIONS:
             if gold[a] is None:
                 continue
@@ -254,12 +287,14 @@ def evaluate(rows: list[dict], classify) -> dict:
             values['positive' if gold[a] else 'negative'] += 1
             values['fn'] += int(gold[a] and a not in out['actions'])
             values['fp'] += int(not gold[a] and a in out['actions'])
+            values['missed_when_unknown_false'] += int(
+                gold[a] and a not in out['actions'] and not out['unknown'])
         if gold['unknown'] is not None:
             unknown['known'] += 1
+            unknown['positive' if gold['unknown'] else 'negative'] += 1
             unknown['lost_unknown'] += int(gold['unknown'] and not out['unknown'])
             unknown['false_unknown'] += int(not gold['unknown'] and out['unknown'])
         all_known = all(gold[h] is not None for h in HEADS)
-        expected = [a for a in ACTIONS if gold[a] is True]
         match = set(expected) == set(out['actions']) and gold['unknown'] == out['unknown']
         contract_match = None
         if 'accepted_outputs' in row:
@@ -283,9 +318,18 @@ def evaluate(rows: list[dict], classify) -> dict:
     for values in per_label.values():
         values['fn_rate'] = values['fn'] / values['positive'] if values['positive'] else None
         values['fp_rate'] = values['fp'] / values['negative'] if values['negative'] else None
+        values['missed_when_unknown_false_rate'] = (
+            values['missed_when_unknown_false'] / values['positive'] if values['positive'] else None)
+    critical['missed_rate'] = (critical['missed_calls_when_unknown_false'] / critical['scored_positive_calls']
+                               if critical['scored_positive_calls'] else None)
+    retention['retention_rate'] = (retention['all_known_positive_actions_retained'] / retention['scored_cases']
+                                   if retention['scored_cases'] else None)
     return {'calls': len(rows), 'valid': valid, 'technical_errors': len(rows) - valid,
             'per_label': per_label, 'unknown': unknown, 'abstentions': abstentions,
             'coverage': (valid - abstentions) / valid if valid else None,
+            'coverage_total': (valid - abstentions) / len(rows) if rows else None,
+            'abstention_rate': abstentions / valid if valid else None,
+            'critical_known_action_misses': critical, 'mixed_positive_retention': retention,
             'fully_annotated': fully_annotated, 'exact_matches': exact,
             'contract_scored': contract_scored, 'contract_matches': contract_matches,
             'mixed_cases': mixed, 'mixed_exact_matches': mixed_exact,
