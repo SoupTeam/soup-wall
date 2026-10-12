@@ -167,6 +167,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p target/task3-resilience/tmp
+          # Keep strict probe output outside Cargo's cache and unique on retries.
+          printf 'SOU17_GENERIC_OUTPUT=%s/sou17-generic-%s-%s\n' "$RUNNER_TEMP" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
           printf 'TMPDIR=%s\n' "$(cd target/task3-resilience/tmp && pwd -P)" >> "$GITHUB_ENV"
           {
             git rev-parse HEAD
@@ -186,7 +188,7 @@ jobs:
             --repo "$PWD" --agentfw target/debug/agentfw \
             --expected-commit "$GITHUB_SHA" \
             --expected-binary-sha256 "$SOU17_BINARY_SHA" \
-            --output target/task3-resilience/generic-boundary
+            --output "$SOU17_GENERIC_OUTPUT"
       - name: Retain native macOS resilience evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -195,7 +197,14 @@ jobs:
           path: |
             target/task3-resilience/environment.log
             target/task3-resilience/verification/
-            target/task3-resilience/generic-boundary/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Retain current-run generic boundary evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: task3-native-macos-generic-boundary
+          path: ${{ env.SOU17_GENERIC_OUTPUT }}/
           if-no-files-found: warn
           retention-days: 14
       - name: Disposable Agent setup and daemon status
