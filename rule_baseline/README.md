@@ -48,14 +48,17 @@ recipient, `group_by` is not a permission), the action words of the tool name, a
   `change_permissions`; removing a member is an access change, not a delete. A delete verb is turned into
   an access change only when its own object is the access noun (`remove_user_access`); in
   `delete_file_and_grant_access` the delete is kept next to `change_permissions`, and a `delete: true`
-  flag counts as a delete.
+  flag counts as a delete. The object of a verb is read clause by clause: in `delete_file_and_remove_member`
+  each clause keeps its own effect, and a clause that names both an access noun and a data noun
+  (`delete_member_file`) is ambiguous, so it keeps the delete, adds the access change and is `unknown`.
 - Partial knowledge is `unknown` with the proven actions kept: a category guessed from a noun alone and not
   supported by the arguments, a compound name (`a_and_b`) with an unrecognised part, an argument that names
   code to run (`plugin`, `callback`, `*processor`), and arguments that violate the declared schema
   (`args_schema_violation`, checked against `pinned_schema` first).
 - A tool named only `run` or `call` is a generic runner: what it runs is not in its arguments, so a
   guess from `mode` or similar values stays `unknown` unless a shell command is visible. Workflow-style
-  names are different, their `steps` are read one by one.
+  names are different, their `steps` are read one by one. The same holds for a runner clause in a compound
+  name (`read_and_run` keeps `read` and is `unknown`); a visible shell command or parsed steps resolve it.
 - Not claimed: a tool that only receives text is not proven to have no effect (`text_stats` stays unknown),
   and `dry_run=true` is reported as `dry_run_declared` while the write is still reported.
 

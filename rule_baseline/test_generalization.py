@@ -169,6 +169,19 @@ class DeleteAndPermissionChangesStaySeparate(unittest.TestCase):
         a, _, _ = run("manage_file", {"path": "a.txt", "delete": False, "permissions": "public"})
         self.assertEqual(a, {"change_permissions"})
 
+    def test_two_clauses_keep_each_clauses_own_effect(self):
+        # reproduction from the review of PR 2: "member" belongs to the second clause only
+        a, u, _ = run("delete_file_and_remove_member", {"path": "x", "member_id": "u"})
+        self.assertEqual((a, u), ({"delete", "change_permissions"}, False))
+
+    def test_one_clause_naming_a_file_and_an_access_noun_is_ambiguous(self):
+        a, u, r = run("delete_member_file", {"path": "x", "member_id": "u"})
+        self.assertEqual((a, u), ({"delete", "change_permissions"}, True))
+
+    def test_removing_a_member_from_a_group_is_an_access_change(self):
+        a, u, _ = run("remove_group_member", {"group": "g", "member_id": "u"})
+        self.assertEqual((a, u), ({"change_permissions"}, False))
+
     def test_removing_an_access_entry_is_not_a_file_delete(self):
         for name in ("remove_user_access", "delete_user_permission", "permission_delete"):
             with self.subTest(name=name):
@@ -186,6 +199,20 @@ class GenericRunnerStaysOpen(unittest.TestCase):
 
     def test_run_with_a_visible_shell_command_is_still_judged(self):
         a, u, _ = run("run", {"command": "ls -la"})
+        self.assertEqual((a, u), ({"read"}, False))
+
+    def test_opaque_runner_clause_in_a_compound_name_keeps_the_known_action_and_unknown(self):
+        # reproductions from the review of PR 2
+        for name in ("read_and_run", "read_and_call"):
+            with self.subTest(name=name):
+                a, u, _ = run(name, {"path": "x", "task_id": "t"})
+                self.assertEqual((a, u), ({"read"}, True))
+
+    def test_runner_clause_is_resolved_by_a_visible_command_or_parsed_steps(self):
+        a, u, _ = run("read_and_run", {"path": "x", "command": "ls"})
+        self.assertEqual((a, u), ({"read"}, False))
+        steps = [{"action": "read_file", "path": "a"}]
+        a, u, _ = run("read_and_run_workflow", {"steps": steps})
         self.assertEqual((a, u), ({"read"}, False))
 
     def test_workflow_steps_are_still_read_one_by_one(self):

@@ -347,7 +347,7 @@ BARE_RUNNERS = {"run", "call"}
 KNOWN_RUNNERS = SHELL_TOKENS | OPAQUE_TOKENS | {"run", "call", "invoke", "workflow", "batch", "pipeline", "sequence"}
 
 
-def _unresolved_compound(toks: list[str]) -> bool:
+def _unresolved_compound(toks: list[str], runner_resolved: bool = False) -> bool:
     """True for a compound name (`notify_and_render`) in which some part has no recognised action word.
 
     Only compound names are judged this way: an unfamiliar single name such as `quartz_17` is legitimate
@@ -362,15 +362,25 @@ def _unresolved_compound(toks: list[str]) -> bool:
             cur.append(t)
     parts.append(cur)
     parts = [p for p in parts if p]
-    return len(parts) > 1 and any(not any(t in VERBS or t in KNOWN_RUNNERS for t in part) for part in parts)
+    # A runner clause (`run`, `call`, `workflow`, ...) is resolved only by invocation evidence: a visible shell
+    # command or parsed steps. Recognising the word is not knowing what it runs.
+    return len(parts) > 1 and any(
+        not any(t in VERBS or (runner_resolved and t in KNOWN_RUNNERS) for t in part) for part in parts)
 
 
-def _acts_on_permission(toks: list[str], i: int) -> bool:
-    """True when the verb at toks[i] is applied to a permission noun, not to some other object.
+DATA_NOUNS = set(("file files folder folders directory directories dir document documents doc docs record records row rows "
+                  "table tables database db bucket object objects message messages email emails ticket tickets issue issues "
+                  "page pages repo repository branch key keys secret secrets backup backups log logs volume snapshot snapshots "
+                  "entry entries item items data content text blob blobs asset assets image images note notes comment comments").split())
+
+
+def _verb_object(toks: list[str], i: int) -> str:
+    """What the verb at toks[i] is applied to: "permission", "ambiguous" or "other".
 
     The object is the run of tokens after the verb up to the next verb; when nothing follows it
-    ("permission_delete"), the run of tokens before it is used. "delete_file_and_grant_access" keeps
-    its delete: the object of "delete" is a file and "access" belongs to "grant".
+    ("permission_delete"), the run of tokens before it is used. "delete_file_and_remove_member": the
+    object of "delete" is a file and "member" belongs to "remove". "delete_member_file" names both an
+    access noun and a data noun in one clause, so the target is ambiguous and nothing is dropped.
     """
     def span(rng):
         out = []
@@ -382,10 +392,13 @@ def _acts_on_permission(toks: list[str], i: int) -> bool:
         return out
     after = span(range(i + 1, len(toks)))
     obj = after or span(range(i - 1, -1, -1))
-    return any(t in PERM_NOUNS for t in obj)
+    has_perm = any(t in PERM_NOUNS for t in obj)
+    if has_perm and any(t in DATA_NOUNS for t in obj):
+        return "ambiguous"
+    return "permission" if has_perm else "other"
 
 
-def _name_evidence(tool_name: str, ev) -> tuple[set[str], bool]:
+def _name_evidence(tool_name: str, ev, runner_resolved: bool = False) -> tuple[set[str], bool]:
     """Emit name evidence. Returns (categories inferred from nouns alone, compound name not fully resolved)."""
     if tool_name in BUILTIN:
         ev(BUILTIN[tool_name], 0.95, "name", f"known built-in tool {tool_name}")
@@ -394,14 +407,18 @@ def _name_evidence(tool_name: str, ev) -> tuple[set[str], bool]:
     toks = _tokens(last)
     verbs = [t for t in toks if t in VERBS]
     perm_noun = any(t in PERM_NOUNS for t in toks)
-    retargeted = False
+    retargeted = ambiguous = False
     for i, t in enumerate(toks):
         if t not in VERBS:
             continue
         cat, w = VERBS[t]
-        if perm_noun and (t in GENERIC_WRITE or t in DELETE_VERBS) and _acts_on_permission(toks, i):
-            retargeted = True  # "remove user access" changes permissions; it does not delete a file
-            continue
+        if perm_noun and (t in GENERIC_WRITE or t in DELETE_VERBS):
+            target = _verb_object(toks, i)
+            if target == "permission":
+                retargeted = True  # "remove user access" changes permissions; it does not delete a file
+                continue
+            if target == "ambiguous":
+                retargeted = ambiguous = True  # keep the verb's own effect and add the access change
         ev(cat, w, "name", f"name token '{t}'")
     noun_cats: set[str] = set()
     if perm_noun:
@@ -413,7 +430,7 @@ def _name_evidence(tool_name: str, ev) -> tuple[set[str], bool]:
     elif not verbs and any(t in SEND_NOUNS for t in toks):
         ev("send_data", 0.5, "name", "messaging noun without a verb")
         noun_cats.add("send_data")
-    return noun_cats, _unresolved_compound(toks)
+    return noun_cats, ambiguous or _unresolved_compound(toks, runner_resolved)
 
 
 def _arg_evidence(w: _Walk, ev) -> None:
@@ -615,7 +632,7 @@ def _classify(event: Any) -> dict[str, Any]:
     walk.go(args)
     if isinstance(args, str):
         walk.leaves.append(("", args[:MAX_LEAF_CHARS]))
-    noun_cats, compound_unresolved = _name_evidence(name, ev)
+    noun_cats, compound_unresolved = _name_evidence(name, ev, bool(walk.keys & SHELL_KEYS or walk.children))
     name_cats = {c for c, items in evid.items() if any(s == "name" for _, s, _ in items)}
     before = {c: len(v) for c, v in evid.items()}
     _arg_evidence(walk, ev)
