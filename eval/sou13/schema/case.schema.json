@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sou13-v0.3-cp1-case",
+  "title": "SOU-13 v0.3 case record (Checkpoint 1)",
+  "description": "Documentation schema. Enforcement is done by sou13/validate.py (stdlib only), which also checks cross-field invariants this schema cannot express.",
+  "type": "object",
+  "required": ["id", "dataset_version", "split", "subset", "evaluation_group", "scenario_tags", "input_profile", "input", "hashes",
+               "expected_outcome", "technical_error", "annotation", "evidence", "evidence_strength", "label_status",
+               "open_questions", "review", "contract", "provenance"],
+  "additionalProperties": false,
+  "$defs": {
+    "tri": {"type": ["boolean", "null"]},
+    "actions5": {
+      "type": "object",
+      "required": ["read", "write", "delete", "send_data", "change_permissions"],
+      "additionalProperties": false
+    },
+    "action": {"enum": ["read", "write", "delete", "send_data", "change_permissions"]}
+  },
+  "properties": {
+    "id": {"type": "string", "pattern": "^S13V03-(DEV-[0-9]{2}|SUP-S[0-9]+)$"},
+    "dataset_version": {"const": "0.3-cp1"},
+    "split": {"enum": ["train", "validation", "calibration", "test"]},
+    "subset": {"enum": ["dev16", "supplementary"]},
+    "evaluation_group": {"enum": ["regression", "challenge", "shell", "technical_error"]},
+    "scenario_tags": {"type": "array", "items": {"type": "string"}},
+    "input_profile": {"const": "object_arguments_fixture_profile", "description": "SOU-10 §1.2: object-argument profiles reject null raw_arguments."},
+    "input": {
+      "type": "object",
+      "required": ["tool_name", "tool_schema", "raw_arguments"],
+      "description": "SOU-10 §1.2 semantic input. Unknown fields are rejected.",
+      "additionalProperties": false,
+      "properties": {
+        "server_id": {"type": "string", "minLength": 1, "description": "Optional (§1.2)."},
+        "tool_name": {"type": "string", "minLength": 1},
+        "tool_description": {"type": ["string", "null"], "description": "Optional text or null; untrusted metadata (§1.2, §4.1, D04)."},
+        "tool_schema": {"type": "object"},
+        "pinned_schema": {"type": "object", "description": "Optional (§1.2); when present arguments must also satisfy it (SOU-13 convention)."},
+        "raw_arguments": {"type": ["object", "null"], "description": "null only in technical_error records (D06)."}
+      }
+    },
+    "hashes": {
+      "type": "object",
+      "required": ["input_sha256", "arguments_sha256", "definition_sha256"],
+      "properties": {
+        "input_sha256": {"type": "string"}, "arguments_sha256": {"type": "string"}, "definition_sha256": {"type": "string"}
+      }
+    },
+    "expected_outcome": {"enum": ["classification", "technical_error"]},
+    "technical_error": {"enum": [null, "classifier_invalid", "classifier_timeout", "classifier_internal_error"]},
+    "annotation": {
+      "type": "object",
+      "required": ["per_action_targets", "known_mask", "unknown", "contract_view", "label_evidence", "rationale", "contract_rules"],
+      "properties": {
+        "per_action_targets": {"oneOf": [{"type": "null"}, {"allOf": [{"$ref": "#/$defs/actions5"}],
+          "properties": {"read": {"$ref": "#/$defs/tri"}, "write": {"$ref": "#/$defs/tri"}, "delete": {"$ref": "#/$defs/tri"},
+                         "send_data": {"$ref": "#/$defs/tri"}, "change_permissions": {"$ref": "#/$defs/tri"}}}]},
+        "known_mask": {"oneOf": [{"type": "null"}, {"allOf": [{"$ref": "#/$defs/actions5"}],
+          "additionalProperties": {"enum": [0, 1]}}]},
+        "unknown": {"type": ["boolean", "null"], "description": "Stored separately; any null label requires true. Converse is assumption SOU13-ASSUME-UNKNOWN-FROM-NULL."},
+        "contract_view": {"oneOf": [{"type": "null"}, {"type": "object", "required": ["actions", "unknown"], "additionalProperties": false,
+          "properties": {"actions": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/action"}}, "unknown": {"type": "boolean"}}}]},
+        "forbidden_actions": {"type": "array", "items": {"$ref": "#/$defs/action"},
+          "description": "SOU-13 convention (SOU13-CONV-FORBIDDEN-ACTIONS), not a SOU-10 contract field and not a runtime field; records using it must be pending."},
+        "label_evidence": {"oneOf": [{"type": "null"}, {"allOf": [{"$ref": "#/$defs/actions5"}], "additionalProperties": {
+          "type": "object", "required": ["value", "basis", "strength", "refs"],
+          "properties": {
+            "value": {"$ref": "#/$defs/tri"},
+            "basis": {"enum": ["controlled_execution_trace", "controlled_execution_absence", "environment_channel_disabled",
+                               "opaque_component", "no_established_semantics"]},
+            "strength": {"enum": ["execution", "model_execution", "environment_declaration", "not_established"]},
+            "refs": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+          }}}]},
+        "rationale": {"type": "string"},
+        "contract_rules": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "evidence": {"type": "object", "required": ["kind"],
+      "properties": {"kind": {"enum": ["controlled_execution", "no_established_semantics", "input_validation"]},
+                     "tool_admission": {"description": "Admitted-tool registry entry that selects semantics (§1.1); synthetic assumption (Q-ADMISSION)."}}},
+    "evidence_strength": {"type": "string"},
+    "label_status": {"enum": ["provisional", "pending", "confirmed"], "description": "SOU-13 convention (Q-STATUS), not a SOU-10 contract field."},
+    "open_questions": {"type": "array", "items": {"type": "string"}},
+    "review": {"type": "object", "required": ["annotator", "reviewer", "reviewed_at", "decision", "second_reviewer", "adjudication"]},
+    "contract": {"type": "object", "required": ["version", "sha256", "commit", "blob"], "description": "SOU-10 contract on main the labels are aligned with."},
+    "provenance": {"type": "object"}
+  }
+}

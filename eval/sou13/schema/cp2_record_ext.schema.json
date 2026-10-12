@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sou13-cp2-record-extension",
+  "title": "SUPERSEDED by schema/cp2_case.schema.json (strict Draft 2020-12). Kept as Phase 1 documentation of the CP2 extension fields.",
+  "description": "Documentation schema. Enforcement: sou13cp2/records.py (record_errors) and sou13cp2/leakage.py. CP1 fields, labels (true/false/null, known_mask, unknown, contract_view, label_evidence), provenance and digests are kept byte-for-byte; CP1 records on disk are never rewritten (the CP2 view is built in memory).",
+  "type": "object",
+  "required": ["family_id", "template_id", "alias_group_id", "leakage_group_id", "exposure", "source_material"],
+  "properties": {
+    "family_id": {"type": "string", "pattern": "^fam\\.(read|write|delete|send_data|change_permissions|mixed|no_effect|unknown|shell)\\.[a-z0-9_]+$",
+                  "description": "One implementation of tool behaviour, admitted under one or more (server_id, tool_name) identities."},
+    "template_id": {"type": "string", "pattern": "^tpl\\.[a-z_]+\\.[a-z0-9_]+\\.[a-z0-9_]+$",
+                    "description": "Case-construction pattern inside the family; its structural signature must be unique in the taxonomy."},
+    "alias_group_id": {"type": "string", "pattern": "^ag\\.", "description": "All identities/normalised names of the family."},
+    "leakage_group_id": {"type": "string", "pattern": "^lg\\.", "description": "Connected component of the leakage graph; unit of split assignment (from the manifest)."},
+    "exposure": {"enum": ["none", "cp1_shared", "v02_derived"], "description": "cp1_shared / v02_derived are pinned to train."},
+    "source_material": {"type": "object", "required": ["kind"],
+      "properties": {"kind": {"enum": ["sou13_v03_cp1_record", "new_cp2_case"],
+                              "description": "sou13_pilot_v02 is rejected: v0.2 is analysis input only."},
+                     "cp1_record_sha256": {"type": "string", "description": "sha256 of the canonical CP1 record; any change to CP1 fields is detected."}}},
+    "split": {"enum": ["train", "validation", "calibration", "test"], "description": "Must equal manifest.family_split[family_id]."}
+  }
+}
