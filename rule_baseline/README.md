@@ -76,13 +76,23 @@ python rule_baseline/evaluate_dev.py --exports <sou13 package>/exports --classif
     --baseline <old rule_baseline.py> --baseline-label 900cc3a --out-dir out/
 ```
 
-It reports, with the denominators shown in the report: exact match per split, per-label precision and
-recall, critical misses (an expected risky label missing while `unknown=false`), mixed-action quality,
-abstentions and coverage, technical failures, and batch-size-1 latency in process, with a warm process and
-with a new `python -I -u` process per call. Two reference rows (always abstain, always no-effect) show what
-a blanket answer scores, so a refusal is not mistaken for generalization. Only these measured candidates
-are compared: the baseline at `900cc3a` and this file. `test_evaluate_dev.py` checks the arithmetic on a
-few synthetic cases and does not need the SOU-13 package.
+It reports, with the denominators shown in the report: contract match per split, per-label results on
+known labels only, critical misses (a known-true risky label missing while `unknown=false`), mixed-action
+quality, abstentions and coverage, technical failures, and batch-size-1 latency in process, with a warm
+snapshot process and with a new snapshot process per call. Two reference rows (always abstain, always
+no-effect) show what a blanket answer scores, so a refusal is not mistaken for generalization. Only these
+measured candidates are compared: the baseline at `900cc3a` and this file.
+
+Scoring rules (scoring version 2):
+- Labels are tri-state. `per_action_targets` (true/false/null) and `known_mask` are read from the export and checked against `contract_view`; only known targets are scored. Fully annotated cases (all five known) are reported apart from partially annotated ones.
+- Every output is validated with the reviewed `check_output`. Missing or malformed output, an explicit error status and a raised exception are technical failures counted against the case totals; they are never a no-op answer or a match.
+- Latency samples are valid completed exchanges only: each response is parsed and validated, request and cleanup are time-bounded, and failed or timed-out attempts are reported separately with attempt counts.
+- One captured source: the file is read once, hashed, compiled with `exec(compile(...))` (never a cached `.pyc`), and the same bytes start the snapshot processes through a digest-checking bootstrap. A change of the file during the run is rejected.
+- The snapshot processes are shaped like the daemon's snapshot start but are not its code or admission path, so the latency figures are not a bound on daemon latency.
+
+`test_evaluate_dev.py` covers these rules on synthetic cases (null targets, `{}` and malformed output, exceptions, invalid and hung processes, same-size same-mtime source rewrite) and does not need the SOU-13 package.
+
+The first report is kept as [EVALUATION_SOU14_e4e494a.md](EVALUATION_SOU14_e4e494a.md), marked superseded, because its scoring was corrected after review.
 
 What the numbers are not: the splits were visible while the rules were written, the labels are
 `provisional`, and the closed test is held by its custodian. They are development numbers.
