@@ -119,6 +119,15 @@ jobs:
           name: sou18-status-linux
           path: ${{ runner.temp }}/sou18-status/results.json
           if-no-files-found: warn
+      - name: Run combined SOU-18 local probes
+        run: python3 scripts/run-sou18-acceptance.py --run --repo . --agentfw target/debug/agentfw --expected-commit "${{ github.sha }}" --output "${{ runner.temp }}/sou18-suite"
+      - name: Retain combined SOU-18 probe evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou18-suite-linux
+          path: ${{ runner.temp }}/sou18-suite/
+          if-no-files-found: warn
       - name: Run isolated Gateway binary acceptance
         run: python3 scripts/self-hosted-local-acceptance.py --gateway target/debug/llm-firewall --artifact-label "$GITHUB_SHA" --out target/local-gateway-evidence.json
       - name: Retain isolated Gateway acceptance evidence
@@ -195,6 +204,15 @@ jobs:
         with:
           name: sou18-status-macos
           path: ${{ runner.temp }}/sou18-status/results.json
+          if-no-files-found: warn
+      - name: Run combined SOU-18 local probes
+        run: python3 scripts/run-sou18-acceptance.py --run --repo . --agentfw target/debug/agentfw --expected-commit "${{ github.sha }}" --output "${{ runner.temp }}/sou18-suite"
+      - name: Retain combined SOU-18 probe evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou18-suite-macos
+          path: ${{ runner.temp }}/sou18-suite/
           if-no-files-found: warn
 
   # The optional ML stack is not compiled by the default-feature job.

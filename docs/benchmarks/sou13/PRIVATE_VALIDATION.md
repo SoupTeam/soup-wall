@@ -94,11 +94,21 @@ Get-Content "$Out\ledger.json"
 `--require-private` disables every private-artifact skip, so a missing artifact is an error. At this
 revision, the expected result is:
 
-- `ran` 343, `failed` 0, `errored` 0, `result` `PASS`;
+- `ran` 437, `failed` 0, `errored` 0, `result` `PASS`. This includes:
+  - the 93 data-free gold-export tests (`tests_cp2/test_gold_export.py`, `tests_cp2/test_gold_review_queue.py`,
+    `tests_cp2/test_gold_batch.py`), which also run in the public suite;
+  - the privacy-gate symlink regression added at the merge of PR #80.
+
+  Commit `bdd1f92` had 343 tests; see Recorded runs;
 - `skipped` exactly **3**, all public-copy counterpart tests, which skip by design when restricted material is
   present:
   - `test_splits.PublicCopyAssignment` (2 tests);
   - `test_taxonomy.TaxonomyIsValid.test_public_copy_is_the_documented_development_subset`.
+
+  On Windows without the symlink privilege (Developer Mode or an elevated shell), one more test skips:
+  `test_release_privacy_gate.PathAndContentRules.test_dangling_symlink_is_not_treated_as_a_deletion`, with
+  reason `symlink creation unavailable`. That makes 4 skips. Record the reason; no other additional skip is
+  acceptable.
 
 Any other skip, failure or error is a finding. Investigate it without editing frozen data. Report it with its
 test name, not its data.
@@ -157,11 +167,10 @@ not inspected here.
 | --- | --- | --- |
 | 1 (owner) | **FAIL**: 340 ran / 324 passed / 10 failed / 3 errored / 3 skipped | Causes: test fixtures that assumed a DRAFT manifest after the freeze, a test-name shadowing defect, and missing owner trust-anchor configuration. All three are fixed in this revision. |
 | 2 (owner-reported, 2026-10-12) | **PASS**: 343 ran / 340 passed / 0 failed / 0 errored / 3 skipped | CP1 74 passed; CP2 266 passed and 3 skipped. Source identity PASS (46 byte-identical files); freeze anchor signature verified against the pinned fingerprint; privacy gate PASS; disposable working copy deleted. Run after correcting `SOU13_V02_DATA` to the historical v0.2 data directory. No frozen data or signed manifest was modified. |
+| 3 (owner-reported, final for PR #80) | **PASS**: 343 ran / 340 passed / 0 failed / 0 errored / 3 skipped | Source commit `bdd1f92`. The 3 skips are the expected public-copy counterparts listed in step 4. This run covers the test-only change to `test_obsolete_contract_binding_rejected` (a visibly synthetic obsolete-contract digest with two added assertions) that run 2 predated. |
 
-Run 2 is historical evidence for the revision that was tested. One later change has **not** yet had a full
-owner-only strict rerun: in `tests/test_validate.py`, `test_obsolete_contract_binding_rejected` now uses a
-visibly synthetic obsolete-contract digest instead of an unverified literal, with two added assertions. It is a
-test-only change; no source, schema or frozen file changed. The next strict run covers it.
+Runs 2 and 3 are historical evidence for the revisions that were tested. A later revision needs its own strict
+run; the expected ledger for this revision is given in step 4.
 
 ## 8. Diagnostics to share after a failing run
 
