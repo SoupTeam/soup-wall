@@ -825,8 +825,7 @@ async fn classifier_failures_never_reach_policy_or_the_server() {
         ("timeout", "classifier_timeout"),
         ("crash", "classifier_crash"),
         ("invalid", "classifier_invalid"),
-        ("unknown", "unsupported_classification_mapping"),
-        ("mixed", "unsupported_classification_mapping"),
+        ("duplicate", "classifier_invalid"),
     ];
     for (index, (fault, label)) in cases.iter().enumerate() {
         let id = 10 + index;
@@ -838,14 +837,14 @@ async fn classifier_failures_never_reach_policy_or_the_server() {
             reply["id"], id,
             "the technical response keeps the host call id"
         );
+        assert!(
+            executed(&fixture.ledger).is_empty(),
+            "{fault} must not execute"
+        );
         let message = reply["error"]["message"].as_str().unwrap();
         assert!(
             message.contains(label) && message.contains("policy not reached"),
             "{message}"
-        );
-        assert!(
-            executed(&fixture.ledger).is_empty(),
-            "{fault} must not execute"
         );
     }
     let followup = r#"{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"read_document","arguments":{}}}"#;
@@ -2586,18 +2585,18 @@ async fn sou15_multi_action_and_unknown_classification_handling() {
     let reply: Value =
         serde_json::from_str(&fixture.exchange(&unknown_call.to_string()).await.unwrap()).unwrap();
     assert_eq!(reply["id"], "unknown-class-1");
-    assert_eq!(reply["error"]["code"], -32603);
-    assert!(reply["error"]["message"]
+    assert_eq!(reply["result"]["isError"], true);
+    assert!(reply["result"]["content"][0]["text"]
         .as_str()
         .unwrap()
-        .contains("unsupported_classification_mapping"));
+        .contains("policy_unconfirmed_ask"));
     assert_eq!(
         executed(&fixture.ledger).len(),
         0,
         "unknown classification must withhold without execution"
     );
 
-    // 2. Mixed actions with read + send_data (with undeclared egress) is rejected before policy
+    // 2. Mixed actions with read + send_data (with undeclared egress) is rejected by policy
     let mixed_call = json!({
         "jsonrpc": "2.0",
         "id": "mixed-class-1",
@@ -2613,15 +2612,43 @@ async fn sou15_multi_action_and_unknown_classification_handling() {
     let reply2: Value =
         serde_json::from_str(&fixture.exchange(&mixed_call.to_string()).await.unwrap()).unwrap();
     assert_eq!(reply2["id"], "mixed-class-1");
-    assert_eq!(reply2["error"]["code"], -32603);
-    assert!(reply2["error"]["message"]
+    assert_eq!(reply2["result"]["isError"], true);
+    assert!(reply2["result"]["content"][0]["text"]
         .as_str()
         .unwrap()
-        .contains("unsupported_classification_mapping"));
+        .contains("policy_denied"));
     assert_eq!(
         executed(&fixture.ledger).len(),
         0,
         "unauthorized mixed actions must be withheld without execution"
+    );
+
+    // 3. Mixed actions with authorized egress are allowed and executed
+    let allowed_mixed_call = json!({
+        "jsonrpc": "2.0",
+        "id": "mixed-class-allowed-1",
+        "method": "tools/call",
+        "params": {
+            "name": "send_http",
+            "arguments": {
+                "url": "http://127.0.0.1:9/collect",
+                "body": "authorized egress with classifier-fault-mixed"
+            }
+        }
+    });
+    let reply3: Value = serde_json::from_str(
+        &fixture
+            .exchange(&allowed_mixed_call.to_string())
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(reply3["id"], "mixed-class-allowed-1");
+    assert_ne!(reply3["result"]["isError"], true);
+    assert_eq!(
+        executed(&fixture.ledger).len(),
+        1,
+        "authorized mixed action must execute exactly once"
     );
 }
 
