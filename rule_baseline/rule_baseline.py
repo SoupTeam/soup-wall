@@ -488,7 +488,10 @@ def _arg_evidence(w: _Walk, ev) -> None:
     shell_keys = keys & SHELL_KEYS
     if shell_keys:
         text = " ".join(v for k, v in w.leaves if k in shell_keys)
-        w.unmatched += _shell(text, ev)
+        if text.strip():
+            w.unmatched += _shell(text, ev)
+        else:
+            w.unmatched += 1  # A command key without inspectable text does not resolve a runner.
     for child in w.children:
         _arg_evidence(child, ev)
         w.unmatched += child.unmatched

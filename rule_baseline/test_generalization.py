@@ -208,6 +208,14 @@ class GenericRunnerStaysOpen(unittest.TestCase):
                 a, u, _ = run(name, {"path": "x", "task_id": "t"})
                 self.assertEqual((a, u), ({"read"}, True))
 
+    def test_empty_or_nontext_command_does_not_resolve_an_opaque_runner(self):
+        for name in ("read_and_run", "read_and_call"):
+            for command in (None, 42, [], {}, "", "   "):
+                with self.subTest(name=name, command=command):
+                    a, u, r = run(name, {"path": "x", "task_id": "t", "command": command})
+                    self.assertEqual((a, u), ({"read"}, True))
+                    self.assertIsNone(r["failure"])
+
     def test_runner_clause_is_resolved_by_a_visible_command_or_parsed_steps(self):
         a, u, _ = run("read_and_run", {"path": "x", "command": "ls"})
         self.assertEqual((a, u), ({"read"}, False))
