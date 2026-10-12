@@ -238,7 +238,7 @@ custodian receives the frozen model and training report, holds the test data,
 reviews the linked provenance and performs the single comparison. Neither CLI
 changes the shared runtime contract or grants tool execution authority.
 
-After human review and dataset-license approval, the development export has
+After reviewed labels and explicit dataset-use approval, the development export has
 `format: "soup-wall/classifier-development-dataset/1"` and `cases` with the same
 row fields as the earlier local dataset: `id`, `family`, `split`, `input`, `labels`
 and optional evaluation-only `accepted_outputs`. Nonempty `train`, `validation`
@@ -256,6 +256,38 @@ features. Exclude pending, admission-rejection and technical-error rows. A
 provisional directory named `pilot` is not data approval. The final release must
 review the export and its digest; do not automatically convert the provisional
 11 October checkpoint into approved training data.
+
+For SOU-13's authorized Gold JSONL export, use the conversion command after
+separately running its reviewed verifier from the repository. Preserve the UTF-8
+JSON verification report and obtain the exact `GOLD_EXPORT_MANIFEST.json` SHA-256
+from the dataset owner outside the export. Do not execute an unreviewed script
+copied from a received archive. Both self-consistency and anchored integrity must
+report PASS. An internal usage decision such as `SOU13-USAGE-2026-10-12` permits
+only its recorded scope; it does not grant public licensing or publication.
+
+```sh
+# Verify the actual approved Gold release using the reviewed SOU-13 tooling.
+python -I -B eval/sou13/scripts_cp2/verify_gold_export.py /private/gold-dev \
+  --expect-manifest-sha256 OWNER_PUBLISHED_DIGEST > /private/verified.json
+
+python -m experiments.local_classifier.gold_import \
+  --gold-export /private/gold-dev --verification-report /private/verified.json \
+  --expect-manifest-sha256 OWNER_PUBLISHED_DIGEST \
+  --review-reference ACTUAL_OWNER_RELEASE_AND_REVIEW_REFERENCE \
+  --holdout-id CUSTODIAN_ISSUED_STABLE_ID --expected-cases 179 \
+  --output-dir /private/converted-dev
+```
+
+The 179-case CP2 scope excludes historical CP1 and sealed test. Conversion
+rechecks manifest/file/input hashes, paired IDs, confirmed status, tri-state masks,
+development splits and alias-group separation. Only original tool inputs become
+features. Output is `development.json`, `development-review.json` and
+`conversion.json`; existing output is never overwritten. Run `custodian train`
+below using these development files. Import neither trains nor accesses test.
+A JSON receipt asserts prior verification without authenticating a reviewer;
+the owner-published digest, actual release/use decisions and independent custody
+remain required. On Windows, capture the receipt as UTF-8 without a BOM; legacy
+PowerShell `>` emits UTF-16 and is unsuitable for the report.
 
 The separate development approval is a bounded JSON object with exactly:
 
@@ -296,7 +328,7 @@ review reference and test-export `dataset_sha256`, plus
 These are experimental bookkeeping formats, not implementation contracts between
 adapter, classifier, policy and executor.
 
-The existing external run authorization and ledger format remains unchanged.
+The existing two-candidate external run authorization and ledger remain supported.
 For this path its `dataset_sha256` binds the custodian's reviewed **holdout export**,
 while model provenance separately binds the development export/review. The run's
 `holdout_id` must match both approvals. Freeze and review the same baseline source
@@ -316,6 +348,60 @@ python -m experiments.local_classifier.custodian evaluate \
   --run-ledger-dir /custodian/shared-run-ledger
 ```
 
+### One experiment with additional frozen classifiers
+
+Agree all participants before the first held-out prediction. To include SOU-14's
+generic classifier alongside the model and the original `900cc3a` baseline, add
+`--additional-classifier generic_rule_v1=/custodian/frozen-generic-rule` to the
+custodian command. The directory must contain the reviewed `rule_baseline.py`
+exporting `classify(input)`. It is trusted experimental code, not tool metadata;
+the custodian must review it before loading. This option never replaces the
+original baseline. Training rejects additional-classifier arguments without
+opening their sources.
+
+For a run with additional participants, the authorization must also contain an
+exact ID-to-source-SHA-256 map. For the agreed source after PR #78:
+
+```json
+"additional_classifiers": {
+  "generic_rule_v1": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+}
+```
+
+This member belongs in the same run authorization object as the existing model,
+baseline and dataset digests. Missing, changed or unrequested participants fail
+before reservation and prediction. Each source is executed and hashed from the
+same captured bytes; preserve exact Git blob bytes on Windows. All participants
+share one external ledger reservation and one result receipt. A failed comparison
+still consumes the experiment; adding a participant after a completed run cannot
+reopen the same holdout. Reports retain `candidate` and `baseline`, plus
+`additional_classifiers` and `additional_classifier_sha256` keyed by agreed ID.
+No intermediate test results or test-based tuning are allowed.
+
+Every participant receives only a deep copy of the original input and uses the
+same evaluator and gold masks. In each label's metrics, `eligible_*` counts the
+full annotated population, while `known`, `positive` and `negative` count only
+valid predictions. FN/FP rates use scored positive/negative denominators;
+technical failures are reported separately and do not become semantic errors.
+Null targets remain masked, never inferred negatives. Unknown metrics include
+both population and scored positive/negative counts.
+
+`missed_when_unknown_false` records each omitted known-positive action where the
+prediction did not abstain. `critical_known_action_misses` counts calls missing
+at least one known-positive write/delete/send_data/change_permissions action
+with predicted unknown false, divided by scored calls containing a known risky
+action. Its eligible and scored counts expose failures excluded from that rate.
+This is classification risk, not an observed policy allow or execution bypass.
+`mixed_positive_retention` includes cases with at least two proven positive
+actions even if other targets are null, and measures whether all proven actions
+survive. Existing `mixed_cases` and exact-match fields still require full labels.
+
+`coverage` retains its valid-output denominator; `coverage_total` divides valid
+non-abstaining predictions by all calls, exposing technical failures. Abstentions
+and `abstention_rate` concern valid outputs. Each candidate is called once per
+case, with p50/p95 latency measured in that same experiment, including failed
+calls. Independent latency work must use development fixtures, not reopen test.
+
 Before first prediction, evaluation rejects changed model provenance, mismatched
 review/manifest/test identities and shared case IDs, families or semantic inputs
 across development and holdout. Description-only differences do not bypass the
@@ -334,7 +420,8 @@ preparation establishes no actual SOU-13 training result or held-out quality met
 ```sh
 python -m unittest experiments.local_classifier.test_model \
   experiments.local_classifier.test_ledger \
-  experiments.local_classifier.test_custodian -v
+  experiments.local_classifier.test_custodian \
+  experiments.local_classifier.test_gold_import -v
 ```
 
 ## Dated evidence and recommendation

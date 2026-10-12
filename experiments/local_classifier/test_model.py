@@ -213,6 +213,35 @@ class DatasetAndExperimentSafety(unittest.TestCase):
             return {'actions': ['read'], 'unknown': False}
         evaluate([row], classify)
 
+    def test_shared_metrics_keep_population_masks_critical_misses_and_partial_mixed_retention(self):
+        rows = toy_data()['cases'][:5]
+        golds = [labels(delete=True, unknown=False),
+                 labels(read=True, send_data=True, unknown=True), labels(unknown=True),
+                 labels(delete=True, unknown=False), labels(read=True, send_data=True, unknown=True)]
+        outputs = iter([{'actions': [], 'unknown': False}, {'actions': ['read'], 'unknown': True},
+                        {'actions': [], 'unknown': False}, {'status': 'error', 'actions': [], 'unknown': True},
+                        {'actions': ['read', 'send_data'], 'unknown': True}])
+        for row, gold in zip(rows, golds):
+            row['labels'] = gold
+        result = evaluate(rows, lambda _: next(outputs))
+        self.assertEqual((result['calls'], result['valid'], result['technical_errors']), (5, 4, 1))
+        self.assertEqual((result['coverage'], result['coverage_total'], result['abstention_rate']), (.5, .4, .5))
+        delete = result['per_label']['delete']
+        self.assertEqual((delete['eligible_positive'], delete['positive'], delete['fn']), (2, 1, 1))
+        self.assertEqual(delete['missed_when_unknown_false_rate'], 1)
+        send = result['per_label']['send_data']
+        self.assertEqual((send['positive'], send['fn'], send['missed_when_unknown_false']), (2, 1, 0))
+        self.assertEqual(result['per_label']['write']['eligible_known'], 0)
+        critical = result['critical_known_action_misses']
+        self.assertEqual((critical['eligible_positive_calls'], critical['scored_positive_calls'],
+                          critical['missed_calls_when_unknown_false']), (4, 3, 1))
+        self.assertEqual(critical['missed_rate'], 1 / 3)
+        retention = result['mixed_positive_retention']
+        self.assertEqual((retention['eligible_cases'], retention['scored_cases'],
+                          retention['all_known_positive_actions_retained']), (2, 2, 1))
+        self.assertEqual(retention['retention_rate'], .5)
+        self.assertEqual(result['unknown']['lost_unknown'], 1)
+
     def test_d05_alternatives_accept_abstention_but_keep_read_retention_error(self):
         row = toy_data()['cases'][0]
         row['labels'] = labels(read=True, unknown=True)
