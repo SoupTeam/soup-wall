@@ -54,7 +54,8 @@ The public run executes every test whose inputs ship in the repository. Other te
 `PRIVATE ARTIFACT MISSING:` followed by the exact paths they need.
 
 The public run proves several things:
-- source identity with both freezes;
+- the source-identity checker on synthetic inputs; matching the actual freezes requires the owner-only
+  digest records and is not established by the public run;
 - schema validity;
 - the CP2 interpreter semantics, leakage-graph logic, near-duplicate logic and trust-anchor logic on synthetic
   inputs;

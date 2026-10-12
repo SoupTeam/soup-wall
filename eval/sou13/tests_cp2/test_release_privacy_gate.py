@@ -98,6 +98,16 @@ class PathAndContentRules(Tree):
             registry[probe]['confirmed'] = True
             self.assertEqual(self.issues(families=PUBLIC), [])
 
+    def test_dangling_symlink_is_not_treated_as_a_deletion(self):
+        link = self.root / 'candidate.txt'
+        try:
+            link.symlink_to('missing-target.txt')
+        except OSError as exc:
+            self.skipTest(f'symlink creation unavailable: {exc}')
+        self.assertFalse(link.exists())
+        self.assertTrue(link.is_symlink())
+        self.assertTrue(any('not a regular file' in issue for issue in self.issues()))
+
     def test_binary_content_fails_closed(self):
         self.put('blob.bin', b'\x00\x01')
         self.assertTrue(any('binary' in i for i in self.issues()))

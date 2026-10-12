@@ -169,8 +169,8 @@ def inspect_files(base, rels, families=None, digests=frozenset()):
     issues = []
     for rel in sorted(set(rels)):
         p = Path(base) / rel
-        if not p.exists():
-            continue  # a deletion carries no content
+        if not p.exists() and not p.is_symlink():
+            continue  # a deletion carries no content; dangling symlinks still carry a target
         if p.is_symlink() or not p.is_file():
             issues.append(f'{rel}: not a regular file')
             continue

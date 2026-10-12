@@ -60,3 +60,8 @@ preserved.
 - [ ] The PR content is reviewed for safety, and the owner has authorized publication.
 - [ ] A versioned gold release (addendum) is issued **only after** all applicable sign-offs. It is accepted only
       with independent-reviewer labels that match the labels being confirmed.
+
+Maintainer review on October 12 fixed a dangling-symlink omission in the public-only privacy gate and
+added one public regression. The frozen source modules, schemas and data were not modified. The public
+suite now runs 344 tests: 194 pass and 150 named private-artifact skips. The owner-only 343-test ledger
+above remains historical; it is not a strict private rerun of this later overlay.
