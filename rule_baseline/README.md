@@ -66,6 +66,49 @@ An unfamiliar name such as `quartz_17` is classified from its arguments, not ref
 heuristics; the measured effect, including errors, abstentions and the data they were developed on, is
 reported with the evaluation and not claimed here.
 
+## Evaluation, pinned versions and handoff (SOU-14, step 3)
+
+`evaluate_dev.py` measures a classifier on the SOU-13 development exports and writes `evaluation.json`
+and `EVALUATION.md`. The committed result is [EVALUATION_SOU14.md](EVALUATION_SOU14.md).
+
+```
+python rule_baseline/evaluate_dev.py --exports <sou13 package>/exports --classifier rule_baseline/rule_baseline.py \
+    --baseline <old rule_baseline.py> --baseline-label 900cc3a --out-dir out/
+```
+
+It reports, with the denominators shown in the report: exact match per split, per-label precision and
+recall, critical misses (an expected risky label missing while `unknown=false`), mixed-action quality,
+abstentions and coverage, technical failures, and batch-size-1 latency in process, with a warm process and
+with a new `python -I -u` process per call. Two reference rows (always abstain, always no-effect) show what
+a blanket answer scores, so a refusal is not mistaken for generalization. Only these measured candidates
+are compared: the baseline at `900cc3a` and this file. `test_evaluate_dev.py` checks the arithmetic on a
+few synthetic cases and does not need the SOU-13 package.
+
+What the numbers are not: the splits were visible while the rules were written, the labels are
+`provisional`, and the closed test is held by its custodian. They are development numbers.
+
+**Pinned revision.** The classifier is one stdlib-only file with no configuration file. Its behaviour is
+fixed by the file and its constants (`THRESHOLD = 0.5` decides which actions are reported; `MAX_*` bound
+input and reply sizes; `INTERFACE = "sw-classifier-core/0.4"`). To pin it for Task 7 or the daemon, record
+the git commit of `main` that contains it and the `sha256` of `rule_baseline.py`; the report prints the
+hash of the measured file (the file as committed, with LF line ends; on a Windows checkout with CRLF use
+`git show HEAD:rule_baseline/rule_baseline.py` to get the same bytes). After any change to the file or a constant, run the evaluation again.
+
+**Handoff to SOU-15.** The reply keeps `actions`, `unknown`, `confidence`, `uncertainty`, `reason`, plus
+`evidence`, `definition_estimate`, `definition_invocation_diff` and `failure`. Five shapes now reach the
+bridge and `map_classification` still accepts only the first one:
+
+| Reply | Meaning |
+|---|---|
+| one action, `unknown=false` | a known single action |
+| two or more actions | mixed call; keep every action |
+| actions plus `unknown=true` | partial knowledge: the listed actions are proven, more may exist |
+| no actions, `unknown=true` | nothing matched; the policy side must ask or deny |
+| no actions, `unknown=false` | every command is a proven no-op (D07) |
+
+A technical failure is `status="error"` with `failure.code` one of `classifier_invalid`,
+`classifier_timeout`, `classifier_internal_error`; the policy is not reached.
+
 ## Interface and remaining integration work
 
 `classify(input)` is the local Python interface consumed by the
