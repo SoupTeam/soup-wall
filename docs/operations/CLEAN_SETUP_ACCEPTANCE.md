@@ -7,6 +7,68 @@ It does not introduce another classifier, MCP harness or admission contract.
 
 See the dated [initial-path results](evidence/SOU18_INITIAL_PATH_2026-10-11.md)
 for the measured candidate, platform limits and remaining administrator work.
+The [combined-run evidence from October 12](evidence/SOU18_LOCAL_SUITE_2026-10-12.md)
+records a fresh build after the accepted classifier updates.
+
+## Run the local probes together
+
+The [combined runner](../../scripts/run-sou18-acceptance.py) executes the existing
+disposable installation check, seven status/MCP cases and paired latency probe
+in sequence. Use Python 3.10+, a clean candidate checkout and an Agent built for
+the runtime platform. Build first with the native or pinned Docker procedure
+below; retain its source, compiler, cache state and binary hash. The runner does
+not compile the Agent or attest a supplied binary's source.
+
+```sh
+CANDIDATE_DIR=/absolute/path/to/clean/candidate
+CANDIDATE_SHA=$(git -C "$CANDIDATE_DIR" rev-parse HEAD)
+python3 scripts/run-sou18-acceptance.py --run \
+  --repo "$CANDIDATE_DIR" --agentfw "$CANDIDATE_DIR/target/debug/agentfw" \
+  --expected-commit "$CANDIDATE_SHA" --pairs 30 \
+  --output /absolute/path/outside/candidate/new-suite-run
+```
+
+For an older candidate containing the three probes, invoke the runner from a
+separate checkout containing this script. It records both the runner hash and
+the candidate's probe hashes. Replace `--agentfw` with the extracted binary when
+using the Docker build. Without `--run`, no probes or reports are created.
+
+Each probe runs with a private temporary child profile and no inherited provider
+credentials. Real host settings and service registrations are untouched. The
+output directory must be new and outside the candidate. It contains:
+
+- `results.json` and `report.md`: combined outcome, identities and stage results.
+- `setup.json`: installation, preservation of synthetic settings and rollback.
+- `status/results.json`: independent execution and delivery evidence for seven cases.
+- `latency/results.json` and its companion files: 30 paired reads by default,
+  one excluded warmup pair, raw witnesses and p50/p95 added duration.
+
+Exit **0** means all three bounded probes passed. Exit **1** means a probe
+reported a failure. Exit **2** means incomplete evidence, an unsupported skip,
+invalid input, changed source/binary or a process timeout. A success label or
+zero child exit alone is insufficient: the runner checks report schemas,
+identities, required observations and recomputes the status/latency grades.
+Failed or partial child reports are retained. Process diagnostics are discarded
+to avoid retaining inherited private text; read the sanitized child report for
+the failure reason. Missing child evidence remains explicitly incomplete.
+
+Per-stage timeouts are 120, 180 and 240 seconds. On timeout the runner terminates
+its owned process tree and stops subsequent probes. Such a run does not certify
+cleanup: inspect its owned temporary directories before removing leftovers.
+Ordinary completion removes the temporary profiles.
+
+Linux and macOS CI run this command and retain `sou18-suite-*` artifacts on
+success or failure. Native Windows can run setup and status, but the existing
+paired-latency probe is POSIX-only: the runner records `skip` and exits **2**.
+Existing Windows setup/status CI remains separate. A Linux container pass does
+not establish native Mac, Windows or WSL2 coverage.
+
+This command covers the selected trusted local fixture. It keeps
+`generic_candidate_acceptance=pending_sou15`, `actual_host=not_run` and
+`acceptance_passed=false`, including on exit 0. It does not measure general
+classifier accuracy or prove CodeQL merge protection. Repeat it on the final
+agreed candidate and complete the remaining host, generic-action and
+administrator checks separately.
 
 ## Disposable installation and status checks
 
