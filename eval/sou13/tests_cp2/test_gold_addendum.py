@@ -250,7 +250,8 @@ class Cli(unittest.TestCase):
                 p.write_text(''.join(json.dumps(r) + '\n' for r in keep), encoding='utf-8')
                 files[rel] = file_sha(p)
         (self.exports / 'EXPORT_MANIFEST.json').write_text(
-            json.dumps({'cp2_version': BASE['dataset_version'], 'files_sha256': files}), encoding='utf-8')
+            json.dumps({'export_kind': 'sou13_cp2_label_separated_exports', 'cp2_version': BASE['dataset_version'],
+                        'files_sha256': files}), encoding='utf-8')
         self.base = dict(BASE, export_manifest_sha256=file_sha(self.exports / 'EXPORT_MANIFEST.json'))
 
     def tearDown(self):
