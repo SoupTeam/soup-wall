@@ -114,6 +114,25 @@ class SchemaDrift(unittest.TestCase):
         self.assertFalse(run("read_file", {"path": "a", "x": 1}, tool_schema={"type": "object"})[2]["args_schema_violation"])
         self.assertFalse(run("read_file", {"path": "a"}, tool_schema={"anyOf": []})[2]["args_schema_violation"])
 
+    def test_union_property_type_does_not_crash_shallow_checker(self):
+        schema = {"type": "object", "properties": {"path": {"type": ["string", "null"]}},
+                  "required": ["path"], "additionalProperties": False}
+        for value in ("a", None):
+            with self.subTest(value=value):
+                a, _, r = run("read_file", {"path": value}, tool_schema=schema)
+                self.assertEqual(r["status"], "ok")
+                self.assertIsNone(r["failure"])
+                self.assertEqual(a, {"read"})
+                self.assertFalse(r["args_schema_violation"])
+
+    def test_unsupported_property_type_shape_does_not_raise_internal_error(self):
+        for kind in (None, {}, []):
+            with self.subTest(kind=kind):
+                schema = {"type": "object", "properties": {"path": {"type": kind}}}
+                r = run("read_file", {"path": "a"}, tool_schema=schema)[2]
+                self.assertIsNone(r["failure"])
+                self.assertEqual(r["status"], "ok")
+
     def test_pinned_schema_wins_over_a_drifted_declared_one(self):
         drifted = {"type": "object", "properties": {"path": {"type": "string"}, "extra": {"type": "string"}}}
         a, u, r = run("read_file", {"path": "a", "extra": "x"}, tool_schema=drifted, pinned_schema=self.SCHEMA)
