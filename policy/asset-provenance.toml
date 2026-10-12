@@ -83,3 +83,13 @@ decision = "unresolved"
 origin = "https://huggingface.co/datasets/JailbreakBench/JBB-Behaviors"
 version = "not pinned"
 reason = "Optional out-of-scope dataset, no licensed snapshot approval"
+
+[[asset]]
+name = "pinned SOU-13 Python validation dependency"
+kind = "optional_support_requirements"
+path = "eval/sou13/requirements-cp2.txt"
+mandatory = false
+decision = "unresolved"
+origin = "Python package pinned in tracked SOU-13 requirements file"
+version = "per-package pin, no dependency license attestation here"
+reason = "jsonschema supports dataset validation; Python wheels and transitive dependencies are not bundled or approved by this inventory or the internal dataset-use decision"

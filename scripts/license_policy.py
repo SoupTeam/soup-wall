@@ -25,6 +25,7 @@ SPDX_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9.+:-]*|[()]", re.ASCII)
 REQUIRED_ASSET_PATHS = frozenset({
     "vendor/kryptering/LICENSE",
     "scripts/benchmarks/agentdojo-live.requirements.txt",
+    "eval/sou13/requirements-cp2.txt",
     "models/injection/model.safetensors",
     "models/moderation/model.safetensors",
     "datasets/deepset_injection.jsonl",

@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sou13-gold-export-authorization",
+  "title": "SOU-13 gold development export authorization (interface only; no authorization has been issued)",
+  "description": "Licensing and release decisions for ONE gold development export, kept separate from the label decisions in the addendum chain: a semantic or gold-label sign-off is never a license. The document is bound to the dataset base, to the exact addendum chain (length and head SHA-256) and to the exact gold set (canonical SHA-256 and per-split counts) that sou13gold.export computes, so it cannot be reused for a different chain or case selection. Cross-field rules are enforced in sou13gold/export.py and by the receiving team's verify_gold_export.py.",
+  "type": "object",
+  "required": ["authorization_kind", "authorization_version", "status", "created_at", "base", "addendum_chain",
+               "gold_set", "recipient", "permitted_use", "license_decision_ids", "release_decision_ids",
+               "release_blockers_resolved", "approvals"],
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "decision_id": {"type": "string", "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)+$"},
+    "decision_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/decision_id"}},
+    "dev_split": {"enum": ["train", "validation", "calibration"]}
+  },
+  "properties": {
+    "authorization_kind": {"const": "sou13_gold_dev_export_authorization"},
+    "authorization_version": {"type": "integer", "minimum": 1},
+    "status": {"enum": ["draft", "approved"]},
+    "created_at": {"$ref": "#/$defs/date"},
+    "base": {
+      "type": "object",
+      "required": ["dataset_version", "export_manifest_sha256", "split_manifest_sha256", "contract_sha256"],
+      "additionalProperties": false,
+      "properties": {
+        "dataset_version": {"type": "string", "minLength": 1},
+        "export_manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "split_manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "contract_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "addendum_chain": {
+      "type": "object", "required": ["length", "head_sha256"], "additionalProperties": false,
+      "properties": {"length": {"type": "integer", "minimum": 1}, "head_sha256": {"$ref": "#/$defs/sha256"}}
+    },
+    "gold_set": {
+      "type": "object", "required": ["sha256", "counts"], "additionalProperties": false,
+      "properties": {
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "counts": {
+          "type": "object", "required": ["train", "validation", "calibration"], "additionalProperties": false,
+          "properties": {"train": {"type": "integer", "minimum": 0}, "validation": {"type": "integer", "minimum": 0},
+                         "calibration": {"type": "integer", "minimum": 0}}
+        }
+      }
+    },
+    "recipient": {
+      "type": "object", "required": ["team", "reference"], "additionalProperties": false,
+      "properties": {"team": {"type": "string", "minLength": 1}, "reference": {"type": "string", "minLength": 1}}
+    },
+    "permitted_use": {
+      "type": "object",
+      "required": ["training_use_authorized", "splits", "license_id", "terms_reference", "restrictions"],
+      "additionalProperties": false,
+      "properties": {
+        "training_use_authorized": {"type": "boolean", "description": "Must be true for an export; false records a refusal."},
+        "splits": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/dev_split"}},
+        "license_id": {"type": "string", "minLength": 1, "description": "Identifier of the dataset license chosen by the license owner (opaque here)."},
+        "terms_reference": {"type": "string", "minLength": 1, "description": "Where the license terms and provenance decision are recorded (opaque here)."},
+        "restrictions": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "license_decision_ids": {"$ref": "#/$defs/decision_ids", "description": "license_owner approvals: licensing, provenance and training use."},
+    "release_decision_ids": {"$ref": "#/$defs/decision_ids", "description": "dataset_owner approvals: release of this export to the recipient."},
+    "release_blockers_resolved": {
+      "description": "Traceability metadata. For each release question (every frozen open question of a gold row, and Q-CP2-DECL-EVIDENCE for every gold row with a false action label), the decision ids, recorded in the addendum chain or in this document, that the authorizing owners cite as resolving it. Tools check only that each cited id exists as a recorded approval, never what the decision says: confirming that it resolves the question is a mandatory human release check. Cite an existing decision where one exists (for example the development sign-off for Q-FUTURE). A question left out blocks the export.",
+      "type": "object",
+      "propertyNames": {"pattern": "^(Q|SOU13)-[A-Z0-9]+(-[A-Z0-9]+)*$"},
+      "additionalProperties": {"$ref": "#/$defs/decision_ids"}
+    },
+    "approvals": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["decision_id", "approver", "role", "approved_at", "statement"],
+        "additionalProperties": false,
+        "properties": {
+          "decision_id": {"$ref": "#/$defs/decision_id"},
+          "approver": {"type": "string", "minLength": 1},
+          "role": {"enum": ["independent_reviewer", "contract_owner", "dataset_owner", "license_owner"]},
+          "approved_at": {"$ref": "#/$defs/date"},
+          "statement": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

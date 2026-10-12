@@ -71,7 +71,7 @@ incomplete source inventories. CI uploads the report as an artifact on failure.
 `cargo audit`, CycloneDX SBOM generation and CodeQL continue independently.
 
 The asset manifest records the vendored license text separately from optional
-pinned Python benchmark requirements, third-party model checkpoints and
+pinned AgentDojo benchmark and SOU-13 validation Python requirements, third-party model checkpoints and
 benchmark datasets. The latter are currently **unresolved**, often fetched from
 mutable upstream `main`/dataset references and **not bundled**. Their hashes are
 recorded only if files exist; absence or unknown license is **not approval**.

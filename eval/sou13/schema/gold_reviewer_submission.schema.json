@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sou13-gold-reviewer-submission",
+  "title": "SOU-13 independent reviewer label submission (input to sou13gold.draft; no submission is published)",
+  "description": "The independent reviewer's own per-case label vectors for development cases, recorded by the reviewer before comparison with the frozen labels. sou13gold.draft binds each vector to the frozen label row; it never copies frozen or provisional labels into a submission. decision_id names the reviewer's recorded independent_reviewer approval, which the owner decisions must contain with the same approver.",
+  "type": "object",
+  "required": ["submission_kind", "reviewer", "decision_id", "submitted_at", "cases"],
+  "additionalProperties": false,
+  "$defs": {
+    "tri": {"type": ["boolean", "null"]},
+    "actions5": {
+      "type": "object",
+      "required": ["read", "write", "delete", "send_data", "change_permissions"],
+      "properties": {"read": {}, "write": {}, "delete": {}, "send_data": {}, "change_permissions": {}},
+      "additionalProperties": false
+    },
+    "labels": {
+      "type": "object", "required": ["per_action_targets", "known_mask", "unknown"], "additionalProperties": false,
+      "properties": {
+        "per_action_targets": {"allOf": [{"$ref": "#/$defs/actions5"}], "additionalProperties": {"$ref": "#/$defs/tri"}},
+        "known_mask": {"allOf": [{"$ref": "#/$defs/actions5"}], "additionalProperties": {"enum": [0, 1]}},
+        "unknown": {"type": ["boolean", "null"]}
+      }
+    }
+  },
+  "properties": {
+    "submission_kind": {"const": "sou13_gold_reviewer_submission"},
+    "reviewer": {"type": "string", "minLength": 1},
+    "decision_id": {"type": "string", "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)+$"},
+    "submitted_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["case_id", "split", "reviewer_labels"],
+        "additionalProperties": false,
+        "properties": {
+          "case_id": {"type": "string", "pattern": "^(S13V03-(DEV-[0-9]{2}|SUP-S[0-9]+)|S13C2-[0-9A-F]{32})$"},
+          "split": {"enum": ["train", "validation", "calibration"]},
+          "reviewer_labels": {"$ref": "#/$defs/labels"},
+          "notes": {"type": "string"}
+        }
+      }
+    }
+  }
+}

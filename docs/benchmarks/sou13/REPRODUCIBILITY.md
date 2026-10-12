@@ -95,6 +95,8 @@ archive, the test family identities, the test gold or the private signing key.
   ```
 
 - Run the private full validation against the version-matched immutable inputs.
-- Record a provenance and license decision before any dataset export for model training.
+- Record a provenance and license decision before any dataset export for model training. A gold development
+  export is built only by `build_gold_dev_export.py`. It needs an export-grade addendum chain and an approved
+  export authorization with license-owner and dataset-owner decisions ([gold development export](GOLD_DEV_EXPORT.md)).
 - Require owner approval before opening or updating a public pull request. A draft public pull request is
   still public.

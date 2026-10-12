@@ -3,4 +3,9 @@
 
 Kept outside `sou13/` and `scripts/` (CP1 freeze globs) and outside the hash-pinned CP2 tools. It reads
 exported development label rows and never modifies frozen records, exports or manifests. No addendum has been
-issued; this package is the interface a future, separately approved addendum must satisfy."""
+issued; this package is the interface a future, separately approved addendum must satisfy.
+
+  addendum.py  validation rules (legacy and export grade) and the gold view
+  draft.py     drafting the next addendum from recorded reviewer and owner decisions (per case or proposed batch)
+  export.py    the authorised train/validation/calibration gold export (no test material)
+  files.py     fail-closed file handling shared by the tools; cli.py: trust-anchor command-line plumbing"""

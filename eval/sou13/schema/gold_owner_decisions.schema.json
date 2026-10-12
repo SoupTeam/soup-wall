@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sou13-gold-owner-decisions",
+  "title": "SOU-13 owner decision record for drafting one gold addendum (input to sou13gold.draft; none is published)",
+  "description": "Recorded decisions only: every approval is copied verbatim from an existing decision record, with its real decision id. sou13gold.draft never creates, defaults or infers an approval, a status or a label. `status` is the owner's declaration: `approved` is accepted only when the drafted chain passes every export-grade rule (sou13gold.addendum.strict_errors). The drafted addendum uses schema/gold_addendum.schema.json unchanged, which checks the approval records again.",
+  "type": "object",
+  "required": ["decisions_kind", "status", "created_at", "scope", "approvals", "transitions"],
+  "additionalProperties": false,
+  "$defs": {
+    "decision_id": {"type": "string", "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)+$"}
+  },
+  "properties": {
+    "decisions_kind": {"const": "sou13_gold_owner_decisions"},
+    "status": {"enum": ["draft", "approved"]},
+    "created_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "scope": {
+      "type": "object", "required": ["splits"], "additionalProperties": false,
+      "properties": {"splits": {"type": "array", "minItems": 1, "uniqueItems": true,
+                                "items": {"enum": ["train", "validation", "calibration"]}}}
+    },
+    "approvals": {"type": "array", "items": {"type": "object"}},
+    "batch_attestation": {
+      "description": "PROPOSED (pending maintainer review). The independent reviewer's recorded batch approval, copied from the decision record: decision id, digests of the reviewed artifacts, scope, the reviewer's own scope statement and stated case count, exclusions, and any labels the reviewer stated explicitly per question. sou13gold.draft derives and checks the case set; the result is validated against schema/gold_addendum.schema.json.",
+      "type": "object",
+      "required": ["decision_id", "reviewed_artifacts", "scope_kind", "scope_statement", "expected_case_count",
+                   "excluded", "label_assertions"],
+      "additionalProperties": false,
+      "properties": {
+        "decision_id": {"$ref": "#/$defs/decision_id"},
+        "reviewed_artifacts": {"type": "array", "minItems": 1, "items": {"type": "object"}},
+        "scope_kind": {"enum": ["all_cp2_development_cases"]},
+        "scope_statement": {"type": "string", "minLength": 1},
+        "expected_case_count": {"type": "integer", "minimum": 1},
+        "excluded": {"type": "object"},
+        "label_assertions": {"type": "array", "items": {"type": "object"}}
+      }
+    },
+    "transitions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["case_id", "split", "to_status", "adjudication", "decision_ids", "rationale"],
+        "additionalProperties": false,
+        "properties": {
+          "case_id": {"type": "string", "pattern": "^(S13V03-(DEV-[0-9]{2}|SUP-S[0-9]+)|S13C2-[0-9A-F]{32})$"},
+          "split": {"enum": ["train", "validation", "calibration"]},
+          "to_status": {"enum": ["provisional", "pending", "confirmed", "excluded"]},
+          "adjudication": {"enum": ["independent_human", "owner_inspected", "owner_batch", "owner_rule_propagated"]},
+          "decision_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/decision_id"}},
+          "rationale": {"type": "string", "minLength": 1},
+          "label_change": {"description": "Explicit replacement labels; required when the reviewer's labels differ from the current labels, and then equal to them. Never inferred.",
+                           "type": ["object", "null"]}
+        }
+      }
+    }
+  }
+}

@@ -163,6 +163,12 @@ path = "scripts/benchmarks/agentdojo-live.requirements.txt"
 mandatory = false
 decision = "unresolved"
 [[asset]]
+name = "sou13 python validation"
+kind = "optional_support_requirements"
+path = "eval/sou13/requirements-cp2.txt"
+mandatory = false
+decision = "unresolved"
+[[asset]]
 name = "deepset"
 kind = "external_optional_dataset"
 path = "datasets/deepset_injection.jsonl"
@@ -192,12 +198,39 @@ decision = "unresolved"
         (self.root / "assets.toml").write_text(asset_toml, encoding="utf8")
         return mod.build_report(self.root, self.root / "policy.toml", self.root / "assets.toml", self.metadata(), None)
 
+    def test_sou13_pins_are_inventoried_without_granting_license_approval(self):
+        path = self.root / "eval/sou13/requirements-cp2.txt"
+        path.parent.mkdir(parents=True)
+        for version in ("4.25.1", "4.25.2"):
+            path.write_text("jsonschema==" + version + "\n", encoding="utf8")
+            report = self.report()
+            row = next(a for a in report["assets"] if a["path"] == "eval/sou13/requirements-cp2.txt")
+            self.assertEqual(row["sha256"], mod.sha256(path))
+            self.assertEqual(row["pinned_packages"][0]["version"], version)
+            self.assertEqual(row["pinned_packages"][0]["decision"], "unresolved")
+            self.assertFalse(report["summary"]["approved_for_release"])
+
+    def test_sou13_requirement_record_cannot_be_removed(self):
+        self.report()
+        manifest = self.root / "assets.toml"
+        contents = manifest.read_text().replace('''[[asset]]
+name = "sou13 python validation"
+kind = "optional_support_requirements"
+path = "eval/sou13/requirements-cp2.txt"
+mandatory = false
+decision = "unresolved"
+''', "", 1)
+        manifest.write_text(contents)
+        report = mod.build_report(self.root, self.root / "policy.toml", manifest, self.metadata(), None)
+        self.assertFalse(report["summary"]["license_gate_pass"])
+        self.assertTrue(any("eval/sou13/requirements-cp2.txt" in e for e in report["errors"]))
+
     def test_valid_lock_vendored_and_optional_asset_distinct(self):
         report = self.report()
         self.assertTrue(report["summary"]["license_gate_pass"], report["errors"])
         self.assertFalse(report["summary"]["approved_for_release"])
         self.assertEqual(report["summary"]["rust_count"], 3)
-        self.assertEqual(len(report["summary"]["unreviewed_optional_assets"]), 7)
+        self.assertEqual(len(report["summary"]["unreviewed_optional_assets"]), 8)
         self.assertTrue(report["inputs"]["cargo_lock_sha256"])
         self.assertTrue(report["inputs"]["checker_sha256"])
 

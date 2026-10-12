@@ -2,6 +2,9 @@
 
 **Release status:** NOT RELEASED. No data file is part of this repository.
 
+**Use:** internal model training and evaluation **only**, under lead authorization `SOU13-USAGE-2026-10-12`
+(2026-10-12). No public license has been granted; publication and redistribution are not authorized.
+
 **License:** PENDING an explicit dataset license and provenance sign-off. The repository's Apache-2.0 license
 applies to the code. It does not apply automatically to the benchmark dataset.
 
@@ -32,8 +35,9 @@ CP2 semantics are AI-assisted synthetic programs with simulated interpreter and 
 arbitrary MCP tools, sends external HTTP requests or touches production resources.
 
 - A positive action is demonstrated relative to the declared program.
-- A negative action is warranted only under a complete closed-program model after an audited execution. This
-  is subject to formal approval of Q-CP2-DECL-EVIDENCE.
+- A negative action is warranted only under a complete closed-program model after an audited execution.
+  Q-CP2-DECL-EVIDENCE is resolved for exactly this reading, and only for the 179 CP2 development cases: no
+  generalization to external calls, CP1 or the sealed test.
 - `unknown=true` keeps the known positive actions; unproven actions remain `null`.
 
 ## Review
@@ -51,7 +55,9 @@ versioned gold release, which has not been issued. The sealed test labels have n
 A gold release must be a versioned gold addendum
 ([schema](../../../eval/sou13/schema/gold_addendum.schema.json)). It must be bound to the case ID and to the
 evidence digests of the frozen label row, and it needs an independent reviewer's recorded approval. Owner
-inspection, owner batch review and owner-rule propagation cannot confirm a label under that interface.
+inspection, owner batch review and owner-rule propagation cannot confirm a label under that interface. Training
+use needs a separate export authorization from the license owner
+([gold development export](GOLD_DEV_EXPORT.md)).
 
 ## Integrity
 
@@ -67,21 +73,25 @@ consistency, not origin. Origin needs signature verification against an independ
   sign-off.
 - **Internal keys enumeration:** the sign-off references 12 cases across `delete_prefix` and `user_offboard`.
   The 6 prefix `keys` cases listed earlier are a narrower subset; no further case mapping is inferred here.
-- **Q-ADMISSION:** limited technical approval only. It is not a gold release and does not cover licensing.
+- **Q-ADMISSION:** limited technical approval; clarified to apply within the agreed synthetic fixtures, including DEV09 / opaque admission; semantic labels confirmed. It is not a gold release, does not
+  cover licensing, and adds no CP1 case to the gold scope.
+- **Q-CP2-DECL-EVIDENCE:** resolved for the closed-program semantics of the approved 179 CP2 development cases only, where the absence of side effects is supported by the scenario audit; no generalization to external calls.
 - **Sealed test custody:** confirmed. Sealed-test label correctness is still not verified.
 
 ## Known limitations and unresolved approvals
 
-- Q-CP2-DECL-EVIDENCE: closed-world negatives and the masked-negative interpretation. This is a separate,
-  open interpretation question; it does not withdraw the semantic sign-off of the 179 development cases.
+- Q-CP2-DECL-EVIDENCE is resolved only for the closed-program semantics of the 179 CP2 development cases. Known
+  `false` labels make no claim about external or real-tool effects.
 - Other special-case interpretations of the contract.
 - The 19-case CP1 legacy review.
 - Versioned gold release (**pending**; no addendum issued).
 - Independent review of the sealed-test labels.
-- Separate dataset licensing (**pending**).
+- Separate dataset licensing beyond internal use (**pending**).
 - One-shot sealed-test evaluation protocol.
 
-No official model benchmark, test score, production behavior or training authorization is claimed.
+No official model benchmark, test score or production behavior is claimed. Training is authorized only
+internally (`SOU13-USAGE-2026-10-12`), and only on development data released through a gold release and an
+export authorization.
 
 ## Leakage boundary
 
