@@ -7,6 +7,9 @@ on:
       - main
       - feature/*
 
+permissions:
+  contents: read
+
 jobs:
   validate-gate-matrix:
     runs-on: ubuntu-latest
