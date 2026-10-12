@@ -1,0 +1,85 @@
+# SOU-27 third-party assets: keep non-bundled or unreviewed sources *unresolved*.
+# Approval of the Rust license gate is NOT approval of these separate assets.
+
+[[asset]]
+name = "vendored kryptering license text"
+kind = "bundled_vendor"
+path = "vendor/kryptering/LICENSE"
+mandatory = true
+decision = "reviewed"
+license = "BSD-2-Clause"
+origin = "https://github.com/kushaldas/kryptering"
+version = "v0.6.0 / 1cb2c1d64a5ecf78bb0d69abaac22e19d30081c2"
+notice_path = "vendor/kryptering/LICENSE"
+reviewed_git_blob_sha1 = "f32e1bc274f9c3b0780286af541bbeac8e7efaf6"
+reason = "Original license text retained; tracked upstream source and patch digest in PATCH.md"
+
+[[asset]]
+name = "pinned AgentDojo Python benchmark dependencies"
+kind = "optional_support_requirements"
+path = "scripts/benchmarks/agentdojo-live.requirements.txt"
+mandatory = false
+decision = "unresolved"
+origin = "Python packages pinned in tracked requirements file"
+version = "per-package pins, no license attestation here"
+reason = "Optional installation list, NOT bundled Python wheels; package-by-package licenses/notices still need review before redistribution or release claim"
+
+[[asset]]
+name = "Prompt injection model weights"
+kind = "external_optional_model"
+path = "models/injection/model.safetensors"
+mandatory = false
+decision = "unresolved"
+origin = "https://huggingface.co/protectai/deberta-v3-base-prompt-injection-v2"
+version = "mutable main reference in fetch-model.sh; no pinned commit"
+reason = "Not shipped, no immutable checkpoint, license or model-card approval recorded"
+
+[[asset]]
+name = "Moderation model weights"
+kind = "external_optional_model"
+path = "models/moderation/model.safetensors"
+mandatory = false
+decision = "unresolved"
+origin = "https://huggingface.co/domenicrosati/deberta-v3-xsmall-beavertails-harmful-qa-classifier"
+version = "mutable main reference in fetch-model.sh; no pinned commit"
+reason = "Not shipped, checkpoint/license/redistribution approval not recorded"
+
+[[asset]]
+name = "deepset prompt-injections dataset"
+kind = "external_optional_dataset"
+path = "datasets/deepset_injection.jsonl"
+mandatory = false
+decision = "unresolved"
+origin = "https://huggingface.co/datasets/deepset/prompt-injections"
+version = "not pinned"
+reason = "fetch-datasets.sh downloads at runtime; license/snapshot must be reviewed"
+
+[[asset]]
+name = "jackhhao jailbreak-classification dataset"
+kind = "external_optional_dataset"
+path = "datasets/jailbreak_classification.jsonl"
+mandatory = false
+decision = "unresolved"
+origin = "https://huggingface.co/datasets/jackhhao/jailbreak-classification"
+version = "not pinned"
+reason = "Optional dataset, no redistribution approval"
+
+[[asset]]
+name = "xTRam1 safe-guard-prompt-injection dataset"
+kind = "external_optional_dataset"
+path = "datasets/safe_guard.jsonl"
+mandatory = false
+decision = "unresolved"
+origin = "https://huggingface.co/datasets/xTRam1/safe-guard-prompt-injection"
+version = "not pinned"
+reason = "Optional dataset, no immutable licensed snapshot"
+
+[[asset]]
+name = "JailbreakBench behaviors dataset"
+kind = "external_optional_dataset"
+path = "datasets/jailbreakbench.jsonl"
+mandatory = false
+decision = "unresolved"
+origin = "https://huggingface.co/datasets/JailbreakBench/JBB-Behaviors"
+version = "not pinned"
+reason = "Optional out-of-scope dataset, no licensed snapshot approval"

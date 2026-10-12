@@ -28,6 +28,59 @@ Run a fresh locked dependency, license, and advisory review for each release. Th
 
 The SAML interoperability fixture under `crates/proxy/tests/fixtures/saml/` uses a self-signed test key pair. It is not a customer credential and must not be used in a deployment. Secret scans of working files and Git history, including generated artifacts and workflow logs, are release checks before publishing material from a previously private source tree.
 
+## Automated dependency-license and provenance check (SOU-27)
+
+The dedicated [license-policy workflow](../.github/workflows/license-policy.yml)
+runs on pull requests, pushes to main and manual dispatch. It uses the six-member
+workspace's **locked, all-feature Cargo metadata without a platform filter**,
+checks every resolved package against `Cargo.lock`, and requires the patched
+`vendor/kryptering 0.6.0` to remain the reviewed local path with its original
+BSD-2-Clause license text and [patch provenance](../vendor/kryptering/PATCH.md).
+The policy and optional asset manifest are at
+[`policy/license-policy.toml`](../policy/license-policy.toml) and
+[`policy/asset-provenance.toml`](../policy/asset-provenance.toml).
+
+The checker implements SPDX `WITH` before `AND` before `OR`. A dependency
+passes if a **complete** offered license alternative consists of explicitly
+reviewed obligations; `WITH` additions are never discarded. Unknown metadata,
+unsupported expressions and unreviewed sources fail, as do missing vendor
+notices and incomplete lock coverage. A package exception must match an **exact name, version, source and
+Cargo.lock checksum**, preserve a real upstream license notice whose SHA-256
+matches policy, and preserve any supplemental copyright or derived-code notices.
+The 19 legacy slash-form packages are specifically documented at
+[`policy/third-party-notices/README.md`](../policy/third-party-notices/README.md);
+no general translation of `/` to `OR` is permitted. `webpki-roots 1.0.9` is
+separately limited to its source CDLA-Permissive-2.0 license and pinned archive.
+Final release packaging and notices for CCADB-derived trust data require an
+explicit maintainer review; a green Rust check is not release approval. The
+permissive allowlist is not a blanket declaration of legal compatibility.
+
+Run with **Python 3.11+** and the Rust toolchain from the repository root:
+
+```sh
+python3 -m unittest discover -s scripts/tests -p 'test_license_policy.py' -v
+python3 scripts/license_policy.py --root . --report target/license-policy/report.json
+```
+
+The check writes JSON **even on metadata/approval failures** with individual
+package license expression, status, selected approved SPDX branch, exact
+package source, source-manifest and lock hashes, checker/policy/asset hashes,
+vendored PATCH/manifest hashes, current Git HEAD and dirty status (when
+available). It returns nonzero on unreviewed/disallowed Rust licenses or
+incomplete source inventories. CI uploads the report as an artifact on failure.
+`cargo audit`, CycloneDX SBOM generation and CodeQL continue independently.
+
+The asset manifest records the vendored license text separately from optional
+pinned Python benchmark requirements, third-party model checkpoints and
+benchmark datasets. The latter are currently **unresolved**, often fetched from
+mutable upstream `main`/dataset references and **not bundled**. Their hashes are
+recorded only if files exist; absence or unknown license is **not approval**.
+The report's `license_gate_pass` concerns only the locked Rust workspace;
+`approved_for_release` is always false: this inventory never authorizes a release.
+Legal/redistribution approval still requires independent source terms, notices,
+immutable revisions and an authorized review for the actual redistributed assets.
+Do not publish percentages as license coverage for external models or datasets.
+
 ## Release evidence
 
 Review and retain the locked dependency graph, an SBOM, third-party license and notice inventory, model and dataset records, the upstream attribution, and security-scan findings for the **complete** workspace. Document any unresolved advisory or deployment limitation in the release notes.

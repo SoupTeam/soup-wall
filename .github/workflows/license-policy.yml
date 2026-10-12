@@ -1,0 +1,36 @@
+name: License and provenance policy
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust-license-policy:
+    name: Locked workspace license policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Unit-test policy evaluator and fail-closed paths
+        run: python3 -m unittest discover -s scripts/tests -p 'test_license_policy.py' -v
+      - name: Check full locked workspace and write provenance report
+        run: >-
+          python3 scripts/license_policy.py
+          --root .
+          --policy policy/license-policy.toml
+          --assets policy/asset-provenance.toml
+          --report target/license-policy/report.json
+      - name: Archive inventory and unresolved license evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: locked-license-policy-${{ github.run_id }}
+          path: target/license-policy/report.json
+          if-no-files-found: warn
+          retention-days: 90
