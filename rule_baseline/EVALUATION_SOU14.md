@@ -140,3 +140,17 @@ The snapshot processes start from the captured classifier bytes through a small 
 | `fam.no_effect.text_stats` | 5 | 5/5 | no effect | no action ? |
 | `fam.unknown.vendor_bridge` | 2 | 2/2 | no effect ? | delete ? |
 | `fam.write.migration_apply` | 2 | 0/2 | no effect | write |
+
+## Held-out result (SOU-16 official run)
+
+One official run on the sealed test, executed by the test custodian (not by this evaluator): run_id `sou16-pilot-heldout-run-1`, holdout_id `sou13-cp2-test-54-2026-10-11`, evaluation.json sha256 `7108f431…ee8c`. 54 calls, 0 technical errors. Candidate: this classifier, sha256 `d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd`. This is a pilot: 54 cases, 9 families, one run; no tuning on it. The tables above are development numbers and do not describe this run.
+
+| Candidate | Exact match (of 42 fully annotated) | Abstention (of 54) | Silent critical misses (of 30) | False-positive write |
+|---|---|---|---|---|
+| model (e3bfe6a4) | 4 | 47 | 0 | 0 |
+| baseline 900cc3a | 18 | 30 | 6 | 6 |
+| this classifier | 18 | 24 | 12 | 6 |
+
+Mixed-action retention is 0/6 for all three; every delete case went to unknown. Latency p50 (ms): model 0.22, baseline 0.06, this classifier 0.19.
+
+Reading: the development results above did not generalize to the unseen families. The classifier misses change_permissions and write with unknown=false more often than the baseline. It must not be treated as sufficient for Allow on write/change_permissions; policy restrictions stay on top. A per-label breakdown is not in the custodian's summary and should be added from evaluation.json when shared. Independent continue/revise/reject review is pending.
