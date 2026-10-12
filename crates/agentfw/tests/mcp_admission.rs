@@ -825,6 +825,7 @@ async fn classifier_failures_never_reach_policy_or_the_server() {
         ("timeout", "classifier_timeout"),
         ("crash", "classifier_crash"),
         ("invalid", "classifier_invalid"),
+        ("duplicate", "classifier_invalid"),
     ];
     for (index, (fault, label)) in cases.iter().enumerate() {
         let id = 10 + index;
@@ -836,14 +837,14 @@ async fn classifier_failures_never_reach_policy_or_the_server() {
             reply["id"], id,
             "the technical response keeps the host call id"
         );
+        assert!(
+            executed(&fixture.ledger).is_empty(),
+            "{fault} must not execute"
+        );
         let message = reply["error"]["message"].as_str().unwrap();
         assert!(
             message.contains(label) && message.contains("policy not reached"),
             "{message}"
-        );
-        assert!(
-            executed(&fixture.ledger).is_empty(),
-            "{fault} must not execute"
         );
     }
     let followup = r#"{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"read_document","arguments":{}}}"#;

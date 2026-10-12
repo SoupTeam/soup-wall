@@ -285,6 +285,8 @@ impl InvocationClassifier for FixtureTestDouble {
             vec![]
         } else if fault("mixed") {
             vec!["read".into(), "send_data".into()]
+        } else if fault("duplicate") {
+            vec!["read".into(), "read".into()]
         } else if fault("understate") {
             vec!["read".into()]
         } else if values
@@ -324,6 +326,7 @@ fn map_classification(result: &Classification) -> Result<Option<ActionClass>, &'
         && (0.0..=1.0).contains(&result.uncertainty)
         && !result.reason.is_empty()
         && result.reason.len() <= 1024
+        && result.actions.iter().collect::<BTreeSet<_>>().len() == result.actions.len()
         && result.actions.iter().all(|action| {
             matches!(
                 action.as_str(),
@@ -363,6 +366,8 @@ pub fn compose_production_policy(
         && (0.0..=1.0).contains(&classification.uncertainty)
         && !classification.reason.is_empty()
         && classification.reason.len() <= 1024
+        && classification.actions.iter().collect::<BTreeSet<_>>().len()
+            == classification.actions.len()
         && classification.actions.iter().all(|action| {
             matches!(
                 action.as_str(),
@@ -474,6 +479,7 @@ pub fn classification_to_adapter(
         && (0.0..=1.0).contains(&result.uncertainty)
         && !result.reason.is_empty()
         && result.reason.len() <= 1024
+        && result.actions.iter().collect::<BTreeSet<_>>().len() == result.actions.len()
         && result.actions.iter().all(|action| {
             matches!(
                 action.as_str(),
@@ -788,7 +794,9 @@ impl<'a> Collector<'a> {
         } else {
             None
         };
-        let prod_eval = if let Some(ref res) = result {
+        let prod_eval = if let Err(failure) = mapped {
+            Err(failure) // Invalid classifier replies never reach policy.
+        } else if let Some(ref res) = result {
             compose_production_policy(res, baseline, egress_declared)
         } else {
             Err(mapped.err().unwrap_or("classifier_unavailable"))
@@ -1816,6 +1824,14 @@ mod input_identity_tests {
         assert_eq!(
             compose_production_policy(&cl, ActionClass::ReadOnly, false).unwrap(),
             ProductionVerdict::Deny
+        );
+
+        // Duplicate actions violate the core contract and never reach policy.
+        let cl = make_cl(vec!["read", "read"], false, 0.05);
+        assert_eq!(map_classification(&cl), Err("classifier_invalid"));
+        assert_eq!(
+            compose_production_policy(&cl, ActionClass::Network, true),
+            Err("classifier_invalid")
         );
 
         // proven no-op (D07): empty actions, unknown=false -> Allow
