@@ -341,6 +341,9 @@ def _distinct(a: set[str], b: set[str]) -> bool:
 
 COMPOUND_TOKENS = {"and", "then"}
 # Containers whose effects are defined by the (parsed) arguments rather than by the name.
+# Names that say only "run something": the thing that runs is not in the arguments. Workflow-style
+# names (batch, pipeline, ...) are different: their steps are read one by one.
+BARE_RUNNERS = {"run", "call"}
 KNOWN_RUNNERS = SHELL_TOKENS | OPAQUE_TOKENS | {"run", "call", "invoke", "workflow", "batch", "pipeline", "sequence"}
 
 
@@ -362,6 +365,26 @@ def _unresolved_compound(toks: list[str]) -> bool:
     return len(parts) > 1 and any(not any(t in VERBS or t in KNOWN_RUNNERS for t in part) for part in parts)
 
 
+def _acts_on_permission(toks: list[str], i: int) -> bool:
+    """True when the verb at toks[i] is applied to a permission noun, not to some other object.
+
+    The object is the run of tokens after the verb up to the next verb; when nothing follows it
+    ("permission_delete"), the run of tokens before it is used. "delete_file_and_grant_access" keeps
+    its delete: the object of "delete" is a file and "access" belongs to "grant".
+    """
+    def span(rng):
+        out = []
+        for j in rng:
+            if toks[j] in VERBS:
+                break
+            if toks[j] not in COMPOUND_TOKENS:
+                out.append(toks[j])
+        return out
+    after = span(range(i + 1, len(toks)))
+    obj = after or span(range(i - 1, -1, -1))
+    return any(t in PERM_NOUNS for t in obj)
+
+
 def _name_evidence(tool_name: str, ev) -> tuple[set[str], bool]:
     """Emit name evidence. Returns (categories inferred from nouns alone, compound name not fully resolved)."""
     if tool_name in BUILTIN:
@@ -371,14 +394,18 @@ def _name_evidence(tool_name: str, ev) -> tuple[set[str], bool]:
     toks = _tokens(last)
     verbs = [t for t in toks if t in VERBS]
     perm_noun = any(t in PERM_NOUNS for t in toks)
-    for t in verbs:
+    retargeted = False
+    for i, t in enumerate(toks):
+        if t not in VERBS:
+            continue
         cat, w = VERBS[t]
-        if perm_noun and (t in GENERIC_WRITE or t in DELETE_VERBS):
-            continue  # retargeted below
+        if perm_noun and (t in GENERIC_WRITE or t in DELETE_VERBS) and _acts_on_permission(toks, i):
+            retargeted = True  # "remove user access" changes permissions; it does not delete a file
+            continue
         ev(cat, w, "name", f"name token '{t}'")
     noun_cats: set[str] = set()
     if perm_noun:
-        if any(t in GENERIC_WRITE or t in DELETE_VERBS for t in toks):
+        if retargeted:
             ev("change_permissions", 0.75, "name", "permission noun with a mutation verb")
         elif not verbs:
             ev("change_permissions", 0.55, "name", "permission noun")
@@ -410,6 +437,9 @@ def _arg_evidence(w: _Walk, ev) -> None:
         ev("write", 0.7, "args", "path plus content arguments")
     if _kmatch(keys, PERM_KEYS, PERM_TOK):
         ev("change_permissions", 0.65, "args", "permission/role argument")
+    for k, v in sc.items():
+        if v is True and any(t in DELETE_VERBS for t in _tokens(str(k))):
+            ev("delete", 0.6, "args", f"flag {k}=true")  # e.g. {"delete": true} on a generic tool
     if _kmatch(keys, set(), SOURCE_TOK):
         ev("read", 0.55, "args", "source resource argument")
     if any(set(_tokens(k)) & OPAQUE_ARG_TOK or any(t.endswith("processor") for t in _tokens(k)) for k in keys):
@@ -593,6 +623,11 @@ def _classify(event: Any) -> dict[str, Any]:
         walk.unmatched += 1  # effects hidden behind a callback/plugin: partial unknown
     if compound_unresolved:
         walk.unmatched += 1  # one part of a compound tool name is not recognised
+    last_toks = _tokens(name.split("__")[-1])
+    if (any(t in BARE_RUNNERS for t in last_toks) and not any(t in VERBS for t in last_toks)
+            and not set(last_toks) & (KNOWN_RUNNERS - BARE_RUNNERS) and not walk.children
+            and not (walk.keys & SHELL_KEYS)):
+        walk.unmatched += 1  # a generic runner: what it runs is not in its arguments, so its effects are open
     for cat in noun_cats:  # a category guessed from a noun alone must be corroborated by the arguments
         if not any(src in ("args", "shell") and w >= THRESHOLD for w, src, _ in evid.get(cat, [])):
             walk.unmatched += 1

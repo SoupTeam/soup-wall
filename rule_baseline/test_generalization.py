@@ -131,5 +131,53 @@ class ReadLabelsDoNotOverrideEffects(unittest.TestCase):
         self.assertTrue(u)
 
 
+class DeleteAndPermissionChangesStaySeparate(unittest.TestCase):
+    """Review of PR 2: a mixed delete + access change must keep the delete."""
+
+    def test_delete_file_and_grant_access_keeps_both(self):
+        a, u, _ = run("delete_file_and_grant_access", {"path": "a.txt", "user": "bob"})
+        self.assertEqual((a, u), ({"delete", "change_permissions"}, False))
+
+    def test_remove_file_then_set_permissions_keeps_both(self):
+        a, _, _ = run("remove_file_set_permissions", {"path": "a.txt", "permissions": "777"})
+        self.assertEqual(a, {"delete", "change_permissions"})
+
+    def test_delete_flag_next_to_a_permission_argument_keeps_both(self):
+        a, _, _ = run("manage_file", {"path": "a.txt", "delete": True, "permissions": "public"})
+        self.assertEqual(a, {"delete", "change_permissions"})
+
+    def test_false_delete_flag_is_not_a_delete(self):
+        a, _, _ = run("manage_file", {"path": "a.txt", "delete": False, "permissions": "public"})
+        self.assertEqual(a, {"change_permissions"})
+
+    def test_removing_an_access_entry_is_not_a_file_delete(self):
+        for name in ("remove_user_access", "delete_user_permission", "permission_delete"):
+            with self.subTest(name=name):
+                a, _, _ = run(name, {"user": "bob", "role": "viewer"})
+                self.assertEqual(a, {"change_permissions"})
+
+
+class GenericRunnerStaysOpen(unittest.TestCase):
+    """Review of PR 2: a tool that only says "run" must not become a certain write."""
+
+    def test_run_with_mode_value_is_not_certain(self):
+        for args in ({"id": "42", "mode": "x"}, {"mode": "w"}):
+            with self.subTest(args=args):
+                self.assertTrue(run("run", args)[1])
+
+    def test_run_with_a_visible_shell_command_is_still_judged(self):
+        a, u, _ = run("run", {"command": "ls -la"})
+        self.assertEqual((a, u), ({"read"}, False))
+
+    def test_workflow_steps_are_still_read_one_by_one(self):
+        steps = [{"action": "read_file", "path": "a"}, {"action": "send_email", "body": "x", "to": "t@x.test"}]
+        a, u, _ = run("run_workflow", {"steps": steps})
+        self.assertEqual((a, u), ({"read", "send_data"}, False))
+
+    def test_a_named_action_is_not_treated_as_a_bare_runner(self):
+        a, u, _ = run("batch_delete", {"ids": [1, 2]})
+        self.assertEqual((a, u), ({"delete"}, False))
+
+
 if __name__ == "__main__":
     unittest.main()
