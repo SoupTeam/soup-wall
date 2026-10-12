@@ -158,9 +158,6 @@ jobs:
     name: Native macOS admission resilience
     runs-on: macos-15
     timeout-minutes: 30
-    env:
-      # Evidence must not be restored with Cargo's target cache or reused on retries.
-      SOU17_GENERIC_OUTPUT: ${{ runner.temp }}/sou17-generic-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -170,6 +167,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p target/task3-resilience/tmp
+          # Keep strict probe output outside Cargo's cache and unique on retries.
+          printf 'SOU17_GENERIC_OUTPUT=%s/sou17-generic-%s-%s\n' "$RUNNER_TEMP" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
           printf 'TMPDIR=%s\n' "$(cd target/task3-resilience/tmp && pwd -P)" >> "$GITHUB_ENV"
           {
             git rev-parse HEAD
