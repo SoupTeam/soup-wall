@@ -10,3 +10,4 @@ eval/sou13/** text eol=lf
 eval/sou13/schema/case.schema.cp1-fix1.json -text whitespace=cr-at-eol
 eval/sou13/schema/case.schema.json -text whitespace=cr-at-eol
 eval/sou13/sou13/cases.py -text whitespace=cr-at-eol
+policy/third-party-notices/vcpkg-0.2.15/LICENSE-MIT -text whitespace=cr-at-eol,-blank-at-eof
