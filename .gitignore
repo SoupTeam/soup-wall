@@ -28,3 +28,14 @@ __pycache__/
 /.env
 /.env.*
 !/.env.example
+
+# SOU-13 gold addendum and development-export working files are private (owner workstation only).
+# The tools refuse to write inside a Git work tree; these names are ignored anywhere as a second guard.
+addendum-v[0-9]*.json
+reviewer_submission*.json
+owner_decisions*.json
+EXPORT_AUTHORIZATION*.json
+GOLD_EXPORT_MANIFEST.json
+*.digest.json
+.*.partial/
+sou13-gold-*/

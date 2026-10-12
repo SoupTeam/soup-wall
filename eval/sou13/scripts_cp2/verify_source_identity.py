@@ -9,7 +9,8 @@
   2. CP2 dev package: raw-byte SHA-256 of the shipped tools, schemas and requirements equal MANIFEST.json.
   3. Optional: every source module and schema of this checkout is byte-identical to the same path under
      --private-root. Only source.py/schema files are hashed there; data and sealed folders are never listed.
-     New public-only files (privacy gate, addendum interface, this script) are reported as `repo_only`.
+     New public-only files (privacy gate, gold addendum and export tooling, this script) are reported as
+     `repo_only`.
 
 Only digests and paths are printed. Exit status 1 on any mismatch.
 """
@@ -35,7 +36,11 @@ DEV_PACKAGE_FILES = {
 SOURCE_GLOBS = ('sou13/*.py', 'sou13cp2/*.py', 'scripts/*.py', 'scripts_cp2/*.py', 'schema/*.json',
                 'requirements-cp2.txt')
 PUBLIC_ONLY = frozenset({'scripts_cp2/check_release_privacy.py', 'scripts_cp2/validate_gold_addendum.py',
-                         'scripts_cp2/verify_source_identity.py', 'schema/gold_addendum.schema.json'})
+                         'scripts_cp2/verify_source_identity.py', 'schema/gold_addendum.schema.json',
+                         'scripts_cp2/draft_gold_addendum.py', 'scripts_cp2/build_gold_dev_export.py',
+                         'scripts_cp2/verify_gold_export.py', 'scripts_cp2/submission_from_review_queue.py',
+                         'schema/gold_reviewer_submission.schema.json',
+                         'schema/gold_owner_decisions.schema.json', 'schema/gold_export_authorization.schema.json'})
 
 
 def raw_sha(path):

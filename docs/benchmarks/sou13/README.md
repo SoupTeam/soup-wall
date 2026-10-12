@@ -29,16 +29,22 @@ pending approval.
 
 - **Independent Dev Review Sign-off** (owner record, 2026-10-11): received for all 179 CP2 development cases,
   including the six Q-FUTURE cases and the agreed internal-read and keys-enumeration interpretations. It is a
-  confirmed semantic approval, not a gold release. Q-CP2-DECL-EVIDENCE remains a separate open question.
+  confirmed semantic approval, not a gold release. Q-CP2-DECL-EVIDENCE and Q-ADMISSION have since been
+  clarified within a limited scope (see [acceptance status](ACCEPTANCE.md)).
 - **Frozen CP2 development label statuses:** 173 provisional, 6 pending, 0 confirmed. These are the frozen
   records' statuses and change only through a versioned gold release.
 - **Gold-label addenda (interface only):** future gold decisions must be issued as versioned, hash-chained
   addenda ([`schema/gold_addendum.schema.json`](../../../eval/sou13/schema/gold_addendum.schema.json),
   [`sou13gold/addendum.py`](../../../eval/sou13/sou13gold/addendum.py)). No addendum has been issued.
+- **Gold development export (tooling only):** an owner-only workflow drafts addenda (the `bdd1f92` schema, plus a proposed batch attestation under
+  maintainer review) from
+  recorded reviewer and owner decisions. It builds an authorised train / validation / calibration export
+  for SOU-16 with a standalone verifier, without reading the sealed test split
+  ([gold development export](GOLD_DEV_EXPORT.md)). No export has been authorised.
 
 See the [review protocol](REVIEW_PROTOCOL.md), [dataset card](DATASET_CARD.md),
-[reproduction and gates](REPRODUCIBILITY.md), [owner-only private validation](PRIVATE_VALIDATION.md) and
-[acceptance status](ACCEPTANCE.md).
+[reproduction and gates](REPRODUCIBILITY.md), [owner-only private validation](PRIVATE_VALIDATION.md),
+[gold development export](GOLD_DEV_EXPORT.md) and [acceptance status](ACCEPTANCE.md).
 
 ## Public checks (no private data)
 
