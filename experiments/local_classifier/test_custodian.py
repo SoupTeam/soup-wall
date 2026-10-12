@@ -182,6 +182,83 @@ class CustodianPilot(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             main(args)
 
+    def additional_args(self):
+        directory = self.root / 'generic'
+        directory.mkdir()
+        source = directory / 'rule_baseline.py'
+        source.write_text('def classify(call):\n    return {"actions": ["delete"], "unknown": False}\n',
+                          encoding='utf-8')
+        args = self.evaluation_args() + ['--additional-classifier', 'generic_rule_v1=' + str(directory)]
+        authorization = json.loads(self.run.read_text())
+        authorization['additional_classifiers'] = {'generic_rule_v1': digest(source)}
+        self.save(self.run, authorization)
+        return args, source
+
+    def test_three_candidates_share_one_reservation_and_cannot_repeat_after_copy(self):
+        self.train()
+        args, source = self.additional_args()
+        self.assertEqual(main(args), 0)
+        report = json.loads((self.model / 'evaluation.json').read_text())
+        self.assertEqual(report['additional_classifier_sha256'], {'generic_rule_v1': digest(source)})
+        for result in (report['candidate'], report['baseline'], report['additional_classifiers']['generic_rule_v1']):
+            self.assertEqual(result['calls'], len(self.test_data['cases']))
+            self.assertEqual(result['per_label']['delete']['eligible_known'],
+                             report['baseline']['per_label']['delete']['eligible_known'])
+        self.assertEqual(len(list(self.ledger.glob('*.reserved.json'))), 1)
+        copied = self.root / 'copied-three-way'
+        shutil.copytree(self.model, copied, ignore=shutil.ignore_patterns('.holdout-*', 'evaluation.json'))
+        args[args.index('--model-dir') + 1] = str(copied)
+        with patch('experiments.local_classifier.custodian.evaluate') as evaluate:
+            with self.assertRaises(FileExistsError):
+                main(args)
+            evaluate.assert_not_called()
+
+    def test_unapproved_or_changed_third_candidate_never_predicts_or_consumes_run(self):
+        self.train()
+        args, source = self.additional_args()
+        original = json.loads(self.run.read_text())
+        variants = [None, {}, {'generic_rule_v1': '0' * 64},
+                    dict(original['additional_classifiers'], unrequested='f' * 64)]
+        for mapping in variants:
+            authorization = dict(original)
+            if mapping is None:
+                del authorization['additional_classifiers']
+            else:
+                authorization['additional_classifiers'] = mapping
+            self.save(self.run, authorization)
+            with patch('experiments.local_classifier.custodian.evaluate') as evaluate:
+                with self.assertRaises(ValueError):
+                    main(args)
+                evaluate.assert_not_called()
+            self.assertEqual(list(self.ledger.iterdir()), [])
+        self.save(self.run, original)
+        source.write_bytes(source.read_bytes() + b'\n')
+        with patch('experiments.local_classifier.custodian.evaluate') as evaluate:
+            with self.assertRaises(ValueError):
+                main(args)
+            evaluate.assert_not_called()
+        self.assertEqual(list(self.ledger.iterdir()), [])
+
+    def test_training_rejects_additional_classifiers_without_opening_them(self):
+        with patch('sys.stderr'), patch('experiments.local_classifier.custodian.load_baseline') as load:
+            with self.assertRaises(SystemExit):
+                main(['train', '--development-dataset', str(self.dev),
+                      '--development-approval', str(self.dev_approval), '--output-dir', str(self.model),
+                      '--additional-classifier', 'generic_rule_v1=must-not-open'])
+            load.assert_not_called()
+
+    def test_failure_in_third_candidate_evaluation_consumes_whole_experiment(self):
+        self.train()
+        args, _ = self.additional_args()
+        with patch('experiments.local_classifier.custodian.evaluate',
+                   side_effect=[{}, {}, RuntimeError('synthetic third-participant failure')]):
+            with self.assertRaises(RuntimeError):
+                main(args)
+        self.assertEqual(len(list(self.ledger.glob('*.reserved.json'))), 1)
+        self.assertFalse((self.model / 'evaluation.json').exists())
+        with self.assertRaises(FileExistsError):
+            main(args)
+
     def test_changed_model_or_training_provenance_is_rejected_before_reservation(self):
         self.train()
         args = self.evaluation_args()
