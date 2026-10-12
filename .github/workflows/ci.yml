@@ -158,6 +158,9 @@ jobs:
     name: Native macOS admission resilience
     runs-on: macos-15
     timeout-minutes: 30
+    env:
+      # Evidence must not be restored with Cargo's target cache or reused on retries.
+      SOU17_GENERIC_OUTPUT: ${{ runner.temp }}/sou17-generic-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -186,7 +189,7 @@ jobs:
             --repo "$PWD" --agentfw target/debug/agentfw \
             --expected-commit "$GITHUB_SHA" \
             --expected-binary-sha256 "$SOU17_BINARY_SHA" \
-            --output target/task3-resilience/generic-boundary
+            --output "$SOU17_GENERIC_OUTPUT"
       - name: Retain native macOS resilience evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -195,7 +198,14 @@ jobs:
           path: |
             target/task3-resilience/environment.log
             target/task3-resilience/verification/
-            target/task3-resilience/generic-boundary/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Retain current-run generic boundary evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: task3-native-macos-generic-boundary
+          path: ${{ env.SOU17_GENERIC_OUTPUT }}/
           if-no-files-found: warn
           retention-days: 14
       - name: Disposable Agent setup and daemon status
