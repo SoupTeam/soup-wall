@@ -98,15 +98,15 @@ def scenarios(url):
         case("classifier_crash", "send_http", fault("crash"), "not_reached:classifier_crash", ["send_data"], False),
         case("classifier_invalid_scores", "send_http", fault("invalid"), "not_reached:classifier_invalid",
              ["send_data"], False),
-        case("unknown_classification_unsupported", "send_http", fault("unknown"),
-             "not_reached:unsupported_classification_mapping", ["send_data"], False),
-        case("mixed_classification_unsupported", "send_http", fault("mixed"),
-             "not_reached:unsupported_classification_mapping", ["send_data"], False),
+        case("unknown_classification", "send_http", fault("unknown"), "ask", ["send_data"], False),
+        case("mixed_classification", "read_document", {"name": "inventory classifier-fault-mixed"},
+             "deny", ["read"], False),
         case("injected_result_withheld", "read_document", {"name": "injected"}, "result_withheld", ["read"], True),
         case("work_continues", "read_document", {"name": "inventory"}, "allow", ["read"], True),
     ]
     if REAL_BASELINE:
-        cases = [case for case in cases if not case["expected_outcome"].startswith("not_reached") ]
+        cases = [case for case in cases if not case["expected_outcome"].startswith("not_reached")
+                 and case["scenario"] not in ("unknown_classification", "mixed_classification")]
     return cases
 
 
@@ -666,7 +666,7 @@ def main():
         "scripted": baseline,
         "claude_host": host,
         "passed": passed,
-        "limits": [("Real rule baseline; unknown and mixed actions remain unsupported by the candidate harness. "
+        "limits": [("Real rule baseline. "
                     "Python failure injection is covered by mcp_admission integration tests, not this matrix."
                     if REAL_BASELINE else "Identified test double; real classifier integration is not measured."),
                    "Scripted harness frames, a scripted model and a fixture policy: integration evidence, not "

@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sou13-gold-addendum",
+  "title": "SOU-13 versioned gold-label addendum (interface only; no addendum has been issued)",
+  "description": "Append-only, hash-chained decisions about frozen development label rows. An addendum never edits frozen records or exports: sou13gold.addendum applies it to produce a separate gold view. Each entry is bound to an immutable case id and to the evidence digests of the exported label row. Test-split cases are outside this public interface; sealed-test gold is reviewed and held by the custodian. Cross-field rules (base digests, evidence binding, status chain, approval roles) are enforced in sou13gold/addendum.py. PROPOSED, pending maintainer review: `batch_attestations` and the adjudication `independent_human_batch` record an independent reviewer's explicit batch approval of an exact, hash-identified artifact and case set without per-case reviewer labels; the per-case mode is unchanged.",
+  "type": "object",
+  "required": ["addendum_kind", "addendum_version", "previous_addendum_sha256", "status", "created_at", "base", "scope",
+               "approvals", "entries"],
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "tri": {"type": ["boolean", "null"]},
+    "dev_split": {"enum": ["train", "validation", "calibration"]},
+    "decision_id": {"type": "string", "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)+$"},
+    "labels": {
+      "type": "object", "required": ["per_action_targets", "known_mask", "unknown"], "additionalProperties": false,
+      "properties": {
+        "per_action_targets": {"allOf": [{"$ref": "#/$defs/actions5"}], "additionalProperties": {"$ref": "#/$defs/tri"}},
+        "known_mask": {"allOf": [{"$ref": "#/$defs/actions5"}], "additionalProperties": {"enum": [0, 1]}},
+        "unknown": {"type": ["boolean", "null"]}
+      }
+    },
+    "actions5": {
+      "type": "object",
+      "required": ["read", "write", "delete", "send_data", "change_permissions"],
+      "properties": {"read": {}, "write": {}, "delete": {}, "send_data": {}, "change_permissions": {}},
+      "additionalProperties": false
+    }
+  },
+  "properties": {
+    "addendum_kind": {"const": "sou13_gold_label_addendum"},
+    "addendum_version": {"type": "integer", "minimum": 1},
+    "previous_addendum_sha256": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/sha256"}]},
+    "status": {"enum": ["draft", "approved"]},
+    "created_at": {"$ref": "#/$defs/date"},
+    "base": {
+      "type": "object",
+      "required": ["dataset_version", "export_manifest_sha256", "split_manifest_sha256", "contract_sha256"],
+      "additionalProperties": false,
+      "properties": {
+        "dataset_version": {"type": "string", "minLength": 1, "description": "Must be listed in sou13gold.addendum.SUPPORTED_DATASET_VERSIONS and equal the export's cp2_version."},
+        "export_manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "split_manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "contract_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "scope": {
+      "type": "object", "required": ["splits"], "additionalProperties": false,
+      "properties": {"splits": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/dev_split"}}}
+    },
+    "approvals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["decision_id", "approver", "role", "approved_at", "statement"],
+        "additionalProperties": false,
+        "properties": {
+          "decision_id": {"$ref": "#/$defs/decision_id"},
+          "approver": {"type": "string", "minLength": 1},
+          "role": {"enum": ["independent_reviewer", "contract_owner", "dataset_owner", "license_owner"]},
+          "approved_at": {"$ref": "#/$defs/date"},
+          "statement": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "batch_attestations": {
+      "description": "PROPOSED (pending maintainer review). An independent reviewer's explicit batch approval, copied from the reviewer's recorded decision. It approves the frozen labels of exactly the attested case set as they are: entries confirmed under it use adjudication independent_human_batch, carry no reviewer_labels and no label_change. case_set_sha256 is the canonical SHA-256 of the sorted [{id, label_sha256}] of those cases; reviewed_artifacts are the digests of the artifacts the reviewer approved; label_assertions are labels the reviewer stated explicitly for the cases carrying a question, which the frozen labels must equal.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["decision_id", "reviewed_artifacts", "scope_kind", "scope_statement", "case_count", "case_set_sha256",
+                     "excluded", "label_assertions"],
+        "additionalProperties": false,
+        "properties": {
+          "decision_id": {"$ref": "#/$defs/decision_id"},
+          "reviewed_artifacts": {
+            "type": "array", "minItems": 1, "uniqueItems": true,
+            "items": {"type": "object", "required": ["name", "sha256"], "additionalProperties": false,
+                      "properties": {"name": {"type": "string", "minLength": 1}, "sha256": {"$ref": "#/$defs/sha256"}}}
+          },
+          "scope_kind": {"enum": ["all_cp2_development_cases"]},
+          "scope_statement": {"type": "string", "minLength": 1},
+          "case_count": {"type": "integer", "minimum": 1},
+          "case_set_sha256": {"$ref": "#/$defs/sha256"},
+          "excluded": {
+            "type": "object", "required": ["cp1_cases", "sealed_test_cases"], "additionalProperties": false,
+            "properties": {"cp1_cases": {"type": "integer", "minimum": 0}, "sealed_test_cases": {"type": "integer", "minimum": 0}}
+          },
+          "label_assertions": {
+            "type": "array",
+            "items": {
+              "type": "object", "required": ["question_id", "case_count", "actions", "unknown"], "additionalProperties": false,
+              "properties": {
+                "question_id": {"type": "string", "pattern": "^(Q|SOU13)-[A-Z0-9]+(-[A-Z0-9]+)*$"},
+                "case_count": {"type": "integer", "minimum": 1},
+                "actions": {"type": "array", "uniqueItems": true,
+                            "items": {"enum": ["read", "write", "delete", "send_data", "change_permissions"]}},
+                "unknown": {"type": "boolean"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["case_id", "split", "evidence", "from_status", "to_status", "label_change", "reviewer_labels",
+                     "decision_ids", "adjudication", "rationale"],
+        "additionalProperties": false,
+        "properties": {
+          "case_id": {"type": "string", "pattern": "^(S13V03-(DEV-[0-9]{2}|SUP-S[0-9]+)|S13C2-[0-9A-F]{32})$"},
+          "split": {"$ref": "#/$defs/dev_split"},
+          "evidence": {
+            "type": "object",
+            "required": ["label_sha256", "input_sha256", "arguments_sha256", "definition_sha256"],
+            "additionalProperties": false,
+            "properties": {
+              "label_sha256": {"$ref": "#/$defs/sha256"},
+              "input_sha256": {"$ref": "#/$defs/sha256"},
+              "arguments_sha256": {"$ref": "#/$defs/sha256"},
+              "definition_sha256": {"$ref": "#/$defs/sha256"}
+            }
+          },
+          "from_status": {"enum": ["provisional", "pending", "confirmed", "excluded"]},
+          "to_status": {"enum": ["provisional", "pending", "confirmed", "excluded"]},
+          "label_change": {"description": "Replacement labels; allowed only when the entry confirms the case.",
+                           "oneOf": [{"type": "null"}, {"$ref": "#/$defs/labels"}]},
+          "reviewer_labels": {"description": "The independent reviewer's own label vector, recorded before comparison. Required to confirm and must equal the confirmed labels; null otherwise.",
+                              "oneOf": [{"type": "null"}, {"$ref": "#/$defs/labels"}]},
+          "decision_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/decision_id"}},
+          "adjudication": {"enum": ["independent_human", "independent_human_batch", "owner_inspected", "owner_batch",
+                                    "owner_rule_propagated"]},
+          "rationale": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

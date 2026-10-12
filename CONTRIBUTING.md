@@ -33,7 +33,7 @@ python3 -m unittest discover -s scripts/benchmarks -p 'test_*.py' -v
 python3 scripts/check_docs.py
 ```
 
-On Windows, use `python` instead of `python3`. These Python suites contain environment-dependent skips; report them explicitly. Full CI also checks optional features, platform-specific behavior, dependency advisories, SBOM generation, containers, and service integrations. License and attribution review remains a contributor responsibility; CI does not currently enforce a license allowlist. The [development guide](docs/DEVELOPMENT.md#verification) explains their scope. For documentation-only changes, run the local-link checker and verify commands and affected claims; no new behavior tests are needed.
+On Windows, use `python` instead of `python3`. These Python suites contain environment-dependent skips; report them explicitly. Full CI also checks optional features, platform-specific behavior, dependency advisories, SBOM generation, containers, and service integrations. License and attribution review remains a contributor responsibility; CI enforces a reviewed allowlist for the complete locked Rust workspace through the license-policy workflow. This does not approve optional external Python, model or dataset assets; consult [source provenance](docs/PROVENANCE.md) and the retained machine-readable report. The [development guide](docs/DEVELOPMENT.md#verification) explains their scope. For documentation-only changes, run the local-link checker and verify commands and affected claims; no new behavior tests are needed.
 
 The documentation job runs on every PR, including documentation-only changes.
 Supply-chain checks cover PRs against working branches as well as `main` when

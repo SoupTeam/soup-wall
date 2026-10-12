@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sou13-cp2-case",
+  "title": "SOU-13 CP2 case record (CP1 lifted, CP1 revised, new CP2 candidate)",
+  "description": "Strict Draft 2020-12 schema, enforced by validate_cp2 with jsonschema.Draft202012Validator. It includes the Draft 2020-12 fix from the 2026-10-10 technical review ($defs/actions5 declares the five action properties). Cross-field rules that JSON Schema cannot express (labels derived from execution, digests, leakage, split assignment) are enforced by sou13cp2/records.py.",
+  "type": "object",
+  "required": ["id", "dataset_version", "split", "subset", "evaluation_group", "scenario_tags", "input_profile", "input", "hashes",
+               "expected_outcome", "technical_error", "annotation", "evidence", "evidence_strength", "label_status",
+               "open_questions", "review", "contract", "provenance",
+               "family_id", "template_id", "alias_group_id", "leakage_group_id", "exposure", "source_material", "evaluation",
+               "technical_reviews"],
+  "additionalProperties": false,
+  "$defs": {
+    "tri": {"type": ["boolean", "null"]},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "action": {"enum": ["read", "write", "delete", "send_data", "change_permissions"]},
+    "actions5": {
+      "type": "object",
+      "required": ["read", "write", "delete", "send_data", "change_permissions"],
+      "properties": {"read": {}, "write": {}, "delete": {}, "send_data": {}, "change_permissions": {}},
+      "additionalProperties": false
+    },
+    "evidence_item": {
+      "type": "object",
+      "required": ["value", "basis", "strength", "refs"],
+      "additionalProperties": false,
+      "properties": {
+        "value": {"$ref": "#/$defs/tri"},
+        "basis": {"enum": ["controlled_execution_trace", "controlled_execution_absence", "closed_semantics_absence",
+                           "environment_channel_disabled", "opaque_component", "no_established_semantics"]},
+        "strength": {"enum": ["execution", "model_execution", "declarative_execution", "environment_declaration",
+                              "not_established"]},
+        "refs": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "accepted_output": {
+      "type": "object", "required": ["name", "actions", "unknown"], "additionalProperties": false,
+      "properties": {"name": {"type": "string", "minLength": 1},
+                     "actions": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/action"}},
+                     "unknown": {"const": true}}
+    }
+  },
+  "properties": {
+    "id": {"type": "string", "pattern": "^(S13V03-(DEV-[0-9]{2}|SUP-S[0-9]+)|S13C2-[0-9A-F]{32})$"},
+    "dataset_version": {"enum": ["0.3-cp1", "0.4-cp2-candidate"]},
+    "split": {"enum": ["train", "validation", "calibration", "test"]},
+    "subset": {"enum": ["dev16", "supplementary", "cp2_candidate"]},
+    "evaluation_group": {"enum": ["regression", "challenge", "shell", "technical_error"]},
+    "scenario_tags": {"type": "array", "items": {"type": "string"}},
+    "input_profile": {"const": "object_arguments_fixture_profile"},
+    "input": {
+      "type": "object", "required": ["tool_name", "tool_schema", "raw_arguments"], "additionalProperties": false,
+      "properties": {
+        "server_id": {"type": "string", "minLength": 1},
+        "tool_name": {"type": "string", "minLength": 1},
+        "tool_description": {"type": ["string", "null"]},
+        "tool_schema": {"type": "object"},
+        "pinned_schema": {"type": "object"},
+        "raw_arguments": {"type": ["object", "null"]}
+      }
+    },
+    "hashes": {
+      "type": "object", "required": ["input_sha256", "arguments_sha256", "definition_sha256"], "additionalProperties": false,
+      "properties": {"input_sha256": {"$ref": "#/$defs/sha256"}, "arguments_sha256": {"$ref": "#/$defs/sha256"},
+                     "definition_sha256": {"$ref": "#/$defs/sha256"}}
+    },
+    "expected_outcome": {"enum": ["classification", "technical_error"]},
+    "technical_error": {"enum": [null, "classifier_invalid", "classifier_timeout", "classifier_internal_error"]},
+    "annotation": {
+      "type": "object",
+      "required": ["per_action_targets", "known_mask", "unknown", "contract_view", "label_evidence", "rationale", "contract_rules"],
+      "additionalProperties": false,
+      "properties": {
+        "per_action_targets": {"oneOf": [{"type": "null"},
+          {"allOf": [{"$ref": "#/$defs/actions5"}], "additionalProperties": {"$ref": "#/$defs/tri"}}]},
+        "known_mask": {"oneOf": [{"type": "null"},
+          {"allOf": [{"$ref": "#/$defs/actions5"}], "additionalProperties": {"enum": [0, 1]}}]},
+        "unknown": {"type": ["boolean", "null"]},
+        "contract_view": {"oneOf": [{"type": "null"},
+          {"type": "object", "required": ["actions", "unknown"], "additionalProperties": false,
+           "properties": {"actions": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/action"}},
+                          "unknown": {"type": "boolean"}}}]},
+        "forbidden_actions": {"type": "array", "items": {"$ref": "#/$defs/action"}},
+        "label_evidence": {"oneOf": [{"type": "null"},
+          {"allOf": [{"$ref": "#/$defs/actions5"}], "additionalProperties": {"$ref": "#/$defs/evidence_item"}}]},
+        "rationale": {"type": "string"},
+        "contract_rules": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "evidence": {
+      "type": "object", "required": ["kind"],
+      "properties": {"kind": {"enum": ["controlled_execution", "no_established_semantics", "input_validation",
+                                        "declarative_semantics_execution"]}},
+      "if": {"properties": {"kind": {"const": "declarative_semantics_execution"}}},
+      "then": {"required": ["semantics_id", "program", "semantics_sha256", "interpreter_sha256", "tool_admission",
+                            "execution", "executed_real_tool", "fixture_code_executed"],
+               "properties": {"executed_real_tool": {"const": false}, "fixture_code_executed": {"const": false},
+                              "semantics_sha256": {"$ref": "#/$defs/sha256"},
+                              "interpreter_sha256": {"$ref": "#/$defs/sha256"}}}
+    },
+    "evidence_strength": {"type": "string"},
+    "label_status": {"enum": ["provisional", "pending", "confirmed"]},
+    "open_questions": {"type": "array", "items": {"type": "string"}},
+    "review": {"type": "object", "required": ["annotator", "reviewer", "reviewed_at", "decision", "second_reviewer", "adjudication"]},
+    "contract": {"type": "object", "required": ["version", "sha256", "commit", "blob"]},
+    "provenance": {"type": "object"},
+    "family_id": {"type": "string", "pattern": "^fam\\.(read|write|delete|send_data|change_permissions|mixed|no_effect|unknown|shell)\\.[a-z0-9_]+$"},
+    "template_id": {"type": "string", "pattern": "^tpl\\.[a-z_]+\\.[a-z0-9_]+\\.[a-z0-9_]+$"},
+    "alias_group_id": {"type": "string", "pattern": "^ag\\."},
+    "leakage_group_id": {"type": "string", "pattern": "^lg\\."},
+    "exposure": {"enum": ["none", "cp1_shared", "v02_derived", "restricted_test"]},
+    "source_material": {
+      "type": "object", "required": ["kind"],
+      "properties": {"kind": {"enum": ["sou13_v03_cp1_record", "cp1_record_revised", "new_cp2_case"]},
+                     "cp1_record_sha256": {"$ref": "#/$defs/sha256"}},
+      "if": {"properties": {"kind": {"const": "cp1_record_revised"}}},
+      "then": {"required": ["cp1_id", "cp1_record_sha256", "revision"],
+               "properties": {"revision": {
+                 "type": "object", "required": ["changes", "reason", "basis", "confirms_labels"], "additionalProperties": false,
+                 "properties": {
+                   "changes": {"type": "array", "minItems": 1, "items": {
+                     "type": "object", "required": ["path", "before", "before_absent", "after", "after_absent"],
+                     "additionalProperties": false,
+                     "properties": {"path": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+                                    "before": true, "after": true,
+                                    "before_absent": {"type": "boolean"}, "after_absent": {"type": "boolean"}}}},
+                   "reason": {"type": "string"}, "basis": {"type": "array", "items": {"type": "string"}},
+                   "confirms_labels": {"const": false}}}}}
+    },
+    "evaluation": {
+      "type": "object", "required": ["role", "in_semantic_accuracy", "in_pilot_export", "reason"], "additionalProperties": false,
+      "properties": {
+        "role": {"enum": ["classification", "technical_error_check", "admission_rejection_test", "set_valued_oracle"]},
+        "in_semantic_accuracy": {"type": "boolean"},
+        "in_pilot_export": {"type": "boolean"},
+        "reason": {"type": "string"},
+        "expected_admission": {"const": "rejected"},
+        "accepted_outputs": {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/accepted_output"}},
+        "retained_recognized_actions": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/action"}},
+        "coverage_tracking": {"type": "string"},
+        "policy_status": {"type": "string"},
+        "policy_source": {"type": "array", "items": {"type": "string"}}
+      },
+      "allOf": [
+        {"if": {"properties": {"role": {"const": "set_valued_oracle"}}},
+         "then": {"required": ["accepted_outputs", "retained_recognized_actions", "policy_status"],
+                  "properties": {"in_semantic_accuracy": {"const": false}, "in_pilot_export": {"const": false}}}},
+        {"if": {"properties": {"role": {"const": "admission_rejection_test"}}},
+         "then": {"required": ["expected_admission"],
+                  "properties": {"in_semantic_accuracy": {"const": false}, "in_pilot_export": {"const": false}}}},
+        {"if": {"properties": {"role": {"const": "technical_error_check"}}},
+         "then": {"properties": {"in_semantic_accuracy": {"const": false}, "in_pilot_export": {"const": false}}}}
+      ]
+    },
+    "technical_reviews": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["review_kind", "reviewer", "requested_by", "decision", "label_decisions", "evidence_confirmed",
+                     "notes", "alternative_interpretation", "reviewed_at", "source_file_sha256", "source_archive_sha256",
+                     "confirms_labels"],
+        "additionalProperties": false,
+        "properties": {
+          "review_kind": {"const": "ai_assisted_technical_review_not_human_confirmation"},
+          "reviewer": {"type": "string"}, "requested_by": {"type": "string"},
+          "decision": {"enum": ["accept", "revise", "pending"]},
+          "label_decisions": {"type": "object"},
+          "evidence_confirmed": {"enum": ["Y", "N"]},
+          "notes": {"type": "string"}, "alternative_interpretation": {"type": "string"}, "reviewed_at": {"type": "string"},
+          "source_file_sha256": {"$ref": "#/$defs/sha256"}, "source_archive_sha256": {"$ref": "#/$defs/sha256"},
+          "confirms_labels": {"const": false}
+        }
+      }
+    }
+  },
+  "allOf": [
+    {"if": {"properties": {"evaluation": {"properties": {"in_pilot_export": {"const": true}}}}},
+     "then": {"properties": {"label_status": {"const": "provisional"},
+                             "evaluation": {"properties": {"role": {"const": "classification"}}}}}},
+    {"if": {"properties": {"label_status": {"const": "confirmed"}}},
+     "then": {"properties": {"review": {"properties": {"reviewer": {"type": "string", "minLength": 1}}}}}}
+  ]
+}

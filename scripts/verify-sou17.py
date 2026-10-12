@@ -211,6 +211,9 @@ def run(args):
                         "test_status": status, "evidence": evidence, "evidence_diagnostics": diagnostics, **executed}
                 report["cases"].append(case)
                 print(f"{case['status'].upper()}: {target}::{name}", flush=True)
+                if case["status"] in {"fail", "error"}:
+                    print(f"Raw failure log: {log}", flush=True)
+                    print(text, flush=True)
                 write_report(out, report)
         report["source_after"] = snapshot("source-after")
         for key in ("commit", "inputs_digest", "tracked_patch_sha256"):

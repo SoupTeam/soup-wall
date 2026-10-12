@@ -78,6 +78,8 @@ def main(argv=None):
     parser.add_argument('--holdout-dataset', type=Path)
     parser.add_argument('--holdout-approval', type=Path)
     parser.add_argument('--baseline-path', type=Path)
+    parser.add_argument('--additional-classifier', action='append', default=[], metavar='ID=DIRECTORY',
+                        help='include a reviewed, hash-authorized classifier in the same single run')
     parser.add_argument('--run-authorization', type=Path)
     parser.add_argument('--run-ledger-dir', type=Path)
     parser.add_argument('--epochs', type=int, default=60)
@@ -87,7 +89,7 @@ def main(argv=None):
     development, dev_review, dev_review_hash = load_part(
         args.development_dataset, args.development_approval, 'development')
     if args.mode == 'train':
-        if any(value is not None for value in (args.holdout_dataset, args.holdout_approval,
+        if args.additional_classifier or any(value is not None for value in (args.holdout_dataset, args.holdout_approval,
                                               args.run_authorization, args.run_ledger_dir)):
             parser.error('training accepts no holdout inputs or run authorization')
         if args.output_dir is None:
@@ -134,15 +136,26 @@ def main(argv=None):
     if authorization.get('holdout_id') != test_review['holdout_id']:
         raise ValueError('run authorization differs from reviewed holdout identity')
     baseline, baseline_hash = load_baseline(args.baseline_path)
+    extra_paths = {}
+    for participant in args.additional_classifier:
+        identity, separator, directory = participant.partition('=')
+        if (not separator or not directory or not re.fullmatch('[a-z][a-z0-9_-]{0,63}', identity)
+                or identity in extra_paths or identity in ('candidate', 'baseline') or len(extra_paths) >= 8):
+            raise ValueError('up to eight unique additional classifier IDs and directories required')
+        extra_paths[identity] = Path(directory)
+    extra = {identity: load_baseline(path) for identity, path in extra_paths.items()}
+    extra_hashes = {identity: loaded[1] for identity, loaded in extra.items()}
     test_hash = test_review['dataset_sha256']
     local = args.model_dir / ('.holdout-' + test_hash + '.reserved')
     if local.exists() or (args.model_dir / 'evaluation.json').exists():
         raise FileExistsError('evaluation already reserved or retained in model artifacts')
     external, reservation = reserve_reviewed_run(args.run_authorization, args.run_ledger_dir,
-                                               args.model_dir, test_hash, model_hash, baseline_hash)
+                                               args.model_dir, test_hash, model_hash, baseline_hash,
+                                               extra_hashes)
     with local.open('x', encoding='utf-8') as handle:
         handle.write(json.dumps({'dataset_sha256': test_hash, 'model_sha256': model_hash,
-                                 'baseline_sha256': baseline_hash}) + '\n')
+                                 'baseline_sha256': baseline_hash,
+                                 'additional_classifiers': extra_hashes}) + '\n')
         handle.flush()
         os.fsync(handle.fileno())
     report = {'format': 'soup-wall/local-classifier-evaluation/1',
@@ -153,6 +166,9 @@ def main(argv=None):
               'reviewed_run': reservation, 'environment': run_environment(),
               'candidate': evaluate(heldout['holdout'], model.classify),
               'baseline': evaluate(heldout['holdout'], baseline),
+              'additional_classifier_sha256': extra_hashes,
+              'additional_classifiers': {identity: evaluate(heldout['holdout'], loaded[0])
+                                         for identity, loaded in extra.items()},
               'api_requests': 0, 'api_cost_usd': 0, 'tool_executions': 0,
               'recommendation': 'manual_continue_revise_or_reject_review_required'}
     write_json(args.model_dir / 'evaluation.json', report)
