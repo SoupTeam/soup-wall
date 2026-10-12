@@ -238,7 +238,7 @@ custodian receives the frozen model and training report, holds the test data,
 reviews the linked provenance and performs the single comparison. Neither CLI
 changes the shared runtime contract or grants tool execution authority.
 
-After human review and dataset-license approval, the development export has
+After reviewed labels and explicit dataset-use approval, the development export has
 `format: "soup-wall/classifier-development-dataset/1"` and `cases` with the same
 row fields as the earlier local dataset: `id`, `family`, `split`, `input`, `labels`
 and optional evaluation-only `accepted_outputs`. Nonempty `train`, `validation`
@@ -256,6 +256,38 @@ features. Exclude pending, admission-rejection and technical-error rows. A
 provisional directory named `pilot` is not data approval. The final release must
 review the export and its digest; do not automatically convert the provisional
 11 October checkpoint into approved training data.
+
+For SOU-13's authorized Gold JSONL export, use the conversion command after
+separately running its reviewed verifier from the repository. Preserve the UTF-8
+JSON verification report and obtain the exact `GOLD_EXPORT_MANIFEST.json` SHA-256
+from the dataset owner outside the export. Do not execute an unreviewed script
+copied from a received archive. Both self-consistency and anchored integrity must
+report PASS. An internal usage decision such as `SOU13-USAGE-2026-10-12` permits
+only its recorded scope; it does not grant public licensing or publication.
+
+```sh
+# Verify the actual approved Gold release using the reviewed SOU-13 tooling.
+python -I -B eval/sou13/scripts_cp2/verify_gold_export.py /private/gold-dev \
+  --expect-manifest-sha256 OWNER_PUBLISHED_DIGEST > /private/verified.json
+
+python -m experiments.local_classifier.gold_import \
+  --gold-export /private/gold-dev --verification-report /private/verified.json \
+  --expect-manifest-sha256 OWNER_PUBLISHED_DIGEST \
+  --review-reference ACTUAL_OWNER_RELEASE_AND_REVIEW_REFERENCE \
+  --holdout-id CUSTODIAN_ISSUED_STABLE_ID --expected-cases 179 \
+  --output-dir /private/converted-dev
+```
+
+The 179-case CP2 scope excludes historical CP1 and sealed test. Conversion
+rechecks manifest/file/input hashes, paired IDs, confirmed status, tri-state masks,
+development splits and alias-group separation. Only original tool inputs become
+features. Output is `development.json`, `development-review.json` and
+`conversion.json`; existing output is never overwritten. Run `custodian train`
+below using these development files. Import neither trains nor accesses test.
+A JSON receipt asserts prior verification without authenticating a reviewer;
+the owner-published digest, actual release/use decisions and independent custody
+remain required. On Windows, capture the receipt as UTF-8 without a BOM; legacy
+PowerShell `>` emits UTF-16 and is unsuitable for the report.
 
 The separate development approval is a bounded JSON object with exactly:
 
