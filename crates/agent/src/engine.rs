@@ -70,11 +70,20 @@ impl Outcome {
 }
 
 /// Holds all per-session state. One instance serves many sessions.
+/// Actual managed policy attached to the running firewall, not a download receipt.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct ManagedActivePolicy {
+    pub revision: String,
+    pub deployment_sequence: u64,
+    pub policy_sha256: String,
+}
+
 pub struct AgentFirewall {
     policy: AgentPolicySet,
     detectors: Vec<Box<dyn Detector>>,
     taint: TaintTracker,
     authority: Authority,
+    managed_active: Option<ManagedActivePolicy>,
 }
 
 impl AgentFirewall {
@@ -98,6 +107,7 @@ impl AgentFirewall {
             ],
             taint: TaintTracker::new(taint_cap),
             authority: Authority::default(),
+            managed_active: None,
         }
     }
 
@@ -113,6 +123,29 @@ impl AgentFirewall {
     /// to apply remote configuration: that silently erases security evidence.
     pub fn replace_policy_preserving_provenance(&mut self, policy: AgentPolicySet) {
         self.policy = policy;
+        self.managed_active = None;
+    }
+
+    /// Activate in place, preserving all session evidence, trackers, detectors,
+    /// authority and resource state. Caller must ensure any old grants cannot
+    /// be redeemed across the switch.
+    pub fn activate_managed_policy(
+        &mut self,
+        policy: AgentPolicySet,
+        revision: String,
+        sequence: u64,
+        digest: String,
+    ) {
+        self.policy = policy;
+        self.managed_active = Some(ManagedActivePolicy {
+            revision,
+            deployment_sequence: sequence,
+            policy_sha256: digest,
+        });
+    }
+
+    pub fn active_managed_policy(&self) -> Option<ManagedActivePolicy> {
+        self.managed_active.clone()
     }
 
     /// Register the top-level agent's tool grant for a session.
