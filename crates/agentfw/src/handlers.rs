@@ -118,11 +118,14 @@ fn now_ms() -> u64 {
 /// an operator at a glance whether a blocked call is expected behavior.
 pub async fn health(State(st): State<Shared>) -> Json<serde_json::Value> {
     // This reads the actual in-process AgentFirewall, NOT a downloaded file.
-    let active = st.firewall.lock().ok().and_then(|fw| fw.active_managed_policy());
+    let (active, transport) = st.firewall.lock().ok()
+        .map(|fw| (fw.active_managed_policy(), fw.managed_transport_status()))
+        .unwrap_or_default();
     Json(serde_json::json!({
         "status": "ok",
         "enforce": st.config.enforce,
         "managed_policy": active,
+        "managed_transport": transport,
     }))
 }
 
