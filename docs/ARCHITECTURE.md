@@ -194,3 +194,13 @@ effectiveness acceptance. Independent integration acceptance remains separate.
 ## Where to work next
 
 Add a detector in `crates/core`, an agent decision rule in `crates/agent`, or a provider adapter in `crates/proxy`. For every enforcement change, add a test for the unsafe action and a benign case that should still succeed. Run the [full workspace checks](../CONTRIBUTING.md) and the relevant policy regression corpus before changing a default.
+
+The report also replays the unchanged 40-session corpus with the historical
+negative-control policy `agent_policies: []; default: allow` (valid YAML is
+written to the evidence directory). Mandatory production Deny floors now stop
+13 attacks that this policy formerly missed; its six remaining misses are
+retained by session ID in `negative-control.json`. The control must exit 1 and
+fail the policy gate, with zero benign interruptions. The report verifies this
+specific failure; it does not suppress arbitrary command failures or relabel
+any corpus expectations. The report unit tests retain the same input and now
+assert six misses under the production floors instead of the historical 19.

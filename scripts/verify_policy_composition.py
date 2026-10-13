@@ -28,6 +28,9 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     # Never reuse a matrix result from an earlier failed build.
     (out / "matrix.json").unlink(missing_ok=True)
+    (out / "negative-control.json").unlink(missing_ok=True)
+    negative_policy = out / "negative-control.yaml"
+    negative_policy.write_text("agent_policies: []\ndefault: allow\n", encoding="utf-8")
     tracked = capture("git", "ls-files", "-z").split("\0")
     prefixes = ("crates/agent/", "crates/agentfw/", "crates/core/", "crates/adapter/", "crates/bench/")
     source = {p: sha((ROOT / p).read_bytes()) for p in sorted(tracked) if p and (
@@ -54,7 +57,11 @@ def main():
         ["cargo", "test", "--locked", "-p", "agentfw", "--test", "native_endpoint"],
         ["cargo", "run", "--locked", "-p", "soup-wall-bench", "--", "--agent", "crates/bench/corpora/agent_sessions.jsonl", "--policy", POLICY],
     ]
+    commands.append(["cargo", "run", "--locked", "-p", "soup-wall-bench", "--",
+                     "--agent", "crates/bench/corpora/agent_sessions.jsonl",
+                     "--policy", str(negative_policy), "--agent-out", str(out / "negative-control.json")])
     for index, command in enumerate(commands):
+        expected_code = 1 if index == len(commands) - 1 else 0
         log = out / f"{index:02d}.log"
         print("Running:", " ".join(command), flush=True)
         try:
@@ -63,19 +70,34 @@ def main():
         except OSError as exc:
             log.write_text(str(exc), encoding="utf-8")
             code = 127
-        report["commands"].append({"argv": command, "exit_code": code, "log": log.name, "log_sha256": sha(log.read_bytes())})
+        report["commands"].append({"argv": command, "exit_code": code, "expected_exit_code": expected_code, "log": log.name, "log_sha256": sha(log.read_bytes())})
         (out / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     matrix = out / "matrix.json"
     if matrix.exists():
         report["matrix"] = json.loads(matrix.read_text(encoding="utf-8"))
-    report["passed"] = all(c["exit_code"] == 0 for c in report["commands"]) and bool(report.get("matrix"))
+    negative = out / "negative-control.json"
+    negative_ok = False
+    if negative.exists():
+        evidence = json.loads(negative.read_text(encoding="utf-8"))
+        report["negative_control"] = evidence
+        report["negative_control_sha256"] = sha(negative.read_bytes())
+        negative_ok = (evidence.get("passes_reviewed_policy_gate") is False
+                       and evidence.get("counts", {}).get("fn") == 6
+                       and evidence.get("counts", {}).get("fp") == 0
+                       and len(evidence.get("missed_attacks", [])) == 6
+                       and len(evidence.get("sessions", [])) == 40
+                       and evidence.get("policy_sha256") == sha(negative_policy.read_bytes()))
+    report["negative_control_verified"] = negative_ok
+    report["passed"] = (all(c["exit_code"] == c["expected_exit_code"] for c in report["commands"])
+                        and bool(report.get("matrix")) and negative_ok)
     (out / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     (out / "summary.md").write_text(
         f"# Policy composition evidence\n\nSource: `{report['head']}`; dirty: `{report['dirty']}`.\n\n"
         f"Source digest: `{report['source_sha256']}`.\n\nPolicy: `{report['policy_sha256']}`.\n\n"
         f"Inputs: `{report['input_sha256']}`.\n\nPassed: `{report['passed']}`.\n\n"
-        + "\n".join(f"- `{c['log']}`: exit {c['exit_code']}" for c in report["commands"])
-        + "\n\nSee report.json for all expected/actual rows and exact commands.\n", encoding="utf-8")
+        + "\n".join(f"- `{c['log']}`: exit {c['exit_code']} (expected {c['expected_exit_code']})" for c in report["commands"])
+        + "\n\nThe permissive negative control must fail its gate and retain six missed attacks.\n"
+        + "\nSee report.json for all expected/actual rows and exact commands.\n", encoding="utf-8")
     print(f"Evidence: {out}; passed={report['passed']}")
     return 0 if report["passed"] else 1
 
