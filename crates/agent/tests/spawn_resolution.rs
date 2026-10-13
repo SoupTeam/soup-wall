@@ -48,8 +48,14 @@ fn documentation_and_unavailable_allow_commit_before_the_child_read() {
         });
         assert_eq!(out.verdict, Verdict::Allow);
         assert!(!out.authority_pending);
-        assert_eq!(out.adapter_response("test").verdict, soup_wall_adapter::Verdict::Allow);
-        assert_eq!(fw.inspect_resolved(&read(), |_| false).verdict, Verdict::Allow);
+        assert_eq!(
+            out.adapter_response("test").verdict,
+            soup_wall_adapter::Verdict::Allow
+        );
+        assert_eq!(
+            fw.inspect_resolved(&read(), |_| false).verdict,
+            Verdict::Allow
+        );
     }
 }
 
@@ -57,7 +63,8 @@ fn documentation_and_unavailable_allow_commit_before_the_child_read() {
 fn direct_allow_is_a_passing_control_and_does_not_call_the_judge() {
     let mut fw = firewall("allow", "");
     assert_eq!(
-        fw.inspect_resolved(&spawn(), |_| panic!("unexpected judge")).verdict,
+        fw.inspect_resolved(&spawn(), |_| panic!("unexpected judge"))
+            .verdict,
         Verdict::Allow
     );
     assert_eq!(fw.inspect(&read()).verdict, Verdict::Allow);
@@ -67,7 +74,10 @@ fn direct_allow_is_a_passing_control_and_does_not_call_the_judge() {
 fn injection_and_ask_fallback_create_no_child_grant() {
     for (fallback, injection) in [("allow", true), ("ask", false), ("ask", true)] {
         let mut fw = firewall("escalate", &format!("    fallback: {fallback}\n"));
-        assert_eq!(fw.inspect_resolved(&spawn(), |_| injection).verdict, Verdict::Ask);
+        assert_eq!(
+            fw.inspect_resolved(&spawn(), |_| injection).verdict,
+            Verdict::Ask
+        );
         assert_eq!(fw.inspect(&read()).verdict, Verdict::Deny);
     }
 }
@@ -87,10 +97,16 @@ fn unresolved_projection_does_not_claim_a_committed_allow() {
     let mut fw = firewall("escalate", "    fallback: allow\n");
     let mut out = fw.inspect(&spawn());
     assert_eq!(out.verdict, Verdict::Escalate);
-    assert_eq!(out.adapter_response("test").verdict, soup_wall_adapter::Verdict::Ask);
+    assert_eq!(
+        out.adapter_response("test").verdict,
+        soup_wall_adapter::Verdict::Ask
+    );
     // A standalone verdict resolver cannot commit this firewall's authority.
     out.verdict = soup_wall_agent::resolution::resolve(out.verdict, out.fallback, false);
-    assert_eq!(out.adapter_response("test").verdict, soup_wall_adapter::Verdict::Ask);
+    assert_eq!(
+        out.adapter_response("test").verdict,
+        soup_wall_adapter::Verdict::Ask
+    );
     assert_eq!(fw.inspect(&read()).verdict, Verdict::Deny);
 }
 
@@ -101,14 +117,20 @@ fn parent_revocation_after_an_unresolved_inspection_is_rechecked() {
     fw.set_root("s", "main", &[]);
     let out = fw.inspect_resolved(&spawn(), |_| panic!("hard denial bypasses judge"));
     assert_eq!(out.verdict, Verdict::Deny);
-    assert_eq!(old.adapter_response("test").verdict, soup_wall_adapter::Verdict::Ask);
+    assert_eq!(
+        old.adapter_response("test").verdict,
+        soup_wall_adapter::Verdict::Ask
+    );
     assert_eq!(fw.inspect(&read()).verdict, Verdict::Deny);
 }
 
 #[test]
 fn finalization_is_bound_to_the_exact_child_and_requested_tools() {
     let mut fw = firewall("escalate", "    fallback: allow\n");
-    assert_eq!(fw.inspect_resolved(&spawn(), |_| false).verdict, Verdict::Allow);
+    assert_eq!(
+        fw.inspect_resolved(&spawn(), |_| false).verdict,
+        Verdict::Allow
+    );
     let mut other = read();
     other.agent = "other-child".into();
     assert_eq!(fw.inspect(&other).verdict, Verdict::Deny);
@@ -117,7 +139,10 @@ fn finalization_is_bound_to_the_exact_child_and_requested_tools() {
         *tool = "Write".into();
     }
     assert_eq!(fw.inspect(&extra).verdict, Verdict::Deny);
-    assert_eq!(fw.inspect_resolved(&read(), |_| false).verdict, Verdict::Allow);
+    assert_eq!(
+        fw.inspect_resolved(&read(), |_| false).verdict,
+        Verdict::Allow
+    );
 }
 
 #[test]
@@ -129,7 +154,8 @@ fn peer_session_and_session_end_cannot_reuse_committed_grants() {
     assert_eq!(fw.inspect(&peer).verdict, Verdict::Deny);
     fw.inspect(&event(serde_json::json!({"kind":"session_end"})));
     assert_eq!(
-        fw.inspect_resolved(&spawn(), |_| panic!("parent grant ended")).verdict,
+        fw.inspect_resolved(&spawn(), |_| panic!("parent grant ended"))
+            .verdict,
         Verdict::Deny
     );
     assert_eq!(fw.inspect(&read()).verdict, Verdict::Deny);
