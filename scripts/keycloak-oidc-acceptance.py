@@ -389,7 +389,7 @@ def run(args):
             active_cookie = next(c["value"] for c in owner.cookies() if c["name"] == "__Host-llm-fw-session")
             report["phase"] = "console-logout"
             page.locator("#logout").click()
-            page.wait_for_function("document.getElementById('status').textContent.includes('logged out')")
+            page.get_by_text("You have been logged out of this workspace.", exact=True).wait_for(state="visible")
             check("console-logout-clears-workspace-ui", not page.locator("#identity").is_visible()
                   and page.locator("#sign-in").is_visible() and page.locator("#identity").inner_html() == "")
             check("logout-revokes-server-session", request("GET", gateway_base + "/customer/v1/session",
