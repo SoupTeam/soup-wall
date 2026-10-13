@@ -78,12 +78,21 @@ pub struct ManagedActivePolicy {
     pub policy_sha256: String,
 }
 
+/// Last observed Console connectivity/verification state. Active policy is
+/// independent of this observation: offline never means policy was removed.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct ManagedTransportStatus {
+    pub state: String,
+    pub observed_at_unix: i64,
+}
+
 pub struct AgentFirewall {
     policy: AgentPolicySet,
     detectors: Vec<Box<dyn Detector>>,
     taint: TaintTracker,
     authority: Authority,
     managed_active: Option<ManagedActivePolicy>,
+    managed_transport: Option<ManagedTransportStatus>,
 }
 
 impl AgentFirewall {
@@ -108,6 +117,7 @@ impl AgentFirewall {
             taint: TaintTracker::new(taint_cap),
             authority: Authority::default(),
             managed_active: None,
+            managed_transport: None,
         }
     }
 
@@ -146,6 +156,17 @@ impl AgentFirewall {
 
     pub fn active_managed_policy(&self) -> Option<ManagedActivePolicy> {
         self.managed_active.clone()
+    }
+
+    pub fn set_managed_transport_status(&mut self, state: &str, observed_at_unix: i64) {
+        self.managed_transport = Some(ManagedTransportStatus {
+            state: state.to_owned(),
+            observed_at_unix,
+        });
+    }
+
+    pub fn managed_transport_status(&self) -> Option<ManagedTransportStatus> {
+        self.managed_transport.clone()
     }
 
     /// Register the top-level agent's tool grant for a session.
