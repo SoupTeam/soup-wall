@@ -29,6 +29,7 @@ pub mod saml_auth;
 pub mod scim;
 pub mod spend_limit;
 pub mod tenant_store;
+pub mod managed_agent_api;
 pub mod usage;
 
 use axum::{
@@ -94,6 +95,8 @@ pub fn app(state: Shared) -> Router {
         // admin header. Every data-changing request remains on the separately
         // authenticated /admin/v1 API below.
         let dashboard = Router::new().route("/admin", get(admin_ui::dashboard));
+        let managed_agent = Router::new()
+            .route("/agent/v1/whoami", get(managed_agent_api::whoami));
         let scim_api = Router::new()
             .route(
                 "/scim/v2/ServiceProviderConfig",
@@ -172,6 +175,14 @@ pub fn app(state: Shared) -> Router {
             .route(
                 "/admin/v1/tenants/:tenant_id/tokens",
                 post(admin::issue_token).get(admin::list_tokens),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents",
+                post(managed_agent_api::enroll).get(managed_agent_api::list),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/:agent_id/revoke",
+                post(managed_agent_api::revoke),
             )
             .route(
                 "/admin/v1/tenants/:tenant_id/limits",
@@ -278,6 +289,7 @@ pub fn app(state: Shared) -> Router {
             .merge(admin)
             .merge(dashboard)
             .merge(scim_api)
+            .merge(managed_agent)
     } else {
         probes.merge(api)
     };
