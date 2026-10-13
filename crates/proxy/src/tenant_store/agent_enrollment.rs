@@ -32,12 +32,18 @@ pub struct IssuedAgentCredential {
 fn valid_id(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
-        && value.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.'))
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.'))
 }
 
 fn credential_hash(token: &str) -> Option<Vec<u8>> {
-    if token.len() != 52 || !token.starts_with("sw_agent_")
-        || !token.bytes().skip(9).all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    if token.len() != 52
+        || !token.starts_with("sw_agent_")
+        || !token
+            .bytes()
+            .skip(9)
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
     {
         return None;
     }
@@ -48,8 +54,9 @@ fn credential_hash(token: &str) -> Option<Vec<u8>> {
 }
 
 fn ensure_schema(connection: &rusqlite::Connection) -> Result<()> {
-    connection.execute_batch(
-        "CREATE TABLE IF NOT EXISTS managed_agent_enrollments (
+    connection
+        .execute_batch(
+            "CREATE TABLE IF NOT EXISTS managed_agent_enrollments (
              tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
              agent_id TEXT NOT NULL,
              token_hash BLOB NOT NULL UNIQUE,
@@ -59,8 +66,9 @@ fn ensure_schema(connection: &rusqlite::Connection) -> Result<()> {
          );
          CREATE INDEX IF NOT EXISTS managed_agents_active_tokens
              ON managed_agent_enrollments(token_hash)
-             WHERE revoked_at_unix IS NULL;"
-    ).context("failed to prepare SQLite managed-agent enrollment schema")
+             WHERE revoked_at_unix IS NULL;",
+        )
+        .context("failed to prepare SQLite managed-agent enrollment schema")
 }
 
 impl TenantStore {
@@ -72,13 +80,22 @@ impl TenantStore {
         tenant_id: &str,
         agent_id: &str,
     ) -> Result<IssuedAgentCredential> {
-        ensure!(valid_id(tenant_id) && valid_id(agent_id), "invalid tenant/Agent identity");
+        ensure!(
+            valid_id(tenant_id) && valid_id(agent_id),
+            "invalid tenant/Agent identity"
+        );
         let mut conn = self.connection()?;
         ensure_schema(&conn)?;
-        let tx = conn.transaction().context("could not start Agent enrollment transaction")?;
-        let active: Option<i64> = tx.query_row(
-            "SELECT active FROM tenants WHERE id = ?1", [tenant_id], |r| r.get(0)
-        ).optional()?;
+        let tx = conn
+            .transaction()
+            .context("could not start Agent enrollment transaction")?;
+        let active: Option<i64> = tx
+            .query_row(
+                "SELECT active FROM tenants WHERE id = ?1",
+                [tenant_id],
+                |r| r.get(0),
+            )
+            .optional()?;
         ensure!(active == Some(1), "tenant not found or inactive");
         let token = format!("sw_agent_{}", random_base64url(32));
         let hash = credential_hash(&token).context("invalid generated Agent credential")?;
@@ -88,7 +105,8 @@ impl TenantStore {
                  (tenant_id, agent_id, token_hash, created_at_unix)
              VALUES (?1, ?2, ?3, ?4)",
             params![tenant_id, agent_id, hash, created_at_unix],
-        ).context("Agent enrollment already exists or could not be saved")?;
+        )
+        .context("Agent enrollment already exists or could not be saved")?;
         tx.commit()?;
         Ok(IssuedAgentCredential {
             agent: EnrolledAgent {
@@ -120,18 +138,26 @@ impl TenantStore {
              FROM managed_agent_enrollments a
              JOIN tenants t ON t.id = a.tenant_id
              WHERE a.token_hash = ?1 AND a.revoked_at_unix IS NULL AND t.active = 1",
-            [hash], |r| Ok(EnrolledAgent {
-                tenant_id: r.get(0)?,
-                agent_id: r.get(1)?,
-                created_at_unix: r.get(2)?,
-                revoked_at_unix: r.get(3)?,
-            })
-        ).optional().context("managed Agent authentication failed")
+            [hash],
+            |r| {
+                Ok(EnrolledAgent {
+                    tenant_id: r.get(0)?,
+                    agent_id: r.get(1)?,
+                    created_at_unix: r.get(2)?,
+                    revoked_at_unix: r.get(3)?,
+                })
+            },
+        )
+        .optional()
+        .context("managed Agent authentication failed")
     }
 
     /// Revoking enrollment invalidates credential and fetch/ack authorization.
     pub fn revoke_managed_agent(&self, tenant_id: &str, agent_id: &str) -> Result<bool> {
-        ensure!(valid_id(tenant_id) && valid_id(agent_id), "invalid tenant/Agent identity");
+        ensure!(
+            valid_id(tenant_id) && valid_id(agent_id),
+            "invalid tenant/Agent identity"
+        );
         let conn = self.connection()?;
         ensure_schema(&conn)?;
         let changed = conn.execute(
@@ -150,15 +176,18 @@ impl TenantStore {
         let mut stmt = conn.prepare(
             "SELECT tenant_id, agent_id, created_at_unix, revoked_at_unix
              FROM managed_agent_enrollments WHERE tenant_id = ?1
-             ORDER BY agent_id ASC LIMIT 256"
+             ORDER BY agent_id ASC LIMIT 256",
         )?;
-        let rows = stmt.query_map([tenant_id], |r| Ok(EnrolledAgent {
-            tenant_id: r.get(0)?,
-            agent_id: r.get(1)?,
-            created_at_unix: r.get(2)?,
-            revoked_at_unix: r.get(3)?,
-        }))?;
-        rows.collect::<rusqlite::Result<Vec<_>>>().context("failed to list managed Agents")
+        let rows = stmt.query_map([tenant_id], |r| {
+            Ok(EnrolledAgent {
+                tenant_id: r.get(0)?,
+                agent_id: r.get(1)?,
+                created_at_unix: r.get(2)?,
+                revoked_at_unix: r.get(3)?,
+            })
+        })?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .context("failed to list managed Agents")
     }
 }
 
@@ -174,17 +203,30 @@ mod tests {
         let issued = store.enroll_managed_agent(&one.id, "agent-a").unwrap();
         assert!(issued.token.starts_with("sw_agent_"));
         assert!(store.enroll_managed_agent(&one.id, "agent-a").is_err());
-        assert!(store.enroll_managed_agent("tenant_not_real", "agent-a").is_err());
-        assert!(store.authenticate_managed_agent(Some("Bearer llmfw_tenant_token")).unwrap().is_none());
-        assert!(store.authenticate_managed_agent(Some(&format!("Bearer {}", issued.token))).unwrap().is_some());
+        assert!(store
+            .enroll_managed_agent("tenant_not_real", "agent-a")
+            .is_err());
+        assert!(store
+            .authenticate_managed_agent(Some("Bearer llmfw_tenant_token"))
+            .unwrap()
+            .is_none());
+        assert!(store
+            .authenticate_managed_agent(Some(&format!("Bearer {}", issued.token)))
+            .unwrap()
+            .is_some());
         let list = store.list_managed_agents(&one.id).unwrap();
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].agent_id, "agent-a");
         assert!(store.list_managed_agents(&two.id).unwrap().is_empty());
         assert!(store.revoke_managed_agent(&one.id, "agent-a").unwrap());
         assert!(!store.revoke_managed_agent(&one.id, "agent-a").unwrap());
-        assert!(store.authenticate_managed_agent(Some(&format!("Bearer {}", issued.token))).unwrap().is_none());
-        assert!(store.list_managed_agents(&one.id).unwrap()[0].revoked_at_unix.is_some());
+        assert!(store
+            .authenticate_managed_agent(Some(&format!("Bearer {}", issued.token)))
+            .unwrap()
+            .is_none());
+        assert!(store.list_managed_agents(&one.id).unwrap()[0]
+            .revoked_at_unix
+            .is_some());
     }
 
     #[test]

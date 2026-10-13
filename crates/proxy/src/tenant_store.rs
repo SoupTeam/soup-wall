@@ -22,8 +22,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::sync::mpsc;
 
-mod postgres;
 mod agent_enrollment;
+mod postgres;
 pub use agent_enrollment::{EnrolledAgent, IssuedAgentCredential};
 
 use postgres::PostgresTenantStore;
