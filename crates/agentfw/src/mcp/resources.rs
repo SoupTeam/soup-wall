@@ -292,6 +292,14 @@ fn canonical_path(
     if !bounded_text(text) || text.contains('*') || text.contains('?') {
         return Err("resource_path_unsupported");
     }
+    let requested = Path::new(text);
+    if requested
+        .components()
+        .any(|c| matches!(c, Component::ParentDir))
+        || text.split(['/', '\\']).any(|part| part == "..")
+    {
+        return Err("resource_path_traversal");
+    }
     // Reject foreign/ambiguous path syntaxes instead of interpreting them on this host.
     #[cfg(not(windows))]
     if text.contains('\\') || text.contains(':') {
@@ -312,7 +320,7 @@ fn canonical_path(
             }
             let device = part.split('.').next().unwrap_or("").to_ascii_uppercase();
             if part.contains(':')
-                || (part != "." && (part.ends_with('.') || part.ends_with(' ')))
+                || (part != "." && part != ".." && (part.ends_with('.') || part.ends_with(' ')))
                 || matches!(device.as_str(), "CON" | "PRN" | "AUX" | "NUL")
                 || [
                     "CONIN$",
@@ -332,13 +340,6 @@ fn canonical_path(
                 return Err("resource_path_syntax_unsupported");
             }
         }
-    }
-    let requested = Path::new(text);
-    if requested
-        .components()
-        .any(|c| matches!(c, Component::ParentDir))
-    {
-        return Err("resource_path_traversal");
     }
     if !executor.workspace.is_absolute() || !executor.cwd.is_absolute() {
         return Err("resource_executor_context_invalid");
