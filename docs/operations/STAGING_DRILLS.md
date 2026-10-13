@@ -250,3 +250,6 @@ JSON. A changed source revision requires affected checks to run again. Refer to
 before deploying. Public HTTPS/TLS delivery in the intended environment remains
 a separate operator acceptance step; this local increment does not close all of
 Phase 6.
+
+The [2026-10-13 webhook checkpoint](evidence/WEBHOOK_RECOVERY_2026-10-13.md) retains the exact
+source, both-store baseline failure, passing candidate and receiver receipts.

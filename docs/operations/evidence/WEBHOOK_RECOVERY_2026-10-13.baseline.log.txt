@@ -1,0 +1,42 @@
+   Compiling kryptering v0.6.0 ($BASELINE/vendor/kryptering)
+   Compiling soup-wall-adapter v0.1.0 ($BASELINE/crates/adapter)
+   Compiling tsp-ltv v0.5.0
+   Compiling bergshamra-crypto v0.9.2
+   Compiling bergshamra-pkcs12 v0.9.2
+   Compiling soup-wall-agent v0.2.0 ($BASELINE/crates/agent)
+   Compiling bergshamra-keys v0.9.2
+   Compiling bergshamra-transforms v0.9.2
+   Compiling bergshamra-enc v0.9.2
+   Compiling bergshamra-dsig v0.9.2
+   Compiling bergshamra v0.9.2
+   Compiling saml-rs v0.5.3
+   Compiling llm-firewall v0.2.0 ($BASELINE/crates/proxy)
+    Finished `test` profile [unoptimized] target(s) in 10.40s
+     Running unittests src/lib.rs ($CARGO_TARGET_DIR/debug/deps/llm_firewall-ff4e2426a288fdcb)
+
+running 2 tests
+SOU33_BASELINE SQLite before=Delivered after=Pending attempts=2 last_http_status=Some(503)
+
+thread 'tenant_store::sou33_baseline_regression::sqlite_stale_failure_must_not_reset_newer_success' (586289) panicked at crates/proxy/src/tenant_store/sou33_baseline_regression.rs:48:5:
+assertion `left == right` failed: a stale failure must not undo a newer delivered receipt
+  left: Pending
+ right: Delivered
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test tenant_store::sou33_baseline_regression::sqlite_stale_failure_must_not_reset_newer_success ... FAILED
+SOU33_BASELINE PostgreSQL before=Delivered after=Pending attempts=2 last_http_status=Some(503)
+
+thread 'tenant_store::sou33_baseline_regression::postgres_stale_failure_must_not_reset_newer_success' (586288) panicked at crates/proxy/src/tenant_store/sou33_baseline_regression.rs:80:5:
+assertion `left == right` failed: a stale failure must not undo a newer delivered receipt
+  left: Pending
+ right: Delivered
+test tenant_store::sou33_baseline_regression::postgres_stale_failure_must_not_reset_newer_success ... FAILED
+
+failures:
+
+failures:
+    tenant_store::sou33_baseline_regression::postgres_stale_failure_must_not_reset_newer_success
+    tenant_store::sou33_baseline_regression::sqlite_stale_failure_must_not_reset_newer_success
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 161 filtered out; finished in 0.12s
+
+error: test failed, to rerun pass `-p llm-firewall --lib`
