@@ -11,6 +11,7 @@ pub mod event;
 pub mod facet;
 pub mod fingerprint;
 pub mod policy;
+pub mod resolution;
 pub mod taint;
 
 pub use action::{classify, classify_with_baseline, touches_sensitive_path, ActionClass};
