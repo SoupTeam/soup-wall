@@ -33,6 +33,9 @@ struct Case {
     #[serde(default)]
     events: Vec<AgentEvent>,
     root_tools: Option<Vec<String>>,
+    #[serde(default)]
+    resolve_each: bool,
+    expected_steps: Option<Vec<String>>,
     cap: Option<usize>,
     native: Option<ActionClass>,
     #[serde(default)]
@@ -65,6 +68,7 @@ fn run(c: &Case) -> Value {
             .unwrap_or(include_str!("../../agent/policies/agent-default.yaml")),
     )
     .expect("frozen policy parses");
+    let mut steps = Vec::new();
     let mut out = if let Some(i) = &c.signals {
         let mut findings = Vec::new();
         for (present, detector) in [(i.secret, "secret.synthetic"), (i.pii, "pii.synthetic")] {
@@ -98,6 +102,7 @@ fn run(c: &Case) -> Value {
             rule: d.rule,
             message: d.message,
             fallback: d.fallback,
+            authority_pending: false,
             taint: signals.taint,
             provenance_incomplete: i.incomplete,
             findings,
@@ -114,16 +119,21 @@ fn run(c: &Case) -> Value {
             let class = c
                 .native
                 .filter(|_| matches!(ev.kind, EventKind::ToolCall { .. }));
-            last = Some(if let Some(class) = class {
+            let inspected = if let Some(class) = class {
                 fw.inspect_native_call(ev, class, &c.hosts)
+            } else if c.resolve_each {
+                fw.inspect_resolved(ev, |_| c.judge == "injection")
             } else {
                 fw.inspect(ev)
-            });
+            };
+            steps.push(name(inspected.verdict).to_string());
+            last = Some(inspected);
         }
         if let Some([drift, shadow]) = c.handshake {
             last = Some(fw.inspect_mcp_handshake("fixture", &[], drift, shadow));
         }
         last.unwrap_or_else(|| Outcome {
+            authority_pending: false,
             verdict: c.verdict.expect("case has an entry point"),
             rule: None,
             message: None,
@@ -159,7 +169,8 @@ fn run(c: &Case) -> Value {
         "deny" => "deny",
         _ => panic!("invalid expected verdict"),
     };
-    let passed = final_name == c.expected
+    let passed = c.expected_steps.as_ref().is_none_or(|s| *s == steps)
+        && final_name == c.expected
         && hook.permission_decision == expected_hook
         && adapter["verdict"] == c.expected
         && c.expected_rule
@@ -168,7 +179,7 @@ fn run(c: &Case) -> Value {
     json!({"id":c.id,"expected":c.expected,"actual":final_name,"initial":name(initial),
         "hook":hook.permission_decision,"adapter":adapter["verdict"],"rule":out.rule,
         "expected_rule":c.expected_rule,"incomplete":out.provenance_incomplete,
-        "known_taint":out.taint.is_some(),"passed":passed,"historical":c.historical})
+        "steps":steps,"expected_steps":c.expected_steps,"known_taint":out.taint.is_some(),"passed":passed,"historical":c.historical})
 }
 
 fn main() {

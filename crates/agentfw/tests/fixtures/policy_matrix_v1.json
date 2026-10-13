@@ -1604,5 +1604,335 @@
         }
       }
     ]
+  },
+  {
+    "id": "sequential-spawn-documentation",
+    "policy": "agent_policies:\n  - name: reviewed-spawn\n    when: {}\n    action: escalate\n    fallback: allow\ndefault: allow",
+    "events": [
+      {
+        "session": "s",
+        "agent": "main",
+        "parent": null,
+        "seq": 1,
+        "at_ms": 1,
+        "kind": "subagent_spawn",
+        "name": "worker",
+        "instructions": "Review documentation",
+        "granted_tools": [
+          "Read"
+        ]
+      },
+      {
+        "session": "s",
+        "agent": "worker",
+        "parent": "main",
+        "seq": 2,
+        "at_ms": 2,
+        "kind": "tool_call",
+        "tool": "Read",
+        "args": {
+          "path": "README.md"
+        }
+      }
+    ],
+    "root_tools": [
+      "Read"
+    ],
+    "resolve_each": true,
+    "judge": "documentation",
+    "expected_steps": [
+      "allow",
+      "allow"
+    ],
+    "expected": "allow",
+    "historical": "PR #92: final-Allow spawn formerly failed to commit child authority before its next read."
+  },
+  {
+    "id": "sequential-spawn-unavailable",
+    "policy": "agent_policies:\n  - name: reviewed-spawn\n    when: {}\n    action: escalate\n    fallback: allow\ndefault: allow",
+    "events": [
+      {
+        "session": "s",
+        "agent": "main",
+        "parent": null,
+        "seq": 1,
+        "at_ms": 1,
+        "kind": "subagent_spawn",
+        "name": "worker",
+        "instructions": "Review documentation",
+        "granted_tools": [
+          "Read"
+        ]
+      },
+      {
+        "session": "s",
+        "agent": "worker",
+        "parent": "main",
+        "seq": 2,
+        "at_ms": 2,
+        "kind": "tool_call",
+        "tool": "Read",
+        "args": {
+          "path": "README.md"
+        }
+      }
+    ],
+    "root_tools": [
+      "Read"
+    ],
+    "resolve_each": true,
+    "judge": "unavailable",
+    "expected_steps": [
+      "allow",
+      "allow"
+    ],
+    "expected": "allow",
+    "historical": "PR #92: final-Allow spawn formerly failed to commit child authority before its next read."
+  },
+  {
+    "id": "sequential-spawn-invalid",
+    "policy": "agent_policies:\n  - name: reviewed-spawn\n    when: {}\n    action: escalate\n    fallback: allow\ndefault: allow",
+    "events": [
+      {
+        "session": "s",
+        "agent": "main",
+        "parent": null,
+        "seq": 1,
+        "at_ms": 1,
+        "kind": "subagent_spawn",
+        "name": "worker",
+        "instructions": "Review documentation",
+        "granted_tools": [
+          "Read"
+        ]
+      },
+      {
+        "session": "s",
+        "agent": "worker",
+        "parent": "main",
+        "seq": 2,
+        "at_ms": 2,
+        "kind": "tool_call",
+        "tool": "Read",
+        "args": {
+          "path": "README.md"
+        }
+      }
+    ],
+    "root_tools": [
+      "Read"
+    ],
+    "resolve_each": true,
+    "judge": "invalid",
+    "expected_steps": [
+      "allow",
+      "allow"
+    ],
+    "expected": "allow",
+    "historical": "PR #92: final-Allow spawn formerly failed to commit child authority before its next read."
+  },
+  {
+    "id": "sequential-spawn-timeout",
+    "policy": "agent_policies:\n  - name: reviewed-spawn\n    when: {}\n    action: escalate\n    fallback: allow\ndefault: allow",
+    "events": [
+      {
+        "session": "s",
+        "agent": "main",
+        "parent": null,
+        "seq": 1,
+        "at_ms": 1,
+        "kind": "subagent_spawn",
+        "name": "worker",
+        "instructions": "Review documentation",
+        "granted_tools": [
+          "Read"
+        ]
+      },
+      {
+        "session": "s",
+        "agent": "worker",
+        "parent": "main",
+        "seq": 2,
+        "at_ms": 2,
+        "kind": "tool_call",
+        "tool": "Read",
+        "args": {
+          "path": "README.md"
+        }
+      }
+    ],
+    "root_tools": [
+      "Read"
+    ],
+    "resolve_each": true,
+    "judge": "timeout",
+    "expected_steps": [
+      "allow",
+      "allow"
+    ],
+    "expected": "allow",
+    "historical": "PR #92: final-Allow spawn formerly failed to commit child authority before its next read."
+  },
+  {
+    "id": "sequential-spawn-injection",
+    "policy": "agent_policies:\n  - name: reviewed-spawn\n    when: {}\n    action: escalate\n    fallback: allow\ndefault: allow",
+    "events": [
+      {
+        "session": "s",
+        "agent": "main",
+        "parent": null,
+        "seq": 1,
+        "at_ms": 1,
+        "kind": "subagent_spawn",
+        "name": "worker",
+        "instructions": "Review documentation",
+        "granted_tools": [
+          "Read"
+        ]
+      },
+      {
+        "session": "s",
+        "agent": "worker",
+        "parent": "main",
+        "seq": 2,
+        "at_ms": 2,
+        "kind": "tool_call",
+        "tool": "Read",
+        "args": {
+          "path": "README.md"
+        }
+      }
+    ],
+    "root_tools": [
+      "Read"
+    ],
+    "resolve_each": true,
+    "judge": "injection",
+    "expected_steps": [
+      "ask",
+      "deny"
+    ],
+    "expected": "deny",
+    "historical": "PR #92: final-Allow spawn formerly failed to commit child authority before its next read."
+  },
+  {
+    "id": "sequential-spawn-initial-allow",
+    "policy": "agent_policies: []\ndefault: allow",
+    "events": [
+      {
+        "session": "s",
+        "agent": "main",
+        "parent": null,
+        "seq": 1,
+        "at_ms": 1,
+        "kind": "subagent_spawn",
+        "name": "worker",
+        "instructions": "Review documentation",
+        "granted_tools": [
+          "Read"
+        ]
+      },
+      {
+        "session": "s",
+        "agent": "worker",
+        "parent": "main",
+        "seq": 2,
+        "at_ms": 2,
+        "kind": "tool_call",
+        "tool": "Read",
+        "args": {
+          "path": "README.md"
+        }
+      }
+    ],
+    "root_tools": [
+      "Read"
+    ],
+    "resolve_each": true,
+    "expected_steps": [
+      "allow",
+      "allow"
+    ],
+    "expected": "allow"
+  },
+  {
+    "id": "sequential-spawn-initial-ask",
+    "policy": "agent_policies: []\ndefault: ask",
+    "events": [
+      {
+        "session": "s",
+        "agent": "main",
+        "parent": null,
+        "seq": 1,
+        "at_ms": 1,
+        "kind": "subagent_spawn",
+        "name": "worker",
+        "instructions": "Review documentation",
+        "granted_tools": [
+          "Read"
+        ]
+      },
+      {
+        "session": "s",
+        "agent": "worker",
+        "parent": "main",
+        "seq": 2,
+        "at_ms": 2,
+        "kind": "tool_call",
+        "tool": "Read",
+        "args": {
+          "path": "README.md"
+        }
+      }
+    ],
+    "root_tools": [
+      "Read"
+    ],
+    "resolve_each": true,
+    "expected_steps": [
+      "ask",
+      "deny"
+    ],
+    "expected": "deny"
+  },
+  {
+    "id": "sequential-spawn-initial-deny",
+    "policy": "agent_policies: []\ndefault: deny",
+    "events": [
+      {
+        "session": "s",
+        "agent": "main",
+        "parent": null,
+        "seq": 1,
+        "at_ms": 1,
+        "kind": "subagent_spawn",
+        "name": "worker",
+        "instructions": "Review documentation",
+        "granted_tools": [
+          "Read"
+        ]
+      },
+      {
+        "session": "s",
+        "agent": "worker",
+        "parent": "main",
+        "seq": 2,
+        "at_ms": 2,
+        "kind": "tool_call",
+        "tool": "Read",
+        "args": {
+          "path": "README.md"
+        }
+      }
+    ],
+    "root_tools": [
+      "Read"
+    ],
+    "resolve_each": true,
+    "expected_steps": [
+      "deny",
+      "deny"
+    ],
+    "expected": "deny"
   }
 ]

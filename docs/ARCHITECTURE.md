@@ -127,8 +127,25 @@ allowlist evidence. Extraction completeness and enforceable resource grants rema
 the selected executor's responsibility; a library Allow is not a resource grant.
 This increment does not change native/MCP admission wiring or resource contracts.
 
-Delegation is recorded only after the spawn's production policy returns Allow.
-Ask, Deny and unresolved Escalate do not register proposed child rights. Calls
+Delegation is recorded only after a final Allow. Hosts that support SubagentSpawn
+use `AgentFirewall::inspect_resolved(event, judge_injection)` to inspect, resolve
+and commit the exact proposal in one exclusive mutable borrow. The trusted callback
+runs only for Escalate; Documentation, unavailable, invalid and failed judge
+responses report no injection and use the declared fallback. Injection may tighten
+Allow to Ask. The parent grant is checked again at commit.
+
+The event remains immutably borrowed and the callback cannot mutate this firewall.
+There is no detached grant token or deferred proposal queue to replay across
+sessions, parent revocation or changed event fields. Asynchronous hosts must keep
+exclusive engine ownership through their resolution operation; this increment does
+not add asynchronous spawn admission wiring. A plain `inspect` may still return an
+intermediate Escalate with `Outcome::authority_pending`; its stateless
+`adapter_response` returns Ask rather than advertising an uncommitted Allow.
+Changing the intermediate verdict with a standalone resolver does not commit rights.
+After `inspect_resolved`, the existing adapter projection reflects the final
+stateful outcome. `authority_pending` is internal Rust outcome state, not a new
+adapter wire field or grant contract. Ask, Deny and unresolved Escalate do not
+register proposed child rights. Calls
 carrying a parent identity must hold their registered tool grant. Root registration
 and authenticated parent/agent identity remain host responsibilities; callers must
 not erase the parent field or reuse stale identity to bypass delegated checks.
@@ -169,7 +186,11 @@ does not implement replacement policy logic. The command also runs existing Agen
 and daemon unit suites, loopback mock judge endpoint tests, native escalation
 regressions, and the unchanged shipped agent-session corpus. Mock endpoint tests
 exercise real invalid responses, HTTP errors, disabled judges and timeout behavior;
-the matrix's failure labels alone do not simulate transport.
+the matrix's failure labels alone do not simulate transport. Sequential rows with
+`resolve_each` resolve every event before the next one and record expected/actual
+step verdicts. They retain PR #92's final-Allow spawn regression alongside the
+original rows; dedicated `spawn_resolution` tests cover exact child/tool binding,
+parent revocation, unfinished projection and session cleanup.
 
 `target/policy-composition/` contains expected/actual rows, command exits and logs,
 HEAD/tree, dirty state, per-source-file hashes, a combined source digest and separate
