@@ -20,16 +20,17 @@ use tokio_postgres::Row;
 use tokio_postgres_rustls::MakeRustlsConnect;
 
 use super::{
-    canonical_policy_document, canonical_security_event_payload, evaluate_policy_simulation,
-    evaluate_usage_reconciliation, generate_admin_token, generate_oidc_browser_session_token,
-    generate_scim_token, generate_token, now_unix, oidc_browser_session_hash, random_id,
-    scim_token_hash, token_hash, usage_retention_cutoff, validate_label, validate_limits,
-    validate_oidc_browser_session_expiry, validate_policy_document, validate_scim_token_expiry,
-    validate_usage_event, validate_usage_quota_policy, validate_usage_range,
-    validate_usage_reconciliation_import, validate_usage_retention_policy, validate_usage_text,
-    AdminIdentity, AdminRole, BrowserSessionFederation, ControlPlaneAdmin, DailyUsageAggregate,
-    IssuedAdminToken, IssuedOidcBrowserSession, IssuedScimToken, IssuedToken,
-    IssuedWorkspaceInvitation, IssuedWorkspaceServiceAccount, ModelUsageAggregate, NewUsageEvent,
+    bounded_webhook_error, canonical_policy_document, canonical_security_event_payload,
+    evaluate_policy_simulation, evaluate_usage_reconciliation, generate_admin_token,
+    generate_oidc_browser_session_token, generate_scim_token, generate_token, now_unix,
+    oidc_browser_session_hash, random_id, scim_token_hash, token_hash, usage_retention_cutoff,
+    validate_label, validate_limits, validate_oidc_browser_session_expiry,
+    validate_policy_document, validate_scim_token_expiry, validate_usage_event,
+    validate_usage_quota_policy, validate_usage_range, validate_usage_reconciliation_import,
+    validate_usage_retention_policy, validate_usage_text, AdminIdentity, AdminRole,
+    BrowserSessionFederation, ControlPlaneAdmin, DailyUsageAggregate, IssuedAdminToken,
+    IssuedOidcBrowserSession, IssuedScimToken, IssuedToken, IssuedWorkspaceInvitation,
+    IssuedWorkspaceServiceAccount, ModelUsageAggregate, NewUsageEvent,
     NewUsageReconciliationImport, OidcBrowserSession, Organization, OrganizationOidcConnection,
     OrganizationSamlConnection, PendingWebhookDelivery, PolicyDeploymentAction,
     PolicySimulationCase, SamlAuthorizationPending, ScimGroup, ScimGroupMemberChange,
@@ -44,7 +45,8 @@ use super::{
     WebhookDestination, Workspace, WorkspaceAdminAuditEvent, WorkspaceExternalIdentity,
     WorkspaceInvitation, WorkspaceMember, WorkspaceMembership, WorkspacePermission,
     WorkspacePrincipal, WorkspaceRole, WorkspaceScimGroup, WorkspaceScimGroupMapping,
-    WorkspaceScimUser, WorkspaceServiceAccount, BOOTSTRAP_ORGANIZATION_ID,
+    WorkspaceScimUser, WorkspaceServiceAccount, BOOTSTRAP_ORGANIZATION_ID, WEBHOOK_LEASE_SECONDS,
+    WEBHOOK_MAX_ATTEMPTS,
 };
 
 #[derive(Clone)]
@@ -5270,7 +5272,33 @@ impl PostgresTenantStore {
             .bounded(client.transaction())
             .await
             .context("failed to begin PostgreSQL webhook claim")?;
-        let now = now_unix();
+        // A shared database clock keeps leases meaningful across hosts whose
+        // application clocks differ. Completion uses this same clock domain.
+        let now: i64 = self
+            .bounded(transaction.query_one(
+                "SELECT FLOOR(EXTRACT(EPOCH FROM clock_timestamp()))::BIGINT",
+                &[],
+            ))
+            .await
+            .context("failed to read PostgreSQL webhook claim time")?
+            .get(0);
+        let max_attempts = i64::from(WEBHOOK_MAX_ATTEMPTS);
+        self.bounded(transaction.execute(
+            "UPDATE tenant_webhook_deliveries
+             SET status = 'dead', locked_until_unix = NULL, next_attempt_at_unix = $1,
+                 last_http_status = CASE WHEN status = 'in_flight' THEN NULL ELSE last_http_status END,
+                 last_error = CASE
+                   WHEN NOT EXISTS (SELECT 1 FROM tenant_webhook_destinations w
+                                    WHERE w.id = destination_id AND w.active = TRUE)
+                     THEN 'destination_inactive'
+                   WHEN status = 'in_flight' THEN 'lease_expired_after_max_attempts'
+                   ELSE 'max_attempts_exhausted' END
+             WHERE (status = 'pending' OR (status = 'in_flight' AND locked_until_unix <= $1))
+               AND (attempt_count >= $2 OR NOT EXISTS (
+                   SELECT 1 FROM tenant_webhook_destinations w
+                   WHERE w.id = destination_id AND w.active = TRUE))",
+            &[&now, &max_attempts],
+        )).await.context("failed to finalize abandoned PostgreSQL webhook deliveries")?;
         let pending = self
             .bounded(transaction.query_opt(
                 "SELECT d.id, d.tenant_id, d.event_id, d.destination_id, d.status,
@@ -5283,12 +5311,12 @@ impl PostgresTenantStore {
                  FROM tenant_webhook_deliveries d
                  JOIN tenant_webhook_destinations w ON w.id = d.destination_id
                  JOIN tenant_security_events e ON e.id = d.event_id
-                 WHERE w.active = TRUE
+                 WHERE w.active = TRUE AND d.attempt_count < $2
                    AND ((d.status = 'pending' AND d.next_attempt_at_unix <= $1)
                      OR (d.status = 'in_flight' AND d.locked_until_unix <= $1))
                  ORDER BY d.next_attempt_at_unix ASC, d.id ASC
                  LIMIT 1 FOR UPDATE OF d SKIP LOCKED",
-                &[&now],
+                &[&now, &max_attempts],
             ))
             .await
             .context("failed to select PostgreSQL webhook delivery")?
@@ -5300,7 +5328,7 @@ impl PostgresTenantStore {
                 .context("failed to commit empty PostgreSQL webhook claim")?;
             return Ok(None);
         };
-        let locked_until = now.saturating_add(30);
+        let locked_until = now.saturating_add(WEBHOOK_LEASE_SECONDS);
         self.bounded(transaction.execute(
             "UPDATE tenant_webhook_deliveries
              SET status = 'in_flight', attempt_count = attempt_count + 1,
@@ -5321,54 +5349,68 @@ impl PostgresTenantStore {
 
     pub(super) async fn finish_webhook_delivery(
         &self,
-        delivery_id: &str,
+        claim: &WebhookDelivery,
         result: WebhookAttemptResult,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<bool> {
         let client = self.checkout().await?;
-        let attempts = self
-            .bounded(client.query_opt(
-                "SELECT attempt_count FROM tenant_webhook_deliveries WHERE id = $1",
-                &[&delivery_id],
+        let now: i64 = self
+            .bounded(client.query_one(
+                "SELECT FLOOR(EXTRACT(EPOCH FROM clock_timestamp()))::BIGINT",
+                &[],
             ))
             .await
-            .context("failed to load PostgreSQL webhook attempt count")?
-            .map(|row| row.get::<_, i64>(0))
-            .unwrap_or(0);
-        let now = now_unix();
+            .context("failed to read PostgreSQL webhook completion time")?
+            .get(0);
         let status = if result.error.is_none() {
             WebhookDeliveryStatus::Delivered
-        } else if attempts >= 8 {
+        } else if claim.attempt_count >= WEBHOOK_MAX_ATTEMPTS {
             WebhookDeliveryStatus::Dead
         } else {
             WebhookDeliveryStatus::Pending
         };
         let next_attempt = if matches!(status, WebhookDeliveryStatus::Pending) {
-            now.saturating_add(5_i64.saturating_mul(1_i64 << attempts.clamp(0, 10)))
+            now.saturating_add(5_i64.saturating_mul(1_i64 << claim.attempt_count.min(10)))
         } else {
             now
         };
-        let error = result
-            .error
-            .map(|value| value.chars().take(512).collect::<String>());
+        let error = result.error.map(bounded_webhook_error);
         let status_value = status.storage_value();
-        self.bounded(client.execute(
-            "UPDATE tenant_webhook_deliveries
-             SET status = $2, next_attempt_at_unix = $3, locked_until_unix = NULL,
+        let attempts = i64::from(claim.attempt_count);
+        let changed = self
+            .bounded(client.execute(
+                "UPDATE tenant_webhook_deliveries
+             SET status = CASE WHEN $2 = 'pending' AND NOT EXISTS (
+                     SELECT 1 FROM tenant_webhook_destinations w
+                     WHERE w.id = destination_id AND w.active = TRUE)
+                   THEN 'dead' ELSE $2 END,
+                 next_attempt_at_unix = CASE WHEN NOT EXISTS (
+                     SELECT 1 FROM tenant_webhook_destinations w
+                     WHERE w.id = destination_id AND w.active = TRUE)
+                   THEN $4 ELSE $3 END,
+                 locked_until_unix = NULL,
                  delivered_at_unix = CASE WHEN $2 = 'delivered' THEN $4 ELSE delivered_at_unix END,
-                 last_http_status = $5, last_error = $6
-             WHERE id = $1",
-            &[
-                &delivery_id,
-                &status_value,
-                &next_attempt,
-                &now,
-                &result.http_status.map(i32::from),
-                &error,
-            ],
-        ))
-        .await
-        .context("failed to update PostgreSQL webhook delivery")?;
-        Ok(())
+                 last_http_status = $5,
+                 last_error = CASE WHEN $2 = 'pending' AND NOT EXISTS (
+                     SELECT 1 FROM tenant_webhook_destinations w
+                     WHERE w.id = destination_id AND w.active = TRUE)
+                   THEN 'destination_inactive' ELSE $6 END
+             WHERE id = $1 AND status = 'in_flight' AND attempt_count = $7
+               AND locked_until_unix = $8
+               AND locked_until_unix > FLOOR(EXTRACT(EPOCH FROM clock_timestamp()))::BIGINT",
+                &[
+                    &claim.id,
+                    &status_value,
+                    &next_attempt,
+                    &now,
+                    &result.http_status.map(i32::from),
+                    &error,
+                    &attempts,
+                    &claim.locked_until_unix,
+                ],
+            ))
+            .await
+            .context("failed to update PostgreSQL webhook delivery")?;
+        Ok(changed == 1)
     }
 
     pub(super) async fn simulate_policy_version(

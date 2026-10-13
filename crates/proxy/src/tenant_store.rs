@@ -24,9 +24,23 @@ use tokio::sync::mpsc;
 
 mod postgres;
 
+#[cfg(test)]
+mod webhook_recovery_tests;
+
 use postgres::PostgresTenantStore;
 
 const BOOTSTRAP_ORGANIZATION_ID: &str = "org_bootstrap";
+const WEBHOOK_MAX_ATTEMPTS: u32 = 8;
+const WEBHOOK_LEASE_SECONDS: i64 = 30;
+
+fn bounded_webhook_error(mut error: String) -> String {
+    let mut end = error.len().min(512);
+    while !error.is_char_boundary(end) {
+        end -= 1;
+    }
+    error.truncate(end);
+    error
+}
 
 #[derive(Clone)]
 pub struct TenantStore {
@@ -2327,11 +2341,11 @@ impl TenantStore {
         match &self.postgres {
             Some(postgres) => {
                 postgres
-                    .finish_webhook_delivery(&pending.delivery.id, result)
+                    .finish_webhook_delivery(&pending.delivery, result)
                     .await?
             }
-            None => self.finish_webhook_delivery(&pending.delivery.id, result)?,
-        }
+            None => self.finish_webhook_delivery(&pending.delivery, result)?,
+        };
         Ok(true)
     }
 
@@ -8196,9 +8210,27 @@ impl TenantStore {
     fn claim_webhook_delivery(&self) -> anyhow::Result<Option<PendingWebhookDelivery>> {
         let mut connection = self.connection()?;
         let transaction = connection
-            .transaction()
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .context("failed to begin webhook claim transaction")?;
         let now = now_unix();
+        // Reap abandoned final attempts and inactive destinations without
+        // revoking a live worker's right to record a completed HTTP attempt.
+        transaction.execute(
+            "UPDATE tenant_webhook_deliveries
+             SET status = 'dead', locked_until_unix = NULL, next_attempt_at_unix = ?1,
+                 last_http_status = CASE WHEN status = 'in_flight' THEN NULL ELSE last_http_status END,
+                 last_error = CASE
+                   WHEN NOT EXISTS (SELECT 1 FROM tenant_webhook_destinations w
+                                    WHERE w.id = destination_id AND w.active = 1)
+                     THEN 'destination_inactive'
+                   WHEN status = 'in_flight' THEN 'lease_expired_after_max_attempts'
+                   ELSE 'max_attempts_exhausted' END
+             WHERE (status = 'pending' OR (status = 'in_flight' AND locked_until_unix <= ?1))
+               AND (attempt_count >= ?2 OR NOT EXISTS (
+                   SELECT 1 FROM tenant_webhook_destinations w
+                   WHERE w.id = destination_id AND w.active = 1))",
+            params![now, WEBHOOK_MAX_ATTEMPTS],
+        ).context("failed to finalize abandoned webhook deliveries")?;
         let pending = transaction
             .query_row(
                 "SELECT d.id, d.tenant_id, d.event_id, d.destination_id, d.status,
@@ -8211,11 +8243,11 @@ impl TenantStore {
                  FROM tenant_webhook_deliveries d
                  JOIN tenant_webhook_destinations w ON w.id = d.destination_id
                  JOIN tenant_security_events e ON e.id = d.event_id
-                 WHERE w.active = 1
+                 WHERE w.active = 1 AND d.attempt_count < ?2
                    AND ((d.status = 'pending' AND d.next_attempt_at_unix <= ?1)
                      OR (d.status = 'in_flight' AND d.locked_until_unix <= ?1))
                  ORDER BY d.next_attempt_at_unix ASC, d.id ASC LIMIT 1",
-                [now],
+                params![now, WEBHOOK_MAX_ATTEMPTS],
                 pending_webhook_from_sqlite_row,
             )
             .optional()
@@ -8226,7 +8258,7 @@ impl TenantStore {
                 .context("failed to commit empty webhook claim")?;
             return Ok(None);
         };
-        let locked_until = now.saturating_add(30);
+        let locked_until = now.saturating_add(WEBHOOK_LEASE_SECONDS);
         transaction
             .execute(
                 "UPDATE tenant_webhook_deliveries
@@ -8245,55 +8277,62 @@ impl TenantStore {
         Ok(Some(pending))
     }
 
+    /// Finish only the still-live claim that performed this attempt. A stale
+    /// worker may have produced a receiver effect, but cannot rewrite the outbox.
     fn finish_webhook_delivery(
         &self,
-        delivery_id: &str,
+        claim: &WebhookDelivery,
         result: WebhookAttemptResult,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<bool> {
         let connection = self.connection()?;
-        let attempt_count: u32 = connection
-            .query_row(
-                "SELECT attempt_count FROM tenant_webhook_deliveries WHERE id = ?1",
-                [delivery_id],
-                |row| row.get::<_, i64>(0),
-            )
-            .optional()?
-            .map(|value| u32::try_from(value).unwrap_or(u32::MAX))
-            .unwrap_or(0);
         let now = now_unix();
         let status = if result.error.is_none() {
             WebhookDeliveryStatus::Delivered
-        } else if attempt_count >= 8 {
+        } else if claim.attempt_count >= WEBHOOK_MAX_ATTEMPTS {
             WebhookDeliveryStatus::Dead
         } else {
             WebhookDeliveryStatus::Pending
         };
         let next_attempt = if matches!(status, WebhookDeliveryStatus::Pending) {
-            now.saturating_add(5_i64.saturating_mul(1_i64 << attempt_count.min(10)))
+            now.saturating_add(5_i64.saturating_mul(1_i64 << claim.attempt_count.min(10)))
         } else {
             now
         };
-        let error = result
-            .error
-            .map(|error| error.chars().take(512).collect::<String>());
-        connection
+        let error = result.error.map(bounded_webhook_error);
+        let changed = connection
             .execute(
                 "UPDATE tenant_webhook_deliveries
-                 SET status = ?2, next_attempt_at_unix = ?3, locked_until_unix = NULL,
+                 SET status = CASE WHEN ?2 = 'pending' AND NOT EXISTS (
+                         SELECT 1 FROM tenant_webhook_destinations w
+                         WHERE w.id = destination_id AND w.active = 1)
+                       THEN 'dead' ELSE ?2 END,
+                     next_attempt_at_unix = CASE WHEN NOT EXISTS (
+                         SELECT 1 FROM tenant_webhook_destinations w
+                         WHERE w.id = destination_id AND w.active = 1)
+                       THEN ?4 ELSE ?3 END,
+                     locked_until_unix = NULL,
                      delivered_at_unix = CASE WHEN ?2 = 'delivered' THEN ?4 ELSE delivered_at_unix END,
-                     last_http_status = ?5, last_error = ?6
-                 WHERE id = ?1",
+                     last_http_status = ?5,
+                     last_error = CASE WHEN ?2 = 'pending' AND NOT EXISTS (
+                         SELECT 1 FROM tenant_webhook_destinations w
+                         WHERE w.id = destination_id AND w.active = 1)
+                       THEN 'destination_inactive' ELSE ?6 END
+                 WHERE id = ?1 AND status = 'in_flight' AND attempt_count = ?7
+                   AND locked_until_unix = ?8
+                   AND locked_until_unix > CAST(strftime('%s', 'now') AS INTEGER)",
                 params![
-                    delivery_id,
+                    claim.id,
                     status.storage_value(),
                     next_attempt,
                     now,
                     result.http_status.map(i64::from),
                     error,
+                    claim.attempt_count,
+                    claim.locked_until_unix,
                 ],
             )
             .context("failed to update webhook delivery result")?;
-        Ok(())
+        Ok(changed == 1)
     }
 
     pub fn simulate_policy_version(
@@ -10959,12 +10998,16 @@ fn validate_webhook_destination_url(value: &str) -> anyhow::Result<String> {
     let uri = Url::parse(&value).context("webhook URL is not a valid URI")?;
     let host = uri
         .host_str()
-        .ok_or_else(|| anyhow::anyhow!("webhook URL must contain a host"))?;
+        .ok_or_else(|| anyhow::anyhow!("webhook URL must contain a host"))?
+        .trim_end_matches('.');
     if host.eq_ignore_ascii_case("localhost")
         || host.ends_with(".localhost")
         || host.eq_ignore_ascii_case("metadata.google.internal")
-        || host.eq_ignore_ascii_case("metadata.google.internal.")
-        || host.parse::<IpAddr>().is_ok()
+        || host
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .parse::<IpAddr>()
+            .is_ok()
     {
         bail!("webhook URL must use an external DNS hostname, not a local or literal address");
     }
@@ -11002,13 +11045,14 @@ fn is_public_socket_address(address: SocketAddr) -> bool {
                 && !ip.is_unspecified()
                 && !ip.is_broadcast()
                 && !ip.is_multicast()
-                && !ip.octets().starts_with(&[100, 64])
+                && !(ip.octets()[0] == 100 && (64..=127).contains(&ip.octets()[1]))
                 && !ip.octets().starts_with(&[192, 0, 0])
                 && !ip.octets().starts_with(&[198, 18])
                 && !ip.octets().starts_with(&[198, 19])
         }
         IpAddr::V6(ip) => {
             !ip.is_loopback()
+                && ip.to_ipv4_mapped().is_none()
                 && !ip.is_unique_local()
                 && !ip.is_unicast_link_local()
                 && !ip.is_unspecified()
@@ -11049,20 +11093,66 @@ struct WebhookAttemptResult {
     error: Option<String>,
 }
 
+// Includes DNS resolution in the attempt deadline, within the storage lease.
 async fn deliver_webhook(
     _base_client: &Client,
     key: &WebhookSigningKey,
     pending: &PendingWebhookDelivery,
 ) -> WebhookAttemptResult {
-    let (url, addresses) = match resolve_public_webhook_url(&pending.destination.url).await {
-        Ok(value) => value,
-        Err(error_value) => {
+    match tokio::time::timeout(Duration::from_secs(10), async {
+        if validate_webhook_destination_url(&pending.destination.url).is_err() {
             return WebhookAttemptResult {
                 http_status: None,
-                error: Some(error_value.to_string()),
+                error: Some("webhook destination is invalid".to_owned()),
             };
         }
-    };
+        let (url, addresses) = match resolve_public_webhook_url(&pending.destination.url).await {
+            Ok(value) => value,
+            Err(_) => {
+                return WebhookAttemptResult {
+                    http_status: None,
+                    error: Some("webhook destination resolution failed".to_owned()),
+                };
+            }
+        };
+        let host = url.host_str().expect("validated webhook URL has a host");
+        let client = match Client::builder()
+            .connect_timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(10))
+            .redirect(Policy::none())
+            // Environment proxies must not bypass the validated address pin.
+            .no_proxy()
+            .resolve_to_addrs(host, &addresses)
+            .build()
+        {
+            Ok(client) => client,
+            Err(_) => {
+                return WebhookAttemptResult {
+                    http_status: None,
+                    error: Some("webhook HTTP client initialization failed".to_owned()),
+                };
+            }
+        };
+        send_webhook_request(&client, url, key, pending).await
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => WebhookAttemptResult {
+            http_status: None,
+            error: Some("webhook attempt timed out".to_owned()),
+        },
+    }
+}
+
+// The production caller supplies a validated HTTPS URL and a pinned client.
+// Local receiver fixtures call this private boundary only in the test binary.
+async fn send_webhook_request(
+    client: &Client,
+    url: Url,
+    key: &WebhookSigningKey,
+    pending: &PendingWebhookDelivery,
+) -> WebhookAttemptResult {
     let body_value = serde_json::json!({
         "schema_version": 1,
         "event_id": pending.event.id,
@@ -11075,35 +11165,19 @@ async fn deliver_webhook(
     });
     let body = match serde_json::to_vec(&body_value) {
         Ok(body) => body,
-        Err(error_value) => {
+        Err(_) => {
             return WebhookAttemptResult {
                 http_status: None,
-                error: Some(format!("failed to encode webhook body: {error_value}")),
+                error: Some("webhook body encoding failed".to_owned()),
             };
         }
     };
     let signature = match key.signature_for(&pending.destination.id, &body) {
         Ok(signature) => signature,
-        Err(error_value) => {
+        Err(_) => {
             return WebhookAttemptResult {
                 http_status: None,
-                error: Some(error_value.to_string()),
-            };
-        }
-    };
-    let host = url.host_str().expect("validated webhook URL has a host");
-    let client = match Client::builder()
-        .connect_timeout(Duration::from_secs(5))
-        .timeout(Duration::from_secs(10))
-        .redirect(Policy::none())
-        .resolve_to_addrs(host, &addresses)
-        .build()
-    {
-        Ok(client) => client,
-        Err(error_value) => {
-            return WebhookAttemptResult {
-                http_status: None,
-                error: Some(format!("failed to build webhook client: {error_value}")),
+                error: Some("webhook body signing failed".to_owned()),
             };
         }
     };
@@ -11121,7 +11195,14 @@ async fn deliver_webhook(
         Err(error_value) => {
             return WebhookAttemptResult {
                 http_status: None,
-                error: Some(format!("webhook request failed: {error_value}")),
+                // Reqwest's Display can contain URL credentials or query values.
+                error: Some(if error_value.is_timeout() {
+                    "webhook request timed out".to_owned()
+                } else if error_value.is_connect() {
+                    "webhook connection failed".to_owned()
+                } else {
+                    "webhook request failed".to_owned()
+                }),
             };
         }
     };
@@ -11141,6 +11222,11 @@ async fn deliver_webhook(
         }
     }
 }
+
+#[cfg(test)]
+mod webhook_delivery_tests;
+#[cfg(test)]
+mod webhook_transport_tests;
 
 fn now_unix() -> i64 {
     SystemTime::now()
