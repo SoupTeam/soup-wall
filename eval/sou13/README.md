@@ -9,7 +9,7 @@ copies out of Git.
 | --- | --- |
 | `sou13/`, `scripts/` | CP1 source; **frozen**, so every byte is pinned by the CP1 freeze |
 | `sou13cp2/`, `scripts_cp2/` | CP2 taxonomy, semantics, splits, leakage, exports, freeze, anchor and handoff |
-| `sou13gold/` | Versioned gold-label addenda: validation, drafting and the authorised gold development export (none issued) |
+| `sou13gold/` | Versioned gold-label addenda: validation, drafting and the authorised gold development export (approved CP2 private v1 issued; not committed here) |
 | `schema/` | Draft 2020-12 schemas |
 | `tests/`, `tests_cp2/` | unittest suites; `_testsupport.py` gates tests on named private artifacts |
 | `run_tests.py` | Exact test ledger for the public and private modes |
