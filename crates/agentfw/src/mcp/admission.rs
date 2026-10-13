@@ -1384,112 +1384,31 @@ where
                         let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
                         ensure!(args.is_object(), "MCP call arguments must be an object");
                         schemas.get(name).context("MCP tool schema not installed")?.validate(&args)?;
-                        if installed.resource_policy.is_none()
-                            && collector.config.resource_profiles.contains_key(name)
+                        if collector.config.resource_profiles.contains_key(name)
+                            || installed.resource_policy.is_some()
                         {
                             let reasons = json!(["resource_executor_unsupported"]);
                             write(host, &withheld(request_id, "invocation", &reasons)).await?;
                             continue;
                         }
-                        let resource_admission = if let Some(policy) = &installed.resource_policy {
+                        let mut prod_verdict = None;
+                        if collector.config.classifier.is_some() {
                             let snapshot = admitted_snapshot
                                 .as_ref()
                                 .context("classifier discovery state missing")?;
-                            let admitted_tool = snapshot
-                                .tools
-                                .get(name)
-                                .context("admitted tool discovery missing")?;
-                            if let Some(agentfw_ws) = std::env::var_os("AGENTFW_WORKSPACE") {
-                                if let (Ok(policy_ws_canon), Ok(agentfw_ws_canon)) = (
-                                    policy.workspace.canonicalize(),
-                                    std::fs::canonicalize(&agentfw_ws),
-                                ) {
-                                    if policy_ws_canon != agentfw_ws_canon {
-                                        let reasons = json!(["resource_workspace_mismatch"]);
-                                        write(host, &withheld(request_id, "invocation", &reasons))
-                                            .await?;
-                                        continue;
-                                    }
-                                }
-                            }
-                            let source = collector
-                                .config
-                                .classifier
-                                .as_ref()
-                                .map(|c| c.source())
-                                .unwrap_or("unconfigured");
-                            let revision = collector
-                                .config
-                                .classifier
-                                .as_ref()
-                                .and_then(|c| c.revision())
-                                .map(str::to_owned);
-                            let input_sha256 = prediction_identity(
-                                &collector.config.server_id,
-                                snapshot,
-                                admitted_tool,
-                                name,
-                                &args,
-                                source,
-                                revision.as_deref(),
-                            );
-                            let input = Invocation {
-                                server_id: policy.profile.server_id.clone(),
-                                host_call_id: request_id.clone(),
-                                registry_sha256: collector.config.native.registry_sha256.clone(),
-                                snapshot_sha256: snapshot.sha256.clone(),
-                                schema_sha256: installed.schema_sha256.clone(),
-                                tool: name.into(),
-                                description: admitted_tool.description.clone(),
-                                schema: admitted_tool.schema.clone(),
-                                definition: admitted_tool.definition.clone(),
-                                server_info: snapshot.server_info.clone(),
-                                definition_sha256: admitted_tool.definition_sha256.clone(),
-                                input_sha256: input_sha256.clone(),
-                                classifier_revision: revision.clone(),
-                                args: args.clone(),
-                                baseline: installed.action_class,
-                            };
-                            let context = super::resources::ExecutorContext {
-                                os: std::env::consts::OS,
-                                workspace: &policy.workspace,
-                                cwd: &policy.cwd,
-                                fixed_destinations: true,
-                            };
-                            let derived = super::resources::extract(&input, &policy.profile, &context);
-                            if !derived.complete() {
-                                let reasons = if !derived.issues.is_empty() {
-                                    json!(derived.issues.iter().map(|i| i.reason).collect::<Vec<_>>())
-                                } else {
-                                    json!(["resource_extraction_incomplete"])
-                                };
-                                write(host, &withheld(request_id, "invocation", &reasons)).await?;
-                                continue;
-                            }
-                            let profile_sha256 = crate::native::canonical_digest(
-                                &serde_json::to_value(&policy.profile)
-                                    .context("profile serializes")?,
-                            );
-                            let admission = crate::native::resource::Admission {
-                                server_id: policy.profile.server_id.clone(),
-                                host_call_id: request_id.clone(),
-                                profile_sha256,
-                                executor_sha256: policy.executor_sha256.clone(),
-                                classifier_sha256: policy.classifier_sha256.clone(),
-                                snapshot_sha256: snapshot.sha256.clone(),
-                                definition_sha256: admitted_tool.definition_sha256.clone(),
-                                input_sha256,
-                                resources: derived.resources,
-                            };
-                            Some(admission)
-                        } else {
-                            None
-                        };
-                        let mut prod_verdict = None;
-                        if collector.config.classifier.is_some() {
-                            let snapshot = admitted_snapshot.as_ref().context("classifier discovery state missing")?;
-                            let egress_declared = installed.action_class == ActionClass::Network || !installed.egress.is_empty();
-                            match collector.classify(snapshot, request_id, name, &args, installed.action_class, egress_declared).await? {
+                            let egress_declared = installed.action_class == ActionClass::Network
+                                || !installed.egress.is_empty();
+                            match collector
+                                .classify(
+                                    snapshot,
+                                    request_id,
+                                    name,
+                                    &args,
+                                    installed.action_class,
+                                    egress_declared,
+                                )
+                                .await?
+                            {
                                 Err(failure) => {
                                     write(host, &not_classified(request_id, failure)).await?;
                                     continue;
@@ -1504,34 +1423,46 @@ where
                                 ProductionVerdict::Allow => {}
                                 ProductionVerdict::Ask => {
                                     let reasons = json!(["policy_unconfirmed_ask"]);
-                                    write(host, &withheld(request_id, "invocation", &reasons)).await?;
+                                    write(host, &withheld(request_id, "invocation", &reasons))
+                                        .await?;
                                     continue;
                                 }
                                 ProductionVerdict::Deny => {
                                     let reasons = json!(["policy_denied"]);
-                                    write(host, &withheld(request_id, "invocation", &reasons)).await?;
+                                    write(host, &withheld(request_id, "invocation", &reasons))
+                                        .await?;
                                     continue;
                                 }
                             }
                         }
                         // A composed refusal must not reserve native capacity.
                         // Native trusted restrictions still gate every permitted call.
-                        let mut call_fields = json!({
-                            "tool": name, "args": args,
-                            "schema_sha256": installed.schema_sha256,
-                        });
-                        let contract_version = if let Some(ref admission) = resource_admission {
-                            call_fields["resource_admission"] = serde_json::to_value(admission)?;
-                            crate::native::resource::CONTRACT.to_string()
-                        } else {
-                            CONTRACT.to_string()
-                        };
-                        let receipt = collector.event("call", call_fields).await?;
+                        let receipt = collector
+                            .event(
+                                "call",
+                                json!({
+                                    "tool": name,
+                                    "args": args,
+                                    "schema_sha256": installed.schema_sha256,
+                                }),
+                            )
+                            .await?;
                         if receipt["release"] != true {
-                            write(host, &withheld(request_id, "invocation", &receipt["reason_codes"])).await?;
+                            write(
+                                host,
+                                &withheld(request_id, "invocation", &receipt["reason_codes"]),
+                            )
+                            .await?;
                             continue;
                         }
-                        Pending::Call { id: request_id.clone(), tool:name.into(), args, call_id:receipt["call_id"].clone(), binding:receipt["binding_sha256"].clone(), contract_version }
+                        Pending::Call {
+                            id: request_id.clone(),
+                            tool: name.into(),
+                            args,
+                            call_id: receipt["call_id"].clone(),
+                            binding: receipt["binding_sha256"].clone(),
+                            contract_version: CONTRACT.to_string(),
+                        }
                     }
                     _ => bail!("unsupported MCP method"),
                 };

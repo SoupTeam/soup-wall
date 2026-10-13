@@ -2776,7 +2776,7 @@ async fn sou24_readonly_write_with_high_uncertainty_is_hard_denied() {
 }
 
 #[tokio::test]
-async fn sou15_constrained_resource_executor_allows_authorized_call_and_witnesses_execution() {
+async fn sou15_resource_policy_refuses_execution_without_confined_executor() {
     let mut fixture =
         Fixture::with_resource_policy("classified-read", true, None, |dir, registry| {
             let file = dir.join("reviewed-input.txt");
@@ -2813,7 +2813,7 @@ async fn sou15_constrained_resource_executor_allows_authorized_call_and_witnesse
     let target_file = fixture._dir.path().join("reviewed-input.txt");
     let call = json!({
         "jsonrpc": "2.0",
-        "id": "res-auth-read",
+        "id": "res-policy-refusal",
         "method": "tools/call",
         "params": {
             "name": "read_document",
@@ -2824,157 +2824,12 @@ async fn sou15_constrained_resource_executor_allows_authorized_call_and_witnesse
     });
     let reply: Value =
         serde_json::from_str(&fixture.exchange(&call.to_string()).await.unwrap()).unwrap();
-    assert_eq!(reply["id"], "res-auth-read");
-    assert_ne!(reply["result"]["isError"], true);
-    assert!(reply["result"]["content"][0]["text"]
-        .as_str()
-        .unwrap()
-        .contains("7 red widgets"));
-    assert_eq!(
-        executed(&fixture.ledger).len(),
-        1,
-        "authorized resource call must execute and produce witness in ledger"
-    );
-}
-
-#[tokio::test]
-async fn sou15_constrained_resource_executor_refuses_path_traversal_with_zero_execution() {
-    let mut fixture =
-        Fixture::with_resource_policy("classified-read", true, None, |dir, registry| {
-            let file = dir.join("reviewed-input.txt");
-            std::fs::write(&file, "synthetic contents").unwrap();
-            let canonical_file = file.canonicalize().unwrap().to_str().unwrap().to_string();
-            let canonical_dir = dir.canonicalize().unwrap();
-            let schema = json!({
-                "type": "object",
-                "properties": { "path": { "type": "string" } },
-                "required": ["path"],
-                "additionalProperties": false
-            });
-            let profile = json!({
-                "server_id": "fixture",
-                "tool_name": "read_document",
-                "schema_sha256": sha(schema.to_string().as_bytes()),
-                "selectors": [{ "pointer": "/path", "kind": "path" }]
-            });
-            registry["tools"][0]["resource_policy"] = json!({
-                "profile": profile,
-                "workspace": canonical_dir,
-                "cwd": canonical_dir,
-                "executor_sha256": "e".repeat(64),
-                "classifier_sha256": "c".repeat(64),
-                "allowed_resources": [{
-                    "kind": "path",
-                    "canonical": canonical_file
-                }]
-            });
-        })
-        .await;
-    fixture.ready().await;
-
-    // Path traversal attempt: ../escape.txt
-    let traversal_call = json!({
-        "jsonrpc": "2.0",
-        "id": "res-traversal-read",
-        "method": "tools/call",
-        "params": {
-            "name": "read_document",
-            "arguments": {
-                "path": "../escape.txt"
-            }
-        }
-    });
-    let reply: Value =
-        serde_json::from_str(&fixture.exchange(&traversal_call.to_string()).await.unwrap())
-            .unwrap();
-    assert_eq!(reply["id"], "res-traversal-read");
+    assert_eq!(reply["id"], "res-policy-refusal");
     assert_eq!(reply["result"]["isError"], true);
-    assert!(reply.to_string().contains("resource_path_traversal"));
+    assert!(reply.to_string().contains("resource_executor_unsupported"));
     assert_eq!(
         executed(&fixture.ledger).len(),
         0,
-        "forbidden path traversal must leave zero execution ledger entries"
-    );
-
-    // Benign authorized call succeeds afterwards
-    let target_file = fixture._dir.path().join("reviewed-input.txt");
-    let benign_call = json!({
-        "jsonrpc": "2.0",
-        "id": "res-benign-followup",
-        "method": "tools/call",
-        "params": {
-            "name": "read_document",
-            "arguments": {
-                "path": target_file.to_str().unwrap()
-            }
-        }
-    });
-    let ok_reply: Value =
-        serde_json::from_str(&fixture.exchange(&benign_call.to_string()).await.unwrap()).unwrap();
-    assert_eq!(ok_reply["id"], "res-benign-followup");
-    assert_ne!(ok_reply["result"]["isError"], true);
-    assert_eq!(executed(&fixture.ledger).len(), 1);
-}
-
-#[tokio::test]
-async fn sou15_constrained_resource_executor_refuses_unauthorized_destination_with_zero_execution()
-{
-    let mut fixture =
-        Fixture::with_resource_policy("classified-read", true, None, |dir, registry| {
-            let file = dir.join("reviewed-input.txt");
-            std::fs::write(&file, "synthetic contents").unwrap();
-            let canonical_file = file.canonicalize().unwrap().to_str().unwrap().to_string();
-            let canonical_dir = dir.canonicalize().unwrap();
-            let schema = json!({
-                "type": "object",
-                "properties": { "path": { "type": "string" } },
-                "required": ["path"],
-                "additionalProperties": false
-            });
-            let profile = json!({
-                "server_id": "fixture",
-                "tool_name": "read_document",
-                "schema_sha256": sha(schema.to_string().as_bytes()),
-                "selectors": [{ "pointer": "/path", "kind": "path" }]
-            });
-            registry["tools"][0]["resource_policy"] = json!({
-                "profile": profile,
-                "workspace": canonical_dir,
-                "cwd": canonical_dir,
-                "executor_sha256": "e".repeat(64),
-                "classifier_sha256": "c".repeat(64),
-                "allowed_resources": [{
-                    "kind": "path",
-                    "canonical": canonical_file
-                }]
-            });
-        })
-        .await;
-    fixture.ready().await;
-
-    // Create another file inside workspace that is NOT in allowed_resources
-    let unauth_file = fixture._dir.path().join("unauthorized.txt");
-    std::fs::write(&unauth_file, "secret").unwrap();
-
-    let unauth_call = json!({
-        "jsonrpc": "2.0",
-        "id": "res-unauth-dest",
-        "method": "tools/call",
-        "params": {
-            "name": "read_document",
-            "arguments": {
-                "path": unauth_file.to_str().unwrap()
-            }
-        }
-    });
-    let reply: Value =
-        serde_json::from_str(&fixture.exchange(&unauth_call.to_string()).await.unwrap()).unwrap();
-    assert_eq!(reply["id"], "res-unauth-dest");
-    assert_eq!(reply["result"]["isError"], true);
-    assert!(reply.to_string().contains("native_resource_not_allowed"));
-    assert_eq!(
-        executed(&fixture.ledger).len(),
-        0,
-        "unauthorized resource call must leave zero execution ledger entries"
+        "resource-policy calls must be refused without execution until a confined executor is reviewed"
     );
 }

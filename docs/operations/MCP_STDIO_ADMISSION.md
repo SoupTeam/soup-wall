@@ -499,13 +499,9 @@ All five valid classifier reply shapes reach production policy: single action, m
 
 The [versioned native resource contract](NATIVE_RESOURCE_ADMISSION.md) adds operator-installed resource permissions, repeats extraction from actual arguments and binds complete typed evidence/revisions to a one-shot receipt. A matching digest alone does not authorize a destination. Legacy `sw-native/1` calls retain their strict shape; resource extensions cannot be accepted silently and resource policies cannot be downgraded.
 
-The stdio relay distinguishes between unreviewed generic executors and tools with an operator-reviewed `resource_policy`. Unreviewed generic executors with resource profiles remain refused with `resource_executor_unsupported` to prevent false promotion.
+The generic stdio relay launches a trusted process with the configured working directory. This is **not an execution sandbox**: a script inside a workspace can still access other files or open sockets. The relay therefore refuses a call with `resource_executor_unsupported` when its tool has a configured resource profile or native resource policy. Neither `AGENTFW_EXECUTOR_FIXED_DESTINATIONS` nor script location enables this mode. Unsupported calls reserve no grant and reach no tool executor. Unprofiled tools keep the existing trusted-server admission flow.
 
-When a tool is configured with an operator-installed `resource_policy`, the operation-level constrained resource executor activates:
-1. Workspace bounds are verified against `AGENTFW_WORKSPACE` (returning `resource_workspace_mismatch` if diverged).
-2. Destinations are canonically extracted with fixed destinations enabled (`fixed_destinations: true`). Any traversal escape (`..`), symlink violation, or unresolvable path immediately withholds the call with zero server execution.
-3. Typed `resource_admission` is submitted under `sw-native/resources/1` to the native daemon. If native policy denies or withholds the call, execution is prevented with a zero-execution witness.
-4. On authorized admission (`release == true`), the request is dispatched to the server process and result delivery is verified and bound.
+Resource-aware stdio execution requires a reviewed executor that enforces grants at actual file/network operations. Native resource authorization checks permissions and correlation for an authenticated trusted collector; it does not prove containment of arbitrary server code. Earlier candidate confinement claims based on command flags, script location and working directory are superseded by this explicit unsupported boundary.
 
 ### Maintainer repair preparation (2026-10-10)
 
