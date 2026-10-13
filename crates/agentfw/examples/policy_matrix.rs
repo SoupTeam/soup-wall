@@ -111,7 +111,9 @@ fn run(c: &Case) -> Value {
         }
         let mut last = None;
         for ev in &c.events {
-            let class = c.native.filter(|_| matches!(ev.kind, EventKind::ToolCall { .. }));
+            let class = c
+                .native
+                .filter(|_| matches!(ev.kind, EventKind::ToolCall { .. }));
             last = Some(if let Some(class) = class {
                 fw.inspect_native_call(ev, class, &c.hosts)
             } else {
