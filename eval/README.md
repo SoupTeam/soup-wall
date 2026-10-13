@@ -37,6 +37,15 @@ cmp /tmp/challenge-regenerated.json fixtures/soup_task1_challenge_cases_v0.1.jso
 grep -E '^[[:xdigit:]]{64}[[:space:]]+' evidence/sou5_original/GOLD_FREEZE.txt | sha256sum -c -
 ```
 
+## Contract-reconciled fixtures (SOU-31)
+
+`fixtures/soup_task1_evaluation_cases_v0.5.json` and `fixtures/soup_task1_challenge_cases_v0.2.json`
+apply the accepted SOU-10 v0.4 decisions D04, D06 and D07 to the frozen v0.4/v0.1 files,
+which stay unchanged. `tools/make_v05.py` regenerates them byte for byte and
+`tools/check_fixtures.py` checks frozen digests, regeneration and contract rules. A case may
+now expect a D06 technical failure (`expected.technical_failure`); see the
+[SOU-31 report](evidence/sou31/README.md) for changes, counts and old versus new results.
+
 ## Historical results are not current results
 
 For the unmodified **original** `rule_baseline.py` (as captured 8 Oct 2026): regression 21/21, challenge 22/34 = **43/55** scored passes, 12 mismatches, zero technical errors. These are synthetic, assumption-dependent results. The original combined mixed-action add-on run was 43/59, but SOU-21 owns the UX01–UX05 fixtures, so those are **not** republished here.
