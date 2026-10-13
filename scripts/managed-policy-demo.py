@@ -168,7 +168,11 @@ def main():
                 "tool_name": "Bash",
                 "tool_input": {"command": "echo hello"},
             }, {"Authorization": "Bearer " + hook_token})
-            return data.get("hookSpecificOutput", {}).get("permissionDecision", "unknown")
+            # Agent hook intentionally returns {} for an Allow/defer verdict:
+            # a no-objection decision must not grant provider permissions.
+            if data == {}:
+                return "defer"
+            return data["hookSpecificOutput"]["permissionDecision"]
         def applied(seq):
             def check():
                 _, items = request("GET", base + "/deployments", headers=admin_headers)
