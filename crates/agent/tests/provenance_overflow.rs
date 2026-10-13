@@ -217,7 +217,6 @@ fn explicit_allow_and_judge_fallback_cannot_bypass_loss_floor() {
     }
 }
 
-
 #[test]
 fn managed_policy_activation_preserves_incomplete_history_across_rollback() {
     let mut fw = firewall(0);
@@ -225,23 +224,39 @@ fn managed_policy_activation_preserves_incomplete_history_across_rollback() {
     assert!(fw.provenance_incomplete("s"));
     fw.activate_managed_policy(
         AgentPolicySet::from_yaml("default: deny").unwrap(),
-        "revision-1".into(), 1, "digest-one".into(),
+        "revision-1".into(),
+        1,
+        "digest-one".into(),
     );
     assert!(fw.provenance_incomplete("s"));
-    assert_eq!(fw.inspect(&call("s", "Write", "effectful")).verdict, Verdict::Deny);
+    assert_eq!(
+        fw.inspect(&call("s", "Write", "effectful")).verdict,
+        Verdict::Deny
+    );
     fw.activate_managed_policy(
         AgentPolicySet::from_yaml("default: allow").unwrap(),
-        "revision-2".into(), 2, "digest-two".into(),
+        "revision-2".into(),
+        2,
+        "digest-two".into(),
     );
     assert!(fw.provenance_incomplete("s"));
     let verdict = fw.inspect(&call("s", "Write", "effectful"));
-    assert_eq!(verdict.verdict, Verdict::Ask, "incomplete-history floor survives activation");
+    assert_eq!(
+        verdict.verdict,
+        Verdict::Ask,
+        "incomplete-history floor survives activation"
+    );
     assert_eq!(verdict.rule.as_deref(), Some("taint-history-incomplete"));
     fw.activate_managed_policy(
         AgentPolicySet::from_yaml("default: deny").unwrap(),
-        "revision-1".into(), 3, "digest-one".into(),
+        "revision-1".into(),
+        3,
+        "digest-one".into(),
     );
     assert!(fw.provenance_incomplete("s"));
     assert_eq!(fw.active_managed_policy().unwrap().deployment_sequence, 3);
-    assert_eq!(fw.inspect(&call("s", "Write", "effectful")).verdict, Verdict::Deny);
+    assert_eq!(
+        fw.inspect(&call("s", "Write", "effectful")).verdict,
+        Verdict::Deny
+    );
 }
