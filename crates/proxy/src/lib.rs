@@ -98,7 +98,10 @@ pub fn app(state: Shared) -> Router {
         let managed_agent = Router::new()
             .route("/agent/v1/whoami", get(managed_agent_api::whoami))
             .route("/agent/v1/policy", get(managed_agent_api::fetch_policy))
-            .route("/agent/v1/policy/ack", post(managed_agent_api::acknowledge_policy));
+            .route(
+                "/agent/v1/policy/ack",
+                post(managed_agent_api::acknowledge_policy),
+            );
         let scim_api = Router::new()
             .route(
                 "/scim/v2/ServiceProviderConfig",
