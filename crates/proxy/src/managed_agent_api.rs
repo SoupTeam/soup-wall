@@ -39,7 +39,8 @@ pub async fn enroll(
     };
     let result = tokio::task::spawn_blocking(move || {
         store.enroll_managed_agent(&tenant_id, &input.agent_id)
-    }).await;
+    })
+    .await;
     match result {
         Ok(Ok(credential)) => (StatusCode::CREATED, Json(credential)).into_response(),
         Ok(Err(error_value)) => {
@@ -48,7 +49,10 @@ pub async fn enroll(
         }
         Err(error_value) => {
             tracing::error!(error = %error_value, "managed Agent enrollment task failed");
-            failure(StatusCode::SERVICE_UNAVAILABLE, "Agent enrollment temporarily unavailable")
+            failure(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Agent enrollment temporarily unavailable",
+            )
         }
     }
 }
@@ -65,9 +69,15 @@ pub async fn list(
         Ok(Ok(agents)) => Json(agents).into_response(),
         Ok(Err(error_value)) => {
             tracing::error!(error = %error_value, "managed Agent inventory unavailable");
-            failure(StatusCode::SERVICE_UNAVAILABLE, "Agent inventory unavailable")
+            failure(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Agent inventory unavailable",
+            )
         }
-        Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "Agent inventory unavailable"),
+        Err(_) => failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Agent inventory unavailable",
+        ),
     }
 }
 
@@ -88,7 +98,10 @@ pub async fn revoke(
             tracing::warn!(error = %error_value, "managed Agent revocation refused");
             failure(StatusCode::BAD_REQUEST, "Agent revocation refused")
         }
-        Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "Agent revocation unavailable"),
+        Err(_) => failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Agent revocation unavailable",
+        ),
     }
 }
 
@@ -107,8 +120,14 @@ pub async fn whoami(State(state): State<Shared>, headers: HeaderMap) -> Response
         Ok(Ok(None)) => failure(StatusCode::UNAUTHORIZED, "Agent authentication required"),
         Ok(Err(error_value)) => {
             tracing::error!(error = %error_value, "managed Agent authentication unavailable");
-            failure(StatusCode::SERVICE_UNAVAILABLE, "Agent authentication unavailable")
+            failure(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Agent authentication unavailable",
+            )
         }
-        Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "Agent authentication unavailable"),
+        Err(_) => failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Agent authentication unavailable",
+        ),
     }
 }
