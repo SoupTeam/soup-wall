@@ -1,49 +1,93 @@
-# Managed Agent policy rollout (SOU-30)
+# Signed managed Agent-policy rollout (SOU-30)
 
-> **Status: work in progress.** This document specifies the implemented signed-bundle verifier and the intended rollout contract. The Console API, live activation, acknowledgements and executable rollback demonstration are **not yet implemented**. Do not claim this branch as release-ready.
+> **Draft / review in progress.** This is a bounded **local SQLite Console + `agentfw serve`** integration. It is **not** general remote deployment, TLS/IdP certification or permission to publish a product release. Full current-head review remains required.
 
-## Separation of policy types
+## Purpose and policy separation
 
-Managed policy bundles carry the YAML `soup_wall_agent::AgentPolicySet`, not the Gateway's `TenantPolicyDocument`. They MUST NOT modify `agentfw::Config.enforce`, the operator-controlled native registry, local executor permissions, or judge configuration.
+Console manages immutable, approved **AgentPolicySet YAML** revisions. These are not Gateway `TenantPolicyDocument` model policies; the existing Gateway policy APIs remain unchanged. Agent enrollment credentials are entirely separate from admin, tenant proxy and workspace service tokens.
 
-## v1 signed envelope
+Rollout stages stored per enrolled Agent:
 
-The Rust type is `agentfw::managed_policy::SignedAgentPolicy`. Required JSON properties:
+1. `issued`: an approved Agent revision is signed as a new deployment sequence;
+2. `delivered`: Console returned the signed envelope to an authenticated Agent;
+3. `applied`: the Agent authenticated to Console *after reading back* its running firewall's active revision, SHA-256 and sequence; Console checks they match the current deployment;
+4. `rejected`: the authenticated Agent refused a candidate; its last active policy remains intact.
+
+The Agent reports `online`, `offline`, `stale`, `rejected` (and `restored_offline` immediately after restoring a previously accepted signed bundle) separately from the last **active** policy through `GET /health`. A download, persisted envelope, or lack of errors is not `applied` evidence.
+
+## v1 signing protocol
+
+`crates/agentfw/src/managed_policy.rs` defines `SignedAgentPolicy`; Console serializes the same fields as `SignedManagedBundle`.
 
 | Property | Meaning |
 | --- | --- |
-| `schema_version` | Exact integer 1 |
-| `tenant_id`, `agent_id` | Exact, operator-enrolled audience |
-| `revision` | Approved immutable Agent policy revision |
-| `deployment_sequence` | Strictly increasing per enrolled Agent, including rollback |
-| `issued_at_unix`, `expires_at_unix` | Unix seconds; expiry exclusive, maximum 86,400-second lifetime |
-| `issuer_key_id` | References an independently pinned Ed25519 public key |
-| `policy_yaml` | Raw UTF-8 AgentPolicySet YAML; max 64 KiB |
-| `policy_sha256` | Lowercase SHA-256 of the raw UTF-8 YAML bytes |
-| `signature_hex` | Lowercase hex encoding of the Ed25519 signature (64 bytes) |
+| `schema_version` | integer 1 |
+| `tenant_id`, `agent_id` | exact enrolled audience |
+| `revision` | immutable approved Agent policy revision |
+| `deployment_sequence` | strictly increasing **per Agent** (rollback included) |
+| `issued_at_unix`, `expires_at_unix` | seconds since epoch; maximum validity 86,400 seconds; current issuer produces one-hour bundles |
+| `issuer_key_id` | exact identifier for independently pinned Ed25519 key |
+| `policy_yaml` | UTF-8 `AgentPolicySet`, at most 64 KiB |
+| `policy_sha256` | lowercase SHA-256 of exact YAML bytes |
+| `signature_hex` | lowercase Ed25519 signature, 64 bytes |
 
-Unknown fields are rejected. Before parsing, cap the entire JSON body to **96 KiB**. Signing bytes are constructed without canonical JSON: begin with ASCII `soup-wall-agent-policy-bundle-v1` followed by one NUL byte, then each of the first ten properties above **except signature_hex**, in the declared order. Encode every property as its UTF-8 string (numeric values in plain base-10 ASCII) prefixed with a 4-byte unsigned **big-endian** length. Sign this transcript with Ed25519; hex-encode the signature. This binds exact audience, revision, deployment order, key ID and payload to one signature.
+Before JSON decoding, the Agent refuses bundles over 96 KiB. Both sides sign this transcript, not canonical JSON: UTF-8 `soup-wall-agent-policy-bundle-v1`, one NUL byte, then **each field except `signature_hex` in the order above**, encoded as a 4-byte unsigned big-endian byte length and the literal UTF-8 bytes. Numeric fields use ordinary base-10 ASCII. Operator-pinned public key material is never trusted from the received bundle.
 
-## Trust and verification
+Verify exact audience, key identity/revocation, signature, digest, issuance/expiry, strictly increasing deployment sequence and strict `AgentPolicySet::from_yaml` parser before changing state. No implicit changes to `enforce`, judge, native registry, MCP resource confinement or executor permissions.
 
-An Agent must obtain its issuer key ID/public key independently from its local operator-controlled configuration. **Never trust a signing key delivered alongside the policy.** Unknown, revoked, malformed or mismatched keys fail. Reject wrong audience, modified policy/digest, expired bundle, future issuance outside the 60-second clock-skew allowance, invalid AgentPolicySet, and a deployment sequence not strictly greater than the highest durable accepted sequence. New keys require local operator provisioning and revoked keys must not validate fresh deliveries.
+## Local operation (no provider or IdP needed)
 
-SQLite enrollment is handled in `tenant_store::agent_enrollment`. One Agent credential is returned once and stored only as a domain-separated SHA-256 hash, entirely separate from admin, tenant and service tokens. A revoked enrollment fails subsequent credential authentication; caller code must not accept a cached claim.
+The quickest reproducible test builds real binaries and runs a disposable Console and Agent:
 
-## Safety invariant for the unfinished runtime slice
+```bash
+python3 scripts/managed-policy-demo.py
+```
 
-Only after signature verification **and** successful in-process policy installation may the Agent durably record the new accepted sequence and report `applied` with its actual exposed revision and SHA-256. Download receipts (`delivered`) are not application proofs. A failed attempt must retain the last accepted policy and all session taint, incomplete-history indicators and admission evidence. Grant invalidation must be explicitly handled; simply creating a fresh AgentFirewall discards security history and is forbidden. Offline, stale and rejected states need distinct evidence.
+CI runs the same scenario with prebuilt binaries in `.github/workflows/managed-policy-demo.yml`. It verifies **deny → defer/no hook objection → deny** after new `v-deny` / `v-allow` / rollback-to-`v-deny` deployments, with exact active sequence 1/2/3 and `applied` acknowledgements. The test uses temporary home/SQLite folders and random loopback ports; it does not access external providers. The `defer` behavior is represented as an empty Claude Code hook response `{}` (not permission `allow`). The witness, when the run succeeds, is `target/sou30-managed-rollout-evidence.json`.
 
-Rollback is a **new, higher-sequence signed deployment** of a previously approved payload, not a replay of an old envelope. Required demonstration: one disposable SQLite Console and existing local `agentfw serve` show a real changed verdict after activation and restored verdict after rollback. Add tamper, cross-tenant, replay, revocation, key-rotation and unavailable-Console tests before marking this PR ready for review.
+### Console operator settings
 
-## Current checkpoint and remaining work
+Enable SQLite `tenant_store` in `firewall.yaml` and bind Console to loopback. Set a **separate secret** `LLM_FW_ADMIN_TOKEN` for `/admin/v1`, and provide an Ed25519 signing seed from the local operator's protected environment:
 
-- [x] Independently pinned Ed25519 candidate-bundle verifier with focused negative tests in `agentfw`.
-- [x] SQLite-backed managed Agent enrollment/credential hash/revocation store with focused tests.
-- [ ] Wire admin/operator enrollment endpoints; separate Agent fetch and acknowledgment routes.
-- [ ] Implement approved policy revisions, issuer signing, immutable deployments and status persistence.
-- [ ] Fetch, validate, safely activate and attest the running policy without clearing any session evidence.
-- [ ] Authenticated applied/rejected acknowledgments, rotation/offline recovery and rollback sequencing.
-- [ ] One-command E2E demonstration, integration testing and passing current-head CI.
+- `SOUP_AGENT_POLICY_KEY_ID`: nonempty key identifier
+- `SOUP_AGENT_POLICY_SEED_HEX`: 32 random signing seed bytes, as 64 lowercase hexadecimal characters
 
-The SOU-26 release-gate and SOU-15 MCP/resource isolation remain owned by their respective teams. This milestone is **not** deployment authorization.
+Never commit the seed or token. The admin endpoint `GET /admin/v1/managed-issuer` returns the public key hex for **out-of-band provisioning** to the Agent; it never returns the seed.
+
+Admin routes (existing `x-llm-firewall-admin-token: Bearer …` header, **Owner** required for mutations):
+
+| Method | Route under `/admin/v1/tenants/{tenant}/agents` | Purpose |
+| --- | --- | --- |
+| POST | `/` | enroll `{"agent_id":"a"}`; returns Agent Bearer token **once** |
+| GET | `/` | inventory without credentials or hashes |
+| POST | `/{agent}/revoke` | revoke Agent credential |
+| POST | `/{agent}/revisions` | create `{"revision":"v1","policy_yaml":"default: deny\n"}` |
+| POST | `/{agent}/revisions/{revision}/approve` | explicitly approve immutable revision |
+| POST | `/{agent}/revisions/{revision}/deploy` | `{"rollback":false}` or `{"rollback":true}` |
+| GET | `/{agent}/deployments` | current and previous issued/delivered/applied/rejected deployments |
+
+Agent routes with **its own** `Authorization: Bearer sw_agent_…`:
+`GET /agent/v1/whoami`, `GET /agent/v1/policy`, `POST /agent/v1/policy/ack`.
+
+### Agent operator pinning
+
+The daemon continues to start with the existing `agentfw serve` command. In its operator-controlled environment, set:
+
+- `SOUP_MANAGED_AGENT_CONSOLE=http://127.0.0.1:8080/` (or correct private loopback port)
+- `SOUP_MANAGED_AGENT_TOKEN`: once-issued Agent Bearer credential
+- `SOUP_MANAGED_AGENT_TENANT`, `SOUP_MANAGED_AGENT_ID`: exact enrolled audience
+- `SOUP_MANAGED_AGENT_KEY_ID`, `SOUP_MANAGED_AGENT_PUBLIC_KEY_HEX`: independently provisioned and pinned Ed25519 issuer key
+
+Omitting `SOUP_MANAGED_AGENT_CONSOLE` disables managed polling entirely. The current bounded integration refuses non-loopback and non-HTTP origins (the remote TLS deployment is a different task). The Agent periodically fetches at most 96 KiB, validates, invalidates prior pending grants **explicitly**, writes a private signed last-accepted envelope, and switches policy **inside the existing `AgentFirewall`**. This preserves in-process session taint, incomplete-history indicators and authority; it does not silently reset the Agent's enforcement mode. A previous accepted envelope is restored on restart, including during Console outage; a previously expired envelope can remain the last accepted state but cannot authorize a new deployment.
+
+## Failure semantics and outstanding review boundaries
+
+- **Replayed, cross-tenant/Agent, modified, expired, unknown/revoked-key or invalid YAML**: reject before activation and attempt an authenticated `rejected` acknowledgement; preserve the last active policy.
+- **Console offline/unavailable**: retain the last accepted active policy, expose transport status separately, and retry. If an `applied` ack failed, the same signed pending deployment can be acknowledged again *without* a second application.
+- **Rollback**: issue a **new** higher-sequence signed deployment of a previously approved payload; do not replay an old signed bundle.
+- **Revoked enrollment**: server refuses all future fetches and acknowledgements using the old Agent token. Already active policy is not remotely erased.
+- **Key rotation**: issuer seed/key ID and independently pinned Agent public key are operator-provisioned. Changing keys requires coordinated local reprovisioning/restart; an unexpected new key fails. There is no online trust-root update.
+- **Approval-grant boundary**: pending local grant files are explicitly invalidated on activation, with failure blocking policy changes. Maintainers must examine concurrent grant creation/redemption races before claiming production-level policy-transition isolation.
+- **Trust limits**: an authenticated Agent `applied` assertion is an observation of this software process, **not hardware remote attestation**. Local file/OS compromise is outside the bounded slice. SQLite-only managed-policy records have not been added to the PostgreSQL implementation.
+
+SOU-15 retains responsibility for MCP/resource confinement; SOU-26 owns release publication. This PR must remain Draft until integration tests and security review pass for the exact final source.
