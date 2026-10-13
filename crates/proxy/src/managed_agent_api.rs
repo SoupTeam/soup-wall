@@ -35,7 +35,10 @@ pub async fn enroll(
     Json(input): Json<EnrollRequest>,
 ) -> Response {
     let Some(store) = store(&state) else {
-        return failure(StatusCode::SERVICE_UNAVAILABLE, "managed Agent enrollment unavailable");
+        return failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "managed Agent enrollment unavailable",
+        );
     };
     let result = tokio::task::spawn_blocking(move || {
         store.enroll_managed_agent(&tenant_id, &input.agent_id)
@@ -58,12 +61,12 @@ pub async fn enroll(
 }
 
 /// Admin inventory never returns credentials or their persisted hashes.
-pub async fn list(
-    State(state): State<Shared>,
-    Path(tenant_id): Path<String>,
-) -> Response {
+pub async fn list(State(state): State<Shared>, Path(tenant_id): Path<String>) -> Response {
     let Some(store) = store(&state) else {
-        return failure(StatusCode::SERVICE_UNAVAILABLE, "managed Agent enrollment unavailable");
+        return failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "managed Agent enrollment unavailable",
+        );
     };
     match tokio::task::spawn_blocking(move || store.list_managed_agents(&tenant_id)).await {
         Ok(Ok(agents)) => Json(agents).into_response(),
@@ -87,11 +90,14 @@ pub async fn revoke(
     Path((tenant_id, agent_id)): Path<(String, String)>,
 ) -> Response {
     let Some(store) = store(&state) else {
-        return failure(StatusCode::SERVICE_UNAVAILABLE, "managed Agent enrollment unavailable");
+        return failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "managed Agent enrollment unavailable",
+        );
     };
-    match tokio::task::spawn_blocking(move || {
-        store.revoke_managed_agent(&tenant_id, &agent_id)
-    }).await {
+    match tokio::task::spawn_blocking(move || store.revoke_managed_agent(&tenant_id, &agent_id))
+        .await
+    {
         Ok(Ok(true)) => StatusCode::NO_CONTENT.into_response(),
         Ok(Ok(false)) => failure(StatusCode::NOT_FOUND, "Agent enrollment not found"),
         Ok(Err(error_value)) => {
@@ -107,15 +113,19 @@ pub async fn revoke(
 
 /// Explicit Agent identity proof; never reuses admin/tenant authentication.
 pub async fn whoami(State(state): State<Shared>, headers: HeaderMap) -> Response {
-    let auth = headers.get(axum::http::header::AUTHORIZATION)
+    let auth = headers
+        .get(axum::http::header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .map(str::to_owned);
     let Some(store) = store(&state) else {
-        return failure(StatusCode::SERVICE_UNAVAILABLE, "managed Agent enrollment unavailable");
+        return failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "managed Agent enrollment unavailable",
+        );
     };
-    match tokio::task::spawn_blocking(move || {
-        store.authenticate_managed_agent(auth.as_deref())
-    }).await {
+    match tokio::task::spawn_blocking(move || store.authenticate_managed_agent(auth.as_deref()))
+        .await
+    {
         Ok(Ok(Some(identity))) => Json(identity).into_response(),
         Ok(Ok(None)) => failure(StatusCode::UNAUTHORIZED, "Agent authentication required"),
         Ok(Err(error_value)) => {
