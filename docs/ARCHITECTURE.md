@@ -176,7 +176,7 @@ HEAD/tree, dirty state, per-source-file hashes, a combined source digest and sep
 policy/input SHA256 hashes. CI retains this directory as `policy-composition`.
 CI checkout may be a PR merge commit; use the recorded SHA, not a branch label.
 Tracked local edits are covered by content hashes; commit new files before recording
-delivery evidence. A failing command makes the report fail and its log is retained.
+delivery evidence. An unexpected command exit makes the report fail and its log is retained.
 
 Historical fixtures and corpus labels are preserved. New rows explicitly record
 the former missing-fallback Allow, unresolved-hook defer, softened Deny, ignored
@@ -191,10 +191,6 @@ in PR history. No shipped corpus input or label is changed.
 The matrix is a synthetic component contract, not held-out accuracy or full runtime
 effectiveness acceptance. Independent integration acceptance remains separate.
 
-## Where to work next
-
-Add a detector in `crates/core`, an agent decision rule in `crates/agent`, or a provider adapter in `crates/proxy`. For every enforcement change, add a test for the unsafe action and a benign case that should still succeed. Run the [full workspace checks](../CONTRIBUTING.md) and the relevant policy regression corpus before changing a default.
-
 The report also replays the unchanged 40-session corpus with the historical
 negative-control policy `agent_policies: []; default: allow` (valid YAML is
 written to the evidence directory). Mandatory production Deny floors now stop
@@ -204,3 +200,7 @@ fail the policy gate, with zero benign interruptions. The report verifies this
 specific failure; it does not suppress arbitrary command failures or relabel
 any corpus expectations. The report unit tests retain the same input and now
 assert six misses under the production floors instead of the historical 19.
+
+## Where to work next
+
+Add a detector in `crates/core`, an agent decision rule in `crates/agent`, or a provider adapter in `crates/proxy`. For every enforcement change, add a test for the unsafe action and a benign case that should still succeed. Run the [full workspace checks](../CONTRIBUTING.md) and the relevant policy regression corpus before changing a default.
