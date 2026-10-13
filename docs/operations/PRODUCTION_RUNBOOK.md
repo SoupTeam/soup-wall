@@ -49,6 +49,69 @@ to the managed PostgreSQL/Redis provider and record the chosen retention region.
    dependency gate. Keep `.dockerignore` in the build context so local `.env`,
    runtime data, and model artifacts never reach the Docker daemon.
 
+## Policy webhook delivery and recovery
+
+Delivery uses a durable outbox in the tenant store. Each claim increments its
+attempt count and owns a 30-second lease. Completion atomically checks that exact
+attempt and lease, that the row is still `in_flight`, and that the lease has not
+expired. A late worker result is ignored; it cannot replace a newer result or
+move a `delivered` row back to `pending`. SQLite claims use an immediate write
+transaction; PostgreSQL claims lock rows with `SKIP LOCKED`.
+
+The worker attempts delivery at most eight times, including claims interrupted
+by a crash. Failed attempts return to `pending` with exponential backoff
+(`5 * 2^attempt_count` seconds: 10 seconds after the first failure). An expired
+lease can be reclaimed immediately; an expired eighth lease becomes `dead`.
+`dead` and `delivered` are terminal. A ten-second attempt deadline includes DNS;
+HTTP connection setup is separately bounded to five seconds. Worker idle/error
+polling can add delay beyond `next_attempt_at_unix`.
+
+Deactivating a destination stops new enqueues and claims. Pending or expired
+claims become `dead` when the worker next visits the queue. A request already
+claimed may still reach the receiver: deactivation cannot recall bytes or undo
+receiver effects. An owning, unexpired success is recorded honestly; a failure
+for an inactive destination is terminal rather than rescheduled. Inspect
+`attempt_count`, `last_http_status`, `last_error` and `delivered_at_unix` together.
+Errors contain bounded categories/status codes, not endpoint URLs or response
+bodies. `dead` means the worker stopped trying, not proof the receiver saw nothing.
+
+Delivery is **at least once within a bounded retry budget**, not guaranteed
+arrival or exactly-once receiver effects. If the receiver accepts a request and
+the sender crashes before recording success, the request will be repeated. The
+delivery ID, event ID and serialized event body stay stable across attempts.
+Verify `x-llm-firewall-signature` as HMAC-SHA256 over the **raw request body**, using
+the destination secret returned once at registration. Its format remains
+`sha256=<lowercase hex>`; compare decoded MAC bytes in constant time before
+processing JSON or applying effects. The signature authenticates the body,
+including `tenant_id` and `event_id`; it does **not** authenticate the delivery or
+event headers. Deduplicate the authenticated `(tenant_id, event_id)` within the
+receiver's destination/subscription scope, atomically with the receiver effect.
+Treat headers as diagnostic metadata, not an authorization or deduplication key.
+Retain deduplication state across receiver restarts and the possible replay
+window, including backup recovery. The current signature has no expiry/freshness
+claim; a valid captured body can be replayed.
+
+Keep `LLM_FW_WEBHOOK_SIGNING_KEY` unchanged during restart and restore. Changing
+it changes derived destination secrets and requires coordinated receiver key
+rotation. Only public DNS HTTPS destinations are supported; address pinning,
+TLS certificate verification and redirect refusal remain enabled. Environment
+HTTP proxies are disabled for delivery so they cannot bypass address pinning.
+There is no production switch to allow local fixture endpoints.
+
+Before upgrading this ownership fix, **stop all old webhook workers** (including
+other replicas), then start only the updated version. Older binaries complete
+by delivery ID and cannot safely coexist with fenced workers. No columns or
+schema versions change: existing SQLite initialization and PostgreSQL migrations
+preserve populated outboxes. Do not reset attempt counts or leases in a live
+queue. Back up and drill the upgrade first; rolling back to an older worker
+reintroduces the stale-completion race. There is no supported automatic dead-row
+replay API; investigate the endpoint, key, receiver receipts and deduplication
+before any separately reviewed recovery action.
+
+See the [disposable webhook recovery drill](STAGING_DRILLS.md#webhook-ownership-and-receiver-recovery)
+for both-store race tests and independent receiver evidence. A loopback fixture
+is not acceptance of a deployed public HTTPS receiver.
+
 ## Health and monitoring
 
 - `/healthz` is dependency-free liveness.

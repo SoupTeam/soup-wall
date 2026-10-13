@@ -19,6 +19,16 @@ The public Soup Wall workspace now contains the Agent, Gateway, and self-hosted 
 
 The supplied Compose image now starts `soup-wall-gateway` directly. With `deploy/docker-compose.production.yaml`, pass subcommands as `docker compose ... run --rm firewall preflight` and `docker compose ... run --rm firewall migrate`; do not repeat a binary name after the service name. See the [production runbook](operations/PRODUCTION_RUNBOOK.md) for the exact sequence and failure drills.
 
+## Unreleased webhook ownership fix
+
+Stop every old Gateway webhook worker before starting the candidate; mixed old
+and new workers are unsafe because old binaries can overwrite a newer delivery
+result. The fix uses existing attempt/lease columns, without a schema change or
+identifier rewrite. Preserve the signing key and queued rows. See
+[webhook recovery](operations/PRODUCTION_RUNBOOK.md#policy-webhook-delivery-and-recovery)
+for retry limits, deactivation, receiver deduplication and rollback implications,
+and run the [disposable drill](operations/STAGING_DRILLS.md#webhook-ownership-and-receiver-recovery).
+
 ## Unreleased SAML provider change
 
 The current source uses AWS-LC for SAML on every release target, including non-FIPS Windows x86_64 MSVC. The complete application lock excludes `rsa`, and advisory checks run without a vulnerability exception. This change is unreleased; [the provider checkpoint](operations/evidence/SAML_PROVIDER_2026-10-06.md) records Windows checks and live Keycloak acceptance. The candidate pull request must also pass native verification on all four release platforms.
