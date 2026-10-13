@@ -60,6 +60,12 @@ The customer panel at `/customer` requires an active organization, workspace mem
 
 The [identity interoperability checks](operations/IDENTITY_INTEROPERABILITY.md) separate local fixtures from external discovery probes and customer pilot acceptance.
 
+For OIDC, `/customer` offers sign-in using the organization and workspace IDs
+provided by an administrator. See [Keycloak OIDC Console acceptance](operations/KEYCLOAK_OIDC_ACCEPTANCE.md)
+for client setup, optional private-CA trust, browser-bound callbacks, session
+rotation and the reproducible vendor drill. Console logout revokes the local
+session; it does not terminate the identity provider's SSO session.
+
 ## 4. Plan a networked deployment
 
 The local SQLite mode is for one instance. For multiple Gateway replicas, configure PostgreSQL as the control-plane store and run `llm-firewall migrate` with a migration database role before starting runtime replicas. Use a separate least-privileged runtime role. Shared Redis is optional for cross-replica rate and spend admission windows; it is not the immutable usage ledger. Review the deployment templates under `deploy/` and run their checks for your chosen environment.

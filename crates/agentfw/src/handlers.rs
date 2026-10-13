@@ -23,16 +23,14 @@ use crate::spans::SpanCache;
 
 /// Turn a judgement plus the rule's declared fallback into a final verdict.
 ///
-/// `Injection` always lands on `Ask` — the judge may only *tighten*, never soften.
-/// Everything else (ordinary documentation, or any judge failure) takes the fallback
-/// the rule declared. A missing fallback resolves to `Allow`, never a block: this
-/// firewall never invents a denial from an absent optional dependency. Pure, so the
-/// policy is testable without a server.
+/// Delegate to the shared production resolver. Injection can tighten Allow to Ask;
+/// Deny is preserved. Missing or recursive fallbacks require Ask.
 pub fn resolve_escalation(j: Judgement, fallback: Option<Verdict>) -> Verdict {
-    match j {
-        Judgement::Injection => Verdict::Ask,
-        Judgement::Documentation | Judgement::Unavailable(_) => fallback.unwrap_or(Verdict::Allow),
-    }
+    soup_wall_agent::resolution::resolve(
+        Verdict::Escalate,
+        fallback,
+        matches!(j, Judgement::Injection),
+    )
 }
 
 /// Stable audit-log string for a verdict. Deliberately explicit rather than
@@ -240,7 +238,10 @@ pub async fn hook(
         if span.trim().is_empty() {
             // No retained content means nothing to judge — take the fallback rather
             // than asking the model about an empty string.
-            verdict = outcome.fallback.unwrap_or(Verdict::Allow);
+            verdict = resolve_escalation(
+                Judgement::Unavailable("no retained span".into()),
+                outcome.fallback,
+            );
             judged = Some("Unavailable(\"no retained span\")".into());
         } else {
             let j = st.judge.judge(&span, &source).await;
@@ -496,12 +497,11 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_fallback_resolves_to_allow_rather_than_blocking() {
-        // Unreachable — the policy parser requires a fallback on every escalate rule.
-        // If it ever happens, never invent a block from a missing field.
+    fn a_missing_fallback_requires_review() {
+        // Retains the historical missing-fallback input; the old Allow was unsafe.
         assert_eq!(
             resolve_escalation(Judgement::Unavailable("x".into()), None),
-            Verdict::Allow
+            Verdict::Ask
         );
     }
 

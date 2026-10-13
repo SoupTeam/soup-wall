@@ -142,9 +142,11 @@ mod tests {
         .unwrap();
         let report: Value = serde_json::from_slice(&std::fs::read(output).unwrap()).unwrap();
         assert_eq!(report["passes_reviewed_policy_gate"], false);
-        assert_eq!(report["counts"]["fn"], 19);
+        // Mandatory production Deny floors stop 13 of the original 19 attacks.
+        // The permissive policy remains a failed gate; retain all six misses.
+        assert_eq!(report["counts"]["fn"], 6);
         assert_eq!(report["counts"]["fp"], 0);
-        assert_eq!(report["missed_attacks"].as_array().unwrap().len(), 19);
+        assert_eq!(report["missed_attacks"].as_array().unwrap().len(), 6);
         assert_eq!(report["sessions"].as_array().unwrap().len(), 40);
         assert_eq!(
             report["policy_sha256"],
@@ -201,7 +203,9 @@ mod tests {
         assert_eq!(report["corpus_sha256"], hash(&snapshot.corpus_bytes));
         assert_eq!(report["manifest_sha256"], hash(&snapshot.manifest_bytes));
         assert_eq!(report["policy_sha256"], hash(policy));
-        assert_eq!(report["counts"]["fn"], 19);
+        // Mandatory production Deny floors stop 13 of the original 19 attacks.
+        // The permissive policy remains a failed gate; retain all six misses.
+        assert_eq!(report["counts"]["fn"], 6);
     }
 
     #[test]

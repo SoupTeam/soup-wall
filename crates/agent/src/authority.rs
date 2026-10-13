@@ -41,11 +41,27 @@ impl Authority {
         child: &str,
         requested: &[String],
     ) -> Option<Escalation> {
-        let session_grants = self.grants.entry(session.to_string()).or_default();
-        let parent_tools = session_grants.get(parent).cloned().unwrap_or_default();
-        let requested: BTreeSet<String> = requested.iter().cloned().collect();
+        if let Some(escalation) = self.check_spawn(session, parent, child, requested) {
+            return Some(escalation);
+        }
+        self.set_root(session, child, requested);
+        None
+    }
 
-        let extra: Vec<String> = requested.difference(&parent_tools).cloned().collect();
+    /// Validate proposed authority without registering it before policy approval.
+    pub fn check_spawn(
+        &self,
+        session: &str,
+        parent: &str,
+        child: &str,
+        requested: &[String],
+    ) -> Option<Escalation> {
+        let parent_tools = self.grants.get(session).and_then(|s| s.get(parent));
+        let requested: BTreeSet<String> = requested.iter().cloned().collect();
+        let extra: Vec<String> = requested
+            .into_iter()
+            .filter(|tool| !parent_tools.is_some_and(|tools| tools.contains(tool)))
+            .collect();
         if !extra.is_empty() {
             return Some(Escalation {
                 agent: child.to_string(),
@@ -53,7 +69,6 @@ impl Authority {
                 extra,
             });
         }
-        session_grants.insert(child.to_string(), requested);
         None
     }
 

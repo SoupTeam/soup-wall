@@ -81,6 +81,8 @@ For a local, single-instance operator console, set `tenant_store.enabled: true` 
 
 The customer workspace at `/customer` requires configured OIDC or SAML federation and an active membership; there is no local password login. This source also includes an organization-scoped SCIM subset, service accounts, immutable usage events, reconciliation, quotas, retention, and an **invoice preview**. The preview is read-only and non-final. There is no final-invoice or payment-collection workflow. See [Self-hosting guide](docs/SELF_HOSTING.md) for deployment boundaries and prerequisites.
 
+The [Keycloak OIDC drill](docs/operations/KEYCLOAK_OIDC_ACCEPTANCE.md) reproduces genuine browser login and the Console session lifecycle on disposable Linux/Docker with a pinned provider image. Its dated evidence covers synthetic local identities and SQLite; customer identity deployments still require their own acceptance.
+
 ## What is in the workspace
 
 | Crate | Purpose |
