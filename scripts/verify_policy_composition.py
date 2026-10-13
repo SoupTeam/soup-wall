@@ -51,7 +51,7 @@ def main():
         ["cargo", "test", "--locked", "-p", "soup-wall-agent"],
         ["cargo", "test", "--locked", "-p", "agentfw", "--lib"],
         ["cargo", "test", "--locked", "-p", "agentfw", "--test", "judge_endpoint"],
-        ["cargo", "test", "--locked", "-p", "agentfw", "--test", "mcp_admission", "native_escalation"],
+        ["cargo", "test", "--locked", "-p", "agentfw", "--test", "native_endpoint"],
         ["cargo", "run", "--locked", "-p", "soup-wall-bench", "--", "--agent", "crates/bench/corpora/agent_sessions.jsonl", "--policy", POLICY],
     ]
     for index, command in enumerate(commands):

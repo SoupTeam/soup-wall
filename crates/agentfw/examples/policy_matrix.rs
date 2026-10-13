@@ -4,8 +4,8 @@ use agentfw::{decision, handlers::resolve_escalation, judge};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use soup_wall_agent::{
-    ActionClass, AgentEvent, AgentFirewall, AgentPolicySet, EventKind, Facet, Outcome, Provenance, Signals,
-    TaintMark, Verdict,
+    ActionClass, AgentEvent, AgentFirewall, AgentPolicySet, EventKind, Facet, Outcome, Provenance,
+    Signals, TaintMark, Verdict,
 };
 use soup_wall_core::{Finding, Severity};
 
@@ -69,13 +69,18 @@ fn run(c: &Case) -> Value {
         let mut findings = Vec::new();
         for (present, detector) in [(i.secret, "secret.synthetic"), (i.pii, "pii.synthetic")] {
             if present {
-                findings.push((Facet::ToolArgs, Finding::new(detector, Severity::High, 1.0, "synthetic")));
+                findings.push((
+                    Facet::ToolArgs,
+                    Finding::new(detector, Severity::High, 1.0, "synthetic"),
+                ));
             }
         }
         let signals = Signals {
             action_class: i.action_class,
             taint: i.taint.then(|| TaintMark {
-                source: Provenance::Network { host: "fixture.invalid".into() },
+                source: Provenance::Network {
+                    host: "fixture.invalid".into(),
+                },
                 seq: 1,
             }),
             provenance_incomplete: i.incomplete,
@@ -106,7 +111,8 @@ fn run(c: &Case) -> Value {
         }
         let mut last = None;
         for ev in &c.events {
-            last = Some(if let Some(class) = c.native.filter(|_| matches!(ev.kind, EventKind::ToolCall { .. })) {
+            let class = c.native.filter(|_| matches!(ev.kind, EventKind::ToolCall { .. }));
+            last = Some(if let Some(class) = class {
                 fw.inspect_native_call(ev, class, &c.hosts)
             } else {
                 fw.inspect(ev)
@@ -137,7 +143,12 @@ fn run(c: &Case) -> Value {
         };
         out.verdict = resolve_escalation(j, out.fallback);
     }
-    let hook = decision::decide(out.verdict, out.rule.as_deref(), out.message.as_deref(), true);
+    let hook = decision::decide(
+        out.verdict,
+        out.rule.as_deref(),
+        out.message.as_deref(),
+        true,
+    );
     let adapter = serde_json::to_value(out.adapter_response("frozen-matrix-v1")).unwrap();
     let final_name = name(hook.would_have_been);
     let expected_hook = match c.expected.as_str() {
@@ -149,7 +160,9 @@ fn run(c: &Case) -> Value {
     let passed = final_name == c.expected
         && hook.permission_decision == expected_hook
         && adapter["verdict"] == c.expected
-        && c.expected_rule.as_ref().is_none_or(|r| out.rule.as_ref() == Some(r));
+        && c.expected_rule
+            .as_ref()
+            .is_none_or(|r| out.rule.as_ref() == Some(r));
     json!({"id":c.id,"expected":c.expected,"actual":final_name,"initial":name(initial),
         "hook":hook.permission_decision,"adapter":adapter["verdict"],"rule":out.rule,
         "expected_rule":c.expected_rule,"incomplete":out.provenance_incomplete,
@@ -162,13 +175,18 @@ fn main() {
     let cases: Vec<Case> = serde_json::from_slice(&std::fs::read(&args[1]).unwrap()).unwrap();
     assert!(!cases.is_empty());
     let mut ids = std::collections::HashSet::new();
-    let rows: Vec<Value> = cases.iter().map(|c| {
-        assert!(ids.insert(&c.id), "duplicate matrix id");
-        run(c)
-    }).collect();
+    let rows: Vec<Value> = cases
+        .iter()
+        .map(|c| {
+            assert!(ids.insert(&c.id), "duplicate matrix id");
+            run(c)
+        })
+        .collect();
     let passed = rows.iter().filter(|r| r["passed"] == true).count();
     let report = json!({"total":rows.len(),"passed":passed,"cases":rows});
     std::fs::write(&args[2], serde_json::to_vec_pretty(&report).unwrap()).unwrap();
     println!("policy matrix: {passed}/{}", cases.len());
-    if passed != cases.len() { std::process::exit(1); }
+    if passed != cases.len() {
+        std::process::exit(1);
+    }
 }

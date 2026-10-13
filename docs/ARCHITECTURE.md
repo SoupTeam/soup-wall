@@ -183,6 +183,11 @@ the former missing-fallback Allow, unresolved-hook defer, softened Deny, ignored
 false destination condition and premature child registration. Two unit assertions
 for the old unsafe fallback/boundary behavior change alongside the production fix;
 these are documented defect corrections, not relabelled evaluation corpus entries.
+The former judge transport test's credential-path call now meets a mandatory hard
+Deny and is retained verbatim as `historical-judge-credential-overlap`. Transport
+tests use an ordinary report file to continue exercising actual judge responses;
+their fallback expectations are unchanged. The initial failing CI evidence remains
+in PR history. No shipped corpus input or label is changed.
 The matrix is a synthetic component contract, not held-out accuracy or full runtime
 effectiveness acceptance. Independent integration acceptance remains separate.
 

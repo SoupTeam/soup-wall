@@ -267,14 +267,14 @@ impl AgentFirewall {
                 ..
             } => {
                 let parent = ev.parent.clone().unwrap_or_else(|| ev.agent.clone());
-                let mut candidate = self.authority.clone();
-                if candidate
-                    .spawn(&ev.session, &parent, name, granted_tools)
+                if self
+                    .authority
+                    .check_spawn(&ev.session, &parent, name, granted_tools)
                     .is_some()
                 {
                     signals.subagent_escalation = true;
                 } else {
-                    proposed_authority = Some(candidate);
+                    proposed_authority = Some((parent, name.clone(), granted_tools.clone()));
                 }
             }
             _ => {}
@@ -292,8 +292,8 @@ impl AgentFirewall {
 
         // An unapproved spawn must not leave an effective child grant behind.
         if verdict == Verdict::Allow {
-            if let Some(candidate) = proposed_authority {
-                self.authority = candidate;
+            if let Some((parent, child, tools)) = proposed_authority {
+                let _ = self.authority.spawn(&ev.session, &parent, &child, &tools);
             }
         }
 
