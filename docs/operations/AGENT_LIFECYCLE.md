@@ -20,7 +20,7 @@ agentfw lifecycle status
 On macOS, use `shasum -a 256 target/release/agentfw` instead of `sha256sum`.
 On Windows, use `Get-FileHash -Algorithm SHA256 .\agentfw.exe` and pass the
 lowercase digest to `agentfw.exe lifecycle install`. Use a build made for the
-same host architecture. A candidate is capped at 256 MiB and must match the
+same host architecture. A candidate is capped at 512 MiB and must match the
 operator-supplied digest before it enters managed storage.
 
 ## Routine operations

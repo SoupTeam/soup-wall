@@ -35,6 +35,24 @@ fn status(profile: &Path) -> Status {
     serde_json::from_str(&success(profile, &["status"])).unwrap()
 }
 
+fn profile_accessible(home: &Path) -> bool {
+    #[cfg(windows)]
+    if let Err(error) = Manager::new(home).status() {
+        assert!(
+            error.to_string().contains("untrusted owner: S-1-5-32-544"),
+            "unexpected profile error: {error:#}"
+        );
+        assert!(!home.join("versions/lifecycle.json").exists());
+        eprintln!(
+            "Windows runner uses an Administrators-owned profile; lifecycle access was refused"
+        );
+        return false;
+    }
+    #[cfg(not(windows))]
+    let _ = home;
+    true
+}
+
 fn candidate(dir: &Path, name: &str, append: &[u8]) -> (PathBuf, String) {
     let path = dir.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
     fs::copy(env!("CARGO_BIN_EXE_agentfw"), &path).unwrap();
@@ -56,6 +74,9 @@ fn managed_lifecycle_restores_last_working_version() {
     let profile = dir.path().join("profile");
     let home = profile.join(".agentfw");
     fs::create_dir_all(&home).unwrap();
+    if !profile_accessible(&home) {
+        return;
+    }
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     drop(listener);
@@ -175,6 +196,9 @@ fn managed_lifecycle_restores_last_working_version() {
 fn managed_storage_rejects_unsafe_inputs_and_preserves_foreign_files() {
     let dir = tempdir().unwrap();
     let home = dir.path().join(".agentfw");
+    if !profile_accessible(&home) {
+        return;
+    }
     let manager = Manager::new(&home);
     let candidate = dir.path().join("candidate");
     fs::write(&candidate, b"candidate").unwrap();
@@ -195,6 +219,9 @@ fn managed_storage_rejects_unsafe_inputs_and_preserves_foreign_files() {
 fn recovery_restores_the_version_before_an_interrupted_upgrade() {
     let dir = tempdir().unwrap();
     let home = dir.path().join(".agentfw");
+    if !profile_accessible(&home) {
+        return;
+    }
     let manager = Manager::new(&home);
     let first = dir.path().join("first");
     let second = dir.path().join("second");
@@ -222,6 +249,9 @@ fn recovery_restores_the_version_before_an_interrupted_upgrade() {
 fn recovery_removes_only_the_recorded_incomplete_stage() {
     let dir = tempdir().unwrap();
     let home = dir.path().join(".agentfw");
+    if !profile_accessible(&home) {
+        return;
+    }
     let manager = Manager::new(&home);
     let candidate = dir.path().join("candidate");
     fs::write(&candidate, b"candidate").unwrap();
@@ -252,6 +282,9 @@ fn an_unowned_listener_is_reported_and_never_stopped() {
     let dir = tempdir().unwrap();
     let home = dir.path().join(".agentfw");
     fs::create_dir_all(&home).unwrap();
+    if !profile_accessible(&home) {
+        return;
+    }
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     fs::write(home.join("config.yaml"), format!("port: {port}\n")).unwrap();

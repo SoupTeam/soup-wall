@@ -293,6 +293,8 @@ jobs:
       # Each MCP case owns real processes and protected profile files. Avoid a
       # startup burst on Windows; explicit within-case concurrency remains tested.
       - run: cargo test --locked -p agentfw -- --test-threads=1
+      - name: Record Windows lifecycle profile ownership result
+        run: cargo test --locked -p agentfw --test lifecycle -- --test-threads=1 --nocapture
       - name: Native Windows MCP fixture storage and harness checks
         run: python -m unittest discover -s scripts/tests -p 'test_windows*.py' -v
       - run: cargo build --locked -p agentfw --bin agentfw

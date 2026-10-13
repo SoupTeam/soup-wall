@@ -10,7 +10,7 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 const MANIFEST: &str = "lifecycle.json";
-const MAX_CANDIDATE_BYTES: u64 = 256 * 1024 * 1024;
+const MAX_CANDIDATE_BYTES: u64 = 512 * 1024 * 1024;
 const START_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -607,7 +607,7 @@ impl Manager {
         let length = fs::metadata(candidate)?.len();
         ensure!(
             length > 0 && length <= MAX_CANDIDATE_BYTES,
-            "candidate size must be between 1 and 256 MiB"
+            "candidate size must be between 1 and 512 MiB"
         );
         let file_name = format!("agentfw-{version}{}", std::env::consts::EXE_SUFFIX);
         let target = self.root.join(&file_name);
