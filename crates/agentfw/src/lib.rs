@@ -6,6 +6,7 @@
 
 pub mod audit;
 pub mod config;
+pub mod managed_policy;
 pub mod decision;
 pub mod grant;
 pub mod handlers;
