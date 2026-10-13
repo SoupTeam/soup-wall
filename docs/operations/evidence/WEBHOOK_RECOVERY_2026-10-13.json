@@ -1,0 +1,334 @@
+{
+  "schema_version": 1,
+  "scope": "SOU-33 local webhook ownership and recovery; not full Phase 6 deployment acceptance",
+  "tested_source_commit": "108511a88ba7a7d047ff5568b4676123424dc507",
+  "source_clean": true,
+  "base_commit": "b6075bd6698fe5cbfe65fffb29803749f3beb670",
+  "configuration": {
+    "os": "Darwin 25.3.0 arm64",
+    "rustc": "1.99.0 (b940084d7 2026-09-28)",
+    "cargo": "1.99.0 (5f94df478 2026-08-27)",
+    "python": "3.14.3",
+    "postgresql": "18.3 Homebrew, fresh disposable loopback cluster",
+    "ci_postgresql": "16-alpine; CI result tracked on the PR",
+    "cargo_lock_sha256": "b47634e7508864daa1df5826433f4cc31d967b013e5719dd09f3ab453f38618a",
+    "cargo_profile_dev_debug": 0,
+    "cargo_profile_test_debug": 0,
+    "cargo_incremental": 0,
+    "models_or_paid_receivers_used": false,
+    "production_signing_keys_or_customer_data_used": false
+  },
+  "runtime_verification": {
+    "source_commit": "108511a88ba7a7d047ff5568b4676123424dc507",
+    "source_clean_before": true,
+    "cargo_lock_sha256": "b47634e7508864daa1df5826433f4cc31d967b013e5719dd09f3ab453f38618a",
+    "started_at_utc": "2026-10-13T12:21:18.335015+00:00",
+    "checks": [
+      {
+        "name": "fmt",
+        "command": [
+          "cargo",
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 0.571,
+        "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "webhook-fast",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "-p",
+          "llm-firewall",
+          "--lib",
+          "webhook_"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 12.408,
+        "log_sha256": "9bf32a239e6117bc924a580375cd79649bf45800a0d282156e467f9c1c22fff5"
+      },
+      {
+        "name": "webhook-postgres",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "-p",
+          "llm-firewall",
+          "--lib",
+          "tenant_store::webhook_recovery_tests::postgres_webhook_recovery_and_fenced_completion",
+          "--",
+          "--ignored",
+          "--exact",
+          "--nocapture"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 0.51,
+        "log_sha256": "33ad15a9ae3cb8d79c97b5f116925e40f2070a85d7d488136fb27e6fc9107cd7"
+      },
+      {
+        "name": "webhook-receiver",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "-p",
+          "llm-firewall",
+          "--lib",
+          "tenant_store::webhook_delivery_tests::webhook_receiver_recovery_demo",
+          "--",
+          "--ignored",
+          "--exact",
+          "--nocapture"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 43.625,
+        "log_sha256": "2ed02f74a3b5100147200056576b350f7f029ad132bbf86dff2dc203237cfa2c"
+      },
+      {
+        "name": "clippy",
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--offline",
+          "--workspace",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 6.287,
+        "log_sha256": "5c936c0c6be8686fa88b6b81925c87db7baa02c144a12d0639327c6f267e3012"
+      },
+      {
+        "name": "workspace",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--workspace"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 71.807,
+        "log_sha256": "1b2924b584b2599e857279a28194ad7dd7a02b085ff583aee5e2d8a9232fb404"
+      }
+    ],
+    "source_clean_after": true,
+    "finished_at_utc": "2026-10-13T12:23:33.573357+00:00"
+  },
+  "python_verification": {
+    "source_commit": "108511a88ba7a7d047ff5568b4676123424dc507",
+    "source_clean_before": true,
+    "cargo_lock_sha256": "b47634e7508864daa1df5826433f4cc31d967b013e5719dd09f3ab453f38618a",
+    "started_at_utc": "2026-10-13T12:23:38.454303+00:00",
+    "checks": [
+      {
+        "name": "python-tests",
+        "command": [
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "scripts/tests",
+          "-p",
+          "test_*.py",
+          "-v"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 10.96,
+        "log_sha256": "010eb570e3dc3b1ca790e91321ccf3ad715e13cb93c924c1adece5682d2ced11"
+      },
+      {
+        "name": "python-benchmarks",
+        "command": [
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "scripts/benchmarks",
+          "-p",
+          "test_*.py",
+          "-v"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 5.639,
+        "log_sha256": "c38fb60b2ad2c7eafdfaa914dd2b21e76e16b2064cacb1155bb7ba602d1f6a12"
+      },
+      {
+        "name": "docs",
+        "command": [
+          "python3",
+          "scripts/check_docs.py"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 0.255,
+        "log_sha256": "bc930402b8863177e10e4fbc7e0f3ddbd355079955fdd8b8ad77162db71e3b60"
+      }
+    ],
+    "source_clean_after": true,
+    "finished_at_utc": "2026-10-13T12:23:55.333914+00:00"
+  },
+  "postgres_compatibility": {
+    "source_commit": "108511a88ba7a7d047ff5568b4676123424dc507",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--offline",
+      "-p",
+      "llm-firewall",
+      "--lib",
+      "tenant_store::tests::postgres_control_plane_persists_tenants_tokens_policies_and_audit",
+      "--",
+      "--ignored",
+      "--exact",
+      "--nocapture"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.68,
+    "log_sha256": "fb15f6ea9bb3cda3366c6bc31f789bdec28b854b6a68d5d5652ce95f8d8426d6"
+  },
+  "baseline": {
+    "source_commit": "b6075bd6698fe5cbfe65fffb29803749f3beb670",
+    "production_code_unchanged": true,
+    "test_overlay_sha256": "1b3b4970156c4946f922a0267057b9147db9bb72afac9df676792c64b32c30d4",
+    "exit_code": 101,
+    "passed": 0,
+    "failed": 2,
+    "sqlite_observed": "Delivered -> Pending after stale failure; attempt 2, HTTP503",
+    "postgresql_observed": "Delivered -> Pending after stale failure; attempt 2, HTTP503",
+    "lease_expiry_injection": "test-only SQL timestamp adjustment",
+    "sanitized_log_sha256": "fe4ced2e6a290964ab65ce92480fa0c9ec074a18a9a568697778c2930df591cd"
+  },
+  "workspace_totals": {
+    "passed": 944,
+    "failed": 0,
+    "ignored": 8
+  },
+  "receiver": {
+    "attempt_counts": {
+      "http_retry": 2,
+      "interrupted": 2,
+      "useful": 1
+    },
+    "authenticated_receipts": 6,
+    "deduplication_key": [
+      "authenticated tenant_id",
+      "authenticated event_id"
+    ],
+    "delivered_rows": 3,
+    "duplicates_without_repeated_effect": 2,
+    "elapsed_ms": 43406,
+    "lease_clock": "real",
+    "process_interrupted_after_receiver_success_before_store_completion": true,
+    "production_egress_validation_bypassed_only_in_test_module": true,
+    "public_https_deployment_acceptance": false,
+    "receipts": [
+      {
+        "body_sha256": "a959ec3d7a3aee99ddc75833be69f391175c229e9322a7efb06f3259b4dca324",
+        "delivery_id": "webhook_delivery_G2OKlnnsBNjYvQGXEqNhNw",
+        "duplicate": false,
+        "effect_applied": true,
+        "event_id": "security_event_ZjgDhuxncc9wDOEFxxbEEQ",
+        "scenario": "useful",
+        "signature_valid": true,
+        "status": 200
+      },
+      {
+        "body_sha256": "7434c320b95eef66200b025bf19a262c25bcf6254d1e4be3f266612df399ce17",
+        "delivery_id": "webhook_delivery_G2OKlnnsBNjYvQGXEqNhNw",
+        "duplicate": false,
+        "effect_applied": false,
+        "event_id": "",
+        "scenario": "tampered",
+        "signature_valid": false,
+        "status": 401
+      },
+      {
+        "body_sha256": "a959ec3d7a3aee99ddc75833be69f391175c229e9322a7efb06f3259b4dca324",
+        "delivery_id": "altered-unsigned-delivery",
+        "duplicate": true,
+        "effect_applied": false,
+        "event_id": "security_event_ZjgDhuxncc9wDOEFxxbEEQ",
+        "scenario": "header-replay",
+        "signature_valid": true,
+        "status": 200
+      },
+      {
+        "body_sha256": "7c5b9bf634856a1733173d45188273f4eeaf83cb8def3b179c9fc3052346d1d7",
+        "delivery_id": "webhook_delivery_FQIBmcpu0C0_g3UlC7m-mA",
+        "duplicate": false,
+        "effect_applied": false,
+        "event_id": "security_event_Uac393qccw8AlCyrMY2aPQ",
+        "scenario": "retry",
+        "signature_valid": true,
+        "status": 503
+      },
+      {
+        "body_sha256": "7c5b9bf634856a1733173d45188273f4eeaf83cb8def3b179c9fc3052346d1d7",
+        "delivery_id": "webhook_delivery_FQIBmcpu0C0_g3UlC7m-mA",
+        "duplicate": false,
+        "effect_applied": true,
+        "event_id": "security_event_Uac393qccw8AlCyrMY2aPQ",
+        "scenario": "retry",
+        "signature_valid": true,
+        "status": 200
+      },
+      {
+        "body_sha256": "4c5d6fac21a008b53489b5b3a6a14e9dcf405def2e16c340da051545350d7458",
+        "delivery_id": "webhook_delivery_ATbgrAE8GWLELkn2PwEAOg",
+        "duplicate": false,
+        "effect_applied": true,
+        "event_id": "security_event_Hu994AN6VrbyetGVL91gaw",
+        "scenario": "interrupted",
+        "signature_valid": true,
+        "status": 200
+      },
+      {
+        "body_sha256": "4c5d6fac21a008b53489b5b3a6a14e9dcf405def2e16c340da051545350d7458",
+        "delivery_id": "webhook_delivery_ATbgrAE8GWLELkn2PwEAOg",
+        "duplicate": true,
+        "effect_applied": false,
+        "event_id": "security_event_Hu994AN6VrbyetGVL91gaw",
+        "scenario": "interrupted",
+        "signature_valid": true,
+        "status": 200
+      }
+    ],
+    "receiver_dedup_storage": "in-memory fixture; receiver remains running",
+    "receiver_effects": 3,
+    "receiver_receipt_storage": "durable JSONL",
+    "receiver_receipts": 7,
+    "receiver_restart_acceptance": false,
+    "result": "pass",
+    "retry_clock": "real",
+    "scenario": "webhook_receiver_recovery_demo",
+    "schema_version": 1,
+    "stable_delivery_event_ids_and_payloads_across_retries": true,
+    "store": "sqlite",
+    "tampered_body_rejections": 1,
+    "transport": "cfg(test)-only loopback HTTP; shared production request/signature helper",
+    "unsigned_delivery_header_replay_deduplicated": true
+  },
+  "limitations": [
+    "Loopback HTTP transport seam is available only in the test binary; public HTTPS/TLS deployment not tested.",
+    "Receiver stays running; fixture deduplication map is in memory, while receipts are flushed to disk.",
+    "PostgreSQL lifecycle tests use real PostgreSQL; receiver process restart demo uses SQLite.",
+    "Regular workspace run ignores external service/model/identity tests; PostgreSQL suites and receiver demo were run explicitly.",
+    "Native Windows/DPAPI and optional installed AgentDojo runtime Python tests remain skipped.",
+    "Review, remote CI and merge are separate from these local results."
+  ]
+}

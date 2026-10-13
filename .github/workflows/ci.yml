@@ -376,6 +376,22 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      # Run on the fresh service database before suites which leave queued events.
+      - name: Verify webhook ownership, recovery and populated migrations
+        run: cargo test --locked -p llm-firewall --lib tenant_store::webhook_recovery_tests::postgres_webhook_recovery_and_fenced_completion -- --ignored --exact --nocapture
+        env:
+          LLM_FW_TEST_POSTGRES_URL: postgresql://firewall:firewall@127.0.0.1:5432/firewall?sslmode=disable
+      - name: Verify independent webhook receipts and interrupted sender recovery
+        run: cargo test --locked -p llm-firewall --lib tenant_store::webhook_delivery_tests::webhook_receiver_recovery_demo -- --ignored --exact --nocapture
+        env:
+          SOUP_WALL_WEBHOOK_EVIDENCE: ${{ github.workspace }}/target/webhook-receiver-evidence.json
+      - name: Retain sanitized webhook receiver evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: webhook-receiver-recovery
+          path: target/webhook-receiver-evidence.json
+          if-no-files-found: ignore
       - run: cargo test --locked -p llm-firewall tenant_store::tests::postgres_control_plane_persists_tenants_tokens_policies_and_audit -- --ignored
         env:
           LLM_FW_TEST_POSTGRES_URL: postgresql://firewall:firewall@127.0.0.1:5432/firewall?sslmode=disable
