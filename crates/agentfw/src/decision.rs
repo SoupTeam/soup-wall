@@ -49,6 +49,7 @@ pub fn decide(
     message: Option<&str>,
     enforce: bool,
 ) -> Decision {
+    let verdict = soup_wall_agent::resolution::resolve(verdict, None, false);
     let reason = match (rule, message) {
         (Some(r), Some(m)) => Some(format!("[{r}] {m}")),
         (Some(r), None) => Some(format!("[{r}]")),
@@ -69,11 +70,7 @@ pub fn decide(
         Verdict::Allow => ("defer", None),
         Verdict::Ask => ("ask", reason),
         Verdict::Deny => ("deny", reason),
-        // The handler is responsible for resolving `Escalate` (via the judge, or
-        // its rule's `fallback`) before this function ever sees it. If it somehow
-        // arrives here anyway, the only safe behaviour is no opinion — never widen
-        // it into `deny` or narrow it into `allow` on its behalf.
-        Verdict::Escalate => ("defer", None),
+        Verdict::Escalate => unreachable!("resolution always returns a concrete verdict"),
     };
 
     Decision {
@@ -170,10 +167,9 @@ mod tests {
 
     #[test]
     fn escalate_must_be_resolved_before_reaching_a_decision() {
-        // `decide` should never see Escalate — the handler resolves it first. If it
-        // ever does, treat it as the safest thing that cannot be wrong: no opinion.
+        // Historical unresolved-Escalate input: review replaces the old defer.
         let d = decide(Verdict::Escalate, Some("r"), Some("m"), true);
-        assert_eq!(d.permission_decision, "defer");
+        assert_eq!(d.permission_decision, "ask");
     }
 
     #[test]

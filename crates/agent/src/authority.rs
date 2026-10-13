@@ -18,7 +18,7 @@ pub struct Escalation {
 }
 
 /// Per-session record of which agent holds which tools.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Authority {
     grants: HashMap<SessionId, HashMap<AgentId, BTreeSet<String>>>,
 }

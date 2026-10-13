@@ -45,15 +45,11 @@ impl Outcome {
     /// deployment credentials. An `Escalate` that somehow reaches this boundary is
     /// tightened to its declared fallback, or to `Ask` when no fallback exists.
     pub fn adapter_response(&self, policy_version: impl Into<String>) -> DecisionResponse {
-        let verdict = match self.verdict {
+        let verdict = match crate::resolution::resolve(self.verdict, self.fallback, false) {
             Verdict::Allow => AdapterVerdict::Allow,
             Verdict::Ask => AdapterVerdict::Ask,
             Verdict::Deny => AdapterVerdict::Deny,
-            Verdict::Escalate => match self.fallback.unwrap_or(Verdict::Ask) {
-                Verdict::Allow => AdapterVerdict::Allow,
-                Verdict::Ask | Verdict::Escalate => AdapterVerdict::Ask,
-                Verdict::Deny => AdapterVerdict::Deny,
-            },
+            Verdict::Escalate => unreachable!("resolution always returns a concrete verdict"),
         };
         DecisionResponse {
             contract_version: CONTRACT_VERSION.into(),
@@ -188,6 +184,7 @@ impl AgentFirewall {
             _ => {}
         }
 
+        let mut proposed_authority = None;
         // 1. Run core's detectors over every projected facet.
         let projected = facets(ev);
         let mut findings: Vec<(Facet, Finding)> = Vec::new();
@@ -238,6 +235,9 @@ impl AgentFirewall {
                 self.taint.record(&ev.session, ev.seq, &source, content);
             }
             EventKind::ToolCall { tool, args } => {
+                if ev.parent.is_some() && !self.authority.holds(&ev.session, &ev.agent, tool) {
+                    signals.subagent_escalation = true;
+                }
                 signals.action_class = Some(native.map_or_else(
                     || classify(tool, args),
                     |(baseline, _)| classify_with_baseline(args, baseline),
@@ -267,12 +267,14 @@ impl AgentFirewall {
                 ..
             } => {
                 let parent = ev.parent.clone().unwrap_or_else(|| ev.agent.clone());
-                if self
-                    .authority
+                let mut candidate = self.authority.clone();
+                if candidate
                     .spawn(&ev.session, &parent, name, granted_tools)
                     .is_some()
                 {
                     signals.subagent_escalation = true;
+                } else {
+                    proposed_authority = Some(candidate);
                 }
             }
             _ => {}
@@ -287,6 +289,13 @@ impl AgentFirewall {
             message,
             fallback,
         } = self.policy.evaluate(&signals);
+
+        // An unapproved spawn must not leave an effective child grant behind.
+        if verdict == Verdict::Allow {
+            if let Some(candidate) = proposed_authority {
+                self.authority = candidate;
+            }
+        }
 
         Outcome {
             verdict,

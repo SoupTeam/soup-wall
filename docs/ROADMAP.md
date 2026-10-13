@@ -180,6 +180,11 @@ Build on the corrected first-match precedence rather than re-opening the same
 known defect as new work. Review combined taint, secret/PII findings, destinations,
 sensitive paths, manifest drift and action classes.
 
+The [production composition contract](ARCHITECTURE.md#frozen-policy-composition)
+defines required floors and judge failure behavior. Its frozen matrix and
+one-command exact-source report cover this component; independent final runtime
+acceptance remains required.
+
 **Ready when:**
 
 - An executable reviewed matrix covers overlaps with no judge, judge outcomes,

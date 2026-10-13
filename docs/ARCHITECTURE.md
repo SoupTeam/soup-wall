@@ -102,6 +102,90 @@ Tracker unit tests assert both map and queue bounds through repeated overflow.
 These are component checks, not certification of the complete Phase 2 runtime.
 The existing CI test job retains the focused test log as an artifact.
 
+## Frozen policy composition
+
+The production contract has three stages: derive signals in `AgentFirewall`,
+evaluate the operator's first matching YAML rule (or default), and apply required
+safety floors before final resolution. The YAML schema and rule order are unchanged.
+Later arbitrary operator rules are not scanned for a stronger verdict. Required
+hard refusals reuse the shipped policy's Deny predicates, independently of an
+earlier custom Allow/Ask/Escalate. A selected Deny retains its original reason.
+
+| Evidence | Required result / precedence |
+| --- | --- |
+| Retained untrusted taint + destructive or privilege-changing action | Deny |
+| Delegated tool outside its registered grant, or spawn beyond parent's grant | Deny |
+| Secret finding in tool arguments + Network or more severe action | Deny |
+| Incomplete provenance + protected action | Ask floor, below every Deny |
+| PII egress, sensitive-path egress, unknown destination, manifest drift/shadow | Shipped Ask rules precede taint escalation; operator YAML remains configurable |
+| Taint alone + ordinary side effect | Shipped Escalate with explicit Allow fallback |
+| Ordinary nonsensitive read, known benign destination | Existing benign behavior |
+
+An `egress_not_allowlisted: false` condition requires a nonempty destination list
+whose every host is allowlisted. Missing destinations cannot satisfy positive
+allowlist evidence. Extraction completeness and enforceable resource grants remain
+the selected executor's responsibility; a library Allow is not a resource grant.
+This increment does not change native/MCP admission wiring or resource contracts.
+
+Delegation is recorded only after the spawn's production policy returns Allow.
+Ask, Deny and unresolved Escalate do not register proposed child rights. Calls
+carrying a parent identity must hold their registered tool grant. Root registration
+and authenticated parent/agent identity remain host responsibilities; callers must
+not erase the parent field or reuse stale identity to bypass delegated checks.
+Existing session cleanup and isolation apply. No approval-grant format changes.
+
+### Judge and final decision contract
+
+`soup_wall_agent::resolution::resolve` is used by adapter projection, hook decision
+mapping and the existing handler escalation resolver. Concrete Allow/Ask/Deny
+decisions are preserved. For Escalate:
+
+| Fallback | Documentation, disabled/no judge, invalid reply, timeout/error/unavailable | Injection |
+| --- | --- | --- |
+| Allow | Allow | Ask |
+| Ask | Ask | Ask |
+| Deny (defensive API input; YAML still rejects it) | Deny | Deny |
+| Missing or recursive Escalate | Ask | Ask |
+
+The empty-span path uses this same resolver without contacting a model. An
+unresolved Escalate reaching the hook boundary requires Ask rather than defer.
+Hook Allow still maps to defer, preserving the operator's permission flow; shadow
+mode still does not enforce. Native judge configuration remains unsupported: this
+does not enable a provider, add paid calls or alter native wiring.
+
+### Executable matrix and evidence
+
+Run from the repository root with Git, Python and Cargo available:
+
+```sh
+python scripts/verify_policy_composition.py
+```
+
+The [frozen matrix](../crates/agentfw/tests/fixtures/policy_matrix_v1.json) contains
+controlled signal overlaps, actual engine event sequences, handshake and native
+library calls, and judge/final-boundary cases. The
+[driver](../crates/agentfw/examples/policy_matrix.rs) invokes production APIs; it
+does not implement replacement policy logic. The command also runs existing Agent
+and daemon unit suites, loopback mock judge endpoint tests, native escalation
+regressions, and the unchanged shipped agent-session corpus. Mock endpoint tests
+exercise real invalid responses, HTTP errors, disabled judges and timeout behavior;
+the matrix's failure labels alone do not simulate transport.
+
+`target/policy-composition/` contains expected/actual rows, command exits and logs,
+HEAD/tree, dirty state, per-source-file hashes, a combined source digest and separate
+policy/input SHA256 hashes. CI retains this directory as `policy-composition`.
+CI checkout may be a PR merge commit; use the recorded SHA, not a branch label.
+Tracked local edits are covered by content hashes; commit new files before recording
+delivery evidence. A failing command makes the report fail and its log is retained.
+
+Historical fixtures and corpus labels are preserved. New rows explicitly record
+the former missing-fallback Allow, unresolved-hook defer, softened Deny, ignored
+false destination condition and premature child registration. Two unit assertions
+for the old unsafe fallback/boundary behavior change alongside the production fix;
+these are documented defect corrections, not relabelled evaluation corpus entries.
+The matrix is a synthetic component contract, not held-out accuracy or full runtime
+effectiveness acceptance. Independent integration acceptance remains separate.
+
 ## Where to work next
 
 Add a detector in `crates/core`, an agent decision rule in `crates/agent`, or a provider adapter in `crates/proxy`. For every enforcement change, add a test for the unsafe action and a benign case that should still succeed. Run the [full workspace checks](../CONTRIBUTING.md) and the relevant policy regression corpus before changing a default.
