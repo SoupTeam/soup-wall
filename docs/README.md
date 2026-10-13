@@ -21,6 +21,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | Guide | Purpose |
 | --- | --- |
 | [Self-hosting](SELF_HOSTING.md) | Build and run the Agent, Gateway and optional Console |
+| [Managed Agent lifecycle](operations/AGENT_LIFECYCLE.md) | Install, verify, upgrade, roll back and remove a user-scoped Agent |
 | [Upgrading](UPGRADING.md) | Existing deployment compatibility and migration guidance |
 | [Production runbook](operations/PRODUCTION_RUNBOOK.md) | Readiness, operations, alerts and recovery |
 | [Staging drills](operations/STAGING_DRILLS.md) | Explicit dependency and restore acceptance procedures |
