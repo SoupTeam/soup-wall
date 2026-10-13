@@ -1,0 +1,158 @@
+{
+  "schema_version": 1,
+  "scope": "Disposable Keycloak OIDC and Console browser acceptance",
+  "started_at_utc": "2026-10-13T14:32:19.324116+00:00",
+  "artifact_label": "2ffe8200547bd2107de5b63d30f2cbfc24871f66",
+  "checks": [
+    {
+      "name": "pinned-container-image-pulled-by-digest",
+      "passed": true
+    },
+    {
+      "name": "real-keycloak-https-discovery",
+      "passed": true
+    },
+    {
+      "name": "local-membership-bootstrap",
+      "passed": true
+    },
+    {
+      "name": "gateway-ready",
+      "passed": true
+    },
+    {
+      "name": "production-start-redirect",
+      "passed": true
+    },
+    {
+      "name": "callback-without-originating-browser-rejected-before-state-consumption",
+      "passed": true
+    },
+    {
+      "name": "invalid-state-refused-by-production-callback",
+      "passed": true
+    },
+    {
+      "name": "separate-vendor-code-issued-for-pkce-negative",
+      "passed": true
+    },
+    {
+      "name": "real-keycloak-rejects-wrong-pkce-verifier",
+      "passed": true
+    },
+    {
+      "name": "console-login-through-real-keycloak",
+      "passed": true
+    },
+    {
+      "name": "secure-opaque-host-session-cookie",
+      "passed": true
+    },
+    {
+      "name": "authorization-callback-replay-rejected",
+      "passed": true
+    },
+    {
+      "name": "owner-can-read-owner-only-api",
+      "passed": true
+    },
+    {
+      "name": "refresh-needs-csrf",
+      "passed": true
+    },
+    {
+      "name": "csrf-protected-session-rotation",
+      "passed": true
+    },
+    {
+      "name": "rotated-cookie-invalidates-previous-session",
+      "passed": true
+    },
+    {
+      "name": "gateway-ready",
+      "passed": true
+    },
+    {
+      "name": "session-persists-across-gateway-restart",
+      "passed": true
+    },
+    {
+      "name": "console-logout-clears-workspace-ui",
+      "passed": true
+    },
+    {
+      "name": "logout-revokes-server-session",
+      "passed": true
+    },
+    {
+      "name": "logout-cookie-removed",
+      "passed": true
+    },
+    {
+      "name": "idp-owner-role-does-not-override-local-analyst",
+      "passed": true
+    },
+    {
+      "name": "analyst-denied-owner-only-api",
+      "passed": true
+    },
+    {
+      "name": "unprovisioned-idp-user-denied",
+      "passed": true
+    },
+    {
+      "name": "cross-organization-membership-denied",
+      "passed": true
+    },
+    {
+      "name": "expired-session-denied-server-side",
+      "passed": true
+    },
+    {
+      "name": "expired-session-returns-to-sign-in",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "cleanup_passed": true,
+  "platform": "posix",
+  "runtimes": {
+    "keycloak_image": "quay.io/keycloak/keycloak@sha256:ad1b0f0fa4bb5eff10f7a78eaafbb6d65b25431c1f824b0710836d74373a7dfb",
+    "keycloak_version": "26.8.0",
+    "keycloak_license": "Apache-2.0",
+    "platform": "linux/amd64"
+  },
+  "limitations": [
+    "Local synthetic realm; no customer deployment, MFA or external federation",
+    "Console logout revokes its local session; Keycloak SSO remains active",
+    "Browser trusts the ephemeral CA in its isolated HOME/NSS database",
+    "Gateway and HTTP driver verify TLS with an explicit ephemeral CA",
+    "Session expiry is advanced only in this run's disposable SQLite fixture"
+  ],
+  "gateway_sha256": "a516cbcd75abd40e6cf7fbe61839113cc006e488865aa34baa044bc0128614cc",
+  "bootstrap_helper_sha256": "36e9ac6bfc16b8b2e5bf32df65729941da28839d01948ee02149fdaf0ec0ae88",
+  "source_sha256": {
+    "scripts/keycloak-oidc-acceptance.py": "2a7df30e174e5bcafc8e6b5c03facb915ace01fe1e647cd1a5989f1cbba89ccb",
+    "scripts/keycloak-saml-acceptance.py": "9e68691adcf58bdbbc1a0b8cbdbc3742dfbfa28a0eea8c0588d78c9c60ac3008",
+    "Cargo.lock": "b47634e7508864daa1df5826433f4cc31d967b013e5719dd09f3ab453f38618a",
+    "crates/proxy/examples/keycloak-oidc-bootstrap.rs": "aa38140e05735ca5d8fbc1b7ecbd8c2875566e90ff86866c0fa026b2f38e91dc",
+    "crates/proxy/src/oidc.rs": "e0cb21fa426fdb8bc13cbb01795adce5ac06cf5f61e7389f9dc37d63f4e1a53e",
+    "crates/proxy/src/oidc_auth.rs": "1c62a1d826d5718077349b4dda703678e443c49c94873c9350c09e76530e6b61",
+    "crates/proxy/src/customer_dashboard.html": "3463b890da9a08598c84260586a9463c99a6448e4a1e7f0e42f9c744a1ac1ef5"
+  },
+  "phase": "complete",
+  "configuration": {
+    "bind": "loopback only",
+    "store": "new disposable SQLite",
+    "oidc_client": "public",
+    "flow": "authorization_code",
+    "pkce": "S256 required",
+    "https": true,
+    "gateway_certificate_verification": true,
+    "os_trust_modified": false,
+    "identity_source": "generated synthetic users",
+    "firewall_yaml_sha256": "0806f99ad2abcfaf702247a45ede56b6e2ee88aa7a710a9f6640f064305933a5",
+    "realm_configuration_sha256": "5b11cc55c2729287dbbc828d20c9e78a4b2133a62198c203af444878e4f5dd87"
+  },
+  "browser_version": "153.0.8010.12"
+}

@@ -345,6 +345,24 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn rejects_wrong_issuer_and_tampered_signature_with_other_claims_valid() {
+        let connection = connection();
+        let signer = signer();
+        let mut wrong_issuer = claims(json!("firewall-console"));
+        wrong_issuer.iss = "https://id.example.test/another-realm".into();
+        let token = signed_token(&signer, &wrong_issuer);
+        assert!(verify_id_token(&token, &signer.jwks, &connection, "expected-nonce").is_err());
+
+        let valid = signed_token(&signer, &claims(json!("firewall-console")));
+        assert!(verify_id_token(&valid, &signer.jwks, &connection, "expected-nonce").is_ok());
+        let (signed, signature) = valid.rsplit_once('.').unwrap();
+        let mut signature = URL_SAFE_NO_PAD.decode(signature).unwrap();
+        signature[0] ^= 1;
+        let tampered = format!("{signed}.{}", URL_SAFE_NO_PAD.encode(signature));
+        assert!(verify_id_token(&tampered, &signer.jwks, &connection, "expected-nonce").is_err());
+    }
+
+    #[test]
     fn rejects_nonce_audience_and_authorized_party_mismatches() {
         let connection = connection();
         let signer = signer();
