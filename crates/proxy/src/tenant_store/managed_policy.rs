@@ -477,7 +477,14 @@ mod tests {
             UnparsedPublicKey::new(&ED25519, signer.pair.public_key().as_ref())
                 .verify(&b.transcript().unwrap(), &{
                     let mut bytes = [0u8; 64];
-                    for (i, chunk) in b.signature_hex.as_bytes().as_chunks::<2>().0.iter().enumerate() {
+                    for (i, chunk) in b
+                        .signature_hex
+                        .as_bytes()
+                        .as_chunks::<2>()
+                        .0
+                        .iter()
+                        .enumerate()
+                    {
                         bytes[i] =
                             u8::from_str_radix(std::str::from_utf8(chunk).unwrap(), 16).unwrap()
                     }
