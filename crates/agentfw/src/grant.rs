@@ -313,6 +313,24 @@ impl GrantStore {
         Ok(path)
     }
 
+    /// Explicit invalidation on managed-policy activation. Any unexpected file,
+    /// symlink or failed removal blocks the switch. No silently surviving
+    /// approval can be intentionally carried into a new policy revision.
+    pub fn invalidate_all_for_policy_switch(&self) -> std::io::Result<usize> {
+        let mut removed = 0;
+        for entry in std::fs::read_dir(&self.dir)? {
+            let entry = entry?;
+            if !entry.file_type()?.is_file()
+                || entry.path().extension().and_then(|ext| ext.to_str()) != Some("json")
+            {
+                return Err(std::io::Error::other("unexpected pending grant entry"));
+            }
+            std::fs::remove_file(entry.path())?;
+            removed += 1;
+        }
+        Ok(removed)
+    }
+
     /// Every readable pending grant. Unparsable files are skipped rather than
     /// fatal: a half-written or hand-edited file must not stop a legitimate
     /// approval sitting beside it from being found.
