@@ -3,6 +3,8 @@ set -euo pipefail
 
 RECORD=$1
 MANIFEST=$2
+EXPECTED_TAG=$3
+EXPECTED_SHA=$4
 
 if [ ! -f "$RECORD" ]; then
   echo "CRITICAL: Missing acceptance record ($RECORD)"
@@ -15,6 +17,7 @@ if [ "$DECISION" != "approved" ]; then
   exit 1
 fi
 
+# SOU-26: Gate status checks
 for gate in product operator license; do
   STATUS=$(jq -r ".gates.${gate} // \"missing\"" "$RECORD")
   if [ "$STATUS" != "passed" ]; then
@@ -23,36 +26,68 @@ for gate in product operator license; do
   fi
 done
 
+# SOU-26: Evidence check
 EVIDENCE=$(jq -r '.evidence_ref // "none"' "$RECORD")
 if [ "$EVIDENCE" == "none" ] || [ -z "$EVIDENCE" ]; then
   echo "CRITICAL: Missing reviewed evidence reference"
   exit 1
 fi
 
-REC_SHA=$(jq -r '.source_sha' "$RECORD")
+# Identity bindings checks
+MAN_TAG=$(jq -r '.tag' "$MANIFEST")
+if [ "$MAN_TAG" != "$EXPECTED_TAG" ]; then
+  echo "CRITICAL: Manifest tag ($MAN_TAG) does not match expected workflow tag ($EXPECTED_TAG)"
+  exit 1
+fi
+
 MAN_SHA=$(jq -r '.source_sha' "$MANIFEST")
+if [ "$MAN_SHA" != "$EXPECTED_SHA" ]; then
+  echo "CRITICAL: Manifest source SHA ($MAN_SHA) does not match expected checkout commit ($EXPECTED_SHA)"
+  exit 1
+fi
+
+REC_SHA=$(jq -r '.source_sha' "$RECORD")
 if [ "$REC_SHA" != "$MAN_SHA" ]; then
   echo "CRITICAL: Source SHA mismatch! Expected $MAN_SHA, got $REC_SHA"
   exit 1
 fi
 
-# Inventory integrity checks
-ARCHIVE_COUNT=$(jq -r '[.checksums[] | select(endswith(".tar.gz") or endswith(".zip"))] | length' "$MANIFEST")
-SBOM_COUNT=$(jq -r '[.checksums[] | select(endswith(".cdx.json"))] | length' "$MANIFEST")
-IMAGE_COUNT=$(jq -r '[.checksums[] | select(endswith("soup-wall-image.tar"))] | length' "$MANIFEST")
+# Exact Inventory Enforcement (4 archives, 6 SBOMs, 1 OCI image)
+EXPECTED_FILENAMES=(
+  "soup-wall-${MAN_TAG}-x86_64-unknown-linux-gnu.tar.gz"
+  "soup-wall-${MAN_TAG}-aarch64-apple-darwin.tar.gz"
+  "soup-wall-${MAN_TAG}-x86_64-apple-darwin.tar.gz"
+  "soup-wall-${MAN_TAG}-x86_64-pc-windows-msvc.zip"
+  "soup-wall-core.cdx.json"
+  "soup-wall-agent.cdx.json"
+  "agentfw.cdx.json"
+  "soup-wall-adapter.cdx.json"
+  "soup-wall-bench.cdx.json"
+  "llm-firewall.cdx.json"
+  "soup-wall-image.tar"
+)
 
-if [ "$ARCHIVE_COUNT" -lt 4 ]; then
-  echo "CRITICAL: Missing platform archives in candidate (found $ARCHIVE_COUNT, expected 4)"
+TOTAL_FOUND=$(jq -r '.checksums | length' "$MANIFEST")
+if [ "$TOTAL_FOUND" -ne 11 ]; then
+  echo "CRITICAL: Candidate must contain exactly 11 distinct artifacts, found $TOTAL_FOUND"
   exit 1
 fi
-if [ "$SBOM_COUNT" -lt 6 ]; then
-  echo "CRITICAL: Missing SBOMs in candidate (found $SBOM_COUNT, expected 6)"
-  exit 1
-fi
-if [ "$IMAGE_COUNT" -lt 1 ]; then
-  echo "CRITICAL: Missing OCI image in candidate"
-  exit 1
-fi
+
+for expected_file in "${EXPECTED_FILENAMES[@]}"; do
+  # Escape file name for jq regex
+  MATCH=$(jq -r --arg file "$expected_file" '.checksums[] | select(endswith($file))' "$MANIFEST" || true)
+  
+  if [ -z "$MATCH" ] || [ $(echo "$MATCH" | wc -l) -ne 1 ]; then
+    echo "CRITICAL: Missing or duplicate required artifact: $expected_file"
+    exit 1
+  fi
+
+  HASH_PART=$(echo "$MATCH" | awk '{print $1}')
+  if ! [[ "$HASH_PART" =~ ^[a-f0-9]{64}$ ]]; then
+    echo "CRITICAL: Invalid SHA-256 digest format for $expected_file: $HASH_PART"
+    exit 1
+  fi
+done
 
 REC_HASHES=$(jq -c '.checksums | sort' "$RECORD")
 MAN_HASHES=$(jq -c '.checksums | sort' "$MANIFEST")

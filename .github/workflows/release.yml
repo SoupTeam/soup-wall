@@ -1,3 +1,9 @@
+# Build the agent, benchmark and Soup Wall Gateway from one verified tag.
+# Publish platform archives, six SBOMs, checksums and a GHCR image.
+#
+# No third-party release action: `gh` is preinstalled on every runner and the
+# token it uses is the one already scoped to this repository.
+
 name: release
 
 on:
@@ -290,12 +296,21 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG }}
+          fetch-depth: 0
+      - name: Verify Promotion Target Commit
+        id: ref
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show-ref --verify --quiet "refs/tags/${TAG}"
+          sha="$(git rev-parse HEAD)"
+          test "$sha" = "$(git rev-parse "refs/tags/${TAG}^{commit}")"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
       - name: Download Frozen Candidate
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir dist
-          # Download immutable package from the exact approved preparation run
           gh run download ${{ inputs.promote_run_id }} -n candidate-package -D dist
       - name: Verify Checksums Locally
         run: |
@@ -312,14 +327,13 @@ jobs:
              exit 1
           fi
           echo "$ACCEPTANCE_RECORD" > external-acceptance.json
-          ../scripts/validate_candidate.sh external-acceptance.json candidate-manifest.json
+          ../scripts/validate_candidate.sh external-acceptance.json candidate-manifest.json "${TAG}" "${{ steps.ref.outputs.sha }}"
       
       - name: Load and Push Container
         if: env.DRY_RUN != 'true'
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
           IMAGE_NAME="ghcr.io/${GITHUB_REPOSITORY,,}"
-          # --all preserves OCI index including attestations (SBOM/Provenance)
           skopeo copy --all oci-archive:dist/soup-wall-image.tar docker://$IMAGE_NAME:${TAG}
           if [[ "${TAG}" != *-* ]]; then
             skopeo copy --all oci-archive:dist/soup-wall-image.tar docker://$IMAGE_NAME:latest
