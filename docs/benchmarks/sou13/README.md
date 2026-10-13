@@ -1,7 +1,6 @@
 # SOU-13 family-held-out pilot (candidate integration)
 
-**Status: candidate source integration. This is not a released dataset. The 179 CP2 development cases have
-independent semantic sign-off, but no gold release has been issued.**
+**Status (2026-10-13): approved CP2 Gold Dev Export privately issued, signed and recipient-verified; final SOU-13 documentation acceptance pending. No dataset has been publicly released.**
 
 The SOU-13 Checkpoint 1 (CP1) and Checkpoint 2 (CP2) implementation, schemas, validators and tests live in
 [`eval/sou13/`](../../../eval/sou13/README.md). The directory is self-contained: its own folder is the project
@@ -9,8 +8,7 @@ root for both frozen source inventories, so no SOU-13 file shares a glob with th
 
 The repository does **not** contain the frozen CP1 records, CP2 development exports, review worksheets,
 open-question registers, split manifests, signed anchors, the sealed test split or any custodian material.
-Those artifacts remain in the owner's immutable, restricted workflow. Dataset publication and licensing are
-pending approval.
+Those artifacts remain in the owner's restricted workflow. The approved 179-case CP2 development Gold Export was delivered privately for internal training/evaluation only; public dataset publication and licensing remain unapproved.
 
 ## Contents
 
@@ -29,18 +27,20 @@ pending approval.
 
 - **Independent Dev Review Sign-off** (owner record, 2026-10-11): received for all 179 CP2 development cases,
   including the six Q-FUTURE cases and the agreed internal-read and keys-enumeration interpretations. It is a
-  confirmed semantic approval, not a gold release. Q-CP2-DECL-EVIDENCE and Q-ADMISSION have since been
-  clarified within a limited scope (see [acceptance status](ACCEPTANCE.md)).
+  confirmed semantic approval, later bound to a versioned private Gold Addendum v1. Q-CP2-DECL-EVIDENCE and
+  Q-ADMISSION were clarified within a limited scope (see [acceptance status](ACCEPTANCE.md)).
 - **Frozen CP2 development label statuses:** 173 provisional, 6 pending, 0 confirmed. These are the frozen
-  records' statuses and change only through a versioned gold release.
-- **Gold-label addenda (interface only):** future gold decisions must be issued as versioned, hash-chained
+  source records' historical statuses; confirmation is recorded in the additive, approved Gold Addendum v1.
+- **Gold-label addenda:** the approved private CP2 Gold Addendum v1 follows the versioned, hash-chained
   addenda ([`schema/gold_addendum.schema.json`](../../../eval/sou13/schema/gold_addendum.schema.json),
-  [`sou13gold/addendum.py`](../../../eval/sou13/sou13gold/addendum.py)). No addendum has been issued.
-- **Gold development export (tooling only):** an owner-only workflow drafts addenda (the `bdd1f92` schema, plus a proposed batch attestation under
-  maintainer review) from
+  [`sou13gold/addendum.py`](../../../eval/sou13/sou13gold/addendum.py)). Frozen source row statuses remain historical.
+- **Gold development export (privately released):** the owner-only workflow applies the accepted artifact-bound batch attestation from
+  [PR #85](https://github.com/SoupTeam/soup-wall/pull/85) to
   recorded reviewer and owner decisions. It builds an authorised train / validation / calibration export
   for SOU-16 with a standalone verifier, without reading the sealed test split
-  ([gold development export](GOLD_DEV_EXPORT.md)). No export has been authorised.
+  ([gold development export](GOLD_DEV_EXPORT.md)). Recipient @KAZDANTOK independently verified the signed
+  export and used it for SOU-16 training. Legacy CP1 (19 cases) is deferred by lead decision on 2026-10-13;
+  test material remains under separate custodian control.
 
 See the [review protocol](REVIEW_PROTOCOL.md), [dataset card](DATASET_CARD.md),
 [reproduction and gates](REPRODUCIBILITY.md), [owner-only private validation](PRIVATE_VALIDATION.md),
