@@ -1,8 +1,7 @@
 # SOU-13 gold development export (owner workflow)
 
-**Status: tooling only. No gold addendum, export authorization or gold export has been issued.** This page
-describes how the dataset owner can turn recorded decisions into a versioned gold addendum and an authorised
-train / validation / calibration export for SOU-16. Every step runs on the owner workstation. No step reads the
+**Status (2026-10-13): approved Gold Addendum v1 and export authorization privately issued for 179 CP2 development cases; signed export delivered and independently verified by @KAZDANTOK. No public dataset release.** This page
+continues to document the reusable owner-only workflow for future releases. Every step runs on the owner workstation. No step reads the
 sealed test split.
 
 The tools never create, default or infer an approval, a status or a label. They bind the decisions that people
@@ -10,13 +9,26 @@ have already recorded to the frozen evidence, and they refuse to continue when a
 inconsistent. They add no governance roles or approval requirements. Where a public record leaves a human
 decision open, the tools report it as a release blocker and never treat it as approved.
 
+
+## Recorded private CP2 release and handoff (2026-10-12)
+
+The approved Gold Addendum v1 and export authorization were issued **outside Git**, confirming 179 CP2 development cases (train 71 / validation 54 / calibration 54). The 19 historical CP1 cases and all 54 sealed-test cases were excluded. Public code/validators are in [PR #85](https://github.com/SoupTeam/soup-wall/pull/85), with the path-scope fix from [PR #87](https://github.com/SoupTeam/soup-wall/pull/87).
+
+- Export ZIP SHA-256: `24611b702c7242ad25bcf5e0d8bf4baecd8c19714fc014977976a9caadfa6237`.
+- Export manifest SHA-256 (communicated outside the ZIP): `78f0f539b80ebaee886f322fc71c530d18a1bb824f0de7edf96c5a08e832080d`.
+- Owner-reported final strict private validation: 445 tests / 441 passed / 0 failed / 0 errors / 4 expected Windows skips.
+- Independent recipient verification: signed digest checked against previously pinned owner key, `self_consistency=PASS` and `anchored_integrity=PASS`. The recipient preserved tri-state masks, original inputs and leakage groups for [SOU-16](https://linear.app/soup-wall/issue/SOU-16); see the [SOU-13 handoff comment](https://linear.app/soup-wall/issue/SOU-13).
+- Permitted use: internal training/evaluation only, under `SOU13-USAGE-2026-10-12`. Public publication, licensing and redistribution remain unauthorized.
+
+These are recorded release results, not a claim that the public repository includes the private addendum, reviewer decisions, source data, label rows or test gold. The protocol below remains relevant to **future** releases; a verifier proves package identity and citations, not the truth/authority of the cited human decisions.
+
 ## Documents
 
 | Document | Written by | Schema | Purpose |
 | --- | --- | --- | --- |
 | Reviewer submission | the independent reviewer, or transcribed from the reviewer's completed review queue by `submission_from_review_queue.py` | [`gold_reviewer_submission`](../../../eval/sou13/schema/gold_reviewer_submission.schema.json) | The reviewer's own label vector for each case |
 | Owner decisions | the dataset owner | [`gold_owner_decisions`](../../../eval/sou13/schema/gold_owner_decisions.schema.json) | Approval records copied verbatim (with their real decision ids) and per-case transitions |
-| Gold addendum | drafted by `draft_gold_addendum.py` | [`gold_addendum`](../../../eval/sou13/schema/gold_addendum.schema.json): the `bdd1f92` contract plus the **proposed** batch attestation (below) | Append-only, hash-chained label decisions bound to the frozen rows |
+| Gold addendum | drafted by `draft_gold_addendum.py` | [`gold_addendum`](../../../eval/sou13/schema/gold_addendum.schema.json): the `bdd1f92` contract plus the **accepted** artifact-bound batch attestation (below) | Append-only, hash-chained label decisions bound to the frozen rows |
 | Export authorization | the license owner and the dataset owner | [`gold_export_authorization`](../../../eval/sou13/schema/gold_export_authorization.schema.json) | Licensing, provenance, training use and release, plus the recorded decisions cited for each release question (traceability), bound to one chain and one gold set |
 | Gold export | built by `build_gold_dev_export.py` | — | Gold rows, label-free model inputs, the addenda, the authorization and a standalone verifier |
 
@@ -126,10 +138,9 @@ is **technical domain separation only**: it prevents a signature made for the fr
 approval and adds no approval requirement. The owner key's `allowed_signers` entry must permit it, for example
 `namespaces="sou13-cp2-freeze,sou13-gold-export"`.
 
-## Proposed: batch attestation (pending maintainer review)
+## Accepted: artifact-bound batch attestation (PR #85)
 
-**This is a proposed contract change, not an approved contract.** It needs maintainer review in the PR before
-any addendum may use it. It is additive: the per-case mode and every rule above are unchanged.
+**The additive `independent_human_batch` contract was approved and merged in [PR #85](https://github.com/SoupTeam/soup-wall/pull/85) after the file-scope repair in [PR #87](https://github.com/SoupTeam/soup-wall/pull/87).** It does not claim individual per-case human review; the per-case mode and all other rules remain unchanged.
 
 Use it when the independent reviewer approved an exact, hash-identified artifact as a whole, for example "all
 179 CP2 development cases of package X are gold", without filling in per-case review rows. The addendum then
@@ -204,11 +215,11 @@ needed for batch-confirmed cases.
 
 ## Owner-only sequence
 
-**Release blockers (human decisions, not code).** Each must be recorded with a real decision id, or the
-affected cases must be left non-gold:
+**Owner-only workflow prerequisites (human decisions, not code).** For any new export, each must be recorded
+with a real decision id, or affected cases must remain non-gold:
 
-1. The development sign-off's decision id, and the reviewer's per-case label submission for every case to be
-   confirmed.
+1. The development sign-off decision: reviewer per-case label submissions, **or** the accepted exact-artifact
+   independent-human batch attestation with a recorded decision and matching frozen case/label hashes.
 2. Q-CP2-DECL-EVIDENCE: **clarified** for the 179 CP2 cases (see
    [recorded clarifications](#recorded-clarifications-scoped)). Still needed: the clarification's decision id,
    approver and date, copied from the record.
@@ -248,8 +259,7 @@ $Review  = @('--reviewer-submission', "$Gold\reviewer_submission.json")
    - `--expect-cases 179` fails unless all 179 development cases were accepted.
 
    If the review is instead an explicit batch approval of an exact artifact, use the
-   [proposed batch attestation](#proposed-batch-attestation-pending-maintainer-review) once a maintainer has
-   approved it, and skip the transcription. Never derive per-case reviewer labels from frozen labels.
+   [accepted batch attestation](#accepted-artifact-bound-batch-attestation-pr-85), and skip the transcription. Never derive per-case reviewer labels from frozen labels.
    ```powershell
    python -B "$Tools\submission_from_review_queue.py" --queue '<queue returned by the reviewer>' `
        --exports "$Pkg\exports" --reviewer '<reviewer name as recorded>' --decision-id '<recorded decision id>' `

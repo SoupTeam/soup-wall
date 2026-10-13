@@ -7,8 +7,9 @@ shared workspace or a coding-agent session. Never place its working copy inside 
 Publish only the aggregate ledger (`result`, counts, skip reasons). The test log can contain case ids,
 family ids or label values in assertion messages, so it stays private.
 
-Technical validation confirms no label. The 179 CP2 development cases already have independent semantic
-sign-off. The versioned gold release and dataset licensing remain separate, pending decisions
+Technical validation confirms no label. The 179 CP2 development cases have independent semantic sign-off and a
+separately approved private Gold Addendum v1 plus internal-use-only export authorization; source freezes are
+unchanged. Public dataset licensing/publication remains unapproved
 ([acceptance status](ACCEPTANCE.md)).
 
 ## Prerequisites
@@ -94,7 +95,8 @@ Get-Content "$Out\ledger.json"
 `--require-private` disables every private-artifact skip, so a missing artifact is an error. At this
 revision, the expected result is:
 
-- `ran` 437, `failed` 0, `errored` 0, `result` `PASS`. This includes:
+- `ran` **445**, `failed` 0, `errored` 0, `result` `PASS` in the final owner-reported current-source run.
+  The owner-reported Windows ledger has 441 passed and 4 expected skips. This includes:
   - the 93 data-free gold-export tests (`tests_cp2/test_gold_export.py`, `tests_cp2/test_gold_review_queue.py`,
     `tests_cp2/test_gold_batch.py`), which also run in the public suite;
   - the privacy-gate symlink regression added at the merge of PR #80.
@@ -168,9 +170,10 @@ not inspected here.
 | 1 (owner) | **FAIL**: 340 ran / 324 passed / 10 failed / 3 errored / 3 skipped | Causes: test fixtures that assumed a DRAFT manifest after the freeze, a test-name shadowing defect, and missing owner trust-anchor configuration. All three are fixed in this revision. |
 | 2 (owner-reported, 2026-10-12) | **PASS**: 343 ran / 340 passed / 0 failed / 0 errored / 3 skipped | CP1 74 passed; CP2 266 passed and 3 skipped. Source identity PASS (46 byte-identical files); freeze anchor signature verified against the pinned fingerprint; privacy gate PASS; disposable working copy deleted. Run after correcting `SOU13_V02_DATA` to the historical v0.2 data directory. No frozen data or signed manifest was modified. |
 | 3 (owner-reported, final for PR #80) | **PASS**: 343 ran / 340 passed / 0 failed / 0 errored / 3 skipped | Source commit `bdd1f92`. The 3 skips are the expected public-copy counterparts listed in step 4. This run covers the test-only change to `test_obsolete_contract_binding_rejected` (a visibly synthetic obsolete-contract digest with two added assertions) that run 2 predated. |
+| 4 (owner-reported, 2026-10-12 final current-source CP2 release) | **PASS**: 445 ran / 441 passed / 0 failed / 0 errored / 4 skipped | Three named public-copy counterpart skips and one expected Windows symlink-privilege skip. The private ledger remains owner-held and was not inspected in the public repository; see [SOU-13](https://linear.app/soup-wall/issue/SOU-13) for the owner's result. |
 
-Runs 2 and 3 are historical evidence for the revisions that were tested. A later revision needs its own strict
-run; the expected ledger for this revision is given in step 4.
+Runs 2 and 3 are historical evidence for earlier revisions. Run 4 is the owner-reported current-source release
+ledger; future source revisions still require their own strict run.
 
 ## 8. Diagnostics to share after a failing run
 
