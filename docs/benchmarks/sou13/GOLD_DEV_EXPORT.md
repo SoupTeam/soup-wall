@@ -259,8 +259,7 @@ $Review  = @('--reviewer-submission', "$Gold\reviewer_submission.json")
    - `--expect-cases 179` fails unless all 179 development cases were accepted.
 
    If the review is instead an explicit batch approval of an exact artifact, use the
-   [proposed batch attestation](#proposed-batch-attestation-pending-maintainer-review) once a maintainer has
-   approved it, and skip the transcription. Never derive per-case reviewer labels from frozen labels.
+   [accepted batch attestation](#accepted-artifact-bound-batch-attestation-pr-85), and skip the transcription. Never derive per-case reviewer labels from frozen labels.
    ```powershell
    python -B "$Tools\submission_from_review_queue.py" --queue '<queue returned by the reviewer>' `
        --exports "$Pkg\exports" --reviewer '<reviewer name as recorded>' --decision-id '<recorded decision id>' `
