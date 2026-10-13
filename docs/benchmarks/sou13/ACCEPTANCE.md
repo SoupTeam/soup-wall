@@ -1,12 +1,10 @@
 # SOU-13 acceptance status
 
-**No acceptance criterion is claimed as met.** This page separates the technical evidence the repository can
-reproduce from the decisions that only named people can make.
+**Status (2026-10-13): final documentation/lead acceptance pending.** The approved private Gold Addendum v1 and internal-use-only export authorization confirmed **179 CP2 development cases** (train 71 / validation 54 / calibration 54). The export was signed, delivered and independently verified by @KAZDANTOK. Frozen source row statuses were not rewritten. No private source, label rows or sealed test cases are in this repository.
 
-The 179 CP2 development cases have received **independent semantic sign-off**. That is not a gold release. The
-frozen records and their statuses are unchanged, and labels become gold only through a versioned gold release
-(addendum). None has been issued. Passing tests, matching digests and mechanical rule agreement are technical
-evidence, not a license or a release decision.
+On 2026-10-13 at 11:13 UTC+5 (Soup Wall General), project lead @winux125 instructed the owner to **update documentation and the checklist with verification links, after which AC2 and AC4 can be accepted for the approved CP2 scope**. The 19 historical CP1 cases are to be handled in a **separate task** and remain excluded from Gold. This is conditional scope approval, not final acceptance of the documentation PR or public dataset publication.
+
+**Official test status:** @iazizza reviewed the 54 held-out cases and completed one authorized test run for [SOU-16](https://linear.app/soup-wall/issue/SOU-16). Restricted test gold and per-case results remain with the custodian.
 
 ## Recorded decisions
 
@@ -15,13 +13,13 @@ are kept outside the repository; their decision ids and dates are not reproduced
 
 | Question | Recorded decision | What it does **not** decide |
 | --- | --- | --- |
-| Independent Dev Review Sign-off | **Received for all 179 CP2 development cases.** It covers the six Q-FUTURE cases, the internal ACL read interpretation and the internal keys-enumeration interpretation (rows below). | It is not a versioned gold release; no addendum is issued and the frozen statuses are unchanged. It does not resolve Q-CP2-DECL-EVIDENCE, the CP1 legacy review, licensing, the sealed test or publication. |
+| Independent Dev Review Sign-off | **179/179 CP2 development labels signed off** by Nari AB; six Q-FUTURE and internal bookkeeping interpretations included. An approved private Gold Addendum v1 then bound that sign-off to the 179-case release. | Batch approval is not 179 individual independent reviews; no CP1 or test Gold implied. |
 | Internal ACL read | **33 cases** (replacing the earlier count of 17). The interpretation is **agreed** in the sign-off. | — |
 | Internal keys enumeration | The sign-off references **12 cases across `delete_prefix` and `user_offboard`**. The 6 prefix `keys` cases listed earlier are a narrower subset of these. | This page infers no further case-to-family mapping. |
 | Q-ADMISSION | **Limited technical approval**, within the scope stated in the owner record. **Clarified** by the contract owner and independent reviewer (Nari AB): it applies within the agreed synthetic fixtures, including DEV09 / opaque admission; semantic labels confirmed. | It is not a gold release and does not cover licensing or release. It does not add DEV09 or any other CP1 case to the gold scope. |
 | Q-CP2-DECL-EVIDENCE | **Resolved within a limited scope** by the contract owner and independent reviewer (Nari AB): known `false` labels are confirmed for the closed-program semantics of the approved 179 CP2 development cases only, where the absence of side effects is supported by the scenario audit; no generalization to external calls. | It covers no CP1 case, no sealed-test case and no external tool call. |
-| Sealed test custody | **Test custody confirmed.** The 54-case sealed test package is held under the custodian process. | Sealed-test label correctness is still **NOT VERIFIED**. Independent test-label review and the one-shot evaluation protocol are pending. |
-| Internal use (`SOU13-USAGE-2026-10-12`, lead authorization, 2026-10-12) | **Internal model training and evaluation only.** Recorded as Telegram Soup Wall message 653, 2026-10-12 11:43 UTC+5. | It is not a public license and does not authorize publication or redistribution; both remain undecided. It is not a gold release: it resolves no label, open question, Q-CP2-DECL-EVIDENCE or the CP1 legacy review, and it never makes the sealed test available. |
+| Sealed test custody | Custody confirmed; @iazizza independently reviewed the 54-case sealed test and completed **one official authorized SOU-16 run** (2026-10-12). | No raw test inputs/labels or per-case predictions released to model authors. |
+| Internal use (`SOU13-USAGE-2026-10-12`) | **Internal training and evaluation only**, under the project lead's 2026-10-12 decision (Soup Wall General message 653). | No public license, publication or redistribution authorization. |
 
 ## Criteria
 
