@@ -59,6 +59,12 @@ of its provider, interoperability, dependency and documentation criteria.
 
 ## Optional external discovery probes
 
+The separate [Keycloak OIDC Console drill](KEYCLOAK_OIDC_ACCEPTANCE.md) drives
+the real browser authorization-code flow with PKCE and the production Gateway.
+It covers local membership, session rotation, restart, expiry and Console
+logout. Its optional browser dependencies and private-CA trust are explicit;
+run it separately from the mock identity fixtures and metadata-only probes.
+
 Record the provider's exact HTTPS issuer, without adding its discovery suffix.
 Soup Wall derives discovery URLs using
 [OpenID Connect Discovery 1.0 section 4.1](https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderConfigurationRequest):

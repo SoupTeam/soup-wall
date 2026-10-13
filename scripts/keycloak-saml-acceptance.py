@@ -276,7 +276,16 @@ def validated_response_headers(headers):
 
 
 def write_gateway_response(handler, response):
-    headers = validated_response_headers(response.headers.items())
+    pairs = list(response.headers.items())
+    raw_headers = getattr(getattr(response, "raw", None), "headers", None)
+    if raw_headers is not None and callable(getattr(raw_headers, "getlist", None)):
+        cookies = raw_headers.getlist("Set-Cookie")
+        if isinstance(cookies, list) and cookies:
+            # Set-Cookie cannot be comma-folded: an expiry on the flow cookie
+            # would otherwise expire the newly issued Console session too.
+            pairs = [(name, value) for name, value in pairs if name.lower() != "set-cookie"]
+            pairs.extend(("Set-Cookie", value) for value in cookies)
+    headers = validated_response_headers(pairs)
     content = response.content
     handler.send_response(response.status_code)
     for name, value in headers:

@@ -60,6 +60,17 @@
     <div class="soup-header"><svg class="soup-mark" viewBox="0 0 200 200" aria-hidden="true"><rect x="20" y="20" width="160" height="160" rx="28" ry="28" fill="#C0512D"/><line x1="55" y1="155" x2="145" y2="45" stroke="white" stroke-width="22" stroke-linecap="round"/></svg><div><div class="soup-wordmark">Soup Wall</div><p>Self-hosted workspace</p></div></div>
     <h1>Customer workspace</h1>
     <p id="status">Checking your secure session…</p>
+    <section id="sign-in" hidden>
+      <h2>Sign in to your workspace</h2>
+      <p>Use the organization and workspace IDs supplied by your administrator. You will continue to your organization's identity provider.</p>
+      <form id="sign-in-form" action="/auth/oidc/start" method="get">
+        <div class="settings-grid">
+          <label>Organization ID<input id="login-organization" name="organization_id" required maxlength="256" autocomplete="off"></label>
+          <label>Workspace ID<input id="login-workspace" name="workspace_id" required maxlength="256" autocomplete="off"></label>
+        </div>
+        <button type="submit">Continue to sign in</button>
+      </form>
+    </section>
     <section id="identity" hidden aria-live="polite">
       <dl>
         <dt>Organization</dt><dd id="organization"></dd>
@@ -235,6 +246,14 @@
   <script>
     const status = document.getElementById('status');
     const identity = document.getElementById('identity');
+    const signIn = document.getElementById('sign-in');
+    document.getElementById('sign-in-form').addEventListener('submit', event => {
+      event.preventDefault();
+      const query = new URLSearchParams(new FormData(event.currentTarget));
+      // Navigate from the fixed same-origin entry point: CSP form-action must
+      // not need to allow arbitrary external identity-provider destinations.
+      window.location.assign('/auth/oidc/start?' + query.toString());
+    });
     const audit = document.getElementById('audit');
     const auditStatus = document.getElementById('audit-status');
     const auditList = document.getElementById('audit-list');
@@ -293,6 +312,28 @@
     let csrfToken = null;
     let sessionRole = null;
     let sessionPrincipal = null;
+    let sessionEnded = false;
+    function endSession(message) {
+      sessionEnded = true;
+      csrfToken = null;
+      sessionRole = null;
+      sessionPrincipal = null;
+      identity.hidden = true;
+      identity.replaceChildren();
+      signIn.hidden = false;
+      status.textContent = message;
+      status.className = 'error';
+    }
+    async function customerFetch(url, options) {
+      if (sessionEnded) throw new Error('session ended');
+      const response = await fetch(url, options);
+      if (response.status === 401) {
+        endSession('Your session has expired. Sign in again to continue.');
+        throw new Error('session ended');
+      }
+      if (sessionEnded) throw new Error('session ended');
+      return response;
+    }
     const text = (id, value) => { document.getElementById(id).textContent = value || '—'; };
     function renderAuditEvent(event) {
       const item = document.createElement('li');
@@ -308,7 +349,7 @@
       auditList.append(item);
     }
     async function loadAudit() {
-      const response = await fetch('/customer/v1/audit?limit=20', { credentials: 'same-origin', cache: 'no-store' });
+      const response = await customerFetch('/customer/v1/audit?limit=20', { credentials: 'same-origin', cache: 'no-store' });
       audit.hidden = false;
       if (response.status === 403) {
         auditStatus.textContent = 'Your current role cannot read workspace administration history.';
@@ -335,7 +376,7 @@
       proxyAuditList.append(item);
     }
     async function loadProxyAudit() {
-      const response = await fetch('/customer/v1/proxy-audit?limit=20', { credentials: 'same-origin', cache: 'no-store' });
+      const response = await customerFetch('/customer/v1/proxy-audit?limit=20', { credentials: 'same-origin', cache: 'no-store' });
       proxyAudit.hidden = false;
       if (response.status === 403) {
         proxyAuditStatus.textContent = 'Your current role cannot read proxy request history.';
@@ -353,7 +394,7 @@
     }
     async function updateMember(member) {
       if (!csrfToken) await loadCsrfToken();
-      const response = await fetch('/customer/v1/members', {
+      const response = await customerFetch('/customer/v1/members', {
         method: 'PATCH', credentials: 'same-origin', cache: 'no-store',
         headers: { 'Content-Type': 'application/json', 'X-LLM-Firewall-CSRF-Token': csrfToken },
         body: JSON.stringify(member),
@@ -363,7 +404,7 @@
     }
     async function assignScimMember(member) {
       if (!csrfToken) await loadCsrfToken();
-      const response = await fetch('/customer/v1/members', {
+      const response = await customerFetch('/customer/v1/members', {
         method: 'POST', credentials: 'same-origin', cache: 'no-store',
         headers: { 'Content-Type': 'application/json', 'X-LLM-Firewall-CSRF-Token': csrfToken },
         body: JSON.stringify(member),
@@ -425,7 +466,7 @@
       return item;
     }
     async function loadMembers() {
-      const response = await fetch('/customer/v1/members', { credentials: 'same-origin', cache: 'no-store' });
+      const response = await customerFetch('/customer/v1/members', { credentials: 'same-origin', cache: 'no-store' });
       members.hidden = false;
       membersList.replaceChildren();
       if (response.status === 403) {
@@ -474,7 +515,7 @@
           try {
             if (!csrfToken) await loadCsrfToken();
             const expiresAt = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
-            const response = await fetch(`/customer/v1/invitations/${encodeURIComponent(invitation.id)}/resend`, {
+            const response = await customerFetch(`/customer/v1/invitations/${encodeURIComponent(invitation.id)}/resend`, {
               method: 'POST', credentials: 'same-origin', cache: 'no-store',
               headers: { 'Content-Type': 'application/json', 'X-LLM-Firewall-CSRF-Token': csrfToken },
               body: JSON.stringify({ expires_at_unix: expiresAt }),
@@ -503,7 +544,7 @@
             revoke.disabled = true;
             try {
               if (!csrfToken) await loadCsrfToken();
-              const response = await fetch(`/customer/v1/invitations/${encodeURIComponent(invitation.id)}/revoke`, {
+              const response = await customerFetch(`/customer/v1/invitations/${encodeURIComponent(invitation.id)}/revoke`, {
                 method: 'POST', credentials: 'same-origin', cache: 'no-store',
                 headers: { 'X-LLM-Firewall-CSRF-Token': csrfToken },
               });
@@ -522,7 +563,7 @@
     }
 
     async function loadInvitations() {
-      const response = await fetch('/customer/v1/invitations', { credentials: 'same-origin', cache: 'no-store' });
+      const response = await customerFetch('/customer/v1/invitations', { credentials: 'same-origin', cache: 'no-store' });
       invitations.hidden = false;
       invitationList.replaceChildren();
       if (response.status === 403) {
@@ -559,7 +600,7 @@
       invitationToken.hidden = true;
       try {
         if (!csrfToken) await loadCsrfToken();
-        const response = await fetch('/customer/v1/invitations', {
+        const response = await customerFetch('/customer/v1/invitations', {
           method: 'POST', credentials: 'same-origin', cache: 'no-store',
           headers: { 'Content-Type': 'application/json', 'X-LLM-Firewall-CSRF-Token': csrfToken },
           body: JSON.stringify({ recipient_label: recipientLabel, role, expires_at_unix: expiresAt }),
@@ -582,7 +623,7 @@
     });
 
     async function loadServiceAccounts() {
-      const response = await fetch('/customer/v1/service-accounts', { credentials: 'same-origin', cache: 'no-store' });
+      const response = await customerFetch('/customer/v1/service-accounts', { credentials: 'same-origin', cache: 'no-store' });
       serviceAccounts.hidden = false;
       serviceAccountList.replaceChildren();
       if (response.status === 403) {
@@ -621,7 +662,7 @@
             revoke.disabled = true;
             try {
               if (!csrfToken) await loadCsrfToken();
-              const result = await fetch(`/customer/v1/service-accounts/${encodeURIComponent(account.id)}/revoke`, {
+              const result = await customerFetch(`/customer/v1/service-accounts/${encodeURIComponent(account.id)}/revoke`, {
                 method: 'POST', credentials: 'same-origin', cache: 'no-store',
                 headers: { 'X-LLM-Firewall-CSRF-Token': csrfToken },
               });
@@ -654,7 +695,7 @@
       serviceAccountToken.hidden = true;
       try {
         if (!csrfToken) await loadCsrfToken();
-        const response = await fetch('/customer/v1/service-accounts', {
+        const response = await customerFetch('/customer/v1/service-accounts', {
           method: 'POST', credentials: 'same-origin', cache: 'no-store',
           headers: { 'Content-Type': 'application/json', 'X-LLM-Firewall-CSRF-Token': csrfToken },
           body: JSON.stringify({ name, expires_at_unix: expiresAt }),
@@ -696,7 +737,7 @@
           deactivate.disabled = true;
           try {
             if (!csrfToken) await loadCsrfToken();
-            const response = await fetch(`/customer/v1/webhook-destinations/${encodeURIComponent(destination.id)}/deactivate`, {
+            const response = await customerFetch(`/customer/v1/webhook-destinations/${encodeURIComponent(destination.id)}/deactivate`, {
               method: 'POST', credentials: 'same-origin', cache: 'no-store',
               headers: { 'X-LLM-Firewall-CSRF-Token': csrfToken },
             });
@@ -713,7 +754,7 @@
       return item;
     }
     async function loadWebhooks() {
-      const response = await fetch('/customer/v1/webhook-destinations', { credentials: 'same-origin', cache: 'no-store' });
+      const response = await customerFetch('/customer/v1/webhook-destinations', { credentials: 'same-origin', cache: 'no-store' });
       webhooks.hidden = false;
       webhookList.replaceChildren();
       webhookDeliveryList.replaceChildren();
@@ -730,7 +771,7 @@
         ? 'Destinations are workspace-scoped and changes are recorded in administration history.'
         : 'No webhook destinations have been configured.';
       destinations.forEach(destination => webhookList.append(renderWebhookDestination(destination)));
-      const deliveriesResponse = await fetch('/customer/v1/webhook-deliveries?limit=20', { credentials: 'same-origin', cache: 'no-store' });
+      const deliveriesResponse = await customerFetch('/customer/v1/webhook-deliveries?limit=20', { credentials: 'same-origin', cache: 'no-store' });
       if (!deliveriesResponse.ok) return;
       const deliveries = await deliveriesResponse.json();
       deliveries.forEach(delivery => {
@@ -748,7 +789,7 @@
       webhookSecret.hidden = true;
       try {
         if (!csrfToken) await loadCsrfToken();
-        const response = await fetch('/customer/v1/webhook-destinations', {
+        const response = await customerFetch('/customer/v1/webhook-destinations', {
           method: 'POST', credentials: 'same-origin', cache: 'no-store',
           headers: { 'Content-Type': 'application/json', 'X-LLM-Firewall-CSRF-Token': csrfToken },
           body: JSON.stringify({ url, event_types: ['policy.deployed'] }),
@@ -771,7 +812,7 @@
     });
     async function loadScimDirectory(workspaceMembers) {
       if (sessionRole !== 'owner') return;
-      const response = await fetch('/customer/v1/scim-users', { credentials: 'same-origin', cache: 'no-store' });
+      const response = await customerFetch('/customer/v1/scim-users', { credentials: 'same-origin', cache: 'no-store' });
       if (!response.ok) throw new Error('SCIM directory request failed');
       const directory = await response.json();
       scimMember.replaceChildren();
@@ -874,7 +915,7 @@
       }
     }
     async function loadUsage() {
-      const response = await fetch('/customer/v1/usage', { credentials: 'same-origin', cache: 'no-store' });
+      const response = await customerFetch('/customer/v1/usage', { credentials: 'same-origin', cache: 'no-store' });
       usage.hidden = false;
       if (response.status === 403) {
         usageStatus.textContent = 'Your current role cannot read workspace usage.';
@@ -907,7 +948,7 @@
     }
     async function loadInvoicePreview() {
       if (sessionRole !== 'owner') return;
-      const response = await fetch('/customer/v1/billing/invoice-preview', { credentials: 'same-origin', cache: 'no-store' });
+      const response = await customerFetch('/customer/v1/billing/invoice-preview', { credentials: 'same-origin', cache: 'no-store' });
       invoicePreview.hidden = false;
       if (response.status === 403) {
         invoicePreviewStatus.textContent = 'Only the workspace owner can view billing previews.';
@@ -959,7 +1000,7 @@
       container.append(card);
     }
     async function loadQuota() {
-      const response = await fetch('/customer/v1/usage/quota', { credentials: 'same-origin', cache: 'no-store' });
+      const response = await customerFetch('/customer/v1/usage/quota', { credentials: 'same-origin', cache: 'no-store' });
       if (response.status === 403) {
         quotaStatus.textContent = 'Your current role cannot read usage quotas.';
         return;
@@ -1001,7 +1042,7 @@
     }
     async function updateQuota(policy) {
       if (!csrfToken) await loadCsrfToken();
-      const response = await fetch('/customer/v1/usage/quota', {
+      const response = await customerFetch('/customer/v1/usage/quota', {
         method: 'PUT', credentials: 'same-origin', cache: 'no-store',
         headers: { 'Content-Type': 'application/json', 'X-LLM-Firewall-CSRF-Token': csrfToken },
         body: JSON.stringify(policy),
@@ -1049,7 +1090,7 @@
     retentionEnabled.addEventListener('change', syncRetentionFields);
     async function updateRetention(policy) {
       if (!csrfToken) await loadCsrfToken();
-      const response = await fetch('/customer/v1/usage/retention', {
+      const response = await customerFetch('/customer/v1/usage/retention', {
         method: 'PUT', credentials: 'same-origin', cache: 'no-store',
         headers: { 'Content-Type': 'application/json', 'X-LLM-Firewall-CSRF-Token': csrfToken },
         body: JSON.stringify(policy),
@@ -1057,7 +1098,7 @@
       if (!response.ok) throw new Error('retention save failed');
     }
     async function loadRetention() {
-      const response = await fetch('/customer/v1/usage/retention?limit=10', { credentials: 'same-origin', cache: 'no-store' });
+      const response = await customerFetch('/customer/v1/usage/retention?limit=10', { credentials: 'same-origin', cache: 'no-store' });
       if (response.status === 403) {
         retentionStatus.textContent = 'Your current role cannot read usage retention history.';
         return;
@@ -1102,7 +1143,7 @@
       }
     });
     async function loadCsrfToken() {
-      const response = await fetch('/customer/v1/csrf', { credentials: 'same-origin', cache: 'no-store' });
+      const response = await customerFetch('/customer/v1/csrf', { credentials: 'same-origin', cache: 'no-store' });
       if (!response.ok) throw new Error('csrf request failed');
       csrfToken = (await response.json()).token;
       if (typeof csrfToken !== 'string' || csrfToken.length === 0) throw new Error('invalid csrf token');
@@ -1112,7 +1153,7 @@
     }
     async function updatePolicy(policy) {
       if (!csrfToken) await loadCsrfToken();
-      const response = await fetch('/customer/v1/model-policy', {
+      const response = await customerFetch('/customer/v1/model-policy', {
         method: 'PUT', credentials: 'same-origin', cache: 'no-store',
         headers: { 'Content-Type': 'application/json', 'X-LLM-Firewall-CSRF-Token': csrfToken },
         body: JSON.stringify(policy),
@@ -1123,7 +1164,7 @@
     }
     async function updateLimits(limits) {
       if (!csrfToken) await loadCsrfToken();
-      const response = await fetch('/customer/v1/limits', {
+      const response = await customerFetch('/customer/v1/limits', {
         method: 'PUT', credentials: 'same-origin', cache: 'no-store',
         headers: { 'Content-Type': 'application/json', 'X-LLM-Firewall-CSRF-Token': csrfToken },
         body: JSON.stringify(limits),
@@ -1196,7 +1237,7 @@
       }
     });
     async function loadControls() {
-      const response = await fetch('/customer/v1/controls', { credentials: 'same-origin', cache: 'no-store' });
+      const response = await customerFetch('/customer/v1/controls', { credentials: 'same-origin', cache: 'no-store' });
       controls.hidden = false;
       if (response.status === 403) {
         controlsStatus.textContent = 'Your current role cannot view workspace configuration controls.';
@@ -1235,8 +1276,7 @@
     async function loadSession() {
       const response = await fetch('/customer/v1/session', { credentials: 'same-origin', cache: 'no-store' });
       if (response.status === 401) {
-        status.textContent = 'Your session is missing or has expired.';
-        status.className = 'error';
+        endSession('Your session is missing or has expired. Sign in to continue.');
         return;
       }
       if (!response.ok) throw new Error('session request failed');
@@ -1247,10 +1287,11 @@
       text('role', session.access.role);
       sessionRole = session.access.role;
       sessionPrincipal = session.access.principal_id;
+      signIn.hidden = true;
       status.textContent = 'Signed in with an active, locally authorized workspace membership.';
       identity.hidden = false;
       const panels = await Promise.allSettled([loadAudit(), loadProxyAudit(), loadMembers(), loadInvitations(), loadServiceAccounts(), loadWebhooks(), loadControls(), loadUsage(), loadInvoicePreview(), loadQuota(), loadRetention()]);
-      if (panels.some(panel => panel.status === 'rejected')) {
+      if (!sessionEnded && panels.some(panel => panel.status === 'rejected')) {
         status.textContent = 'Signed in. One or more workspace panels are temporarily unavailable.';
       }
     }
@@ -1270,10 +1311,22 @@
         invoicePreviewStatus.className = 'error';
       }
     });
-    document.getElementById('logout').addEventListener('click', async () => {
-      await fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' });
-      identity.hidden = true;
-      status.textContent = 'You have been logged out.';
+    document.getElementById('logout').addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        const response = await fetch('/auth/logout', { method: 'POST', credentials: 'same-origin', cache: 'no-store' });
+        if (!response.ok) throw new Error('logout failed');
+        endSession('You have been logged out of this workspace.');
+        status.className = '';
+      } catch (_) {
+        status.textContent = 'Logout could not be confirmed. Please try again.';
+        status.className = 'error';
+        button.disabled = false;
+      }
+    });
+    window.addEventListener('pageshow', event => {
+      if (event.persisted) window.location.reload();
     });
     loadSession().catch(() => { status.textContent = 'The customer session service is temporarily unavailable.'; status.className = 'error'; });
   </script>

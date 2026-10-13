@@ -65,5 +65,9 @@ name = "keycloak-saml-bootstrap"
 test = true
 
 [[example]]
+name = "keycloak-oidc-bootstrap"
+test = true
+
+[[example]]
 name = "postgres-restore-fixture"
 test = true

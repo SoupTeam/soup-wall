@@ -1,0 +1,51 @@
+name: keycloak-oidc
+
+on:
+  pull_request:
+    paths:
+      - 'crates/proxy/**'
+      - 'scripts/keycloak-oidc*'
+      - 'scripts/keycloak-saml-acceptance.py'
+      - 'scripts/tests/test_console_browser.py'
+      - '.github/workflows/keycloak-oidc.yml'
+      - 'Cargo.lock'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-vendor:
+    name: Genuine Keycloak OIDC on Linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Prepare disposable browser and vendor driver
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libnss3-tools
+          python3 -m venv target/oidc-driver
+          target/oidc-driver/bin/python -m pip install requests==2.34.2 cryptography==50.0.2 psutil==7.2.2 playwright==1.63.0
+          target/oidc-driver/bin/python -m playwright install --with-deps chromium
+      - name: Run browser regressions and real Keycloak lifecycle
+        run: |
+          export PATH="$PWD/target/oidc-driver/bin:$PATH"
+          python3 -m unittest discover -s scripts/tests -p test_console_browser.py -v
+          bash scripts/keycloak-oidc-acceptance.sh
+      - name: Retain only sanitized checks and hashes
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: keycloak-oidc-linux-evidence
+          path: target/oidc-evidence/*.json
+          if-no-files-found: warn
+          retention-days: 30
