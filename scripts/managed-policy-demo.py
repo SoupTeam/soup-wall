@@ -172,8 +172,8 @@ def main():
         def applied(seq):
             def check():
                 _, items = request("GET", base + "/deployments", headers=admin_headers)
-                return items[0] if items and items[0]["deployment_sequence"] == seq
-                and items[0]["status"] == "applied" else None
+                return (items[0] if items and items[0]["deployment_sequence"] == seq
+                        and items[0]["status"] == "applied" else None)
             return wait_for(f"Console applied ack {seq}", check)
 
         first_runtime = active(1)
