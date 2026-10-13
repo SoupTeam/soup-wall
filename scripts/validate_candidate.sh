@@ -36,11 +36,29 @@ if [ "$REC_SHA" != "$MAN_SHA" ]; then
   exit 1
 fi
 
-REC_HASHES=$(jq -c '.checksums | sort' "$RECORD")
-MAN_HASHES=$(jq -c '.checksums | sort' "$MANIFEST")
-if [ "$REC_HASHES" != "$MAN_HASHES" ]; then
-  echo "CRITICAL: Artifact checksums mismatch (including OCI image identity)!"
+# Inventory integrity checks
+ARCHIVE_COUNT=$(jq -r '[.checksums[] | select(endswith(".tar.gz") or endswith(".zip"))] | length' "$MANIFEST")
+SBOM_COUNT=$(jq -r '[.checksums[] | select(endswith(".cdx.json"))] | length' "$MANIFEST")
+IMAGE_COUNT=$(jq -r '[.checksums[] | select(endswith("soup-wall-image.tar"))] | length' "$MANIFEST")
+
+if [ "$ARCHIVE_COUNT" -lt 4 ]; then
+  echo "CRITICAL: Missing platform archives in candidate (found $ARCHIVE_COUNT, expected 4)"
+  exit 1
+fi
+if [ "$SBOM_COUNT" -lt 6 ]; then
+  echo "CRITICAL: Missing SBOMs in candidate (found $SBOM_COUNT, expected 6)"
+  exit 1
+fi
+if [ "$IMAGE_COUNT" -lt 1 ]; then
+  echo "CRITICAL: Missing OCI image in candidate"
   exit 1
 fi
 
-echo "SUCCESS: Product acceptance validated for exact candidate."
+REC_HASHES=$(jq -c '.checksums | sort' "$RECORD")
+MAN_HASHES=$(jq -c '.checksums | sort' "$MANIFEST")
+if [ "$REC_HASHES" != "$MAN_HASHES" ]; then
+  echo "CRITICAL: Artifact checksums mismatch!"
+  exit 1
+fi
+
+echo "SUCCESS: Product acceptance validated for exact complete candidate."

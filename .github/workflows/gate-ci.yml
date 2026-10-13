@@ -26,55 +26,80 @@ jobs:
           {
             "tag": "v0.3.0",
             "source_sha": "dummy_sha",
-            "checksums": ["hash1  file1", "hash2  file2"]
+            "checksums": [
+              "hash1  soup-wall-v0.3.0-x86_64-unknown-linux-gnu.tar.gz",
+              "hash2  soup-wall-v0.3.0-aarch64-apple-darwin.tar.gz",
+              "hash3  soup-wall-v0.3.0-x86_64-apple-darwin.tar.gz",
+              "hash4  soup-wall-v0.3.0-x86_64-pc-windows-msvc.zip",
+              "hash5  agentfw.cdx.json",
+              "hash6  llm-firewall.cdx.json",
+              "hash7  soup-wall-adapter.cdx.json",
+              "hash8  soup-wall-agent.cdx.json",
+              "hash9  soup-wall-bench.cdx.json",
+              "hash10 soup-wall-core.cdx.json",
+              "hash11 soup-wall-image.tar"
+            ]
           }
           EOF
           
-          chmod +x ../scripts/validate_candidate.sh
-
           echo "--- Test 1: Missing approval file ---"
           if ../scripts/validate_candidate.sh "missing.json" "$MANIFEST"; then exit 1; fi
 
           echo "--- Test 2: Decision rejected ---"
           cat <<EOF > rec_rej.json
-          {"decision": "rejected", "source_sha": "dummy_sha", "checksums": ["hash1  file1", "hash2  file2"], "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
+          {"decision": "rejected", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' "$MANIFEST"), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
           EOF
           if ../scripts/validate_candidate.sh rec_rej.json "$MANIFEST"; then exit 1; fi
 
           echo "--- Test 3: Approved but missing product gate ---"
           cat <<EOF > rec_missing_gate.json
-          {"decision": "approved", "source_sha": "dummy_sha", "checksums": ["hash1  file1", "hash2  file2"], "evidence_ref": "https://ref", "gates": {"operator": "passed", "license": "passed"}}
+          {"decision": "approved", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' "$MANIFEST"), "evidence_ref": "https://ref", "gates": {"operator": "passed", "license": "passed"}}
           EOF
           if ../scripts/validate_candidate.sh rec_missing_gate.json "$MANIFEST"; then exit 1; fi
 
           echo "--- Test 4: Approved but operator gate failed ---"
           cat <<EOF > rec_failed_gate.json
-          {"decision": "approved", "source_sha": "dummy_sha", "checksums": ["hash1  file1", "hash2  file2"], "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "failed", "license": "passed"}}
+          {"decision": "approved", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' "$MANIFEST"), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "failed", "license": "passed"}}
           EOF
           if ../scripts/validate_candidate.sh rec_failed_gate.json "$MANIFEST"; then exit 1; fi
           
           echo "--- Test 5: Approved but license gate skipped ---"
           cat <<EOF > rec_skipped_gate.json
-          {"decision": "approved", "source_sha": "dummy_sha", "checksums": ["hash1  file1", "hash2  file2"], "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "skipped"}}
+          {"decision": "approved", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' "$MANIFEST"), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "skipped"}}
           EOF
           if ../scripts/validate_candidate.sh rec_skipped_gate.json "$MANIFEST"; then exit 1; fi
 
           echo "--- Test 6: Wrong source SHA ---"
           cat <<EOF > rec_sha.json
-          {"decision": "approved", "source_sha": "badsha", "checksums": ["hash1  file1", "hash2  file2"], "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
+          {"decision": "approved", "source_sha": "badsha", "checksums": $(jq '.checksums' "$MANIFEST"), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
           EOF
           if ../scripts/validate_candidate.sh rec_sha.json "$MANIFEST"; then exit 1; fi
 
           echo "--- Test 7: Changed artifact ---"
+          jq '.checksums[0] = "badhash  soup-wall-v0.3.0-x86_64-unknown-linux-gnu.tar.gz"' "$MANIFEST" > bad_man.json
           cat <<EOF > rec_hash.json
-          {"decision": "approved", "source_sha": "dummy_sha", "checksums": ["badhash  file1", "hash2  file2"], "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
+          {"decision": "approved", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' bad_man.json), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
           EOF
           if ../scripts/validate_candidate.sh rec_hash.json "$MANIFEST"; then exit 1; fi
 
           echo "--- Test 8: Successful exact-candidate ---"
           cat <<EOF > rec_good.json
-          {"decision": "approved", "source_sha": "dummy_sha", "checksums": ["hash1  file1", "hash2  file2"], "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
+          {"decision": "approved", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' "$MANIFEST"), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
           EOF
           ../scripts/validate_candidate.sh rec_good.json "$MANIFEST"
+
+          echo "--- Test 9: Empty inventory ---"
+          jq '. + {checksums: []}' "$MANIFEST" > man_empty.json
+          cat <<EOF > rec_empty.json
+          {"decision": "approved", "source_sha": "dummy_sha", "checksums": [], "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
+          EOF
+          if ../scripts/validate_candidate.sh rec_empty.json man_empty.json; then exit 1; fi
+
+          echo "--- Test 10: Incomplete inventory (missing image) ---"
+          jq '.checksums |= .[0:-1]' "$MANIFEST" > man_inc.json
+          cat <<EOF > rec_inc.json
+          {"decision": "approved", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' man_inc.json), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
+          EOF
+          if ../scripts/validate_candidate.sh rec_inc.json man_inc.json; then exit 1; fi
           
-          echo "All SOU-26 validator tests passed successfully!"
+          echo "All 10 SOU-26 validator tests passed successfully!"
