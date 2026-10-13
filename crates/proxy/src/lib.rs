@@ -16,6 +16,7 @@ pub mod customer_ui;
 pub mod events;
 pub mod handlers;
 pub mod invitation_ui;
+pub mod managed_agent_api;
 pub mod moderation;
 pub mod oidc;
 pub mod oidc_auth;
@@ -29,7 +30,6 @@ pub mod saml_auth;
 pub mod scim;
 pub mod spend_limit;
 pub mod tenant_store;
-pub mod managed_agent_api;
 pub mod usage;
 
 use axum::{
@@ -95,8 +95,7 @@ pub fn app(state: Shared) -> Router {
         // admin header. Every data-changing request remains on the separately
         // authenticated /admin/v1 API below.
         let dashboard = Router::new().route("/admin", get(admin_ui::dashboard));
-        let managed_agent = Router::new()
-            .route("/agent/v1/whoami", get(managed_agent_api::whoami));
+        let managed_agent = Router::new().route("/agent/v1/whoami", get(managed_agent_api::whoami));
         let scim_api = Router::new()
             .route(
                 "/scim/v2/ServiceProviderConfig",
