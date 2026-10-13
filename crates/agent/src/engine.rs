@@ -108,6 +108,13 @@ impl AgentFirewall {
         Self::new(policy, DEFAULT_TAINT_CAP)
     }
 
+    /// Switch only the policy, preserving detector, taint, incomplete-history and
+    /// authority state for all existing sessions. Do not reconstruct this object
+    /// to apply remote configuration: that silently erases security evidence.
+    pub fn replace_policy_preserving_provenance(&mut self, policy: AgentPolicySet) {
+        self.policy = policy;
+    }
+
     /// Register the top-level agent's tool grant for a session.
     pub fn set_root(&mut self, session: &str, agent: &str, tools: &[String]) {
         self.authority.set_root(session, agent, tools);
