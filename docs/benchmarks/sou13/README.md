@@ -30,7 +30,7 @@ Those artifacts remain in the owner's restricted workflow. The approved 179-case
   confirmed semantic approval, later bound to a versioned private Gold Addendum v1. Q-CP2-DECL-EVIDENCE and
   Q-ADMISSION were clarified within a limited scope (see [acceptance status](ACCEPTANCE.md)).
 - **Frozen CP2 development label statuses:** 173 provisional, 6 pending, 0 confirmed. These are the frozen
-  records' statuses and change only through a versioned gold release.
+  source records' historical statuses; confirmation is recorded in the additive, approved Gold Addendum v1.
 - **Gold-label addenda:** the approved private CP2 Gold Addendum v1 follows the versioned, hash-chained
   addenda ([`schema/gold_addendum.schema.json`](../../../eval/sou13/schema/gold_addendum.schema.json),
   [`sou13gold/addendum.py`](../../../eval/sou13/sou13gold/addendum.py)). Frozen source row statuses remain historical.
