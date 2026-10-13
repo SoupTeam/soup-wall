@@ -54,7 +54,10 @@ pub struct VerifiedAgentPolicy {
 }
 
 fn put_field(out: &mut Vec<u8>, bytes: &[u8]) -> Result<()> {
-    let len: u32 = bytes.len().try_into().context("policy transcript field too long")?;
+    let len: u32 = bytes
+        .len()
+        .try_into()
+        .context("policy transcript field too long")?;
     out.extend_from_slice(&len.to_be_bytes());
     out.extend_from_slice(bytes);
     Ok(())
@@ -81,12 +84,18 @@ impl SignedAgentPolicy {
 
 /// Ingress MUST call this before deserialization to cap attacker-controlled JSON.
 pub fn parse_bounded(input: &[u8]) -> Result<SignedAgentPolicy> {
-    ensure!(!input.is_empty() && input.len() <= MAX_BUNDLE_BYTES, "invalid policy bundle length");
+    ensure!(
+        !input.is_empty() && input.len() <= MAX_BUNDLE_BYTES,
+        "invalid policy bundle length"
+    );
     serde_json::from_slice(input).context("invalid policy bundle JSON")
 }
 
 fn decode_fixed_hex<const N: usize>(text: &str) -> Result<[u8; N]> {
-    ensure!(text.len() == N * 2 && text.is_ascii(), "invalid fixed-length hex");
+    ensure!(
+        text.len() == N * 2 && text.is_ascii(),
+        "invalid fixed-length hex"
+    );
     let mut out = [0u8; N];
     for (index, item) in out.iter_mut().enumerate() {
         let offset = index * 2;
@@ -125,26 +134,64 @@ pub fn verify_candidate(
     last_accepted_sequence: u64,
     now_unix: i64,
 ) -> Result<VerifiedAgentPolicy> {
-    ensure!(bundle.schema_version == SCHEMA_VERSION, "unsupported policy schema");
-    ensure!(!expected_tenant.is_empty() && !expected_agent.is_empty(), "missing pinned audience");
-    ensure!(bundle.tenant_id == expected_tenant && bundle.agent_id == expected_agent, "wrong policy audience");
-    ensure!(!bundle.revision.is_empty() && bundle.revision.len() <= 128, "invalid policy revision");
-    ensure!(bundle.deployment_sequence > last_accepted_sequence, "replayed or stale policy deployment");
-    ensure!(bundle.issued_at_unix <= now_unix.saturating_add(60), "policy bundle issued in future");
+    ensure!(
+        bundle.schema_version == SCHEMA_VERSION,
+        "unsupported policy schema"
+    );
+    ensure!(
+        !expected_tenant.is_empty() && !expected_agent.is_empty(),
+        "missing pinned audience"
+    );
+    ensure!(
+        bundle.tenant_id == expected_tenant && bundle.agent_id == expected_agent,
+        "wrong policy audience"
+    );
+    ensure!(
+        !bundle.revision.is_empty() && bundle.revision.len() <= 128,
+        "invalid policy revision"
+    );
+    ensure!(
+        bundle.deployment_sequence > last_accepted_sequence,
+        "replayed or stale policy deployment"
+    );
+    ensure!(
+        bundle.issued_at_unix <= now_unix.saturating_add(60),
+        "policy bundle issued in future"
+    );
     ensure!(now_unix < bundle.expires_at_unix, "expired policy bundle");
-    let lifetime = bundle.expires_at_unix.checked_sub(bundle.issued_at_unix).context("invalid policy lifetime")?;
-    ensure!(lifetime > 0 && lifetime <= MAX_TTL_SECS, "invalid policy lifetime");
-    ensure!(!bundle.policy_yaml.is_empty() && bundle.policy_yaml.len() <= MAX_POLICY_BYTES, "invalid Agent policy size");
-    ensure!(bundle.issuer_key_id.len() <= 128 && !bundle.issuer_key_id.is_empty(), "invalid issuer key id");
-    ensure!(bundle.tenant_id.len() <= 128 && bundle.agent_id.len() <= 128, "policy audience too long");
+    let lifetime = bundle
+        .expires_at_unix
+        .checked_sub(bundle.issued_at_unix)
+        .context("invalid policy lifetime")?;
+    ensure!(
+        lifetime > 0 && lifetime <= MAX_TTL_SECS,
+        "invalid policy lifetime"
+    );
+    ensure!(
+        !bundle.policy_yaml.is_empty() && bundle.policy_yaml.len() <= MAX_POLICY_BYTES,
+        "invalid Agent policy size"
+    );
+    ensure!(
+        bundle.issuer_key_id.len() <= 128 && !bundle.issuer_key_id.is_empty(),
+        "invalid issuer key id"
+    );
+    ensure!(
+        bundle.tenant_id.len() <= 128 && bundle.agent_id.len() <= 128,
+        "policy audience too long"
+    );
 
     // A key supplied *inside* the signed envelope is never trusted. Trust roots
     // come from the Agent's local independently provisioned key list.
-    let key = keys.iter().find(|key| key.key_id == bundle.issuer_key_id)
+    let key = keys
+        .iter()
+        .find(|key| key.key_id == bundle.issuer_key_id)
         .context("unknown issuer signing key")?;
     ensure!(!key.revoked, "revoked issuer signing key");
     let actual_digest = hex_lower(&Sha256::digest(bundle.policy_yaml.as_bytes()));
-    ensure!(bundle.policy_sha256 == actual_digest, "Agent policy digest mismatch");
+    ensure!(
+        bundle.policy_sha256 == actual_digest,
+        "Agent policy digest mismatch"
+    );
 
     let signature = decode_fixed_hex::<64>(&bundle.signature_hex)?;
     UnparsedPublicKey::new(&ED25519, key.public_key)
@@ -153,8 +200,8 @@ pub fn verify_candidate(
 
     // The parser rejects unknown security fields and escalation defaults. Do
     // NOT map Gateway tenant model policies into this independent payload.
-    let policy = AgentPolicySet::from_yaml(&bundle.policy_yaml)
-        .context("invalid AgentPolicySet YAML")?;
+    let policy =
+        AgentPolicySet::from_yaml(&bundle.policy_yaml).context("invalid AgentPolicySet YAML")?;
     Ok(VerifiedAgentPolicy {
         revision: bundle.revision.clone(),
         deployment_sequence: bundle.deployment_sequence,
@@ -193,8 +240,19 @@ mod tests {
         (bundle, key)
     }
 
-    fn verify(bundle: &SignedAgentPolicy, key: &PinnedIssuerKey, seq: u64) -> Result<VerifiedAgentPolicy> {
-        verify_candidate(bundle, std::slice::from_ref(key), "tenant-1", "agent-1", seq, 1500)
+    fn verify(
+        bundle: &SignedAgentPolicy,
+        key: &PinnedIssuerKey,
+        seq: u64,
+    ) -> Result<VerifiedAgentPolicy> {
+        verify_candidate(
+            bundle,
+            std::slice::from_ref(key),
+            "tenant-1",
+            "agent-1",
+            seq,
+            1500,
+        )
     }
 
     #[test]
@@ -223,8 +281,24 @@ mod tests {
     #[test]
     fn rejects_cross_tenant_or_agent() {
         let (bundle, key) = fixture();
-        assert!(verify_candidate(&bundle, std::slice::from_ref(&key), "tenant-2", "agent-1", 0, 1500).is_err());
-        assert!(verify_candidate(&bundle, std::slice::from_ref(&key), "tenant-1", "agent-2", 0, 1500).is_err());
+        assert!(verify_candidate(
+            &bundle,
+            std::slice::from_ref(&key),
+            "tenant-2",
+            "agent-1",
+            0,
+            1500
+        )
+        .is_err());
+        assert!(verify_candidate(
+            &bundle,
+            std::slice::from_ref(&key),
+            "tenant-1",
+            "agent-2",
+            0,
+            1500
+        )
+        .is_err());
     }
 
     #[test]
@@ -237,7 +311,15 @@ mod tests {
     #[test]
     fn rejects_expiry_and_excessive_ttl() {
         let (mut bundle, key) = fixture();
-        assert!(verify_candidate(&bundle, std::slice::from_ref(&key), "tenant-1", "agent-1", 0, 2000).is_err());
+        assert!(verify_candidate(
+            &bundle,
+            std::slice::from_ref(&key),
+            "tenant-1",
+            "agent-1",
+            0,
+            2000
+        )
+        .is_err());
         bundle.expires_at_unix = 1_000_000;
         assert!(verify(&bundle, &key, 0).is_err());
     }

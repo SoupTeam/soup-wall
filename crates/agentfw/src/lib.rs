@@ -6,13 +6,13 @@
 
 pub mod audit;
 pub mod config;
-pub mod managed_policy;
 pub mod decision;
 pub mod grant;
 pub mod handlers;
 pub mod hook;
 pub mod install;
 pub mod judge;
+pub mod managed_policy;
 pub mod map;
 pub mod mcp;
 pub mod native;
