@@ -237,9 +237,10 @@ async fn webhook_transport_timeout_is_bounded_and_does_not_disclose_request_url(
 }
 
 #[tokio::test]
-async fn webhook_transport_connection_failure_is_sanitized() {
+async fn webhook_transport_connection_failure_is_bounded_and_sanitized() {
     // Reserve a socket without listening, avoiding a released-port race with
-    // another test while obtaining a deterministic connection refusal.
+    // another test. Some OSes refuse immediately; others time out a socket
+    // that is bound but not listening. Both must remain bounded and sanitized.
     let reserved = TcpSocket::new_v4().unwrap();
     reserved.bind("127.0.0.1:0".parse().unwrap()).unwrap();
     let url = Url::parse(&format!(
@@ -255,7 +256,10 @@ async fn webhook_transport_connection_failure_is_sanitized() {
     )
     .await;
     assert_eq!(result.http_status, None);
-    assert_eq!(result.error.as_deref(), Some("webhook connection failed"));
+    assert!(matches!(
+        result.error.as_deref(),
+        Some("webhook connection failed" | "webhook request timed out")
+    ));
     drop(reserved);
 }
 
