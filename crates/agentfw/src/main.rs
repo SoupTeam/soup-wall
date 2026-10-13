@@ -684,6 +684,14 @@ async fn serve() -> anyhow::Result<()> {
         token,
     });
 
+    // Managed enrollment is opt-in and pinned to an operator-approved local
+    // Console origin and public key. A corrupt persisted signed policy stops
+    // startup rather than silently reverting to a permissive default.
+    if let Some(managed) = agentfw::managed_sync::ManagedSync::from_environment(&home)? {
+        managed.restore(&state)?;
+        tokio::spawn(managed.run(state.clone()));
+    }
+
     let addr = cfg.socket_address();
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     tracing::info!(
