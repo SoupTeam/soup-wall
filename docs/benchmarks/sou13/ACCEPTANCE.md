@@ -23,12 +23,21 @@ are kept outside the repository; their decision ids and dates are not reproduced
 
 ## Criteria
 
-| Criterion | Technical evidence available | Status | Remaining blockers |
-| --- | --- | --- | --- |
-| AC1: pilot diversity and size | 252 frozen cases in 45 families; 19 CP1 and 179 CP2 development cases; 54 sealed test cases (owner-local) | Not claimed | Validate the final released gold denominators |
-| AC2: high-quality, reviewed labels | **Independent semantic sign-off of all 179 CP2 development cases**; 35 owner semantic rules with 179 mechanical agreements; limited technical Q-ADMISSION approval; gold-addendum interface | **Not met** | Q-CP2-DECL-EVIDENCE resolved for the 179 CP2 cases only (scoped clarification); 19-case CP1 legacy review; **versioned gold release (pending)**. The frozen records remain 173 provisional / 6 pending / 0 confirmed until that release. |
-| AC3: frozen, disjoint splits and custody | Family-disjoint split, immutable manifest and anchor; sealed package technically verified; **test custody confirmed** | Not claimed | Independently pinned owner key; one-shot evaluation protocol; **independent sealed-test label review (pending)** |
-| AC4: reproducible handoff, documentation and PR | Source byte-identical to both freezes; public data-free suite; privacy gate; [private validation procedure](PRIVATE_VALIDATION.md); owner-reported private strict validation PASS (2026-10-12): 343 ran / 340 passed / 0 failed / 0 errored / 3 skipped; source identity PASS; freeze anchor verified; privacy gate PASS | **Not met** | Exact-head PR CI; **dataset licensing and provenance (pending)**; owner approval to publish |
+| Criterion | Current evidence | Status / next action |
+| --- | --- | --- |
+| **AC1: pilot diversity and size** | Frozen **252-case / 45-family** pilot, including 179 CP2 dev, 19 historical CP1 and 54 sealed-test cases. | **Checked in [SOU-13](https://linear.app/soup-wall/issue/SOU-13)**; approved Gold release covers CP2 dev only. |
+| **AC2: reviewed labels, masks and evidence** | Nari AB's independent **179/179 CP2** sign-off and scoped clarifications; versioned approved Gold Addendum v1 binds the exact frozen case/label hashes. Recipient confirms 179 approved CP2 cases. | **Ready for lead acceptance for CP2** after this documentation update/review. The 19 CP1 cases are deferred by lead decision (2026-10-13); no CP1 Gold is claimed. |
+| **AC3: frozen family-held-out splits** | Original signed frozen split, independently pinned owner key and development export scoped to **71 train / 54 validation / 54 calibration** CP2; independent custodian holds the **54** sealed-test cases. | **Checked in [SOU-13](https://linear.app/soup-wall/issue/SOU-13)**; no re-freeze or repeat test. |
+| **AC4: reproducibility, documentation, provenance and PR** | Owner-reported final current-source strict validation **445 run / 441 passed / 0 failures / 0 errors / 4 expected Windows skips**; [PR #85](https://github.com/SoupTeam/soup-wall/pull/85) and [PR #87](https://github.com/SoupTeam/soup-wall/pull/87) merged after 24 checks; signed export and receipt verification PASS; [dataset card](DATASET_CARD.md), [workflow](GOLD_DEV_EXPORT.md), [private validation](PRIVATE_VALIDATION.md) and this checklist updated. | **Ready for lead acceptance for CP2** after docs PR review/merge. Internal-use-only permission recorded. Public dataset licensing/publication not granted or claimed. |
+
+### Exact handoff and verification references
+
+- Final private Gold ZIP SHA-256: `24611b702c7242ad25bcf5e0d8bf4baecd8c19714fc014977976a9caadfa6237`.
+- Export manifest SHA-256 (separately communicated outside archive): `78f0f539b80ebaee886f322fc71c530d18a1bb824f0de7edf96c5a08e832080d`.
+- Signed export: independent `self_consistency=PASS`, `anchored_integrity=PASS` and matched owner key as recorded by @KAZDANTOK in his final [SOU-13 handoff comment](https://linear.app/soup-wall/issue/SOU-13). The archive content, addendum and authorization were verified without executing archived scripts.
+- Source/tooling: reviewed [PR #80](https://github.com/SoupTeam/soup-wall/pull/80), accepted batch-attestation + export tooling [PR #85](https://github.com/SoupTeam/soup-wall/pull/85), verifier containment fix [PR #87](https://github.com/SoupTeam/soup-wall/pull/87); downstream model converter [PR #88](https://github.com/SoupTeam/soup-wall/pull/88). Frozen private source remains unchanged.
+- Source/reviewer/usage: [SOU-13 decision records](https://linear.app/soup-wall/issue/SOU-13) include Nari AB's 179-case sign-off, closed-world negatives and opaque admission clarification, owner report, and `SOU13-USAGE-2026-10-12` lead permission for internal training/evaluation only.
+- Downstream once-only custodian test and measured review: [SOU-16](https://linear.app/soup-wall/issue/SOU-16). Test scores are experimental classifier outcomes, **not** a guaranteed dataset-quality score or a production safety claim.
 
 ## Scope clarification (open)
 
