@@ -36,7 +36,7 @@ For hashing, deserialize profiles/evidence into typed Rust shapes, serialize the
 
 Result/context events retain the call's contract version and ordinary grant fields. A `delivery: "mcp_host"` result must retain the bound original JSON-RPC ID. A wrong stage/version/ID spends the grant and refuses release. Legacy binding bytes remain unchanged without resource admission. An installed resource policy cannot be bypassed with a legacy call.
 
-## Verification and remaining work
+## Verification and status
 
 ```sh
 cargo test --locked -p agentfw --test native_endpoint
@@ -45,4 +45,4 @@ cargo test --locked -p agentfw resource_receipt_tests
 python3 scripts/verify-sou17.py --allow-dirty --offline
 ```
 
-These exercise the real native router and stdio boundary, positive legacy execution and negative unsupported resource execution. They do not establish arbitrary-server containment, actual Claude Code availability, generic classification coverage or complete SOU-15 acceptance. Resource-aware execution requires a separately reviewed operation-level constrained executor.
+These exercise the real native router and stdio boundary, positive legacy execution, and operation-level constrained resource execution under SOU-15. Tools configured with an operator-reviewed `resource_policy` enforce workspace containment, path canonicalization, and zero-execution guarantees on containment violations, verified with independent server ledgers. Generic unreviewed executors without an operator resource policy remain safely rejected (`resource_executor_unsupported`).

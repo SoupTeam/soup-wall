@@ -1065,6 +1065,7 @@ enum Pending {
         args: Value,
         call_id: Value,
         binding: Value,
+        contract_version: String,
     },
 }
 
@@ -1383,16 +1384,107 @@ where
                         let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
                         ensure!(args.is_object(), "MCP call arguments must be an object");
                         schemas.get(name).context("MCP tool schema not installed")?.validate(&args)?;
-                        if collector.config.resource_profiles.contains_key(name)
-                            || installed.resource_policy.is_some()
+                        if installed.resource_policy.is_none()
+                            && collector.config.resource_profiles.contains_key(name)
                         {
-                            // No resource-aware constrained executor is shipped here.
-                            // Keep both URL and path guarantees unsupported, including
-                            // when an old fixed-destination environment flag is asserted.
                             let reasons = json!(["resource_executor_unsupported"]);
                             write(host, &withheld(request_id, "invocation", &reasons)).await?;
                             continue;
                         }
+                        let resource_admission = if let Some(policy) = &installed.resource_policy {
+                            let snapshot = admitted_snapshot
+                                .as_ref()
+                                .context("classifier discovery state missing")?;
+                            let admitted_tool = snapshot
+                                .tools
+                                .get(name)
+                                .context("admitted tool discovery missing")?;
+                            if let Some(agentfw_ws) = std::env::var_os("AGENTFW_WORKSPACE") {
+                                if let (Ok(policy_ws_canon), Ok(agentfw_ws_canon)) = (
+                                    policy.workspace.canonicalize(),
+                                    std::fs::canonicalize(&agentfw_ws),
+                                ) {
+                                    if policy_ws_canon != agentfw_ws_canon {
+                                        let reasons = json!(["resource_workspace_mismatch"]);
+                                        write(host, &withheld(request_id, "invocation", &reasons))
+                                            .await?;
+                                        continue;
+                                    }
+                                }
+                            }
+                            let source = collector
+                                .config
+                                .classifier
+                                .as_ref()
+                                .map(|c| c.source())
+                                .unwrap_or("unconfigured");
+                            let revision = collector
+                                .config
+                                .classifier
+                                .as_ref()
+                                .and_then(|c| c.revision())
+                                .map(str::to_owned);
+                            let input_sha256 = prediction_identity(
+                                &collector.config.server_id,
+                                snapshot,
+                                admitted_tool,
+                                name,
+                                &args,
+                                source,
+                                revision.as_deref(),
+                            );
+                            let input = Invocation {
+                                server_id: policy.profile.server_id.clone(),
+                                host_call_id: request_id.clone(),
+                                registry_sha256: collector.config.native.registry_sha256.clone(),
+                                snapshot_sha256: snapshot.sha256.clone(),
+                                schema_sha256: installed.schema_sha256.clone(),
+                                tool: name.into(),
+                                description: admitted_tool.description.clone(),
+                                schema: admitted_tool.schema.clone(),
+                                definition: admitted_tool.definition.clone(),
+                                server_info: snapshot.server_info.clone(),
+                                definition_sha256: admitted_tool.definition_sha256.clone(),
+                                input_sha256: input_sha256.clone(),
+                                classifier_revision: revision.clone(),
+                                args: args.clone(),
+                                baseline: installed.action_class,
+                            };
+                            let context = super::resources::ExecutorContext {
+                                os: std::env::consts::OS,
+                                workspace: &policy.workspace,
+                                cwd: &policy.cwd,
+                                fixed_destinations: true,
+                            };
+                            let derived = super::resources::extract(&input, &policy.profile, &context);
+                            if !derived.complete() {
+                                let reasons = if !derived.issues.is_empty() {
+                                    json!(derived.issues.iter().map(|i| i.reason).collect::<Vec<_>>())
+                                } else {
+                                    json!(["resource_extraction_incomplete"])
+                                };
+                                write(host, &withheld(request_id, "invocation", &reasons)).await?;
+                                continue;
+                            }
+                            let profile_sha256 = crate::native::canonical_digest(
+                                &serde_json::to_value(&policy.profile)
+                                    .context("profile serializes")?,
+                            );
+                            let admission = crate::native::resource::Admission {
+                                server_id: policy.profile.server_id.clone(),
+                                host_call_id: request_id.clone(),
+                                profile_sha256,
+                                executor_sha256: policy.executor_sha256.clone(),
+                                classifier_sha256: policy.classifier_sha256.clone(),
+                                snapshot_sha256: snapshot.sha256.clone(),
+                                definition_sha256: admitted_tool.definition_sha256.clone(),
+                                input_sha256,
+                                resources: derived.resources,
+                            };
+                            Some(admission)
+                        } else {
+                            None
+                        };
                         let mut prod_verdict = None;
                         if collector.config.classifier.is_some() {
                             let snapshot = admitted_snapshot.as_ref().context("classifier discovery state missing")?;
@@ -1424,15 +1516,22 @@ where
                         }
                         // A composed refusal must not reserve native capacity.
                         // Native trusted restrictions still gate every permitted call.
-                        let receipt = collector.event("call", json!({
+                        let mut call_fields = json!({
                             "tool": name, "args": args,
                             "schema_sha256": installed.schema_sha256,
-                        })).await?;
+                        });
+                        let contract_version = if let Some(ref admission) = resource_admission {
+                            call_fields["resource_admission"] = serde_json::to_value(admission)?;
+                            crate::native::resource::CONTRACT.to_string()
+                        } else {
+                            CONTRACT.to_string()
+                        };
+                        let receipt = collector.event("call", call_fields).await?;
                         if receipt["release"] != true {
                             write(host, &withheld(request_id, "invocation", &receipt["reason_codes"])).await?;
                             continue;
                         }
-                        Pending::Call { id: request_id.clone(), tool:name.into(), args, call_id:receipt["call_id"].clone(), binding:receipt["binding_sha256"].clone() }
+                        Pending::Call { id: request_id.clone(), tool:name.into(), args, call_id:receipt["call_id"].clone(), binding:receipt["binding_sha256"].clone(), contract_version }
                     }
                     _ => bail!("unsupported MCP method"),
                 };
@@ -1473,10 +1572,10 @@ where
                         ready = true;
                     }
                     Pending::Ping(_) => { ensure!(value.get("error").is_none(), "MCP ping failed"); keys(&value["result"], &[])?; }
-                    Pending::Call { id, tool, args, call_id, binding } => {
+                    Pending::Call { id, tool, args, call_id, binding, contract_version } => {
                         let kind = result_kind(&value)?;
                         let content = std::str::from_utf8(&raw).context("MCP result is not UTF-8")?;
-                        let receipt = collector.event("result", json!({"tool":tool,"args":args,"call_id":call_id,"result_kind":kind,"delivery":"mcp_host","content":content,"expected_binding_sha256":binding})).await?;
+                        let receipt = collector.event("result", json!({"expected_contract_version":contract_version,"tool":tool,"args":args,"call_id":call_id,"result_kind":kind,"delivery":"mcp_host","content":content,"expected_binding_sha256":binding})).await?;
                         if receipt["release"] != true {
                             write(host, &withheld(&id, "result", &receipt["reason_codes"])).await?;
                             continue;
