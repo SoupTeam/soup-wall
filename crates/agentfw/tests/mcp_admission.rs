@@ -2448,7 +2448,12 @@ print(json.dumps({{'status':'ok','actions':[('read' if '{refusal}' == 'ask' else
             "params":{"name":"read_document","arguments":{}}});
             let reply: Value =
                 serde_json::from_str(&fixture.exchange(&call.to_string()).await.unwrap()).unwrap();
-            assert_eq!(reply["result"]["isError"], true);
+            assert_eq!(
+                reply["result"]["isError"],
+                true,
+                "expected {refusal} refusal at call {index}; synthetic reply: {reply}; classifier evidence: {:?}",
+                classifications(&fixture)
+            );
             assert!(reply.to_string().contains(if refusal == "ask" {
                 "policy_unconfirmed_ask"
             } else {

@@ -9,6 +9,8 @@ See the dated [initial-path results](evidence/SOU18_INITIAL_PATH_2026-10-11.md)
 for the measured candidate, platform limits and remaining administrator work.
 The [combined-run evidence from October 12](evidence/SOU18_LOCAL_SUITE_2026-10-12.md)
 records a fresh build after the accepted classifier updates.
+The [October 13 integration recheck](evidence/SOU18_INTEGRATION_2026-10-13.md)
+adds the accepted generic classifier/policy matrix and complete raw reports.
 
 ## Run the local probes together
 
@@ -22,14 +24,27 @@ not compile the Agent or attest a supplied binary's source.
 ```sh
 CANDIDATE_DIR=/absolute/path/to/clean/candidate
 CANDIDATE_SHA=$(git -C "$CANDIDATE_DIR" rev-parse HEAD)
-python3 scripts/run-sou18-acceptance.py --run \
+python3 scripts/run-sou18-acceptance.py --run --include-generic \
   --repo "$CANDIDATE_DIR" --agentfw "$CANDIDATE_DIR/target/debug/agentfw" \
   --expected-commit "$CANDIDATE_SHA" --pairs 30 \
   --output /absolute/path/outside/candidate/new-suite-run
 ```
 
-For an older candidate containing the three probes, invoke the runner from a
-separate checkout containing this script. It records both the runner hash and
+`--include-generic` adds the accepted
+[SOU-17 generic boundary probe](../../scripts/verify-sou17-generic-boundary.py).
+Its 15 synthetic reply cases check valid single/mixed/unknown/empty shapes
+reaching production policy, hard-Deny precedence, and malformed replies stopping
+before policy or execution. Independent executor, receiver and complete client
+transcript witnesses are regraded. This checks runtime wiring, not classifier
+quality, actual no-op behavior or operation-level resource confinement.
+
+Omit this flag for the original three-stage command or an older candidate that
+does not contain the generic probe. Schema version 1 and the original child
+report formats remain unchanged; `required_stages` records the requested stages.
+A requested generic failure, skip or incomplete result prevents suite success.
+
+For a separate candidate, invoke the runner from a checkout containing this
+script. It records both the runner hash and
 the candidate's probe hashes. Replace `--agentfw` with the extracted binary when
 using the Docker build. Without `--run`, no probes or reports are created.
 
@@ -42,8 +57,10 @@ output directory must be new and outside the candidate. It contains:
 - `status/results.json`: independent execution and delivery evidence for seven cases.
 - `latency/results.json` and its companion files: 30 paired reads by default,
   one excluded warmup pair, raw witnesses and p50/p95 added duration.
+- `generic/results.json` and its companion files, when requested: all 15 cases,
+  original frames, classifier emissions, native decisions and final effect witnesses.
 
-Exit **0** means all three bounded probes passed. Exit **1** means a probe
+Exit **0** means all requested bounded probes passed. Exit **1** means a probe
 reported a failure. Exit **2** means incomplete evidence, an unsupported skip,
 invalid input, changed source/binary or a process timeout. A success label or
 zero child exit alone is insufficient: the runner checks report schemas,
@@ -52,14 +69,18 @@ Failed or partial child reports are retained. Process diagnostics are discarded
 to avoid retaining inherited private text; read the sanitized child report for
 the failure reason. Missing child evidence remains explicitly incomplete.
 
-Per-stage timeouts are 120, 180 and 240 seconds. On timeout the runner terminates
+Setup, status and latency timeouts are 120, 180 and 240 seconds; the optional
+generic stage has a 120-second wrapper limit and its own 90-second active limit.
+On timeout the runner terminates
 its owned process tree and stops subsequent probes. Such a run does not certify
 cleanup: inspect its owned temporary directories before removing leftovers.
 Ordinary completion removes the temporary profiles.
 
-Linux and macOS CI run this command and retain `sou18-suite-*` artifacts on
-success or failure. Native Windows can run setup and status, but the existing
-paired-latency probe is POSIX-only: the runner records `skip` and exits **2**.
+Linux and macOS CI include the generic stage and retain `sou18-suite-*` artifacts
+on success or failure. Output directories include the run ID and attempt to
+avoid reusing evidence on a rerun. Native Windows can run setup and status, but
+the latency and generic probes are POSIX-only: the runner records `skip` for
+each requested unsupported stage and exits **2**.
 Existing Windows setup/status CI remains separate. A Linux container pass does
 not establish native Mac, Windows or WSL2 coverage.
 
@@ -67,7 +88,7 @@ This command covers the selected trusted local fixture. It keeps
 `generic_candidate_acceptance=pending_sou15`, `actual_host=not_run` and
 `acceptance_passed=false`, including on exit 0. It does not measure general
 classifier accuracy or prove CodeQL merge protection. Repeat it on the final
-agreed candidate and complete the remaining host, generic-action and
+agreed candidate and complete the remaining host, constrained-resource and
 administrator checks separately.
 
 ## Disposable installation and status checks
@@ -238,8 +259,10 @@ direct MCP server launches bypass native admission. See
 
 The seven-case probe verifies the accepted initial path. Repeat it and the
 paired measurement on the same final SOU-15 candidate used by SOU-17, and review
-the generic action/resource matrix separately. A selected-fixture pass does not
-resolve unsupported resource execution or unknown/mixed mappings. Record the
+the generic action/resource matrix separately. PR #82 implemented routing for
+valid unknown/mixed/empty replies; the optional generic stage verifies those
+policy boundaries. A selected-fixture pass does not resolve unsupported
+operation-level resource execution. Record the
 supported host, transport, schemas, result content and unprotected paths for that
 candidate. Run the existing real-Claude acceptance separately when available.
 Any numeric performance gate must come from an accepted team protocol; the
