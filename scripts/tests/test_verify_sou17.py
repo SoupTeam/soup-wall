@@ -105,6 +105,7 @@ class VerificationGates(unittest.TestCase):
                         "timed_out": False, "elapsed_ms": 1}
 
             environment = {"PATH": "/fixture/bin", "LANG": "C", "OPENAI_API_KEY": "must-not-record",
+                           "AGENTFW_CLASSIFIER_PYTHON": "/unreviewed/python",
                            "CARGO_ENCODED_RUSTFLAGS": "--cfg\x1ffixture", "RUSTFLAGS": "--cfg fixture"}
             with patch.object(VERIFY, "ROOT", root), patch.object(VERIFY.sys, "platform", "linux"), \
                     patch.object(VERIFY, "SUITES", (("soup-wall-adapter", "resilience_tests"),)), \
@@ -151,7 +152,8 @@ class VerificationGates(unittest.TestCase):
         self.assertEqual(code, 0)
         environment = result["environment"]
         runtime = environment["runtime_environment"]
-        self.assertEqual(runtime, {"PATH": "/fixture/bin", "LANG": "C", "PYTHONDONTWRITEBYTECODE": "1"})
+        self.assertEqual(runtime, {"PATH": "/fixture/bin", "LANG": "C", "PYTHONDONTWRITEBYTECODE": "1",
+                                   "AGENTFW_CLASSIFIER_PYTHON": "/fixture/python-real"})
         self.assertEqual(environment["fixture_python"]["version"], "3.12.1")
         self.assertEqual(environment["fixture_python"]["resolved_command"], "/fixture/python3")
         self.assertEqual(environment["build_settings"]["CARGO_ENCODED_RUSTFLAGS"], "--cfg\x1ffixture")
