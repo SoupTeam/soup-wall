@@ -150,28 +150,34 @@ async fn receive(
     status
 }
 
-struct SenderChild(Option<Child>);
+struct SenderChild(Option<Child>, PathBuf);
 
 impl SenderChild {
     fn start(directory: &Path, database: &Path, target: &str, pause: bool) -> anyhow::Result<Self> {
         let output = File::create(directory.join("sender.log"))?;
-        let child = Command::new(std::env::current_exe()?)
-            .args(["--ignored", "--exact", WORKER_TEST, "--nocapture"])
-            .env("SOUP_WALL_WEBHOOK_DEMO_DATABASE", database)
-            .env("SOUP_WALL_WEBHOOK_DEMO_TARGET", target)
-            .env(
-                "SOUP_WALL_WEBHOOK_DEMO_MARKER",
-                directory.join("response.observed"),
-            )
-            .env(
-                "SOUP_WALL_WEBHOOK_DEMO_PAUSE",
-                if pause { "1" } else { "0" },
-            )
-            .stdout(Stdio::from(output.try_clone()?))
-            .stderr(Stdio::from(output))
-            .spawn()
-            .context("could not start disposable sender")?;
-        Ok(Self(Some(child)))
+        let completed = directory.join("sender.completed");
+        if completed.exists() {
+            std::fs::remove_file(&completed)?;
+        }
+        let child =
+            Command::new(directory.join(format!("sender-fixture{}", std::env::consts::EXE_SUFFIX)))
+                .args(["--ignored", "--exact", WORKER_TEST, "--nocapture"])
+                .env("SOUP_WALL_WEBHOOK_DEMO_DATABASE", database)
+                .env("SOUP_WALL_WEBHOOK_DEMO_TARGET", target)
+                .env("SOUP_WALL_WEBHOOK_DEMO_COMPLETED", &completed)
+                .env(
+                    "SOUP_WALL_WEBHOOK_DEMO_MARKER",
+                    directory.join("response.observed"),
+                )
+                .env(
+                    "SOUP_WALL_WEBHOOK_DEMO_PAUSE",
+                    if pause { "1" } else { "0" },
+                )
+                .stdout(Stdio::from(output.try_clone()?))
+                .stderr(Stdio::from(output))
+                .spawn()
+                .context("could not start disposable sender")?;
+        Ok(Self(Some(child), completed))
     }
 
     async fn expect_success(&mut self) -> anyhow::Result<()> {
@@ -182,6 +188,9 @@ impl SenderChild {
                 self.0.take();
                 if !status.success() {
                     bail!("disposable sender exited unsuccessfully: {status}");
+                }
+                if !self.1.is_file() {
+                    bail!("sender exited without its completion witness (possibly zero matched tests)");
                 }
                 return Ok(());
             }
@@ -318,6 +327,11 @@ async fn webhook_receiver_demo_worker() -> anyhow::Result<()> {
         std::future::pending::<()>().await;
     }
     assert!(store.finish_webhook_delivery(&pending.delivery, result)?);
+    let completed = std::env::var_os("SOUP_WALL_WEBHOOK_DEMO_COMPLETED")
+        .context("missing child completion witness")?;
+    let mut completed = File::create(completed)?;
+    completed.write_all(b"completion committed\n")?;
+    completed.sync_all()?;
     Ok(())
 }
 
@@ -326,6 +340,14 @@ async fn webhook_receiver_demo_worker() -> anyhow::Result<()> {
 async fn webhook_receiver_recovery_demo() -> anyhow::Result<()> {
     let started = Instant::now();
     let directory = tempfile::tempdir()?;
+    // Another checkout may rebuild a shared Cargo target during the real
+    // lease wait. Pin the running test binary before creating any children.
+    std::fs::copy(
+        std::env::current_exe()?,
+        directory
+            .path()
+            .join(format!("sender-fixture{}", std::env::consts::EXE_SUFFIX)),
+    )?;
     let database = directory.path().join("sender.sqlite3");
     let receipts_path = directory.path().join("receiver-receipts.jsonl");
     let store = open_fixture(&database)?;
