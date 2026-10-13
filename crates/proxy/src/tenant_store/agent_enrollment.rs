@@ -36,7 +36,7 @@ fn valid_id(value: &str) -> bool {
 }
 
 fn credential_hash(token: &str) -> Option<Vec<u8>> {
-    if token.len() != 55 || !token.starts_with("sw_agent_")
+    if token.len() != 52 || !token.starts_with("sw_agent_")
         || !token.bytes().skip(9).all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
     {
         return None;
