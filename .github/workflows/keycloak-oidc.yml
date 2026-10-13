@@ -7,6 +7,7 @@ on:
       - 'scripts/keycloak-oidc*'
       - 'scripts/keycloak-saml-acceptance.py'
       - 'scripts/tests/test_console_browser.py'
+      - 'scripts/tests/test_keycloak_oidc_acceptance.py'
       - '.github/workflows/keycloak-oidc.yml'
       - 'Cargo.lock'
   workflow_dispatch:
@@ -40,6 +41,7 @@ jobs:
         run: |
           export PATH="$PWD/target/oidc-driver/bin:$PATH"
           python3 -m unittest discover -s scripts/tests -p test_console_browser.py -v
+          python3 -m unittest discover -s scripts/tests -p test_keycloak_oidc_acceptance.py -v
           bash scripts/keycloak-oidc-acceptance.sh
       - name: Retain only sanitized checks and hashes
         if: always()

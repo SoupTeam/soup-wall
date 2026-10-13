@@ -34,6 +34,17 @@ spec.loader.exec_module(vendor)
 KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak@sha256:ad1b0f0fa4bb5eff10f7a78eaafbb6d65b25431c1f824b0710836d74373a7dfb"
 
 
+def imported_credential(password):
+    """Import a salted Keycloak credential; keep generated cleartext in memory."""
+    salt = secrets.token_bytes(16)
+    iterations = 210_000
+    derived = hashlib.pbkdf2_hmac("sha512", password.encode("utf-8"), salt, iterations, dklen=64)
+    return {"type": "password", "temporary": False,
+            "credentialData": json.dumps({"algorithm": "pbkdf2-sha512", "hashIterations": iterations}),
+            "secretData": json.dumps({"value": base64.b64encode(derived).decode("ascii"),
+                                       "salt": base64.b64encode(salt).decode("ascii")})}
+
+
 def stop_child(child):
     if os.name == "nt":
         return vendor.stop_child(child)
@@ -164,7 +175,7 @@ def run(args):
                           "users": [{"id": user["id"], "username": user["username"], "enabled": True,
                                      "email": user["username"] + "@example.test", "emailVerified": True,
                                      "firstName": "Synthetic", "lastName": "Acceptance", "realmRoles": ["owner"],
-                                     "credentials": [{"type": "password", "value": user["password"], "temporary": False}]}
+                                     "credentials": [imported_credential(user["password"])]}
                                     for user in users]}
             import_dir = directory / "realm-import" if args.docker else keycloak / "data/import"
             import_dir.mkdir(parents=True)

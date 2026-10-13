@@ -54,6 +54,12 @@ and [Apache-2.0 license](https://github.com/keycloak/keycloak/blob/26.8.0/LICENS
 apply; retain the image's included JVM/base-image license notices as well.
 No customer account or paid service is required.
 
+The realm import contains salted PBKDF2-SHA512 verifiers, not cleartext passwords.
+The format and 210,000 iterations follow the pinned Keycloak
+[credential model](https://github.com/keycloak/keycloak/blob/26.8.0/server-spi/src/main/java/org/keycloak/models/credential/PasswordCredentialModel.java)
+and [hash provider](https://github.com/keycloak/keycloak/blob/26.8.0/server-spi-private/src/main/java/org/keycloak/credential/hash/Pbkdf2Sha512PasswordHashProviderFactory.java).
+Generated cleartext remains in driver memory for the genuine HTTPS login.
+
 Prepare the optional Python/browser tools in an activated virtualenv:
 
 ```sh
