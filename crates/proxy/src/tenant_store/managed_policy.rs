@@ -2,7 +2,7 @@
 //! SOU-30 SQLite Console issuer for approved, signed AgentPolicySet revisions.
 //! Deliberately distinct from the Gateway TenantPolicyDocument API.
 
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::{ensure, Context, Result};
 use aws_lc_rs::signature::{Ed25519KeyPair, KeyPair};
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -65,19 +65,28 @@ pub struct ManagedIssuer {
 }
 
 fn exact_id(s: &str) -> bool {
-    !s.is_empty() && s.len() <= 128 &&
-        s.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+    !s.is_empty()
+        && s.len() <= 128
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
 }
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 fn decode_seed(value: &str) -> Result<[u8; 32]> {
-    ensure!(value.len() == 64 && value.is_ascii(), "expected 64 lowercase hex characters");
+    ensure!(
+        value.len() == 64 && value.is_ascii(),
+        "expected 64 lowercase hex characters"
+    );
     let mut out = [0u8; 32];
     for (idx, b) in out.iter_mut().enumerate() {
         let chunk = &value[idx * 2..idx * 2 + 2];
-        ensure!(chunk.bytes().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
-            "non-canonical issuer seed");
+        ensure!(
+            chunk
+                .bytes()
+                .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
+            "non-canonical issuer seed"
+        );
         *b = u8::from_str_radix(chunk, 16)?;
     }
     Ok(out)
@@ -92,11 +101,16 @@ impl SignedManagedBundle {
     fn transcript(&self) -> Result<Vec<u8>> {
         let mut b = DOMAIN.to_vec();
         for v in [
-            self.schema_version.to_string(), self.tenant_id.clone(),
-            self.agent_id.clone(), self.revision.clone(),
-            self.deployment_sequence.to_string(), self.issued_at_unix.to_string(),
-            self.expires_at_unix.to_string(), self.issuer_key_id.clone(),
-            self.policy_yaml.clone(), self.policy_sha256.clone()
+            self.schema_version.to_string(),
+            self.tenant_id.clone(),
+            self.agent_id.clone(),
+            self.revision.clone(),
+            self.deployment_sequence.to_string(),
+            self.issued_at_unix.to_string(),
+            self.expires_at_unix.to_string(),
+            self.issuer_key_id.clone(),
+            self.policy_yaml.clone(),
+            self.policy_sha256.clone(),
         ] {
             field(&mut b, v.as_bytes())?;
         }
@@ -151,27 +165,41 @@ fn schema(db: &rusqlite::Connection) -> Result<()> {
            PRIMARY KEY(tenant_id,agent_id,deployment_sequence),
            FOREIGN KEY(tenant_id,agent_id,revision)
              REFERENCES managed_agent_revisions(tenant_id,agent_id,revision)
-        );"
-    ).context("cannot prepare managed policy tables")
+        );",
+    )
+    .context("cannot prepare managed policy tables")
 }
 
 fn eligible(db: &rusqlite::Connection, tenant: &str, agent: &str) -> Result<()> {
-    ensure!(exact_id(tenant) && exact_id(agent), "invalid policy audience");
-    let exists: Option<i64> = db.query_row(
-        "SELECT 1 FROM managed_agent_enrollments a JOIN tenants t ON t.id=a.tenant_id
+    ensure!(
+        exact_id(tenant) && exact_id(agent),
+        "invalid policy audience"
+    );
+    let exists: Option<i64> = db
+        .query_row(
+            "SELECT 1 FROM managed_agent_enrollments a JOIN tenants t ON t.id=a.tenant_id
          WHERE a.tenant_id=?1 AND a.agent_id=?2 AND a.revoked_at_unix IS NULL AND t.active=1",
-        params![tenant,agent], |r| r.get(0)
-    ).optional()?;
+            params![tenant, agent],
+            |r| r.get(0),
+        )
+        .optional()?;
     ensure!(exists.is_some(), "Agent not enrolled or revoked");
     Ok(())
 }
 
 impl TenantStore {
     pub fn create_managed_revision(
-        &self, tenant: &str, agent: &str, revision: &str, yaml: &str,
+        &self,
+        tenant: &str,
+        agent: &str,
+        revision: &str,
+        yaml: &str,
     ) -> Result<ManagedRevision> {
         ensure!(exact_id(revision), "invalid immutable revision");
-        ensure!(!yaml.is_empty() && yaml.len() <= MAX_YAML, "Agent policy size out of bounds");
+        ensure!(
+            !yaml.is_empty() && yaml.len() <= MAX_YAML,
+            "Agent policy size out of bounds"
+        );
         AgentPolicySet::from_yaml(yaml).context("invalid AgentPolicySet YAML")?;
         let digest = hex(&Sha256::digest(yaml.as_bytes()));
         let db = self.connection()?;
@@ -181,57 +209,91 @@ impl TenantStore {
             "INSERT INTO managed_agent_revisions
               (tenant_id,agent_id,revision,policy_yaml,policy_sha256)
              VALUES (?1,?2,?3,?4,?5)",
-            params![tenant,agent,revision,yaml,digest],
-        ).context("revision exists or cannot be created")?;
-        Ok(ManagedRevision { tenant_id:tenant.into(),agent_id:agent.into(),
-            revision:revision.into(),policy_sha256:digest, approved:false })
+            params![tenant, agent, revision, yaml, digest],
+        )
+        .context("revision exists or cannot be created")?;
+        Ok(ManagedRevision {
+            tenant_id: tenant.into(),
+            agent_id: agent.into(),
+            revision: revision.into(),
+            policy_sha256: digest,
+            approved: false,
+        })
     }
     pub fn approve_managed_revision(
-        &self, tenant: &str, agent: &str, revision: &str
+        &self,
+        tenant: &str,
+        agent: &str,
+        revision: &str,
     ) -> Result<bool> {
         let db = self.connection()?;
         schema(&db)?;
-        eligible(&db,tenant,agent)?;
-        let changed=db.execute(
+        eligible(&db, tenant, agent)?;
+        let changed = db.execute(
             "UPDATE managed_agent_revisions SET approved_at_unix=?4
              WHERE tenant_id=?1 AND agent_id=?2 AND revision=?3 AND approved_at_unix IS NULL",
-            params![tenant,agent,revision,now_unix()],
+            params![tenant, agent, revision, now_unix()],
         )?;
         Ok(changed == 1)
     }
     /// New signed, monotonically numbered deployment. Rollback reuses only
     /// the APPROVED YAML payload, never the old signed envelope/sequence.
     pub fn deploy_managed_revision(
-        &self, tenant: &str, agent: &str, revision: &str, rollback: bool,
-        issuer: &ManagedIssuer
+        &self,
+        tenant: &str,
+        agent: &str,
+        revision: &str,
+        rollback: bool,
+        issuer: &ManagedIssuer,
     ) -> Result<ManagedDeployment> {
         let mut db = self.connection()?;
         schema(&db)?;
         let tx = db.transaction()?;
-        eligible(&tx,tenant,agent)?;
-        let payload: Option<(String,String)> = tx.query_row(
-            "SELECT policy_yaml,policy_sha256 FROM managed_agent_revisions
+        eligible(&tx, tenant, agent)?;
+        let payload: Option<(String, String)> = tx
+            .query_row(
+                "SELECT policy_yaml,policy_sha256 FROM managed_agent_revisions
              WHERE tenant_id=?1 AND agent_id=?2 AND revision=?3 AND approved_at_unix IS NOT NULL",
-            params![tenant,agent,revision],|r|Ok((r.get(0)?,r.get(1)?))
-        ).optional()?;
-        let (yaml,digest)=payload.context("revision not approved or not found")?;
-        let last: Option<(i64,String)> = tx.query_row(
-            "SELECT deployment_sequence,revision FROM managed_agent_deployments
+                params![tenant, agent, revision],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
+        let (yaml, digest) = payload.context("revision not approved or not found")?;
+        let last: Option<(i64, String)> = tx
+            .query_row(
+                "SELECT deployment_sequence,revision FROM managed_agent_deployments
              WHERE tenant_id=?1 AND agent_id=?2 ORDER BY deployment_sequence DESC LIMIT 1",
-            params![tenant,agent],|r|Ok((r.get(0)?,r.get(1)?))
-        ).optional()?;
+                params![tenant, agent],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
         if rollback {
-            let (_,previous)=last.as_ref().context("cannot rollback with no prior deployment")?;
-            ensure!(previous != revision, "rollback must select a different approved revision");
+            let (_, previous) = last
+                .as_ref()
+                .context("cannot rollback with no prior deployment")?;
+            ensure!(
+                previous != revision,
+                "rollback must select a different approved revision"
+            );
         }
-        let seq = last.map(|(s,_)|s).unwrap_or(0).checked_add(1).context("sequence exhausted")?;
-        let issued=now_unix();
-        let mut bundle=SignedManagedBundle {
-            schema_version:1,tenant_id:tenant.into(),agent_id:agent.into(),
-            revision:revision.into(),deployment_sequence:seq.try_into()?,
-            issued_at_unix:issued,expires_at_unix:issued+3600,
-            issuer_key_id:issuer.key_id.clone(),policy_yaml:yaml,policy_sha256:digest.clone(),
-            signature_hex:String::new()
+        let seq = last
+            .map(|(s, _)| s)
+            .unwrap_or(0)
+            .checked_add(1)
+            .context("sequence exhausted")?;
+        let issued = now_unix();
+        let mut bundle = SignedManagedBundle {
+            schema_version: 1,
+            tenant_id: tenant.into(),
+            agent_id: agent.into(),
+            revision: revision.into(),
+            deployment_sequence: seq.try_into()?,
+            issued_at_unix: issued,
+            expires_at_unix: issued + 3600,
+            issuer_key_id: issuer.key_id.clone(),
+            policy_yaml: yaml,
+            policy_sha256: digest.clone(),
+            signature_hex: String::new(),
         };
         issuer.sign(&mut bundle)?;
         tx.execute(
@@ -239,48 +301,82 @@ impl TenantStore {
              (tenant_id,agent_id,deployment_sequence,revision,policy_sha256,action,
               bundle_json,status,issued_at_unix)
              VALUES (?1,?2,?3,?4,?5,?6,?7,'issued',?8)",
-            params![tenant,agent,seq,revision,digest,
-                    if rollback {"rollback"}else{"activate"},
-                    serde_json::to_string(&bundle)?,issued],
+            params![
+                tenant,
+                agent,
+                seq,
+                revision,
+                digest,
+                if rollback { "rollback" } else { "activate" },
+                serde_json::to_string(&bundle)?,
+                issued
+            ],
         )?;
         tx.commit()?;
         Ok(ManagedDeployment {
-            tenant_id:tenant.into(),agent_id:agent.into(),
-            deployment_sequence:seq.try_into()?, revision:revision.into(),
-            policy_sha256:digest,action:if rollback{"rollback".into()}else{"activate".into()},
-            status:"issued".into(),issued_at_unix:issued,applied_at_unix:None
+            tenant_id: tenant.into(),
+            agent_id: agent.into(),
+            deployment_sequence: seq.try_into()?,
+            revision: revision.into(),
+            policy_sha256: digest,
+            action: if rollback {
+                "rollback".into()
+            } else {
+                "activate".into()
+            },
+            status: "issued".into(),
+            issued_at_unix: issued,
+            applied_at_unix: None,
         })
     }
-    pub fn deliver_managed_bundle(&self,tenant:&str,agent:&str)
-        -> Result<Option<SignedManagedBundle>> {
-        let db=self.connection()?;
+    pub fn deliver_managed_bundle(
+        &self,
+        tenant: &str,
+        agent: &str,
+    ) -> Result<Option<SignedManagedBundle>> {
+        let db = self.connection()?;
         schema(&db)?;
-        eligible(&db,tenant,agent)?;
-        let latest:Option<(i64,String,String)> = db.query_row(
-            "SELECT deployment_sequence,bundle_json,status
+        eligible(&db, tenant, agent)?;
+        let latest: Option<(i64, String, String)> = db
+            .query_row(
+                "SELECT deployment_sequence,bundle_json,status
              FROM managed_agent_deployments WHERE tenant_id=?1 AND agent_id=?2
              ORDER BY deployment_sequence DESC LIMIT 1",
-            params![tenant,agent],|r| Ok((r.get(0)?,r.get(1)?,r.get(2)?))
-        ).optional()?;
-        let Some((sequence,json,status))=latest else {return Ok(None)};
-        if status=="applied" || status=="rejected" {return Ok(None)}
-        let bundle:SignedManagedBundle=serde_json::from_str(&json)?;
-        if now_unix()>=bundle.expires_at_unix{return Ok(None)}
+                params![tenant, agent],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .optional()?;
+        let Some((sequence, json, status)) = latest else {
+            return Ok(None);
+        };
+        if status == "applied" || status == "rejected" {
+            return Ok(None);
+        }
+        let bundle: SignedManagedBundle = serde_json::from_str(&json)?;
+        if now_unix() >= bundle.expires_at_unix {
+            return Ok(None);
+        }
         db.execute(
             "UPDATE managed_agent_deployments SET status='delivered'
              WHERE tenant_id=?1 AND agent_id=?2 AND deployment_sequence=?3 AND status='issued'",
-            params![tenant,agent,sequence],
+            params![tenant, agent, sequence],
         )?;
         Ok(Some(bundle))
     }
     pub fn acknowledge_managed_bundle(
-        &self,tenant:&str,agent:&str,report:&AppliedReport
+        &self,
+        tenant: &str,
+        agent: &str,
+        report: &AppliedReport,
     ) -> Result<bool> {
-        ensure!(report.status=="applied" || report.status=="rejected","invalid acknowledgement");
-        let db=self.connection()?;
+        ensure!(
+            report.status == "applied" || report.status == "rejected",
+            "invalid acknowledgement"
+        );
+        let db = self.connection()?;
         schema(&db)?;
-        eligible(&db,tenant,agent)?;
-        let seq:i64=report.deployment_sequence.try_into()?;
+        eligible(&db, tenant, agent)?;
+        let seq: i64 = report.deployment_sequence.try_into()?;
         // A stale/unknown ack, including an ack for a superseded deployment,
         // may never mark the Console's current revision applied.
         let changed = db.execute(
@@ -293,29 +389,44 @@ impl TenantStore {
                  SELECT MAX(deployment_sequence) FROM managed_agent_deployments
                  WHERE tenant_id=?1 AND agent_id=?2
                )",
-            params![tenant,agent,seq,report.status,now_unix(),
-                    report.revision,report.policy_sha256]
+            params![
+                tenant,
+                agent,
+                seq,
+                report.status,
+                now_unix(),
+                report.revision,
+                report.policy_sha256
+            ],
         )?;
-        Ok(changed==1)
+        Ok(changed == 1)
     }
-    pub fn list_managed_deployments(&self,tenant:&str,agent:&str)
-        -> Result<Vec<ManagedDeployment>> {
-        let db=self.connection()?;
+    pub fn list_managed_deployments(
+        &self,
+        tenant: &str,
+        agent: &str,
+    ) -> Result<Vec<ManagedDeployment>> {
+        let db = self.connection()?;
         schema(&db)?;
-        ensure!(exact_id(tenant)&&exact_id(agent),"invalid identity");
-        let mut stmt=db.prepare(
+        ensure!(exact_id(tenant) && exact_id(agent), "invalid identity");
+        let mut stmt = db.prepare(
             "SELECT deployment_sequence,revision,policy_sha256,action,status,
                     issued_at_unix,applied_at_unix
              FROM managed_agent_deployments WHERE tenant_id=?1 AND agent_id=?2
-             ORDER BY deployment_sequence DESC LIMIT 50"
+             ORDER BY deployment_sequence DESC LIMIT 50",
         )?;
-        let rows=stmt.query_map(params![tenant,agent],|r| {
-            let sequence:i64=r.get(0)?;
+        let rows = stmt.query_map(params![tenant, agent], |r| {
+            let sequence: i64 = r.get(0)?;
             Ok(ManagedDeployment {
-                tenant_id:tenant.into(),agent_id:agent.into(),
-                deployment_sequence:sequence as u64,revision:r.get(1)?,
-                policy_sha256:r.get(2)?,action:r.get(3)?,status:r.get(4)?,
-                issued_at_unix:r.get(5)?,applied_at_unix:r.get(6)?
+                tenant_id: tenant.into(),
+                agent_id: agent.into(),
+                deployment_sequence: sequence as u64,
+                revision: r.get(1)?,
+                policy_sha256: r.get(2)?,
+                action: r.get(3)?,
+                status: r.get(4)?,
+                issued_at_unix: r.get(5)?,
+                applied_at_unix: r.get(6)?,
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
@@ -325,45 +436,93 @@ impl TenantStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aws_lc_rs::signature::{UnparsedPublicKey,ED25519};
+    use aws_lc_rs::signature::{UnparsedPublicKey, ED25519};
 
     #[test]
     fn approved_deployment_is_signed_and_rollback_increases_sequence() {
-        let store=TenantStore::open(":memory:").unwrap();
-        let tenant=store.create_tenant("managed-issuer-test").unwrap();
-        store.enroll_managed_agent(&tenant.id,"agent-a").unwrap();
-        store.create_managed_revision(&tenant.id,"agent-a","v1","default: deny\n").unwrap();
-        store.create_managed_revision(&tenant.id,"agent-a","v2","default: allow\n").unwrap();
-        let pair=Ed25519KeyPair::from_seed_unchecked(&[9u8;32]).unwrap();
-        let signer=ManagedIssuer {key_id:"k1".into(),pair};
-        assert!(store.deploy_managed_revision(&tenant.id,"agent-a","v1",false,&signer).is_err());
-        assert!(store.approve_managed_revision(&tenant.id,"agent-a","v1").unwrap());
-        assert!(store.approve_managed_revision(&tenant.id,"agent-a","v2").unwrap());
-        let a=store.deploy_managed_revision(&tenant.id,"agent-a","v1",false,&signer).unwrap();
-        assert_eq!(a.deployment_sequence,1);
-        let b=store.deliver_managed_bundle(&tenant.id,"agent-a").unwrap().unwrap();
-        let signature=hex(signer.pair.sign(&b.transcript().unwrap()).as_ref());
-        assert_eq!(signature,b.signature_hex);
-        assert!(UnparsedPublicKey::new(&ED25519,signer.pair.public_key().as_ref())
-            .verify(&b.transcript().unwrap(),&{
-                let mut bytes=[0u8;64];
-                for (i,chunk) in b.signature_hex.as_bytes().chunks_exact(2).enumerate(){
-                    bytes[i]=u8::from_str_radix(std::str::from_utf8(chunk).unwrap(),16).unwrap()
+        let store = TenantStore::open(":memory:").unwrap();
+        let tenant = store.create_tenant("managed-issuer-test").unwrap();
+        store.enroll_managed_agent(&tenant.id, "agent-a").unwrap();
+        store
+            .create_managed_revision(&tenant.id, "agent-a", "v1", "default: deny\n")
+            .unwrap();
+        store
+            .create_managed_revision(&tenant.id, "agent-a", "v2", "default: allow\n")
+            .unwrap();
+        let pair = Ed25519KeyPair::from_seed_unchecked(&[9u8; 32]).unwrap();
+        let signer = ManagedIssuer {
+            key_id: "k1".into(),
+            pair,
+        };
+        assert!(store
+            .deploy_managed_revision(&tenant.id, "agent-a", "v1", false, &signer)
+            .is_err());
+        assert!(store
+            .approve_managed_revision(&tenant.id, "agent-a", "v1")
+            .unwrap());
+        assert!(store
+            .approve_managed_revision(&tenant.id, "agent-a", "v2")
+            .unwrap());
+        let a = store
+            .deploy_managed_revision(&tenant.id, "agent-a", "v1", false, &signer)
+            .unwrap();
+        assert_eq!(a.deployment_sequence, 1);
+        let b = store
+            .deliver_managed_bundle(&tenant.id, "agent-a")
+            .unwrap()
+            .unwrap();
+        let signature = hex(signer.pair.sign(&b.transcript().unwrap()).as_ref());
+        assert_eq!(signature, b.signature_hex);
+        assert!(
+            UnparsedPublicKey::new(&ED25519, signer.pair.public_key().as_ref())
+                .verify(&b.transcript().unwrap(), &{
+                    let mut bytes = [0u8; 64];
+                    for (i, chunk) in b.signature_hex.as_bytes().as_chunks::<2>().0.iter().enumerate() {
+                        bytes[i] =
+                            u8::from_str_radix(std::str::from_utf8(chunk).unwrap(), 16).unwrap()
+                    }
+                    bytes
+                })
+                .is_ok()
+        );
+        assert!(store
+            .acknowledge_managed_bundle(
+                &tenant.id,
+                "agent-a",
+                &AppliedReport {
+                    deployment_sequence: 1,
+                    revision: "v1".into(),
+                    policy_sha256: b.policy_sha256.clone(),
+                    status: "applied".into()
                 }
-                bytes
-            }).is_ok());
-        assert!(store.acknowledge_managed_bundle(&tenant.id,"agent-a",&AppliedReport{
-            deployment_sequence:1,revision:"v1".into(),
-            policy_sha256:b.policy_sha256.clone(),status:"applied".into()
-        }).unwrap());
-        store.deploy_managed_revision(&tenant.id,"agent-a","v2",false,&signer).unwrap();
-        let r=store.deploy_managed_revision(&tenant.id,"agent-a","v1",true,&signer).unwrap();
-        assert_eq!(r.deployment_sequence,3);
-        assert_eq!(r.action,"rollback");
-        assert!(!store.acknowledge_managed_bundle(&tenant.id,"agent-a",&AppliedReport{
-            deployment_sequence:1,revision:"v1".into(),
-            policy_sha256:b.policy_sha256,status:"applied".into()
-        }).unwrap());
-        assert_eq!(store.list_managed_deployments(&tenant.id,"agent-a").unwrap().len(),3);
+            )
+            .unwrap());
+        store
+            .deploy_managed_revision(&tenant.id, "agent-a", "v2", false, &signer)
+            .unwrap();
+        let r = store
+            .deploy_managed_revision(&tenant.id, "agent-a", "v1", true, &signer)
+            .unwrap();
+        assert_eq!(r.deployment_sequence, 3);
+        assert_eq!(r.action, "rollback");
+        assert!(!store
+            .acknowledge_managed_bundle(
+                &tenant.id,
+                "agent-a",
+                &AppliedReport {
+                    deployment_sequence: 1,
+                    revision: "v1".into(),
+                    policy_sha256: b.policy_sha256,
+                    status: "applied".into()
+                }
+            )
+            .unwrap());
+        assert_eq!(
+            store
+                .list_managed_deployments(&tenant.id, "agent-a")
+                .unwrap()
+                .len(),
+            3
+        );
     }
 }
