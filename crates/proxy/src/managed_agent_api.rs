@@ -24,10 +24,8 @@ fn failure(code: StatusCode, message: &'static str) -> Response {
     (code, Json(serde_json::json!({"error": message}))).into_response()
 }
 
-fn store(state: &Shared) -> Result<TenantStore, Response> {
-    state.tenant_store.as_ref().cloned().ok_or_else(|| {
-        failure(StatusCode::SERVICE_UNAVAILABLE, "managed Agent enrollment unavailable")
-    })
+fn store(state: &Shared) -> Option<TenantStore> {
+    state.tenant_store.as_ref().cloned()
 }
 
 /// Operator-only: issues the Agent credential once, never on later reads.
@@ -36,9 +34,8 @@ pub async fn enroll(
     Path(tenant_id): Path<String>,
     Json(input): Json<EnrollRequest>,
 ) -> Response {
-    let store = match store(&state) {
-        Ok(store) => store,
-        Err(response) => return response,
+    let Some(store) = store(&state) else {
+        return failure(StatusCode::SERVICE_UNAVAILABLE, "managed Agent enrollment unavailable");
     };
     let result = tokio::task::spawn_blocking(move || {
         store.enroll_managed_agent(&tenant_id, &input.agent_id)
@@ -61,9 +58,8 @@ pub async fn list(
     State(state): State<Shared>,
     Path(tenant_id): Path<String>,
 ) -> Response {
-    let store = match store(&state) {
-        Ok(store) => store,
-        Err(response) => return response,
+    let Some(store) = store(&state) else {
+        return failure(StatusCode::SERVICE_UNAVAILABLE, "managed Agent enrollment unavailable");
     };
     match tokio::task::spawn_blocking(move || store.list_managed_agents(&tenant_id)).await {
         Ok(Ok(agents)) => Json(agents).into_response(),
@@ -80,9 +76,8 @@ pub async fn revoke(
     State(state): State<Shared>,
     Path((tenant_id, agent_id)): Path<(String, String)>,
 ) -> Response {
-    let store = match store(&state) {
-        Ok(store) => store,
-        Err(response) => return response,
+    let Some(store) = store(&state) else {
+        return failure(StatusCode::SERVICE_UNAVAILABLE, "managed Agent enrollment unavailable");
     };
     match tokio::task::spawn_blocking(move || {
         store.revoke_managed_agent(&tenant_id, &agent_id)
@@ -102,9 +97,8 @@ pub async fn whoami(State(state): State<Shared>, headers: HeaderMap) -> Response
     let auth = headers.get(axum::http::header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .map(str::to_owned);
-    let store = match store(&state) {
-        Ok(store) => store,
-        Err(response) => return response,
+    let Some(store) = store(&state) else {
+        return failure(StatusCode::SERVICE_UNAVAILABLE, "managed Agent enrollment unavailable");
     };
     match tokio::task::spawn_blocking(move || {
         store.authenticate_managed_agent(auth.as_deref())
