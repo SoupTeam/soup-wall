@@ -5386,7 +5386,7 @@ impl PostgresTenantStore {
                  next_attempt_at_unix = CASE WHEN NOT EXISTS (
                      SELECT 1 FROM tenant_webhook_destinations w
                      WHERE w.id = destination_id AND w.active = TRUE)
-                   THEN $4 ELSE $3 END,
+                   THEN $4::BIGINT ELSE $3::BIGINT END,
                  locked_until_unix = NULL,
                  delivered_at_unix = CASE WHEN $2 = 'delivered' THEN $4 ELSE delivered_at_unix END,
                  last_http_status = $5,
