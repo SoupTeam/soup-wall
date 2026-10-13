@@ -24,7 +24,9 @@ use tokio::sync::mpsc;
 
 mod agent_enrollment;
 mod managed_policy;
-pub use managed_policy::{AppliedReport, ManagedDeployment, ManagedIssuer, ManagedRevision, SignedManagedBundle};
+pub use managed_policy::{
+    AppliedReport, ManagedDeployment, ManagedIssuer, ManagedRevision, SignedManagedBundle,
+};
 mod postgres;
 pub use agent_enrollment::{EnrolledAgent, IssuedAgentCredential};
 
