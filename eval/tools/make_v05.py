@@ -169,9 +169,12 @@ def build_eval(src: dict) -> dict:
         },
         "scoring_rules": dict(src["scoring_rules"], technical_failure=(
             "expected.technical_failure (D06) means the right answer is a refusal through a failure channel. "
-            "The case passes only on an exception, status='error' or an invalid output, and when the classifier "
-            "reports a failure.code it must equal the expected code. A valid classification (including "
-            "actions=[] with unknown=true) is a masked failure and fails the case.")),
+            "The case passes only when the observed channel equals the expected one. The channel is the "
+            "classifier's failure.code when status='error' carries a supported code; otherwise an invalid "
+            "output is classifier_invalid and an unhandled exception is classifier_internal_error. "
+            "status='error' without a supported code, or a different channel, fails. A timeout must be "
+            "reported explicitly. A valid classification (including actions=[] with unknown=true) is a "
+            "masked failure and fails the case.")),
         "allowed_values": dict(src["allowed_values"],
                                origin=src["allowed_values"]["origin"] + ["sou10_contract_oracle", "sou31_d06_control"],
                                technical_failure=["classifier_invalid", "classifier_timeout", "classifier_internal_error"]),

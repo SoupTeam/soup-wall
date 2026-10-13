@@ -44,11 +44,38 @@ class FailureChannel(unittest.TestCase):
         out = {"status": "error", "actions": [], "unknown": True, "failure": {"code": "classifier_timeout"}}
         self.assertEqual(r.evaluate_case(case(), lambda _: out, "s")["outcome"], "fail")
 
-    def test_exception_without_code_passes(self):
-        self.assertEqual(r.evaluate_case(case(), raises, "s")["outcome"], "pass")
+    def test_crashing_producer_does_not_match_invalid_channel(self):
+        # Control from the PR #95 review: an unrelated crash must not satisfy an E01-style case.
+        def crash(_):
+            raise RuntimeError("unrelated bug")
+        rec = r.evaluate_case(case(), crash, "s")
+        self.assertEqual((rec["outcome"], rec["failure_channel"]), ("fail", "classifier_internal_error"))
+        s = r.summarize([rec])
+        self.assertEqual(r.exit_code(s), 1)
+        self.assertEqual(s["expected_technical_failures"][0]["observed_channel"], "classifier_internal_error")
+
+    def test_exception_matches_internal_error_channel(self):
+        rec = r.evaluate_case(case(technical_failure="classifier_internal_error"), raises, "s")
+        self.assertEqual(rec["outcome"], "pass")
+
+    def test_invalid_output_derives_invalid_channel(self):
+        rec = r.evaluate_case(case(), lambda _: {"actions": "read"}, "s")
+        self.assertEqual((rec["outcome"], rec["failure_channel"]), ("pass", "classifier_invalid"))
+        wrong = r.evaluate_case(case(technical_failure="classifier_timeout"), lambda _: {}, "s")
+        self.assertEqual((wrong["outcome"], wrong["failure_channel"]), ("fail", "classifier_invalid"))
+
+    def test_error_status_without_code_is_unestablished(self):
+        for out in ({"status": "error"}, {"status": "error", "failure": {"code": "made_up"}}):
+            rec = r.evaluate_case(case(), lambda _, o=out: o, "s")
+            self.assertEqual((rec["outcome"], rec["failure_channel"]), ("fail", "unestablished"))
+
+    def test_timeout_needs_explicit_envelope(self):
+        out = {"status": "error", "failure": {"code": "classifier_timeout"}}
+        rec = r.evaluate_case(case(technical_failure="classifier_timeout"), lambda _: out, "s")
+        self.assertEqual(rec["outcome"], "pass")
 
     def test_expected_failure_is_not_counted_as_unexpected_technical_error(self):
-        recs = [r.evaluate_case(case(), raises, "s")]
+        recs = [r.evaluate_case(case(technical_failure="classifier_internal_error"), raises, "s")]
         s = r.summarize(recs)
         self.assertEqual(s["technical_errors"], [])
         self.assertEqual(len(s["expected_technical_failures"]), 1)
@@ -78,6 +105,7 @@ class FailureChannel(unittest.TestCase):
         self.assertIn("Expected technical failures (D06)", md)
         self.assertIn("technical_failure=classifier_invalid", md)
         self.assertIn("classifier_invalid", r.render_csv(recs))
+        self.assertIn("failure_channel", r.render_csv(recs).splitlines()[0])
 
     def test_committed_v05_fixtures_validate(self):
         for name in ("soup_task1_evaluation_cases_v0.5.json", "soup_task1_challenge_cases_v0.2.json"):

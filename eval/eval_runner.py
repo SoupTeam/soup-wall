@@ -6,8 +6,10 @@ Evaluates a classifier against v0.4/v0.5-style fixtures:
   * action sets are compared ignoring order, and ``unknown`` is compared separately;
   * exceptions, ``status="error"`` and invalid outputs are technical errors, never passes;
   * a case may instead expect a D06 technical failure (``expected.technical_failure``): it passes
-    only when the classifier refuses through a failure channel, and fails if the input is masked
-    as a semantic classification;
+    only when the observed failure channel equals the expected one. The channel is an explicit
+    ``failure.code`` envelope, or derived: invalid output -> classifier_invalid, unhandled
+    exception -> classifier_internal_error. An error without an established channel, a different
+    channel, or a masked semantic classification fails;
   * pending cases are run for observation but excluded from every denominator;
   * results are bucketed by suite, origin, group, shell dependence and contract assumption.
 
@@ -159,6 +161,23 @@ def reported_failure_code(out: Any) -> str | None:
     return None
 
 
+def failure_channel(out: Any, exception: bool) -> str:
+    """D06 channel actually observed for a failed call (contract section 3.2).
+
+    * unhandled exception -> classifier_internal_error;
+    * status="error" with a supported failure.code -> that code (explicit envelope);
+    * status="error" without a supported code -> "unestablished" (never matches);
+    * any other invalid output -> classifier_invalid.
+    A timeout cannot be observed by this in-process runner; it needs an explicit envelope.
+    """
+    if exception:
+        return "classifier_internal_error"
+    if isinstance(out, dict) and out.get("status") == "error":
+        code = reported_failure_code(out)
+        return code if code in FAILURE_CODES else "unestablished"
+    return "classifier_invalid"
+
+
 def _canon(actions) -> list[str]:
     return [a for a in ACTIONS if a in set(actions or [])]
 
@@ -179,13 +198,14 @@ def evaluate_case(case: dict, classify: Callable[[dict], Any], suite: str) -> di
         "missing": [], "spurious": [], "critical_missing": [],
         "forbidden_actions": exp.get("forbidden_actions") or [], "constraint_violations": [],
         "expected_technical_failure": exp.get("technical_failure"), "reported_failure_code": None,
-        "masked_failure": False, "outcome": None,
+        "failure_channel": None, "masked_failure": False, "outcome": None,
     }
     payload = copy.deepcopy(case["input"])  # the ONLY thing the classifier sees
+    raised = False
     try:
         out = classify(payload)
     except Exception as e:  # noqa: BLE001 - any classifier crash is a technical error
-        out, rec["technical_error"] = None, f"exception: {type(e).__name__}: {e}"[:300]
+        out, rec["technical_error"], raised = None, f"exception: {type(e).__name__}: {e}"[:300], True
     if rec["technical_error"] is None:
         try:
             rec["raw_output"] = json.loads(json.dumps(out, default=repr))
@@ -199,6 +219,8 @@ def evaluate_case(case: dict, classify: Callable[[dict], Any], suite: str) -> di
             rec["predicted_actions"] = _canon(out["actions"])
             rec["predicted_unknown"] = out["unknown"]
             rec["predicted_status"] = out.get("status")
+    if rec["technical_error"] is not None:
+        rec["failure_channel"] = failure_channel(out, raised)
     if rec["technical_error"] is None and rec["forbidden_actions"]:
         rec["constraint_violations"] = [a for a in rec["forbidden_actions"] if a in rec["predicted_actions"]]
 
@@ -211,8 +233,8 @@ def evaluate_case(case: dict, classify: Callable[[dict], Any], suite: str) -> di
             rec["masked_failure"] = True  # e.g. actions=[] with unknown=true instead of a refusal
             rec["outcome"] = "fail"
         else:
-            code = rec["reported_failure_code"]
-            rec["outcome"] = "pass" if code in (None, rec["expected_technical_failure"]) else "fail"
+            # Exact channel match only; an untyped or different failure is not the expected refusal.
+            rec["outcome"] = "pass" if rec["failure_channel"] == rec["expected_technical_failure"] else "fail"
         return rec
     if rec["technical_error"]:
         rec["outcome"] = "technical_error"
@@ -272,7 +294,8 @@ def summarize(recs: list[dict]) -> dict:
                               "error": r["technical_error"]} for r in recs
                              if r["technical_error"] and not _expects_failure(r)],
         "expected_technical_failures": [{"id": r["id"], "suite": r["suite"], "expected": r["expected_technical_failure"],
-                                         "observed": r["technical_error"], "reported_code": r["reported_failure_code"],
+                                         "observed": r["technical_error"], "observed_channel": r["failure_channel"],
+                                         "reported_code": r["reported_failure_code"],
                                          "masked_as_classification": r["masked_failure"], "outcome": r["outcome"]}
                                         for r in recs if _expects_failure(r)],
         "constraint_violations": [{"id": r["id"], "suite": r["suite"], "violated": r["constraint_violations"]}
@@ -329,7 +352,7 @@ def render_markdown(summary: dict, recs: list[dict], meta: dict) -> str:
     L += ["", "## Expected technical failures (D06)", ""]
     L += [f"- {t['suite']} {t['id']}: expected {t['expected']}; " + (
           f"masked as a classification ({'FAIL'})" if t["masked_as_classification"] else
-          f"refused ({t['observed']}; reported code {t['reported_code'] or 'none'}) ({t['outcome'].upper()})")
+          f"failed via {t['observed_channel']} ({t['observed']}) ({t['outcome'].upper()})")
           for t in summary.get("expected_technical_failures", [])] or ["- none"]
     L += ["", "## Constraint checks (forbidden_actions)", "",
           f"- checked: {', '.join(summary['constraint_checked']) or 'none'}"]
@@ -357,7 +380,7 @@ def render_markdown(summary: dict, recs: list[dict], meta: dict) -> str:
 CSV_FIELDS = ["suite", "id", "group", "origin", "expectation_status", "shell_dependent", "contract_assumptions", "outcome",
               "expected_actions", "expected_unknown", "predicted_actions", "predicted_unknown", "predicted_status",
               "missing", "spurious", "critical_missing", "constraint_violations", "technical_error",
-              "expected_technical_failure", "reported_failure_code"]
+              "expected_technical_failure", "failure_channel", "reported_failure_code"]
 
 
 def render_csv(recs: list[dict]) -> str:

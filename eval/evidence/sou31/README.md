@@ -21,7 +21,7 @@ accepting the contract is not human Gold approval of each case.
 | `tools/make_v05.py` | Converter. Refuses to run if a frozen input digest changed; every change is listed in code. |
 | `tools/check_fixtures.py` | Checker: frozen digests, byte-exact regeneration, runner validation, contract rules. |
 | `.gitattributes` | Fixture JSON stays LF on every platform so digests match on Windows. |
-| `eval_runner.py` | Supports `expected.technical_failure` (D06): passes only on a refusal, fails a masked `actions=[]`, `unknown=true`. Old fixtures score exactly as before. |
+| `eval_runner.py` | Supports `expected.technical_failure` (D06): passes only when the observed failure channel equals the expected one (explicit `failure.code`, else invalid output = `classifier_invalid`, unhandled exception = `classifier_internal_error`); an untyped error, a different channel or a masked `actions=[]`, `unknown=true` fails. Old fixtures score exactly as before. |
 | `test_eval_failure_channel.py` | 10 regressions for the new runner path and the committed fixtures. |
 | Frozen files | v0.4, challenge v0.1, both urtisto add-ons, earlier evidence and `rule_baseline.py` are byte-identical. |
 
@@ -55,7 +55,7 @@ CX06 are unchanged and still need a second review.
 Both frozen classifier sources were run unchanged:
 `900cc3a` (`rule_baseline.py` sha256 `c413a81d75be52e7f7ece26edf325b29b0e6c6781250f92c0203474fa29ee803`)
 and current `main` (`rule_baseline.py` sha256 `d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd`).
-Runner sha256 `c52a6b65cf6391e05c25263be0815bd0e067565fe69566a151e9563b9505abf9`.
+Runner sha256 `86dded74283e7dc38e3ea8b2996a8cccf900912ccb847ea0fdad482abcbd0662`.
 
 | Classifier | Old fixtures (v0.4 + v0.1 + add-ons) | New fixtures (v0.5 + v0.2 + add-ons) |
 |---|---|---|
