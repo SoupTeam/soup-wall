@@ -12,7 +12,7 @@ use axum::Json;
 use serde::Deserialize;
 
 use crate::handlers::Shared;
-use crate::tenant_store::TenantStore;
+use crate::tenant_store::{AppliedReport, EnrolledAgent, ManagedIssuer, TenantStore};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -28,7 +28,7 @@ fn store(state: &Shared) -> Option<TenantStore> {
     state.tenant_store.as_ref().cloned()
 }
 
-/// Operator-only: issues the Agent credential once, never on later reads.
+/// Owner-only: issues the Agent credential once, never on later reads.
 pub async fn enroll(
     State(state): State<Shared>,
     Path(tenant_id): Path<String>,
@@ -84,7 +84,7 @@ pub async fn list(State(state): State<Shared>, Path(tenant_id): Path<String>) ->
     }
 }
 
-/// Operator-only revocation. The Bearer token stops working immediately.
+/// Owner-only revocation. The Bearer token stops working immediately.
 pub async fn revoke(
     State(state): State<Shared>,
     Path((tenant_id, agent_id)): Path<(String, String)>,
@@ -139,5 +139,164 @@ pub async fn whoami(State(state): State<Shared>, headers: HeaderMap) -> Response
             StatusCode::SERVICE_UNAVAILABLE,
             "Agent authentication unavailable",
         ),
+    }
+}
+
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NewRevisionRequest {
+    pub revision: String,
+    pub policy_yaml: String,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NewDeploymentRequest {
+    #[serde(default)]
+    pub rollback: bool,
+}
+
+/// Strictly privileged Console authoring: payload is AgentPolicySet YAML,
+/// never a Gateway TenantPolicyDocument.
+pub async fn create_revision(
+    State(state): State<Shared>,
+    Path((tenant, agent)): Path<(String, String)>,
+    Json(input): Json<NewRevisionRequest>,
+) -> Response {
+    let Some(db) = store(&state) else {
+        return failure(StatusCode::SERVICE_UNAVAILABLE, "Console storage unavailable");
+    };
+    match tokio::task::spawn_blocking(move || {
+        db.create_managed_revision(&tenant, &agent, &input.revision, &input.policy_yaml)
+    }).await {
+        Ok(Ok(version)) => (StatusCode::CREATED, Json(version)).into_response(),
+        Ok(Err(e)) => {
+            tracing::warn!(error = %e, "managed revision creation denied");
+            failure(StatusCode::BAD_REQUEST, "revision invalid or already exists")
+        }
+        Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "Console unavailable"),
+    }
+}
+
+pub async fn approve_revision(
+    State(state): State<Shared>,
+    Path((tenant, agent, revision)): Path<(String, String, String)>,
+) -> Response {
+    let Some(db) = store(&state) else {
+        return failure(StatusCode::SERVICE_UNAVAILABLE, "Console storage unavailable");
+    };
+    match tokio::task::spawn_blocking(move || {
+        db.approve_managed_revision(&tenant, &agent, &revision)
+    }).await {
+        Ok(Ok(true)) => StatusCode::NO_CONTENT.into_response(),
+        Ok(Ok(false)) => failure(StatusCode::NOT_FOUND, "revision absent or already approved"),
+        Ok(Err(e)) => {
+            tracing::warn!(error = %e, "Agent revision approval denied");
+            failure(StatusCode::BAD_REQUEST, "revision approval denied")
+        }
+        Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "Console unavailable"),
+    }
+}
+
+/// The seed never leaves the operator's environment; each deployment has
+/// fresh sequence and expiry. Rollback re-signs an older approved payload.
+pub async fn deploy_revision(
+    State(state): State<Shared>,
+    Path((tenant, agent, revision)): Path<(String, String, String)>,
+    Json(input): Json<NewDeploymentRequest>,
+) -> Response {
+    let Some(db) = store(&state) else {
+        return failure(StatusCode::SERVICE_UNAVAILABLE, "Console storage unavailable");
+    };
+    match tokio::task::spawn_blocking(move || {
+        let issuer = ManagedIssuer::from_environment()?;
+        db.deploy_managed_revision(&tenant, &agent, &revision, input.rollback, &issuer)
+    }).await {
+        Ok(Ok(deployment)) => (StatusCode::CREATED, Json(deployment)).into_response(),
+        Ok(Err(e)) => {
+            tracing::warn!(error = %e, "Agent deployment refused");
+            failure(StatusCode::BAD_REQUEST, "deployment unavailable or not approved")
+        }
+        Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "Console unavailable"),
+    }
+}
+
+/// Public verification key, obtainable via authenticated Console on the
+/// provisioning channel; the Agent still requires local operator pinning.
+pub async fn issuer_public_key() -> Response {
+    match tokio::task::spawn_blocking(ManagedIssuer::from_environment).await {
+        Ok(Ok(issuer)) => Json(serde_json::json!({
+            "public_key_hex": issuer.public_key_hex()
+        })).into_response(),
+        _ => failure(StatusCode::SERVICE_UNAVAILABLE, "issuer not configured"),
+    }
+}
+
+pub async fn deployments(
+    State(state): State<Shared>,
+    Path((tenant, agent)): Path<(String, String)>,
+) -> Response {
+    let Some(db) = store(&state) else {
+        return failure(StatusCode::SERVICE_UNAVAILABLE, "Console storage unavailable");
+    };
+    match tokio::task::spawn_blocking(move || {
+        db.list_managed_deployments(&tenant, &agent)
+    }).await {
+        Ok(Ok(items)) => Json(items).into_response(),
+        _ => failure(StatusCode::SERVICE_UNAVAILABLE, "deployment inventory unavailable"),
+    }
+}
+
+async fn principal(state: &Shared, headers: &HeaderMap) -> Option<(TenantStore, EnrolledAgent)> {
+    let db = store(state)?;
+    let bearer = headers.get(axum::http::header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok())?.to_owned();
+    let lookup = db.clone();
+    let identity = tokio::task::spawn_blocking(move || {
+        lookup.authenticate_managed_agent(Some(&bearer))
+    }).await.ok()?.ok()??;
+    Some((db, identity))
+}
+
+/// Only an enrolled Agent may fetch its own latest pending deployment.
+pub async fn fetch_policy(State(state): State<Shared>, headers: HeaderMap) -> Response {
+    let Some((db, who)) = principal(&state, &headers).await else {
+        return failure(StatusCode::UNAUTHORIZED, "Agent authentication required");
+    };
+    match tokio::task::spawn_blocking(move || {
+        db.deliver_managed_bundle(&who.tenant_id, &who.agent_id)
+    }).await {
+        Ok(Ok(Some(bundle))) => Json(bundle).into_response(),
+        Ok(Ok(None)) => StatusCode::NO_CONTENT.into_response(),
+        Ok(Err(e)) => {
+            tracing::error!(error = %e, "managed policy delivery unavailable");
+            failure(StatusCode::SERVICE_UNAVAILABLE, "policy delivery unavailable")
+        }
+        Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "policy delivery unavailable"),
+    }
+}
+
+/// Agent MUST call this only after inspecting its own active runtime policy.
+/// Token possession is a bounded Agent assertion, not a cryptographic quote
+/// from trusted hardware. Console validates exact current sequence/revision/hash.
+pub async fn acknowledge_policy(
+    State(state): State<Shared>,
+    headers: HeaderMap,
+    Json(report): Json<AppliedReport>,
+) -> Response {
+    let Some((db, who)) = principal(&state, &headers).await else {
+        return failure(StatusCode::UNAUTHORIZED, "Agent authentication required");
+    };
+    match tokio::task::spawn_blocking(move || {
+        db.acknowledge_managed_bundle(&who.tenant_id, &who.agent_id, &report)
+    }).await {
+        Ok(Ok(true)) => StatusCode::NO_CONTENT.into_response(),
+        Ok(Ok(false)) => failure(StatusCode::CONFLICT, "ack mismatch, stale or superseded"),
+        Ok(Err(e)) => {
+            tracing::warn!(error = %e, "policy ack invalid");
+            failure(StatusCode::BAD_REQUEST, "invalid policy acknowledgement")
+        }
+        Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "acknowledgement unavailable"),
     }
 }
