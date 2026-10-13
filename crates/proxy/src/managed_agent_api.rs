@@ -142,7 +142,6 @@ pub async fn whoami(State(state): State<Shared>, headers: HeaderMap) -> Response
     }
 }
 
-
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct NewRevisionRequest {
@@ -165,15 +164,23 @@ pub async fn create_revision(
     Json(input): Json<NewRevisionRequest>,
 ) -> Response {
     let Some(db) = store(&state) else {
-        return failure(StatusCode::SERVICE_UNAVAILABLE, "Console storage unavailable");
+        return failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Console storage unavailable",
+        );
     };
     match tokio::task::spawn_blocking(move || {
         db.create_managed_revision(&tenant, &agent, &input.revision, &input.policy_yaml)
-    }).await {
+    })
+    .await
+    {
         Ok(Ok(version)) => (StatusCode::CREATED, Json(version)).into_response(),
         Ok(Err(e)) => {
             tracing::warn!(error = %e, "managed revision creation denied");
-            failure(StatusCode::BAD_REQUEST, "revision invalid or already exists")
+            failure(
+                StatusCode::BAD_REQUEST,
+                "revision invalid or already exists",
+            )
         }
         Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "Console unavailable"),
     }
@@ -184,11 +191,16 @@ pub async fn approve_revision(
     Path((tenant, agent, revision)): Path<(String, String, String)>,
 ) -> Response {
     let Some(db) = store(&state) else {
-        return failure(StatusCode::SERVICE_UNAVAILABLE, "Console storage unavailable");
+        return failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Console storage unavailable",
+        );
     };
     match tokio::task::spawn_blocking(move || {
         db.approve_managed_revision(&tenant, &agent, &revision)
-    }).await {
+    })
+    .await
+    {
         Ok(Ok(true)) => StatusCode::NO_CONTENT.into_response(),
         Ok(Ok(false)) => failure(StatusCode::NOT_FOUND, "revision absent or already approved"),
         Ok(Err(e)) => {
@@ -207,16 +219,24 @@ pub async fn deploy_revision(
     Json(input): Json<NewDeploymentRequest>,
 ) -> Response {
     let Some(db) = store(&state) else {
-        return failure(StatusCode::SERVICE_UNAVAILABLE, "Console storage unavailable");
+        return failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Console storage unavailable",
+        );
     };
     match tokio::task::spawn_blocking(move || {
         let issuer = ManagedIssuer::from_environment()?;
         db.deploy_managed_revision(&tenant, &agent, &revision, input.rollback, &issuer)
-    }).await {
+    })
+    .await
+    {
         Ok(Ok(deployment)) => (StatusCode::CREATED, Json(deployment)).into_response(),
         Ok(Err(e)) => {
             tracing::warn!(error = %e, "Agent deployment refused");
-            failure(StatusCode::BAD_REQUEST, "deployment unavailable or not approved")
+            failure(
+                StatusCode::BAD_REQUEST,
+                "deployment unavailable or not approved",
+            )
         }
         Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "Console unavailable"),
     }
@@ -228,7 +248,8 @@ pub async fn issuer_public_key() -> Response {
     match tokio::task::spawn_blocking(ManagedIssuer::from_environment).await {
         Ok(Ok(issuer)) => Json(serde_json::json!({
             "public_key_hex": issuer.public_key_hex()
-        })).into_response(),
+        }))
+        .into_response(),
         _ => failure(StatusCode::SERVICE_UNAVAILABLE, "issuer not configured"),
     }
 }
@@ -238,24 +259,32 @@ pub async fn deployments(
     Path((tenant, agent)): Path<(String, String)>,
 ) -> Response {
     let Some(db) = store(&state) else {
-        return failure(StatusCode::SERVICE_UNAVAILABLE, "Console storage unavailable");
+        return failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Console storage unavailable",
+        );
     };
-    match tokio::task::spawn_blocking(move || {
-        db.list_managed_deployments(&tenant, &agent)
-    }).await {
+    match tokio::task::spawn_blocking(move || db.list_managed_deployments(&tenant, &agent)).await {
         Ok(Ok(items)) => Json(items).into_response(),
-        _ => failure(StatusCode::SERVICE_UNAVAILABLE, "deployment inventory unavailable"),
+        _ => failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "deployment inventory unavailable",
+        ),
     }
 }
 
 async fn principal(state: &Shared, headers: &HeaderMap) -> Option<(TenantStore, EnrolledAgent)> {
     let db = store(state)?;
-    let bearer = headers.get(axum::http::header::AUTHORIZATION)
-        .and_then(|h| h.to_str().ok())?.to_owned();
+    let bearer = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok())?
+        .to_owned();
     let lookup = db.clone();
-    let identity = tokio::task::spawn_blocking(move || {
-        lookup.authenticate_managed_agent(Some(&bearer))
-    }).await.ok()?.ok()??;
+    let identity =
+        tokio::task::spawn_blocking(move || lookup.authenticate_managed_agent(Some(&bearer)))
+            .await
+            .ok()?
+            .ok()??;
     Some((db, identity))
 }
 
@@ -266,14 +295,22 @@ pub async fn fetch_policy(State(state): State<Shared>, headers: HeaderMap) -> Re
     };
     match tokio::task::spawn_blocking(move || {
         db.deliver_managed_bundle(&who.tenant_id, &who.agent_id)
-    }).await {
+    })
+    .await
+    {
         Ok(Ok(Some(bundle))) => Json(bundle).into_response(),
         Ok(Ok(None)) => StatusCode::NO_CONTENT.into_response(),
         Ok(Err(e)) => {
             tracing::error!(error = %e, "managed policy delivery unavailable");
-            failure(StatusCode::SERVICE_UNAVAILABLE, "policy delivery unavailable")
+            failure(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "policy delivery unavailable",
+            )
         }
-        Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "policy delivery unavailable"),
+        Err(_) => failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "policy delivery unavailable",
+        ),
     }
 }
 
@@ -290,13 +327,18 @@ pub async fn acknowledge_policy(
     };
     match tokio::task::spawn_blocking(move || {
         db.acknowledge_managed_bundle(&who.tenant_id, &who.agent_id, &report)
-    }).await {
+    })
+    .await
+    {
         Ok(Ok(true)) => StatusCode::NO_CONTENT.into_response(),
         Ok(Ok(false)) => failure(StatusCode::CONFLICT, "ack mismatch, stale or superseded"),
         Ok(Err(e)) => {
             tracing::warn!(error = %e, "policy ack invalid");
             failure(StatusCode::BAD_REQUEST, "invalid policy acknowledgement")
         }
-        Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "acknowledgement unavailable"),
+        Err(_) => failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "acknowledgement unavailable",
+        ),
     }
 }
