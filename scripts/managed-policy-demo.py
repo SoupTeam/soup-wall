@@ -212,6 +212,30 @@ def main():
         except urllib.error.HTTPError as exc:
             assert exc.code == 404, exc.code
 
+        # Revoke enrollment and verify the Agent's old credential cannot be
+        # used again, while an already accepted live policy stays active.
+        status, _ = request("POST", base + "/revoke", {}, admin_headers)
+        assert status == 204
+        try:
+            request("GET", console + "/agent/v1/whoami",
+                    headers={"Authorization": "Bearer " + agent_token})
+            raise AssertionError("revoked Agent credential was still accepted")
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 401, exc.code
+        assert request("GET", agent + "/health")[1]["managed_policy"]["deployment_sequence"] == 3
+
+        # A disconnected Console is not permission to erase or silently relax
+        # the current policy. The Agent reports offline separately from active.
+        cons.terminate()
+        cons.wait(timeout=8)
+        offline = wait_for("Agent offline state while retaining last policy", lambda: (
+            (lambda h: h if h.get("managed_transport", {}).get("state") == "offline"
+             and h["managed_policy"]["deployment_sequence"] == 3 else None)(
+                request("GET", agent + "/health")[1])
+        ), timeout=15)
+        assert offline["managed_policy"]["revision"] == "v-deny"
+        assert verdict(4) == "deny"
+
         report = {
             "scope": "disposable-real-agentfw-and-sqlite-console",
             "no_external_provider": True,
@@ -221,6 +245,8 @@ def main():
                 "authenticated_runtime_applied": True,
                 "rollback_sequence_increased": True,
                 "policy_payload_restored": True,
+                "credential_revocation_enforced": True,
+                "offline_last_accepted_policy_retained": True,
             },
             "deployments": [
                 {"sequence": 1, "revision": first_runtime["revision"],
