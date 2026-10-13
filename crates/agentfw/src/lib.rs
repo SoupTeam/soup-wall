@@ -12,6 +12,7 @@ pub mod handlers;
 pub mod hook;
 pub mod install;
 pub mod judge;
+pub mod lifecycle;
 pub mod map;
 pub mod mcp;
 pub mod native;

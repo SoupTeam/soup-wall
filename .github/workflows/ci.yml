@@ -244,6 +244,36 @@ jobs:
           path: ${{ runner.temp }}/sou18-suite/
           if-no-files-found: warn
 
+  agent-lifecycle-macos:
+    name: Agent lifecycle on macOS
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build and test managed Agent lifecycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/sou29-macos
+          {
+            git rev-parse HEAD
+            uname -a
+            rustc --version
+            cargo --version
+          } | tee target/sou29-macos/environment.log
+          cargo build --locked -p agentfw --bin agentfw
+          shasum -a 256 target/debug/agentfw | tee target/sou29-macos/agentfw.sha256
+          cargo test --locked -p agentfw --test lifecycle -- --test-threads=1 2>&1 | tee target/sou29-macos/lifecycle.log
+      - name: Retain macOS lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou29-macos-lifecycle
+          path: target/sou29-macos/
+          if-no-files-found: warn
+
   # The optional ML stack is not compiled by the default-feature job.
   all-features:
     runs-on: ubuntu-latest
@@ -272,6 +302,8 @@ jobs:
       # Each MCP case owns real processes and protected profile files. Avoid a
       # startup burst on Windows; explicit within-case concurrency remains tested.
       - run: cargo test --locked -p agentfw -- --test-threads=1
+      - name: Record Windows lifecycle profile ownership result
+        run: cargo test --locked -p agentfw --test lifecycle -- --test-threads=1 --nocapture
       - name: Native Windows MCP fixture storage and harness checks
         run: python -m unittest discover -s scripts/tests -p 'test_windows*.py' -v
       - run: cargo build --locked -p agentfw --bin agentfw
