@@ -82,6 +82,29 @@ same command and retains only the sanitized JSON. Check its actual result before
 claiming acceptance. Token signature, issuer/audience and nonce mutation tests
 remain focused Rust fixtures, separate from genuine vendor positive evidence.
 
+## Recorded Linux acceptance, October 13, 2026
+
+[Workflow run 38414056010](https://github.com/SoupTeam/soup-wall/actions/runs/38414056010)
+completed all 27 vendor/lifecycle checks and owned cleanup on Ubuntu 24.04,
+Linux/amd64, with Chromium 153.0.8010.12. Five Console browser regressions and
+the credential-import regression also passed in that job. Source:
+`2ffe8200547bd2107de5b63d30f2cbfc24871f66`.
+
+The [unaltered sanitized report](evidence/keycloak-oidc-linux-2026-10-13.json)
+records runtime, binary and configuration digests. Its seven recorded source
+hashes were independently matched against that commit's Git blobs. Report SHA-256:
+`313aadcc883f99ad4f4ff52a129916dba619d8fbfcee7881d64a4f080240a290`.
+Downloaded workflow archive SHA-256:
+`5c723ec7a2d5cd039164c21b11907b4ce3f39c2f5286109ca580dda3f41ecb85`.
+
+Genuine-provider checks cover S256 rejection, browser/state binding, callback
+replay, membership and cross-organization denial alongside working login,
+rotation, restart, logout and expiry. Focused signed-token negatives are separate:
+`oidc_token::tests::rejects_nonce_audience_and_authorized_party_mismatches` and
+`oidc_token::tests::rejects_wrong_issuer_and_tampered_signature_with_other_claims_valid`.
+The latter adds explicit issuer/signature mutations with otherwise valid claims;
+it does not mutate vendor-issued positive evidence.
+
 ## Optional Windows diagnostics
 
 Use Python 3.10+, the native Rust build prerequisites, and the exact official
