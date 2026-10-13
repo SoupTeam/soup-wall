@@ -2,7 +2,7 @@
 
 **Status (2026-10-13): final documentation/lead acceptance pending.** The approved private Gold Addendum v1 and internal-use-only export authorization confirmed **179 CP2 development cases** (train 71 / validation 54 / calibration 54). The export was signed, delivered and independently verified by @KAZDANTOK. Frozen source row statuses were not rewritten. No private source, label rows or sealed test cases are in this repository.
 
-On 2026-10-13 at 11:13 UTC+5 (Soup Wall General), project lead @winux125 instructed the owner to **update documentation and the checklist with verification links, after which AC2 and AC4 can be accepted for the approved CP2 scope**. The 19 historical CP1 cases are to be handled in a **separate task** and remain excluded from Gold. This is conditional scope approval, not final acceptance of the documentation PR or public dataset publication.
+On 2026-10-13 at 11:13 (Soup Wall General), project lead @winux125 instructed the owner to **update documentation and the checklist with verification links, after which AC2 and AC4 can be accepted for the approved CP2 scope**. The 19 historical CP1 cases are to be handled in a **separate task** and remain excluded from Gold. This is conditional scope approval, not final acceptance of the documentation PR or public dataset publication.
 
 **Official test status:** @iazizza reviewed the 54 held-out cases and completed one authorized test run for [SOU-16](https://linear.app/soup-wall/issue/SOU-16). Restricted test gold and per-case results remain with the custodian.
 
@@ -41,7 +41,7 @@ are kept outside the repository; their decision ids and dates are not reproduced
 
 ## Deferred work and scope boundaries
 
-- **CP1:** On 2026-10-13 at 11:13 UTC+5, @winux125 directed a separate task for the **19 historical CP1** cases. They are excluded from the Gold development release and their labels are **not** certified here.
+- **CP1:** On 2026-10-13 at 11:13, @winux125 directed a separate task for the **19 historical CP1** cases. They are excluded from the Gold development release and their labels are **not** certified here.
 - **Task 1 fixture versioning:** The [SOU-10 contract](../../../contract/updated_contract2.md) names SOU-13 / SOU-21 for `fixtures/*.json` synchronization with D07/D04. The [Task 1 report](../task1_classification_report.md) also mentions U07/CS03 and E01. The October 13 CP1 scope decision did **not expressly assign or complete this fixture task**. Its ownership/follow-up remains separately open; preserve the historical Task 1 runs and do not silently assert completion.
 - **License:** `SOU13-USAGE-2026-10-12` is internal-use permission only; a future public release, reuse or redistribution requires a distinct approval.
 - **Sealed-test:** @iazizza approved and ran the official one-shot experiment on 2026-10-12 for SOU-16. This does not expose the sealed inputs, prove production safety, or permit an additional evaluation on the same held-out set.
