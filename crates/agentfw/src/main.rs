@@ -229,11 +229,42 @@ enum LifecycleCommand {
     Remove,
     #[command(hide = true)]
     ServeManaged {
-        #[arg(long)]
+        #[arg(long, allow_hyphen_values = true)]
         instance: String,
         #[arg(long)]
         home: PathBuf,
     },
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+
+    #[test]
+    fn managed_instance_preserves_leading_hyphens() {
+        for prefix in ["-", "--"] {
+            let expected = format!("{prefix}{}", "a".repeat(43 - prefix.len()));
+            let cli = Cli::try_parse_from([
+                "agentfw",
+                "lifecycle",
+                "serve-managed",
+                "--instance",
+                &expected,
+                "--home",
+                "owned-profile",
+            ])
+            .expect("URL-safe instance IDs can begin with hyphens");
+            match cli.cmd {
+                Cmd::Lifecycle {
+                    command: LifecycleCommand::ServeManaged { instance, home },
+                } => {
+                    assert_eq!(instance, expected);
+                    assert_eq!(home, PathBuf::from("owned-profile"));
+                }
+                _ => panic!("expected the managed lifecycle command"),
+            }
+        }
+    }
 }
 
 fn main() -> anyhow::Result<()> {
