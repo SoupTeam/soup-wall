@@ -106,6 +106,7 @@ impl ManagedSync {
             verified.policy, verified.revision,
             verified.deployment_sequence, verified.policy_sha256,
         );
+        fw.set_managed_transport_status("restored_offline", now());
         Ok(())
     }
 
@@ -178,6 +179,26 @@ impl ManagedSync {
         Ok(())
     }
 
+    /// A negative assertion is separate from applied and never claims that the
+    /// running policy changed. Console validates identity + exact sequence/hash.
+    async fn report_rejection(&self, client: &reqwest::Client, bundle: &SignedAgentPolicy) {
+        let result = client.post(match self.endpoint("agent/v1/policy/ack") {
+            Ok(url) => url,
+            Err(_) => return,
+        })
+        .bearer_auth(&self.token)
+        .json(&json!({
+            "deployment_sequence": bundle.deployment_sequence,
+            "revision": bundle.revision,
+            "policy_sha256": bundle.policy_sha256,
+            "status": "rejected"
+        }))
+        .send().await;
+        if let Err(error) = result {
+            tracing::warn!(error=%error, "unable to report rejected managed bundle");
+        }
+    }
+
     async fn poll_once(&self, client: &reqwest::Client, state: &Shared) -> Result<()> {
         let mut response = client.get(self.endpoint("agent/v1/policy")?)
             .bearer_auth(&self.token)
@@ -204,11 +225,20 @@ impl ManagedSync {
             return self.acknowledge(client, state).await;
         }
         let last = active.map_or(0, |a| a.deployment_sequence);
-        let verified = verify_candidate(
+        let verified = match verify_candidate(
             &bundle, std::slice::from_ref(&self.issuer),
             &self.tenant, &self.agent, last, now(),
-        )?;
-        self.activate(state, verified, &bundle)?;
+        ) {
+            Ok(verified) => verified,
+            Err(error) => {
+                self.report_rejection(client, &bundle).await;
+                return Err(error);
+            }
+        };
+        if let Err(error) = self.activate(state, verified, &bundle) {
+            self.report_rejection(client, &bundle).await;
+            return Err(error);
+        }
         self.acknowledge(client, state).await
     }
 
@@ -224,10 +254,20 @@ impl ManagedSync {
         let mut ticker = tokio::time::interval(Duration::from_secs(2));
         loop {
             ticker.tick().await;
-            if let Err(error) = self.poll_once(&client, &state).await {
-                // Fail closed for NEW deployment, preserve current live policy,
-                // and keep retrying after network/service unavailability.
-                tracing::warn!(error=%error, "managed policy unavailable or rejected; last accepted policy preserved");
+            let result = self.poll_once(&client, &state).await;
+            let transport_state = match &result {
+                Ok(()) => "online",
+                Err(e) if e.chain().any(|cause| cause.downcast_ref::<reqwest::Error>().is_some()) => "offline",
+                Err(e) if e.to_string().contains("stale") || e.to_string().contains("replayed") => "stale",
+                Err(_) => "rejected",
+            };
+            if let Ok(mut fw) = state.firewall.lock() {
+                fw.set_managed_transport_status(transport_state, now());
+            }
+            if let Err(error) = result {
+                // A failure cannot change the last accepted live policy.
+                tracing::warn!(error=%error, transport_state,
+                    "managed policy unavailable or rejected; last accepted policy preserved");
             }
         }
     }
