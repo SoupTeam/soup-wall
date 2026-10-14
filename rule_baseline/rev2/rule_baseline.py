@@ -568,6 +568,8 @@ def _schema_violation(args: Any, schema: Any) -> bool:
 
     Unsupported or open schemas are not checked. This never rewrites arguments; it only reports drift.
     """
+    if isinstance(schema, dict):  # same normalisation as _object_schema: plain, inputSchema or input_schema
+        schema = schema.get("inputSchema") or schema.get("input_schema") or schema
     if not isinstance(schema, dict) or not isinstance(args, dict) or schema.get("type") != "object":
         return False
     props = schema.get("properties")

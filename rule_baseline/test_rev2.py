@@ -45,6 +45,7 @@ OBJ = {"type": "object", "properties": {"command": {"type": "string"}}}
 
 class FrozenCandidateUntouched(unittest.TestCase):
     def test_frozen_bytes(self):
+        # git stores LF; a Windows checkout with core.autocrlf=true writes CRLF. Compare the stored bytes.
         with open(FROZEN_PATH, "rb") as fh:
             data = fh.read().replace(b"\r\n", b"\n")
         self.assertEqual(hashlib.sha256(data).hexdigest(), FROZEN_SHA256)
@@ -204,6 +205,54 @@ class MixedAndAmbiguousActions(unittest.TestCase):
             out = run(R2, name, args)
             self.assertFalse(out["unknown"], name)
             self.assertEqual(out["actions"], ["read"], name)
+
+
+class WrappedSchemaSpellings(unittest.TestCase):
+    """One normalised schema decides D06, violation diagnostics and the no-op proof (review of PR 115)."""
+    DESC = "Compute a checksum of provided text without changing external state"
+    BASE = {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"],
+            "additionalProperties": False}
+
+    def spellings(self):
+        return {"plain": self.BASE, "inputSchema": {"inputSchema": self.BASE},
+                "input_schema": {"input_schema": self.BASE}}
+
+    def call(self, args, spelling, slot):
+        event = {"tool_name": "checksum_text", "tool_description": self.DESC, "raw_arguments": args,
+                 slot: self.spellings()[spelling]}
+        return R2.classify(event)
+
+    def test_valid_arguments_are_a_proven_noop_for_every_spelling_and_slot(self):
+        for spelling in self.spellings():
+            for slot in ("tool_schema", "pinned_schema"):
+                out = self.call({"text": "x"}, spelling, slot)
+                self.assertEqual((out["status"], out["actions"], out["unknown"]), ("ok", [], False), (spelling, slot))
+                self.assertFalse(out["args_schema_violation"], (spelling, slot))
+
+    def test_invalid_arguments_never_earn_a_noop_for_any_spelling_and_slot(self):
+        bad = {"missing required": {}, "wrong type": {"text": 9}, "extra property": {"text": "x", "z": 1}}
+        for spelling in self.spellings():
+            for slot in ("tool_schema", "pinned_schema"):
+                for label, args in bad.items():
+                    out = self.call(args, spelling, slot)
+                    self.assertTrue(out["unknown"], (spelling, slot, label))
+                    self.assertTrue(out["args_schema_violation"], (spelling, slot, label))
+                    self.assertNotIn("proven_noop", out["reason_codes"], (spelling, slot, label))
+
+    def test_non_object_arguments_fail_d06_for_every_spelling(self):
+        for spelling in self.spellings():
+            for args in (None, ["x"]):
+                out = self.call(args, spelling, "tool_schema")
+                self.assertEqual(out["status"], "error", (spelling, args))
+                self.assertEqual(out["failure"]["code"], "classifier_invalid")
+
+    def test_pinned_schema_is_selected_over_a_permissive_tool_schema(self):
+        event = {"tool_name": "checksum_text", "tool_description": self.DESC, "raw_arguments": {},
+                 "tool_schema": {"type": "object", "properties": {"text": {"type": "string"}}},
+                 "pinned_schema": {"inputSchema": self.BASE}}
+        out = R2.classify(event)
+        self.assertTrue(out["unknown"])
+        self.assertNotIn("proven_noop", out["reason_codes"])
 
 
 if __name__ == "__main__":

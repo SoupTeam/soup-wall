@@ -5,7 +5,7 @@ A separately identified revision of the generic classifier. The frozen candidate
 is byte-identical and keeps the SOU-14 held-out result. **This revision has no held-out result. It is not
 enabled in production admission and no generalization claim is made.**
 
-- File: `rule_baseline/rev2/rule_baseline.py`, sha256 `d31fd4148fcd08746ce78347530dca98b4b55eb08d659b75cc170b23723cd664`
+- File: `rule_baseline/rev2/rule_baseline.py`, sha256 `d0b4fc02720ee5ff38dec73d5992c6bdee9eda8595282e33015e60d07ce33ea5`
 - `REVISION = "generic_rule_v2"`, `INTERFACE = "sw-classifier-core/0.4"`, `THRESHOLD = 0.5`, `TIME_BUDGET_S = 1.0`
 - Select it explicitly: `python3 eval/eval_runner.py <fixtures> --classifier-path rule_baseline/rev2 --out-dir <out>`
 - Regressions: `rule_baseline/test_rev2.py`. Report: `eval/evidence/sou34/README.md`.

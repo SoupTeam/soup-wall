@@ -633,30 +633,30 @@
     "cold_process_per_call": {
      "attempts": 30,
      "failed": 0,
-     "max_ms": 88.289,
+     "max_ms": 80.598,
      "over_inner_timeout": 0,
-     "p50_ms": 58.242,
-     "p95_ms": 84.661,
+     "p50_ms": 57.872,
+     "p95_ms": 72.486,
      "timed_out": 0,
      "valid": 30
     },
     "in_process_call": {
      "attempts": 500,
      "failed": 0,
-     "max_ms": 0.43,
+     "max_ms": 2.32,
      "over_inner_timeout": 0,
-     "p50_ms": 0.169,
-     "p95_ms": 0.27,
+     "p50_ms": 0.175,
+     "p95_ms": 0.346,
      "timed_out": 0,
      "valid": 500
     },
     "warm_process_round_trip": {
      "attempts": 500,
      "failed": 0,
-     "max_ms": 51.784,
+     "max_ms": 46.771,
      "over_inner_timeout": 0,
-     "p50_ms": 0.474,
-     "p95_ms": 0.773,
+     "p50_ms": 0.453,
+     "p95_ms": 0.735,
      "timed_out": 0,
      "valid": 500
     }
@@ -1770,35 +1770,35 @@
     "cold_process_per_call": {
      "attempts": 30,
      "failed": 0,
-     "max_ms": 97.198,
+     "max_ms": 116.807,
      "over_inner_timeout": 0,
-     "p50_ms": 62.601,
-     "p95_ms": 93.182,
+     "p50_ms": 70.19,
+     "p95_ms": 113.722,
      "timed_out": 0,
      "valid": 30
     },
     "in_process_call": {
      "attempts": 500,
      "failed": 0,
-     "max_ms": 3.911,
+     "max_ms": 1.617,
      "over_inner_timeout": 0,
-     "p50_ms": 0.262,
-     "p95_ms": 0.463,
+     "p50_ms": 0.212,
+     "p95_ms": 0.378,
      "timed_out": 0,
      "valid": 500
     },
     "warm_process_round_trip": {
      "attempts": 500,
      "failed": 0,
-     "max_ms": 60.83,
+     "max_ms": 54.788,
      "over_inner_timeout": 0,
-     "p50_ms": 0.551,
-     "p95_ms": 0.908,
+     "p50_ms": 0.497,
+     "p95_ms": 0.82,
      "timed_out": 0,
      "valid": 500
     }
    },
-   "sha256": "d31fd4148fcd08746ce78347530dca98b4b55eb08d659b75cc170b23723cd664",
+   "sha256": "d0b4fc02720ee5ff38dec73d5992c6bdee9eda8595282e33015e60d07ce33ea5",
    "splits": {
     "calibration": {
      "abstention": {

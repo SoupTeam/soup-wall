@@ -6,7 +6,7 @@ Contract: SOU-10 v0.4 (D04 untrusted metadata, D06 technical failure channels, D
 ## Scope and claims
 
 - New file `rule_baseline/rev2/rule_baseline.py`, `REVISION = "generic_rule_v2"`, sha256
-  `d31fd4148fcd08746ce78347530dca98b4b55eb08d659b75cc170b23723cd664`.
+  `d0b4fc02720ee5ff38dec73d5992c6bdee9eda8595282e33015e60d07ce33ea5`.
 - Frozen, untouched: `rule_baseline/rule_baseline.py` sha256 `d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd`
   (the SOU-14 held-out result is bound to it), earlier reports, fixtures, `eval/eval_runner.py`
   (sha256 `86dded74283e7dc38e3ea8b2996a8cccf900912ccb847ea0fdad482abcbd0662`).
@@ -56,10 +56,23 @@ Per label (known true / missed / extra): write 35/12/2 -> 35/6/2, delete 29/12/0
 send_data 38/0/6 -> 38/0/0, change_permissions 36/6/0 -> 36/0/0, read 35/0/0 -> 35/0/0. The 6 remaining
 write misses are flagged `unknown=true`.
 
-Batch-1 latency (ms, valid exchanges, p50 / p95 / max): `classify()` in process 0.262 / 0.463 / 3.911
-(frozen 0.169 / 0.270 / 0.430); warm snapshot process 0.551 / 0.908 / 60.83 (0.474 / 0.773 / 51.78);
-new process per call 62.6 / 93.2 / 97.2 (58.2 / 84.7 / 88.3). No call over 1500 ms. Single environment,
+Batch-1 latency (ms, valid exchanges, p50 / p95 / max): `classify()` in process 0.212 / 0.378 / 1.617
+(frozen 0.175 / 0.346 / 2.32); warm snapshot process 0.497 / 0.82 / 54.79 (0.453 / 0.735 / 46.77);
+new process per call 70.2 / 113.7 / 116.8 (57.9 / 72.5 / 80.6). No call over 1500 ms. Single environment,
 not a bound on daemon latency.
+
+## Review fix (PR 115, requested changes at 4c3f80c)
+
+`_schema_violation` now reads the same normalised schema as `_object_schema` and `_pure_definition`
+(plain, `inputSchema` or `input_schema`). Before, a wrapped schema was used for D06 and the no-op proof but not
+for the violation check, so `checksum_text` with `{}` or `{"text": 9}` under a wrapped schema was reported as a proven
+no-op. Now D06, the violation diagnostic and the no-op proof use one schema. Four regressions
+(`WrappedSchemaSpellings` in `test_rev2.py`) cover valid, missing-required, wrong-type and extra-property
+arguments for all three spellings and for both `tool_schema` and `pinned_schema`, plus non-object arguments and a
+pinned schema chosen over a permissive tool schema; the invalid-arguments control fails on the previous revision bytes.
+The revision bytes changed, so all source-hash-bound evidence was regenerated: the public-fixture results and
+the development evaluation below are unchanged except the latency samples and the revision digest. The frozen candidate
+digest is unchanged.
 
 ## Remaining defects (not fixed here)
 
