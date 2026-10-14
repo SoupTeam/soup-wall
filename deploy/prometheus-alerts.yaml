@@ -14,7 +14,7 @@ groups:
           runbook: https://github.com/SoupTeam/soup-wall/blob/main/docs/operations/PRODUCTION_RUNBOOK.md#health-and-monitoring
 
       - alert: LLMFirewallControlPlaneUnavailable
-        expr: min_over_time(llm_firewall_control_plane_ready[2m]) == 0
+        expr: llm_firewall_control_plane_ready == 0
         for: 2m
         labels:
           severity: critical

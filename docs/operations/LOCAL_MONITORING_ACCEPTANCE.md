@@ -1,10 +1,14 @@
 # Local monitoring acceptance
 
-The local checkpoint exercises the published Windows Gateway with real
+The original local checkpoint exercises the published Windows Gateway with real
 Prometheus, promtool and Alertmanager, then receives authenticated firing and
 resolved webhooks on a disposable loopback server. It stops and restarts only
 the Gateway process that it started. It sends no model requests or external
 notifications and does not require PostgreSQL or Redis.
+
+The current-source Linux/Docker procedure is described below. Its persistent
+receiver, real dependency failures and evidence are a separate acceptance slice;
+the historical Windows procedure and result remain unchanged.
 
 The [independent Windows evidence](evidence/LOCAL_MONITORING_2026-10-05.md)
 records a complete 26/26 run against the published v0.4.0 Gateway, including
@@ -26,8 +30,10 @@ the rule disables this coverage.
 
 An unavailable Gateway stops exporting its readiness metric. A missing or
 stale sample does not become zero; therefore the existing readiness rule
-cannot replace scrape-target outage detection. The existing dependency and
-evidence-loss rules remain unchanged. See Prometheus's
+cannot replace scrape-target outage detection. The dependency rules inspect the
+current readiness sample. Their pending intervals still apply; recovery must
+resolve rather than preserve a historical failure sample. The evidence-loss rules remain
+unchanged. See Prometheus's
 [staleness semantics](https://prometheus.io/docs/prometheus/latest/querying/basics/#staleness)
 and [rule-test format](https://prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/).
 
@@ -141,3 +147,85 @@ critical route is staffed. Alertmanager's
 supports `send_resolved` and HTTP authentication; configure receiver retention
 and deduplication explicitly. Examples are configuration guidance, not evidence
 that a production receiver exists.
+
+## Current-source Linux dependency and receiver recovery
+
+This opt-in procedure runs Linux containers with a Gateway built from the
+checkout's exact source, real PostgreSQL and Redis, Prometheus 3.15.0 and
+Alertmanager 0.34.1. It uses the persistent [alert receiver](ALERT_RECEIVER.md)
+with a private database and credential, an exact alert/target allowlist and a
+per-run HTTPS certificate. Alertmanager trusts only that fixture CA for this
+receiver; the drill does not modify the host trust store or disable certificate
+verification.
+
+Use Python 3.12 or later, Git, OpenSSL and Docker with a working Linux-container
+daemon. Run from the repository root with enough Docker memory and disk for the
+locked Gateway build. On macOS the processes under test are Linux containers,
+not native macOS Gateway execution. WSL must use the Linux interpreter and its
+Linux Docker engine. The first execution may download the declared images and
+Rust dependencies; no paid service or production account is needed.
+
+```sh
+python3 scripts/linux-alert-acceptance.py
+python3 scripts/linux-alert-acceptance.py --execute \
+  --out target/linux-alert-recovery.json
+```
+
+The default command prints the declared execution scope and starts no services.
+Execution requires a clean checkout; the Gateway is built from an archived Git
+commit with the locked dependency graph. `--expected-commit <full-commit>` can
+require a specific candidate. The source identity must remain unchanged through
+verification. The image inventory is pinned by digest in
+`deploy/monitoring-images.json`; selected runtime and binary hashes are recorded
+separately.
+`--execute` is the explicit fault-drill opt-in. Choose a fresh output filename;
+existing evidence must not be overwritten. Keep the real one-minute Redis and
+two-minute PostgreSQL/Gateway pending intervals. The complete sequence takes
+longer than a simple health check because it waits for actual Prometheus rule
+transitions and Alertmanager delivery. The drill preserves the 30-second rule
+evaluation interval, 30-second notification `group_wait` and four-hour
+`repeat_interval`. Its controlled routing sets `group_interval: 15s` to avoid an
+extra grouping delay for resolved notifications; this is an explicit fixture
+routing override. The production Alertmanager example retains
+`group_interval: 5m`; rule pending durations and firing clocks are unchanged.
+
+The drill must establish all of these independent observations:
+
+1. A healthy reachable Gateway has working readiness, scrape and benign local
+   behavior. The fixture sends no request to a real model provider.
+2. Stopping the generated PostgreSQL service makes control-plane readiness fail
+   while the Gateway remains scrapeable. The selected control-plane alert
+   produces an authenticated durable firing receipt. Restoring PostgreSQL
+   produces a resolved receipt for the same alert identity and `startsAt`.
+3. Stopping the generated Redis service makes enabled shared-limit readiness
+   fail while the Gateway remains scrapeable. Its firing and resolved cycle is
+   separately witnessed after Redis recovery.
+4. Stopping and restarting the generated Gateway establishes target-down firing
+   and matching resolved delivery, including useful behavior after recovery.
+5. A receiver outage prevents acknowledgment. Alertmanager retry after receiver
+   restart is witnessed in the durable store. A duplicate authenticated replay
+   and another receiver restart preserve the original deduplicated identity.
+6. Missing/wrong authentication, unsupported messages and unrelated targets are
+   refused without adding an accepted receipt. Only generated services and
+   private fixture state are stopped or removed during cleanup.
+
+Evidence records the source revision and file hashes, selected image/runtime
+identities, configuration hashes, transition/receipt timings, rejected probes,
+duplicate handling and cleanup outcome. Do not publish generated bearer tokens,
+private keys, raw customer content or unredacted runtime logs. A dependency,
+receiver, timeout or cleanup failure remains failed/incomplete evidence and
+returns a failing command status; rerunning does not erase that result.
+
+Run the focused free regressions before the complete fault drill:
+
+```sh
+python3 -m unittest discover -s scripts/tests -p 'test_*alert*.py' -v
+```
+
+The controlled fixture validates the stated notification and recovery boundary.
+It does not establish managed PostgreSQL/Redis failover, certificate rotation,
+public routing, a staffed human response or deployment acceptance. An operator
+must configure the actual monitoring source and receiver ownership, preserve
+retention and credentials, and collect evidence in the intended environment.
+The separate policy-event outbox and historical Windows release drill are not
+rerun by this procedure.

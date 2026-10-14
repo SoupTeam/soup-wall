@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "scope": "SOU-41 private disposable Linux monitoring acceptance; not a release or redistribution approval",
+  "pin_kind": "official multi-platform image manifest digest",
+  "images": {
+    "prometheus": {
+      "image": "prom/prometheus@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e",
+      "version": "3.15.0",
+      "origin": "https://github.com/prometheus/prometheus",
+      "license": "Apache-2.0",
+      "role": "Real rule evaluation and scrape witnesses"
+    },
+    "alertmanager": {
+      "image": "prom/alertmanager@sha256:e9733bafb1bdef9b00e25a21f8f99dc26a22224bf16641ad754d1649f4c3357a",
+      "version": "0.34.1",
+      "origin": "https://github.com/prometheus/alertmanager",
+      "license": "Apache-2.0",
+      "role": "Real authenticated HTTPS delivery and retry"
+    },
+    "postgres": {
+      "image": "postgres@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416",
+      "version": "16.13-alpine",
+      "origin": "https://github.com/docker-library/postgres",
+      "license": "PostgreSQL",
+      "role": "Dedicated disposable Gateway tenant and audit storage"
+    },
+    "redis": {
+      "image": "redis@sha256:29e8589c3f9ba699b5f7aa4b3c7733c58852a3626439e619aa0ee78de08c6ca0",
+      "version": "7.2.16-alpine",
+      "origin": "https://github.com/redis/redis/tree/7.2",
+      "license": "BSD-3-Clause",
+      "role": "Dedicated disposable admission limiter; avoids Redis 7.4 source-available intake"
+    },
+    "python": {
+      "image": "python@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258",
+      "version": "3.12.15-slim-bookworm",
+      "origin": "https://github.com/docker-library/python",
+      "license": "PSF-2.0",
+      "role": "Receiver runtime and synthetic local provider"
+    },
+    "rust": {
+      "image": "rust@sha256:ff521445a372125ed4f76e1453a1f8098f2d05332d1601d30db1c1f62757e730",
+      "version": "1.98.1-slim-bookworm",
+      "origin": "https://github.com/rust-lang/docker-rust",
+      "license": "MIT OR Apache-2.0",
+      "role": "Build the exact archived Gateway source with its locked dependencies"
+    }
+  },
+  "notices": "These component labels do not replace the complete image/OS license inventory. Original upstream notices remain in the unmodified containers. The local test image preserves Soup Wall LICENSE, NOTICE and the vendored kryptering license; it is not published."
+}
