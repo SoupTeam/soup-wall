@@ -302,8 +302,25 @@ jobs:
       # Each MCP case owns real processes and protected profile files. Avoid a
       # startup burst on Windows; explicit within-case concurrency remains tested.
       - run: cargo test --locked -p agentfw -- --test-threads=1
-      - name: Record Windows lifecycle profile ownership result
-        run: cargo test --locked -p agentfw --test lifecycle -- --test-threads=1 --nocapture
+      - name: Verify lifecycle under a disposable standard Windows user
+        shell: pwsh
+        run: |
+          $messages = & cargo test --locked -p agentfw --test lifecycle --no-run --message-format=json
+          if ($LASTEXITCODE -ne 0) { throw 'Lifecycle test build failed' }
+          $artifacts = @($messages | ForEach-Object { $_ | ConvertFrom-Json } | Where-Object {
+            $_.reason -eq 'compiler-artifact' -and $_.target.name -eq 'lifecycle' -and $_.executable
+          })
+          if ($artifacts.Count -ne 1) { throw 'Expected exactly one lifecycle test executable' }
+          ./scripts/ci-windows-lifecycle.ps1 -AgentBinary target/debug/agentfw.exe `
+            -TestBinary $artifacts[0].executable -Commit $env:GITHUB_SHA `
+            -OutputDirectory "$env:RUNNER_TEMP/windows-lifecycle-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+      - name: Retain standard-user Windows lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-lifecycle-standard-user
+          path: ${{ runner.temp }}/windows-lifecycle-${{ github.run_id }}-${{ github.run_attempt }}/
+          if-no-files-found: error
       - name: Native Windows MCP fixture storage and harness checks
         run: python -m unittest discover -s scripts/tests -p 'test_windows*.py' -v
       - run: cargo build --locked -p agentfw --bin agentfw
