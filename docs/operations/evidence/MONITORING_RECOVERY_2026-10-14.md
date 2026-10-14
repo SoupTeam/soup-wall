@@ -1,0 +1,186 @@
+# Protected alert recovery evidence — 2026-10-14 (SOU-41)
+
+The controlled Linux/arm64 slice passed **65 checks**, with six authenticated durable status identities across three correlated firing/resolved cycles. The raw [successful result](SOU41_linux-alert-98a7cf6.json) records source, image/binary/configuration hashes, runtime versions, observations and cleanup. This accepts the declared local notification/recovery slice; it does not establish production routing, staffed incident response, host-loss recovery, network egress denial or release eligibility.
+
+## Repaired current candidate: local and Linux CI verification
+
+The repaired clean candidate `ae3e742a41f4512e7114b05d6cd094adec55f801`
+(tree `0f2542c095e66b042e92fe094fd8cc5682797b07`, integrated main `d940d9e`)
+passed **65/65 checks** again on Linux/arm64. Its [raw outcome](SOU41_linux-alert-ae3e742.json)
+contains six durable status identities / three correlated cycles, **four observed
+failed HTTP notification attempts**, authenticated restart/replay deduplication,
+four useful calls with provider and durable audit witnesses, and two dependency
+refusals with zero provider effects. Source stayed clean and unchanged; owned
+cleanup passed and the private successful profile was removed.
+
+| Actual fault | Rule firing phase | Authenticated firing receipt phase | Resolved receipt phase |
+| --- | ---: | ---: | ---: |
+| PostgreSQL | 142.340 s | 4.065 s | 18.217 s |
+| Redis | 89.469 s | 30.375 s | 26.304 s |
+| Gateway | 142.093 s | 28.364 s | 44.714 s |
+
+These are named polling-phase waits, not end-to-end latency or a production SLO.
+The raw report also retains one initial `pg_isready` probe exit 2, followed by
+successful readiness; it is not hidden or counted as a useful-call interruption.
+The four accepted useful calls had zero interruptions in this controlled sample.
+
+The [native Linux/amd64 CI job](https://github.com/SoupTeam/soup-wall/actions/runs/38538491261/job/115767157039)
+also **succeeded** (12m 20s), including the focused receiver/driver boundaries and
+the same exact-source acceptance command. [CI observation metadata](SOU41_ci-linux-ae3e742.json)
+links its retained raw artifact, archive digest and workflow-event commit
+`49c70099d4d3687c3dde0d3e3c72c1bfb1ce1e6e`. Independent Git fetch/comparison
+confirmed that event commit and the PR head have the identical tree
+`0f2542c095e66b042e92fe094fd8cc5682797b07`. Artifact contents were not downloaded
+through the browser; this observation does not fabricate a second local raw
+report. GitHub retains the full CI artifact for 14 days. The local exact-source
+raw report is committed for continued review.
+
+Driver regressions passed **42/42** on the repaired candidate. The separate
+[clean exact-source Redis ACL probe](SOU41_redis-acl-auth-ae3e742.json) confirms
+valid authentication and rejection of missing/wrong credentials on pinned
+Redis 7.2.16, with label-checked cleanup and no network/host ports.
+Documentation passed 101 files / 468 local links at this candidate; rerun the
+link check after adding these evidence files.
+
+Reproduce from a clean checkout of the verified runtime:
+
+```sh
+mkdir -p target
+python3 scripts/linux-alert-acceptance.py --execute \
+  --expected-commit ae3e742a41f4512e7114b05d6cd094adec55f801 \
+  --out target/linux-alert-repaired.json
+```
+
+Subsequent evidence-only changes do not change runtime code, but exact final-head
+CI and maintainer review are still required. SOU-41 remains open until those
+requirements and the two scoped code-scanning dispositions below are accepted.
+
+### Code-scanning dispositions for the repaired candidate
+
+| Alert | Rule / severity | Analyzed path / commit | Disposition |
+| --- | --- | --- | --- |
+| [113](https://github.com/SoupTeam/soup-wall/security/code-scanning/113) | `py/clear-text-storage-sensitive-data` / High | driver line 144 / `30e75b7` | Confirmed fixture defect; fixed by `df38ba4`; Python rescan on `ae3e742` reports **Fixed**, without dismissal. |
+| [114](https://github.com/SoupTeam/soup-wall/security/code-scanning/114) | `py/weak-sensitive-data-hashing` / High | driver line 367 / `ae3e742` | Evidence-backed proposed false positive for this generated Redis ACL credential; kept open for reviewer disposition. |
+| [115](https://github.com/SoupTeam/soup-wall/security/code-scanning/115) | `py/weak-sensitive-data-hashing` / High | regression line 197 / `ae3e742` | The test checks the same required Redis ACL encoding; kept open for reviewer disposition. |
+
+The scan is [Python analysis run 38538487393](https://github.com/SoupTeam/soup-wall/actions/runs/38538487393)
+on `refs/pull/105/head`; owner is konung3 and PR review was requested from Nari-Ab.
+The original confirmed persistence defect is separate from the two new findings.
+No alert has been dismissed and no query-wide suppression has been introduced.
+These observations cover this PR's findings, not a clean repository-wide scan.
+
+The input to the Redis verifier is freshly generated by `secrets.token_hex(32)`:
+32 OS-CSPRNG bytes / 256 bits of entropy, without human or external password
+input. [Python specifies that byte count](https://docs.python.org/3.14/library/secrets.html#secrets.token_hex).
+[Redis 7.2.16 computes SHA-256 for its ACL verifier](https://github.com/redis/redis/blob/7.2.16/src/acl.c#L159),
+and its [ACL format requires that hash](https://redis.io/docs/latest/operate/oss_and_stack/management/security/acl/#acl-rules).
+Replacing it with a general human-password KDF would reject the same credential.
+The [CodeQL guidance](https://codeql.github.com/codeql-query-help/python/py-weak-sensitive-data-hashing/)
+identifies limited-input-space passwords as the reason for expensive hashing.
+The independent pinned-server auth probe validates interoperability and refusal.
+Re-triage if the generator, entropy, caller-input boundary or Redis protocol
+changes. Keep reviewer acceptance explicit; two unresolved High findings must
+not be described as a clean scan merely because this proposed rationale exists.
+
+## Earlier verified source and reproduction
+
+Verified clean commit: `98a7cf6f9ebfd96ac069d1d830eae2d67fa06d35`; tree `0ff5d5404d2d54954448b3c1ed48900b467ba49f`. Base main: `290e043bee52b7d97682577af2d3fd09e715e13e`. The Gateway was built from `git archive` of this commit using its locked Cargo dependencies. The local test image uses release opt-level 1, without LTO/debug information; this is not a published release image or performance benchmark. The evidence-only commit `30e75b7` changes documentation/artifacts; subsequent runtime repairs are described below and require separate verification. The runtime JSON verifies unchanged source before and after the complete drill.
+
+Run in a clean checkout of the verified commit with Python 3.12+, OpenSSL and a working Linux Docker daemon:
+
+```sh
+mkdir -p target
+python3 scripts/linux-alert-acceptance.py --execute \
+  --expected-commit 98a7cf6f9ebfd96ac069d1d830eae2d67fa06d35 \
+  --out target/linux-alert-recovery.json
+```
+
+Use a fresh output path; the command refuses existing evidence. See the [Linux procedure](../LOCAL_MONITORING_ACCEPTANCE.md#current-source-linux-dependency-and-receiver-recovery) and [receiver ownership/retention instructions](../ALERT_RECEIVER.md). The [six-image inventory](../../../deploy/monitoring-images.json) pins official multi-platform manifests; the independent [architecture metadata check](SOU41_image-platform-review.json) confirms Linux amd64/arm64 entries, not execution on both architectures. Local actual execution used Linux/arm64 containers on macOS Docker Desktop (Engine 29.2.1, Compose 5.1.0). The dedicated [CI job](../../../.github/workflows/monitoring.yml) runs the same command on Linux/amd64; inspect its exact-head result before accepting that platform.
+
+Rule evaluation remains 30 seconds, PostgreSQL/Gateway `for: 2m` and Redis `for: 1m`. The controlled fixture preserves `group_wait: 30s` but declares `group_interval: 15s` for notification scheduling; the production example remains 5 minutes. HTTPS used a fresh explicit per-run CA with strict chain/hostname verification and protected owner-only token/key/state files. The private standard Docker bridge publishes only owned loopback observer ports; PostgreSQL/Redis have no host ports.
+
+## Post-publication repairs and initial failure
+
+[PR #105](https://github.com/SoupTeam/soup-wall/pull/105) preserves the successful
+`98a7cf6` run as historical exact-source evidence. Its first
+[Linux/amd64 CI attempt](https://github.com/SoupTeam/soup-wall/actions/runs/38535768567/job/115758140801)
+failed before completing the pinned promtool stage, after three recorded checks.
+The private rule mount was created under `umask 077`, while the image's default
+promtool user differed from the owner. The repaired owner-UID invocation subsequently passed native Linux execution
+and its regressions, as recorded above. This initial failed attempt remains
+separate from that later success.
+
+[Code-scanning alert #113](https://github.com/SoupTeam/soup-wall/security/code-scanning/113)
+reported High `py/clear-text-storage-sensitive-data` on PR head `30e75b7`.
+Review confirmed generated PostgreSQL/Redis password values flowed into the
+private saved Compose document. The owner-only profile limited access; it did
+not make plaintext secret persistence a false positive. This is a confirmed
+fixture credential-storage defect, not evidence of a public credential leak or
+customer-secret exposure.
+
+The repair publishes harness-written configuration and bearer files exclusively
+and atomically with `0600` before their first byte. OpenSSL generates private
+TLS keys inside the fresh `0700` profile under `umask 077`; those keys retain
+`0600`, but are not published by the configuration helper.
+The Compose document uses required child-environment references for generated
+PostgreSQL/Redis/admin credentials. Redis's ACL contains only a hash of its
+high-entropy password. Credentials remain available to the owned services in
+process/container environments, which a privileged Docker-daemon or host/root
+operator can inspect; the change does not claim encrypted runtime secrets.
+Neither generated secret values nor privileged inspection output belongs in
+public evidence. Alertmanager's required bearer file and TLS keys remain
+protected runtime inputs rather than receipt fields.
+
+A separate [pinned Redis ACL compatibility check](SOU41_redis-acl-auth.json)
+confirmed valid authentication and rejection of missing/wrong credentials, using
+a disposable container with no network or published ports. Its owned cleanup
+passed. This component check is separate from complete candidate acceptance.
+The driver follow-up suite passed 42 tests, including first-byte permissions,
+non-overwriting publication, saved-secret absence, owned promtool execution and
+sanitized command failures.
+
+The repaired candidate completed the fresh exact-source drill, focused
+regressions and Python rescan recorded above. The historical 65-check result
+and raw outcomes below remain unchanged. Alert 113 was fixed by code and
+verified by that scan; the new scoped SHA-256 findings remain open for reviewer
+disposition. Maintainer review and final-head CI remain required.
+
+## Earlier raw outcomes and witnesses (98a7cf6)
+
+| Actual fault | Wait to real rule firing | Wait to authenticated firing receipt | Wait to authenticated resolved receipt | Correlation |
+| --- | ---: | ---: | ---: | --- |
+| PostgreSQL | 130.073 s | 2.028 s | 24.286 s | same validated labels, startsAt and cycle ID |
+| Redis | 89.458 s | 28.484 s | 28.277 s | same validated labels, startsAt and cycle ID |
+| Gateway | 144.341 s | 30.364 s | 60.629 s | same validated labels, startsAt and cycle ID |
+
+These waits cover each named polling phase, not total end-to-end alert latency or a production SLO. Raw UTC observation times and configuration hashes are in the JSON.
+
+- PostgreSQL and Redis loss each produced readiness 503, the selected dependency gauge 0, the other dependency 1 and Prometheus `up=1`. A model request returned 503 with **zero** independent provider receipt delta for each fault. Gateway outage produced `up=0` and absent readiness rather than a fabricated readiness zero.
+- Alertmanager recorded **3 failed HTTP notification attempts** while the receiver was stopped. The pinned counter is `alertmanager_notification_requests_failed_total`; whole-stage failure counts are not substituted for individual attempts.
+- Restoring the receiver delivered the PostgreSQL firing notification. A second receiver restart preserved event/cycle identity; authenticated replay returned a duplicate and no new identity. The driver reinspects ownership and current loopback bindings after start/restart because ephemeral host ports can change.
+- Missing/wrong credentials returned 401; malformed messages and unrelated targets returned 400. All four probes left zero durable receipts. Bearer possession and validated declared labels are distinct from proof of the sender's network identity.
+- Four useful synthetic calls (before outages and after each recovery) returned the same benign response and independently appended exactly one provider record each. Each completed call also had a durable PostgreSQL audit-row witness before the next fault. This is **zero interruptions in four fixture calls**, not a general detection or availability rate.
+- The final protected receipt inventory contained exactly six identities, firing/resolved for each declared alert, without truncation or unrelated rows. Only generated project services/volumes were stopped. Success cleanup was verified and its private profile removed; no paid model or real incident channel was contacted.
+
+## Earlier regressions and checks (98a7cf6)
+
+- Protected receiver: **28 passed**, including process interruption, restart/dedup, storage failure/capacity, declared source/type bounds and real TLS saturation/recovery. Pinned Alertmanager 0.34.1 `notification_reason` and `routeLabels` metadata are validated and discarded; they never authorize a source or change identity. Older payloads remain supported.
+- Linux driver: **31 passed**, including actual lifecycle methods with changed external bindings, strict generated CA/leaf verification, incomplete/truncated evidence, source/ownership gates and useful/provider/audit witnesses. Both endpoint lifecycle regressions fail against the pre-fix driver.
+- Pinned promtool: **7 rules validated; 18 fixture assertions passed** ([outcomes and baseline failure](SOU41_promtool-results.json)). The new brief-outage/recovery expectations fail against baseline main for the previous PostgreSQL `min_over_time` expression; the instantaneous readiness expression with unchanged `for: 2m` prevents stale firing after recovery.
+- Rust: `cargo fmt --all -- --check`, locked workspace clippy with warnings denied, and locked workspace tests passed (**963 passed, 8 explicitly ignored**). No Rust code or Cargo lock changes are included.
+- Python scripts: **433 run, 10 skipped, all 423 executed tests passed**. Skips are five optional Playwright fixtures and five native Windows launcher/ACL/DPAPI fixtures. Benchmark scripts: **44 tests run; 28 passed, 16 individual skips and 2 class-level skips** (explicit pinned checkout/runtime or disposable native Agent required). No skipped test is used as runtime acceptance.
+- Documentation: local link check passed. Initial sandboxed suites could not bind local fixture sockets; authorized local-listener reruns passed. This was an execution-environment limitation, not successful protection evidence.
+
+## Preserved development attempts
+
+Incomplete attempts are retained rather than relabeled as passing. Every attempt below verified cleanup of its generated services; private failure profiles remain local and are not committed.
+
+| Source | Raw outcome | Reason and resulting repair |
+| --- | --- | --- |
+| `e18edd2` | [incomplete](SOU41_linux-alert-e18edd2.json) | Internal-only Docker network suppressed published host ports; switched to an owned private standard bridge and strict actual binding inspection. No fault cycle reached. |
+| `b046201` | [incomplete](SOU41_linux-alert-b046201.json) | Strict CA validation refused missing CA key usage; generated explicit CA/leaf extensions and real strict TLS regressions. No fault cycle reached. |
+| `91d2635` | [incomplete](SOU41_linux-alert-91d2635.json) | Fixture omitted the Gateway admin Bearer prefix; aligned it with the existing authentication contract. No fault cycle reached. |
+| `9fc65be` | [cancelled/incomplete](SOU41_linux-alert-9fc65be.json) | Stopped gracefully after actual PostgreSQL readiness/refusal checks when primary-source review identified the pinned webhook's new metadata fields and per-attempt metric. This is not a completed firing/resolved cycle. |
+| `234e172` | [incomplete](SOU41_linux-alert-234e172.json) | Actual firing/retry succeeded, but the observer used the old ephemeral port after restart. A separate [read-only checkpointed SQLite witness](SOU41_independent-receiver-234e172.json) found one durable firing row after cleanup; it does not make this run complete. Refreshing owned endpoints fixed the observer. |
+
+Acceptance of the current candidate requires fresh verification of any affected runtime repairs, maintainer-reviewed code and passing exact-head CI; the historical successful run alone does not accept a changed revision. The local result does not mark the issue Done while external review/checks remain; earlier partial outcomes are preserved to explain actual failures. Production receiver operation still requires a declared operator, durable-disk/backup monitoring, coordinated credential/certificate renewal, retained deduplication horizon and verified incident-routing ownership.

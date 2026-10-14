@@ -60,6 +60,71 @@ tests:
       - eval_time: 3m
         alertname: LLMFirewallGatewayTargetDown
         exp_alerts: []
+      - eval_time: 4m
+        alertname: LLMFirewallControlPlaneUnavailable
+        exp_alerts: []
       - eval_time: 6m
         alertname: LLMFirewallControlPlaneUnavailable
+        exp_alerts: []
+  - name: A brief recovered control-plane outage never becomes a delayed firing alert
+    interval: 30s
+    input_series:
+      - series: 'llm_firewall_control_plane_ready{job="soup-wall-gateway",instance="127.0.0.1:9001"}'
+        values: '1 1 0 0 1x10'
+    alert_rule_test:
+      - eval_time: 1m30s
+        alertname: LLMFirewallControlPlaneUnavailable
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: LLMFirewallControlPlaneUnavailable
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: LLMFirewallControlPlaneUnavailable
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: LLMFirewallControlPlaneUnavailable
+        exp_alerts: []
+  - name: Redis configured dependency failure fires after one minute and resolves on recovery
+    interval: 30s
+    input_series:
+      - series: 'llm_firewall_redis_limits_enabled{job="soup-wall-gateway",instance="127.0.0.1:9001"}'
+        values: '1x14'
+      - series: 'llm_firewall_redis_limits_ready{job="soup-wall-gateway",instance="127.0.0.1:9001"}'
+        values: '1 1 0 0 0 0 1x8'
+    alert_rule_test:
+      - eval_time: 1m30s
+        alertname: LLMFirewallRedisLimitsUnavailable
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: LLMFirewallRedisLimitsUnavailable
+        exp_alerts:
+          - exp_labels:
+              job: soup-wall-gateway
+              instance: '127.0.0.1:9001'
+              severity: critical
+              component: admission-limits
+            exp_annotations:
+              summary: Soup Wall shared Redis limits are unavailable
+              description: Distributed rate/spend admission state is configured but cannot be reached.
+              runbook: https://github.com/SoupTeam/soup-wall/blob/main/docs/operations/PRODUCTION_RUNBOOK.md#dependency-failure-drills
+      - eval_time: 3m
+        alertname: LLMFirewallRedisLimitsUnavailable
+        exp_alerts: []
+  - name: Brief Redis failure and disabled Redis do not interrupt operators
+    interval: 30s
+    input_series:
+      - series: 'llm_firewall_redis_limits_enabled{job="soup-wall-gateway",instance="brief"}'
+        values: '1x14'
+      - series: 'llm_firewall_redis_limits_ready{job="soup-wall-gateway",instance="brief"}'
+        values: '1 1 0 1x11'
+      - series: 'llm_firewall_redis_limits_enabled{job="soup-wall-gateway",instance="disabled"}'
+        values: '0x14'
+      - series: 'llm_firewall_redis_limits_ready{job="soup-wall-gateway",instance="disabled"}'
+        values: '0x14'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: LLMFirewallRedisLimitsUnavailable
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: LLMFirewallRedisLimitsUnavailable
         exp_alerts: []

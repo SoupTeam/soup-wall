@@ -1,0 +1,65 @@
+{
+  "status": "pass",
+  "scope": "official multi-platform manifest metadata; runtime drill is separate",
+  "entries": {
+    "prometheus": {
+      "image": "prom/prometheus@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e",
+      "linux_amd64": true,
+      "linux_arm64": true,
+      "observation": "official pinned remote index verified earlier in this review"
+    },
+    "alertmanager": {
+      "image": "prom/alertmanager@sha256:e9733bafb1bdef9b00e25a21f8f99dc26a22224bf16641ad754d1649f4c3357a",
+      "linux_amd64": true,
+      "linux_arm64": true,
+      "observation": "official pinned remote index verified earlier in this review"
+    },
+    "postgres": {
+      "image": "postgres@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416",
+      "linux_amd64": true,
+      "linux_arm64": true,
+      "observation": "official pinned remote index verified earlier in this review"
+    },
+    "redis": {
+      "image": "redis@sha256:29e8589c3f9ba699b5f7aa4b3c7733c58852a3626439e619aa0ee78de08c6ca0",
+      "platforms": [
+        "linux/386",
+        "linux/amd64",
+        "linux/arm",
+        "linux/arm64",
+        "linux/ppc64le",
+        "linux/riscv64",
+        "linux/s390x",
+        "unknown/unknown"
+      ],
+      "linux_amd64": true,
+      "linux_arm64": true
+    },
+    "python": {
+      "image": "python@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258",
+      "platforms": [
+        "linux/386",
+        "linux/amd64",
+        "linux/arm",
+        "linux/arm64",
+        "linux/ppc64le",
+        "unknown/unknown"
+      ],
+      "linux_amd64": true,
+      "linux_arm64": true
+    },
+    "rust": {
+      "image": "rust@sha256:ff521445a372125ed4f76e1453a1f8098f2d05332d1601d30db1c1f62757e730",
+      "platforms": [
+        "linux/386",
+        "linux/amd64",
+        "linux/arm",
+        "linux/arm64",
+        "linux/ppc64le",
+        "unknown/unknown"
+      ],
+      "linux_amd64": true,
+      "linux_arm64": true
+    }
+  }
+}

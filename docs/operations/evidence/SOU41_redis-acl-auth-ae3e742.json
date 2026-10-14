@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "source": {
+    "commit": "ae3e742a41f4512e7114b05d6cd094adec55f801",
+    "tree": "0f2542c095e66b042e92fe094fd8cc5682797b07",
+    "clean": true,
+    "cargo_lock_sha256": "050d12d3c526788bf719e5e7f877cc880b152bef37fec73f09fea0fe81f1fe57"
+  },
+  "credential_generation": {
+    "provider": "Python secrets.token_hex(32)",
+    "random_bytes": 32,
+    "entropy_bits": 256,
+    "human_or_external_password_input": false
+  },
+  "scope": "owned none-network pinned Redis ACL authentication",
+  "image": "redis@sha256:29e8589c3f9ba699b5f7aa4b3c7733c58852a3626439e619aa0ee78de08c6ca0",
+  "published_ports": false,
+  "plaintext_credentials_in_arguments": false,
+  "password_stored_as_sha256_acl_hash": true,
+  "cleanup": true,
+  "outcomes": {
+    "valid_authenticated_ping": true,
+    "absent_credential_refused": true,
+    "wrong_credential_refused": true
+  },
+  "image_id": "sha256:29e8589c3f9ba699b5f7aa4b3c7733c58852a3626439e619aa0ee78de08c6ca0",
+  "redis_version": "Redis server v=7.2.16 sha=00000000:0 malloc=jemalloc-5.3.0 bits=64 build=ec26ae8dbff88af0",
+  "status": "pass"
+}

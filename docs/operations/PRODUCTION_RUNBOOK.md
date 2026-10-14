@@ -143,8 +143,12 @@ gauge into zero. Keep the existing readiness/dependency alerts alongside the
 target-down rule. The [local monitoring procedure](LOCAL_MONITORING_ACCEPTANCE.md)
 tests actual stop, authenticated firing, restart and resolved delivery with
 portable monitoring binaries. The
-[Alertmanager example](../../deploy/alertmanager.example.yaml) still requires
-an operator-owned receiver and protected credentials before deployment.
+[Alertmanager example](../../deploy/alertmanager.example.yaml) requires an
+operator-owned receiver and protected credentials before deployment. Use the
+[persistent receiver guide](ALERT_RECEIVER.md) for the implemented receipt
+service, accepted source labels, authentication, retention and restart recovery.
+The current-source Linux procedure exercises actual PostgreSQL/Redis failures
+and receiver restart; the historical Windows checkpoint has a separate scope.
 
 Route `critical` alerts to the staffed incident channel and `warning` alerts
 to the operational backlog. The file contains no tenant labels or customer
