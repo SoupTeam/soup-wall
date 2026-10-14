@@ -18,6 +18,7 @@ from pathlib import Path
 import secrets
 import shutil
 import signal
+import socket
 import sqlite3
 import subprocess
 import tempfile
@@ -32,6 +33,108 @@ spec = importlib.util.spec_from_file_location("vendor_helpers", Path(__file__).w
 vendor = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(vendor)
 KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak@sha256:ad1b0f0fa4bb5eff10f7a78eaafbb6d65b25431c1f824b0710836d74373a7dfb"
+POSTGRES_IMAGE = "postgres@sha256:ec9f656f17c8b4dfebf49e58cf5c46d493d4846d4ea6d8b85d0637f68ee33bfc"
+
+
+def owned_container(docker, arguments, resources):
+    created = subprocess.run([docker, "create", *arguments], check=True,
+                             capture_output=True, text=True, timeout=30)
+    identifier = created.stdout.strip()
+    if len(identifier) != 64 or any(c not in "0123456789abcdef" for c in identifier):
+        raise RuntimeError("Docker did not return an owned container ID")
+    resources.callback(lambda: subprocess.run([docker, "rm", "--force", "--volumes", identifier],
+                       check=True, capture_output=True, timeout=30))
+    return identifier
+
+
+class FixtureDatabase:
+    """Only the newly created file/container; no operator-supplied DSN or SQL CLI."""
+    def __init__(self, directory, environment, resources, postgres=False, cert=None, key=None):
+        self.path = directory / "gateway.sqlite"
+        self.container = None
+        self.environment = environment
+        self.name = "soup_oidc_" + uuid.uuid4().hex
+        if not postgres:
+            return
+        self.docker = shutil.which("docker")
+        subprocess.run([self.docker, "pull", "--platform", "linux/amd64", POSTGRES_IMAGE],
+                       check=True, capture_output=True, timeout=240)
+        password = secrets.token_urlsafe(32)
+        credentials = directory / "postgres.env"
+        credentials.write_text(f"POSTGRES_USER=oidc_fixture\nPOSTGRES_DB={self.name}\nPOSTGRES_PASSWORD={password}\n",
+                               encoding="utf-8")
+        credentials.chmod(0o600)
+        port = vendor.free_port()
+        self.container = owned_container(self.docker, ["--platform", "linux/amd64",
+            "--name", "soup-oidc-postgres-" + uuid.uuid4().hex,
+            "--publish", f"127.0.0.1:{port}:5432", "--memory=512m",
+            "--security-opt=no-new-privileges", "--cap-drop=ALL",
+            "--cap-add=CHOWN", "--cap-add=DAC_OVERRIDE", "--cap-add=FOWNER",
+            "--cap-add=SETGID", "--cap-add=SETUID", "--env-file", str(credentials),
+            "--mount", f"type=bind,src={cert},dst=/fixture-cert.pem,readonly",
+            "--mount", f"type=bind,src={key},dst=/fixture-key.pem,readonly",
+            POSTGRES_IMAGE, "bash", "-ec",
+            "cp /fixture-key.pem /tmp/oidc-server.key; chown postgres:postgres /tmp/oidc-server.key; "
+            "chmod 600 /tmp/oidc-server.key; exec docker-entrypoint.sh postgres "
+            "-c ssl=on -c ssl_cert_file=/fixture-cert.pem -c ssl_key_file=/tmp/oidc-server.key"], resources)
+        subprocess.run([self.docker, "start", self.container], check=True, capture_output=True, timeout=30)
+        environment.update(SOUP_OIDC_FIXTURE_DATABASE_URL=
+            f"postgresql://oidc_fixture:{password}@127.0.0.1:{port}/{self.name}?sslmode=require",
+            SOUP_OIDC_FIXTURE_DATABASE_NAME=self.name)
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            try:
+                if self.sql("SELECT 1") == "1":
+                    with socket.create_connection(("127.0.0.1", port), timeout=1):
+                        return
+            except (subprocess.SubprocessError, OSError):
+                pass
+            time.sleep(.25)
+        raise RuntimeError("disposable PostgreSQL startup failed")
+
+    def sql(self, query):
+        if self.container:
+            result = subprocess.run([self.docker, "exec", "--user", "postgres", "-i", self.container,
+                "psql", "--no-psqlrc", "--quiet", "--tuples-only", "--no-align",
+                "--set", "ON_ERROR_STOP=1", "--username", "oidc_fixture", "--dbname", self.name],
+                input=query, capture_output=True, text=True, check=True, timeout=15)
+            return result.stdout.strip()
+        with closing(sqlite3.connect(self.path)) as connection:
+            cursor = connection.execute(query)
+            row = cursor.fetchone()
+            connection.commit()
+            return str(row[0]) if row else ""
+
+    def bootstrap_target(self):
+        return "postgres" if self.container else str(self.path)
+
+    def configuration(self):
+        if self.container:
+            return "  backend: postgres\n  postgres_url_env: SOUP_OIDC_FIXTURE_DATABASE_URL\n"
+        return '  backend: sqlite\n  database_path: "gateway.sqlite"\n'
+
+    def identity_snapshot(self):
+        # Compare all persisted identity/session values privately. No raw rows
+        # or their hashes are exported as acceptance evidence.
+        tables = ("organizations", "tenants", "workspaces", "workspace_principals",
+                  "workspace_external_identities", "workspace_memberships",
+                  "organization_oidc_connections", "oidc_authorization_states", "oidc_browser_sessions")
+        return {table: self.sql(f"SELECT COALESCE(json_agg(row_to_json(t) ORDER BY row_to_json(t)::text)::text, '[]') FROM {table} t")
+                for table in tables}
+
+    def restart(self):
+        if not self.container:
+            raise RuntimeError("no owned database service")
+        subprocess.run([self.docker, "restart", self.container], capture_output=True, check=True, timeout=45)
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            try:
+                if self.sql("SELECT 1") == "1":
+                    return
+            except subprocess.SubprocessError:
+                pass
+            time.sleep(.25)
+        raise RuntimeError("owned database did not restart")
 
 
 def imported_credential(password):
@@ -73,7 +176,7 @@ def start_child(command, directory, environment, log, resources):
 def run(args):
     report = {"schema_version": 1, "scope": "Disposable Keycloak OIDC and Console browser acceptance",
               "started_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
-              "artifact_label": args.artifact_label, "checks": [], "passed": False,
+              "artifact_label": args.artifact_label, "backend": args.backend, "checks": [], "passed": False,
               "cleanup_passed": False, "platform": os.name,
               "runtimes": ({"keycloak_image": KEYCLOAK_IMAGE, "keycloak_version": "26.8.0",
                             "keycloak_license": "Apache-2.0", "platform": "linux/amd64"}
@@ -83,7 +186,7 @@ def run(args):
                               ("Browser trusts the ephemeral CA in its isolated HOME/NSS database"
                                if args.docker else "Windows diagnostic browser uses an ephemeral SPKI pin"),
                               "Gateway and HTTP driver verify TLS with an explicit ephemeral CA",
-                              "Session expiry is advanced only in this run's disposable SQLite fixture"]}
+                              "Session expiry is advanced only in this run's disposable database fixture"]}
     output = vendor.ReportOutput(args.out, [args.gateway, args.bootstrap_helper, args.keycloak_zip,
                                           args.jdk_zip, Path(__file__)], report)
 
@@ -95,6 +198,8 @@ def run(args):
             raise RuntimeError(name)
 
     try:
+        if args.backend == "postgres" and not args.docker:
+            raise RuntimeError("PostgreSQL acceptance requires the owned Linux Docker service")
         if args.docker:
             if os.name != "posix" or not shutil.which("docker") or not shutil.which("certutil"):
                 raise RuntimeError("Linux Docker and NSS certutil are required")
@@ -112,7 +217,11 @@ def run(args):
                                                ROOT / "Cargo.lock", ROOT / "crates/proxy/examples/keycloak-oidc-bootstrap.rs",
                                                ROOT / "crates/proxy/src/oidc.rs",
                                                ROOT / "crates/proxy/src/oidc_auth.rs",
-                                               ROOT / "crates/proxy/src/customer_dashboard.html"]}
+                                               ROOT / "crates/proxy/src/customer_dashboard.html",
+                                               ROOT / "crates/proxy/src/tenant_store.rs",
+                                               ROOT / "crates/proxy/src/tenant_store/postgres.rs",
+                                               ROOT / "scripts/keycloak-oidc-acceptance.sh",
+                                               ROOT / ".github/workflows/keycloak-oidc.yml"]}
         scratch = vendor.scratch_directory(ROOT)
         children = []
         with ExitStack() as resources:
@@ -151,7 +260,7 @@ def run(args):
                     except (RuntimeError, requests.RequestException):
                         self.send_error(502)
 
-                do_GET = do_POST = do_PUT = do_DELETE = forward
+                do_GET = do_POST = do_PUT = do_DELETE = do_PATCH = forward
 
             edge = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Edge)
             resources.callback(edge.server_close)
@@ -241,21 +350,48 @@ def run(args):
 
             report["phase"] = "vendor-startup"
             check("real-keycloak-https-discovery", ready(issuer + "/.well-known/openid-configuration", child, 120))
-            database = directory / "gateway.sqlite"
-            seeded = subprocess.run([str(args.bootstrap_helper), str(database), issuer, client_id, callback,
-                                     users[0]["id"], users[1]["id"]], env=environment, cwd=directory,
-                                    capture_output=True, timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-            check("local-membership-bootstrap", seeded.returncode == 0)
-            scope = json.loads(seeded.stdout)
+            environment["LLM_FW_POSTGRES_CA_CERT_FILE"] = str(ca)
+            report["phase"] = "database-startup"
+            database = FixtureDatabase(directory, environment, resources,
+                                       postgres=args.backend == "postgres", cert=cert, key=key)
             gateway_environment = dict(environment, SOUP_FIXTURE_ADMIN_TOKEN=secrets.token_urlsafe(32),
                 LLM_FW_OIDC_STATE_KEY=secrets.token_urlsafe(32), LLM_FW_OIDC_CA_CERT_FILE=str(ca), RUST_LOG="error")
             (directory / "policy.yaml").write_text("policies: []\ndefault: allow\n", encoding="utf-8")
             (directory / "firewall.yaml").write_text(
                 f'bind: "127.0.0.1:{gateway_port}"\ntenant_store:\n  enabled: true\n'
-                '  backend: sqlite\n  database_path: "gateway.sqlite"\n'
+                + database.configuration() +
                 '  admin_token_env: "SOUP_FIXTURE_ADMIN_TOKEN"\npolicy_file: "policy.yaml"\n'
                 'fail_mode: fail_closed\n', encoding="utf-8")
-            report["configuration"] = {"bind": "loopback only", "store": "new disposable SQLite",
+
+            def migrate():
+                return subprocess.run([str(args.gateway), "migrate"], env=gateway_environment, cwd=directory,
+                                      capture_output=True, timeout=60).returncode == 0
+
+            if database.container:
+                report["runtimes"]["postgres_image"] = POSTGRES_IMAGE
+                report["runtimes"]["postgres_version"] = database.sql("SHOW server_version")
+                report["runtimes"]["postgres_license"] = "PostgreSQL License"
+                check("fresh-postgres-has-no-public-tables", database.sql(
+                    "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'") == "0")
+                check("explicit-production-postgres-migrations", migrate())
+            seed_command = [str(args.bootstrap_helper), database.bootstrap_target(), issuer, client_id,
+                            callback, users[0]["id"], users[1]["id"]]
+            seeded = subprocess.run(seed_command, env=environment, cwd=directory,
+                                    capture_output=True, timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            check("local-membership-bootstrap", seeded.returncode == 0)
+            scope = json.loads(seeded.stdout)
+            repeat = subprocess.run(seed_command, env=environment, cwd=directory, capture_output=True, timeout=30)
+            check("bootstrap-refuses-populated-store", repeat.returncode != 0)
+            if database.container:
+                # A valid but unrelated certificate must not authenticate the
+                # database. The probe does not change rows or run migrations.
+                wrong_ca = dict(environment, LLM_FW_POSTGRES_CA_CERT_FILE=str(directory / "soup-wall-sp.pem"))
+                rejected = subprocess.run([str(args.bootstrap_helper), "--probe-token", "postgres"],
+                    input="synthetic-invalid", text=True, env=wrong_ca, cwd=directory,
+                    capture_output=True, timeout=30)
+                check("postgres-untrusted-certificate-refused", rejected.returncode != 0)
+            report["configuration"] = {"bind": "loopback only", "store": "new disposable " + args.backend,
+                "database_tls_verified": bool(database.container),
                 "oidc_client": "public", "flow": "authorization_code", "pkce": "S256 required",
                 "https": True, "gateway_certificate_verification": True,
                 "os_trust_modified": False, "identity_source": "generated synthetic users",
@@ -270,6 +406,10 @@ def run(args):
                 return process
 
             gateway = start_gateway()
+            if database.container:
+                check("gateway-postgres-connections-use-tls", database.sql(
+                    "SELECT count(*) FROM pg_stat_ssl s JOIN pg_stat_activity a USING(pid) "
+                    "WHERE a.application_name = 'llm-firewall-control-plane' AND s.ssl") != "0")
             report["phase"] = "real-provider-negative-flow"
             start_url = gateway_base + "/auth/oidc/start?" + urllib.parse.urlencode({
                 "organization_id": scope["organization_id"], "workspace_id": scope["workspace_id"]})
@@ -279,8 +419,7 @@ def run(args):
             state_value = urllib.parse.parse_qs(urllib.parse.urlsplit(authorization).query)["state"][0]
             missing_browser = request("GET", callback, headers={"Cookie": ""},
                                       params={"state": state_value, "code": "unused-negative"})
-            with closing(sqlite3.connect(database)) as connection:
-                pending = connection.execute("SELECT count(*) FROM oidc_authorization_states WHERE consumed_at_unix IS NULL").fetchone()[0]
+            pending = int(database.sql("SELECT count(*) FROM oidc_authorization_states WHERE consumed_at_unix IS NULL"))
             check("callback-without-originating-browser-rejected-before-state-consumption",
                   missing_browser.status_code == 400 and pending == 1)
             invalid_state = "synthetic-invalid-state"
@@ -395,6 +534,12 @@ def run(args):
             check("rotated-cookie-invalidates-previous-session", request("GET", gateway_base + "/customer/v1/session",
                   headers={"Cookie": "__Host-llm-fw-session=" + old_cookie}).status_code == 401)
             stop_child(gateway)
+            if database.container:
+                before = database.identity_snapshot()
+                check("migrations-on-populated-identity-store", migrate())
+                check("populated-identity-and-session-state-preserved", database.identity_snapshot() == before)
+                database.restart()
+                check("postgres-restart-preserves-populated-state", database.identity_snapshot() == before)
             gateway = start_gateway()
             check("session-persists-across-gateway-restart", browser_fetch(page, "/customer/v1/session")["status"] == 200)
             active_cookie = next(c["value"] for c in owner.cookies() if c["name"] == "__Host-llm-fw-session")
@@ -411,6 +556,61 @@ def run(args):
             analyst_page = login(analyst, users[1])
             check("idp-owner-role-does-not-override-local-analyst", analyst_page.locator("#role").inner_text() == "analyst")
             check("analyst-denied-owner-only-api", browser_fetch(analyst_page, "/customer/v1/billing/invoice-preview")["status"] == 403)
+            # New genuine owner login after logout; local membership changes use
+            # the public CSRF-protected endpoint, not direct SQL modifications.
+            manager = context()
+            manager_page = login(manager, users[0])
+            manager_csrf = browser_fetch(manager_page, "/customer/v1/csrf")["data"]["token"]
+            mutation_headers = {"X-LLM-Firewall-CSRF-Token": manager_csrf, "Content-Type": "application/json"}
+
+            def membership(active):
+                return browser_fetch(manager_page, "/customer/v1/members", "PATCH", mutation_headers,
+                    json.dumps({"principal_id": scope["analyst_principal_id"], "role": "analyst", "active": active}))
+
+            check("owner-revokes-analyst-membership", membership(False)["status"] == 200)
+            check("revoked-membership-invalidates-existing-session",
+                  browser_fetch(analyst_page, "/customer/v1/session")["status"] == 401)
+            stop_child(gateway)
+            gateway = start_gateway()
+            check("membership-revocation-survives-restart",
+                  browser_fetch(analyst_page, "/customer/v1/session")["status"] == 401)
+            check("logout-revocation-survives-restart", request("GET", gateway_base + "/customer/v1/session",
+                  headers={"Cookie": "__Host-llm-fw-session=" + active_cookie}).status_code == 401)
+            check("owner-session-survives-second-restart",
+                  browser_fetch(manager_page, "/customer/v1/session")["status"] == 200)
+            denied_member = context()
+            denied_member_page = login(denied_member, users[1], success=False)
+            check("revoked-member-cannot-create-new-session",
+                  "oidc_login_failed" in denied_member_page.locator("body").inner_text())
+            check("owner-restores-analyst-membership", membership(True)["status"] == 200)
+            # Positive authentication and revocation are checked against the
+            # production store API, without making any external model request.
+            issued = browser_fetch(manager_page, "/customer/v1/service-accounts", "POST", mutation_headers,
+                json.dumps({"name": "Disposable token", "expires_at_unix": int(time.time()) + 1800}))
+            check("owner-issues-workspace-token", issued["status"] == 200)
+            credential = issued["data"]
+
+            def token_authenticates():
+                result = subprocess.run([str(args.bootstrap_helper), "--probe-token", database.bootstrap_target()],
+                    input=credential["token"], env=environment, cwd=directory,
+                    text=True, capture_output=True, timeout=30)
+                if result.returncode:
+                    raise RuntimeError("production store token probe failed")
+                return json.loads(result.stdout)["authenticated"]
+
+            check("issued-token-authenticates-production-store", token_authenticates())
+            revoked = browser_fetch(manager_page,
+                "/customer/v1/service-accounts/" + credential["account"]["id"] + "/revoke", "POST", mutation_headers)
+            check("owner-revokes-workspace-token", revoked["status"] == 200 and revoked["data"].get("revoked") is True)
+            check("revoked-token-refused-production-store", not token_authenticates())
+            stop_child(gateway)
+            gateway = start_gateway()
+            check("token-revocation-survives-restart", not token_authenticates())
+            # Fresh positive session ensures the expiry test cannot pass merely
+            # because the preceding membership test already denied this user.
+            analyst = context()
+            analyst_page = login(analyst, users[1])
+            check("restored-member-can-login", browser_fetch(analyst_page, "/customer/v1/session")["status"] == 200)
             for name, user, org, workspace in [
                 ("unprovisioned-idp-user-denied", users[2], scope["organization_id"], scope["workspace_id"]),
                 ("cross-organization-membership-denied", users[0], scope["other_organization_id"], scope["other_workspace_id"])]:
@@ -419,11 +619,7 @@ def run(args):
                 check(name, "oidc_login_failed" in denied_page.locator("body").inner_text()
                       and not any(c["name"] == "__Host-llm-fw-session" for c in denied.cookies()))
             # Advance expiry only in the new fixture, never in an existing store.
-            if database.parent.resolve() != directory or not directory.is_relative_to(scratch.resolve()):
-                raise RuntimeError("expiry fixture outside owned directory")
-            with closing(sqlite3.connect(database)) as connection:
-                connection.execute("UPDATE oidc_browser_sessions SET expires_at_unix = 1")
-                connection.commit()
+            database.sql("UPDATE oidc_browser_sessions SET expires_at_unix = 1")
             check("expired-session-denied-server-side", browser_fetch(analyst_page, "/customer/v1/session")["status"] == 401)
             analyst_page.reload()
             analyst_page.locator("#sign-in").wait_for(state="visible")
@@ -450,6 +646,7 @@ def main():
         parser.add_argument("--" + name, required=True, type=lambda value: Path(value).resolve())
     for name in ("keycloak-zip", "jdk-zip"):
         parser.add_argument("--" + name, type=lambda value: Path(value).resolve())
+    parser.add_argument("--backend", choices=("sqlite", "postgres"), default="sqlite")
     parser.add_argument("--docker", action="store_true")
     parser.add_argument("--artifact-label", required=True)
     return run(parser.parse_args())

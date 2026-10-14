@@ -82,6 +82,57 @@ same command and retains only the sanitized JSON. Check its actual result before
 claiming acceptance. Token signature, issuer/audience and nonce mutation tests
 remain focused Rust fixtures, separate from genuine vendor positive evidence.
 
+## PostgreSQL identity parity (SOU-39)
+
+After the same prerequisites, select the dedicated disposable backend:
+
+```sh
+bash scripts/keycloak-oidc-acceptance.sh postgres
+```
+
+The default command remains SQLite; `sqlite` may also be passed explicitly.
+Both modes run the original vendor/browser checks and the new membership/token
+revocation checks. CI runs both backends independently, retaining failed reports
+as well as passing ones. A success on one backend does not stand in for the other.
+
+The PostgreSQL Linux/amd64 service is pinned to
+`postgres@sha256:ec9f656f17c8b4dfebf49e58cf5c46d493d4846d4ea6d8b85d0637f68ee33bfc`
+(official PostgreSQL 16 bookworm image). The
+[PostgreSQL License](https://www.postgresql.org/about/licence/) and the image's
+bundled operating-system notices apply. The report records the observed server
+version and image digest. The service has a generated database name and password,
+a loopback-only published port, and TLS with an explicit ephemeral CA. Neither
+the driver nor bootstrap accepts an operator database URL. Generated credentials
+stay in private temporary files/process memory; they are not evidence artifacts.
+Cleanup removes only the created container ID and its anonymous volume. The
+PostgreSQL entrypoint retains the minimal ownership/user-switch capabilities
+needed to initialize its volume and private TLS key; privilege escalation is
+disabled. It is separate from the capability-free Keycloak container.
+
+The production `llm-firewall migrate` command initializes the new database before
+the asynchronous bootstrap provisions synthetic local identities. Normal Gateway
+startup does not migrate. The bootstrap rejects repeat seeding into a populated
+store. The drill also reruns migrations on populated identity/session state,
+compares its complete selected rows privately, and checks that the active session
+survives Gateway restart. It checks TLS use and refusal with an unrelated CA.
+No schema reset or migration-version rewrite is performed.
+
+Membership suspension/reactivation uses the public owner-only, CSRF-protected
+Console API. An existing analyst session and a fresh login are refused while
+suspended; a new login works after reactivation. Revocation remains effective
+after Gateway restart. A genuine owner session also creates and revokes a machine
+token through the Console API. A separate read-only helper calls the production
+store authentication API before and after revocation and restart. This token
+probe is a local store check, not a vendor login or external model request.
+Console logout revocation is checked again after restart. Expiry is advanced by
+SQL only inside this run's owned database, after verifying a fresh session works.
+
+The selected scope is PostgreSQL-backed Gateway identity/session persistence.
+Keycloak uses its disposable development realm store; PostgreSQL HA/failover,
+SCIM, managed-Agent tables and Keycloak SSO logout are outside this drill.
+The historical SQLite evidence below remains unchanged. New PostgreSQL acceptance
+requires a passing report from this extended driver and independent review.
+
 ## Recorded Linux acceptance, October 13, 2026
 
 [Workflow run 38414056010](https://github.com/SoupTeam/soup-wall/actions/runs/38414056010)
