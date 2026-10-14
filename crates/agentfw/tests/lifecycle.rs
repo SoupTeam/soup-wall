@@ -177,7 +177,7 @@ fn managed_lifecycle_restores_last_working_version() {
             &first_hash,
         ],
     );
-    success(&profile, &["start"]);
+    assert!(success(&profile, &["start"]).contains("started owned Agent and confirmed health"));
     assert!(status(&profile).running);
     failure(&profile, &["start"]);
     fs::write(

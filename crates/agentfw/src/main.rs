@@ -276,6 +276,8 @@ fn main() -> anyhow::Result<()> {
                     .build()?
                     .block_on(serve(home, Some(instance)));
             }
+            #[cfg(windows)]
+            isolate_lifecycle_stdio()?;
             let manager = agentfw::lifecycle::Manager::new(Config::home()?);
             match command {
                 LifecycleCommand::Install {
@@ -696,6 +698,41 @@ fn main() -> anyhow::Result<()> {
                 })
         }
     }
+}
+
+#[cfg(windows)]
+fn isolate_lifecycle_stdio() -> anyhow::Result<()> {
+    use anyhow::Context;
+    use windows_sys::Win32::Foundation::{
+        SetHandleInformation, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE,
+    };
+    use windows_sys::Win32::System::Console::{
+        GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+    };
+
+    // Do this in the single-threaded lifecycle CLI before starting any runtime
+    // or child. Windows Command::spawn inherits additional inheritable handles
+    // even when all three child streams are redirected. A managed daemon must
+    // not keep the caller's pipes alive after this CLI exits. Keep these handles
+    // open for our own I/O; only the inheritance flag changes, until CLI exit.
+    for stream in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+        // SAFETY: GetStdHandle borrows this process's standard handle. It is not
+        // closed or replaced here, and the CLI has not started worker threads.
+        let handle = unsafe { GetStdHandle(stream) };
+        if handle.is_null() {
+            continue;
+        }
+        if handle == INVALID_HANDLE_VALUE {
+            return Err(std::io::Error::last_os_error()).context("read lifecycle standard handle");
+        }
+        // SAFETY: The valid borrowed handle stays open. The mask changes only
+        // HANDLE_FLAG_INHERIT, preserving all other flags and access rights.
+        if unsafe { SetHandleInformation(handle, HANDLE_FLAG_INHERIT, 0) } == 0 {
+            return Err(std::io::Error::last_os_error())
+                .context("prevent managed Agent from inheriting lifecycle CLI streams");
+        }
+    }
+    Ok(())
 }
 
 /// Probe the daemon's unauthenticated loopback health endpoint. Every failure mode
