@@ -14,6 +14,9 @@ adds the accepted generic classifier/policy matrix and complete raw reports.
 The [October 14 resource-executor check](evidence/SOU18_RESOURCES_2026-10-14.md)
 tests the Windows lifecycle fixes together with SOU-15 PR #107. It records nine
 passing resource/startup cases and a failing same-session recovery case.
+The [post-merge rerun](evidence/SOU18_MAIN_2026-10-14.md) records main `5fc6d72`
+after PRs #107 and #110: all ten resource checks pass, including useful recovery
+after 70 read errors. The earlier failure report remains unchanged.
 
 ## Run the local probes together
 
@@ -124,6 +127,10 @@ arbitrary server process or protection from concurrent path replacement.
 The ten cases cover absolute/relative reads, an unlisted file, traversal,
 symlinks, unsupported operations, result withholding, workspace mismatch,
 missing-workspace startup failure and recovery after 70 invalid UTF-8 reads.
+An unsupported tool must retain its classification evidence but stop before
+native admission: both `native_call` and `native_result` must be absent. An
+ordinary native resource denial is checked separately and requires its native
+denial record.
 The recovery case requires a useful allowed read in the same session after the
 errors; a new connection or zero child calls cannot replace that proof.
 
@@ -140,8 +147,8 @@ Keep the build manifest with these outputs. The supplied executor/classifier
 digests in the resource profile are operator declarations, not independent
 attestations. The combined runner above still covers its original four stages;
 run this probe separately and retain a failure even if those stages pass.
-The dated evidence does not supersede SOU-15 review findings. Rerun both commands
-after the executor changes and have SOU-17/SOU-18 use the same agreed candidate.
+Rerun both commands after executor changes and have SOU-17/SOU-18 use the same
+agreed candidate. Historical reports describe only their pinned revisions.
 
 ## Disposable installation and status checks
 
