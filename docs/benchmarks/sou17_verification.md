@@ -15,7 +15,25 @@ classification/policy gating, all five generic reply shapes and operation-level
 bounded Unix resource reads. No competing test-local pipeline replaces those
 production components. Unsupported mappings are explicitly refused.
 
-## Current repaired candidate — 2026-10-14
+## Current CI lifecycle correction — 2026-10-14
+
+The [6a57bef lifecycle verification](evidence/sou17_ci_lifecycle_2026-10-14.md)
+in [PR #113](https://github.com/SoupTeam/soup-wall/pull/113) follows the retained
+native macOS and ARM64 failures on the previous reviewed head. New Unix pipe/socket
+I/O uses cancellation-safe descriptors and physical frame completion. Exact clean-source
+checks pass: 126 boundary regressions, 10 resource, 15 generic and 11 pending cases,
+64 Ask refusals followed by useful continuation, and 1,030 workspace tests.
+Thirty serial pairs have zero false interruptions; mean overhead is 40.625 ms and
+p99 57.346 ms. Original CI failures and non-reproducing local repetitions remain
+raw evidence; neither the proposed transport diagnosis nor local passes prove the
+exact hosted failure cause. **SOU-17 remains open** for new-head required CI,
+review, scan disposition, merge and affected actual-main verification.
+
+## Previous local repair verification — 2026-10-14
+
+Hosted CI subsequently rejected the previous head; the following records historical
+local success only. The linked current lifecycle supplement governs acceptance.
+
 
 The [bb64321 repair verification](evidence/sou17_candidate_bb64321_2026-10-14.md)
 in [PR #113](https://github.com/SoupTeam/soup-wall/pull/113) passes 123/123 exact-source
