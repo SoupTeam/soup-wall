@@ -931,11 +931,13 @@ impl PinnedWorkspace {
             let c_name = CString::new(comp.as_bytes()).context("path component contains NUL")?;
 
             if is_leaf {
+                // A leaf may become a FIFO after admission. Open without waiting
+                // so the descriptor type check can refuse it before any read.
                 let file_fd = unsafe {
                     libc::openat(
                         current_fd,
                         c_name.as_ptr(),
-                        libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                        libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK,
                     )
                 };
                 if file_fd < 0 {
@@ -1744,5 +1746,19 @@ mod tests {
         assert!(validate_proxy_url("http://example.com/").is_err());
         assert!(validate_proxy_url("https://proxy.example/path").is_err());
         assert!(validate_proxy_url("http://127.0.0.1:8080/").is_ok());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_guarded_file_open_refuses_fifo_without_blocking() {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = PinnedWorkspace::open(temp.path()).unwrap();
+        let fifo_path = temp.path().join("fifo_target");
+        let c_path = std::ffi::CString::new(fifo_path.to_str().unwrap()).unwrap();
+        let res = unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) };
+        assert_eq!(res, 0);
+
+        let err = workspace.open_file(&fifo_path).unwrap_err().to_string();
+        assert!(err.contains("not a regular file"));
     }
 }
