@@ -2781,7 +2781,7 @@ async fn sou24_readonly_write_with_high_uncertainty_is_hard_denied() {
 }
 
 #[tokio::test]
-async fn sou15_resource_policy_refuses_execution_without_confined_executor() {
+async fn sou15_operation_constrained_resource_executor_enforces_boundaries() {
     let mut fixture =
         Fixture::with_resource_policy("classified-read", true, None, |dir, registry| {
             let file = dir.join("reviewed-input.txt");
@@ -2815,10 +2815,11 @@ async fn sou15_resource_policy_refuses_execution_without_confined_executor() {
         .await;
     fixture.ready().await;
 
+    // 1. Authorized read succeeds through constrained executor without executing unconfined child.
     let target_file = fixture._dir.path().join("reviewed-input.txt");
     let call = json!({
         "jsonrpc": "2.0",
-        "id": "res-policy-refusal",
+        "id": "res-policy-auth",
         "method": "tools/call",
         "params": {
             "name": "read_document",
@@ -2829,12 +2830,71 @@ async fn sou15_resource_policy_refuses_execution_without_confined_executor() {
     });
     let reply: Value =
         serde_json::from_str(&fixture.exchange(&call.to_string()).await.unwrap()).unwrap();
-    assert_eq!(reply["id"], "res-policy-refusal");
-    assert_eq!(reply["result"]["isError"], true);
-    assert!(reply.to_string().contains("resource_executor_unsupported"));
+    assert_eq!(reply["id"], "res-policy-auth");
+    assert!(reply["result"]["isError"].is_null() || reply["result"]["isError"] == false);
+    assert_eq!(
+        reply["result"]["content"][0]["text"].as_str().unwrap(),
+        "synthetic contents"
+    );
     assert_eq!(
         executed(&fixture.ledger).len(),
         0,
-        "resource-policy calls must be refused without execution until a confined executor is reviewed"
+        "constrained executor handles read directly; child process must never execute"
+    );
+
+    // 2. Unauthorized workspace target is refused by native resource admission.
+    let unauthorized_file = fixture._dir.path().join("unauthorized.txt");
+    std::fs::write(&unauthorized_file, "secret payload").unwrap();
+    let unauth_call = json!({
+        "jsonrpc": "2.0",
+        "id": "res-policy-unauth",
+        "method": "tools/call",
+        "params": {
+            "name": "read_document",
+            "arguments": {
+                "path": unauthorized_file.to_str().unwrap()
+            }
+        }
+    });
+    let unauth_reply: Value =
+        serde_json::from_str(&fixture.exchange(&unauth_call.to_string()).await.unwrap()).unwrap();
+    assert_eq!(unauth_reply["id"], "res-policy-unauth");
+    assert_eq!(unauth_reply["result"]["isError"], true);
+    assert!(unauth_reply
+        .to_string()
+        .contains("native_resource_not_allowed"));
+    assert_eq!(
+        executed(&fixture.ledger).len(),
+        0,
+        "unauthorized read must never reach child process"
+    );
+
+    // 3. Path traversal outside workspace is refused before admission.
+    let traversal_call = json!({
+        "jsonrpc": "2.0",
+        "id": "res-policy-traversal",
+        "method": "tools/call",
+        "params": {
+            "name": "read_document",
+            "arguments": {
+                "path": "../outside.txt"
+            }
+        }
+    });
+    let trav_reply: Value =
+        serde_json::from_str(&fixture.exchange(&traversal_call.to_string()).await.unwrap())
+            .unwrap();
+    assert_eq!(trav_reply["id"], "res-policy-traversal");
+    assert_eq!(trav_reply["result"]["isError"], true);
+    assert!(
+        trav_reply.to_string().contains("resource_path_traversal")
+            || trav_reply
+                .to_string()
+                .contains("native_resource_not_allowed")
+    );
+    assert_eq!(
+        executed(&fixture.ledger).len(),
+        0,
+        "traversal read must never reach child process"
     );
 }

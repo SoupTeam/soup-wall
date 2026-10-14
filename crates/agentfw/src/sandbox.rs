@@ -633,7 +633,7 @@ fn validate(spec: &SandboxSpec) -> anyhow::Result<PathBuf> {
     Ok(workspace)
 }
 
-fn validate_workspace_path(workspace: &Path) -> anyhow::Result<PathBuf> {
+pub(crate) fn validate_workspace_path(workspace: &Path) -> anyhow::Result<PathBuf> {
     let workspace = workspace
         .canonicalize()
         .with_context(|| format!("sandbox workspace does not exist: {}", workspace.display()))?;
@@ -646,7 +646,10 @@ fn validate_workspace_path(workspace: &Path) -> anyhow::Result<PathBuf> {
     Ok(workspace)
 }
 
-fn resolve_workspace_target(workspace: &Path, requested: &Path) -> anyhow::Result<PathBuf> {
+pub(crate) fn resolve_workspace_target(
+    workspace: &Path,
+    requested: &Path,
+) -> anyhow::Result<PathBuf> {
     if requested.as_os_str().is_empty() {
         bail!("guarded file operation path is empty");
     }
@@ -683,6 +686,15 @@ fn resolve_workspace_target(workspace: &Path, requested: &Path) -> anyhow::Resul
         }
     }
     Ok(target)
+}
+
+pub(crate) fn read_workspace_file(target: &Path) -> anyhow::Result<String> {
+    let metadata = fs::symlink_metadata(target).context("guarded file read target is missing")?;
+    if metadata.file_type().is_symlink() || !metadata.file_type().is_file() {
+        bail!("guarded file read target is not a regular file");
+    }
+    let content = fs::read_to_string(target).context("failed to read guarded file target")?;
+    Ok(content)
 }
 
 fn delete_workspace_file(target: &Path) -> anyhow::Result<bool> {
