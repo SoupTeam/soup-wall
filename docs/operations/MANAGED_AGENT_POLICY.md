@@ -145,4 +145,15 @@ up. CI runs this in `.github/workflows/managed-policy-postgres.yml`; the separat
 SQLite runtime demonstration remains enabled. Successful checks are evidence
 for independent review, not permission to self-approve or mark the task Done.
 
+The [2026-10-14 PostgreSQL witness](evidence/managed-policy-postgres-2026-10-14.json)
+records 35 passing checks against PostgreSQL 16.15, including owned fixture
+cleanup, on source `b760038abc945909e1abe7b4f183542b2554f752`.
+[Linux run 38577520261](https://github.com/SoupTeam/soup-wall/actions/runs/38577520261)
+contains the original artifact (archive SHA-256
+`0ac26e6ff631a85a973f34c204a09ab5da699af7f9dfc946e78838defc587e81`).
+All eight recorded source hashes were checked against the Git blobs before
+retaining the report. The documentation-only evidence commit changes no tested
+source or runtime configuration. This proves the bounded local managed rollout;
+it is not acceptance of remote HTTPS transport or the full release.
+
 SOU-15 retains responsibility for MCP/resource confinement; SOU-26 owns release publication. This PR must remain Draft until integration tests and security review pass for the exact final source.
