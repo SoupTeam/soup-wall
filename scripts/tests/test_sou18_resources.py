@@ -67,7 +67,8 @@ def observation(case="absolute-read"):
     response = copy.deepcopy(produced)
     if expected in {"allow", "result_withheld", "resource_executor_unsupported", "native_resource_not_allowed"}:
         row["classifications"] = [classifier]
-        row["native_decisions"] = [call]
+        if expected != "resource_executor_unsupported":
+            row["native_decisions"] = [call]
     if expected in {"allow", "result_withheld"}:
         row["native_decisions"].append(completion)
     if expected != "allow":
@@ -142,10 +143,16 @@ class ResourceEvidenceTests(unittest.TestCase):
             self.assertEqual(PROBE.grade(row)["status"], "fail")
 
     def test_policy_refusal_and_unsupported_execution_have_different_native_evidence(self):
-        for case in ("unlisted-file", "unsupported-tool"):
-            row = observation(case)
-            row["native_decisions"][0]["released"] = not row["native_decisions"][0]["released"]
+        row = observation("unlisted-file")
+        row["native_decisions"][0]["released"] = True
+        self.assertEqual(PROBE.grade(row)["status"], "fail")
+        for released in (True, False):
+            row = observation("unsupported-tool")
+            row["native_decisions"] = [dict(observation()["native_decisions"][0], released=released)]
             self.assertEqual(PROBE.grade(row)["status"], "fail")
+        row = observation("unsupported-tool")
+        row["classifications"] = []
+        self.assertEqual(PROBE.grade(row)["status"], "fail")
         row = observation("traversal")
         row["classifications"] = observation()["classifications"]
         self.assertEqual(PROBE.grade(row)["status"], "fail")

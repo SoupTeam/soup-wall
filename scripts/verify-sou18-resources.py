@@ -172,11 +172,15 @@ def grade(row):
             require(expected in text, "wrong refusal reason")
             require(not any(item.get("event") == "native_result" for item in native),
                     "refused operation produced a result")
-            if expected in {"native_resource_not_allowed", "resource_executor_unsupported"}:
+            if expected == "native_resource_not_allowed":
                 require(len(native) == 1 and native[0].get("event") == "native_call"
                         and native[0].get("shadow") is False
-                        and native[0].get("released") is (expected == "resource_executor_unsupported"),
+                        and native[0].get("released") is False,
                         "native authorization evidence mismatch")
+            elif expected == "resource_executor_unsupported":
+                # Classification still runs, but unsupported dispatch must not
+                # reserve native capacity or produce a native result.
+                require(native == [], "unsupported operation reached native admission")
             else:
                 require(native == classifications == [], "pre-classification refusal reached downstream gates")
         return {"status": "pass", "reason": "independent child, file, client and production-gate witnesses agree"}
