@@ -931,11 +931,13 @@ impl PinnedWorkspace {
             let c_name = CString::new(comp.as_bytes()).context("path component contains NUL")?;
 
             if is_leaf {
+                // A leaf may become a FIFO after admission. Open without waiting
+                // so the descriptor type check can refuse it before any read.
                 let file_fd = unsafe {
                     libc::openat(
                         current_fd,
                         c_name.as_ptr(),
-                        libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                        libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK,
                     )
                 };
                 if file_fd < 0 {

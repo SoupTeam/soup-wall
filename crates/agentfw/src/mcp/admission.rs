@@ -3,6 +3,7 @@
 //! `mcp_host` release is not attestation of the host's eventual model context.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::future::Future;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
@@ -703,6 +704,37 @@ async fn write<W: AsyncWrite + Unpin>(output: &mut W, raw: &[u8]) -> anyhow::Res
     .await
     .context("MCP stdio write timed out")??;
     Ok(())
+}
+
+// Brokered resource operations finish inside the client branch, without a
+// Pending::Call. Monitor unread bytes while each execution/result gate is in
+// progress so an unsupported pipelined request cannot become a serialized call.
+// fill_buf does not consume bytes, including an incomplete next frame. Reply
+// writes remain outside this guard: a client that observes the completed reply
+// may immediately submit its next sequential request.
+async fn without_resource_overlap<R, F, T>(
+    client: &mut R,
+    resource_bound: bool,
+    operation: F,
+) -> anyhow::Result<T>
+where
+    R: AsyncBufRead + Unpin,
+    F: Future<Output = anyhow::Result<T>>,
+{
+    if !resource_bound {
+        return operation.await;
+    }
+    tokio::pin!(operation);
+    tokio::select! {
+        biased;
+        available = client.fill_buf() => {
+            ensure!(available?.is_empty(), "concurrent MCP requests are not supported");
+            // EOF cannot add another request. Preserve the existing single-call
+            // resource behavior when a client closes stdin after its last frame.
+            operation.await
+        }
+        result = &mut operation => result,
+    }
 }
 
 struct Collector<'a> {
@@ -1496,16 +1528,19 @@ where
                                 .context("classifier discovery state missing")?;
                             let egress_declared = installed.action_class == ActionClass::Network
                                 || !installed.egress.is_empty();
-                            match collector
-                                .classify(
+                            match without_resource_overlap(
+                                client,
+                                resource_admission.is_some(),
+                                collector.classify(
                                     snapshot,
                                     request_id,
                                     name,
                                     &args,
                                     installed.action_class,
                                     egress_declared,
-                                )
-                                .await?
+                                ),
+                            )
+                            .await?
                             {
                                 Err(failure) => {
                                     write(host, &not_classified(request_id, failure)).await?;
@@ -1594,7 +1629,12 @@ where
                         } else {
                             CONTRACT.to_string()
                         };
-                        let receipt = collector.event("call", call_fields).await?;
+                        let receipt = without_resource_overlap(
+                            client,
+                            resource_admission.is_some(),
+                            collector.event("call", call_fields),
+                        )
+                        .await?;
                         if receipt["release"] != true {
                             write(
                                 host,
@@ -1608,7 +1648,11 @@ where
                             {
                                 let (pinned, target_path) = pinned_resource_ws
                                     .expect("pinned workspace initialized on unix");
-                                let content = match pinned.read_file(&target_path) {
+                                let read = without_resource_overlap(client, true, async {
+                                    Ok(pinned.read_file(&target_path))
+                                })
+                                .await?;
+                                let content = match read {
                                     Ok(c) => c,
                                     Err(err) => {
                                         let err_msg = err.to_string();
@@ -1623,21 +1667,25 @@ where
                                             withheld(request_id, "invocation", &reasons);
                                         let withheld_content = std::str::from_utf8(&withheld_bytes)
                                             .context("withheld is UTF-8")?;
-                                        let _ = collector
-                                            .event(
-                                                "result",
-                                                json!({
-                                                    "expected_contract_version": contract_version,
-                                                    "tool": name,
-                                                    "args": args,
-                                                    "call_id": receipt["call_id"],
-                                                    "result_kind": "error",
-                                                    "delivery": "mcp_host",
-                                                    "content": withheld_content,
-                                                    "expected_binding_sha256": receipt["binding_sha256"]
-                                                }),
-                                            )
-                                            .await;
+                                        without_resource_overlap(client, true, async {
+                                            let _ = collector
+                                                .event(
+                                                    "result",
+                                                    json!({
+                                                        "expected_contract_version": contract_version,
+                                                        "tool": name,
+                                                        "args": args,
+                                                        "call_id": receipt["call_id"],
+                                                        "result_kind": "error",
+                                                        "delivery": "mcp_host",
+                                                        "content": withheld_content,
+                                                        "expected_binding_sha256": receipt["binding_sha256"]
+                                                    }),
+                                                )
+                                                .await;
+                                            Ok(())
+                                        })
+                                        .await?;
                                         write(host, &withheld_bytes).await?;
                                         continue;
                                     }
@@ -1657,8 +1705,10 @@ where
                                 raw_response.push(b'\n');
                                 let result_content = std::str::from_utf8(&raw_response)
                                     .context("result is UTF-8")?;
-                                let res_receipt = collector
-                                    .event(
+                                let res_receipt = without_resource_overlap(
+                                    client,
+                                    true,
+                                    collector.event(
                                         "result",
                                         json!({
                                             "expected_contract_version": contract_version,
@@ -1670,8 +1720,9 @@ where
                                             "content": result_content,
                                             "expected_binding_sha256": receipt["binding_sha256"]
                                         }),
-                                    )
-                                    .await?;
+                                    ),
+                                )
+                                .await?;
                                 if res_receipt["release"] != true {
                                     write(
                                         host,

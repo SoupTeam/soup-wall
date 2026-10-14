@@ -5,17 +5,39 @@ for [SOU-17](https://linear.app/soup-wall/issue/SOU-17/task-11-independently-ver
 [roadmap R06, bounded P01–P02](../ROADMAP.md). It uses existing production code and
 safe local fixtures. Owner: konung3; PR review coordinator: Nari_Ab.
 
-**Final runtime acceptance is pending SOU-15.** On preparation base
-`fdf4bf716a87b88f17a6241e710bb447885fb8df`, adapter tests import
-`soup_wall_adapter::runner::{run_enforcement_pipeline, evaluate_baseline_policy}`.
-On that historical preparation base, Native/MCP fixtures and the adapter runner
-were tested separately; those results did not establish the integrated milestone.
-The current candidate below adds production classification/policy gating and
-resource receipt authorization and all five generic classifier reply shapes.
-Constrained resource execution remains unfinished. No competing test-local pipeline replaces
-those production components.
+The production adapter tests import
+`soup_wall_adapter::runner::{run_enforcement_pipeline, evaluate_baseline_policy}`;
+actual Native/MCP fixtures use the shared classifier/policy and native admission
+boundary. On historical preparation base
+`fdf4bf716a87b88f17a6241e710bb447885fb8df`, these components were tested separately,
+which did not establish the integrated milestone. Current main adds production
+classification/policy gating, all five generic reply shapes and operation-level
+bounded Unix resource reads. No competing test-local pipeline replaces those
+production components. Unsupported mappings are explicitly refused.
 
-## Current candidate recheck — 2026-10-12
+## Current candidate recheck — 2026-10-14
+
+The [current-main 5fc6d72 verification](evidence/sou17_candidate_5fc6d72_2026-10-14.md)
+records 112/112 existing regressions, the 15-case generic profile and ten-case
+resource profile. The selected production `read_document` executor now performs
+useful constrained file reads with independent content and native result witnesses;
+it is no longer an unfinished-executor dependency. Two additional probes establish
+an admitted FIFO read that hangs and unsupported inline overlap that releases both
+results. Focused [SOU-44](https://linear.app/soup-wall/issue/SOU-44/refuse-post-admission-fifo-replacement-without-blocking-the)
+and [SOU-45](https://linear.app/soup-wall/issue/SOU-45/enforce-unsupported-overlap-refusal-for-inline-constrained-mcp-reads)
+repairs and exact-source reruns are required. **SOU-17 remains open** until the
+confirmed failures, reviewed delivery and accepted limits are satisfied. The dated
+report retains original failures, grader corrections, false interruptions, latency,
+raw outcomes and source/configuration identities.
+
+[October 14 CodeQL triage](../operations/evidence/CODE_SCANNING_TRIAGE_2026-10-14.md)
+confirms one open Critical / 85 closed main alerts and working exact-source
+Rust/Python/Actions scans. The open permission-mode finding is an evidence-backed
+false-positive recommendation pending review; no dismissal was performed and this
+is not a claimed zero-alert scan. Static analysis does not establish runtime
+protection.
+
+## Historical candidate recheck — 2026-10-12
 
 The [main 45b611a recheck](evidence/sou17_candidate_45b611a_2026-10-12.md) verifies
 PR #82's actual five-shape production policy routing: 107 existing regressions,
@@ -195,20 +217,24 @@ are excluded; per-call Python classifier startup remains part of the protected
 request. Raw observations and the measurement scope accompany any percentiles. The positive controls check useful calls and session isolation;
 their regression pass count is not a general false-interruption rate.
 
-SOU-15 must supply one integrated exact commit, its stable interface and classifier,
-registry/schema/resource/policy revisions and configuration. Then run the same suites
-through that production boundary, including invalid classifier outputs, trusted
-hard-Deny versus weaker classification, Unknown/Ask, model-service failure, session
-isolation, replay/restart and both execution/release witnesses. Record any unsupported
-mapping, failure or skip explicitly. [The accepted contract](../../contract/updated_contract2.md) requires zero
+SOU-15 supplied the integrated main `5fc6d72…` candidate with its classifier,
+registry/schema/resource/policy configuration and selected bounded Unix read
+executor. The current report runs the prepared suites through that production
+boundary and independently records remaining failures. Reviewed focused repairs
+must be rerun on a new exact candidate, including invalid classifier outputs,
+trusted hard-Deny versus weaker classification, Unknown/Ask, model-service failure,
+session isolation, replay/restart and independent execution/release witnesses.
+Record unsupported mapping, failure or skip explicitly. [The accepted contract](../../contract/updated_contract2.md) requires zero
 forbidden executions and zero interruptions of declared authorized Allow fixtures.
 Its 15 ms mean / 50 ms p99 and 1% interruption proposals are future targets, not
 accepted production gates. Unsupported mappings and unmet accepted limits keep
 SOU-17 open; the local regression launcher cannot approve acceptance.
 
-The October 12 candidate is due at 15:00; run immediately, report blocking failures
-by 18:00, and finish verification by 23:59 as specified in the Linear task. Any code
-change after a run requires the affected checks again on the new revision.
+The original October 12 acceptance window required the candidate by 15:00,
+blocking failure reports by 18:00 and verification by 23:59. This historical target
+is not evidence that acceptance was completed. Later rechecks retain their actual
+dates. Any code change after a run requires the affected checks again on the new
+revision.
 
 ## Historical code scanning triage — 2026-10-09
 
