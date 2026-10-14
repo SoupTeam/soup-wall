@@ -13,8 +13,8 @@ use serde_json::json;
 
 use crate::handlers::Shared;
 use crate::managed_policy::{
-    parse_bounded, verify_candidate, PinnedIssuerKey, SignedAgentPolicy, VerifiedAgentPolicy,
-    MAX_BUNDLE_BYTES,
+    parse_bounded, parse_keyring, verify_candidate, PinnedIssuerKey, SignedAgentPolicy,
+    VerifiedAgentPolicy, MAX_BUNDLE_BYTES,
 };
 
 pub struct ManagedSync {
@@ -22,7 +22,8 @@ pub struct ManagedSync {
     token: String,
     tenant: String,
     agent: String,
-    issuer: PinnedIssuerKey,
+    keyring_path: PathBuf,
+    fallback_issuer: Option<PinnedIssuerKey>,
     active_path: PathBuf,
 }
 
@@ -80,32 +81,61 @@ impl ManagedSync {
             !tenant.is_empty() && tenant.len() <= 128 && !agent.is_empty() && agent.len() <= 128,
             "missing or excessive managed audience"
         );
-        let key_id = std::env::var("SOUP_MANAGED_AGENT_KEY_ID")
-            .context("missing locally pinned signing key ID")?;
-        ensure!(
-            !key_id.is_empty() && key_id.len() <= 128,
-            "invalid locally pinned signing key ID"
-        );
-        let public_key = fixed_hex_32(
-            &std::env::var("SOUP_MANAGED_AGENT_PUBLIC_KEY_HEX")
-                .context("missing independently pinned issuer public key")?,
-        )?;
-        let revoked = std::env::var("SOUP_MANAGED_AGENT_KEY_REVOKED")
+        let keyring_path = std::env::var("SOUP_MANAGED_AGENT_KEYRING_PATH")
             .ok()
-            .is_some_and(|v| v == "true");
-        ensure!(!revoked, "managed issuer is locally revoked");
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join("trusted-issuers.json"));
+        let fallback_issuer = if let Ok(key_id) = std::env::var("SOUP_MANAGED_AGENT_KEY_ID") {
+            ensure!(
+                !key_id.is_empty() && key_id.len() <= 128,
+                "invalid locally pinned signing key ID"
+            );
+            let public_key = fixed_hex_32(
+                &std::env::var("SOUP_MANAGED_AGENT_PUBLIC_KEY_HEX")
+                    .context("missing independently pinned issuer public key")?,
+            )?;
+            let revoked = std::env::var("SOUP_MANAGED_AGENT_KEY_REVOKED")
+                .ok()
+                .is_some_and(|v| v == "true");
+            Some(PinnedIssuerKey {
+                key_id,
+                public_key,
+                revoked,
+            })
+        } else {
+            None
+        };
+        ensure!(
+            keyring_path.is_file() || fallback_issuer.is_some(),
+            "managed Agent requires either a trusted keyring file or SOUP_MANAGED_AGENT_KEY_ID / SOUP_MANAGED_AGENT_PUBLIC_KEY_HEX"
+        );
         Ok(Some(Self {
             console,
             token,
             tenant,
             agent,
-            issuer: PinnedIssuerKey {
-                key_id,
-                public_key,
-                revoked,
-            },
+            keyring_path,
+            fallback_issuer,
             active_path: home.join("managed-policy-active.json"),
         }))
+    }
+
+    /// Load trusted issuer keys dynamically from the operator keyring file if present,
+    /// or from the fallback environment key. Key changes on disk take effect without restarting.
+    pub fn load_keys(&self) -> Result<Vec<PinnedIssuerKey>> {
+        if self.keyring_path.is_file() {
+            let data = fs::read(&self.keyring_path)
+                .with_context(|| format!("cannot read keyring at {:?}", self.keyring_path))?;
+            return parse_keyring(&data);
+        }
+        if let Some(ref fallback) = self.fallback_issuer {
+            ensure!(!fallback.revoked, "managed issuer is locally revoked");
+            return Ok(vec![fallback.clone()]);
+        }
+        anyhow::bail!(
+            "trusted keyring file {:?} is missing and no fallback key is configured",
+            self.keyring_path
+        );
     }
 
     fn endpoint(&self, path: &str) -> Result<reqwest::Url> {
@@ -124,9 +154,10 @@ impl ManagedSync {
             Err(err) => return Err(err).context("cannot read persisted managed policy"),
         };
         let bundle = parse_bounded(&data)?;
+        let keys = self.load_keys()?;
         let verified = verify_candidate(
             &bundle,
-            std::slice::from_ref(&self.issuer),
+            &keys,
             &self.tenant,
             &self.agent,
             0,
@@ -310,20 +341,15 @@ impl ManagedSync {
             return self.acknowledge(client, state).await;
         }
         let last = active.map_or(0, |a| a.deployment_sequence);
-        let verified = match verify_candidate(
-            &bundle,
-            std::slice::from_ref(&self.issuer),
-            &self.tenant,
-            &self.agent,
-            last,
-            now(),
-        ) {
-            Ok(verified) => verified,
-            Err(error) => {
-                self.report_rejection(client, &bundle).await;
-                return Err(error);
-            }
-        };
+        let keys = self.load_keys()?;
+        let verified =
+            match verify_candidate(&bundle, &keys, &self.tenant, &self.agent, last, now()) {
+                Ok(verified) => verified,
+                Err(error) => {
+                    self.report_rejection(client, &bundle).await;
+                    return Err(error);
+                }
+            };
         if let Err(error) = self.activate(state, verified, &bundle) {
             self.report_rejection(client, &bundle).await;
             return Err(error);

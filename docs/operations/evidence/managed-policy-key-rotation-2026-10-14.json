@@ -1,0 +1,62 @@
+{
+  "scope": "sou46-zero-downtime-key-rotation-and-revocation",
+  "agent_pid_invariant": 49290,
+  "no_agent_restart": true,
+  "source_commit": "5fc6d72fd73ebe9faa70c56607fc492163df1a42",
+  "source_hashes": {
+    "crates/agentfw/src/managed_policy.rs": "53611a0250cb93986654a5763ce7efee35019a6ad4fe37d14097c8cdb8aa5ddd",
+    "crates/agentfw/src/managed_sync.rs": "6be1f549647a1ad8f20dc86a835b2d34bf43837e704a468c43a300f4e1a21527",
+    "crates/proxy/src/managed_agent_api.rs": "09b9444102457ae065c978afaa3cac81504703c518978d920209ff520415403d",
+    "crates/proxy/src/tenant_store/managed_policy.rs": "de9b6d37ce25fa70faf352d7e985e959f2bd30ef25a465a1739b2ce77da430c7",
+    "docs/operations/MANAGED_AGENT_POLICY.md": "b8e26388ee5e55328f6413d0a6fecaa52ca7a87f60ed3261276572abaa9d2b40",
+    "scripts/managed-key-rotation-demo.py": "04304436048bad87f9af748df60f7c66d06a53ff0d995ebfb0b0496803792326"
+  },
+  "binary_hashes": {
+    "console": "1f324c052ce61540198a28ef6bc25b5ef6440fc089a01d54a33bb8e71ea1f829",
+    "agent": "452aa6c8042126b8f6ee105e8b06946a2f7e81029cf0a3f2c60b5a173345d699"
+  },
+  "checks": {
+    "key1_initial_deployment_applied": true,
+    "key2_hot_rotation_applied_without_restart": true,
+    "key1_hot_revocation_fail_closed": true,
+    "active_policy_preserved_on_revoked_key_rejection": true,
+    "hook_decision_preserved_on_rejection": true,
+    "owned_fixture_cleanup_completed": true
+  },
+  "issuers": {
+    "issuer_1": {
+      "key_id": "demo-issuer-1",
+      "public_key_hex": "203c69885a35a01071cf34f29933a1b480f5851daa8fe5fe2827bea94fcc0a34"
+    },
+    "issuer_2": {
+      "key_id": "demo-issuer-2",
+      "public_key_hex": "3c97cac3ea0f151b3372d76e2fad7501acbcb64087ce41192af31e3b08ddb513"
+    }
+  },
+  "deployments": [
+    {
+      "sequence": 1,
+      "signed_by": "demo-issuer-1",
+      "revision": "v-deny",
+      "sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+      "decision": "deny",
+      "ack": "applied"
+    },
+    {
+      "sequence": 2,
+      "signed_by": "demo-issuer-2",
+      "revision": "v-allow",
+      "sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+      "decision": "defer",
+      "ack": "applied"
+    },
+    {
+      "sequence": 3,
+      "signed_by": "demo-issuer-1 (revoked)",
+      "expected_ack": "rejected",
+      "actual_ack": "rejected",
+      "active_policy_maintained_sequence": 2,
+      "decision_maintained": "defer"
+    }
+  ]
+}

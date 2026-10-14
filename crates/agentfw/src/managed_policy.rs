@@ -12,16 +12,27 @@ use soup_wall_agent::AgentPolicySet;
 
 pub const SCHEMA_VERSION: u16 = 1;
 pub const MAX_BUNDLE_BYTES: usize = 96 * 1024;
+pub const MAX_KEYRING_BYTES: usize = 64 * 1024;
 pub const MAX_POLICY_BYTES: usize = 64 * 1024;
 pub const MAX_TTL_SECS: i64 = 86_400;
 const DOMAIN: &[u8] = b"soup-wall-agent-policy-bundle-v1\0";
 
 /// Exact trust anchor, provisioned by the operator independently of Console.
 /// Revocation takes effect even for an otherwise valid old signature.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PinnedIssuerKey {
     pub key_id: String,
     pub public_key: [u8; 32],
+    pub revoked: bool,
+}
+
+/// Keyring entry as serialized/deserialized in operator-provisioned trusted-issuers.json.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct PinnedIssuerKeyEntry {
+    pub key_id: String,
+    pub public_key_hex: String,
+    #[serde(default)]
     pub revoked: bool,
 }
 
@@ -120,6 +131,67 @@ fn hex_lower(bytes: &[u8]) -> String {
         text.push(HEX[(byte & 0x0f) as usize] as char);
     }
     text
+}
+
+/// Parse an operator-provisioned keyring containing one or more pinned issuer keys.
+pub fn parse_keyring(input: &[u8]) -> Result<Vec<PinnedIssuerKey>> {
+    ensure!(
+        !input.is_empty() && input.len() <= MAX_KEYRING_BYTES,
+        "invalid keyring length"
+    );
+    let entries: Vec<PinnedIssuerKeyEntry> =
+        serde_json::from_slice(input).context("invalid keyring JSON")?;
+    ensure!(
+        !entries.is_empty(),
+        "keyring must contain at least one issuer key"
+    );
+    ensure!(entries.len() <= 64, "excessive issuer keys in keyring");
+    let mut keys = Vec::with_capacity(entries.len());
+    let mut seen_ids = std::collections::HashSet::new();
+    for entry in entries {
+        ensure!(
+            !entry.key_id.is_empty() && entry.key_id.len() <= 128,
+            "invalid issuer key id in keyring"
+        );
+        ensure!(
+            entry
+                .key_id
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.')),
+            "issuer key id contains invalid characters"
+        );
+        ensure!(
+            seen_ids.insert(entry.key_id.clone()),
+            "duplicate issuer key id in keyring"
+        );
+        let public_key = decode_fixed_hex::<32>(&entry.public_key_hex)
+            .context("invalid public key hex in keyring")?;
+        keys.push(PinnedIssuerKey {
+            key_id: entry.key_id,
+            public_key,
+            revoked: entry.revoked,
+        });
+    }
+    Ok(keys)
+}
+
+/// Serialize a list of pinned issuer keys to canonical operator-provisioned keyring JSON.
+pub fn serialize_keyring(keys: &[PinnedIssuerKey]) -> Result<Vec<u8>> {
+    ensure!(!keys.is_empty(), "keyring cannot be empty");
+    let entries: Vec<PinnedIssuerKeyEntry> = keys
+        .iter()
+        .map(|k| PinnedIssuerKeyEntry {
+            key_id: k.key_id.clone(),
+            public_key_hex: hex_lower(&k.public_key),
+            revoked: k.revoked,
+        })
+        .collect();
+    let data = serde_json::to_vec_pretty(&entries)?;
+    ensure!(
+        data.len() <= MAX_KEYRING_BYTES,
+        "serialized keyring too large"
+    );
+    Ok(data)
 }
 
 /// Verify independently pinned signer, exact tenant/Agent audience, bounded
@@ -358,5 +430,108 @@ mod tests {
         bundle.policy_sha256 = hex_lower(&Sha256::digest(bundle.policy_yaml.as_bytes()));
         bundle.signature_hex = hex_lower(pair.sign(&bundle.signing_transcript().unwrap()).as_ref());
         assert!(verify(&bundle, &key, 0).is_err());
+    }
+
+    #[test]
+    fn keyring_parse_and_serialize_round_trip() {
+        let key1 = PinnedIssuerKey {
+            key_id: "issuer-1".into(),
+            public_key: [1u8; 32],
+            revoked: false,
+        };
+        let key2 = PinnedIssuerKey {
+            key_id: "issuer-2".into(),
+            public_key: [2u8; 32],
+            revoked: true,
+        };
+        let bytes = serialize_keyring(&[key1.clone(), key2.clone()]).unwrap();
+        let parsed = parse_keyring(&bytes).unwrap();
+        assert_eq!(parsed, vec![key1, key2]);
+    }
+
+    #[test]
+    fn keyring_rejects_empty_or_invalid_entries() {
+        assert!(parse_keyring(b"[]").is_err());
+        assert!(parse_keyring(b"").is_err());
+        assert!(parse_keyring(b"not json").is_err());
+        // duplicate key_id
+        let dup = serde_json::json!([
+            {"key_id": "k1", "public_key_hex": "00".repeat(32)},
+            {"key_id": "k1", "public_key_hex": "11".repeat(32)},
+        ]);
+        assert!(parse_keyring(&serde_json::to_vec(&dup).unwrap()).is_err());
+        // invalid hex
+        let bad_hex = serde_json::json!([
+            {"key_id": "k1", "public_key_hex": "nothex"},
+        ]);
+        assert!(parse_keyring(&serde_json::to_vec(&bad_hex).unwrap()).is_err());
+    }
+
+    #[test]
+    fn multi_key_verification_supports_rotation_and_revocation() {
+        let pair1 = Ed25519KeyPair::from_seed_unchecked(&[1u8; 32]).unwrap();
+        let pair2 = Ed25519KeyPair::from_seed_unchecked(&[2u8; 32]).unwrap();
+        let yaml = "default: deny\n".to_string();
+
+        let make_bundle = |pair: &Ed25519KeyPair, issuer_id: &str, seq: u64| {
+            let mut b = SignedAgentPolicy {
+                schema_version: 1,
+                tenant_id: "tenant-1".into(),
+                agent_id: "agent-1".into(),
+                revision: format!("rev-{seq}"),
+                deployment_sequence: seq,
+                issued_at_unix: 1000,
+                expires_at_unix: 2000,
+                issuer_key_id: issuer_id.into(),
+                policy_sha256: hex_lower(&Sha256::digest(yaml.as_bytes())),
+                policy_yaml: yaml.clone(),
+                signature_hex: String::new(),
+            };
+            b.signature_hex = hex_lower(pair.sign(&b.signing_transcript().unwrap()).as_ref());
+            b
+        };
+
+        let bundle1 = make_bundle(&pair1, "issuer-1", 1);
+        let bundle2 = make_bundle(&pair2, "issuer-2", 2);
+
+        // Keyring with both keys active
+        let keys = vec![
+            PinnedIssuerKey {
+                key_id: "issuer-1".into(),
+                public_key: pair1.public_key().as_ref().try_into().unwrap(),
+                revoked: false,
+            },
+            PinnedIssuerKey {
+                key_id: "issuer-2".into(),
+                public_key: pair2.public_key().as_ref().try_into().unwrap(),
+                revoked: false,
+            },
+        ];
+
+        // Both verify successfully
+        assert!(verify_candidate(&bundle1, &keys, "tenant-1", "agent-1", 0, 1500).is_ok());
+        assert!(verify_candidate(&bundle2, &keys, "tenant-1", "agent-1", 1, 1500).is_ok());
+
+        // Revoke issuer-1
+        let keys_revoked = vec![
+            PinnedIssuerKey {
+                key_id: "issuer-1".into(),
+                public_key: pair1.public_key().as_ref().try_into().unwrap(),
+                revoked: true,
+            },
+            PinnedIssuerKey {
+                key_id: "issuer-2".into(),
+                public_key: pair2.public_key().as_ref().try_into().unwrap(),
+                revoked: false,
+            },
+        ];
+
+        // Bundle from issuer-1 is rejected as revoked
+        let err =
+            verify_candidate(&bundle1, &keys_revoked, "tenant-1", "agent-1", 0, 1500).unwrap_err();
+        assert!(err.to_string().contains("revoked issuer signing key"));
+
+        // Bundle from issuer-2 continues to succeed
+        assert!(verify_candidate(&bundle2, &keys_revoked, "tenant-1", "agent-1", 1, 1500).is_ok());
     }
 }

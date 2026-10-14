@@ -118,18 +118,68 @@ impl SignedManagedBundle {
     }
 }
 impl ManagedIssuer {
-    /// The signing seed must come only from the operator environment; never
-    /// from a request, bundle, tenant settings, or database row.
-    pub fn from_environment() -> Result<Self> {
-        let key_id = std::env::var("SOUP_AGENT_POLICY_KEY_ID")
-            .context("SOUP_AGENT_POLICY_KEY_ID required to sign deployments")?;
+    pub fn new(key_id: String, seed_hex: &str) -> Result<Self> {
         ensure!(exact_id(&key_id), "invalid managed policy key ID");
-        let seed = std::env::var("SOUP_AGENT_POLICY_SEED_HEX")
-            .context("SOUP_AGENT_POLICY_SEED_HEX required to sign deployments")?;
-        let pair = Ed25519KeyPair::from_seed_unchecked(&decode_seed(&seed)?)
+        let pair = Ed25519KeyPair::from_seed_unchecked(&decode_seed(seed_hex)?)
             .map_err(|_| anyhow::anyhow!("invalid Ed25519 issuer seed"))?;
         Ok(Self { key_id, pair })
     }
+
+    pub fn key_id(&self) -> &str {
+        &self.key_id
+    }
+
+    /// The signing seed must come only from the operator environment; never
+    /// from a request, bundle, tenant settings, or database row.
+    pub fn from_environment() -> Result<Self> {
+        Self::from_environment_for_key(None)
+    }
+
+    /// Load an issuer for an optionally specified key_id. If key_id is None or matches
+    /// SOUP_AGENT_POLICY_KEY_ID, uses SOUP_AGENT_POLICY_SEED_HEX. Otherwise, checks
+    /// SOUP_AGENT_POLICY_SEED_HEX_<KEY_ID> from the operator environment.
+    pub fn from_environment_for_key(key_id: Option<&str>) -> Result<Self> {
+        let default_key_id = std::env::var("SOUP_AGENT_POLICY_KEY_ID").ok();
+        let target_key = match key_id {
+            Some(k) => k,
+            None => default_key_id
+                .as_deref()
+                .context("SOUP_AGENT_POLICY_KEY_ID required to sign deployments")?,
+        };
+        ensure!(exact_id(target_key), "invalid managed policy key ID");
+
+        if default_key_id.as_deref() == Some(target_key) {
+            let seed = std::env::var("SOUP_AGENT_POLICY_SEED_HEX")
+                .context("SOUP_AGENT_POLICY_SEED_HEX required to sign deployments")?;
+            return Self::new(target_key.to_string(), &seed);
+        }
+
+        let normalized: String = target_key
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() {
+                    c.to_ascii_uppercase()
+                } else {
+                    '_'
+                }
+            })
+            .collect();
+        let env_var_name = format!("SOUP_AGENT_POLICY_SEED_HEX_{}", normalized);
+        if let Ok(seed) = std::env::var(&env_var_name) {
+            return Self::new(target_key.to_string(), &seed);
+        }
+        let literal_var = format!("SOUP_AGENT_POLICY_SEED_HEX_{}", target_key);
+        if let Ok(seed) = std::env::var(&literal_var) {
+            return Self::new(target_key.to_string(), &seed);
+        }
+
+        anyhow::bail!(
+            "signing seed for issuer key '{}' not found in operator environment (checked {})",
+            target_key,
+            env_var_name
+        );
+    }
+
     pub fn public_key_hex(&self) -> String {
         hex(self.pair.public_key().as_ref())
     }

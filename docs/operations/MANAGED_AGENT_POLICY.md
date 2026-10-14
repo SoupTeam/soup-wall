@@ -76,9 +76,34 @@ The daemon continues to start with the existing `agentfw serve` command. In its 
 - `SOUP_MANAGED_AGENT_CONSOLE=http://127.0.0.1:8080/` (or correct private loopback port)
 - `SOUP_MANAGED_AGENT_TOKEN`: once-issued Agent Bearer credential
 - `SOUP_MANAGED_AGENT_TENANT`, `SOUP_MANAGED_AGENT_ID`: exact enrolled audience
-- `SOUP_MANAGED_AGENT_KEY_ID`, `SOUP_MANAGED_AGENT_PUBLIC_KEY_HEX`: independently provisioned and pinned Ed25519 issuer key
+- `SOUP_MANAGED_AGENT_KEYRING_PATH`: path to `trusted-issuers.json` keyring file (defaults to `$HOME/.agentfw/trusted-issuers.json`).
+- `SOUP_MANAGED_AGENT_KEY_ID`, `SOUP_MANAGED_AGENT_PUBLIC_KEY_HEX`: optional fallback single issuer key if no keyring file is present.
 
-Omitting `SOUP_MANAGED_AGENT_CONSOLE` disables managed polling entirely. The current bounded integration refuses non-loopback and non-HTTP origins (the remote TLS deployment is a different task). The Agent periodically fetches at most 96 KiB, validates, invalidates prior pending grants **explicitly**, writes a private signed last-accepted envelope, and switches policy **inside the existing `AgentFirewall`**. This preserves in-process session taint, incomplete-history indicators and authority; it does not silently reset the Agent's enforcement mode. A previous accepted envelope is restored on restart, including during Console outage; a previously expired envelope can remain the last accepted state but cannot authorize a new deployment.
+### Dynamic keyring store (SOU-46)
+
+The Agent supports dynamic, zero-downtime key rotation and revocation without restarting `agentfw serve`. Trust roots are stored in an operator-managed JSON keyring (`trusted-issuers.json` or `SOUP_MANAGED_AGENT_KEYRING_PATH`):
+
+```json
+[
+  {
+    "key_id": "issuer-primary-2026",
+    "public_key_hex": "08a9779594ed5042668409ed9ac1a9c2623c8760fd07ee9759221d2b39118068",
+    "revoked": false
+  },
+  {
+    "key_id": "issuer-retired-2025",
+    "public_key_hex": "330bac5fed845d50555d91389fb2d0da53da8e440ee7d60a304770e1e461256a",
+    "revoked": true
+  }
+]
+```
+
+Keyring properties and guarantees:
+- **Max capacity**: at most 64 pinned keys and 64 KiB total file size. Unknown fields are rejected (`deny_unknown_fields`).
+- **Zero-downtime hot reloading**: `ManagedSync` re-reads the keyring from disk on every sync tick. When an operator provisions a new key or marks an existing key as `"revoked": true`, the running Agent adopts the changes immediately without process interruption.
+- **Fail-closed key revocation**: any candidate bundle signed by a revoked or unpinned key ID is rejected before activation (`"revoked issuer signing key"` / `"unrecognized issuer signing key"`), the Agent reports `rejected` to Console, and the current active runtime policy remains intact.
+- **Console multi-issuer support**: Console accepts signing seeds from operator environment variables: default `SOUP_AGENT_POLICY_SEED_HEX` or key-specific `SOUP_AGENT_POLICY_SEED_HEX_<KEY_ID>`. When deploying a revision, `issuer_key_id` can be specified to select the active key.
+- **Verification script**: `python3 scripts/managed-key-rotation-demo.py` verifies zero-downtime rotation (`deny -> defer`) and subsequent revocation rejection (`defer retained`, Agent PID invariant) with evidence recorded in [managed-policy-key-rotation-2026-10-14.json](evidence/managed-policy-key-rotation-2026-10-14.json).
 
 ## Failure semantics and outstanding review boundaries
 
@@ -86,7 +111,7 @@ Omitting `SOUP_MANAGED_AGENT_CONSOLE` disables managed polling entirely. The cur
 - **Console offline/unavailable**: retain the last accepted active policy, expose transport status separately, and retry. If an `applied` ack failed, the same signed pending deployment can be acknowledged again *without* a second application.
 - **Rollback**: issue a **new** higher-sequence signed deployment of a previously approved payload; do not replay an old signed bundle.
 - **Revoked enrollment**: server refuses all future fetches and acknowledgements using the old Agent token. Already active policy is not remotely erased.
-- **Key rotation**: issuer seed/key ID and independently pinned Agent public key are operator-provisioned. Changing keys requires coordinated local reprovisioning/restart; an unexpected new key fails. There is no online trust-root update.
+- **Key rotation and revocation**: online zero-downtime rotation and revocation are supported via dynamic local keyring reloading (`trusted-issuers.json`). Public key material is never trusted from incoming bundles; private seeds never leave operator environment variables.
 - **Approval-grant boundary**: pending files are removed and a durable policy epoch is advanced under a cross-process OS file lock shared with CLI issuance and authoritative ledger redemption. A grant carries its signed epoch, so an already-loaded stale grant must fail even when its file was deleted. The hook also rechecks the running deployment after asynchronous judging and refuses a pre-tool decision that spans activation. These changes address the P2 review witness but still require completed exact-head CI and independent concurrency/security review before merge.
 - **Trust limits**: an authenticated Agent `applied` assertion is an observation of this software process, **not hardware remote attestation**. Local file/OS compromise is outside the bounded slice.
 
