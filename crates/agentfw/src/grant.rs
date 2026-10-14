@@ -21,11 +21,11 @@
 //! "Bash was approved" would do exactly that.
 
 use hmac::{Hmac, Mac};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
 type HmacSha256 = Hmac<Sha256>;
@@ -35,7 +35,6 @@ type HmacSha256 = Hmac<Sha256>;
 /// Short on purpose: an approval is a human decision about a specific moment,
 /// and an hour-old "yes" is no longer evidence that the human still means it.
 pub const DEFAULT_TTL_MS: u64 = 5 * 60 * 1000;
-
 
 /// Cross-process approval-policy generation. The *lock inode* is never renamed,
 /// so the daemon and the separately invoked operator CLI serialize on one lock.
@@ -50,33 +49,46 @@ struct PolicyEpochLock {
 impl PolicyEpochLock {
     fn acquire(home: &Path) -> io::Result<Self> {
         fs::create_dir_all(home)?;
+        let lock_path = home.join("approval-policy-epoch.lock");
         let lock = OpenOptions::new()
             .create(true)
             .read(true)
             .write(true)
-            .open(home.join("approval-policy-epoch.lock"))?;
+            .open(&lock_path)?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(home.join("approval-policy-epoch.lock"), fs::Permissions::from_mode(0o600))?;
+            fs::set_permissions(&lock_path, fs::Permissions::from_mode(0o600))?;
         }
         lock.lock()?;
         let epoch_file = home.join("approval-policy-epoch");
         let epoch = match fs::read_to_string(&epoch_file) {
-            Ok(contents) => contents.trim().parse::<u64>()
-                .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid approval policy epoch"))?,
+            Ok(contents) => contents.trim().parse::<u64>().map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidData, "invalid approval policy epoch")
+            })?,
             Err(err) if err.kind() == io::ErrorKind::NotFound => 0,
             Err(err) => return Err(err),
         };
-        Ok(Self { _lock: lock, epoch_file, epoch })
+        Ok(Self {
+            _lock: lock,
+            epoch_file,
+            epoch,
+        })
     }
 
     fn advance(&mut self) -> io::Result<()> {
-        let next = self.epoch.checked_add(1)
+        let next = self
+            .epoch
+            .checked_add(1)
             .ok_or_else(|| io::Error::other("approval policy epoch exhausted"))?;
-        let tmp = self.epoch_file.with_extension(format!("tmp-{}", std::process::id()));
+        let tmp = self
+            .epoch_file
+            .with_extension(format!("tmp-{}", std::process::id()));
         let result = (|| -> io::Result<()> {
-            let mut file = OpenOptions::new().create_new(true).write(true).open(&tmp)?;
+            let mut file = OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(&tmp)?;
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
@@ -86,10 +98,19 @@ impl PolicyEpochLock {
             file.sync_all()?;
             fs::rename(&tmp, &self.epoch_file)?;
             #[cfg(unix)]
-            File::open(self.epoch_file.parent().ok_or_else(|| io::Error::other("missing epoch parent"))?)?.sync_all()?;
+            {
+                File::open(
+                    self.epoch_file
+                        .parent()
+                        .ok_or_else(|| io::Error::other("missing epoch parent"))?,
+                )?
+                .sync_all()?;
+            }
             Ok(())
         })();
-        if result.is_err() { let _ = fs::remove_file(&tmp); }
+        if result.is_err() {
+            let _ = fs::remove_file(&tmp);
+        }
         result?;
         self.epoch = next;
         Ok(())
@@ -791,21 +812,28 @@ mod tests {
         );
     }
 
-
     #[test]
     fn cached_approval_cannot_be_redeemed_after_policy_switch_or_restart() {
         let temp = tempfile::tempdir().unwrap();
         let store = GrantStore::new(&temp.path().join("grants"));
         let path = temp.path().join("grants-spent.json");
         let ledger = GrantLedger::open(&path);
-        let (_, _) = store.issue(KEY, &action(), NOW, DEFAULT_TTL_MS, "cached".into()).unwrap();
+        store
+            .issue(KEY, &action(), NOW, DEFAULT_TTL_MS, "cached".into())
+            .unwrap();
         let cached = store.pending().pop().unwrap();
         assert_eq!(cached.policy_epoch, 0);
         store.invalidate_all_for_policy_switch().unwrap();
         assert!(store.pending().is_empty());
-        assert_eq!(redeem(KEY, &cached, &action(), NOW + 1, &ledger), Err(GrantError::StalePolicy));
+        assert_eq!(
+            redeem(KEY, &cached, &action(), NOW + 1, &ledger),
+            Err(GrantError::StalePolicy)
+        );
         let restarted = GrantLedger::open(&path);
-        assert_eq!(redeem(KEY, &cached, &action(), NOW + 2, &restarted), Err(GrantError::StalePolicy));
+        assert_eq!(
+            redeem(KEY, &cached, &action(), NOW + 2, &restarted),
+            Err(GrantError::StalePolicy)
+        );
     }
 
     #[test]
@@ -813,10 +841,14 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let store = GrantStore::new(&temp.path().join("grants"));
         let ledger = GrantLedger::open(&temp.path().join("grants-spent.json"));
-        let (old, _) = store.issue(KEY, &action(), NOW, DEFAULT_TTL_MS, "old-policy".into()).unwrap();
+        let (old, _) = store
+            .issue(KEY, &action(), NOW, DEFAULT_TTL_MS, "old-policy".into())
+            .unwrap();
         store.invalidate_all_for_policy_switch().unwrap();
         assert!(store.write(&old).is_err());
-        let (new, _) = store.issue(KEY, &action(), NOW, DEFAULT_TTL_MS, "new-policy".into()).unwrap();
+        let (new, _) = store
+            .issue(KEY, &action(), NOW, DEFAULT_TTL_MS, "new-policy".into())
+            .unwrap();
         assert_eq!(new.policy_epoch, 1);
         assert_eq!(redeem(KEY, &new, &action(), NOW + 1, &ledger), Ok(()));
     }
@@ -847,10 +879,17 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let store = GrantStore::new(&temp.path().join("grants"));
         let ledger = GrantLedger::open(&temp.path().join("grants-spent.json"));
-        let (grant, _) = store.issue(KEY, &action(), NOW, DEFAULT_TTL_MS, "before-corruption".into()).unwrap();
+        let (grant, _) = store
+            .issue(KEY, &action(), NOW, DEFAULT_TTL_MS, "before-corruption".into())
+            .unwrap();
         fs::write(temp.path().join("approval-policy-epoch"), "corrupted").unwrap();
-        assert_eq!(redeem(KEY, &grant, &action(), NOW + 1, &ledger), Err(GrantError::StalePolicy));
-        assert!(store.issue(KEY, &action(), NOW, DEFAULT_TTL_MS, "after-corruption".into()).is_err());
+        assert_eq!(
+            redeem(KEY, &grant, &action(), NOW + 1, &ledger),
+            Err(GrantError::StalePolicy)
+        );
+        assert!(store
+            .issue(KEY, &action(), NOW, DEFAULT_TTL_MS, "after-corruption".into())
+            .is_err());
     }
 
     /// Length-prefixing keeps one field from impersonating part of another.
