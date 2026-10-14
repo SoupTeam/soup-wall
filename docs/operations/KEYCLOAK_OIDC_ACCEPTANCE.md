@@ -124,7 +124,7 @@ Membership suspension/reactivation uses the public owner-only, CSRF-protected
 Console API. An existing analyst session and a fresh login are refused while
 suspended; a new login works after reactivation. Revocation remains effective
 after Gateway restart. A genuine owner session also creates and revokes a machine
-token through the Console API. A separate read-only helper calls the production
+token through the Console API. A separate authentication helper calls the production
 store authentication API before and after revocation and restart. This token
 probe is a local store check, not a vendor login or external model request.
 Console logout revocation is checked again after restart. Expiry is advanced by
@@ -135,6 +135,41 @@ Keycloak uses its disposable development realm store; PostgreSQL HA/failover,
 SCIM, managed-Agent tables and Keycloak SSO logout are outside this drill.
 The historical SQLite evidence below remains unchanged. New PostgreSQL acceptance
 requires a passing report from this extended driver and independent review.
+
+### Recorded parity run, October 14, 2026
+
+[Workflow run 38520639174](https://github.com/SoupTeam/soup-wall/actions/runs/38520639174)
+passed on source `abe80862462d1fe81c0135804480761f8380aa09`, Ubuntu 24.04,
+Chromium 153.0.8010.12, Keycloak 26.8.0 and PostgreSQL 16.15. Both jobs also
+passed five browser regressions, five driver safety tests and two bootstrap tests.
+All original vendor checks were retained. No production identity/schema
+incompatibility was observed in this selected slice; no migration was added.
+
+| Backend | Passed checks | Cleanup | Unaltered report |
+| --- | ---: | --- | --- |
+| PostgreSQL | 50 | Passed | [PostgreSQL report](evidence/keycloak-oidc-postgres-2026-10-14.json) |
+| SQLite | 43 | Passed | [SQLite report](evidence/keycloak-oidc-sqlite-2026-10-14.json) |
+
+Each report's eleven source hashes were independently matched against that
+commit's Git blobs. PostgreSQL report SHA-256:
+`f34dde498bb07280fb53018978149e0c3dd670990a05fcf22fe2365c1f5e9f84`;
+downloaded archive SHA-256:
+`16a8dd008b07b03d44eb9bd07316fd48bdb2080102a1823690002f569eaa9a76`.
+SQLite report SHA-256:
+`625aff9b415cc78d054a281a96bf0aab0ad186f8910857510b9b83d55977eefd`;
+downloaded archive SHA-256:
+`ca415fd276d5676ef72aa682030965c376bb37417fcb7719dd977aedd748adf9`.
+
+The initial run on `686132d` also passed its vendor checks but had a CodeQL
+finding for a cleartext temporary environment file. It is superseded by the
+recorded run, which passes the generated password only through the Docker client
+environment and includes a regression preventing file/argument exposure.
+Local Windows full-workspace testing also found an unrelated Agent lifecycle
+failure at `crates/agentfw/tests/lifecycle.rs:214` and a hanging
+`managed_lifecycle_restores_last_working_version` test. That run was stopped;
+it is not recorded as passing. The remaining workspace crates, Clippy, focused
+OIDC/bootstrap tests and Python suites passed. These limitations do not replace
+independent review or establish acceptance of other deployment slices.
 
 ## Recorded Linux acceptance, October 13, 2026
 
