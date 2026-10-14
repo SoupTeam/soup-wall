@@ -264,15 +264,16 @@ fn main() -> anyhow::Result<()> {
                 args_fingerprint: agentfw::grant::action_fingerprint(&tool, &parsed),
             };
             let nonce = agentfw::token::generate();
-            let grant = agentfw::grant::mint(
+            let store = agentfw::grant::GrantStore::new(&home.join("grants"));
+            // Issue under the same cross-process epoch lock as live activation
+            // and redemption; never mint an unversioned grant after a switch.
+            let (_, path) = store.issue(
                 &agentfw::grant::derive_key(&token),
                 &action,
                 now_ms(),
                 ttl_minutes.saturating_mul(60_000),
                 nonce,
-            );
-            let store = agentfw::grant::GrantStore::new(&home.join("grants"));
-            let path = store.write(&grant)?;
+            )?;
             println!(
                 "Approved {tool} for {} minute(s). Single use, bound to these exact arguments.
                  Revoke before it is used by deleting:
