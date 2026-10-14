@@ -4,6 +4,15 @@ Changes to the public Soup Wall source distribution are recorded here. Release a
 
 ## Unreleased
 
+- Added the AgentDojo matched evaluation protocol (SOU-36): versioned frozen
+  plans with original tasks/attacks, development and fresh sets, repetitions,
+  identities, budgets and separate proposed/approved limits; a live gate that
+  refuses missing access, budget or identity before any credential is read; and
+  an offline report command that validates pair identity and evaluator outputs
+  and aggregates attack success, utility, interruptions, incomplete runs,
+  uncertainty, latency and resources. Controlled fixture evidence only; Phase 4
+  stays open and historical results are unchanged.
+
 - Added opt-in sequential stdio MCP admission with reviewed schema/argument
   validation, pre-execution call gates and original text-result release to the
   MCP host. The legacy manifest proxy and Claude hooks retain their behavior.

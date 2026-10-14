@@ -4,6 +4,10 @@ models/**/*.bin filter=lfs diff=lfs merge=lfs -text
 # Preserve the pinned upstream package bytes on every platform.
 vendor/kryptering/** text eol=lf
 
+# SOU-36 frozen plan and protocol evidence are bound by raw-byte SHA-256: keep LF on every platform.
+scripts/benchmarks/agentdojo-sou36-workspace.plan.json text eol=lf
+docs/benchmarks/evidence/sou36/** text eol=lf
+
 # SOU-13 sources are pinned by raw-byte SHA-256 (CP1 freeze, CP2 dev handoff): no platform conversion.
 eval/sou13/** text eol=lf
 # These three were frozen with CRLF line endings (one is raw-byte pinned): store their bytes verbatim.

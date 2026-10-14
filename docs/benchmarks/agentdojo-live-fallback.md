@@ -16,10 +16,13 @@ The existing benchmark CI runs the dependency-free checks with:
 python -m unittest discover -s scripts/benchmarks -p 'test_*.py' -v
 ```
 
-It exercises eight historical-import and ten adapter safety methods. Without an
-explicit upstream checkout, the bytecode-contamination method and two runtime
+It exercises eight historical-import and ten adapter safety methods, and 18
+dependency-free [matched-protocol](agentdojo-matched-protocol.md) methods. Without an
+explicit upstream checkout, the bytecode-contamination method and three runtime
 test classes are explicitly skipped. The separate fixture command below runs
-all 29 adapter checks with the pinned runtime and a disposable Agent.
+all 29 adapter checks and the 21 protocol checks (50 in total) with the pinned
+runtime and a disposable Agent. The 2026-10-05 evidence below predates the
+protocol checks and records 29.
 
 ## Prepare an isolated runtime
 
@@ -90,6 +93,10 @@ The observed source revision and modification flag accompany exact file-byte
 hashes; newline conversion can change those hashes across checkouts.
 
 ## Operator-selected live run
+
+For matched measurement, use a schema 2 frozen plan and `--plan-set`; the
+[matched evaluation protocol](agentdojo-matched-protocol.md) describes its live
+gate, identity checks and report command. The schema 1 plan below keeps its behavior.
 
 Live execution is opt-in with `--mode live`. Every provider, model, endpoint,
 credential variable, experiment plan, budget, and output destination must be
