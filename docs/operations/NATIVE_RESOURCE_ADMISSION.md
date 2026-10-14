@@ -36,6 +36,18 @@ For hashing, deserialize profiles/evidence into typed Rust shapes, serialize the
 
 Result/context events retain the call's contract version and ordinary grant fields. A `delivery: "mcp_host"` result must retain the bound original JSON-RPC ID. A wrong stage/version/ID spends the grant and refuses release. Legacy binding bytes remain unchanged without resource admission. An installed resource policy cannot be bypassed with a legacy call.
 
+## Operation-level constrained executor (SOU-15)
+
+Resource-aware execution enforces strict operation-level isolation. An unconfined server process cannot be trusted to self-enforce resource policies or confine file/network access. Therefore:
+
+- For supported workspace file read operations (`read_document`), the proxy itself serves as the constrained operation executor:
+  1. Validates the target canonical path strictly against the canonical workspace boundary (`AGENTFW_WORKSPACE` / `policy.workspace`), rejecting symlinks and path traversals (`resource_path_traversal`).
+  2. Derives native resource evidence with `fixed_destinations: true` and requests admission under `sw-native/resources/1`.
+  3. Directly reads the verified target file through `agentfw::sandbox::read_workspace_file`.
+  4. Delivers the verified result through native result admission (`admit_result`) with bound host ID and release confirmation.
+  5. Directly returns the result to the host, ensuring the unconfined server child process is **never invoked** for the operation.
+- Any unsupported operation, arbitrary tool, or network egress under resource policy is rejected immediately with `resource_executor_unsupported`, preventing unconfined server execution.
+
 ## Verification and remaining work
 
 ```sh
@@ -45,4 +57,5 @@ cargo test --locked -p agentfw resource_receipt_tests
 python3 scripts/verify-sou17.py --allow-dirty --offline
 ```
 
-These exercise the real native router and stdio boundary, positive legacy execution and negative unsupported resource execution. They do not establish arbitrary-server containment, actual Claude Code availability, generic classification coverage or complete SOU-15 acceptance. Resource-aware execution requires a separately reviewed operation-level constrained executor.
+These exercise the real native router and stdio boundary, positive legacy execution, operation-level constrained file reads, and fail-closed unsupported/unauthorized boundaries. Arbitrary-server containment is not claimed; confinement is strictly guaranteed by the verified operation executor.
+

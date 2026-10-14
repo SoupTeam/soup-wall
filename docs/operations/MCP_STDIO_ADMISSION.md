@@ -95,6 +95,14 @@ Transport uncertainty ends the collector rather than silently switching to
 the legacy relay. Explicitly inspect the retained evidence and refusal behavior
 before attaching another server or runtime.
 
+For tools carrying an installed `resource_policy` (SOU-15), operation-level
+constrained execution executes verified workspace file reads (`read_document`)
+directly through the broker under native resource admission (`sw-native/resources/1`)
+without executing the unconfined child process. Any non-reviewed operation or
+arbitrary tool under resource policy is refused fail-closed with
+`resource_executor_unsupported`. See [Native resource admission](NATIVE_RESOURCE_ADMISSION.md).
+
+
 ## Selected harness and event contract
 
 The initial harness is Claude Code acting as a stdio MCP client, where the
