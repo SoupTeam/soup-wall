@@ -1,0 +1,1183 @@
+{
+  "schema_version": "sou17-ci-lifecycle-followup/1",
+  "acceptance_passed": false,
+  "status": "local_exact_source_pass_hosted_ci_review_merge_pending",
+  "pr": "https://github.com/SoupTeam/soup-wall/pull/113",
+  "rejected_hosted_head": "4911e989cc74cbac2a7cc3f46324d899b67733e0",
+  "prior_local_report_source": "bb64321285f1ac81cdc65b013efcca94929a8280",
+  "selected_implementation_and_fixture_hashes_equal": {
+    "crates/agentfw/src/mcp/admission.rs": true,
+    "crates/agentfw/src/sandbox.rs": true,
+    "crates/agentfw/tests/mcp_concurrency.rs": true,
+    "scripts/verify-sou17.py": true,
+    "scripts/verify-sou18-resources.py": true
+  },
+  "merged_current_main": "6ee33d3ed3a9f73c9fcbf188108b9bdf850f7940",
+  "merge_commit": "853bcaf99d708346ed00dca800c26f1e750ad7d8",
+  "correction_candidate": "6a57befbdabdbf5a0571594a0eca4072a4a13126",
+  "ci_failures": [
+    {
+      "job": "https://github.com/SoupTeam/soup-wall/actions/runs/38611256227/job/116015254525",
+      "platform": "native macOS",
+      "test": "sequential_resource_failures_keep_useful_same_session_continuation",
+      "observed": "collector did not close cleanly",
+      "elapsed_seconds": 40.3,
+      "cause": "not proven"
+    },
+    {
+      "job": "https://github.com/SoupTeam/soup-wall/actions/runs/38611256047/job/116014904395",
+      "platform": "linux/arm64",
+      "test": "sou15_generic_resource_executor_refuses_both_destinations",
+      "observed": "missing reply; Option::unwrap(None)",
+      "elapsed_seconds": 0.08,
+      "cause": "not proven"
+    },
+    {
+      "job": "https://github.com/SoupTeam/soup-wall/actions/runs/38611256047/job/116014904395",
+      "platform": "linux/arm64",
+      "test": "sou15_post_admission_read_failure_capacity_leak_prevented_and_continuation_succeeds",
+      "observed": "missing reply; Option::unwrap(None)",
+      "elapsed_seconds": 0.31,
+      "cause": "not proven"
+    }
+  ],
+  "original_implementation_repeats": {
+    "runs": 10,
+    "selected_tests_per_run": 9,
+    "total_passed_test_occurrences": 90,
+    "failed": 0,
+    "interpretation": "Non-reproducing local repetitions; do not erase CI red or claim a deterministic old-source reproducer."
+  },
+  "wrong_package_invocation": {
+    "exit": 101,
+    "tests_executed": 0,
+    "reason": "mcp_admission target requested under soup-wall-agent instead of agentfw"
+  },
+  "transport_rationale": {
+    "stdout": "Physical LF delivery may precede blocking-worker completion; a legitimate next sequential request can be misclassified as overlap.",
+    "stdin": "Locked Tokio source documents uncancellable blocking standard-input read and possible runtime shutdown delay.",
+    "original_ci_root_cause_proven": false,
+    "unix_repair": "AsyncFd with owned CLOEXEC pipe/socket duplicates, direct nonblocking read/write, physical completion and preserved EOF write state",
+    "windows": "legacy transport retained; no parity claim",
+    "first_allowed_effects": "Partial first response bytes remain real; new cancellation may abort first response after already-exposed bytes, not promise full old-frame drain."
+  },
+  "checked_local_checkpoint": {
+    "sou15_selected": 9,
+    "resource_concurrency": 11,
+    "stdio_units": 3,
+    "clippy": "pass",
+    "scope": "Focused controls confirmed again by final source checks; not hosted acceptance."
+  },
+  "scan_scope": "No new scan inventory or scan configuration expansion in this supplement.",
+  "raw_manifest": [
+    {
+      "path": "target/sou17-ci-lifecycle/build.log",
+      "bytes": 171,
+      "sha256": "a124a2bf82ba5f939950cecb0dde7b03520e24f9dcd99bf3abcabdea4d1e45df"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/capacity/results.json",
+      "bytes": 136521,
+      "sha256": "128a11c231fa72798e08c729a2e9d761b7c2a4dce0342f146a9a6b22842031da"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/capacity.log",
+      "bytes": 159,
+      "sha256": "d661814f51eebd685d179e74924cb6fa1486d4aed2764715fa3eccea55c11082"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/clippy-agentfw.log",
+      "bytes": 366,
+      "sha256": "6e140fdd8812d3c3b15237017f7300b51670432820598b53bc31ff67843b9706"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/clippy-workspace.log",
+      "bytes": 171,
+      "sha256": "9c2c8a73273b32059735ff79f1f24d71a029ed62f75c643a8c8db9156c620d57"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/build-mcp_admission.log",
+      "bytes": 189049,
+      "sha256": "62ecfea150cd4ece3d45c87e0228100c8a5e9096e9c07aaed40e84bc1974990b"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/build-mcp_concurrency.log",
+      "bytes": 189055,
+      "sha256": "885051dcd6c8bb3827c4fffecbd4787bea95ed473d859529641cf16fb405119d"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/build-native_endpoint.log",
+      "bytes": 189055,
+      "sha256": "7eb38e6b4e79e373ad2de4ee401abe713ba57f542797f362a0d109c65e8b5204"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/build-resilience_tests.log",
+      "bytes": 29328,
+      "sha256": "a18e0ac85739cacfc79678ca8041ebb98e5d73b7a6254f9fe70764620a3028fd"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/discover-mcp_admission.log",
+      "bytes": 4103,
+      "sha256": "15f4f94653d22b9b768cf60654726a20b6840d5a5043ef8d134c60c6c7d2d515"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/discover-mcp_concurrency.log",
+      "bytes": 711,
+      "sha256": "724e248eae1e00a928a4da3e5c531feebd5e3710f625963e6960b3475a2dc354"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/discover-native_endpoint.log",
+      "bytes": 2588,
+      "sha256": "cc55d509ff03e65e463b8267762870d51116ecb980ae7d08a4b45c754daf085f"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/discover-resilience_tests.log",
+      "bytes": 1222,
+      "sha256": "405a50da28e4c49fe7a09a5da435368d1bab0570bc997f651a3631784f65c5b5"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/fixture-python.log",
+      "bytes": 140,
+      "sha256": "3549b9a66a6129539cdf77e443c21138eb1936b729f5ddbe703f96e1a7a9f0a1"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-000.log",
+      "bytes": 178,
+      "sha256": "1bc4fb7d8e2cec45848715ec5dc2dbad754e4fa6110745d2eab19aa96128ee0d"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-001.log",
+      "bytes": 178,
+      "sha256": "76938f8280896e074e4ce1a39ace6503bdedf4e177681d4f5b349d247baea716"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-002.log",
+      "bytes": 199,
+      "sha256": "ec415b675c6bc9462d4332afc47711391d45076bb9b43ff1576be9473255c468"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-003.log",
+      "bytes": 197,
+      "sha256": "4df2e0aa2ad4acb0dc8ac55e33708eda0498765037efea3091282b1a55cd2783"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-004.log",
+      "bytes": 209,
+      "sha256": "05989e5e4a9bafdbf85ce00fa9730fc45d62790613dee9304afceab7d7900c93"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-005.log",
+      "bytes": 200,
+      "sha256": "c1e9c113f58a18df46b481460cbe7c818c8734f2060ee709b0a9ffac6488e2b0"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-006.log",
+      "bytes": 665,
+      "sha256": "8b7b361266435469cbdda3094faead6609fd925bee1ab503ef37536dfa3e3986"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-007.log",
+      "bytes": 3753,
+      "sha256": "c359b180918d78d7fe225fad0622f77af9e16e0d2e40975749b4fe8006796c8a"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-008.log",
+      "bytes": 191,
+      "sha256": "9a62c32e52c5649f73c97247a30c6935cec021648d1ea8d6e0bc007a34be0769"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-009.log",
+      "bytes": 655,
+      "sha256": "33704db66e30687cf0b2d412774a8c2230b8af52223ebcace176ed8b1dbf4957"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-010.log",
+      "bytes": 1476,
+      "sha256": "4c536731a11d0647958cfcb4b8c05d45bff96fa498e4d72b4768fd500095c105"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-011.log",
+      "bytes": 1415,
+      "sha256": "2b9d259a244e967c1fbba5a06770ecefa932b5ddbed2fabfc932296d85506298"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-012.log",
+      "bytes": 1418,
+      "sha256": "b8056778afc1899920158b110df79e4aca08fe47224859159a40d3f81c7aa08e"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-013.log",
+      "bytes": 180,
+      "sha256": "b9a3394986df4b72f901407a128cd367d889007f94941d612edc7111f5f00b53"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-014.log",
+      "bytes": 3914,
+      "sha256": "1ffa4b0c638ebbf10f5c706a61cdd6741046466e7b77752de7361c5b5d754560"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-015.log",
+      "bytes": 182,
+      "sha256": "a80169e86e0d5a6323f607bf5a891e853f0b521865a18c785769e9b3077ad3c6"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-016.log",
+      "bytes": 184,
+      "sha256": "9fe6b153450379460e5868327d7648bc9892c8802804b8dde6a970653093cceb"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-017.log",
+      "bytes": 185,
+      "sha256": "46cb401233a7fa136b15455576fe6cc250a679d43206a9c41081c63a52aa102f"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-018.log",
+      "bytes": 1455,
+      "sha256": "73337deabfbb198e68ece230748dcc00138ce63f00f0213d101437953981ceb8"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-019.log",
+      "bytes": 196,
+      "sha256": "bf338edec5902ea9ae0dc80784add78a83da8ac0ee4ffc43cd32049b721dc3e0"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-020.log",
+      "bytes": 203,
+      "sha256": "e327cb183ad205773cbf7e0394f184bcde79ce91d3b8e76e9aa15c8356863293"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-021.log",
+      "bytes": 187,
+      "sha256": "5e5016147c86cc8b687bc4971bfc6acdfec67cfa32419f8cac3fa21c69018012"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-022.log",
+      "bytes": 205,
+      "sha256": "1c808f107d4a1e6a85690d08bfa4d6879acb9f7ffe6b16f1df682cd08f9d19ec"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-023.log",
+      "bytes": 184,
+      "sha256": "46e0802fca5cf5857b63e8c91009d2a7f6e257e9290548a8bf0c95424a0583f6"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-024.log",
+      "bytes": 200,
+      "sha256": "79461729bd8283d873497ac495a41890d33a5c673a3d23057750b7066fed893f"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-025.log",
+      "bytes": 195,
+      "sha256": "24916de64f0077eedcc94a49944472707c0c15ac9723e56f4d29c087e7a4c2d3"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-026.log",
+      "bytes": 193,
+      "sha256": "a02e9efdc5febfc7cc75358b6e4a35f384220699e1fe00b9da4db5d81c8780cf"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-027.log",
+      "bytes": 199,
+      "sha256": "f78b0754f2fa1fd5126fe0f3cc750c1b2a7303a7084dcb1f59ef8a582a083fb0"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-028.log",
+      "bytes": 2825,
+      "sha256": "e8de38e264cc7d455045a5f2e3f94a45bc9f81c67ffcbde0209479fe01ae11db"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-029.log",
+      "bytes": 2669,
+      "sha256": "0650dc51f5e53a17b3a87bb937649476c1bd22affdc090fd80ab58f0443d3909"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-030.log",
+      "bytes": 183,
+      "sha256": "7f8c2bbf4bcbf99bc9b513305ef85a154592d411477e37a41e568613d9299abf"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-031.log",
+      "bytes": 619,
+      "sha256": "da37dd70749a258a9505799713439e3e9e2053f2465cd32e51ff002b4672010f"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-032.log",
+      "bytes": 635,
+      "sha256": "68d0a5ae7b25330fc10f245339f9d3fe5ad99af22969e18fd964d68656d8dbfa"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-033.log",
+      "bytes": 188,
+      "sha256": "bf25d1890bed15707e7ed6bbd877ddbb424ef1f99d092107f9f3e394ffe39dcc"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-034.log",
+      "bytes": 186,
+      "sha256": "33ca32c70e0529d9057d9f88e25e1f8898b8404a026f1705eeb51b1f5390f9c6"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-035.log",
+      "bytes": 175,
+      "sha256": "d27fbfd6d0023e1691c9514b86d05b408cac1c732a54e943bdffc518eb25f799"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-036.log",
+      "bytes": 179,
+      "sha256": "49a1548338578922efc181c40d1cbba77eb6db94fd3ebf130d899f87b71d800b"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-037.log",
+      "bytes": 189,
+      "sha256": "4c2962d6339ca809b3087627c7be2e1770df58e55e1bc3c0c83cd88a1d8848fc"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-038.log",
+      "bytes": 174,
+      "sha256": "aeefa3d325333c4831fd8833b759999d3935112b4e51829b2945582a8b8865b3"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-039.log",
+      "bytes": 173,
+      "sha256": "f7307c3f8f9f4efebbe252e8159b6277a29645dc8505cd7db9d06d599a65e6c3"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-040.log",
+      "bytes": 185,
+      "sha256": "36df760b4944e57a784ae74116509867d9d5f2273609587b18184eef205ec9e3"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-041.log",
+      "bytes": 176,
+      "sha256": "ca9ec70eee0c6791169634c37e32ab0e5e6e824a8b5ad2159dd92836bdae6003"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-042.log",
+      "bytes": 181,
+      "sha256": "56d67d72ea2f8386b9106ae24b630e1b3519f24d9df412a788a2e954ae06d802"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-043.log",
+      "bytes": 186,
+      "sha256": "657f826f3a13e2320e44c0428c2fd13dca4fa05c7cc7a8e2ec517f3f986ed528"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-044.log",
+      "bytes": 187,
+      "sha256": "380bfd4c2f8539f3c748e142e18cbb6b527503426062b4862c365687f5b14d35"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-045.log",
+      "bytes": 183,
+      "sha256": "3e3b79408e4107a47c5aeabc87583f8d101c342ed8e7e13a252a971392017a54"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-046.log",
+      "bytes": 173,
+      "sha256": "dcd0eb09d928742bb78c1b088b2e17ddd9b331489f49bc54f5f5c8656f4ac582"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-047.log",
+      "bytes": 180,
+      "sha256": "2c93087bb034e6afe1e43708f13b3ee271a86943307565f23b265c4a190dfe6a"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-048.log",
+      "bytes": 191,
+      "sha256": "3d6b0bebece61a7eece8915b3b075754258d8c2c7372b17b4f27f690c59afb95"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-049.log",
+      "bytes": 184,
+      "sha256": "ea14df4c0be877c29696ed878ba2afc4750b62e95ae83929d939c5748c58c6ea"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-050.log",
+      "bytes": 209,
+      "sha256": "fcb6a77e910989c26ba9135d2819c98298c24e0debf44013935dce1931368e52"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-051.log",
+      "bytes": 189,
+      "sha256": "b980207935eb0ed84d55e3890edad42e7cda92376448291e5e50b5dede1adf10"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-052.log",
+      "bytes": 183,
+      "sha256": "1d94fcbf70408cbfdea6e8d24ef738223c5069de8f77bf71abee851da00b4bd5"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-053.log",
+      "bytes": 188,
+      "sha256": "604cca6889b4410327c022d122351ee9bcd21864f6a0b8e18b2ca97553c40780"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-054.log",
+      "bytes": 779,
+      "sha256": "13248fa3e02e5f1fa75591e85d9443896d2c2f29b8738155d986aa16996347c3"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-055.log",
+      "bytes": 582,
+      "sha256": "d6f8f20e03d84c1bcf234f5fcd6604bc27ae060b3020c8aef67b245813668c64"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-056.log",
+      "bytes": 2989,
+      "sha256": "1d1f08572a8f7349fb6ecdc2c5f63d5e034e0464d585b3c745c926c25e2657de"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-057.log",
+      "bytes": 183,
+      "sha256": "3afca5c4cf20a882228448d114c826fef0203a6e02c4b4727b5e55bc98bc2090"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_admission-058.log",
+      "bytes": 187,
+      "sha256": "7578953d9b7782a6f062926f4815b6bae88600cbf5cb9aee2cb89c6bf63eb813"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_concurrency-000.log",
+      "bytes": 22076,
+      "sha256": "eb2d73669f4f6d681cbab0d27507534945df2afba9f8289120f63ca54eebe138"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_concurrency-001.log",
+      "bytes": 49139,
+      "sha256": "68192dd589ac86925ecd369688218a75eb9b2a65b8b63fbd4f7b26b5a5559d18"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_concurrency-002.log",
+      "bytes": 22417,
+      "sha256": "18f181876d01365d6c0245bd4070e1141ca1ca1c27f798d1c16f1d82f17461dc"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_concurrency-003.log",
+      "bytes": 897,
+      "sha256": "1fa1e77b126e528a5a69f95b9e56c98a0fbe95fc66815b5f5eec7490fd842e22"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_concurrency-004.log",
+      "bytes": 823,
+      "sha256": "2f36ffdd532edfe6b8dfd609393235cad73eb429fdfab39a10f2f90d1dd44362"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_concurrency-005.log",
+      "bytes": 488,
+      "sha256": "93312202e379854ce437cc2004dcc186888617be70683191eb1c5331e76d567c"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_concurrency-006.log",
+      "bytes": 483,
+      "sha256": "a235a8065e13e0d897e725c087b14ee47141727b08fd7f5e50e34a765f0b28c6"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_concurrency-007.log",
+      "bytes": 865,
+      "sha256": "bcda9a695b486eae6d8a03f4603a69057ee0746e3b8dd817534c7a7baa804d8c"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_concurrency-008.log",
+      "bytes": 866,
+      "sha256": "2b86890abf37f3d4e02e784dc5cf768d6dac36d43ea31b7c1478330e144ce44b"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_concurrency-009.log",
+      "bytes": 866,
+      "sha256": "9fbf89ac4dc8e83f58c424880a07278394c9eecd46ac4c95cee3ecfd390588ac"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/mcp_concurrency-010.log",
+      "bytes": 498,
+      "sha256": "bbddf9f1d2e47aa978438768299f5f01a05462e68963e9921d8259134d0f31d8"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-000.log",
+      "bytes": 187,
+      "sha256": "48b413f2760cd9d36d4bc0dc810a29c51088a5754d6567935ccbb1135937cae4"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-001.log",
+      "bytes": 195,
+      "sha256": "2de8ac94e7a95c7a105bd69c939a80428d8706910df3654b8ee49008be985f05"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-002.log",
+      "bytes": 177,
+      "sha256": "590a9f73100877b2ede87c6c4ed9c8c3266d56215a6352bf864c1784162d8798"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-003.log",
+      "bytes": 188,
+      "sha256": "c170317dd4e32f2ce4ab91972e2bf2958ffd163041ca6940eb2ad00a36552019"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-004.log",
+      "bytes": 208,
+      "sha256": "1909c58e2a9aa9d4a74408614a790fa1282ae5f7b625cf5785ec81e795f41da0"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-005.log",
+      "bytes": 191,
+      "sha256": "95890504afe0d87914d88c9a450bb05fec4bfafe54adf285b7098a008354ec40"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-006.log",
+      "bytes": 186,
+      "sha256": "6ab6462a6b88b23112dc2bc025061ec2b278223332e69bec7f1b6101d2db569b"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-007.log",
+      "bytes": 183,
+      "sha256": "94ecfa68f755da2edc6ae27c8ded7bb2b242ff32bc4404441edf181710dc9dd6"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-008.log",
+      "bytes": 191,
+      "sha256": "bbd9d0cd23b05debcf295b678c9ada41c07ccea636f32c267531d0d6c111b4b8"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-009.log",
+      "bytes": 190,
+      "sha256": "910c0ad0e0f84f033ebfeb6fc9edfba177bfb9218af23ecfd171df9baaa07fdb"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-010.log",
+      "bytes": 191,
+      "sha256": "903484526b9d5ad7e7cf8a380ff53e7985499e4c940cc4905d8ba219c7ef9743"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-011.log",
+      "bytes": 206,
+      "sha256": "07cdc5e0da620e5e1afadaccec0736c559d49f3a1a0f5fd8bd595d291f3b8f7e"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-012.log",
+      "bytes": 186,
+      "sha256": "b054b0436728df312baf6d6d111e6b645ef0382ceaba90e46380bd36542fdeaf"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-013.log",
+      "bytes": 207,
+      "sha256": "2b13ef8337464f1928294138f37ef86211ecb855e688a0099ff0673e452a68ed"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-014.log",
+      "bytes": 172,
+      "sha256": "869238ff20ce7a25152e8657d7aa7fa180e80c38149b8b3a17c63a97b2fdcea8"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-015.log",
+      "bytes": 186,
+      "sha256": "07c05d6aa0d12b1ae02ea43084ab0327d6672692861790c79208b71b89f45727"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-016.log",
+      "bytes": 194,
+      "sha256": "ddaa0a7bb2efa3b6177ce0cce9e49162758f816d09a7a540cd41e311b2098b86"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-017.log",
+      "bytes": 186,
+      "sha256": "dde38085a14b2b73375666c66ce03d4cb5f4e658b480d3899cb0c04294adc25d"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-018.log",
+      "bytes": 191,
+      "sha256": "00ea7fdf730dad21b022966c0e072751a71f3b7f2b6e5e0bf5aa6e1389f429ad"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-019.log",
+      "bytes": 200,
+      "sha256": "27fcce97b86b82236a02b15732fc2553cc569f73a934dcd117ac07daf1d07565"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-020.log",
+      "bytes": 201,
+      "sha256": "07e0aec0752a448aec26c0eae4a85a03b68de62909132166a1045a817948aa3d"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-021.log",
+      "bytes": 195,
+      "sha256": "619d37961e7c87e040ca10450daa830436a3b4024a042c43bf21685d988a8f45"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-022.log",
+      "bytes": 183,
+      "sha256": "8fa23db40c1bbf7b0e5f6a596fe4ddde61c3061eb3c10ea98d1a59cc059a6761"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-023.log",
+      "bytes": 199,
+      "sha256": "7b62373df74b5db3485b051583e83e37bf11958fcb0bc361f3b66683f93558df"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-024.log",
+      "bytes": 190,
+      "sha256": "cc9afcb75f46eb8b32db1bde0a0f53988acd57ee4ad6ee00a9589dae2c111cba"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-025.log",
+      "bytes": 176,
+      "sha256": "be6bd939f9f73d77a33d2c7749095af025b81843e613b7507984e4050037e779"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-026.log",
+      "bytes": 178,
+      "sha256": "66b57a7a4cfa0e6f8807d48b97681153bf6a36abaf45ba2c811887d9e223a2c1"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-027.log",
+      "bytes": 181,
+      "sha256": "5982145040eeb3c9d92960938693013282324d52488a3ce3f0b6a0fe340b9854"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-028.log",
+      "bytes": 196,
+      "sha256": "0d94dc6e14a4358a984c34c840837c0e0a4e0f1e19eabac40ee60cc66265049c"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-029.log",
+      "bytes": 189,
+      "sha256": "3e5a0bca053c5e28a9ca0be51abc3bc12140d52cdcca099bfa224435181a2ce6"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-030.log",
+      "bytes": 181,
+      "sha256": "942f4d7e2ad0d34c0b4b08d2e8ee7d86e995a5b6064135d78d946816e6fca61e"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-031.log",
+      "bytes": 191,
+      "sha256": "f2ffb759c1b49a7aa7805b28298f2b726fe0785421c82d26c024a6e2c7a404e5"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-032.log",
+      "bytes": 177,
+      "sha256": "3f34c42054a8139e47a5b05806898b79360e2ca0d0acbc03c3887e1904020513"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-033.log",
+      "bytes": 199,
+      "sha256": "988d97a7d3615a5bf6b73863a8a9eb93b704cfbadd4ae3bb4ddc29cd37c05f59"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-034.log",
+      "bytes": 175,
+      "sha256": "7e58ef6aa2add79fa8e432220ba493ee198707dc2b5b9f842ebe9bae1e5eb3c6"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-035.log",
+      "bytes": 190,
+      "sha256": "a791602c7247fe0354a6796e255f21815de4f1154e90b3abaecd63f2892b0e50"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/native_endpoint-036.log",
+      "bytes": 175,
+      "sha256": "52eb88b45568f56625a77815f73e78adceed48450f3c9116daa4b244d4078797"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/resilience_tests-000.log",
+      "bytes": 194,
+      "sha256": "7995d22ff77142a82c40f45ebedd0450e0f7b84a4c9eb29adcde6c0dfc869c08"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/resilience_tests-001.log",
+      "bytes": 181,
+      "sha256": "40f06053f4ca0aca638fab43e2589ad364848e785c3eaa25ea723a761d901834"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/resilience_tests-002.log",
+      "bytes": 186,
+      "sha256": "b706dce6b87d7fa4c7416de0cb0ac7620b169b2ac5645611961151f8b976e8b7"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/resilience_tests-003.log",
+      "bytes": 9365,
+      "sha256": "b985d679bb33dafaf11bfe9bafb3af5b59fed762d2141f6274b98d68324a0b52"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/resilience_tests-004.log",
+      "bytes": 190,
+      "sha256": "d90367a960621571c22317a6d5f8ef4123316c50a763f15a0473a3836f0f3715"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/resilience_tests-005.log",
+      "bytes": 182,
+      "sha256": "85e68c89cf6b02d81eec4a5fd2c26da18f0f4298bc4cb39375eaca1322b353b5"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/resilience_tests-006.log",
+      "bytes": 188,
+      "sha256": "77b2c3d79845e20483fd28e3b01f29f82b23f7783fecffbe1205a4f8adc7a902"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/resilience_tests-007.log",
+      "bytes": 173,
+      "sha256": "25ab27db4f34131ab7796d130971f5235de7f3a4349507b9a9635c90a93bb048"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/resilience_tests-008.log",
+      "bytes": 172,
+      "sha256": "310484c3db5bb7ba5f54a1826b3724d4ca91324a2605e316c31e8374efbd9627"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/resilience_tests-009.log",
+      "bytes": 183,
+      "sha256": "9c40a5be702a7c0a1967e343ec484fda517fd7eaf44c5a7780b5ad090bae276c"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/resilience_tests-010.log",
+      "bytes": 185,
+      "sha256": "273566e55c6a4d0f986c37cee6f90c4ff74a13de201232ed64d167ed0be8c65c"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/resilience_tests-011.log",
+      "bytes": 174,
+      "sha256": "3f5a97192980c2be1f015d28cb524edc650dbe4412dc91555a2535f120c68afc"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/resilience_tests-012.log",
+      "bytes": 181,
+      "sha256": "0fd5067e25608b64cf37ba2a4bf05811c48047e129acab26347e881884de4dac"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/resilience_tests-013.log",
+      "bytes": 194,
+      "sha256": "eb81571991d258f7b35a230f125001dd0957806236490584f21263bd5d939588"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/resilience_tests-014.log",
+      "bytes": 181,
+      "sha256": "3b909a267eb1cde81a7fab9ca9863fd5e146b259db0bbceb162fa11d73c55cf3"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/resilience_tests-015.log",
+      "bytes": 183,
+      "sha256": "90b6dbbbc9de42a07426798042c667fc6af01ef5afdb1c7c69aba4436b2f73ae"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/resilience_tests-016.log",
+      "bytes": 183,
+      "sha256": "5aabae3124cb95ef66d1442d36c567c177ee9b3f585170a9f3b90e2e1a2ceb0e"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/resilience_tests-017.log",
+      "bytes": 187,
+      "sha256": "46c8996bb22cfc16b2db6c6e1926ea4a9e8c9f222c959ab59ceb07e711feece3"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/resilience_tests-018.log",
+      "bytes": 179,
+      "sha256": "4054b5db4815822d3bc946be79a70e97211725dc9909e0b37f57cd3a17bcaf51"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/results.json",
+      "bytes": 451927,
+      "sha256": "be81d106dacdb148dc65024542d0bbec8c05220cd83840151eb0dbaecf02c89a"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/source-after-commit.log",
+      "bytes": 41,
+      "sha256": "6de13fd15f2cb2b575fa8aeb1407bac1bee5511c50f33c09ce96541c9fae8572"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/source-after-patch.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/source-after-state.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/source-after-tracked.log",
+      "bytes": 28977,
+      "sha256": "20cf603deb35172c67b233c7c4c1d1fb82aa58180ee1f27edaf9764aa911d8c8"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/source-after-untracked.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/source-commit.log",
+      "bytes": 41,
+      "sha256": "6de13fd15f2cb2b575fa8aeb1407bac1bee5511c50f33c09ce96541c9fae8572"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/source-patch.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/source-state.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/source-tracked.log",
+      "bytes": 28977,
+      "sha256": "20cf603deb35172c67b233c7c4c1d1fb82aa58180ee1f27edaf9764aa911d8c8"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/source-untracked.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/version-cargo.log",
+      "bytes": 36,
+      "sha256": "1f88eaf7fe1aaec83184752cf4c944cd22f00184136ff36a3e4c318cc60ef566"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact/run-zm0c6o9o/version-rustc.log",
+      "bytes": 36,
+      "sha256": "8dc912acd5bfeafc70b01b1d2a2afb0844afa02f5dba2f1ae8d5c212d005afb6"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/exact.log",
+      "bytes": 11032,
+      "sha256": "5744782e5a3f021eda9142f3b7028c372a21ec84cdcb5408dcddedc51d04bd1f"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/generic/results.json",
+      "bytes": 283790,
+      "sha256": "78cc47e6dc6ccef2d4d35a32b76ce99bf575fb79750b20093fd9cfd474d866ee"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/generic.log",
+      "bytes": 256,
+      "sha256": "1dfa003f1f0f03c5d4115d08df03870feb532cc6881bbd4494d5853e20ceaa89"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/latency/results.json",
+      "bytes": 408744,
+      "sha256": "5cb462c5164a35091065f5323c2384486358f7e2bbc20e1b6d333c0ea059bb17"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/latency.log",
+      "bytes": 1168,
+      "sha256": "0f501d67b91f19067b25320f3215cecea2b22f80b7fb3f38fdb615d91e8c7bb5"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/original-ci-arm64-dom.txt",
+      "bytes": 13124,
+      "sha256": "0e280bdc1552a84246409964cf1f3085384ad14e4ac6599db62eaf576858e0f2"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/original-ci-macos-dom.txt",
+      "bytes": 21751,
+      "sha256": "9e620bfd1056519e6708ab30a5c413271854413cfdbf8935e8e3f9b019aa16f0"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/original-rapid-immediate-errors.log",
+      "bytes": 50197,
+      "sha256": "16c60ec6c338e124daf1bdc9a8cedd447269428550a653e545b2f7776133ce41"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/original-rapid-immediate-refusals.log",
+      "bytes": 22801,
+      "sha256": "c25124c7a4da3ab7ac292ea578e989e71650a4948dedce2144bf209d1559053b"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/original-rapid-immediate-success.log",
+      "bytes": 22459,
+      "sha256": "76f180824275495a33ac54bb4d70f565d2cde1c6b0239e6b3e1ae03d9f83de70"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/original-rapid-results.json",
+      "bytes": 471,
+      "sha256": "ad9254822f355d99e5f6a86c3aab4aeda771ae274ce8ae8b77c4a238bf28b0d0"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/original-sou15-0.log",
+      "bytes": 134,
+      "sha256": "b4d8d23c5533bc7e3928e7321b585d51c6a8485ed8c10947650f51af0381a489"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/original-sou15-corrected-0.log",
+      "bytes": 958,
+      "sha256": "50dc0d9d602e5b38c7d5ebf24c0270f0ce3cdf80fe60a5f7e51ceae214ab1955"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/original-sou15-corrected-1.log",
+      "bytes": 958,
+      "sha256": "253b571823bd0dce2d4565b84aaf1c7855af287fde474997ed2619bf3ff1cadd"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/original-sou15-corrected-2.log",
+      "bytes": 958,
+      "sha256": "76231fe441352e84498b270a4d935dd18c619f10f16dbed6186d5e4c89599a1c"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/original-sou15-corrected-3.log",
+      "bytes": 958,
+      "sha256": "8441f6550dc1413451a20d174d0b167b7552d0468eacb4482bc8ff18cfbcebca"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/original-sou15-corrected-4.log",
+      "bytes": 958,
+      "sha256": "ae8d58d7831bd9e5618f93e6cd657fccdf611382df1e0304a51bb5fe8cbd9098"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/original-sou15-corrected-5.log",
+      "bytes": 958,
+      "sha256": "099bcbb68b7214a5cf45a90e2a6fab80ab4335362c6e5363763d7dd56bd310f8"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/original-sou15-corrected-6.log",
+      "bytes": 958,
+      "sha256": "e8b8a6371eda87a3088cc889a4bb18a4772ae67f99566289725ea59a70725d3a"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/original-sou15-corrected-7.log",
+      "bytes": 958,
+      "sha256": "443477aee13bea312e667bf77de6c59b45c2ff080d0c556487e9f3bbd62e2c09"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/original-sou15-corrected-8.log",
+      "bytes": 958,
+      "sha256": "602a8c6923281d23432a1b94df51523141a78f1a3bb898b27a9c63afe6b10b08"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/original-sou15-corrected-9.log",
+      "bytes": 958,
+      "sha256": "5533621973edc3b60bbd9521018ba770a48375dd2b572a7de259145304b93bd1"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/original-sou15-repeats-corrected.json",
+      "bytes": 1221,
+      "sha256": "d2d5e721005bb6152b303269050c4058b7532fc106c6d61e5fdf0d0d899cbb4b"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/original-sou15-repeats.json",
+      "bytes": 117,
+      "sha256": "1a41230261d4d03695cef06908bc5579b7f926ea0b445061598bbe1c1aa50ff6"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/pending/results.json",
+      "bytes": 213296,
+      "sha256": "97642417f7d3f3a5e2631357c735a53ad06522299c18ad5ac97f99b5ae059e1f"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/pending.log",
+      "bytes": 223,
+      "sha256": "19a1ede28f45f72028dfa65da9d846d4535d46ff21f15b48aa7a31522475b8e6"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/python-benchmarks.log",
+      "bytes": 8526,
+      "sha256": "a5d73d0364ef30311c040057341835a3dc7b730964952852145b1f4e096bb6d0"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/python.log",
+      "bytes": 83326,
+      "sha256": "5adf586fa6b109694460a63736f73a7acd46f0b9240daa8f7892181182b4db71"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/repaired-concurrency.log",
+      "bytes": 89320,
+      "sha256": "d8efbd79fbc06172a669093db3d5c5e828573c668bca4a871c7f7d4e2d7f2bc6"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/repaired-sou15-first.log",
+      "bytes": 1069,
+      "sha256": "62ef3ff4113038b084fc8ae1fdb44435d0b52fa8cebdf769f240cfc2044cba51"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/resources/results.json",
+      "bytes": 752121,
+      "sha256": "dc02ece6b7980682a7284835125160719d4eaf634154ac8d6cde3707611b8304"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/resources.log",
+      "bytes": 1061,
+      "sha256": "3ca136b3d0fc78932894c980016612b2763a7232715238ab8519dc7cdb333a45"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/transport-controls-final-strong.log",
+      "bytes": 691,
+      "sha256": "10525202a1c301c3ad9a4188d4ee4af3726566a623995574a9c666684b735e3c"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/transport-controls-final.log",
+      "bytes": 691,
+      "sha256": "09147b83e29730a56131a621c6d7b31f575e992ab29732d5f842052de51a4042"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/transport-controls-ownedfd.log",
+      "bytes": 1043,
+      "sha256": "40fb402ddf0af864a1f215eb8d4ed1d80b0a0f709c4c3fb7b7b21f792e0b418f"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/transport-controls.log",
+      "bytes": 1043,
+      "sha256": "1258eec6110f8490096284514585f63e9fa174c6d9f03a18ced72f7e38dc8273"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/transport-flags-diagnosis.log",
+      "bytes": 1081,
+      "sha256": "23d396383c3d5350ed9ef160c95a64e339d864554d650e486b02feb4cfe4a210"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/transport-post-io-flags-diagnosis.log",
+      "bytes": 1114,
+      "sha256": "45b4c7c8a1d0855b8e0d15ad6ed412251c438698ded1c34bf38370e1b5283fce"
+    },
+    {
+      "path": "target/sou17-ci-lifecycle/workspace.log",
+      "bytes": 89307,
+      "sha256": "b8139ba0402d0900a669e98190fbe32a44b5f2ba793b3278170a3c2fec0c405b"
+    }
+  ],
+  "source": {
+    "commit": "6a57befbdabdbf5a0571594a0eca4072a4a13126",
+    "tree": "742501cd455805a000b95c94268dcec6a0d73a15",
+    "dirty_before": false,
+    "dirty_after": false,
+    "inputs_digest": "a20c04bf5722014423d3d4245862e1a495847a2f0ebe31bf21b544407938a424",
+    "binary_sha256": "a10e4639854b33a5f2d725e4551a8c0fc6406ec446ed7af8795b3e7e27191eb0",
+    "source_binary_unchanged": true
+  },
+  "final_checks": {
+    "exact_boundary": {
+      "passed": 126,
+      "failed": 0,
+      "timeouts": 0,
+      "skipped": 0,
+      "adapter": 19,
+      "mcp_admission": 59,
+      "native": 37,
+      "concurrency": 11
+    },
+    "resource": {
+      "passed": 10,
+      "failed": 0
+    },
+    "generic": {
+      "passed": 15,
+      "executions": 4,
+      "released_original_result_bytes": 505
+    },
+    "pending": {
+      "passed": 11,
+      "failed": 0
+    },
+    "capacity": {
+      "ask_refusals": 64,
+      "refused_executions": 0,
+      "useful_followup_executions": 1
+    },
+    "stdio_units": {
+      "passed": 3
+    },
+    "workspace": {
+      "passed": 1030,
+      "failed": 0,
+      "ignored": 8,
+      "target_results": 52
+    },
+    "fmt": "pass",
+    "clippy_workspace_all_targets": "pass",
+    "python": {
+      "run": 476,
+      "passed": 451,
+      "skipped": 25,
+      "skip_reasons": {
+        "selected_linux_tls_runtime": 15,
+        "optional_playwright": 5,
+        "native_windows": 5
+      }
+    },
+    "benchmarks": {
+      "run": 44,
+      "passed": 28,
+      "individual_skipped": 16,
+      "additional_class_level_skips": 2
+    }
+  },
+  "serial_latency": {
+    "status": "pass",
+    "requested_pairs": 30,
+    "observed_rows": 60,
+    "source_binary_stable": true,
+    "complete_final_witnesses": true,
+    "failed_rows": 0,
+    "incomplete_rows": 0,
+    "fixture_false_interruptions": 0,
+    "unknown_interruption_rows": 0,
+    "execution_anomalies": 0,
+    "population_false_interruption_rate": "not measured",
+    "latency_limit": "not agreed; no numeric gate",
+    "direct_request_ms": {
+      "p50": 0.217416,
+      "p95": 0.297791,
+      "p99": 0.312291
+    },
+    "protected_request_ms": {
+      "p50": 39.683041,
+      "p95": 51.64525,
+      "p99": 57.490292
+    },
+    "paired_overhead_ms": {
+      "mean": 40.62538203333334,
+      "p50": 39.492999999999995,
+      "p95": 51.366415999999994,
+      "p99": 57.346126,
+      "raw": [
+        39.561208,
+        39.500750000000004,
+        39.460249000000005,
+        39.492999999999995,
+        38.699751,
+        39.662626,
+        38.921916,
+        39.518291,
+        39.392708999999996,
+        39.646542,
+        39.339792,
+        38.700334,
+        41.809626,
+        57.346126,
+        51.366415999999994,
+        39.260708,
+        39.902291000000005,
+        39.169959000000006,
+        38.645499,
+        39.686417000000006,
+        38.7145,
+        39.357458,
+        39.138707999999994,
+        39.807415999999996,
+        39.040292,
+        40.292249999999996,
+        43.476333999999994,
+        39.768042,
+        39.262417000000006,
+        40.819834
+      ]
+    },
+    "parallel_runtime_or_build_jobs": false
+  },
+  "prior_ci_status": {
+    "head": "4911e989cc74cbac2a7cc3f46324d899b67733e0",
+    "success": 27,
+    "failed": 2,
+    "neutral": 0
+  },
+  "remaining_acceptance": [
+    "new-head required hosted CI",
+    "required review",
+    "new-source scan disposition",
+    "merge and affected exact-main rerun"
+  ],
+  "archive": {
+    "file": "sou17_ci_lifecycle_2026-10-14_raw.tar.gz",
+    "sha256": "3b5fd72e4867accc4384996be59074e314438c53a6f51d187d115290d3c840cf",
+    "bytes": 615669,
+    "raw_files": 192,
+    "credential_pattern_matches": 0,
+    "entries_hash_verified": true
+  }
+}

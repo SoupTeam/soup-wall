@@ -237,11 +237,17 @@ struct DaemonFaults {
     stall_call_admission: AtomicBool,
     call_requests_started: AtomicUsize,
     release_stalled_calls: Notify,
+    stall_result_admission: AtomicBool,
+    result_requests_started: AtomicUsize,
+    release_stalled_results: Notify,
+    stalled_result_content: Mutex<Option<String>>,
     tamper_resources_sha: AtomicBool,
+    #[cfg(unix)]
+    replace_admitted_read_with_fifo: Mutex<Option<std::path::PathBuf>>,
 }
 
-/// Keep the real daemon for session, manifest and result checks. Only call
-/// admission is suspended, so cleanup cannot add a second HTTP timeout.
+/// Keep the real daemon for session and manifest checks. Selected call/result
+/// admission can be suspended; session cleanup never waits on those barriers.
 async fn delay_call_admission(
     State(faults): State<Arc<DaemonFaults>>,
     request: Request,
@@ -260,7 +266,44 @@ async fn delay_call_admission(
         faults.call_requests_started.fetch_add(1, Ordering::SeqCst);
         faults.release_stalled_calls.notified().await;
     }
+    if faults.stall_result_admission.load(Ordering::SeqCst) && value["event"] == "result" {
+        *faults.stalled_result_content.lock().unwrap() =
+            value["content"].as_str().map(str::to_owned);
+        faults
+            .result_requests_started
+            .fetch_add(1, Ordering::SeqCst);
+        faults.release_stalled_results.notified().await;
+    }
     let res = next.run(request).await;
+    #[cfg(unix)]
+    let res = {
+        let swap = if value["event"] == "call" {
+            faults
+                .replace_admitted_read_with_fifo
+                .lock()
+                .unwrap()
+                .take()
+        } else {
+            None
+        };
+        if let Some(target) = swap {
+            use std::os::unix::ffi::OsStrExt;
+            let (parts, body) = res.into_parts();
+            let bytes = axum::body::to_bytes(body, agentfw::native::MAX_BODY)
+                .await
+                .expect("bounded real native receipt");
+            let receipt: Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(receipt["release"], true, "swap only after authentic Allow");
+            assert_eq!(value["args"]["path"], target.to_str().unwrap());
+            std::fs::remove_file(&target).unwrap();
+            let path = std::ffi::CString::new(target.as_os_str().as_bytes()).unwrap();
+            // SAFETY: NUL-terminated owned temporary leaf; no outside path.
+            assert_eq!(unsafe { libc::mkfifo(path.as_ptr(), 0o600) }, 0);
+            Response::from_parts(parts, Body::from(bytes))
+        } else {
+            res
+        }
+    };
     if faults.tamper_resources_sha.load(Ordering::SeqCst) && value["event"] == "call" {
         let (parts, body) = res.into_parts();
         let bytes = axum::body::to_bytes(body, agentfw::native::MAX_BODY)
@@ -3422,4 +3465,375 @@ async fn sou15_root_directory_swap_refused_and_pinned_continuation() {
         assert!(reply.to_string().contains("resource_executor_unsupported"));
         assert_eq!(executed(&fixture.ledger).len(), 0);
     }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn sou17_post_admission_fifo_refused_and_same_session_read_recovers() {
+    let mut fixture = Fixture::with_resource_policy(
+        "classified-read",
+        true,
+        Some("rule-baseline"),
+        |dir, registry| {
+            let workspace = dir.canonicalize().unwrap();
+            let target = workspace.join("admitted-resource.txt");
+            std::fs::write(&target, "useful owned contents").unwrap();
+            let schema = json!({"type":"object","properties":{"path":{"type":"string"}},
+                "required":["path"],"additionalProperties":false});
+            registry["tools"][0]["resource_policy"] = json!({
+                "profile":{"server_id":"fixture","tool_name":"read_document",
+                    "schema_sha256":sha(schema.to_string().as_bytes()),
+                    "selectors":[{"pointer":"/path","kind":"path"}]},
+                "workspace":workspace,"cwd":workspace,
+                "executor_sha256":"e".repeat(64),"classifier_sha256":"c".repeat(64),
+                "allowed_resources":[{"kind":"path","canonical":target}]
+            });
+        },
+    )
+    .await;
+    fixture.ready().await;
+    let target = fixture._dir.path().join("admitted-resource.txt");
+    *fixture
+        .daemon_faults
+        .replace_admitted_read_with_fifo
+        .lock()
+        .unwrap() = Some(target.clone());
+    let frame = json!({"jsonrpc":"2.0","id":"fifo-after-real-allow","method":"tools/call",
+        "params":{"name":"read_document","arguments":{"path":target}}});
+    let started = std::time::Instant::now();
+    let raw = tokio::time::timeout(Duration::from_secs(2), fixture.exchange(&frame.to_string()))
+        .await
+        .expect("an admitted FIFO must be refused without waiting for a writer")
+        .expect("read refusal must remain correlated and leave the session useful");
+    let response: Value = serde_json::from_str(&raw).unwrap();
+    assert_eq!(response["id"], "fifo-after-real-allow");
+    assert_eq!(response["result"]["isError"], true);
+    assert!(raw.contains("resource_read_failed"));
+    assert!(!raw.contains("useful owned contents"));
+    assert!(
+        executed(&fixture.ledger).is_empty(),
+        "broker must not forward a resource operation to the child"
+    );
+    let before = std::fs::read_to_string(&fixture.audit).unwrap();
+    let rows = before
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .filter(|row| row["event"] == "native_call" || row["event"] == "native_result")
+        .collect::<Vec<_>>();
+    assert_eq!(
+        rows.len(),
+        2,
+        "post-admission failure must complete its reservation"
+    );
+    assert_eq!(rows[0]["event"], "native_call");
+    assert_eq!(
+        rows[0]["released"], true,
+        "FIFO swap happened after actual native Allow"
+    );
+    assert_eq!(rows[1]["event"], "native_result");
+    assert_eq!(rows[0]["call_id"], rows[1]["call_id"]);
+    assert_eq!(rows[0]["binding_sha256"], rows[1]["binding_sha256"]);
+    assert_eq!(rows[0]["session"], rows[1]["session"]);
+
+    std::fs::remove_file(&target).unwrap();
+    std::fs::write(&target, "recovered owned contents").unwrap();
+    let followup = json!({"jsonrpc":"2.0","id":"fifo-recovered-read","method":"tools/call",
+        "params":{"name":"read_document","arguments":{"path":target}}});
+    let recovered: Value =
+        serde_json::from_str(&fixture.exchange(&followup.to_string()).await.unwrap()).unwrap();
+    assert_eq!(recovered["id"], "fifo-recovered-read");
+    assert_eq!(
+        recovered["result"]["content"][0]["text"],
+        "recovered owned contents"
+    );
+    assert!(executed(&fixture.ledger).is_empty());
+    let history = std::fs::read_to_string(&fixture.audit).unwrap();
+    let sessions = history
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .filter(|row| row["event"] == "native_call")
+        .map(|row| row["session"].clone())
+        .collect::<Vec<_>>();
+    assert_eq!(sessions.len(), 2);
+    assert_eq!(
+        sessions[0], sessions[1],
+        "recovery must use the original native session"
+    );
+    eprintln!(
+        "SOU17_EVIDENCE {}",
+        json!({
+            "test":"post_admission_fifo_same_session_recovery",
+            "boundary":"production_mcp_resource_executor",
+            "fifo_refusal_raw":raw,"authentic_call_allow":true,
+            "child_executor_entries":0,"protected_contents_released":false,
+            "same_session_recovery":recovered,"fixture_elapsed_ms":started.elapsed().as_secs_f64()*1000.0
+        })
+    );
+}
+
+#[cfg(unix)]
+async fn sou17_resource_gate_fixture(classifier: Option<&str>) -> Fixture {
+    let fixture =
+        Fixture::with_resource_policy("classified-read", true, classifier, |dir, registry| {
+            let workspace = dir.canonicalize().unwrap();
+            let target = workspace.join("staged-resource.txt");
+            std::fs::write(&target, "SOU17_STAGED_RESOURCE_CANARY").unwrap();
+            let schema = json!({"type":"object","properties":{"path":{"type":"string"}},
+                "required":["path"],"additionalProperties":false});
+            registry["tools"][0]["resource_policy"] = json!({
+                "profile":{"server_id":"fixture","tool_name":"read_document",
+                    "schema_sha256":sha(schema.to_string().as_bytes()),
+                    "selectors":[{"pointer":"/path","kind":"path"}]},
+                "workspace":workspace,"cwd":workspace,
+                "executor_sha256":"e".repeat(64),"classifier_sha256":"c".repeat(64),
+                "allowed_resources":[{"kind":"path","canonical":target}]
+            });
+        })
+        .await;
+    // Paired with the server startup witness, a present empty ledger is an
+    // independent observation rather than a missing-file zero assumption.
+    std::fs::File::create(&fixture.ledger).unwrap();
+    fixture
+}
+
+#[cfg(unix)]
+async fn sou17_resource_peer_read(fixture: &Fixture, frame: &str) -> Value {
+    let ledger = fixture._dir.path().join("resource-peer.jsonl");
+    std::fs::File::create(&ledger).unwrap();
+    let stderr = fixture._dir.path().join("resource-peer-stderr.log");
+    let (child, input, output) = spawn_gateway(
+        fixture._dir.path(),
+        &ledger,
+        "classified-read",
+        &stderr,
+        Some("rule-baseline"),
+    );
+    let mut peer = PeerGateway {
+        child,
+        input,
+        output,
+        ledger,
+        stderr,
+    };
+    peer.ready().await;
+    let response: Value = serde_json::from_str(&peer.exchange(frame).await.unwrap()).unwrap();
+    assert_eq!(
+        response["result"]["content"][0]["text"],
+        "SOU17_STAGED_RESOURCE_CANARY"
+    );
+    assert!(std::fs::read(&peer.ledger).unwrap().is_empty());
+    response
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn sou17_resource_overlap_during_native_gates_refused_with_useful_peer() {
+    for (stage, overlap) in [
+        ("call", "complete"),
+        ("call", "partial"),
+        ("result", "complete"),
+        ("result", "partial"),
+        ("result", "cancel"),
+    ] {
+        let mut fixture = sou17_resource_gate_fixture(Some("rule-baseline")).await;
+        fixture.ready().await;
+        let target = fixture._dir.path().join("staged-resource.txt");
+        let contents = std::fs::read(&target).unwrap();
+        let frame = json!({"jsonrpc":"2.0","id":3,"method":"tools/call",
+            "params":{"name":"read_document","arguments":{"path":target}}});
+        let extra = match overlap {
+            "partial" => "{\"jsonrpc\":\"2.0\"".to_owned(),
+            "cancel" => {
+                json!({"jsonrpc":"2.0","method":"notifications/cancelled",
+                "params":{"requestId":3,"reason":"owned test cancellation"}})
+                .to_string()
+                    + "\n"
+            }
+            _ => {
+                json!({"jsonrpc":"2.0","id":4,"method":"tools/call",
+                "params":{"name":"read_document","arguments":{"path":target}}})
+                .to_string()
+                    + "\n"
+            }
+        };
+        let faults = fixture.daemon_faults.clone();
+        let (stall, counter) = if stage == "call" {
+            (&faults.stall_call_admission, &faults.call_requests_started)
+        } else {
+            (
+                &faults.stall_result_admission,
+                &faults.result_requests_started,
+            )
+        };
+        stall.store(true, Ordering::SeqCst);
+        fixture
+            .input
+            .write_all(format!("{frame}\n").as_bytes())
+            .await
+            .unwrap();
+        fixture.input.flush().await.unwrap();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while counter.load(Ordering::SeqCst) == 0 {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("actual native boundary must reach the selected gate");
+        let produced = faults.stalled_result_content.lock().unwrap().clone();
+        if stage == "result" {
+            let value: Value = serde_json::from_str(produced.as_ref().unwrap()).unwrap();
+            assert_eq!(value["id"], 3);
+            assert_eq!(
+                value["result"]["content"][0]["text"],
+                "SOU17_STAGED_RESOURCE_CANARY"
+            );
+        } else {
+            assert!(produced.is_none());
+        }
+        fixture.input.write_all(extra.as_bytes()).await.unwrap();
+        fixture.input.flush().await.unwrap();
+        let output = tokio::time::timeout(Duration::from_secs(2), fixture.receive())
+            .await
+            .expect("queued/cancelled resource work must close before releasing content");
+        assert!(
+            output.is_none(),
+            "no tool result may be released after overlap"
+        );
+        fixture.assert_gateway_failed().await;
+        assert!(std::fs::read_to_string(&fixture.stderr)
+            .unwrap()
+            .contains("concurrent MCP requests are not supported"));
+        let audit = std::fs::read_to_string(&fixture.audit).unwrap();
+        let rows = audit
+            .lines()
+            .map(|line| serde_json::from_str::<Value>(line).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            rows.iter().filter(|r| r["event"] == "native_call").count(),
+            usize::from(stage == "result")
+        );
+        if stage == "result" {
+            let admitted = rows.iter().find(|r| r["event"] == "native_call").unwrap();
+            assert_eq!(
+                admitted["released"], true,
+                "first broker read had authentic native Allow"
+            );
+            assert_eq!(admitted["verdict"], "allow");
+            assert_eq!(admitted["shadow"], false, "native gate enforced the call");
+        }
+        assert!(!rows
+            .iter()
+            .any(|r| r["event"] == "native_result" && r["released"] == true));
+        assert!(rows
+            .iter()
+            .any(|r| r["event"] == "native_session_end" && r["released"] == true));
+        assert!(std::fs::read(&fixture.ledger).unwrap().is_empty());
+        assert_eq!(std::fs::read(&target).unwrap(), contents);
+        stall.store(false, Ordering::SeqCst);
+        if stage == "call" {
+            faults.release_stalled_calls.notify_one();
+        } else {
+            faults.release_stalled_results.notify_one();
+        }
+        // A separate native session with the same daemon/profile remains useful;
+        // the closed session and any abandoned grant cannot authorize the peer.
+        let useful = sou17_resource_peer_read(&fixture, &frame.to_string()).await;
+        eprintln!(
+            "SOU17_EVIDENCE {}",
+            json!({"test":"resource_overlap_native_gate",
+            "boundary":"production_mcp_resource_executor","stage":stage,"overlap":overlap,
+            "request_id":3,"child_executor_entries":0,"file_bytes_unchanged":true,
+            "broker_output_produced":stage == "result","produced_result_raw":produced,
+            "client_tool_result_bytes":0,"protected_contents_released":false,
+            "ended_native_session":true,"same_daemon_peer_recovery":useful})
+        );
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn sou17_resource_overlap_during_classifier_refused_before_native_call() {
+    let script_dir = tempfile::tempdir().unwrap();
+    let script = script_dir.path().join("classifier.py");
+    let ready = script_dir.path().join("ready");
+    let release = script_dir.path().join("release");
+    let source = format!("import json,pathlib,sys,time\njson.load(sys.stdin)\npathlib.Path({}).write_text('ready')\nrelease=pathlib.Path({})\ndeadline=time.monotonic()+3\nwhile not release.exists():\n if time.monotonic()>deadline: raise SystemExit(75)\n time.sleep(0.005)\nprint(json.dumps({{'status':'ok','actions':['read'],'unknown':False,'confidence':1.0,'uncertainty':0.0,'reason':'staged classifier fixture'}}))\n", serde_json::to_string(ready.to_str().unwrap()).unwrap(), serde_json::to_string(release.to_str().unwrap()).unwrap());
+    std::fs::write(&script, source).unwrap();
+    let classifier = format!("script:{}", script.to_str().unwrap());
+    let mut fixture = sou17_resource_gate_fixture(Some(&classifier)).await;
+    fixture.ready().await;
+    let target = fixture._dir.path().join("staged-resource.txt");
+    let contents = std::fs::read(&target).unwrap();
+    let frame = json!({"jsonrpc":"2.0","id":3,"method":"tools/call",
+        "params":{"name":"read_document","arguments":{"path":target}}});
+    fixture
+        .input
+        .write_all(format!("{frame}\n").as_bytes())
+        .await
+        .unwrap();
+    fixture.input.flush().await.unwrap();
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while !ready.is_file() {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("pinned classifier subprocess must reach its fixture barrier");
+    let extra = json!({"jsonrpc":"2.0","id":4,"method":"tools/call",
+        "params":{"name":"read_document","arguments":{"path":target}}});
+    fixture
+        .input
+        .write_all(format!("{extra}\n").as_bytes())
+        .await
+        .unwrap();
+    fixture.input.flush().await.unwrap();
+    // Keep classification held until the production collector has rejected
+    // overlap and ended its native session. Release only after that witness;
+    // a fixed sleep could finish before a delayed CI observer sends its call.
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let audit = std::fs::read_to_string(&fixture.audit).unwrap();
+            if audit.lines().any(|line| {
+                let row: Value = serde_json::from_str(line).unwrap();
+                row["event"] == "native_session_end" && row["released"] == true
+            }) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("held classification must be cancelled with native session cleanup");
+    std::fs::write(&release, "release").unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_secs(2), fixture.receive())
+            .await
+            .unwrap()
+            .is_none()
+    );
+    fixture.assert_gateway_failed().await;
+    assert!(std::fs::read_to_string(&fixture.stderr)
+        .unwrap()
+        .contains("concurrent MCP requests are not supported"));
+    let audit = std::fs::read_to_string(&fixture.audit).unwrap();
+    let rows = audit
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .collect::<Vec<_>>();
+    assert!(!rows
+        .iter()
+        .any(|r| r["event"] == "native_call" || r["event"] == "native_result"));
+    assert!(rows
+        .iter()
+        .any(|r| r["event"] == "native_session_end" && r["released"] == true));
+    assert!(std::fs::read(&fixture.ledger).unwrap().is_empty());
+    assert_eq!(std::fs::read(&target).unwrap(), contents);
+    eprintln!(
+        "SOU17_EVIDENCE {}",
+        json!({"test":"resource_overlap_classifier_gate",
+        "boundary":"production_mcp_resource_executor","classifier_source":"staged pinned local Python fixture",
+        "native_call_events":0,"native_result_events":0,"client_tool_result_bytes":0,
+        "child_executor_entries":0,"file_bytes_unchanged":true,"ended_native_session":true,
+        "protected_contents_released":false,"broker_output_produced":false})
+    );
 }

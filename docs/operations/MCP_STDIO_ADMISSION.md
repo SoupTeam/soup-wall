@@ -103,6 +103,29 @@ arbitrary tool under resource policy is refused fail-closed with
 `resource_executor_unsupported`. See [Native resource admission](NATIVE_RESOURCE_ADMISSION.md).
 
 
+## Unix host transport
+
+On Unix, `--native-admission` requires stdin and stdout pipe or socket descriptors
+that the runtime can register for readiness. Launch the collector through the
+MCP host or a subprocess with piped stdin/stdout. A terminal or regular-file
+redirection is explicitly refused with `native MCP stdio requires a pipe or socket`;
+there is no fallback to the legacy relay. To save a transcript, let the client
+drain the stdout pipe into its output file. Diagnostics remain on stderr.
+
+Native Unix pipe I/O uses owned close-on-exec duplicates and direct nonblocking
+operations. A completed response means its full LF-terminated frame was written,
+so the next immediate sequential request does not wait for a separate blocking
+stdout worker. Cancellation/EOF does not leave a blocking standard-input worker
+holding runtime shutdown open. Descriptor status flags are restored on shutdown
+and failed registration. Windows retains the existing host transport; the bounded
+resource executor remains Unix-only.
+
+These transport requirements do not change MCP identifiers, original arguments,
+native event formats or policy authority. Unsupported overlap still ends the
+uncertain session; any authorized first read or bytes already emitted remain
+actual effects, and a later refusal cannot undo them. See the retained
+[SOU-17 CI lifecycle evidence](../benchmarks/evidence/sou17_ci_lifecycle_2026-10-14.md).
+
 ## Selected harness and event contract
 
 The initial harness is Claude Code acting as a stdio MCP client, where the
