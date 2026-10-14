@@ -1,0 +1,259 @@
+{
+  "schema_version": 1,
+  "scope": "Disposable Keycloak OIDC and Console browser acceptance",
+  "started_at_utc": "2026-10-14T06:11:25.550969+00:00",
+  "artifact_label": "abe80862462d1fe81c0135804480761f8380aa09",
+  "backend": "postgres",
+  "checks": [
+    {
+      "name": "pinned-container-image-pulled-by-digest",
+      "passed": true
+    },
+    {
+      "name": "real-keycloak-https-discovery",
+      "passed": true
+    },
+    {
+      "name": "fresh-postgres-has-no-public-tables",
+      "passed": true
+    },
+    {
+      "name": "explicit-production-postgres-migrations",
+      "passed": true
+    },
+    {
+      "name": "local-membership-bootstrap",
+      "passed": true
+    },
+    {
+      "name": "bootstrap-refuses-populated-store",
+      "passed": true
+    },
+    {
+      "name": "postgres-untrusted-certificate-refused",
+      "passed": true
+    },
+    {
+      "name": "gateway-ready",
+      "passed": true
+    },
+    {
+      "name": "gateway-postgres-connections-use-tls",
+      "passed": true
+    },
+    {
+      "name": "production-start-redirect",
+      "passed": true
+    },
+    {
+      "name": "callback-without-originating-browser-rejected-before-state-consumption",
+      "passed": true
+    },
+    {
+      "name": "invalid-state-refused-by-production-callback",
+      "passed": true
+    },
+    {
+      "name": "separate-vendor-code-issued-for-pkce-negative",
+      "passed": true
+    },
+    {
+      "name": "real-keycloak-rejects-wrong-pkce-verifier",
+      "passed": true
+    },
+    {
+      "name": "console-login-through-real-keycloak",
+      "passed": true
+    },
+    {
+      "name": "secure-opaque-host-session-cookie",
+      "passed": true
+    },
+    {
+      "name": "authorization-callback-replay-rejected",
+      "passed": true
+    },
+    {
+      "name": "owner-can-read-owner-only-api",
+      "passed": true
+    },
+    {
+      "name": "refresh-needs-csrf",
+      "passed": true
+    },
+    {
+      "name": "csrf-protected-session-rotation",
+      "passed": true
+    },
+    {
+      "name": "rotated-cookie-invalidates-previous-session",
+      "passed": true
+    },
+    {
+      "name": "migrations-on-populated-identity-store",
+      "passed": true
+    },
+    {
+      "name": "populated-identity-and-session-state-preserved",
+      "passed": true
+    },
+    {
+      "name": "postgres-restart-preserves-populated-state",
+      "passed": true
+    },
+    {
+      "name": "gateway-ready",
+      "passed": true
+    },
+    {
+      "name": "session-persists-across-gateway-restart",
+      "passed": true
+    },
+    {
+      "name": "console-logout-clears-workspace-ui",
+      "passed": true
+    },
+    {
+      "name": "logout-revokes-server-session",
+      "passed": true
+    },
+    {
+      "name": "logout-cookie-removed",
+      "passed": true
+    },
+    {
+      "name": "idp-owner-role-does-not-override-local-analyst",
+      "passed": true
+    },
+    {
+      "name": "analyst-denied-owner-only-api",
+      "passed": true
+    },
+    {
+      "name": "owner-revokes-analyst-membership",
+      "passed": true
+    },
+    {
+      "name": "revoked-membership-invalidates-existing-session",
+      "passed": true
+    },
+    {
+      "name": "gateway-ready",
+      "passed": true
+    },
+    {
+      "name": "membership-revocation-survives-restart",
+      "passed": true
+    },
+    {
+      "name": "logout-revocation-survives-restart",
+      "passed": true
+    },
+    {
+      "name": "owner-session-survives-second-restart",
+      "passed": true
+    },
+    {
+      "name": "revoked-member-cannot-create-new-session",
+      "passed": true
+    },
+    {
+      "name": "owner-restores-analyst-membership",
+      "passed": true
+    },
+    {
+      "name": "owner-issues-workspace-token",
+      "passed": true
+    },
+    {
+      "name": "issued-token-authenticates-production-store",
+      "passed": true
+    },
+    {
+      "name": "owner-revokes-workspace-token",
+      "passed": true
+    },
+    {
+      "name": "revoked-token-refused-production-store",
+      "passed": true
+    },
+    {
+      "name": "gateway-ready",
+      "passed": true
+    },
+    {
+      "name": "token-revocation-survives-restart",
+      "passed": true
+    },
+    {
+      "name": "restored-member-can-login",
+      "passed": true
+    },
+    {
+      "name": "unprovisioned-idp-user-denied",
+      "passed": true
+    },
+    {
+      "name": "cross-organization-membership-denied",
+      "passed": true
+    },
+    {
+      "name": "expired-session-denied-server-side",
+      "passed": true
+    },
+    {
+      "name": "expired-session-returns-to-sign-in",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "cleanup_passed": true,
+  "platform": "posix",
+  "runtimes": {
+    "keycloak_image": "quay.io/keycloak/keycloak@sha256:ad1b0f0fa4bb5eff10f7a78eaafbb6d65b25431c1f824b0710836d74373a7dfb",
+    "keycloak_version": "26.8.0",
+    "keycloak_license": "Apache-2.0",
+    "platform": "linux/amd64",
+    "postgres_image": "postgres@sha256:ec9f656f17c8b4dfebf49e58cf5c46d493d4846d4ea6d8b85d0637f68ee33bfc",
+    "postgres_version": "16.15 (Debian 16.15-1.pgdg12+2)",
+    "postgres_license": "PostgreSQL License"
+  },
+  "limitations": [
+    "Local synthetic realm; no customer deployment, MFA or external federation",
+    "Console logout revokes its local session; Keycloak SSO remains active",
+    "Browser trusts the ephemeral CA in its isolated HOME/NSS database",
+    "Gateway and HTTP driver verify TLS with an explicit ephemeral CA",
+    "Session expiry is advanced only in this run's disposable database fixture"
+  ],
+  "gateway_sha256": "78720bc9c42cdf44f1a638d18f803922f7fb578207108a358680aaeaa6d0c21b",
+  "bootstrap_helper_sha256": "5689def7c1fdb92001e8a77847a46d41473a1a9fff97a9f9c4daa31d7079b3ae",
+  "source_sha256": {
+    "scripts/keycloak-oidc-acceptance.py": "f3d8c30663aa6086134768beaf8071ebf7b0572c39f822a67c0073f8d708d938",
+    "scripts/keycloak-saml-acceptance.py": "9e68691adcf58bdbbc1a0b8cbdbc3742dfbfa28a0eea8c0588d78c9c60ac3008",
+    "Cargo.lock": "b47634e7508864daa1df5826433f4cc31d967b013e5719dd09f3ab453f38618a",
+    "crates/proxy/examples/keycloak-oidc-bootstrap.rs": "fd1493f14d5ee283c57cc6902e7f4852f2ea92b4364f105dbca69e07c9d3b171",
+    "crates/proxy/src/oidc.rs": "e0cb21fa426fdb8bc13cbb01795adce5ac06cf5f61e7389f9dc37d63f4e1a53e",
+    "crates/proxy/src/oidc_auth.rs": "1c62a1d826d5718077349b4dda703678e443c49c94873c9350c09e76530e6b61",
+    "crates/proxy/src/customer_dashboard.html": "3463b890da9a08598c84260586a9463c99a6448e4a1e7f0e42f9c744a1ac1ef5",
+    "crates/proxy/src/tenant_store.rs": "bce8e55d89fd42c42ba4debb6c2a0b8caf57fc7376a01b8b371d7c4a1eede9ff",
+    "crates/proxy/src/tenant_store/postgres.rs": "4208b8696b440c9eb3eb549dce07b39b147d13c906ca1508e9b3d279fd4c7abf",
+    "scripts/keycloak-oidc-acceptance.sh": "b000660a271965a29a896eac8e42118fdeb283f2ede7898dd9923739a526bac7",
+    ".github/workflows/keycloak-oidc.yml": "7dbed49f228730ee4e8fc2cb6959af69e4e2adef8e47f39c92ba4675e73a1704"
+  },
+  "phase": "complete",
+  "configuration": {
+    "bind": "loopback only",
+    "store": "new disposable postgres",
+    "database_tls_verified": true,
+    "oidc_client": "public",
+    "flow": "authorization_code",
+    "pkce": "S256 required",
+    "https": true,
+    "gateway_certificate_verification": true,
+    "os_trust_modified": false,
+    "identity_source": "generated synthetic users",
+    "firewall_yaml_sha256": "0f148d7c71d755881ff66f8b4041fec589395ef869c2eb4dc9cca97819b7a403",
+    "realm_configuration_sha256": "d44ebc89c107c39bc684c64e609d9e2da8c69937f66d1a138a2c7b3137c6a6a0"
+  },
+  "browser_version": "153.0.8010.12"
+}

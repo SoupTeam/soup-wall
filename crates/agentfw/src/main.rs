@@ -34,6 +34,11 @@ enum Cmd {
     },
     /// Print the settings.json hook block and setup instructions.
     Install,
+    /// Manage a user-scoped Agent binary lifecycle.
+    Lifecycle {
+        #[command(subcommand)]
+        command: LifecycleCommand,
+    },
     /// Check that the daemon is up, and report its enforcement posture.
     ///
     /// Exits non-zero when it is not. The Claude Code hook fails open, so a
@@ -201,6 +206,36 @@ enum Cmd {
     },
 }
 
+#[derive(Subcommand)]
+enum LifecycleCommand {
+    Install {
+        version: String,
+        candidate: PathBuf,
+        #[arg(long)]
+        sha256: String,
+    },
+    Upgrade {
+        version: String,
+        candidate: PathBuf,
+        #[arg(long)]
+        sha256: String,
+    },
+    Rollback,
+    Status,
+    Recover,
+    Start,
+    Stop,
+    Restart,
+    Remove,
+    #[command(hide = true)]
+    ServeManaged {
+        #[arg(long, allow_hyphen_values = true)]
+        instance: String,
+        #[arg(long)]
+        home: PathBuf,
+    },
+}
+
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.cmd {
@@ -209,7 +244,7 @@ fn main() -> anyhow::Result<()> {
             tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()?
-                .block_on(serve())
+                .block_on(serve(Config::home()?, None))
         }
         Cmd::Replay { log } => {
             let home = Config::home()?;
@@ -229,6 +264,65 @@ fn main() -> anyhow::Result<()> {
                 "{}",
                 agentfw::install::instructions_for_config(&cfg, &home.join("token"))
             );
+            Ok(())
+        }
+        Cmd::Lifecycle { command } => {
+            if let LifecycleCommand::ServeManaged { instance, home } = command {
+                tracing_subscriber::fmt().json().init();
+                let manager = agentfw::lifecycle::Manager::new(&home);
+                manager.verify_managed_boot(&instance, &std::env::current_exe()?)?;
+                return tokio::runtime::Builder::new_multi_thread()
+                    .enable_all()
+                    .build()?
+                    .block_on(serve(home, Some(instance)));
+            }
+            let manager = agentfw::lifecycle::Manager::new(Config::home()?);
+            match command {
+                LifecycleCommand::Install {
+                    version,
+                    candidate,
+                    sha256,
+                } => {
+                    let record = manager.install(&version, &candidate, &sha256)?;
+                    println!("installed {} {}", record.version, record.digest);
+                }
+                LifecycleCommand::Upgrade {
+                    version,
+                    candidate,
+                    sha256,
+                } => {
+                    let record = manager.upgrade(&version, &candidate, &sha256)?;
+                    println!("upgraded to {} {}", record.version, record.digest);
+                }
+                LifecycleCommand::Rollback => {
+                    let record = manager.rollback()?;
+                    println!("rolled back to {} {}", record.version, record.digest);
+                }
+                LifecycleCommand::Status => {
+                    println!("{}", serde_json::to_string_pretty(&manager.status()?)?);
+                }
+                LifecycleCommand::Recover => {
+                    manager.recover()?;
+                    println!("recovered lifecycle state");
+                }
+                LifecycleCommand::Start => {
+                    manager.start()?;
+                    println!("started owned Agent and confirmed health");
+                }
+                LifecycleCommand::Stop => {
+                    manager.stop()?;
+                    println!("stopped owned Agent");
+                }
+                LifecycleCommand::Restart => {
+                    manager.restart()?;
+                    println!("restarted owned Agent and confirmed health");
+                }
+                LifecycleCommand::Remove => {
+                    manager.remove()?;
+                    println!("removed owned Agent files");
+                }
+                LifecycleCommand::ServeManaged { .. } => unreachable!(),
+            }
             Ok(())
         }
         Cmd::Preflight {
@@ -264,15 +358,16 @@ fn main() -> anyhow::Result<()> {
                 args_fingerprint: agentfw::grant::action_fingerprint(&tool, &parsed),
             };
             let nonce = agentfw::token::generate();
-            let grant = agentfw::grant::mint(
+            let store = agentfw::grant::GrantStore::new(&home.join("grants"));
+            // Issue under the same cross-process epoch lock as live activation
+            // and redemption; never mint an unversioned grant after a switch.
+            let (_, path) = store.issue(
                 &agentfw::grant::derive_key(&token),
                 &action,
                 now_ms(),
                 ttl_minutes.saturating_mul(60_000),
                 nonce,
-            );
-            let store = agentfw::grant::GrantStore::new(&home.join("grants"));
-            let path = store.write(&grant)?;
+            )?;
             println!(
                 "Approved {tool} for {} minute(s). Single use, bound to these exact arguments.
                  Revoke before it is used by deleting:
@@ -641,8 +736,7 @@ async fn probe_health(config: &Config, timeout_seconds: u64) -> agentfw::preflig
     }
 }
 
-async fn serve() -> anyhow::Result<()> {
-    let home = Config::home()?;
+async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
     let cfg = match std::fs::read_to_string(home.join("config.yaml")) {
         Ok(s) => Config::from_yaml(&s)?,
         Err(_) => Config::default(),
@@ -684,6 +778,14 @@ async fn serve() -> anyhow::Result<()> {
         token,
     });
 
+    // Managed enrollment is opt-in and pinned to an operator-approved local
+    // Console origin and public key. A corrupt persisted signed policy stops
+    // startup rather than silently reverting to a permissive default.
+    if let Some(managed) = agentfw::managed_sync::ManagedSync::from_environment(&home)? {
+        managed.restore(&state)?;
+        tokio::spawn(managed.run(state.clone()));
+    }
+
     let addr = cfg.socket_address();
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     tracing::info!(
@@ -692,6 +794,114 @@ async fn serve() -> anyhow::Result<()> {
         "agentfw listening ({})",
         if cfg.enforce { "ENFORCING" } else { "shadow mode" }
     );
-    axum::serve(listener, app(state)).await?;
+    if let Some(instance) = managed {
+        use axum::http::{HeaderMap, StatusCode};
+        use axum::routing::get;
+        use axum::Json;
+        let health = agentfw::lifecycle::ManagedHealth {
+            pid: std::process::id(),
+            instance,
+            binary_digest: agentfw::lifecycle::sha256_file(&std::env::current_exe()?)?,
+            config_digest: match std::fs::read(home.join("config.yaml")) {
+                Ok(bytes) => {
+                    use sha2::{Digest, Sha256};
+                    format!("{:x}", Sha256::digest(&bytes))
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    use sha2::{Digest, Sha256};
+                    format!("{:x}", Sha256::digest(b""))
+                }
+                Err(error) => return Err(error.into()),
+            },
+        };
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+        let shutdown = Arc::new(Mutex::new(Some(shutdown_tx)));
+        let read_health = health.clone();
+        let read_token = state.token.clone();
+        let stop_health = health;
+        let stop_token = state.token.clone();
+        let router = app(state).route(
+            "/lifecycle/v1",
+            get(move |headers: HeaderMap| {
+                let health = read_health.clone();
+                let token = read_token.clone();
+                async move {
+                    let authorized = headers
+                        .get("authorization")
+                        .and_then(|value| value.to_str().ok())
+                        .is_some_and(|value| agentfw::token::verify(&token, value));
+                    let matches_instance = headers
+                        .get("x-agentfw-instance")
+                        .and_then(|value| value.to_str().ok())
+                        == Some(health.instance.as_str());
+                    if authorized && matches_instance {
+                        Ok(Json(health))
+                    } else {
+                        Err(StatusCode::UNAUTHORIZED)
+                    }
+                }
+            })
+            .post(move |headers: HeaderMap| {
+                let health = stop_health.clone();
+                let token = stop_token.clone();
+                let shutdown = shutdown.clone();
+                async move {
+                    let authorized = headers
+                        .get("authorization")
+                        .and_then(|value| value.to_str().ok())
+                        .is_some_and(|value| agentfw::token::verify(&token, value));
+                    let matches_instance = headers
+                        .get("x-agentfw-instance")
+                        .and_then(|value| value.to_str().ok())
+                        == Some(health.instance.as_str());
+                    if !authorized || !matches_instance {
+                        return StatusCode::UNAUTHORIZED;
+                    }
+                    if let Some(sender) = shutdown.lock().unwrap().take() {
+                        let _ = sender.send(());
+                    }
+                    StatusCode::OK
+                }
+            }),
+        );
+        axum::serve(listener, router)
+            .with_graceful_shutdown(async {
+                let _ = shutdown_rx.await;
+            })
+            .await?;
+    } else {
+        axum::serve(listener, app(state)).await?;
+    }
     Ok(())
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+
+    #[test]
+    fn managed_instance_preserves_leading_hyphens() {
+        for prefix in ["-", "--"] {
+            let expected = format!("{prefix}{}", "a".repeat(43 - prefix.len()));
+            let cli = Cli::try_parse_from([
+                "agentfw",
+                "lifecycle",
+                "serve-managed",
+                "--instance",
+                &expected,
+                "--home",
+                "owned-profile",
+            ])
+            .expect("URL-safe instance IDs can begin with hyphens");
+            match cli.cmd {
+                Cmd::Lifecycle {
+                    command: LifecycleCommand::ServeManaged { instance, home },
+                } => {
+                    assert_eq!(instance, expected);
+                    assert_eq!(home, PathBuf::from("owned-profile"));
+                }
+                _ => panic!("expected the managed lifecycle command"),
+            }
+        }
+    }
 }

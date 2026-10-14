@@ -143,7 +143,7 @@ The snapshot processes start from the captured classifier bytes through a small 
 
 ## Held-out result (SOU-16 official run)
 
-One official run on the sealed test, executed by the test custodian (not by this evaluator): run_id `sou16-pilot-heldout-run-1`, holdout_id `sou13-cp2-test-54-2026-10-11`, evaluation.json sha256 `7108f431…ee8c`. 54 calls, 0 technical errors. Candidate: this classifier, sha256 `d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd`. This is a pilot: 54 cases, 9 families, one run; no tuning on it. The tables above are development numbers and do not describe this run.
+One official run on the sealed test, executed by the test custodian (not by this evaluator): run_id `sou16-pilot-heldout-run-1`, holdout_id `sou13-cp2-test-54-2026-10-11`, evaluation.json sha256 `7108f4317bff5ebb71707d85da65c7fda520a157738ed3fd76c953e48d20ee8c`. 54 calls, 0 technical errors. Candidate: this classifier, sha256 `d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd`. This is a pilot: 54 cases, 9 families, one run; no tuning on it. The tables above are development numbers and do not describe this run.
 
 | Candidate | Exact match (of 42 fully annotated) | Abstention (of 54) | Silent critical misses (of 30) | False-positive write |
 |---|---|---|---|---|
@@ -153,4 +153,16 @@ One official run on the sealed test, executed by the test custodian (not by this
 
 Mixed-action retention is 0/6 for all three; every delete case went to unknown. Latency p50 (ms): model 0.22, baseline 0.06, this classifier 0.19.
 
-Reading: the development results above did not generalize to the unseen families. The classifier misses change_permissions and write with unknown=false more often than the baseline. It must not be treated as sufficient for Allow on write/change_permissions; policy restrictions stay on top. A per-label breakdown is not in the custodian's summary and should be added from evaluation.json when shared. Independent continue/revise/reject review is pending.
+Per-label results for this classifier (aggregates supplied by the test custodian, null labels excluded; P = known positives, N = known negatives):
+
+| Label | TP | FN | FP | P | N |
+|---|---|---|---|---|---|
+| read | 12 | 6 | 0 | 18 | 30 |
+| write | 6 | 6 | 6 | 12 | 30 |
+| delete | 0 | 6 | 0 | 6 | 36 |
+| send_data | 6 | 0 | 0 | 6 | 36 |
+| change_permissions | 0 | 6 | 0 | 6 | 36 |
+
+Unknown handling: unknown loss 0/12, false unknown 12/42. Silent critical misses with unknown=false: 12/30. Fully preserved mixed actions: 0/6.
+
+Reading: the development results above did not generalize to the unseen families. The classifier misses change_permissions and write with unknown=false more often than the baseline. It must not be treated as sufficient for Allow on write/change_permissions; policy restrictions stay on top. The per-label aggregates above come from the custodian and were not independently regraded. Independent continue/revise/reject review is pending.

@@ -5,6 +5,7 @@
 Requires a clean exact candidate and a separately built Agent. This runs only
 the accepted local fixture path, not final generic SOU-15 or host acceptance.
 No models, GitHub settings, real host profiles or service registrations are used.
+Use --include-generic to add the accepted SOU-17 classifier/policy boundary probe.
 """
 from __future__ import annotations
 
@@ -23,13 +24,17 @@ import tempfile
 import time
 
 sys.dont_write_bytecode = True
+BASE_STAGES = ("setup", "status", "latency")
 SCRIPTS = {
     "setup": "clean-setup-acceptance.py",
     "status": "verify-sou18-status.py",
     "latency": "measure-sou17-latency.py",
+    "generic": "verify-sou17-generic-boundary.py",
 }
-REPORTS = {"setup": "setup.json", "status": "status/results.json", "latency": "latency/results.json"}
-SCHEMAS = {"setup": 1, "status": "sou18-status-witnesses/1", "latency": "sou17-paired-latency/0.1"}
+REPORTS = {"setup": "setup.json", "status": "status/results.json", "latency": "latency/results.json",
+           "generic": "generic/results.json"}
+SCHEMAS = {"setup": 1, "status": "sou18-status-witnesses/1", "latency": "sou17-paired-latency/0.1",
+           "generic": "sou17-generic-boundary/1"}
 
 
 def load(repo, name):
@@ -92,6 +97,8 @@ def evaluate(name, data, process, before, binary_hash, pairs, helpers):
         if reported != "pass" or type(process.get("exit_code")) is not int or process["exit_code"] != 0:
             return "incomplete", "probe_did_not_complete_successfully"
         observed_binary = data.get("agentfw", {}).get("sha256") if name == "latency" else data.get("binary_sha256")
+        if name == "generic":
+            observed_binary = data.get("binary_sha256_before")
         if observed_binary != binary_hash:
             return "incomplete", "binary_identity_mismatch"
         if name == "setup":
@@ -106,6 +113,30 @@ def evaluate(name, data, process, before, binary_hash, pairs, helpers):
                            or c["preflight_exit"] != {"shadow": 4, "enforcing": 0, "unavailable": 2, "recovery": 0}[c["name"]]
                            for c in checks if c["name"] in {"shadow", "enforcing", "unavailable", "recovery"})):
                 return "incomplete", "setup_witnesses_incomplete"
+        elif name == "generic":
+            # The accepted SOU-17 helper names the same complete hash map differently.
+            generic_source = dict(before)
+            generic_source["inputs_sha256"] = generic_source.pop("tracked_inputs_sha256")
+            if data["source"] != generic_source or data["source_after"] != generic_source:
+                return "incomplete", "candidate_identity_mismatch"
+            if data["binary_sha256_after"] != binary_hash or data["expected_binary_sha256"] != binary_hash:
+                return "incomplete", "binary_identity_mismatch"
+            if data["expected_commit"] != before["commit"] or data.get("stable") is not True or data.get("error") is not None:
+                return "incomplete", "generic_identity_or_completion_missing"
+            if (data["script_sha256_before"] != data["script_sha256_after"]
+                    or data["helper_sha256_before"] != data["helper_sha256_after"]):
+                return "incomplete", "generic_verifier_changed"
+            observed = data["observed"]
+            if (data["expectations"] != helpers["generic"].cases()
+                    or observed["classifier_sha256"] != observed["classifier_sha256_after"]
+                    or observed["native_audit_errors"] or observed["final_ledger_errors"]):
+                return "incomplete", "generic_witnesses_incomplete"
+            status, _ = helpers["generic"].grade_report(
+                observed["rows"], True, observed["classifier_sha256"], observed["receiver_bodies"],
+                observed["native_decisions"], observed["classifications"], observed["gateway_exit_code"],
+                transcript=observed["transcript"], error=observed["error"])
+            if status != "pass":
+                return ("fail" if status == "fail" else "incomplete"), "generic_witnesses_" + status
         else:
             if data["source_before"] != before or data["source_after"] != before:
                 return "incomplete", "candidate_identity_mismatch"
@@ -129,10 +160,10 @@ def evaluate(name, data, process, before, binary_hash, pairs, helpers):
         return "incomplete", "invalid_report"
 
 
-def outcome(stages, stable):
+def outcome(stages, stable, required=BASE_STAGES):
     if any(row["status"] == "fail" for row in stages):
         return "fail"
-    if stable and len(stages) == 3 and {r["name"] for r in stages} == set(SCRIPTS) \
+    if stable and len(stages) == len(required) and {r["name"] for r in stages} == set(required) \
             and all(row["status"] == "pass" for row in stages):
         return "pass"
     return "incomplete"
@@ -161,48 +192,52 @@ def markdown(report):
         rows += ["", f"Paired MCP added duration: p50 {stats['p50']:.3f} ms; p95 {stats['p95']:.3f} ms.",
                  "Includes per-call Python classifier startup. No numeric performance threshold has been accepted."]
     rows += ["", "Build/download time is outside this runner. Setup CLI timings are not MCP overhead.",
-             "Windows paired latency is unsupported and is recorded as a skip, making the suite incomplete.",
+             "The optional generic stage uses synthetic classifier replies to test production policy routing, not classifier quality or resource confinement.",
+             "Windows paired latency and the optional generic probe are unsupported; requested unsupported stages are skips, making the suite incomplete.",
              "Original child reports remain beside this summary, including failed or incomplete reports.", ""]
     return "\n".join(rows)
 
 
 def run(args):
     repo, binary, out = args.repo.resolve(), args.agentfw.resolve(), args.output.resolve()
+    required = BASE_STAGES + (("generic",) if getattr(args, "include_generic", False) else ())
     if out.is_relative_to(repo):
         raise ValueError("output_must_be_outside_candidate")
     out.mkdir(parents=True, exist_ok=False)
     report = {"schema_version": "sou18-local-suite/1", "status": "incomplete",
               "expected_commit": args.expected_commit, "observed_at": datetime.now(timezone.utc).isoformat(),
               "scope": "selected-local-fixture-path", "generic_candidate_acceptance": "pending_sou15",
+              "required_stages": list(required),
               "actual_host": "not_run", "merge_protection_verified": False, "acceptance_passed": False,
               "build_provenance": "supplied_binary; retain the caller's matching build record",
               "environment": {"os": platform.system(), "architecture": platform.machine(),
                               "python": platform.python_version(), "cpu_count": os.cpu_count()},
-              "stages": [{"name": name, "status": "not_run", "reason": "not_started"} for name in SCRIPTS]}
+              "stages": [{"name": name, "status": "not_run", "reason": "not_started"} for name in required]}
     profiles = []
     helpers, before, binary_hash, runner_hash = {}, None, None, None
     try:
-        helpers = {name: load(repo, name) for name in SCRIPTS}
+        helpers = {name: load(repo, name) for name in required}
         before = helpers["latency"].snapshot(repo)
         report["source_before"] = compact(before)
         if before["dirty"] or before["commit"] != args.expected_commit:
             raise ValueError("clean_exact_candidate_required")
         binary_hash = report["binary_sha256"] = helpers["setup"].sha(binary)
         runner_hash = report["runner_sha256"] = helpers["setup"].sha(Path(__file__))
-        report["probe_sha256"] = {name: helpers["setup"].sha(repo / "scripts" / filename)
-                                  for name, filename in SCRIPTS.items()}
+        report["probe_sha256"] = {name: helpers["setup"].sha(repo / "scripts" / SCRIPTS[name]) for name in required}
         common = ["--repo", str(repo), "--agentfw", str(binary), "--expected-commit", args.expected_commit]
         arguments = {
             "setup": ["--run", "--agentfw", str(binary), "--output", str(out / REPORTS["setup"])],
             "status": ["--run", *common, "--output", str(out / "status")],
             "latency": [*common, "--pairs", str(args.pairs), "--output", str(out / "latency")],
+            "generic": [*common, "--expected-binary-sha256", binary_hash, "--output", str(out / "generic")],
         }
         for stage in report["stages"]:
             name = stage["name"]
             if helpers["latency"].snapshot(repo) != before or helpers["setup"].sha(binary) != binary_hash:
                 raise ValueError("candidate_or_binary_changed")
-            if name == "latency" and sys.platform not in ("linux", "darwin"):
-                stage.update(status="skip", reason="paired_latency_requires_native_linux_or_macos")
+            if name in {"latency", "generic"} and sys.platform not in ("linux", "darwin"):
+                stage.update(status="skip", reason=("paired_latency" if name == "latency" else name)
+                             + "_requires_native_linux_or_macos")
                 continue
             print(f"Running {name}...", flush=True)
             with tempfile.TemporaryDirectory(prefix="sou18-suite-") as temporary:
@@ -210,7 +245,7 @@ def run(args):
                 profiles.append(profile)
                 env = helpers["setup"].private_environment(profile)
                 process = execute([sys.executable, "-I", str(repo / "scripts" / SCRIPTS[name]), *arguments[name]],
-                                  repo, env, {"setup": 120, "status": 180, "latency": 240}[name])
+                                  repo, env, {"setup": 120, "status": 180, "latency": 240, "generic": 120}[name])
             stage["process"] = process
             path = out / REPORTS[name]
             try:
@@ -240,7 +275,7 @@ def run(args):
             except (OSError, subprocess.SubprocessError):
                 pass
         stable = report["source_binary_stable"] and report["owned_profiles_removed"] and "error" not in report
-        report["status"] = outcome(report["stages"], stable)
+        report["status"] = outcome(report["stages"], stable, required)
         (out / "results.json").write_text(json.dumps(report, indent=2, allow_nan=False) + "\n", encoding="utf-8")
         (out / "report.md").write_text(markdown(report), encoding="utf-8")
     print(f"Local probe suite: {report['status']}. Final generic acceptance remains pending. Evidence: {out}")
@@ -255,6 +290,8 @@ def main():
     parser.add_argument("--expected-commit")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--pairs", type=int, default=30)
+    parser.add_argument("--include-generic", action="store_true",
+                        help="also run the accepted synthetic classifier/policy boundary matrix")
     args = parser.parse_args()
     if not args.run:
         print(json.dumps({"status": "not_run", "processes_started": 0, "generic_candidate_acceptance": "pending_sou15"}))

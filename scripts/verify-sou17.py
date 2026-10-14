@@ -154,6 +154,9 @@ def run(args):
             "import json,platform,sys; print(json.dumps({'executable':sys.executable,"
             "'version':platform.python_version(),'implementation':platform.python_implementation()}))"], env=clean_env))
         report["environment"]["fixture_python"]["resolved_command"] = fixture_python
+        # The classifier clears PATH before spawning Python. Select the same
+        # interpreter as the fixture instead of falling back to the OS Python.
+        clean_env["AGENTFW_CLASSIFIER_PYTHON"] = report["environment"]["fixture_python"]["executable"]
         report["configuration"] = {
             "suite_revision": source["commit"],
             "cargo_features": {"default_features": True, "all_features": False, "features": []},

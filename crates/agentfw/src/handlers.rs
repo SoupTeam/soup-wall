@@ -23,16 +23,14 @@ use crate::spans::SpanCache;
 
 /// Turn a judgement plus the rule's declared fallback into a final verdict.
 ///
-/// `Injection` always lands on `Ask` — the judge may only *tighten*, never soften.
-/// Everything else (ordinary documentation, or any judge failure) takes the fallback
-/// the rule declared. A missing fallback resolves to `Allow`, never a block: this
-/// firewall never invents a denial from an absent optional dependency. Pure, so the
-/// policy is testable without a server.
+/// Delegate to the shared production resolver. Injection can tighten Allow to Ask;
+/// Deny is preserved. Missing or recursive fallbacks require Ask.
 pub fn resolve_escalation(j: Judgement, fallback: Option<Verdict>) -> Verdict {
-    match j {
-        Judgement::Injection => Verdict::Ask,
-        Judgement::Documentation | Judgement::Unavailable(_) => fallback.unwrap_or(Verdict::Allow),
-    }
+    soup_wall_agent::resolution::resolve(
+        Verdict::Escalate,
+        fallback,
+        matches!(j, Judgement::Injection),
+    )
 }
 
 /// Stable audit-log string for a verdict. Deliberately explicit rather than
@@ -117,9 +115,18 @@ fn now_ms() -> u64 {
 /// Liveness probe. Also reports whether enforcement is on, so `curl`ing it tells
 /// an operator at a glance whether a blocked call is expected behavior.
 pub async fn health(State(st): State<Shared>) -> Json<serde_json::Value> {
+    // This reads the actual in-process AgentFirewall, NOT a downloaded file.
+    let (active, transport) = st
+        .firewall
+        .lock()
+        .ok()
+        .map(|fw| (fw.active_managed_policy(), fw.managed_transport_status()))
+        .unwrap_or_default();
     Json(serde_json::json!({
         "status": "ok",
         "enforce": st.config.enforce,
+        "managed_policy": active,
+        "managed_transport": transport,
     }))
 }
 
@@ -216,9 +223,11 @@ pub async fn hook(
     // `AgentFirewall::inspect` takes `&mut self`, so the guard must be held across
     // the call. Scoped in its own block so the `std::sync::Mutex` guard is dropped
     // before the function's first `.await` — nothing here awaits while it is held.
-    let outcome = {
+    let (outcome, inspected_deployment) = {
         let mut fw = st.firewall.lock().expect("firewall mutex");
-        fw.inspect(&event)
+        let outcome = fw.inspect(&event);
+        let deployment = fw.active_managed_policy().map(|p| p.deployment_sequence);
+        (outcome, deployment)
     };
 
     // Resolve `Escalate` into a concrete verdict via the judge before deciding. The
@@ -240,13 +249,38 @@ pub async fn hook(
         if span.trim().is_empty() {
             // No retained content means nothing to judge — take the fallback rather
             // than asking the model about an empty string.
-            verdict = outcome.fallback.unwrap_or(Verdict::Allow);
+            verdict = resolve_escalation(
+                Judgement::Unavailable("no retained span".into()),
+                outcome.fallback,
+            );
             judged = Some("Unavailable(\"no retained span\")".into());
         } else {
             let j = st.judge.judge(&span, &source).await;
             judged = Some(format!("{j:?}"));
             verdict = resolve_escalation(j, outcome.fallback);
         }
+    }
+
+    // The judge may have awaited while managed policy activation acquired the
+    // firewall mutex. Recheck the authoritative live deployment and serialize
+    // approval redemption + final decision against activation; never emit an
+    // old-policy Allow after a concurrent switch. No await is held under lock.
+    let _final_policy_guard = st.firewall.lock().expect("firewall mutex");
+    let changed_while_in_flight = is_pre
+        && _final_policy_guard
+            .active_managed_policy()
+            .map(|p| p.deployment_sequence)
+            != inspected_deployment;
+    let mut decision_rule = outcome.rule.clone();
+    let mut decision_message = outcome.message.clone();
+    if changed_while_in_flight {
+        verdict = Verdict::Deny;
+        decision_rule = Some("managed-policy-transition".into());
+        decision_message = Some(
+            "Managed policy changed while this call was being evaluated; retry under the new policy."
+                .into(),
+        );
+        tracing::warn!("refused in-flight old-policy pre-tool decision after managed activation");
     }
 
     // A human approval, if the operator issued one for exactly this call. Only
@@ -288,8 +322,8 @@ pub async fn hook(
 
     let d = decision::decide(
         verdict,
-        outcome.rule.as_deref(),
-        outcome.message.as_deref(),
+        decision_rule.as_deref(),
+        decision_message.as_deref(),
         st.config.enforce,
     );
 
@@ -301,7 +335,7 @@ pub async fn hook(
         tool: payload.tool_name.clone(),
         verdict: verdict_str(d.would_have_been).to_string(),
         shadow: d.shadow,
-        rule: outcome.rule.clone(),
+        rule: decision_rule.clone(),
         risk_score: outcome.risk_score,
         findings: outcome
             .findings
@@ -496,12 +530,11 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_fallback_resolves_to_allow_rather_than_blocking() {
-        // Unreachable — the policy parser requires a fallback on every escalate rule.
-        // If it ever happens, never invent a block from a missing field.
+    fn a_missing_fallback_requires_review() {
+        // Retains the historical missing-fallback input; the old Allow was unsafe.
         assert_eq!(
             resolve_escalation(Judgement::Unavailable("x".into()), None),
-            Verdict::Allow
+            Verdict::Ask
         );
     }
 
