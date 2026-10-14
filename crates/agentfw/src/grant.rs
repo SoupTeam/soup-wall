@@ -21,6 +21,9 @@
 //! "Bash was approved" would do exactly that.
 
 use hmac::{Hmac, Mac};
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
@@ -32,6 +35,66 @@ type HmacSha256 = Hmac<Sha256>;
 /// Short on purpose: an approval is a human decision about a specific moment,
 /// and an hour-old "yes" is no longer evidence that the human still means it.
 pub const DEFAULT_TTL_MS: u64 = 5 * 60 * 1000;
+
+
+/// Cross-process approval-policy generation. The *lock inode* is never renamed,
+/// so the daemon and the separately invoked operator CLI serialize on one lock.
+/// The generation is fsynced and persists across daemon restarts. A corrupted
+/// record fails closed; treating it as zero would resurrect old approvals.
+struct PolicyEpochLock {
+    _lock: File,
+    epoch_file: PathBuf,
+    epoch: u64,
+}
+
+impl PolicyEpochLock {
+    fn acquire(home: &Path) -> io::Result<Self> {
+        fs::create_dir_all(home)?;
+        let lock = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .open(home.join("approval-policy-epoch.lock"))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(home.join("approval-policy-epoch.lock"), fs::Permissions::from_mode(0o600))?;
+        }
+        lock.lock()?;
+        let epoch_file = home.join("approval-policy-epoch");
+        let epoch = match fs::read_to_string(&epoch_file) {
+            Ok(contents) => contents.trim().parse::<u64>()
+                .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid approval policy epoch"))?,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => 0,
+            Err(err) => return Err(err),
+        };
+        Ok(Self { _lock: lock, epoch_file, epoch })
+    }
+
+    fn advance(&mut self) -> io::Result<()> {
+        let next = self.epoch.checked_add(1)
+            .ok_or_else(|| io::Error::other("approval policy epoch exhausted"))?;
+        let tmp = self.epoch_file.with_extension(format!("tmp-{}", std::process::id()));
+        let result = (|| -> io::Result<()> {
+            let mut file = OpenOptions::new().create_new(true).write(true).open(&tmp)?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                file.set_permissions(fs::Permissions::from_mode(0o600))?;
+            }
+            file.write_all(next.to_string().as_bytes())?;
+            file.sync_all()?;
+            fs::rename(&tmp, &self.epoch_file)?;
+            #[cfg(unix)]
+            File::open(self.epoch_file.parent().ok_or_else(|| io::Error::other("missing epoch parent"))?)?.sync_all()?;
+            Ok(())
+        })();
+        if result.is_err() { let _ = fs::remove_file(&tmp); }
+        result?;
+        self.epoch = next;
+        Ok(())
+    }
+}
 
 /// The exact action a human is approving.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -80,6 +143,9 @@ pub struct Grant {
     pub expires_at_ms: u64,
     /// Single-use identifier. Consumption is tracked by the ledger, not here.
     pub nonce: String,
+    /// Durable policy generation; zero for unmanaged/default-policy approvals.
+    #[serde(default)]
+    pub policy_epoch: u64,
     /// Hex HMAC-SHA256 over every field above.
     pub signature: String,
 }
@@ -96,6 +162,9 @@ pub enum GrantError {
     NotYetValid,
     ActionMismatch,
     AlreadyUsed,
+    /// A different managed-policy generation is now authoritative, or its
+    /// durable revocation state could not be read safely.
+    StalePolicy,
 }
 
 impl GrantError {
@@ -106,6 +175,7 @@ impl GrantError {
             Self::NotYetValid => "approval is dated in the future",
             Self::ActionMismatch => "approval was issued for a different action",
             Self::AlreadyUsed => "approval was already used",
+            Self::StalePolicy => "approval was issued under an obsolete policy",
         }
     }
 }
@@ -130,6 +200,7 @@ fn signing_input(grant: &Grant) -> Vec<u8> {
     }
     out.extend_from_slice(&grant.issued_at_ms.to_be_bytes());
     out.extend_from_slice(&grant.expires_at_ms.to_be_bytes());
+    out.extend_from_slice(&grant.policy_epoch.to_be_bytes());
     out
 }
 
@@ -159,6 +230,17 @@ pub fn mint(
     ttl_ms: u64,
     nonce: String,
 ) -> Grant {
+    mint_with_epoch(key, action, issued_at_ms, ttl_ms, nonce, 0)
+}
+
+fn mint_with_epoch(
+    key: &[u8],
+    action: &ActionRef,
+    issued_at_ms: u64,
+    ttl_ms: u64,
+    nonce: String,
+    epoch: u64,
+) -> Grant {
     let mut grant = Grant {
         session: action.session.clone(),
         tool: action.tool.clone(),
@@ -166,6 +248,7 @@ pub fn mint(
         issued_at_ms,
         expires_at_ms: issued_at_ms.saturating_add(ttl_ms),
         nonce,
+        policy_epoch: epoch,
         signature: String::new(),
     };
     grant.signature = sign(key, &grant);
@@ -237,6 +320,13 @@ impl GrantLedger {
     /// unrecordable approval: an approval nobody can prove was spent is one an
     /// attacker can spend again.
     pub fn claim(&self, grant: &Grant, now_ms: u64) -> Result<(), GrantError> {
+        // This lock also covers policy activation AND external approval issuance.
+        // It invalidates an already-deserialized grant after a policy switch.
+        let home = self.path.parent().ok_or(GrantError::StalePolicy)?;
+        let epoch = PolicyEpochLock::acquire(home).map_err(|_| GrantError::StalePolicy)?;
+        if grant.policy_epoch != epoch.epoch {
+            return Err(GrantError::StalePolicy);
+        }
         let mut spent = self.spent.lock().map_err(|_| GrantError::AlreadyUsed)?;
         spent.retain(|_, expires_at| *expires_at > now_ms);
         if spent.contains_key(&grant.nonce) {
@@ -300,7 +390,35 @@ impl GrantStore {
         format!("{safe}.json")
     }
 
-    pub fn write(&self, grant: &Grant) -> std::io::Result<std::path::PathBuf> {
+    /// Issue and persist a grant atomically against policy activation, even
+    /// when the operator command runs in a separate OS process.
+    pub fn issue(
+        &self,
+        key: &[u8],
+        action: &ActionRef,
+        issued_at_ms: u64,
+        ttl_ms: u64,
+        nonce: String,
+    ) -> io::Result<(Grant, PathBuf)> {
+        let epoch = PolicyEpochLock::acquire(self.home())?;
+        let grant = mint_with_epoch(key, action, issued_at_ms, ttl_ms, nonce, epoch.epoch);
+        let path = self.write_unlocked(&grant)?;
+        Ok((grant, path))
+    }
+
+    fn home(&self) -> &Path {
+        self.dir.parent().unwrap_or_else(|| Path::new("."))
+    }
+
+    pub fn write(&self, grant: &Grant) -> io::Result<PathBuf> {
+        let epoch = PolicyEpochLock::acquire(self.home())?;
+        if grant.policy_epoch != epoch.epoch {
+            return Err(io::Error::other("obsolete approval generation"));
+        }
+        self.write_unlocked(grant)
+    }
+
+    fn write_unlocked(&self, grant: &Grant) -> io::Result<PathBuf> {
         let path = self.dir.join(Self::file_name(&grant.nonce));
         let body = serde_json::to_string_pretty(grant)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
@@ -316,7 +434,17 @@ impl GrantStore {
     /// Explicit invalidation on managed-policy activation. Any unexpected file,
     /// symlink or failed removal blocks the switch. No silently surviving
     /// approval can be intentionally carried into a new policy revision.
-    pub fn invalidate_all_for_policy_switch(&self) -> std::io::Result<usize> {
+    pub fn invalidate_all_for_policy_switch(&self) -> io::Result<usize> {
+        let mut epoch = PolicyEpochLock::acquire(self.home())?;
+        // Reject noncanonical pending files before destructive work.
+        for entry in fs::read_dir(&self.dir)? {
+            let entry = entry?;
+            if !entry.file_type()?.is_file()
+                || entry.path().extension().and_then(|ext| ext.to_str()) != Some("json")
+            {
+                return Err(io::Error::other("unexpected pending grant entry"));
+            }
+        }
         let mut removed = 0;
         for entry in std::fs::read_dir(&self.dir)? {
             let entry = entry?;
@@ -328,6 +456,9 @@ impl GrantStore {
             std::fs::remove_file(entry.path())?;
             removed += 1;
         }
+        // Advance *under the same OS lock* as issuance and spending. After
+        // this point even a cached old grant can never be claimed.
+        epoch.advance()?;
         Ok(removed)
     }
 
@@ -658,6 +789,68 @@ mod tests {
             !path.exists() || !std::fs::read_to_string(&path).unwrap().contains("\"n\""),
             "a rejected grant must not consume its nonce"
         );
+    }
+
+
+    #[test]
+    fn cached_approval_cannot_be_redeemed_after_policy_switch_or_restart() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = GrantStore::new(&temp.path().join("grants"));
+        let path = temp.path().join("grants-spent.json");
+        let ledger = GrantLedger::open(&path);
+        let (_, _) = store.issue(KEY, &action(), NOW, DEFAULT_TTL_MS, "cached".into()).unwrap();
+        let cached = store.pending().pop().unwrap();
+        assert_eq!(cached.policy_epoch, 0);
+        store.invalidate_all_for_policy_switch().unwrap();
+        assert!(store.pending().is_empty());
+        assert_eq!(redeem(KEY, &cached, &action(), NOW + 1, &ledger), Err(GrantError::StalePolicy));
+        let restarted = GrantLedger::open(&path);
+        assert_eq!(redeem(KEY, &cached, &action(), NOW + 2, &restarted), Err(GrantError::StalePolicy));
+    }
+
+    #[test]
+    fn approvals_issued_under_current_policy_work_and_old_issuance_is_refused() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = GrantStore::new(&temp.path().join("grants"));
+        let ledger = GrantLedger::open(&temp.path().join("grants-spent.json"));
+        let (old, _) = store.issue(KEY, &action(), NOW, DEFAULT_TTL_MS, "old-policy".into()).unwrap();
+        store.invalidate_all_for_policy_switch().unwrap();
+        assert!(store.write(&old).is_err());
+        let (new, _) = store.issue(KEY, &action(), NOW, DEFAULT_TTL_MS, "new-policy".into()).unwrap();
+        assert_eq!(new.policy_epoch, 1);
+        assert_eq!(redeem(KEY, &new, &action(), NOW + 1, &ledger), Ok(()));
+    }
+
+    #[test]
+    fn concurrent_issuer_observes_new_generation_after_switch_lock_releases() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = std::sync::Arc::new(GrantStore::new(&temp.path().join("grants")));
+        // Hold the same lock used by the CLI to simulate a switch in progress.
+        let mut lock = PolicyEpochLock::acquire(temp.path()).unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let worker_store = store.clone();
+        let worker = std::thread::spawn(move || {
+            let result = worker_store.issue(KEY, &action(), NOW, DEFAULT_TTL_MS, "during".into());
+            tx.send(result).unwrap();
+        });
+        lock.advance().unwrap();
+        drop(lock);
+        let (grant, _) = rx.recv().unwrap().unwrap();
+        worker.join().unwrap();
+        assert_eq!(grant.policy_epoch, 1);
+        let ledger = GrantLedger::open(&temp.path().join("grants-spent.json"));
+        assert_eq!(redeem(KEY, &grant, &action(), NOW + 1, &ledger), Ok(()));
+    }
+
+    #[test]
+    fn corrupt_epoch_fails_closed_for_claims_and_issuance() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = GrantStore::new(&temp.path().join("grants"));
+        let ledger = GrantLedger::open(&temp.path().join("grants-spent.json"));
+        let (grant, _) = store.issue(KEY, &action(), NOW, DEFAULT_TTL_MS, "before-corruption".into()).unwrap();
+        fs::write(temp.path().join("approval-policy-epoch"), "corrupted").unwrap();
+        assert_eq!(redeem(KEY, &grant, &action(), NOW + 1, &ledger), Err(GrantError::StalePolicy));
+        assert!(store.issue(KEY, &action(), NOW, DEFAULT_TTL_MS, "after-corruption".into()).is_err());
     }
 
     /// Length-prefixing keeps one field from impersonating part of another.
