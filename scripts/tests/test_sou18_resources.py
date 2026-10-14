@@ -151,8 +151,12 @@ class ResourceEvidenceTests(unittest.TestCase):
         row = observation("unlisted-file")
         row["native_decisions"][0]["released"] = True
         self.assertEqual(PROBE.grade(row)["status"], "fail")
+        for released in (True, False):
+            row = observation("unsupported-tool")
+            row["native_decisions"] = [dict(observation()["native_decisions"][0], released=released)]
+            self.assertEqual(PROBE.grade(row)["status"], "fail")
         row = observation("unsupported-tool")
-        row["native_decisions"] = observation()["native_decisions"][:1]
+        row["classifications"] = []
         self.assertEqual(PROBE.grade(row)["status"], "fail")
         row = observation("traversal")
         row["classifications"] = observation()["classifications"]

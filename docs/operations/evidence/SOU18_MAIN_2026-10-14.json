@@ -1,0 +1,214 @@
+{
+  "schema_version": "sou18-main-evidence/1",
+  "scope": "Post-merge local SOU-18 rerun",
+  "local_rerun_status": "pass",
+  "acceptance_passed": false,
+  "candidate": {
+    "commit": "5fc6d72fd73ebe9faa70c56607fc492163df1a42",
+    "tree": "ee49a2ffc0e78136767e4075223c5129fd3e5dd7",
+    "clean": true
+  },
+  "probe_commit": "4ad94e62424ec6713cf7d065539de20829ef57b4",
+  "probe_sha256": "3387143dd9b8b4362491617d7f4a487450c7ea5b83fdbebd78f0f07c9fe14bb4",
+  "fixture_sha256": "fe79d9eb96dc784f8c3d9b9492ad8d9c14bc03ade8776dbf521bd30a48278d7e",
+  "agentfw_sha256": "333c37695e71a16e7867d9ea3710bdc05cb7f5bf464e232e7ac28d6b59b8c04c",
+  "build": {
+    "matched_inputs": 343,
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+    "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+    "image_id": "sha256:3b18d034367a57b2f4d277b9ac5e63ef5cf6bdec44b6cd474be860e6a97fb2f8"
+  },
+  "checks": {
+    "docker": {
+      "cases": 150,
+      "status": "pass"
+    },
+    "suite_stages": [
+      {
+        "name": "setup",
+        "status": "pass",
+        "reason": "complete",
+        "process": {
+          "exit_code": 0,
+          "timed_out": false,
+          "elapsed_ms": 615.534
+        },
+        "report_sha256": "c62f18161ae7e654fbea837386da16da0d656e8b9d4e6772ab0cb20e86237056"
+      },
+      {
+        "name": "status",
+        "status": "pass",
+        "reason": "complete",
+        "process": {
+          "exit_code": 0,
+          "timed_out": false,
+          "elapsed_ms": 1868.613
+        },
+        "report_sha256": "04856217d4bae989762450948a5060ab031ab5a5e72a4a301e022b63b84bce26"
+      },
+      {
+        "name": "latency",
+        "status": "pass",
+        "reason": "complete",
+        "process": {
+          "exit_code": 0,
+          "timed_out": false,
+          "elapsed_ms": 2319.351
+        },
+        "report_sha256": "0f7951cc5caa7a0d16b3f56221f304b94e93f857625904d9c95b9e40a3ff292d"
+      },
+      {
+        "name": "generic",
+        "status": "pass",
+        "reason": "complete",
+        "process": {
+          "exit_code": 0,
+          "timed_out": false,
+          "elapsed_ms": 2071.166
+        },
+        "report_sha256": "6358a0613e829fba686755a3405d6eabf47c1319e565ce813ee343ebb1a704f0"
+      }
+    ],
+    "resources": {
+      "passed": 10,
+      "failed": 0,
+      "grades": {
+        "absolute-read": {
+          "status": "pass",
+          "reason": "independent child, file, client and production-gate witnesses agree"
+        },
+        "relative-read": {
+          "status": "pass",
+          "reason": "independent child, file, client and production-gate witnesses agree"
+        },
+        "unlisted-file": {
+          "status": "pass",
+          "reason": "independent child, file, client and production-gate witnesses agree"
+        },
+        "traversal": {
+          "status": "pass",
+          "reason": "independent child, file, client and production-gate witnesses agree"
+        },
+        "symlink": {
+          "status": "pass",
+          "reason": "independent child, file, client and production-gate witnesses agree"
+        },
+        "unsupported-tool": {
+          "status": "pass",
+          "reason": "independent child, file, client and production-gate witnesses agree"
+        },
+        "result-withheld": {
+          "status": "pass",
+          "reason": "independent child, file, client and production-gate witnesses agree"
+        },
+        "workspace-mismatch": {
+          "status": "pass",
+          "reason": "independent child, file, client and production-gate witnesses agree"
+        },
+        "workspace-missing": {
+          "status": "pass",
+          "reason": "missing workspace stopped startup; no MCP call submitted or server startup observed"
+        },
+        "read-error-recovery": {
+          "status": "pass",
+          "reason": "independent child, file, client and production-gate witnesses agree"
+        }
+      }
+    },
+    "unsupported_tool": {
+      "classifications": 1,
+      "native_decisions": 0,
+      "child_tool_calls": 0
+    },
+    "recovery": {
+      "read_errors": 70,
+      "useful_same_session_followup": true,
+      "native_call_result_pairs": 71,
+      "all_error_content_hashes_and_bindings_verified": true
+    },
+    "source_binary_stable": true,
+    "resource_artifact_hashes_verified": true,
+    "resource_grades_recomputed": true,
+    "owned_resource_profiles_removed": true,
+    "workspace_fmt": "pass",
+    "python": {
+      "tests": 460,
+      "skip_records": 10,
+      "status": "pass",
+      "required_child_umask": "0022",
+      "initial_run": "1 failure under host umask 0002; isolated failure and permission cause retained"
+    },
+    "benchmarks": {
+      "tests": 44,
+      "skip_records": 18,
+      "status": "pass"
+    },
+    "documentation": "Checked 103 Markdown files and 485 local links; 0 errors."
+  },
+  "latency": {
+    "requested_pairs": 30,
+    "fixture_false_interruptions": 0,
+    "execution_anomalies": 0,
+    "direct_request_ms": {
+      "p50": 0.213426,
+      "p95": 0.447453,
+      "p99": 0.465401
+    },
+    "protected_request_ms": {
+      "p50": 43.531714,
+      "p95": 46.465824,
+      "p99": 49.85835
+    },
+    "paired_overhead_ms": {
+      "mean": 43.31151673333333,
+      "p50": 43.162619,
+      "p95": 46.320350999999995,
+      "p99": 49.660708,
+      "raw": [
+        44.52146,
+        43.394552,
+        41.786459,
+        42.759095,
+        41.62688,
+        45.868219,
+        42.323864,
+        42.654756,
+        42.274907,
+        49.660708,
+        43.162619,
+        43.996976,
+        43.614891,
+        43.784808,
+        41.468695,
+        46.040369,
+        43.980494,
+        44.982741999999995,
+        45.03889,
+        46.320350999999995,
+        44.121358,
+        41.089125,
+        43.221842,
+        40.017319,
+        41.575407999999996,
+        44.384577,
+        42.27386,
+        41.697835,
+        41.045057,
+        40.657386
+      ]
+    }
+  },
+  "not_run": [
+    "Actual supported client",
+    "Native macOS/Windows/WSL2 acceptance",
+    "External model experiment",
+    "CodeQL merge-rule verification",
+    "PostgreSQL-specific SOU-42 acceptance"
+  ],
+  "archive": {
+    "file": "SOU18_MAIN_2026-10-14.witnesses.json.gz",
+    "sha256": "6ceeabfabb6119bfb1413bd85a6f1873a5cabd0e699e384f542860cc68a5b711",
+    "bytes": 523148,
+    "file_count": 334
+  }
+}
