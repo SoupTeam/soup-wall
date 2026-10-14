@@ -92,7 +92,7 @@ fn agent_refuse_reason(
         crate::agent_scan::inspect_cycle(&mut fw, request_id, &results, &calls)
     };
     let adapter = v.adapter_response("proxy-local");
-    if matches!(v.verdict, soup_wall_agent::Verdict::Allow) {
+    if matches!(adapter.verdict, soup_wall_adapter::Verdict::Allow) {
         return None;
     }
     tracing::warn!(
@@ -104,12 +104,12 @@ fn agent_refuse_reason(
     );
     if state.config.agent_inspection.enforce
         && matches!(
-            v.verdict,
-            soup_wall_agent::Verdict::Deny | soup_wall_agent::Verdict::Ask
+            adapter.verdict,
+            soup_wall_adapter::Verdict::Deny | soup_wall_adapter::Verdict::Ask
         )
     {
-        return Some(v.reason.unwrap_or_else(|| match v.verdict {
-            soup_wall_agent::Verdict::Ask => {
+        return Some(v.reason.unwrap_or_else(|| match adapter.verdict {
+            soup_wall_adapter::Verdict::Ask => {
                 "agent policy held a tool call for human confirmation".into()
             }
             _ => "agent policy denied a tool call".into(),
@@ -128,7 +128,7 @@ fn agent_refuse_events(
         crate::agent_scan::inspect_normalized_cycle(&mut fw, request_id, events)
     };
     let adapter = verdict.adapter_response("proxy-local");
-    if matches!(verdict.verdict, soup_wall_agent::Verdict::Allow) {
+    if matches!(adapter.verdict, soup_wall_adapter::Verdict::Allow) {
         return None;
     }
     tracing::warn!(
@@ -140,12 +140,12 @@ fn agent_refuse_events(
     );
     if state.config.agent_inspection.enforce
         && matches!(
-            verdict.verdict,
-            soup_wall_agent::Verdict::Deny | soup_wall_agent::Verdict::Ask
+            adapter.verdict,
+            soup_wall_adapter::Verdict::Deny | soup_wall_adapter::Verdict::Ask
         )
     {
-        return Some(verdict.reason.unwrap_or_else(|| match verdict.verdict {
-            soup_wall_agent::Verdict::Ask => {
+        return Some(verdict.reason.unwrap_or_else(|| match adapter.verdict {
+            soup_wall_adapter::Verdict::Ask => {
                 "agent policy held a tool call for human confirmation".into()
             }
             _ => "agent policy denied a tool call".into(),
@@ -1449,6 +1449,16 @@ async fn proxy_responses_stream(
         let mut inspected_calls = HashSet::new();
         let mut terminal_response = None;
         let mut usage_recorded = false;
+        let enforce_tool_protection = (task_state.config.agent_inspection.enabled
+            && task_state.config.agent_inspection.enforce)
+            || task_state.config.capability_policy.enforce;
+        let mut in_flight_function_calls: usize = 0;
+        let mut buffered_function_chunks: Vec<Bytes> = Vec::new();
+        let mut buffered_bytes_total: usize = 0;
+        let tool_buffer_limit = task_state
+            .config
+            .stream_buffer_capacity()
+            .max(crate::agent_scan::MAX_STREAM_TOOL_CALL_BYTES);
 
         loop {
             let chunk =
@@ -1499,6 +1509,21 @@ async fn proxy_responses_stream(
 
             for event in events {
                 match event.get("type").and_then(serde_json::Value::as_str) {
+                    Some("response.output_item.added") => {
+                        if event
+                            .pointer("/item/type")
+                            .and_then(serde_json::Value::as_str)
+                            == Some("function_call")
+                        {
+                            in_flight_function_calls += 1;
+                        }
+                    }
+                    Some("response.function_call_arguments.delta")
+                    | Some("response.function_call_arguments.done") => {
+                        if in_flight_function_calls == 0 {
+                            in_flight_function_calls = 1;
+                        }
+                    }
                     Some("response.output_text.delta") => {
                         if let Some(delta) = event.get("delta").and_then(serde_json::Value::as_str)
                         {
@@ -1514,6 +1539,11 @@ async fn proxy_responses_stream(
                         let Some(item) = event.get("item") else {
                             continue;
                         };
+                        let is_function_call = item.get("type").and_then(serde_json::Value::as_str)
+                            == Some("function_call");
+                        if is_function_call {
+                            in_flight_function_calls = in_flight_function_calls.saturating_sub(1);
+                        }
                         let Some(call) = crate::agent_scan::responses_tool_call(item) else {
                             continue;
                         };
@@ -1584,6 +1614,7 @@ async fn proxy_responses_stream(
             }
 
             if let Some(reason) = block_reason {
+                drop(buffered_function_chunks);
                 audit_output_block(&request_id, &reason, started);
                 finish_tenant_stream(&task_state, &task_audit, "blocked", 502).await;
                 if tx.send(Ok(responses_block_frame(&reason))).await.is_err() {
@@ -1591,10 +1622,50 @@ async fn proxy_responses_stream(
                 }
                 return;
             }
-            if tx.send(Ok(bytes)).await.is_err() {
-                finish_tenant_stream(&task_state, &task_audit, "client_disconnected", 499).await;
-                return;
+
+            if !enforce_tool_protection {
+                if tx.send(Ok(bytes)).await.is_err() {
+                    finish_tenant_stream(&task_state, &task_audit, "client_disconnected", 499)
+                        .await;
+                    return;
+                }
+            } else if in_flight_function_calls > 0 {
+                buffered_bytes_total = buffered_bytes_total.saturating_add(bytes.len());
+                if buffered_bytes_total > tool_buffer_limit {
+                    drop(buffered_function_chunks);
+                    let reason = "streamed tool call exceeded inspection buffer limit";
+                    audit_output_block(&request_id, reason, started);
+                    finish_tenant_stream(&task_state, &task_audit, "blocked", 502).await;
+                    let _ = tx.send(Ok(responses_block_frame(reason))).await;
+                    return;
+                }
+                buffered_function_chunks.push(bytes);
+            } else {
+                for chunk in buffered_function_chunks.drain(..) {
+                    if tx.send(Ok(chunk)).await.is_err() {
+                        finish_tenant_stream(&task_state, &task_audit, "client_disconnected", 499)
+                            .await;
+                        return;
+                    }
+                }
+                buffered_bytes_total = 0;
+                if tx.send(Ok(bytes)).await.is_err() {
+                    finish_tenant_stream(&task_state, &task_audit, "client_disconnected", 499)
+                        .await;
+                    return;
+                }
             }
+        }
+
+        if enforce_tool_protection
+            && (in_flight_function_calls > 0 || !buffered_function_chunks.is_empty())
+        {
+            drop(buffered_function_chunks);
+            let reason = "stream truncated before function call completed inspection";
+            audit_output_block(&request_id, reason, started);
+            finish_tenant_stream(&task_state, &task_audit, "blocked", 502).await;
+            let _ = tx.send(Ok(responses_block_frame(reason))).await;
+            return;
         }
 
         finish_tenant_stream(
@@ -1669,6 +1740,16 @@ async fn proxy_stream(
         let mut tool_assembler = tool_context
             .as_ref()
             .map(|context| crate::agent_scan::StreamingToolCalls::new(context.protocol));
+        let enforce_tool_protection = tool_context.is_some()
+            && ((task_state.config.agent_inspection.enabled
+                && task_state.config.agent_inspection.enforce)
+                || task_state.config.capability_policy.enforce);
+        let mut buffered_tool_chunks: Vec<Bytes> = Vec::new();
+        let mut buffered_bytes_total: usize = 0;
+        let tool_buffer_limit = task_state
+            .config
+            .stream_buffer_capacity()
+            .max(crate::agent_scan::MAX_STREAM_TOOL_CALL_BYTES);
         loop {
             let chunk =
                 match timeout(task_state.config.stream_idle_timeout(), byte_stream.next()).await {
@@ -1795,6 +1876,7 @@ async fn proxy_stream(
                 }
             }
             if let Some(reason) = tool_block {
+                drop(buffered_tool_chunks);
                 AuditRecord {
                     request_id: request_id.clone(),
                     direction: "output".into(),
@@ -1821,69 +1903,177 @@ async fn proxy_stream(
                 record_stream_usage(&task_state, &usage_context, &request_id, &terminal_body).await;
                 usage_recorded = true;
             }
-            append_tail(&mut acc, &String::from_utf8_lossy(&bytes), window);
-            if decide_output(&task_state.firewall, &acc).is_some() {
-                AuditRecord {
-                    request_id: request_id.clone(),
-                    direction: "output".into(),
-                    decision: "block".into(),
-                    score: 0,
-                    reasons: vec!["output policy violation".into()],
-                    owasp: Vec::new(),
-                    atlas: Vec::new(),
-                    latency_ms: started.elapsed().as_millis(),
-                }
-                .emit();
-                finish_tenant_stream(&task_state, &task_audit, "blocked", 502).await;
-                if tx.send(Ok(Bytes::from_static(block_frame))).await.is_err() {
-                    return;
-                }
-                return;
-            }
-            // Pass the upstream chunk through VERBATIM (preserves SSE framing).
-            if tx.send(Ok(bytes)).await.is_err() {
-                finish_tenant_stream(&task_state, &task_audit, "client_disconnected", 499).await;
-                return;
-            }
-        }
-        // The stream ended without a terminal marker for a call still being
-        // reassembled. Everything has already been forwarded, so this can only be
-        // audited, never blocked — but recording it stops a truncated stream from
-        // silently skipping inspection altogether.
-        if let (Some(assembler), Some(context)) = (tool_assembler.as_mut(), tool_context.as_ref()) {
-            let trailing = assembler.flush();
-            if !trailing.is_empty() {
-                let missed =
-                    capability_refuse_calls(&task_state, &request_id, &trailing).or_else(|| {
-                        if task_state.config.agent_inspection.enabled {
-                            agent_refuse_reason(
-                                &task_state,
-                                &request_id,
-                                context.tool_results.clone(),
-                                trailing,
-                            )
-                        } else {
-                            None
-                        }
-                    });
-                if let Some(reason) = missed {
-                    tracing::warn!(
-                        cycle = %request_id,
-                        reason,
-                        "streamed tool call completed only at end of stream; it was \
-                         already forwarded and could not be blocked"
-                    );
+
+            if !enforce_tool_protection {
+                append_tail(&mut acc, &String::from_utf8_lossy(&bytes), window);
+                if decide_output(&task_state.firewall, &acc).is_some() {
                     AuditRecord {
                         request_id: request_id.clone(),
                         direction: "output".into(),
-                        decision: "stream_truncated_tool_call".into(),
+                        decision: "block".into(),
                         score: 0,
-                        reasons: vec![reason],
+                        reasons: vec!["output policy violation".into()],
                         owasp: Vec::new(),
                         atlas: Vec::new(),
                         latency_ms: started.elapsed().as_millis(),
                     }
                     .emit();
+                    finish_tenant_stream(&task_state, &task_audit, "blocked", 502).await;
+                    if tx.send(Ok(Bytes::from_static(block_frame))).await.is_err() {
+                        return;
+                    }
+                    return;
+                }
+                if tx.send(Ok(bytes)).await.is_err() {
+                    finish_tenant_stream(&task_state, &task_audit, "client_disconnected", 499)
+                        .await;
+                    return;
+                }
+            } else {
+                let is_holding = tool_assembler.as_ref().is_some_and(|a| a.is_holding());
+                if is_holding {
+                    buffered_bytes_total = buffered_bytes_total.saturating_add(bytes.len());
+                    if buffered_bytes_total > tool_buffer_limit {
+                        drop(buffered_tool_chunks);
+                        let reason = "streamed tool call exceeded inspection buffer limit";
+                        AuditRecord {
+                            request_id: request_id.clone(),
+                            direction: "output".into(),
+                            decision: "block".into(),
+                            score: 0,
+                            reasons: vec![reason.into()],
+                            owasp: Vec::new(),
+                            atlas: Vec::new(),
+                            latency_ms: started.elapsed().as_millis(),
+                        }
+                        .emit();
+                        finish_tenant_stream(&task_state, &task_audit, "blocked", 502).await;
+                        let _ = tx.send(Ok(Bytes::from_static(block_frame))).await;
+                        return;
+                    }
+                    buffered_tool_chunks.push(bytes);
+                } else {
+                    for chunk in buffered_tool_chunks.drain(..) {
+                        append_tail(&mut acc, &String::from_utf8_lossy(&chunk), window);
+                        if decide_output(&task_state.firewall, &acc).is_some() {
+                            AuditRecord {
+                                request_id: request_id.clone(),
+                                direction: "output".into(),
+                                decision: "block".into(),
+                                score: 0,
+                                reasons: vec!["output policy violation".into()],
+                                owasp: Vec::new(),
+                                atlas: Vec::new(),
+                                latency_ms: started.elapsed().as_millis(),
+                            }
+                            .emit();
+                            finish_tenant_stream(&task_state, &task_audit, "blocked", 502).await;
+                            let _ = tx.send(Ok(Bytes::from_static(block_frame))).await;
+                            return;
+                        }
+                        if tx.send(Ok(chunk)).await.is_err() {
+                            finish_tenant_stream(
+                                &task_state,
+                                &task_audit,
+                                "client_disconnected",
+                                499,
+                            )
+                            .await;
+                            return;
+                        }
+                    }
+                    buffered_bytes_total = 0;
+                    append_tail(&mut acc, &String::from_utf8_lossy(&bytes), window);
+                    if decide_output(&task_state.firewall, &acc).is_some() {
+                        AuditRecord {
+                            request_id: request_id.clone(),
+                            direction: "output".into(),
+                            decision: "block".into(),
+                            score: 0,
+                            reasons: vec!["output policy violation".into()],
+                            owasp: Vec::new(),
+                            atlas: Vec::new(),
+                            latency_ms: started.elapsed().as_millis(),
+                        }
+                        .emit();
+                        finish_tenant_stream(&task_state, &task_audit, "blocked", 502).await;
+                        let _ = tx.send(Ok(Bytes::from_static(block_frame))).await;
+                        return;
+                    }
+                    if tx.send(Ok(bytes)).await.is_err() {
+                        finish_tenant_stream(&task_state, &task_audit, "client_disconnected", 499)
+                            .await;
+                        return;
+                    }
+                }
+            }
+        }
+        if enforce_tool_protection
+            && (tool_assembler.as_ref().is_some_and(|a| a.is_holding())
+                || !buffered_tool_chunks.is_empty())
+        {
+            drop(buffered_tool_chunks);
+            let reason = "stream truncated before tool call completed inspection";
+            tracing::warn!(
+                cycle = %request_id,
+                reason,
+                "stream closed prematurely with unconfirmed tool call; blocked"
+            );
+            AuditRecord {
+                request_id: request_id.clone(),
+                direction: "output".into(),
+                decision: "block".into(),
+                score: 0,
+                reasons: vec![reason.into()],
+                owasp: Vec::new(),
+                atlas: Vec::new(),
+                latency_ms: started.elapsed().as_millis(),
+            }
+            .emit();
+            finish_tenant_stream(&task_state, &task_audit, "blocked", 502).await;
+            let _ = tx.send(Ok(Bytes::from_static(block_frame))).await;
+            return;
+        }
+
+        // Observability for shadow mode or non-enforcing paths
+        if !enforce_tool_protection {
+            if let (Some(assembler), Some(context)) =
+                (tool_assembler.as_mut(), tool_context.as_ref())
+            {
+                let trailing = assembler.flush();
+                if !trailing.is_empty() {
+                    let missed = capability_refuse_calls(&task_state, &request_id, &trailing)
+                        .or_else(|| {
+                            if task_state.config.agent_inspection.enabled {
+                                agent_refuse_reason(
+                                    &task_state,
+                                    &request_id,
+                                    context.tool_results.clone(),
+                                    trailing,
+                                )
+                            } else {
+                                None
+                            }
+                        });
+                    if let Some(reason) = missed {
+                        tracing::warn!(
+                            cycle = %request_id,
+                            reason,
+                            "streamed tool call completed only at end of stream; it was \
+                             already forwarded and could not be blocked"
+                        );
+                        AuditRecord {
+                            request_id: request_id.clone(),
+                            direction: "output".into(),
+                            decision: "stream_truncated_tool_call".into(),
+                            score: 0,
+                            reasons: vec![reason],
+                            owasp: Vec::new(),
+                            atlas: Vec::new(),
+                            latency_ms: started.elapsed().as_millis(),
+                        }
+                        .emit();
+                    }
                 }
             }
         }

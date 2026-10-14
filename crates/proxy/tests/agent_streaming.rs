@@ -234,6 +234,10 @@ async fn openai_stream_blocks_a_tool_call_split_across_frames() {
         !body.contains("finish_reason"),
         "the completing frame must never reach the client: {body}"
     );
+    assert!(
+        !body.contains("AKIAIOSFODNN7EXAMPLE"),
+        "withheld tool chunks must not leak to client on block: {body}"
+    );
 }
 
 #[tokio::test]
@@ -253,6 +257,10 @@ async fn anthropic_stream_blocks_a_tool_use_split_across_frames() {
     assert!(
         !body.contains("message_stop"),
         "the completing frame must never reach the client: {body}"
+    );
+    assert!(
+        !body.contains("AKIAIOSFODNN7EXAMPLE"),
+        "withheld tool chunks must not leak to client on block: {body}"
     );
 }
 
@@ -374,5 +382,92 @@ async fn anthropic_stream_blocks_an_ask_tool_use_split_across_frames() {
     assert!(
         !body.contains("message_stop"),
         "the completing frame must never reach the client: {body}"
+    );
+}
+
+fn openai_truncated_tool_call_stream() -> String {
+    format!(
+        concat!(
+            r#"data: {{"choices":[{{"index":0,"delta":{{"role":"assistant","tool_calls":"#,
+            r#"[{{"index":0,"id":"c1","type":"function","function":{{"name":"bash","arguments":""}}}}]}}}}]}}"#,
+            "\n\n",
+            r#"data: {{"choices":[{{"index":0,"delta":{{"tool_calls":"#,
+            r#"[{{"index":0,"function":{{"arguments":"{head}"}}}}]}}}}]}}"#,
+            "\n\n",
+            r#"data: {{"choices":[{{"index":0,"delta":{{"tool_calls":"#,
+            r#"[{{"index":0,"function":{{"arguments":"{tail}"}}}}]}}}}]}}"#,
+            "\n\n"
+        ),
+        head = SECRET_HEAD,
+        tail = SECRET_TAIL
+    )
+}
+
+#[tokio::test]
+async fn openai_stream_truncation_without_terminal_frame_withholds_and_blocks() {
+    let server = upstream("/v1/chat/completions", openai_truncated_tool_call_stream()).await;
+    let body = stream_body(
+        state(server.uri(), true, true),
+        "/v1/chat/completions",
+        openai_request(),
+    )
+    .await;
+
+    assert!(
+        body.contains("llm_firewall_block"),
+        "truncated stream with pending tool call must emit block frame: {body}"
+    );
+    assert!(
+        !body.contains("AKIAIOSFODNN7EXAMPLE"),
+        "unconfirmed tool call material must not leak on truncation: {body}"
+    );
+    assert!(
+        !body.contains("bash"),
+        "tool call name must not leak on truncation: {body}"
+    );
+}
+
+fn anthropic_truncated_tool_call_stream() -> String {
+    format!(
+        concat!(
+            "event: content_block_start\n",
+            r#"data: {{"type":"content_block_start","index":0,"content_block":"#,
+            r#"{{"type":"tool_use","id":"toolu_1","name":"bash","input":{{}}}}}}"#,
+            "\n\n",
+            "event: content_block_delta\n",
+            r#"data: {{"type":"content_block_delta","index":0,"delta":"#,
+            r#"{{"type":"input_json_delta","partial_json":"{head}"}}}}"#,
+            "\n\n",
+            "event: content_block_delta\n",
+            r#"data: {{"type":"content_block_delta","index":0,"delta":"#,
+            r#"{{"type":"input_json_delta","partial_json":"{tail}"}}}}"#,
+            "\n\n"
+        ),
+        head = SECRET_HEAD,
+        tail = SECRET_TAIL
+    )
+}
+
+#[tokio::test]
+async fn anthropic_stream_truncation_without_terminal_frame_withholds_and_blocks() {
+    let server = upstream("/v1/messages", anthropic_truncated_tool_call_stream()).await;
+    let body = stream_body(
+        state(server.uri(), true, true),
+        "/v1/messages",
+        anthropic_request(),
+    )
+    .await;
+
+    assert!(
+        body.contains("blocked by Soup Wall output policy"),
+        "truncated Anthropic stream with pending tool_use must emit block frame: {body}"
+    );
+    assert!(
+        !body.contains("AKIAIOSFODNN7EXAMPLE"),
+        "unconfirmed tool_use material must not leak on truncation: {body}"
+    );
+    assert!(
+        !body.contains("bash"),
+        "tool_use name must not leak on truncation: {body}"
     );
 }

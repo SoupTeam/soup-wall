@@ -240,3 +240,107 @@ async fn disabled_agent_inspection_passes_through() {
         "response forwarded unchanged: {body}"
     );
 }
+
+fn state_with_agent_policy(
+    base: String,
+    yaml: &str,
+    enabled: bool,
+    enforce: bool,
+) -> Arc<AppState> {
+    let policy = PolicySet::from_yaml("policies: []\ndefault: allow\n").unwrap();
+    let fw = Firewall::new(vec![Box::new(InjectionDetector::new())], policy);
+    let mut config = test_config(base);
+    config.agent_inspection.enabled = enabled;
+    config.agent_inspection.enforce = enforce;
+    let agent_policy = soup_wall_agent::AgentPolicySet::from_yaml(yaml).unwrap();
+    let agent_fw = soup_wall_agent::AgentFirewall::new(agent_policy, 100);
+    Arc::new(AppState {
+        firewall: fw,
+        http: reqwest::Client::new(),
+        openai_api_key: None,
+        proxy_auth_token: None,
+        tenant_store: None,
+        admin_token: None,
+        oidc_state_cipher: None,
+        saml: None,
+        rate_limiter: std::sync::Mutex::new(llm_firewall::rate_limit::RateLimiter::new(
+            Default::default(),
+        )),
+        spend_ledger: std::sync::Mutex::new(llm_firewall::spend_limit::SpendLedger::new(
+            Default::default(),
+        )),
+        redis_limits: None,
+        agent: std::sync::Mutex::new(agent_fw),
+        moderation: llm_firewall::moderation::ModerationGate::new(Default::default()),
+        config,
+    })
+}
+
+#[tokio::test]
+async fn escalate_rule_with_ask_fallback_refuses_when_enforcing() {
+    let server = upstream_ask().await;
+    let yaml = r#"
+agent_policies:
+  - name: escalate-ask
+    when: {}
+    action: escalate
+    fallback: ask
+    message: "escalated tool call held for confirmation"
+default: allow
+"#;
+    let st = state_with_agent_policy(server.uri(), yaml, true, true);
+    let (status, body) = post_chat(st).await;
+    assert_eq!(
+        status,
+        StatusCode::BAD_GATEWAY,
+        "enforced Escalate with fallback: ask must refuse with 502: {body}"
+    );
+    assert!(
+        body.contains("escalate-ask"),
+        "error body must contain policy rule name: {body}"
+    );
+}
+
+#[tokio::test]
+async fn escalate_rule_with_allow_fallback_passes_when_enforcing() {
+    let server = upstream_ask().await;
+    let yaml = r#"
+agent_policies:
+  - name: escalate-allow
+    when: {}
+    action: escalate
+    fallback: allow
+    message: "escalated tool call falls back to allow"
+default: allow
+"#;
+    let st = state_with_agent_policy(server.uri(), yaml, true, true);
+    let (status, body) = post_chat(st).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "enforced Escalate with fallback: allow passes with 200: {body}"
+    );
+    assert!(body.contains("tool_calls"));
+}
+
+#[tokio::test]
+async fn escalate_rule_with_ask_fallback_passes_in_shadow_mode() {
+    let server = upstream_ask().await;
+    let yaml = r#"
+agent_policies:
+  - name: escalate-ask
+    when: {}
+    action: escalate
+    fallback: ask
+    message: "escalated tool call held for confirmation"
+default: allow
+"#;
+    let st = state_with_agent_policy(server.uri(), yaml, true, false);
+    let (status, body) = post_chat(st).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "shadow mode must pass with 200: {body}"
+    );
+    assert!(body.contains("tool_calls"));
+}
