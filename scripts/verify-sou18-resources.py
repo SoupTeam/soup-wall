@@ -172,15 +172,30 @@ def grade(row):
             require(expected in text, "wrong refusal reason")
             require(not any(item.get("event") == "native_result" for item in native),
                     "refused operation produced a result")
-            if expected == "native_resource_not_allowed":
+            if expected == "resource_executor_unsupported":
+                # Unsupported operation-level executors are refused before the
+                # native event/reservation boundary, after bound classification.
+                audit = [decode(line) for line in row["native_audit_raw"].splitlines()]
+                require(native == [] and [item.get("event") for item in audit] == [
+                            "native_session_start", "mcp_handshake", "native_session_end"],
+                        "unsupported executor audit missing or reached native reservation/result gates")
+                opened, handshake, closed = audit
+                require(opened.get("session") and closed.get("session") == opened["session"]
+                        and type(opened.get("seq")) is int and opened["seq"] == 1
+                        and type(closed.get("seq")) is int and closed["seq"] == 2
+                        and all(item.get("released") is True and item.get("shadow") is False
+                                and item.get("verdict") == "allow"
+                                and item.get("call_id") is None and item.get("binding_sha256") is None
+                                and item.get("content_sha256") is None
+                                for item in (opened, closed))
+                        and handshake.get("verdict") == "allow" and handshake.get("shadow") is False,
+                        "unsupported executor session audit incomplete or not enforcing")
+            elif expected == "native_resource_not_allowed":
                 require(len(native) == 1 and native[0].get("event") == "native_call"
                         and native[0].get("shadow") is False
-                        and native[0].get("released") is False,
+                        and native[0].get("released") is False
+                        and native[0].get("verdict") == "deny",
                         "native authorization evidence mismatch")
-            elif expected == "resource_executor_unsupported":
-                # Classification still runs, but unsupported dispatch must not
-                # reserve native capacity or produce a native result.
-                require(native == [], "unsupported operation reached native admission")
             else:
                 require(native == classifications == [], "pre-classification refusal reached downstream gates")
         return {"status": "pass", "reason": "independent child, file, client and production-gate witnesses agree"}
@@ -310,6 +325,7 @@ def run_case(repo, binary, out, name, modules):
                 row.update(child_ledger_raw=blobs["child-ledger.jsonl"].decode(), ledger_present=stack.ledger.is_file(),
                     server_started=blobs["server-started.txt"].decode(), server_input_raw=blobs["server-input.jsonl"].decode(),
                     server_output_raw=blobs["server-output.jsonl"].decode(), client_output_raw=blobs["client-output.jsonl"].decode(),
+                    native_audit_raw=blobs["native-audit.jsonl"].decode(),
                     collector_raw=blobs["collector.log"].decode(), classifications=demo.classification_evidence(stack.classifications),
                     native_decisions=[record for record in evidence.records(blobs["native-audit.jsonl"])
                                       if record.get("event") in ("native_call", "native_result")],

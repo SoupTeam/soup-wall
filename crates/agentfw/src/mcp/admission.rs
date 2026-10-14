@@ -3,6 +3,7 @@
 //! `mcp_host` release is not attestation of the host's eventual model context.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::future::Future;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
@@ -705,6 +706,93 @@ async fn write<W: AsyncWrite + Unpin>(output: &mut W, raw: &[u8]) -> anyhow::Res
     Ok(())
 }
 
+// Brokered resource operations finish inside the client branch, without a
+// Pending::Call. Monitor unread bytes while each execution/result gate is in
+// progress so an unsupported pipelined request cannot become a serialized call.
+// fill_buf does not consume bytes, including an incomplete next frame. Reply
+// writes use the completion-first guard below so a client observing a finished
+// response can immediately submit its next sequential request.
+async fn without_resource_overlap<R, F, T>(
+    client: &mut R,
+    resource_bound: bool,
+    operation: F,
+) -> anyhow::Result<T>
+where
+    R: AsyncBufRead + Unpin,
+    F: Future<Output = anyhow::Result<T>>,
+{
+    if !resource_bound {
+        return operation.await;
+    }
+    tokio::pin!(operation);
+    tokio::select! {
+        biased;
+        available = client.fill_buf() => {
+            ensure!(available?.is_empty(), "concurrent MCP requests are not supported");
+            // EOF cannot add another request. Preserve the existing single-call
+            // resource behavior when a client closes stdin after its last frame.
+            operation.await
+        }
+        result = &mut operation => result,
+    }
+}
+
+// Unix admission uses direct nonblocking pipe writes: once the complete frame
+// is visible, its write future completes in the same poll. A blocking stdout
+// worker cannot provide that ordering because it may publish its completion
+// after the client has already submitted a legitimate sequential request.
+// Preserve one pinned write across EOF and give physical completion priority.
+// Refusing overlap cannot retract already-exposed first-call bytes.
+async fn write_resource_reply<R, W>(
+    client: &mut R,
+    host: &mut W,
+    resource_bound: bool,
+    raw: &[u8],
+) -> anyhow::Result<()>
+where
+    R: AsyncBufRead + Unpin,
+    W: AsyncWrite + Unpin,
+{
+    if !resource_bound {
+        return write(host, raw).await;
+    }
+    ensure!(
+        raw.ends_with(b"\n"),
+        "resource MCP reply must end with a newline"
+    );
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    let outcome = {
+        let writing = tokio::time::timeout_at(deadline, async {
+            host.write_all(raw).await?;
+            #[cfg(unix)]
+            host.flush().await?;
+            #[cfg(not(unix))]
+            {
+                // Preserve the existing non-Unix transport; the bounded
+                // resource executor is explicitly unavailable there.
+                let written = host.write(&[]).await?;
+                ensure!(written == 0, "empty stdout drain wrote unexpected bytes");
+            }
+            Ok::<_, anyhow::Error>(())
+        });
+        tokio::pin!(writing);
+        tokio::select! {
+            biased;
+            result = &mut writing => result,
+            available = client.fill_buf() => {
+                ensure!(available?.is_empty(), "concurrent MCP requests are not supported");
+                writing.await
+            }
+        }
+    };
+    outcome.context("MCP stdio write timed out")??;
+    #[cfg(not(unix))]
+    tokio::time::timeout_at(deadline, host.flush())
+        .await
+        .context("MCP stdio write timed out")??;
+    Ok(())
+}
+
 struct Collector<'a> {
     config: &'a AdmissionCfg,
     client: reqwest::Client,
@@ -1381,6 +1469,8 @@ where
                         if let Some(metadata) = params.get("_meta") { call_metadata(metadata)?; }
                         let name = params["name"].as_str().context("MCP call tool absent")?;
                         let installed = collector.config.native.registry.tools.iter().find(|tool| tool.name == name).context("MCP call tool is not installed")?;
+                        let resource_reply = installed.resource_policy.is_some()
+                            || collector.config.resource_profiles.contains_key(name);
                         let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
                         ensure!(args.is_object(), "MCP call arguments must be an object");
                         schemas.get(name).context("MCP tool schema not installed")?.validate(&args)?;
@@ -1394,7 +1484,7 @@ where
                                 {
                                     if policy_ws_canon != agentfw_ws_canon {
                                         let reasons = json!(["resource_workspace_mismatch"]);
-                                        write(host, &withheld(request_id, "invocation", &reasons))
+                                        write_resource_reply(client, host, resource_reply, &withheld(request_id, "invocation", &reasons))
                                             .await?;
                                         continue;
                                     }
@@ -1463,7 +1553,7 @@ where
                                 } else {
                                     json!(["resource_extraction_incomplete"])
                                 };
-                                write(host, &withheld(request_id, "invocation", &reasons)).await?;
+                                write_resource_reply(client, host, resource_reply, &withheld(request_id, "invocation", &reasons)).await?;
                                 continue;
                             }
                             let profile_sha256 = crate::native::canonical_digest(
@@ -1484,7 +1574,7 @@ where
                             Some((admission, derived))
                         } else if collector.config.resource_profiles.contains_key(name) {
                             let reasons = json!(["resource_executor_unsupported"]);
-                            write(host, &withheld(request_id, "invocation", &reasons)).await?;
+                            write_resource_reply(client, host, resource_reply, &withheld(request_id, "invocation", &reasons)).await?;
                             continue;
                         } else {
                             None
@@ -1496,19 +1586,22 @@ where
                                 .context("classifier discovery state missing")?;
                             let egress_declared = installed.action_class == ActionClass::Network
                                 || !installed.egress.is_empty();
-                            match collector
-                                .classify(
+                            match without_resource_overlap(
+                                client,
+                                resource_admission.is_some(),
+                                collector.classify(
                                     snapshot,
                                     request_id,
                                     name,
                                     &args,
                                     installed.action_class,
                                     egress_declared,
-                                )
-                                .await?
+                                ),
+                            )
+                            .await?
                             {
                                 Err(failure) => {
-                                    write(host, &not_classified(request_id, failure)).await?;
+                                    write_resource_reply(client, host, resource_reply, &not_classified(request_id, failure)).await?;
                                     continue;
                                 }
                                 Ok(verdict) => {
@@ -1521,13 +1614,13 @@ where
                                 ProductionVerdict::Allow => {}
                                 ProductionVerdict::Ask => {
                                     let reasons = json!(["policy_unconfirmed_ask"]);
-                                    write(host, &withheld(request_id, "invocation", &reasons))
+                                    write_resource_reply(client, host, resource_reply, &withheld(request_id, "invocation", &reasons))
                                         .await?;
                                     continue;
                                 }
                                 ProductionVerdict::Deny => {
                                     let reasons = json!(["policy_denied"]);
-                                    write(host, &withheld(request_id, "invocation", &reasons))
+                                    write_resource_reply(client, host, resource_reply, &withheld(request_id, "invocation", &reasons))
                                         .await?;
                                     continue;
                                 }
@@ -1541,7 +1634,7 @@ where
                         #[cfg(not(unix))]
                         if resource_admission.is_some() {
                             let reasons = json!(["resource_executor_unsupported"]);
-                            write(host, &withheld(request_id, "invocation", &reasons)).await?;
+                            write_resource_reply(client, host, resource_reply, &withheld(request_id, "invocation", &reasons)).await?;
                             continue;
                         }
                         #[cfg(unix)]
@@ -1551,14 +1644,14 @@ where
                                 && name == "read_document")
                             {
                                 let reasons = json!(["resource_executor_unsupported"]);
-                                write(host, &withheld(request_id, "invocation", &reasons)).await?;
+                                write_resource_reply(client, host, resource_reply, &withheld(request_id, "invocation", &reasons)).await?;
                                 continue;
                             }
                             let first_res = derived.resources.first().map(|r| &r.resource);
                                 let Some(super::resources::Resource::Path { canonical }) = first_res
                                 else {
                                     let reasons = json!(["resource_destination_invalid"]);
-                                    write(host, &withheld(request_id, "invocation", &reasons)).await?;
+                                    write_resource_reply(client, host, resource_reply, &withheld(request_id, "invocation", &reasons)).await?;
                                     continue;
                                 };
                                 let pinned = match crate::sandbox::PinnedWorkspace::open(
@@ -1567,7 +1660,7 @@ where
                                     Ok(ws) => ws,
                                     Err(_) => {
                                         let reasons = json!(["resource_workspace_invalid"]);
-                                        write(host, &withheld(request_id, "invocation", &reasons))
+                                        write_resource_reply(client, host, resource_reply, &withheld(request_id, "invocation", &reasons))
                                             .await?;
                                         continue;
                                     }
@@ -1575,7 +1668,7 @@ where
                                 let target_path = std::path::Path::new(canonical);
                                 if pinned.relative_path(target_path).is_err() {
                                     let reasons = json!(["resource_target_outside_workspace"]);
-                                    write(host, &withheld(request_id, "invocation", &reasons)).await?;
+                                    write_resource_reply(client, host, resource_reply, &withheld(request_id, "invocation", &reasons)).await?;
                                     continue;
                                 }
                                 pinned_resource_ws = Some((pinned, target_path.to_path_buf()));
@@ -1594,10 +1687,14 @@ where
                         } else {
                             CONTRACT.to_string()
                         };
-                        let receipt = collector.event("call", call_fields).await?;
+                        let receipt = without_resource_overlap(
+                            client,
+                            resource_admission.is_some(),
+                            collector.event("call", call_fields),
+                        )
+                        .await?;
                         if receipt["release"] != true {
-                            write(
-                                host,
+                            write_resource_reply(client, host, resource_reply,
                                 &withheld(request_id, "invocation", &receipt["reason_codes"]),
                             )
                             .await?;
@@ -1608,7 +1705,11 @@ where
                             {
                                 let (pinned, target_path) = pinned_resource_ws
                                     .expect("pinned workspace initialized on unix");
-                                let content = match pinned.read_file(&target_path) {
+                                let read = without_resource_overlap(client, true, async {
+                                    Ok(pinned.read_file(&target_path))
+                                })
+                                .await?;
+                                let content = match read {
                                     Ok(c) => c,
                                     Err(err) => {
                                         let err_msg = err.to_string();
@@ -1623,22 +1724,26 @@ where
                                             withheld(request_id, "invocation", &reasons);
                                         let withheld_content = std::str::from_utf8(&withheld_bytes)
                                             .context("withheld is UTF-8")?;
-                                        let _ = collector
-                                            .event(
-                                                "result",
-                                                json!({
-                                                    "expected_contract_version": contract_version,
-                                                    "tool": name,
-                                                    "args": args,
-                                                    "call_id": receipt["call_id"],
-                                                    "result_kind": "error",
-                                                    "delivery": "mcp_host",
-                                                    "content": withheld_content,
-                                                    "expected_binding_sha256": receipt["binding_sha256"]
-                                                }),
-                                            )
-                                            .await;
-                                        write(host, &withheld_bytes).await?;
+                                        without_resource_overlap(client, true, async {
+                                            let _ = collector
+                                                .event(
+                                                    "result",
+                                                    json!({
+                                                        "expected_contract_version": contract_version,
+                                                        "tool": name,
+                                                        "args": args,
+                                                        "call_id": receipt["call_id"],
+                                                        "result_kind": "error",
+                                                        "delivery": "mcp_host",
+                                                        "content": withheld_content,
+                                                        "expected_binding_sha256": receipt["binding_sha256"]
+                                                    }),
+                                                )
+                                                .await;
+                                            Ok(())
+                                        })
+                                        .await?;
+                                        write_resource_reply(client, host, resource_reply, &withheld_bytes).await?;
                                         continue;
                                     }
                                 };
@@ -1657,8 +1762,10 @@ where
                                 raw_response.push(b'\n');
                                 let result_content = std::str::from_utf8(&raw_response)
                                     .context("result is UTF-8")?;
-                                let res_receipt = collector
-                                    .event(
+                                let res_receipt = without_resource_overlap(
+                                    client,
+                                    true,
+                                    collector.event(
                                         "result",
                                         json!({
                                             "expected_contract_version": contract_version,
@@ -1670,11 +1777,11 @@ where
                                             "content": result_content,
                                             "expected_binding_sha256": receipt["binding_sha256"]
                                         }),
-                                    )
-                                    .await?;
+                                    ),
+                                )
+                                .await?;
                                 if res_receipt["release"] != true {
-                                    write(
-                                        host,
+                                    write_resource_reply(client, host, resource_reply,
                                         &withheld(
                                             request_id,
                                             "result",
@@ -1684,7 +1791,7 @@ where
                                     .await?;
                                     continue;
                                 }
-                                write(host, &raw_response).await?;
+                                write_resource_reply(client, host, resource_reply, &raw_response).await?;
                                 continue;
                             }
                             #[cfg(not(unix))]
@@ -1766,6 +1873,15 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
         let workspace = std::env::var_os("AGENTFW_WORKSPACE")
             .map(std::path::PathBuf::from)
             .unwrap_or(cwd);
+        #[cfg(unix)]
+        let mut client =
+            BufReader::new(super::stdio::Pipe::stdin().context("unsupported MCP stdin")?);
+        #[cfg(unix)]
+        let mut host = super::stdio::Pipe::stdout().context("unsupported MCP stdout")?;
+        #[cfg(not(unix))]
+        let mut client = BufReader::new(tokio::io::stdin());
+        #[cfg(not(unix))]
+        let mut host = tokio::io::stdout();
         // A working directory is operational context, never a sandbox assertion.
         let mut process = Command::new(&config.command)
             .args(&config.args)
@@ -1789,8 +1905,6 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
                 .take()
                 .context("MCP server stdout unavailable")?,
         );
-        let mut client = BufReader::new(tokio::io::stdin());
-        let mut host = tokio::io::stdout();
         let outcome = relay(&collector, &mut client, &mut host, &mut server, &mut child).await;
         let _ = process.kill().await;
         outcome
