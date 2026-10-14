@@ -313,6 +313,49 @@ class LinuxAlertBoundaries(unittest.TestCase):
         self.assertEqual(runtime.compose.call_args_list[-1].args, ("down", "--volumes", "--timeout", "3"))
         self.assertEqual(runtime.command.call_args_list[-1].args[0][-1], "label=com.docker.compose.project=owned-project")
 
+    def test_endpoint_discovery_uses_owned_actual_docker_assigned_loopback_binding(self):
+        runtime = self.runtime()
+        runtime.owner, runtime.project = "owned-run", "owned-project"
+        runtime.compose = Mock(return_value="a" * 64)
+        runtime.command = Mock(return_value=json.dumps({"owner": runtime.owner, "project": runtime.project,
+            "service": "receiver", "ports": {"8443/tcp": [{"HostIp": "127.0.0.1", "HostPort": "49152"}]}}))
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(runtime.published_endpoint("receiver", 8443), "https://127.0.0.1:49152")
+        runtime.compose.assert_called_once_with("ps", "--quiet", "receiver")
+        template = runtime.command.call_args.args[0][3]
+        self.assertIn(".NetworkSettings.Ports", template)
+        self.assertNotIn(".HostConfig.PortBindings", template)
+        self.assertEqual(runtime.report["checks"][-1]["assigned_host_port"], 49152)
+
+    def test_endpoint_discovery_refuses_unpublished_zero_foreign_and_ambiguous_bindings(self):
+        runtime = self.runtime()
+        runtime.owner, runtime.project = "owned-run", "owned-project"
+        runtime.compose = Mock(return_value="a" * 64)
+        for bindings in [None, [], [{"HostIp": "127.0.0.1", "HostPort": "0"}],
+                         [{"HostIp": "0.0.0.0", "HostPort": "49152"}],
+                         [{"HostIp": "127.0.0.1", "HostPort": "70000"}],
+                         [{"HostIp": "127.0.0.1", "HostPort": "49152"}] * 2]:
+            data = {"owner": runtime.owner, "project": runtime.project, "service": "gateway",
+                    "ports": {"8080/tcp": bindings}}
+            with self.subTest(bindings=bindings):
+                runtime.command = Mock(return_value=json.dumps(data))
+                with self.assertRaises(DRILL.DrillError):
+                    runtime.published_endpoint("gateway", 8080)
+        for field in ["owner", "project", "service"]:
+            data = {"owner": runtime.owner, "project": runtime.project, "service": "gateway",
+                    "ports": {"8080/tcp": [{"HostIp": "127.0.0.1", "HostPort": "49152"}]}}
+            data[field] = "foreign"
+            with self.subTest(field=field):
+                runtime.command = Mock(return_value=json.dumps(data))
+                with self.assertRaises(DRILL.DrillError):
+                    runtime.published_endpoint("gateway", 8080)
+        runtime.compose.return_value = "a" * 64 + " " + "b" * 64
+        runtime.command.reset_mock()
+        with self.assertRaises(DRILL.DrillError):
+            runtime.published_endpoint("gateway", 8080)
+        runtime.command.assert_not_called()
+        self.assertEqual(runtime.report["checks"], [])
+
     def test_http_transport_refuses_non_loopback_endpoints_before_opening(self):
         for url in ["https://example.test:443/alerts", "http://localhost:80/alerts", "http://127.0.0.1/alerts",
                     "http://credential@127.0.0.1:8080/alerts", "file:///tmp/alerts", "https://[::1]:8443/alerts"]:

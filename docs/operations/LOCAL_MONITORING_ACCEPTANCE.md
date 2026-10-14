@@ -165,7 +165,16 @@ not native macOS Gateway execution. WSL must use the Linux interpreter and its
 Linux Docker engine. The first execution may download the declared images and
 Rust dependencies; no paid service or production account is needed.
 
+The generated project uses its own private Docker bridge. Gateway, receiver,
+Prometheus and Alertmanager publish only Docker-assigned numeric loopback ports;
+PostgreSQL and Redis have no host ports. This is service isolation, not a
+network egress firewall. All configured provider and notification endpoints are
+owned local fixtures; the command never calls a paid model or incident channel.
+Docker internal networks can suppress host port bindings, so acceptance checks
+the actual owned container bindings before contacting any endpoint.
+
 ```sh
+mkdir -p target
 python3 scripts/linux-alert-acceptance.py
 python3 scripts/linux-alert-acceptance.py --execute \
   --out target/linux-alert-recovery.json

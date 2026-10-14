@@ -18,7 +18,11 @@ Use a dedicated bearer token stored in a protected credential file. Require
 HTTPS for remote delivery and keep certificate validation enabled. The supplied
 [Alertmanager example](../../deploy/alertmanager.example.yaml) uses
 `send_resolved: true`, disables redirects and environment proxies, and reads the
-credential from a file. Replace its reserved hostname with the owned receiver.
+credential from a file. Replace the complete webhook URL with the owned HTTPS
+receiver URL, including its port and `/alerts` path; this receiver does not
+serve the example's `/hooks/soup-wall` path. Configure the policy's `receiver`
+and `external_url` to match the reviewed Alertmanager receiver name and
+`--web.external-url` exactly.
 Do not place a token in the URL, command line, Git, evidence or logs.
 
 Authentication is checked before accepting or recording a request. A valid

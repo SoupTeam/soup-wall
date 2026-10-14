@@ -108,6 +108,7 @@ def plan():
             "rule_evaluation_interval_seconds": 30, "notification_group_wait_seconds": 30,
             "notification_group_interval_seconds": 15,
             "notification_group_interval_scope": "controlled drill override; production example remains 5m",
+            "network_scope": "dedicated standard bridge with numeric loopback publications; no network-level egress-denial claim",
             "paid_models_or_external_incident_channels": False,
             "production_routing_or_staffed_response_accepted": False}
 
@@ -379,7 +380,7 @@ policy_file: policies/default.yaml
             "alertmanager": {**common(images["alertmanager"]), "command": ["--config.file=/config/alertmanager.yaml", "--storage.path=/data", "--cluster.listen-address=", "--web.external-url=" + EXTERNAL_URL], "ports": port(9093), "volumes": [mount("alertmanager.yaml", "/config/alertmanager.yaml"), mount("token", "/config/token"), mount("ca.pem", "/config/ca.pem"), mount("alertmanager-data", "/data", False)]},
         }
         self.compose_file = self.directory / "compose.json"
-        protected_file(self.compose_file, json.dumps({"services": services, "volumes": {"postgres-data": {}}, "networks": {"default": {"internal": True}}}, indent=2))
+        protected_file(self.compose_file, json.dumps({"services": services, "volumes": {"postgres-data": {}}, "networks": {"default": {}}}, indent=2))
         for args in [["check", "rules", "/rules/prometheus-alerts.yaml"], ["test", "rules", "/rules/prometheus-alerts.test.yaml"]]:
             self.command(["docker", "run", "--rm", "--network", "none", "--read-only", "--tmpfs", "/tmp:rw,nosuid,noexec,size=128m", "--mount", f"type=bind,src={rules},dst=/rules,readonly", "--entrypoint", "/bin/promtool", images["prometheus"], *args])
         self.check("pinned_rules_and_regressions", True)
@@ -389,10 +390,7 @@ policy_file: policies/default.yaml
         self.compose("run", "--rm", "--no-deps", "gateway", "migrate")
         self.compose("up", "--detach", "gateway", "prometheus", "alertmanager")
         for service, target in [("gateway", 8080), ("receiver", 8443), ("prometheus", 9090), ("alertmanager", 9093)]:
-            address = self.compose("port", service, str(target)).strip()
-            if not re.fullmatch(r"127\.0\.0\.1:[0-9]+", address):
-                raise DrillError("published port is not loopback-scoped")
-            self.urls[service] = ("https" if service == "receiver" else "http") + "://" + address
+            self.urls[service] = self.published_endpoint(service, target)
         self.wait("gateway_ready", lambda: self.gateway("/readyz")[0] == 200, 90)
         self.wait("receiver_ready", lambda: self.receipts()[0] == 200, 60)
         self.wait("prometheus_ready", lambda: request(self.urls["prometheus"] + "/-/ready")[0] == 200, 60)
@@ -400,6 +398,34 @@ policy_file: policies/default.yaml
         self.report["runtime_versions"] = {service: self.compose("exec", "--no-TTY", service, *args).strip() for service, args in [
             ("prometheus", ["/bin/prometheus", "--version"]), ("alertmanager", ["/bin/alertmanager", "--version"]), ("postgres", ["postgres", "--version"]), ("redis", ["redis-server", "--version"]), ("receiver", ["python3", "--version"])]}
         self.check("owned_pinned_services_ready", True)
+
+    def published_endpoint(self, service, target):
+        identifiers = self.compose("ps", "--quiet", service).split()
+        if len(identifiers) != 1 or re.fullmatch(r"[a-f0-9]{12,64}", identifiers[0]) is None:
+            raise DrillError("owned service container is unavailable or ambiguous")
+        template = ('{"owner":{{json (index .Config.Labels "soup-wall.monitoring-run")}},'
+                    '"project":{{json (index .Config.Labels "com.docker.compose.project")}},'
+                    '"service":{{json (index .Config.Labels "com.docker.compose.service")}},'
+                    '"ports":{{json .NetworkSettings.Ports}}}')
+        try:
+            data = json.loads(self.command(["docker", "inspect", "--format", template, identifiers[0]]))
+        except ValueError:
+            raise DrillError("invalid owned port-binding witness") from None
+        if (not isinstance(data, dict) or data.get("owner") != self.owner
+                or data.get("project") != self.project or data.get("service") != service):
+            raise DrillError("published endpoint ownership mismatch")
+        ports = data.get("ports")
+        bindings = ports.get(str(target) + "/tcp") if isinstance(ports, dict) else None
+        if not isinstance(bindings, list) or len(bindings) != 1 or not isinstance(bindings[0], dict):
+            raise DrillError("published endpoint is unavailable or ambiguous")
+        binding = bindings[0]
+        value = binding.get("HostPort")
+        if (binding.get("HostIp") != "127.0.0.1" or not isinstance(value, str)
+                or re.fullmatch(r"[0-9]+", value) is None or not 1 <= int(value) <= 65535):
+            raise DrillError("published endpoint is not an assigned numeric loopback port")
+        self.check(service + "_owned_loopback_endpoint", True, host_ip="127.0.0.1",
+                   container_port=target, assigned_host_port=int(value))
+        return ("https" if service == "receiver" else "http") + "://127.0.0.1:" + value
 
     def gateway(self, path, **args):
         return request(self.urls["gateway"] + path, **args)
