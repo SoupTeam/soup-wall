@@ -8,9 +8,15 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 use tempfile::tempdir;
 
+fn agent_binary() -> PathBuf {
+    std::env::var_os("AGENTFW_LIFECYCLE_TEST_BINARY")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_BIN_EXE_agentfw")))
+}
+
 fn run(profile: &Path, args: &[&str]) -> Output {
     eprintln!("Lifecycle command: {args:?}");
-    let mut command = Command::new(env!("CARGO_BIN_EXE_agentfw"));
+    let mut command = Command::new(agent_binary());
     command.arg("lifecycle").args(args);
     #[cfg(unix)]
     command.env("HOME", profile);
@@ -94,22 +100,10 @@ fn status(profile: &Path) -> Status {
     serde_json::from_str(&success(profile, &["status"])).unwrap()
 }
 
-fn profile_accessible(home: &Path) -> bool {
-    #[cfg(windows)]
-    if let Err(error) = Manager::new(home).status() {
-        assert!(
-            error.to_string().contains("untrusted owner: S-1-5-32-544"),
-            "unexpected profile error: {error:#}"
-        );
-        assert!(!home.join("versions/lifecycle.json").exists());
-        eprintln!(
-            "Windows runner uses an Administrators-owned profile; lifecycle access was refused"
-        );
-        return false;
-    }
-    #[cfg(not(windows))]
-    let _ = home;
-    true
+fn require_owned_profile(home: &Path) {
+    Manager::new(home)
+        .status()
+        .expect("lifecycle tests require an owned accessible profile; no early success is allowed");
 }
 
 fn installed_binary(home: &Path, version: &str) -> PathBuf {
@@ -119,7 +113,7 @@ fn installed_binary(home: &Path, version: &str) -> PathBuf {
 
 fn candidate(dir: &Path, name: &str, append: &[u8]) -> (PathBuf, String) {
     let path = dir.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
-    fs::copy(env!("CARGO_BIN_EXE_agentfw"), &path).unwrap();
+    fs::copy(agent_binary(), &path).unwrap();
     if !append.is_empty() {
         use std::io::Write;
         fs::OpenOptions::new()
@@ -133,14 +127,16 @@ fn candidate(dir: &Path, name: &str, append: &[u8]) -> (PathBuf, String) {
 }
 
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "requires standard-user lifecycle job; run explicitly with --ignored"
+)]
 fn managed_lifecycle_restores_last_working_version() {
     let dir = tempdir().unwrap();
     let profile = dir.path().join("profile");
     let home = profile.join(".agentfw");
     fs::create_dir_all(&home).unwrap();
-    if !profile_accessible(&home) {
-        return;
-    }
+    require_owned_profile(&home);
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     drop(listener);
@@ -257,12 +253,14 @@ fn managed_lifecycle_restores_last_working_version() {
 }
 
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "requires standard-user lifecycle job; run explicitly with --ignored"
+)]
 fn managed_storage_rejects_unsafe_inputs_and_preserves_foreign_files() {
     let dir = tempdir().unwrap();
     let home = dir.path().join(".agentfw");
-    if !profile_accessible(&home) {
-        return;
-    }
+    require_owned_profile(&home);
     let manager = Manager::new(&home);
     let candidate = dir.path().join("candidate");
     fs::write(&candidate, b"candidate").unwrap();
@@ -280,12 +278,14 @@ fn managed_storage_rejects_unsafe_inputs_and_preserves_foreign_files() {
 }
 
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "requires standard-user lifecycle job; run explicitly with --ignored"
+)]
 fn recovery_restores_the_version_before_an_interrupted_upgrade() {
     let dir = tempdir().unwrap();
     let home = dir.path().join(".agentfw");
-    if !profile_accessible(&home) {
-        return;
-    }
+    require_owned_profile(&home);
     let manager = Manager::new(&home);
     let first = dir.path().join("first");
     let second = dir.path().join("second");
@@ -310,12 +310,14 @@ fn recovery_restores_the_version_before_an_interrupted_upgrade() {
 }
 
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "requires standard-user lifecycle job; run explicitly with --ignored"
+)]
 fn recovery_removes_only_the_recorded_incomplete_stage() {
     let dir = tempdir().unwrap();
     let home = dir.path().join(".agentfw");
-    if !profile_accessible(&home) {
-        return;
-    }
+    require_owned_profile(&home);
     let manager = Manager::new(&home);
     let candidate = dir.path().join("candidate");
     fs::write(&candidate, b"candidate").unwrap();
@@ -342,13 +344,15 @@ fn recovery_removes_only_the_recorded_incomplete_stage() {
 }
 
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "requires standard-user lifecycle job; run explicitly with --ignored"
+)]
 fn an_unowned_listener_is_reported_and_never_stopped() {
     let dir = tempdir().unwrap();
     let home = dir.path().join(".agentfw");
     fs::create_dir_all(&home).unwrap();
-    if !profile_accessible(&home) {
-        return;
-    }
+    require_owned_profile(&home);
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     fs::write(home.join("config.yaml"), format!("port: {port}\n")).unwrap();
