@@ -677,6 +677,19 @@ pub(crate) fn resolve_workspace_target(
         bail!("guarded file operation target is outside the workspace");
     }
     let target = parent.join(file_name);
+    let mut cur = workspace.to_path_buf();
+    if let Ok(rel) = candidate.strip_prefix(workspace) {
+        for comp in rel.components() {
+            if let std::path::Component::Normal(c) = comp {
+                cur.push(c);
+                if let Ok(meta) = fs::symlink_metadata(&cur) {
+                    if meta.file_type().is_symlink() {
+                        bail!("guarded file operation refuses a symlink target");
+                    }
+                }
+            }
+        }
+    }
     if let Ok(metadata) = fs::symlink_metadata(&target) {
         if metadata.file_type().is_symlink() {
             bail!("guarded file operation refuses a symlink target");
@@ -688,13 +701,179 @@ pub(crate) fn resolve_workspace_target(
     Ok(target)
 }
 
-pub(crate) fn read_workspace_file(target: &Path) -> anyhow::Result<String> {
-    let metadata = fs::symlink_metadata(target).context("guarded file read target is missing")?;
-    if metadata.file_type().is_symlink() || !metadata.file_type().is_file() {
-        bail!("guarded file read target is not a regular file");
+pub const MAX_RESOURCE_READ_BYTES: usize = crate::native::MAX_CONTENT;
+
+#[allow(dead_code)]
+#[cfg(unix)]
+pub fn open_workspace_file_confined(
+    workspace: &Path,
+    requested: &Path,
+) -> anyhow::Result<fs::File> {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::fs::MetadataExt;
+    use std::os::unix::io::{AsRawFd, FromRawFd};
+
+    if requested.as_os_str().is_empty() {
+        bail!("guarded file read path is empty");
     }
-    let content = fs::read_to_string(target).context("failed to read guarded file target")?;
+    let canonical_workspace = validate_workspace_path(workspace)?;
+
+    let relative = if requested.is_absolute() {
+        if let Ok(rel) = requested.strip_prefix(&canonical_workspace) {
+            rel
+        } else if let Ok(rel) = requested.strip_prefix(workspace) {
+            rel
+        } else {
+            bail!("guarded file operation target is outside the workspace");
+        }
+    } else {
+        requested
+    };
+
+    let mut components = Vec::new();
+    for comp in relative.components() {
+        match comp {
+            std::path::Component::Normal(c) => components.push(c),
+            std::path::Component::CurDir => continue,
+            std::path::Component::ParentDir => {
+                bail!("guarded file operation path traversal is not allowed");
+            }
+            std::path::Component::RootDir | std::path::Component::Prefix(_) => {
+                bail!("guarded file operation target is outside the workspace");
+            }
+        }
+    }
+
+    if components.is_empty() {
+        bail!("guarded file operation target must be a file");
+    }
+
+    let root_c_path = CString::new(canonical_workspace.as_os_str().as_bytes())
+        .context("workspace path contains NUL")?;
+
+    let root_fd = unsafe {
+        libc::open(
+            root_c_path.as_ptr(),
+            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
+        )
+    };
+    if root_fd < 0 {
+        return Err(std::io::Error::last_os_error())
+            .context("failed to open workspace root directory");
+    }
+    let mut current_dir = unsafe { fs::File::from_raw_fd(root_fd) };
+
+    let ws_meta = fs::symlink_metadata(&canonical_workspace)?;
+    let root_file_meta = current_dir.metadata()?;
+    if ws_meta.dev() != root_file_meta.dev() || ws_meta.ino() != root_file_meta.ino() {
+        bail!("workspace root inode mismatch");
+    }
+
+    let n = components.len();
+    for (i, comp) in components.iter().enumerate() {
+        let is_leaf = i == n - 1;
+        let c_name = CString::new(comp.as_bytes()).context("path component contains NUL")?;
+        let current_fd = current_dir.as_raw_fd();
+
+        if is_leaf {
+            let file_fd = unsafe {
+                libc::openat(
+                    current_fd,
+                    c_name.as_ptr(),
+                    libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                )
+            };
+            if file_fd < 0 {
+                let err = std::io::Error::last_os_error();
+                if err.raw_os_error() == Some(libc::ELOOP)
+                    || err.raw_os_error() == Some(libc::EMLINK)
+                {
+                    bail!("guarded file operation refuses a symlink target");
+                }
+                return Err(err).context("failed to open workspace file target");
+            }
+            let file = unsafe { fs::File::from_raw_fd(file_fd) };
+            let meta = file.metadata().context("failed to stat opened file")?;
+            if !meta.file_type().is_file() {
+                bail!("guarded file read target is not a regular file");
+            }
+            return Ok(file);
+        } else {
+            let dir_fd = unsafe {
+                libc::openat(
+                    current_fd,
+                    c_name.as_ptr(),
+                    libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                )
+            };
+            if dir_fd < 0 {
+                let err = std::io::Error::last_os_error();
+                if err.raw_os_error() == Some(libc::ELOOP)
+                    || err.raw_os_error() == Some(libc::EMLINK)
+                    || err.raw_os_error() == Some(libc::ENOTDIR)
+                {
+                    bail!("guarded file operation refuses a symlink directory component");
+                }
+                return Err(err).context("failed to open workspace directory component");
+            }
+            current_dir = unsafe { fs::File::from_raw_fd(dir_fd) };
+        }
+    }
+
+    bail!("guarded file read target must be a file");
+}
+
+#[cfg(unix)]
+pub fn read_workspace_file_bounded(
+    workspace: &Path,
+    requested: &Path,
+    max_bytes: usize,
+) -> anyhow::Result<String> {
+    use std::io::Read;
+
+    let mut file = open_workspace_file_confined(workspace, requested)?;
+    let meta = file.metadata().context("failed to stat opened file")?;
+    if meta.len() > max_bytes as u64 {
+        bail!("resource file content exceeds maximum allowed size");
+    }
+
+    let mut buffer = Vec::with_capacity(meta.len().min(max_bytes as u64) as usize);
+    let mut reader = (&mut file).take((max_bytes + 1) as u64);
+    reader
+        .read_to_end(&mut buffer)
+        .context("failed to read guarded file target")?;
+    if buffer.len() > max_bytes {
+        bail!("resource file content exceeds maximum allowed size");
+    }
+    let content = String::from_utf8(buffer).context("resource content is not valid UTF-8")?;
     Ok(content)
+}
+
+#[cfg(not(unix))]
+pub fn open_workspace_file_confined(
+    _workspace: &Path,
+    _requested: &Path,
+) -> anyhow::Result<fs::File> {
+    bail!("confined workspace execution is unsupported on this platform");
+}
+
+#[cfg(not(unix))]
+pub fn read_workspace_file_bounded(
+    _workspace: &Path,
+    _requested: &Path,
+    _max_bytes: usize,
+) -> anyhow::Result<String> {
+    bail!("confined workspace execution is unsupported on this platform");
+}
+
+pub fn read_workspace_file(workspace: &Path, requested: &Path) -> anyhow::Result<String> {
+    read_workspace_file_bounded(workspace, requested, MAX_RESOURCE_READ_BYTES)
+}
+
+#[allow(dead_code)]
+pub fn read_workspace_file_confined(workspace: &Path, requested: &Path) -> anyhow::Result<String> {
+    read_workspace_file(workspace, requested)
 }
 
 fn delete_workspace_file(target: &Path) -> anyhow::Result<bool> {

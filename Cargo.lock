@@ -53,6 +53,7 @@ dependencies = [
  "clap",
  "futures-util",
  "hmac 0.12.1",
+ "libc",
  "rand 0.10.3",
  "reqwest",
  "serde",
