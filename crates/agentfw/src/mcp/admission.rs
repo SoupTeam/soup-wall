@@ -1538,6 +1538,13 @@ where
                             crate::sandbox::PinnedWorkspace,
                             std::path::PathBuf,
                         )> = None;
+                        #[cfg(not(unix))]
+                        if resource_admission.is_some() {
+                            let reasons = json!(["resource_executor_unsupported"]);
+                            write(host, &withheld(request_id, "invocation", &reasons)).await?;
+                            continue;
+                        }
+                        #[cfg(unix)]
                         if let Some((_, ref derived)) = resource_admission {
                             let policy = installed.resource_policy.as_ref().unwrap();
                             if !(installed.action_class == ActionClass::ReadOnly
@@ -1547,15 +1554,7 @@ where
                                 write(host, &withheld(request_id, "invocation", &reasons)).await?;
                                 continue;
                             }
-                            #[cfg(not(unix))]
-                            {
-                                let reasons = json!(["resource_executor_unsupported"]);
-                                write(host, &withheld(request_id, "invocation", &reasons)).await?;
-                                continue;
-                            }
-                            #[cfg(unix)]
-                            {
-                                let first_res = derived.resources.first().map(|r| &r.resource);
+                            let first_res = derived.resources.first().map(|r| &r.resource);
                                 let Some(super::resources::Resource::Path { canonical }) = first_res
                                 else {
                                     let reasons = json!(["resource_destination_invalid"]);
@@ -1581,7 +1580,6 @@ where
                                 }
                                 pinned_resource_ws = Some((pinned, target_path.to_path_buf()));
                             }
-                        }
                         // A composed refusal must not reserve native capacity.
                         // Native trusted restrictions still gate every permitted call.
                         let mut call_fields = json!({
@@ -1605,7 +1603,7 @@ where
                             .await?;
                             continue;
                         }
-                        if let Some((_admission, _derived)) = resource_admission {
+                        if resource_admission.is_some() {
                             #[cfg(unix)]
                             {
                                 let (pinned, target_path) = pinned_resource_ws
