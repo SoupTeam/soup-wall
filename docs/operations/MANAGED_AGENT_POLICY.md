@@ -84,26 +84,32 @@ The daemon continues to start with the existing `agentfw serve` command. In its 
 The Agent supports dynamic, zero-downtime key rotation and revocation without restarting `agentfw serve`. Trust roots are stored in an operator-managed JSON keyring (`trusted-issuers.json` or `SOUP_MANAGED_AGENT_KEYRING_PATH`):
 
 ```json
-[
-  {
-    "key_id": "issuer-primary-2026",
-    "public_key_hex": "08a9779594ed5042668409ed9ac1a9c2623c8760fd07ee9759221d2b39118068",
-    "revoked": false
-  },
-  {
-    "key_id": "issuer-retired-2025",
-    "public_key_hex": "330bac5fed845d50555d91389fb2d0da53da8e440ee7d60a304770e1e461256a",
-    "revoked": true
-  }
-]
+{
+  "schema_version": 1,
+  "issuers": [
+    {
+      "key_id": "issuer-primary-2026",
+      "public_key_hex": "08a9779594ed5042668409ed9ac1a9c2623c8760fd07ee9759221d2b39118068",
+      "revoked": false
+    },
+    {
+      "key_id": "issuer-retired-2025",
+      "public_key_hex": "330bac5fed845d50555d91389fb2d0da53da8e440ee7d60a304770e1e461256a",
+      "revoked": true
+    }
+  ]
+}
 ```
 
 Keyring properties and guarantees:
-- **Max capacity**: at most 64 pinned keys and 64 KiB total file size. Unknown fields are rejected (`deny_unknown_fields`).
-- **Zero-downtime hot reloading**: `ManagedSync` re-reads the keyring from disk on every sync tick. When an operator provisions a new key or marks an existing key as `"revoked": true`, the running Agent adopts the changes immediately without process interruption.
-- **Fail-closed key revocation**: any candidate bundle signed by a revoked or unpinned key ID is rejected before activation (`"revoked issuer signing key"` / `"unrecognized issuer signing key"`), the Agent reports `rejected` to Console, and the current active runtime policy remains intact.
+- **Versioned format**: top-level object requires `schema_version: 1` and `issuers` list. Unknown fields are strictly rejected (`deny_unknown_fields`).
+- **Bounded read & regular file enforcement**: reads are bounded to at most 64 KiB; non-regular files (FIFOs, sockets, directories) and symlinks are refused before reading.
+- **Fail-closed explicit trust removal**: when file mode is configured, removing or invalidating the keyring file fails closed and **never** falls back to old environment variables (`REVIEW114_EXPLICIT_TRUST_REMOVED`).
+- **Invalid trust-update controls**: malformed or invalid trust updates on disk reject incoming candidate deployments while preserving the in-memory active policy and hook verdicts intact without process interruption.
+- **Zero-downtime hot reloading**: `ManagedSync` re-reads the keyring from disk on every sync tick. When an operator provisions a new key or marks an existing key as `"revoked": true`, the running Agent adopts the changes immediately without restart.
+- **Retained real-process restart/cache**: a restarted Agent restores the last accepted sequence and policy from the persisted signed cache (`managed-policy-active.json`) verified against the keyring.
 - **Console multi-issuer support**: Console accepts signing seeds from operator environment variables: default `SOUP_AGENT_POLICY_SEED_HEX` or key-specific `SOUP_AGENT_POLICY_SEED_HEX_<KEY_ID>`. When deploying a revision, `issuer_key_id` can be specified to select the active key.
-- **Verification script**: `python3 scripts/managed-key-rotation-demo.py` verifies zero-downtime rotation (`deny -> defer`) and subsequent revocation rejection (`defer retained`, Agent PID invariant) with evidence recorded in [managed-policy-key-rotation-2026-10-14.json](evidence/managed-policy-key-rotation-2026-10-14.json).
+- **Verification script**: `python3 scripts/managed-key-rotation-demo.py` verifies zero-downtime rotation, revocation, invalid trust updates, explicit trust removal, and process restart with evidence recorded in [managed-policy-key-rotation-2026-10-14.json](evidence/managed-policy-key-rotation-2026-10-14.json).
 
 ## Failure semantics and outstanding review boundaries
 

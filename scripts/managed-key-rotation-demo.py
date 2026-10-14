@@ -3,14 +3,17 @@
 """SOU-46: zero-downtime policy signing key rotation and revocation witness.
 
 Verifies:
-1. Agent starts with key1 pinned in trusted-issuers.json.
+1. Agent starts with versioned KeyringStore (schema_version=1) pinned in trusted-issuers.json.
 2. Console deploys revision 1 (v-deny) signed by key1 -> applied, hook returns deny.
-3. Hot rotation: trusted-issuers.json is updated on disk to include key2 WITHOUT restarting Agent (PID is verified identical).
+3. Hot rotation: trusted-issuers.json is updated on disk to include key2 WITHOUT restarting Agent (PID is verified invariant).
 4. Console deploys revision 2 (v-allow) signed by key2 -> applied, hook returns defer.
-5. Hot revocation: trusted-issuers.json is updated on disk marking key1 as revoked WITHOUT restarting Agent (PID verified identical).
+5. Hot revocation: trusted-issuers.json is updated on disk marking key1 as revoked WITHOUT restarting Agent (PID verified invariant).
 6. Console deploys revision 3 (v-deny) signed by revoked key1 -> Agent rejects candidate (fail-closed), Console receives rejected ack.
 7. Active policy on running Agent strictly remains revision 2 (v-allow), hook remains defer, fail-closed invariant preserved.
-8. Writes sanitized witness evidence to target/sou46-key-rotation-evidence.json.
+8. Invalid trust-update controls: corrupt/invalid keyring JSON on disk causes candidate rejection without altering active policy or crashing Agent.
+9. Explicit trust removal (REVIEW114_EXPLICIT_TRUST_REMOVED): removing keyring file causes candidate rejection without falling back to unrevoked old env keys.
+10. Retained real-process restart/cache: restarted Agent restores active sequence 2 and revision v-allow from persisted signed envelope.
+11. Writes sanitized witness evidence to target/sou46-key-rotation-evidence.json.
 """
 from __future__ import annotations
 
@@ -162,15 +165,18 @@ def main():
         assert len(issuer2["public_key_hex"]) == 64
         assert issuer1["public_key_hex"] != issuer2["public_key_hex"]
 
-        # Write initial keyring file with demo-issuer-1 ONLY
+        # Write initial versioned keyring file with demo-issuer-1 ONLY
         keyring_file = agentfw_home / "trusted-issuers.json"
-        initial_keyring = [
-            {
-                "key_id": "demo-issuer-1",
-                "public_key_hex": issuer1["public_key_hex"],
-                "revoked": False,
-            }
-        ]
+        initial_keyring = {
+            "schema_version": 1,
+            "issuers": [
+                {
+                    "key_id": "demo-issuer-1",
+                    "public_key_hex": issuer1["public_key_hex"],
+                    "revoked": False,
+                }
+            ],
+        }
         keyring_file.write_text(json.dumps(initial_keyring, indent=2))
 
         # Register revisions
@@ -221,10 +227,10 @@ def main():
         agent_proc = proc(stack, [str(agent_binary), "serve"], temp, agent_env, temp / "agent.log")
         agent_pid = agent_proc.pid
 
-        def active(expected):
+        def active(expected, proc_obj=agent_proc):
             def check():
-                if agent_proc.poll() is not None:
-                    raise RuntimeError(f"Agent exited {agent_proc.returncode}")
+                if proc_obj.poll() is not None:
+                    raise RuntimeError(f"Agent exited {proc_obj.returncode}")
                 _, health = request("GET", agent + "/health")
                 item = health.get("managed_policy")
                 return item if item and item["deployment_sequence"] == expected else None
@@ -284,19 +290,22 @@ def main():
         assert first_verdict == "deny", f"expected deny, got {first_verdict}"
         assert first_runtime["revision"] == "v-deny"
 
-        # STEP 2: Hot rotation - add demo-issuer-2 to keyring on disk WITHOUT restarting Agent
-        rotated_keyring = [
-            {
-                "key_id": "demo-issuer-1",
-                "public_key_hex": issuer1["public_key_hex"],
-                "revoked": False,
-            },
-            {
-                "key_id": "demo-issuer-2",
-                "public_key_hex": issuer2["public_key_hex"],
-                "revoked": False,
-            },
-        ]
+        # STEP 2: Hot rotation - add demo-issuer-2 to versioned keyring on disk WITHOUT restarting Agent
+        rotated_keyring = {
+            "schema_version": 1,
+            "issuers": [
+                {
+                    "key_id": "demo-issuer-1",
+                    "public_key_hex": issuer1["public_key_hex"],
+                    "revoked": False,
+                },
+                {
+                    "key_id": "demo-issuer-2",
+                    "public_key_hex": issuer2["public_key_hex"],
+                    "revoked": False,
+                },
+            ],
+        }
         keyring_file.write_text(json.dumps(rotated_keyring, indent=2))
 
         # Ensure Agent process is still running with identical PID (zero downtime)
@@ -323,18 +332,21 @@ def main():
         assert agent_proc.pid == agent_pid, "Agent process was restarted during rotation"
 
         # STEP 3: Hot revocation - mark demo-issuer-1 as revoked in keyring on disk WITHOUT restarting Agent
-        revoked_keyring = [
-            {
-                "key_id": "demo-issuer-1",
-                "public_key_hex": issuer1["public_key_hex"],
-                "revoked": True,
-            },
-            {
-                "key_id": "demo-issuer-2",
-                "public_key_hex": issuer2["public_key_hex"],
-                "revoked": False,
-            },
-        ]
+        revoked_keyring = {
+            "schema_version": 1,
+            "issuers": [
+                {
+                    "key_id": "demo-issuer-1",
+                    "public_key_hex": issuer1["public_key_hex"],
+                    "revoked": True,
+                },
+                {
+                    "key_id": "demo-issuer-2",
+                    "public_key_hex": issuer2["public_key_hex"],
+                    "revoked": False,
+                },
+            ],
+        }
         keyring_file.write_text(json.dumps(revoked_keyring, indent=2))
 
         # Deploy sequence 3 signed by the newly revoked demo-issuer-1
@@ -364,9 +376,53 @@ def main():
             f"hook decision was altered after rejection: {post_rejection_verdict}"
         )
 
-        # Verify Agent PID has NOT changed throughout
-        assert agent_proc.poll() is None, "Agent process unexpectedly stopped"
-        assert agent_proc.pid == agent_pid, "Agent process was restarted during revocation"
+        # STEP 4: Invalid trust-update controls - corrupt/invalid JSON written to disk
+        keyring_file.write_text('{"schema_version": 1, "invalid_fields": true}')
+        _, fourth = request(
+            "POST",
+            base + "/revisions/v-deny/deploy",
+            {"rollback": False, "issuer_key_id": "demo-issuer-2"},
+            admin_headers,
+        )
+        assert fourth["deployment_sequence"] == 4
+        fourth_ack = rejected(4)
+        assert fourth_ack["status"] == "rejected"
+
+        # Active policy still strictly preserved at sequence 2
+        _, health4 = request("GET", agent + "/health")
+        assert health4["managed_policy"]["deployment_sequence"] == 2
+        assert health4["managed_policy"]["revision"] == "v-allow"
+        assert verdict(4) == "defer"
+        assert agent_proc.poll() is None and agent_proc.pid == agent_pid
+
+        # STEP 5: Explicit trust removed (REVIEW114_EXPLICIT_TRUST_REMOVED)
+        keyring_file.unlink()
+        _, fifth = request(
+            "POST",
+            base + "/revisions/v-deny/deploy",
+            {"rollback": False, "issuer_key_id": "demo-issuer-1"},
+            admin_headers,
+        )
+        assert fifth["deployment_sequence"] == 5
+        fifth_ack = rejected(5)
+        assert fifth_ack["status"] == "rejected"
+        assert verdict(5) == "defer"
+
+        # STEP 6: Retained real-process restart and cached active policy
+        keyring_file.write_text(json.dumps(rotated_keyring, indent=2))
+        agent_proc.terminate()
+        agent_proc.wait(timeout=8)
+
+        # Start a NEW agent process with identical HOME to test retained cache on restart
+        agent_proc2 = proc(stack, [str(agent_binary), "serve"], temp, agent_env, temp / "agent2.log")
+        restarted_active = wait_for("restarted agent active sequence 2", lambda: (
+            (lambda h: h if h.get("managed_policy", {}).get("deployment_sequence") == 2
+             and h["managed_policy"]["revision"] == "v-allow" else None)(
+                request("GET", agent + "/health")[1])
+        ), timeout=15)
+        assert restarted_active["managed_policy"]["deployment_sequence"] == 2
+        assert restarted_active["managed_policy"]["revision"] == "v-allow"
+        assert verdict(6) == "defer"
 
         report = {
             "scope": "sou46-zero-downtime-key-rotation-and-revocation",
@@ -398,6 +454,9 @@ def main():
                 "key1_hot_revocation_fail_closed": True,
                 "active_policy_preserved_on_revoked_key_rejection": True,
                 "hook_decision_preserved_on_rejection": True,
+                "invalid_trust_update_fail_closed": True,
+                "explicit_trust_removed_fail_closed": True,
+                "retained_real_process_restart_restored_cache": True,
             },
             "issuers": {
                 "issuer_1": {"key_id": issuer1["key_id"], "public_key_hex": issuer1["public_key_hex"]},
@@ -428,13 +487,34 @@ def main():
                     "active_policy_maintained_sequence": current_managed["deployment_sequence"],
                     "decision_maintained": post_rejection_verdict,
                 },
+                {
+                    "sequence": 4,
+                    "signed_by": "demo-issuer-2 (invalid keyring on disk)",
+                    "expected_ack": "rejected",
+                    "actual_ack": fourth_ack["status"],
+                    "active_policy_maintained_sequence": 2,
+                    "decision_maintained": "defer",
+                },
+                {
+                    "sequence": 5,
+                    "signed_by": "demo-issuer-1 (keyring file deleted, no fallback)",
+                    "expected_ack": "rejected",
+                    "actual_ack": fifth_ack["status"],
+                    "active_policy_maintained_sequence": 2,
+                    "decision_maintained": "defer",
+                },
             ],
+            "restart_recovery": {
+                "restored_sequence": restarted_active["managed_policy"]["deployment_sequence"],
+                "restored_revision": restarted_active["managed_policy"]["revision"],
+                "decision": "defer",
+            },
         }
     # ExitStack stopped child processes and cleaned up temporary folder
     report["checks"]["owned_fixture_cleanup_completed"] = True
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + "\n")
-    print(f"SOU-46 DEMO PASS: key1 (deny) -> rotated key2 (defer) -> revoked key1 rejected (defer retained); no Agent restart (PID={agent_pid}); evidence={args.output}")
+    print(f"SOU-46 DEMO PASS: key1 (deny) -> rotated key2 (defer) -> revoked key1 rejected -> invalid trust update rejected -> explicit trust removed rejected -> restart restored cache; evidence={args.output}")
 
 
 if __name__ == "__main__":

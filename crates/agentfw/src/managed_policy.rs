@@ -4,6 +4,8 @@
 //! This module ONLY verifies a candidate. It must not mutate the running
 //! firewall, accept a new trust key from the network, or acknowledge application.
 
+use std::path::Path;
+
 use anyhow::{bail, ensure, Context, Result};
 use aws_lc_rs::signature::{UnparsedPublicKey, ED25519};
 use serde::{Deserialize, Serialize};
@@ -11,6 +13,7 @@ use sha2::{Digest, Sha256};
 use soup_wall_agent::AgentPolicySet;
 
 pub const SCHEMA_VERSION: u16 = 1;
+pub const KEYRING_SCHEMA_VERSION: u32 = 1;
 pub const MAX_BUNDLE_BYTES: usize = 96 * 1024;
 pub const MAX_KEYRING_BYTES: usize = 64 * 1024;
 pub const MAX_POLICY_BYTES: usize = 64 * 1024;
@@ -24,6 +27,14 @@ pub struct PinnedIssuerKey {
     pub key_id: String,
     pub public_key: [u8; 32],
     pub revoked: bool,
+}
+
+/// Versioned keyring document stored on disk.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct KeyringStore {
+    pub schema_version: u32,
+    pub issuers: Vec<PinnedIssuerKeyEntry>,
 }
 
 /// Keyring entry as serialized/deserialized in operator-provisioned trusted-issuers.json.
@@ -133,14 +144,32 @@ fn hex_lower(bytes: &[u8]) -> String {
     text
 }
 
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum KeyringPayload {
+    Versioned(KeyringStore),
+    Raw(Vec<PinnedIssuerKeyEntry>),
+}
+
 /// Parse an operator-provisioned keyring containing one or more pinned issuer keys.
 pub fn parse_keyring(input: &[u8]) -> Result<Vec<PinnedIssuerKey>> {
     ensure!(
         !input.is_empty() && input.len() <= MAX_KEYRING_BYTES,
         "invalid keyring length"
     );
-    let entries: Vec<PinnedIssuerKeyEntry> =
-        serde_json::from_slice(input).context("invalid keyring JSON")?;
+    let payload: KeyringPayload = serde_json::from_slice(input).context("invalid keyring JSON")?;
+    let entries = match payload {
+        KeyringPayload::Versioned(store) => {
+            ensure!(
+                store.schema_version == KEYRING_SCHEMA_VERSION,
+                "unsupported keyring schema_version {}; expected {}",
+                store.schema_version,
+                KEYRING_SCHEMA_VERSION
+            );
+            store.issuers
+        }
+        KeyringPayload::Raw(entries) => entries,
+    };
     ensure!(
         !entries.is_empty(),
         "keyring must contain at least one issuer key"
@@ -175,10 +204,10 @@ pub fn parse_keyring(input: &[u8]) -> Result<Vec<PinnedIssuerKey>> {
     Ok(keys)
 }
 
-/// Serialize a list of pinned issuer keys to canonical operator-provisioned keyring JSON.
+/// Serialize a list of pinned issuer keys to canonical versioned operator-provisioned keyring JSON.
 pub fn serialize_keyring(keys: &[PinnedIssuerKey]) -> Result<Vec<u8>> {
     ensure!(!keys.is_empty(), "keyring cannot be empty");
-    let entries: Vec<PinnedIssuerKeyEntry> = keys
+    let issuers: Vec<PinnedIssuerKeyEntry> = keys
         .iter()
         .map(|k| PinnedIssuerKeyEntry {
             key_id: k.key_id.clone(),
@@ -186,12 +215,53 @@ pub fn serialize_keyring(keys: &[PinnedIssuerKey]) -> Result<Vec<u8>> {
             revoked: k.revoked,
         })
         .collect();
-    let data = serde_json::to_vec_pretty(&entries)?;
+    let store = KeyringStore {
+        schema_version: KEYRING_SCHEMA_VERSION,
+        issuers,
+    };
+    let data = serde_json::to_vec_pretty(&store)?;
     ensure!(
         data.len() <= MAX_KEYRING_BYTES,
         "serialized keyring too large"
     );
     Ok(data)
+}
+
+/// Read an operator keyring file, bounding bytes read and refusing non-regular files.
+pub fn read_keyring_file(path: &Path) -> Result<Vec<u8>> {
+    let metadata = std::fs::symlink_metadata(path)
+        .with_context(|| format!("cannot inspect keyring path {:?}", path))?;
+    ensure!(
+        !metadata.file_type().is_symlink(),
+        "keyring path {:?} must not be a symlink",
+        path
+    );
+    ensure!(
+        metadata.is_file(),
+        "keyring path {:?} must be a regular file",
+        path
+    );
+    ensure!(
+        metadata.len() <= MAX_KEYRING_BYTES as u64,
+        "keyring file {:?} size {} exceeds maximum allowed {} bytes",
+        path,
+        metadata.len(),
+        MAX_KEYRING_BYTES
+    );
+    let mut file = std::fs::File::open(path)
+        .with_context(|| format!("cannot open keyring file {:?}", path))?;
+    use std::io::Read;
+    let mut buffer = Vec::with_capacity(metadata.len() as usize);
+    file.by_ref()
+        .take((MAX_KEYRING_BYTES + 1) as u64)
+        .read_to_end(&mut buffer)
+        .with_context(|| format!("cannot read keyring file {:?}", path))?;
+    ensure!(
+        buffer.len() <= MAX_KEYRING_BYTES,
+        "keyring file content exceeds maximum allowed {} bytes",
+        MAX_KEYRING_BYTES
+    );
+    Ok(buffer)
 }
 
 /// Verify independently pinned signer, exact tenant/Agent audience, bounded
@@ -533,5 +603,75 @@ mod tests {
 
         // Bundle from issuer-2 continues to succeed
         assert!(verify_candidate(&bundle2, &keys_revoked, "tenant-1", "agent-1", 1, 1500).is_ok());
+    }
+
+    #[test]
+    fn keyring_versioned_format_supports_schema_version_and_denies_unknown_fields() {
+        // Valid versioned keyring
+        let valid = serde_json::json!({
+            "schema_version": 1,
+            "issuers": [
+                {"key_id": "k1", "public_key_hex": "00".repeat(32), "revoked": false}
+            ]
+        });
+        let parsed = parse_keyring(&serde_json::to_vec(&valid).unwrap()).unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].key_id, "k1");
+
+        // Unsupported schema version
+        let bad_ver = serde_json::json!({
+            "schema_version": 2,
+            "issuers": [
+                {"key_id": "k1", "public_key_hex": "00".repeat(32)}
+            ]
+        });
+        assert!(parse_keyring(&serde_json::to_vec(&bad_ver).unwrap()).is_err());
+
+        // Unknown fields at root rejected
+        let unknown_root = serde_json::json!({
+            "schema_version": 1,
+            "issuers": [
+                {"key_id": "k1", "public_key_hex": "00".repeat(32)}
+            ],
+            "extra_field": "disallowed"
+        });
+        assert!(parse_keyring(&serde_json::to_vec(&unknown_root).unwrap()).is_err());
+
+        // Unknown fields in issuer entry rejected
+        let unknown_entry = serde_json::json!({
+            "schema_version": 1,
+            "issuers": [
+                {"key_id": "k1", "public_key_hex": "00".repeat(32), "unknown": 123}
+            ]
+        });
+        assert!(parse_keyring(&serde_json::to_vec(&unknown_entry).unwrap()).is_err());
+    }
+
+    #[test]
+    fn read_keyring_file_enforces_bounds_and_regular_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let valid_path = temp.path().join("trusted-issuers.json");
+        let valid = serde_json::json!({
+            "schema_version": 1,
+            "issuers": [
+                {"key_id": "k1", "public_key_hex": "00".repeat(32)}
+            ]
+        });
+        std::fs::write(&valid_path, serde_json::to_vec(&valid).unwrap()).unwrap();
+        assert!(read_keyring_file(&valid_path).is_ok());
+
+        // Refuses directory
+        let dir_path = temp.path().join("dir");
+        std::fs::create_dir(&dir_path).unwrap();
+        assert!(read_keyring_file(&dir_path).is_err());
+
+        // Refuses missing file
+        let missing = temp.path().join("missing.json");
+        assert!(read_keyring_file(&missing).is_err());
+
+        // Refuses oversized file (> 64 KiB)
+        let large_path = temp.path().join("large.json");
+        std::fs::write(&large_path, vec![b' '; MAX_KEYRING_BYTES + 1]).unwrap();
+        assert!(read_keyring_file(&large_path).is_err());
     }
 }

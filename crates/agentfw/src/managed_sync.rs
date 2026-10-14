@@ -13,17 +13,22 @@ use serde_json::json;
 
 use crate::handlers::Shared;
 use crate::managed_policy::{
-    parse_bounded, parse_keyring, verify_candidate, PinnedIssuerKey, SignedAgentPolicy,
-    VerifiedAgentPolicy, MAX_BUNDLE_BYTES,
+    parse_bounded, parse_keyring, read_keyring_file, verify_candidate, PinnedIssuerKey,
+    SignedAgentPolicy, VerifiedAgentPolicy, MAX_BUNDLE_BYTES,
 };
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TrustSource {
+    KeyringFile(PathBuf),
+    Environment(PinnedIssuerKey),
+}
 
 pub struct ManagedSync {
     console: reqwest::Url,
     token: String,
     tenant: String,
     agent: String,
-    keyring_path: PathBuf,
-    fallback_issuer: Option<PinnedIssuerKey>,
+    trust_source: TrustSource,
     active_path: PathBuf,
 }
 
@@ -81,11 +86,22 @@ impl ManagedSync {
             !tenant.is_empty() && tenant.len() <= 128 && !agent.is_empty() && agent.len() <= 128,
             "missing or excessive managed audience"
         );
-        let keyring_path = std::env::var("SOUP_MANAGED_AGENT_KEYRING_PATH")
+
+        let explicit_keyring = std::env::var("SOUP_MANAGED_AGENT_KEYRING_PATH")
             .ok()
-            .map(PathBuf::from)
-            .unwrap_or_else(|| home.join("trusted-issuers.json"));
-        let fallback_issuer = if let Ok(key_id) = std::env::var("SOUP_MANAGED_AGENT_KEY_ID") {
+            .map(PathBuf::from);
+        let default_keyring = home.join("trusted-issuers.json");
+        let env_key_id = std::env::var("SOUP_MANAGED_AGENT_KEY_ID").ok();
+
+        let trust_source = if let Some(explicit) = explicit_keyring {
+            ensure!(
+                !explicit.as_os_str().is_empty(),
+                "SOUP_MANAGED_AGENT_KEYRING_PATH cannot be empty"
+            );
+            TrustSource::KeyringFile(explicit)
+        } else if default_keyring.is_file() {
+            TrustSource::KeyringFile(default_keyring)
+        } else if let Some(key_id) = env_key_id {
             ensure!(
                 !key_id.is_empty() && key_id.len() <= 128,
                 "invalid locally pinned signing key ID"
@@ -97,45 +113,43 @@ impl ManagedSync {
             let revoked = std::env::var("SOUP_MANAGED_AGENT_KEY_REVOKED")
                 .ok()
                 .is_some_and(|v| v == "true");
-            Some(PinnedIssuerKey {
+            TrustSource::Environment(PinnedIssuerKey {
                 key_id,
                 public_key,
                 revoked,
             })
         } else {
-            None
+            anyhow::bail!(
+                "managed Agent requires either a trusted keyring file ({:?}) or SOUP_MANAGED_AGENT_KEY_ID / SOUP_MANAGED_AGENT_PUBLIC_KEY_HEX",
+                default_keyring
+            );
         };
-        ensure!(
-            keyring_path.is_file() || fallback_issuer.is_some(),
-            "managed Agent requires either a trusted keyring file or SOUP_MANAGED_AGENT_KEY_ID / SOUP_MANAGED_AGENT_PUBLIC_KEY_HEX"
-        );
+
         Ok(Some(Self {
             console,
             token,
             tenant,
             agent,
-            keyring_path,
-            fallback_issuer,
+            trust_source,
             active_path: home.join("managed-policy-active.json"),
         }))
     }
 
-    /// Load trusted issuer keys dynamically from the operator keyring file if present,
-    /// or from the fallback environment key. Key changes on disk take effect without restarting.
+    /// Load trusted issuer keys dynamically.
+    /// If file mode is configured, keys are loaded strictly from the keyring file;
+    /// if the file is removed, missing, or invalid, loading fails closed with no fallback.
+    /// If environment mode is configured, the pinned single key is used.
     pub fn load_keys(&self) -> Result<Vec<PinnedIssuerKey>> {
-        if self.keyring_path.is_file() {
-            let data = fs::read(&self.keyring_path)
-                .with_context(|| format!("cannot read keyring at {:?}", self.keyring_path))?;
-            return parse_keyring(&data);
+        match &self.trust_source {
+            TrustSource::Environment(pinned) => {
+                ensure!(!pinned.revoked, "managed issuer is locally revoked");
+                Ok(vec![pinned.clone()])
+            }
+            TrustSource::KeyringFile(path) => {
+                let data = read_keyring_file(path)?;
+                parse_keyring(&data)
+            }
         }
-        if let Some(ref fallback) = self.fallback_issuer {
-            ensure!(!fallback.revoked, "managed issuer is locally revoked");
-            return Ok(vec![fallback.clone()]);
-        }
-        anyhow::bail!(
-            "trusted keyring file {:?} is missing and no fallback key is configured",
-            self.keyring_path
-        );
     }
 
     fn endpoint(&self, path: &str) -> Result<reqwest::Url> {
@@ -341,7 +355,17 @@ impl ManagedSync {
             return self.acknowledge(client, state).await;
         }
         let last = active.map_or(0, |a| a.deployment_sequence);
-        let keys = self.load_keys()?;
+        let keys = match self.load_keys() {
+            Ok(keys) => keys,
+            Err(error) => {
+                tracing::warn!(
+                    error = %error,
+                    "cannot load trusted keyring during candidate verification; reporting rejection"
+                );
+                self.report_rejection(client, &bundle).await;
+                return Err(error);
+            }
+        };
         let verified =
             match verify_candidate(&bundle, &keys, &self.tenant, &self.agent, last, now()) {
                 Ok(verified) => verified,
