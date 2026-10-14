@@ -75,11 +75,29 @@ impl Outcome {
 }
 
 /// Holds all per-session state. One instance serves many sessions.
+/// Actual managed policy attached to the running firewall, not a download receipt.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct ManagedActivePolicy {
+    pub revision: String,
+    pub deployment_sequence: u64,
+    pub policy_sha256: String,
+}
+
+/// Last observed Console connectivity/verification state. Active policy is
+/// independent of this observation: offline never means policy was removed.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct ManagedTransportStatus {
+    pub state: String,
+    pub observed_at_unix: i64,
+}
+
 pub struct AgentFirewall {
     policy: AgentPolicySet,
     detectors: Vec<Box<dyn Detector>>,
     taint: TaintTracker,
     authority: Authority,
+    managed_active: Option<ManagedActivePolicy>,
+    managed_transport: Option<ManagedTransportStatus>,
 }
 
 impl AgentFirewall {
@@ -103,6 +121,8 @@ impl AgentFirewall {
             ],
             taint: TaintTracker::new(taint_cap),
             authority: Authority::default(),
+            managed_active: None,
+            managed_transport: None,
         }
     }
 
@@ -111,6 +131,47 @@ impl AgentFirewall {
         let yaml = include_str!("../policies/agent-default.yaml");
         let policy = AgentPolicySet::from_yaml(yaml).expect("shipped policy must parse");
         Self::new(policy, DEFAULT_TAINT_CAP)
+    }
+
+    /// Switch only the policy, preserving detector, taint, incomplete-history and
+    /// authority state for all existing sessions. Do not reconstruct this object
+    /// to apply remote configuration: that silently erases security evidence.
+    pub fn replace_policy_preserving_provenance(&mut self, policy: AgentPolicySet) {
+        self.policy = policy;
+        self.managed_active = None;
+    }
+
+    /// Activate in place, preserving all session evidence, trackers, detectors,
+    /// authority and resource state. Caller must ensure any old grants cannot
+    /// be redeemed across the switch.
+    pub fn activate_managed_policy(
+        &mut self,
+        policy: AgentPolicySet,
+        revision: String,
+        sequence: u64,
+        digest: String,
+    ) {
+        self.policy = policy;
+        self.managed_active = Some(ManagedActivePolicy {
+            revision,
+            deployment_sequence: sequence,
+            policy_sha256: digest,
+        });
+    }
+
+    pub fn active_managed_policy(&self) -> Option<ManagedActivePolicy> {
+        self.managed_active.clone()
+    }
+
+    pub fn set_managed_transport_status(&mut self, state: &str, observed_at_unix: i64) {
+        self.managed_transport = Some(ManagedTransportStatus {
+            state: state.to_owned(),
+            observed_at_unix,
+        });
+    }
+
+    pub fn managed_transport_status(&self) -> Option<ManagedTransportStatus> {
+        self.managed_transport.clone()
     }
 
     /// Register the top-level agent's tool grant for a session.
