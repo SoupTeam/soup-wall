@@ -53,6 +53,11 @@ fn profile_accessible(home: &Path) -> bool {
     true
 }
 
+fn installed_binary(home: &Path, version: &str) -> PathBuf {
+    home.join("versions")
+        .join(format!("agentfw-{version}{}", std::env::consts::EXE_SUFFIX))
+}
+
 fn candidate(dir: &Path, name: &str, append: &[u8]) -> (PathBuf, String) {
     let path = dir.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
     fs::copy(env!("CARGO_BIN_EXE_agentfw"), &path).unwrap();
@@ -186,9 +191,9 @@ fn managed_lifecycle_restores_last_working_version() {
     assert!(home.join("token").exists());
     assert!(home.join("audit.jsonl").exists());
     assert!(home.join("foreign.txt").exists());
-    assert!(!home.join("versions/agentfw-one").exists());
-    assert!(!home.join("versions/agentfw-two").exists());
-    assert!(!home.join("versions/agentfw-broken").exists());
+    assert!(!installed_binary(&home, "one").exists());
+    assert!(!installed_binary(&home, "two").exists());
+    assert!(!installed_binary(&home, "broken").exists());
     assert!(manager.status().unwrap().active.is_none());
 }
 
@@ -209,7 +214,7 @@ fn managed_storage_rejects_unsafe_inputs_and_preserves_foreign_files() {
         .is_err());
     assert!(manager.install("../outside", &candidate, &digest).is_err());
     assert!(manager.install("one", &candidate, &"0".repeat(64)).is_err());
-    let foreign = home.join("versions/agentfw-one");
+    let foreign = installed_binary(&home, "one");
     fs::write(&foreign, "foreign").unwrap();
     assert!(manager.install("one", &candidate, &digest).is_err());
     assert_eq!(fs::read_to_string(&foreign).unwrap(), "foreign");
