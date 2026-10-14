@@ -102,8 +102,11 @@ The PostgreSQL Linux/amd64 service is pinned to
 bundled operating-system notices apply. The report records the observed server
 version and image digest. The service has a generated database name and password,
 a loopback-only published port, and TLS with an explicit ephemeral CA. Neither
-the driver nor bootstrap accepts an operator database URL. Generated credentials
-stay in private temporary files/process memory; they are not evidence artifacts.
+the driver nor bootstrap accepts an operator database URL. The generated password
+is passed through the Docker client's environment by name, never written to an
+environment file or command-line argument. It is present in the owned container's
+private configuration until cleanup; Docker administrators can inspect it. It is
+not an evidence artifact.
 Cleanup removes only the created container ID and its anonymous volume. The
 PostgreSQL entrypoint retains the minimal ownership/user-switch capabilities
 needed to initialize its volume and private TLS key; privilege escalation is

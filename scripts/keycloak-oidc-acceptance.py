@@ -36,9 +36,9 @@ KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak@sha256:ad1b0f0fa4bb5eff10f7a78eaafbb
 POSTGRES_IMAGE = "postgres@sha256:ec9f656f17c8b4dfebf49e58cf5c46d493d4846d4ea6d8b85d0637f68ee33bfc"
 
 
-def owned_container(docker, arguments, resources):
+def owned_container(docker, arguments, resources, environment=None):
     created = subprocess.run([docker, "create", *arguments], check=True,
-                             capture_output=True, text=True, timeout=30)
+                             capture_output=True, text=True, timeout=30, env=environment)
     identifier = created.stdout.strip()
     if len(identifier) != 64 or any(c not in "0123456789abcdef" for c in identifier):
         raise RuntimeError("Docker did not return an owned container ID")
@@ -60,23 +60,22 @@ class FixtureDatabase:
         subprocess.run([self.docker, "pull", "--platform", "linux/amd64", POSTGRES_IMAGE],
                        check=True, capture_output=True, timeout=240)
         password = secrets.token_urlsafe(32)
-        credentials = directory / "postgres.env"
-        credentials.write_text(f"POSTGRES_USER=oidc_fixture\nPOSTGRES_DB={self.name}\nPOSTGRES_PASSWORD={password}\n",
-                               encoding="utf-8")
-        credentials.chmod(0o600)
         port = vendor.free_port()
         self.container = owned_container(self.docker, ["--platform", "linux/amd64",
             "--name", "soup-oidc-postgres-" + uuid.uuid4().hex,
             "--publish", f"127.0.0.1:{port}:5432", "--memory=512m",
             "--security-opt=no-new-privileges", "--cap-drop=ALL",
             "--cap-add=CHOWN", "--cap-add=DAC_OVERRIDE", "--cap-add=FOWNER",
-            "--cap-add=SETGID", "--cap-add=SETUID", "--env-file", str(credentials),
+            "--cap-add=SETGID", "--cap-add=SETUID",
+            "--env", "POSTGRES_USER=oidc_fixture", "--env", "POSTGRES_DB=" + self.name,
+            "--env", "POSTGRES_PASSWORD",
             "--mount", f"type=bind,src={cert},dst=/fixture-cert.pem,readonly",
             "--mount", f"type=bind,src={key},dst=/fixture-key.pem,readonly",
             POSTGRES_IMAGE, "bash", "-ec",
             "cp /fixture-key.pem /tmp/oidc-server.key; chown postgres:postgres /tmp/oidc-server.key; "
             "chmod 600 /tmp/oidc-server.key; exec docker-entrypoint.sh postgres "
-            "-c ssl=on -c ssl_cert_file=/fixture-cert.pem -c ssl_key_file=/tmp/oidc-server.key"], resources)
+            "-c ssl=on -c ssl_cert_file=/fixture-cert.pem -c ssl_key_file=/tmp/oidc-server.key"], resources,
+            environment=dict(os.environ, POSTGRES_PASSWORD=password))
         subprocess.run([self.docker, "start", self.container], check=True, capture_output=True, timeout=30)
         environment.update(SOUP_OIDC_FIXTURE_DATABASE_URL=
             f"postgresql://oidc_fixture:{password}@127.0.0.1:{port}/{self.name}?sslmode=require",

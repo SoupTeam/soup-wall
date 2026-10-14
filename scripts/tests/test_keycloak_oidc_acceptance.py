@@ -34,6 +34,24 @@ class ImportedCredentialTests(unittest.TestCase):
 
 
 class OwnedDatabaseTests(unittest.TestCase):
+    def test_postgres_password_uses_process_environment_without_file_or_argument(self):
+        secret = "synthetic-generated-secret"
+        with tempfile.TemporaryDirectory() as directory, ExitStack() as resources:
+            root = Path(directory)
+            with patch.object(DRIVER.secrets, "token_urlsafe", return_value=secret), \
+                    patch.object(DRIVER.shutil, "which", return_value="docker"), \
+                    patch.object(DRIVER.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "a" * 64)) as run, \
+                    patch.object(DRIVER.FixtureDatabase, "sql", return_value="1"), \
+                    patch.object(DRIVER.socket, "create_connection"):
+                with resources:
+                    DRIVER.FixtureDatabase(root, {}, resources, postgres=True,
+                                           cert=root / "cert.pem", key=root / "key.pem")
+                creation = next(call for call in run.call_args_list if call.args[0][1] == "create")
+                self.assertEqual(creation.kwargs["env"]["POSTGRES_PASSWORD"], secret)
+                for call in run.call_args_list:
+                    self.assertNotIn(secret, " ".join(call.args[0]))
+                self.assertEqual(list(root.iterdir()), [])
+
     def test_sqlite_mode_uses_new_fixture_without_docker_or_environment_changes(self):
         with tempfile.TemporaryDirectory() as directory, ExitStack() as resources:
             environment = {"HOME": directory}
