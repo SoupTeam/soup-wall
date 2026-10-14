@@ -165,6 +165,8 @@ pub struct NewRevisionRequest {
 pub struct NewDeploymentRequest {
     #[serde(default)]
     pub rollback: bool,
+    #[serde(default)]
+    pub issuer_key_id: Option<String>,
 }
 
 /// Strictly privileged Console authoring: payload is AgentPolicySet YAML,
@@ -237,8 +239,9 @@ pub async fn deploy_revision(
             "Console storage unavailable",
         );
     };
+    let target_key = input.issuer_key_id.clone();
     match tokio::task::spawn(async move {
-        let issuer = ManagedIssuer::from_environment()?;
+        let issuer = ManagedIssuer::from_environment_for_key(target_key.as_deref())?;
         db.deploy_managed_revision_async(&tenant, &agent, &revision, input.rollback, &issuer)
             .await
     })
@@ -256,14 +259,31 @@ pub async fn deploy_revision(
     }
 }
 
+#[derive(Default, Deserialize)]
+pub struct IssuerQuery {
+    pub key_id: Option<String>,
+}
+
 /// Public verification key, obtainable via authenticated Console on the
 /// provisioning channel; the Agent still requires local operator pinning.
-pub async fn issuer_public_key() -> Response {
-    match tokio::task::spawn_blocking(ManagedIssuer::from_environment).await {
+pub async fn issuer_public_key(
+    axum::extract::Query(query): axum::extract::Query<IssuerQuery>,
+) -> Response {
+    let target_key = query.key_id;
+    match tokio::task::spawn_blocking(move || {
+        ManagedIssuer::from_environment_for_key(target_key.as_deref())
+    })
+    .await
+    {
         Ok(Ok(issuer)) => Json(serde_json::json!({
+            "key_id": issuer.key_id(),
             "public_key_hex": issuer.public_key_hex()
         }))
         .into_response(),
+        Ok(Err(e)) => {
+            tracing::warn!(error = %e, "issuer key not found or not configured");
+            failure(StatusCode::NOT_FOUND, "issuer not configured")
+        }
         _ => failure(StatusCode::SERVICE_UNAVAILABLE, "issuer not configured"),
     }
 }

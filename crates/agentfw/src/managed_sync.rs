@@ -13,16 +13,22 @@ use serde_json::json;
 
 use crate::handlers::Shared;
 use crate::managed_policy::{
-    parse_bounded, verify_candidate, PinnedIssuerKey, SignedAgentPolicy, VerifiedAgentPolicy,
-    MAX_BUNDLE_BYTES,
+    parse_bounded, parse_keyring, read_keyring_file, verify_candidate, PinnedIssuerKey,
+    SignedAgentPolicy, VerifiedAgentPolicy, MAX_BUNDLE_BYTES,
 };
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TrustSource {
+    KeyringFile(PathBuf),
+    Environment(PinnedIssuerKey),
+}
 
 pub struct ManagedSync {
     console: reqwest::Url,
     token: String,
     tenant: String,
     agent: String,
-    issuer: PinnedIssuerKey,
+    trust_source: TrustSource,
     active_path: PathBuf,
 }
 
@@ -80,32 +86,70 @@ impl ManagedSync {
             !tenant.is_empty() && tenant.len() <= 128 && !agent.is_empty() && agent.len() <= 128,
             "missing or excessive managed audience"
         );
-        let key_id = std::env::var("SOUP_MANAGED_AGENT_KEY_ID")
-            .context("missing locally pinned signing key ID")?;
-        ensure!(
-            !key_id.is_empty() && key_id.len() <= 128,
-            "invalid locally pinned signing key ID"
-        );
-        let public_key = fixed_hex_32(
-            &std::env::var("SOUP_MANAGED_AGENT_PUBLIC_KEY_HEX")
-                .context("missing independently pinned issuer public key")?,
-        )?;
-        let revoked = std::env::var("SOUP_MANAGED_AGENT_KEY_REVOKED")
+
+        let explicit_keyring = std::env::var("SOUP_MANAGED_AGENT_KEYRING_PATH")
             .ok()
-            .is_some_and(|v| v == "true");
-        ensure!(!revoked, "managed issuer is locally revoked");
+            .map(PathBuf::from);
+        let default_keyring = home.join("trusted-issuers.json");
+        let env_key_id = std::env::var("SOUP_MANAGED_AGENT_KEY_ID").ok();
+
+        let trust_source = if let Some(explicit) = explicit_keyring {
+            ensure!(
+                !explicit.as_os_str().is_empty(),
+                "SOUP_MANAGED_AGENT_KEYRING_PATH cannot be empty"
+            );
+            TrustSource::KeyringFile(explicit)
+        } else if default_keyring.is_file() {
+            TrustSource::KeyringFile(default_keyring)
+        } else if let Some(key_id) = env_key_id {
+            ensure!(
+                !key_id.is_empty() && key_id.len() <= 128,
+                "invalid locally pinned signing key ID"
+            );
+            let public_key = fixed_hex_32(
+                &std::env::var("SOUP_MANAGED_AGENT_PUBLIC_KEY_HEX")
+                    .context("missing independently pinned issuer public key")?,
+            )?;
+            let revoked = std::env::var("SOUP_MANAGED_AGENT_KEY_REVOKED")
+                .ok()
+                .is_some_and(|v| v == "true");
+            TrustSource::Environment(PinnedIssuerKey {
+                key_id,
+                public_key,
+                revoked,
+            })
+        } else {
+            anyhow::bail!(
+                "managed Agent requires either a trusted keyring file ({:?}) or SOUP_MANAGED_AGENT_KEY_ID / SOUP_MANAGED_AGENT_PUBLIC_KEY_HEX",
+                default_keyring
+            );
+        };
+
         Ok(Some(Self {
             console,
             token,
             tenant,
             agent,
-            issuer: PinnedIssuerKey {
-                key_id,
-                public_key,
-                revoked,
-            },
+            trust_source,
             active_path: home.join("managed-policy-active.json"),
         }))
+    }
+
+    /// Load trusted issuer keys dynamically.
+    /// If file mode is configured, keys are loaded strictly from the keyring file;
+    /// if the file is removed, missing, or invalid, loading fails closed with no fallback.
+    /// If environment mode is configured, the pinned single key is used.
+    pub fn load_keys(&self) -> Result<Vec<PinnedIssuerKey>> {
+        match &self.trust_source {
+            TrustSource::Environment(pinned) => {
+                ensure!(!pinned.revoked, "managed issuer is locally revoked");
+                Ok(vec![pinned.clone()])
+            }
+            TrustSource::KeyringFile(path) => {
+                let data = read_keyring_file(path)?;
+                parse_keyring(&data)
+            }
+        }
     }
 
     fn endpoint(&self, path: &str) -> Result<reqwest::Url> {
@@ -124,9 +168,10 @@ impl ManagedSync {
             Err(err) => return Err(err).context("cannot read persisted managed policy"),
         };
         let bundle = parse_bounded(&data)?;
+        let keys = self.load_keys()?;
         let verified = verify_candidate(
             &bundle,
-            std::slice::from_ref(&self.issuer),
+            &keys,
             &self.tenant,
             &self.agent,
             0,
@@ -310,20 +355,25 @@ impl ManagedSync {
             return self.acknowledge(client, state).await;
         }
         let last = active.map_or(0, |a| a.deployment_sequence);
-        let verified = match verify_candidate(
-            &bundle,
-            std::slice::from_ref(&self.issuer),
-            &self.tenant,
-            &self.agent,
-            last,
-            now(),
-        ) {
-            Ok(verified) => verified,
+        let keys = match self.load_keys() {
+            Ok(keys) => keys,
             Err(error) => {
+                tracing::warn!(
+                    error = %error,
+                    "cannot load trusted keyring during candidate verification; reporting rejection"
+                );
                 self.report_rejection(client, &bundle).await;
                 return Err(error);
             }
         };
+        let verified =
+            match verify_candidate(&bundle, &keys, &self.tenant, &self.agent, last, now()) {
+                Ok(verified) => verified,
+                Err(error) => {
+                    self.report_rejection(client, &bundle).await;
+                    return Err(error);
+                }
+            };
         if let Err(error) = self.activate(state, verified, &bundle) {
             self.report_rejection(client, &bundle).await;
             return Err(error);
