@@ -473,6 +473,9 @@ def run(args):
 
             def login(ctx, user, organization=None, workspace=None, success=True):
                 page = ctx.new_page()
+
+                page.set_default_timeout(90000)
+
                 report["phase"] = "console-entry-" + user["username"]
                 output.publish(report)
                 page.goto(gateway_base + "/customer")

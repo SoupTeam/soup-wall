@@ -309,10 +309,9 @@ jobs:
           test "$sha" = "$(git rev-parse "refs/tags/${TAG}^{commit}")"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
-      - name: Verify Preparation Run Identity & Attempt Binding (P2)
+      - name: Bind Identity and Fetch Exact Artifact
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          EXPECTED_SHA: ${{ steps.ref.outputs.sha }}
           ACCEPTANCE_RECORD: ${{ inputs.acceptance_record }}
         run: |
           set -euo pipefail
@@ -322,92 +321,57 @@ jobs:
              exit 1
           fi
           
-          EXPECTED_ATTEMPT=$(echo "$ACCEPTANCE_RECORD" | jq -r '.run_attempt // empty')
-          if [ -z "$EXPECTED_ATTEMPT" ]; then
-             echo "CRITICAL: Acceptance record must contain 'run_attempt'."
+          echo "$ACCEPTANCE_RECORD" > external-acceptance.json
+          
+          EXPECTED_RUN_ID=$(jq -r '.run_id // empty' external-acceptance.json)
+          EXPECTED_ARTIFACT_ID=$(jq -r '.artifact_id // empty' external-acceptance.json)
+          
+          if [ -z "$EXPECTED_RUN_ID" ] \vert{}\vert{} [ -z "$EXPECTED_ARTIFACT_ID" ]; then
+             echo "CRITICAL: Acceptance record must contain 'run_id' and 'artifact_id'."
+             exit 1
+          fi
+          if [ "$EXPECTED_RUN_ID" != "${{ inputs.promote_run_id }}" ]; then
+             echo "CRITICAL: Target promote_run_id does not match approved run_id."
              exit 1
           fi
 
-          RUN_JSON=$(gh api repos/${{ github.repository }}/actions/runs/${{ inputs.promote_run_id }})
-          STATUS=$(echo "$RUN_JSON" | jq -r '.status')
-          CONCLUSION=$(echo "$RUN_JSON" | jq -r '.conclusion')
-          RUN_SHA=$(echo "$RUN_JSON" | jq -r '.head_sha')
+          RUN_JSON=$(gh api repos/${{ github.repository }}/actions/runs/${EXPECTED_RUN_ID})
+          ACTUAL_ATTEMPT=$(echo "$RUN_JSON" | jq -r '.run_attempt')
           WORKFLOW_PATH=$(echo "$RUN_JSON" | jq -r '.path')
           EVENT=$(echo "$RUN_JSON" | jq -r '.event')
           REPO=$(echo "$RUN_JSON" | jq -r '.repository.full_name')
-          HEAD_BRANCH=$(echo "$RUN_JSON" | jq -r '.head_branch')
-          ACTUAL_ATTEMPT=$(echo "$RUN_JSON" | jq -r '.run_attempt')
-          
-          echo "Evaluating preparation run attempt: $ACTUAL_ATTEMPT against approved attempt:$EXPECTED_ATTEMPT"
-          
-          if [ "$EXPECTED_ATTEMPT" != "$ACTUAL_ATTEMPT" ]; then
-            echo "CRITICAL: Approved run_attempt ($EXPECTED_ATTEMPT) does not match actual run_attempt ($ACTUAL_ATTEMPT). Stale attempt detected."
-            exit 1
-          fi
 
-          if [ "$WORKFLOW_PATH" != ".github/workflows/release.yml" ]; then
-            echo "CRITICAL: Untrusted workflow path ($WORKFLOW_PATH)"
-            exit 1
-          fi
-          
-          # Nested to avoid using '||' operator per reviewer instruction
-          if [ "$EVENT" != "push" ]; then
-            if [ "$EVENT" != "workflow_dispatch" ]; then
-              echo "CRITICAL: Invalid preparation event ($EVENT)"
-              exit 1
-            fi
-          fi
-          
-          if [ "$REPO" != "${{ github.repository }}" ]; then
-            echo "CRITICAL: Untrusted repository ($REPO)"
-            exit 1
-          fi
+          # --paginate to ensure we get all jobs in the attempt
+          JOBS_JSON=$(gh api --paginate repos/${{ github.repository }}/actions/runs/${EXPECTED_RUN_ID}/attempts/${ACTUAL_ATTEMPT}/jobs)
+          PREPARE_JOB_STATUS=$(echo "$JOBS_JSON" | jq -r '.jobs[] | select(.name == "Prepare & Freeze Candidate") | .conclusion // "missing"')
 
-          # Replaced || with explicit separate checks
-          if [ "$STATUS" != "completed" ]; then
-            echo "CRITICAL: Preparation run is not completed ($STATUS)"
-            exit 1
-          fi
+          ARTIFACTS_JSON=$(gh api repos/${{ github.repository }}/actions/runs/${EXPECTED_RUN_ID}/artifacts)
+          ACTUAL_ARTIFACT_ID=$(echo "$ARTIFACTS_JSON" | jq -r '.artifacts[] | select(.name == "candidate-package") | .id // "missing"')
           
-          if [ "$CONCLUSION" != "success" ]; then
-            echo "CRITICAL: Preparation run conclusion is not success ($CONCLUSION)"
-            exit 1
-          fi
-
-          if [ "$RUN_SHA" != "$EXPECTED_SHA" ]; then
-            echo "CRITICAL: Preparation run SHA ($RUN_SHA) does not match expected tag SHA ($EXPECTED_SHA)"
-            exit 1
-          fi
-          if [ "$HEAD_BRANCH" != "$TAG" ]; then
-            echo "CRITICAL: Preparation run ref ($HEAD_BRANCH) does not match expected tag ($TAG)"
-            exit 1
-          fi
+          # Pass structured context to validator script
+          jq -n \
+            --arg run_id "$EXPECTED_RUN_ID" \
+            --arg attempt "$ACTUAL_ATTEMPT" \
+            --arg path "$WORKFLOW_PATH" \
+            --arg event "$EVENT" \
+            --arg repo "$REPO" \
+            --arg job "$PREPARE_JOB_STATUS" \
+            --arg art "$ACTUAL_ARTIFACT_ID" \
+            '{run_id: $run_id, run_attempt: $attempt, workflow_path:$path, event: $event, repository:$repo, prepare_job_status: $job, artifact_id:$art}' > api-context.json
+            
+          echo "Validating API Identity BEFORE Artifact Download..."
+          ../scripts/validate_candidate.sh external-acceptance.json /dev/null "${TAG}" "${{ steps.ref.outputs.sha }}" api-context.json api-only
           
-          # Verify that NO individual jobs failed in this specific attempt
-          JOBS_JSON=$(gh api repos/${{ github.repository }}/actions/runs/${{ inputs.promote_run_id }}/attempts/$ACTUAL_ATTEMPT/jobs)
-          FAILED_JOBS=$(echo "$JOBS_JSON" | jq '[.jobs[] | select(.conclusion != "success" and .conclusion != "skipped")] | length')
-          if [ "$FAILED_JOBS" -ne 0 ]; then
-            echo "CRITICAL: Unsuccessful preparation jobs detected in attempt $ACTUAL_ATTEMPT."
-            exit 1
-          fi
-          
-          echo "SUCCESS: Preparation run identity, attempt, and jobs verified securely before download."
-
-      - name: Download Frozen Candidate
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
+          echo "Identity strictly bound. Downloading physical artifact ID $EXPECTED_ARTIFACT_ID..."
+          gh api repos/${{ github.repository }}/actions/artifacts/$EXPECTED_ARTIFACT_ID/zip > package.zip
           mkdir dist
-          gh run download ${{ inputs.promote_run_id }} -n candidate-package -D dist
+          unzip package.zip -d dist/
 
       - name: SOU-26 Product Evidence Gate
         shell: bash
-        env:
-          ACCEPTANCE_RECORD: ${{ inputs.acceptance_record }}
         run: |
           cd dist
-          echo "$ACCEPTANCE_RECORD" > external-acceptance.json
-          ../scripts/validate_candidate.sh external-acceptance.json candidate-manifest.json "${TAG}" "${{ steps.ref.outputs.sha }}" "${ACTUAL_ATTEMPT}"
+          ../scripts/validate_candidate.sh ../external-acceptance.json candidate-manifest.json "${TAG}" "${{ steps.ref.outputs.sha }}" ../api-context.json full
 
       - name: Enforce Artifact Bytes Binding (P1)
         id: files
@@ -419,7 +383,6 @@ jobs:
           jq -r '.checksums[]' candidate-manifest.json > APPROVED_SUMS
           sha256sum --strict -c APPROVED_SUMS
           
-          # Pass strictly validated canonical files to next step
           FILES=$(awk '{print $2}' APPROVED_SUMS | tr '\n' ' ')
           echo "validated_files=$FILES" >> "$GITHUB_OUTPUT"
           echo "SUCCESS: Actual file bytes perfectly match the approved manifest."
