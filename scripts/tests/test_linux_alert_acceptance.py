@@ -8,8 +8,12 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
+import ssl
+import sys
 import tarfile
 import tempfile
+import threading
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
@@ -444,6 +448,59 @@ class LinuxAlertBoundaries(unittest.TestCase):
             command = runtime.command.call_args_list[-1].args[0]
             self.assertEqual(command[command.index("python3") + 1], IMAGE_ID)
             self.assertEqual(runtime.report["gateway_image_id"], IMAGE_ID)
+
+
+@unittest.skipUnless(shutil.which("openssl"), "openssl is not installed")
+class LinuxAlertStrictTLS(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.temporary = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(cls.temporary.cleanup)
+        cls.runtime = object.__new__(DRILL.Runtime)
+        cls.runtime.directory = Path(cls.temporary.name)
+        cls.runtime.report, cls.runtime.output, cls.runtime.sequence = {"checks": [], "executed": False}, Mock(), 0
+        with contextlib.redirect_stdout(io.StringIO()):
+            cls.runtime.prepare_tls()
+
+    def test_generated_chain_passes_strict_openssl_server_and_hostname_checks(self):
+        for verification in [["-verify_ip", "127.0.0.1"], ["-verify_hostname", "receiver"]]:
+            result = subprocess.run(["openssl", "verify", "-x509_strict", "-purpose", "sslserver", *verification,
+                                     "-CAfile", str(self.runtime.ca), str(self.runtime.directory / "server.pem")],
+                                    capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.runtime.report["checks"][-1]["check"], "receiver_certificate_chain_strict")
+        self.assertEqual((self.runtime.directory / "ca.key").stat().st_mode & 0o777, 0o600)
+        self.assertEqual((self.runtime.directory / "server.key").stat().st_mode & 0o777, 0o600)
+
+    def test_protected_receiver_health_succeeds_with_strict_stdlib_tls(self):
+        sys.path.insert(0, str(SCRIPT.parent))
+        from alert_receiver import ReceiptStore, ReceiverPolicy, create_server
+        token = b"soup-wall-local-fixture-token-00000000"
+        store = ReceiptStore(self.runtime.directory / "receipt-data", 30, 100)
+        server = None
+        try:
+            server = create_server(("127.0.0.1", 0), token, ReceiverPolicy.from_dict(DRILL.make_policy()), store,
+                                   tls_cert=self.runtime.directory / "server.pem", tls_key=self.runtime.directory / "server.key")
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            context = ssl.create_default_context(cafile=str(self.runtime.ca))
+            context.verify_flags |= ssl.VERIFY_X509_STRICT
+            self.assertTrue(context.check_hostname)
+            self.assertEqual(context.verify_mode, ssl.CERT_REQUIRED)
+            with patch.object(DRILL.ssl, "create_default_context", return_value=context):
+                code, raw = DRILL.request(f"https://127.0.0.1:{server.server_port}/healthz", ca=self.runtime.ca)
+                self.assertEqual(code, 200)
+                self.assertEqual(json.loads(raw), {"status": "serving"})
+                code, raw = DRILL.request(f"https://127.0.0.1:{server.server_port}/receipts?limit=100",
+                                          headers={"Authorization": "Bearer " + token.decode()}, ca=self.runtime.ca)
+                self.assertEqual(code, 200)
+                self.assertEqual(json.loads(raw)["total_unique_events"], 0)
+        finally:
+            if server:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+            store.close()
 
 
 if __name__ == "__main__":

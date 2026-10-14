@@ -277,20 +277,7 @@ class Runtime:
             (self.directory / name).mkdir(mode=0o700)
         protected_file(self.directory / "token", self.token + "\n")
         protected_file(self.directory / "policy.json", json.dumps(make_policy(), indent=2))
-        self.ca = self.directory / "ca.pem"
-        self.command(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", str(self.directory / "ca.key"),
-                      "-out", str(self.ca), "-days", "2", "-subj", "/CN=Soup Wall isolated monitoring CA"])
-        self.command(["openssl", "req", "-newkey", "rsa:2048", "-nodes", "-keyout", str(self.directory / "server.key"),
-                      "-out", str(self.directory / "server.csr"), "-subj", "/CN=receiver"])
-        protected_file(self.directory / "server.ext", "subjectAltName=DNS:receiver,DNS:localhost,IP:127.0.0.1\nextendedKeyUsage=serverAuth\n")
-        self.command(["openssl", "x509", "-req", "-in", str(self.directory / "server.csr"), "-CA", str(self.ca),
-                      "-CAkey", str(self.directory / "ca.key"), "-CAcreateserial", "-out", str(self.directory / "server.pem"),
-                      "-days", "2", "-extfile", str(self.directory / "server.ext")])
-        for path in self.directory.glob("*.key"):
-            path.chmod(0o600)
-        for path in [self.ca, self.directory / "server.pem"]:
-            path.chmod(0o444)
-        self.report["receiver_ca_sha256"] = digest(self.ca.read_bytes())
+        self.prepare_tls()
         rules = self.directory / "rules"
         rules.mkdir(mode=0o755)
         for name in ["prometheus-alerts.yaml", "prometheus-alerts.test.yaml"]:
@@ -398,6 +385,46 @@ policy_file: policies/default.yaml
         self.report["runtime_versions"] = {service: self.compose("exec", "--no-TTY", service, *args).strip() for service, args in [
             ("prometheus", ["/bin/prometheus", "--version"]), ("alertmanager", ["/bin/alertmanager", "--version"]), ("postgres", ["postgres", "--version"]), ("redis", ["redis-server", "--version"]), ("receiver", ["python3", "--version"])]}
         self.check("owned_pinned_services_ready", True)
+
+    def prepare_tls(self):
+        self.ca = self.directory / "ca.pem"
+        protected_file(self.directory / "ca.cnf", """[req]
+distinguished_name = ca_name
+prompt = no
+x509_extensions = ca_extensions
+[ca_name]
+CN = Soup Wall isolated monitoring CA
+[ca_extensions]
+basicConstraints = critical,CA:TRUE
+keyUsage = critical,keyCertSign,cRLSign
+subjectKeyIdentifier = hash
+""")
+        self.command(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-sha256",
+                      "-keyout", str(self.directory / "ca.key"), "-out", str(self.ca), "-days", "2",
+                      "-config", str(self.directory / "ca.cnf")])
+        self.command(["openssl", "req", "-newkey", "rsa:2048", "-nodes", "-sha256",
+                      "-keyout", str(self.directory / "server.key"), "-out", str(self.directory / "server.csr"),
+                      "-subj", "/CN=receiver"])
+        protected_file(self.directory / "server.ext", """basicConstraints = critical,CA:FALSE
+keyUsage = critical,digitalSignature,keyEncipherment
+extendedKeyUsage = serverAuth
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer
+subjectAltName = DNS:receiver,DNS:localhost,IP:127.0.0.1
+""")
+        self.command(["openssl", "x509", "-req", "-sha256", "-in", str(self.directory / "server.csr"),
+                      "-CA", str(self.ca), "-CAkey", str(self.directory / "ca.key"), "-CAcreateserial",
+                      "-out", str(self.directory / "server.pem"), "-days", "2",
+                      "-extfile", str(self.directory / "server.ext")])
+        for path in self.directory.glob("*.key"):
+            path.chmod(0o600)
+        for path in [self.ca, self.directory / "server.pem"]:
+            path.chmod(0o444)
+        self.command(["openssl", "verify", "-x509_strict", "-purpose", "sslserver", "-verify_ip", "127.0.0.1",
+                      "-CAfile", str(self.ca), str(self.directory / "server.pem")])
+        self.report["receiver_ca_sha256"] = digest(self.ca.read_bytes())
+        self.check("receiver_certificate_chain_strict", True,
+                   leaf_certificate_sha256=digest((self.directory / "server.pem").read_bytes()))
 
     def published_endpoint(self, service, target):
         identifiers = self.compose("ps", "--quiet", service).split()
