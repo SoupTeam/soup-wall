@@ -2,7 +2,87 @@
 
 The controlled Linux/arm64 slice passed **65 checks**, with six authenticated durable status identities across three correlated firing/resolved cycles. The raw [successful result](SOU41_linux-alert-98a7cf6.json) records source, image/binary/configuration hashes, runtime versions, observations and cleanup. This accepts the declared local notification/recovery slice; it does not establish production routing, staffed incident response, host-loss recovery, network egress denial or release eligibility.
 
-## Exact source and reproduction
+## Repaired current candidate: local and Linux CI verification
+
+The repaired clean candidate `ae3e742a41f4512e7114b05d6cd094adec55f801`
+(tree `0f2542c095e66b042e92fe094fd8cc5682797b07`, integrated main `d940d9e`)
+passed **65/65 checks** again on Linux/arm64. Its [raw outcome](SOU41_linux-alert-ae3e742.json)
+contains six durable status identities / three correlated cycles, **four observed
+failed HTTP notification attempts**, authenticated restart/replay deduplication,
+four useful calls with provider and durable audit witnesses, and two dependency
+refusals with zero provider effects. Source stayed clean and unchanged; owned
+cleanup passed and the private successful profile was removed.
+
+| Actual fault | Rule firing phase | Authenticated firing receipt phase | Resolved receipt phase |
+| --- | ---: | ---: | ---: |
+| PostgreSQL | 142.340 s | 4.065 s | 18.217 s |
+| Redis | 89.469 s | 30.375 s | 26.304 s |
+| Gateway | 142.093 s | 28.364 s | 44.714 s |
+
+These are named polling-phase waits, not end-to-end latency or a production SLO.
+The raw report also retains one initial `pg_isready` probe exit 2, followed by
+successful readiness; it is not hidden or counted as a useful-call interruption.
+The four accepted useful calls had zero interruptions in this controlled sample.
+
+The [native Linux/amd64 CI job](https://github.com/SoupTeam/soup-wall/actions/runs/38538491261/job/115767157039)
+also **succeeded** (12m 20s), including the focused receiver/driver boundaries and
+the same exact-source acceptance command. [CI observation metadata](SOU41_ci-linux-ae3e742.json)
+links its retained raw artifact, archive digest and workflow-event commit
+`49c70099d4d3687c3dde0d3e3c72c1bfb1ce1e6e`. Independent Git fetch/comparison
+confirmed that event commit and the PR head have the identical tree
+`0f2542c095e66b042e92fe094fd8cc5682797b07`. Artifact contents were not downloaded
+through the browser; this observation does not fabricate a second local raw
+report. GitHub retains the full CI artifact for 14 days. The local exact-source
+raw report is committed for continued review.
+
+Driver regressions passed **42/42** on the repaired candidate. The separate
+[clean exact-source Redis ACL probe](SOU41_redis-acl-auth-ae3e742.json) confirms
+valid authentication and rejection of missing/wrong credentials on pinned
+Redis 7.2.16, with label-checked cleanup and no network/host ports.
+Documentation passed 101 files / 468 local links at this candidate; rerun the
+link check after adding these evidence files.
+
+Reproduce from a clean checkout of the verified runtime:
+
+```sh
+mkdir -p target
+python3 scripts/linux-alert-acceptance.py --execute \
+  --expected-commit ae3e742a41f4512e7114b05d6cd094adec55f801 \
+  --out target/linux-alert-repaired.json
+```
+
+Subsequent evidence-only changes do not change runtime code, but exact final-head
+CI and maintainer review are still required. SOU-41 remains open until those
+requirements and the two scoped code-scanning dispositions below are accepted.
+
+### Code-scanning dispositions for the repaired candidate
+
+| Alert | Rule / severity | Analyzed path / commit | Disposition |
+| --- | --- | --- | --- |
+| [113](https://github.com/SoupTeam/soup-wall/security/code-scanning/113) | `py/clear-text-storage-sensitive-data` / High | driver line 144 / `30e75b7` | Confirmed fixture defect; fixed by `df38ba4`; Python rescan on `ae3e742` reports **Fixed**, without dismissal. |
+| [114](https://github.com/SoupTeam/soup-wall/security/code-scanning/114) | `py/weak-sensitive-data-hashing` / High | driver line 367 / `ae3e742` | Evidence-backed proposed false positive for this generated Redis ACL credential; kept open for reviewer disposition. |
+| [115](https://github.com/SoupTeam/soup-wall/security/code-scanning/115) | `py/weak-sensitive-data-hashing` / High | regression line 197 / `ae3e742` | The test checks the same required Redis ACL encoding; kept open for reviewer disposition. |
+
+The scan is [Python analysis run 38538487393](https://github.com/SoupTeam/soup-wall/actions/runs/38538487393)
+on `refs/pull/105/head`; owner is konung3 and PR review was requested from Nari-Ab.
+The original confirmed persistence defect is separate from the two new findings.
+No alert has been dismissed and no query-wide suppression has been introduced.
+These observations cover this PR's findings, not a clean repository-wide scan.
+
+The input to the Redis verifier is freshly generated by `secrets.token_hex(32)`:
+32 OS-CSPRNG bytes / 256 bits of entropy, without human or external password
+input. [Python specifies that byte count](https://docs.python.org/3.14/library/secrets.html#secrets.token_hex).
+[Redis 7.2.16 computes SHA-256 for its ACL verifier](https://github.com/redis/redis/blob/7.2.16/src/acl.c#L159),
+and its [ACL format requires that hash](https://redis.io/docs/latest/operate/oss_and_stack/management/security/acl/#acl-rules).
+Replacing it with a general human-password KDF would reject the same credential.
+The [CodeQL guidance](https://codeql.github.com/codeql-query-help/python/py-weak-sensitive-data-hashing/)
+identifies limited-input-space passwords as the reason for expensive hashing.
+The independent pinned-server auth probe validates interoperability and refusal.
+Re-triage if the generator, entropy, caller-input boundary or Redis protocol
+changes. Keep reviewer acceptance explicit; two unresolved High findings must
+not be described as a clean scan merely because this proposed rationale exists.
+
+## Earlier verified source and reproduction
 
 Verified clean commit: `98a7cf6f9ebfd96ac069d1d830eae2d67fa06d35`; tree `0ff5d5404d2d54954448b3c1ed48900b467ba49f`. Base main: `290e043bee52b7d97682577af2d3fd09e715e13e`. The Gateway was built from `git archive` of this commit using its locked Cargo dependencies. The local test image uses release opt-level 1, without LTO/debug information; this is not a published release image or performance benchmark. The evidence-only commit `30e75b7` changes documentation/artifacts; subsequent runtime repairs are described below and require separate verification. The runtime JSON verifies unchanged source before and after the complete drill.
 
@@ -19,16 +99,16 @@ Use a fresh output path; the command refuses existing evidence. See the [Linux p
 
 Rule evaluation remains 30 seconds, PostgreSQL/Gateway `for: 2m` and Redis `for: 1m`. The controlled fixture preserves `group_wait: 30s` but declares `group_interval: 15s` for notification scheduling; the production example remains 5 minutes. HTTPS used a fresh explicit per-run CA with strict chain/hostname verification and protected owner-only token/key/state files. The private standard Docker bridge publishes only owned loopback observer ports; PostgreSQL/Redis have no host ports.
 
-## Post-publication follow-up: current candidate verification pending
+## Post-publication repairs and initial failure
 
 [PR #105](https://github.com/SoupTeam/soup-wall/pull/105) preserves the successful
 `98a7cf6` run as historical exact-source evidence. Its first
 [Linux/amd64 CI attempt](https://github.com/SoupTeam/soup-wall/actions/runs/38535768567/job/115758140801)
 failed before completing the pinned promtool stage, after three recorded checks.
 The private rule mount was created under `umask 077`, while the image's default
-promtool user differed from the owner. The ownership/permission repair and its
-regression need fresh Linux execution; this failed attempt is not evidence that
-Linux/amd64 acceptance passed.
+promtool user differed from the owner. The repaired owner-UID invocation subsequently passed native Linux execution
+and its regressions, as recorded above. This initial failed attempt remains
+separate from that later success.
 
 [Code-scanning alert #113](https://github.com/SoupTeam/soup-wall/security/code-scanning/113)
 reported High `py/clear-text-storage-sensitive-data` on PR head `30e75b7`.
@@ -59,13 +139,13 @@ The driver follow-up suite passed 42 tests, including first-byte permissions,
 non-overwriting publication, saved-secret absence, owned promtool execution and
 sanitized command failures.
 
-The changed candidate must complete a new exact-source Linux drill, relevant
-regressions and a new code scan. The historical 65-check result and raw outcomes
-below remain unchanged; they do not accept the repaired head. The finding is
-not dismissed or considered remediated before the exact fix and rescan are
-verified. Maintainer review and exact-head CI remain pending.
+The repaired candidate completed the fresh exact-source drill, focused
+regressions and Python rescan recorded above. The historical 65-check result
+and raw outcomes below remain unchanged. Alert 113 was fixed by code and
+verified by that scan; the new scoped SHA-256 findings remain open for reviewer
+disposition. Maintainer review and final-head CI remain required.
 
-## Raw outcomes and witnesses
+## Earlier raw outcomes and witnesses (98a7cf6)
 
 | Actual fault | Wait to real rule firing | Wait to authenticated firing receipt | Wait to authenticated resolved receipt | Correlation |
 | --- | ---: | ---: | ---: | --- |
@@ -82,7 +162,7 @@ These waits cover each named polling phase, not total end-to-end alert latency o
 - Four useful synthetic calls (before outages and after each recovery) returned the same benign response and independently appended exactly one provider record each. Each completed call also had a durable PostgreSQL audit-row witness before the next fault. This is **zero interruptions in four fixture calls**, not a general detection or availability rate.
 - The final protected receipt inventory contained exactly six identities, firing/resolved for each declared alert, without truncation or unrelated rows. Only generated project services/volumes were stopped. Success cleanup was verified and its private profile removed; no paid model or real incident channel was contacted.
 
-## Regressions and required checks
+## Earlier regressions and checks (98a7cf6)
 
 - Protected receiver: **28 passed**, including process interruption, restart/dedup, storage failure/capacity, declared source/type bounds and real TLS saturation/recovery. Pinned Alertmanager 0.34.1 `notification_reason` and `routeLabels` metadata are validated and discarded; they never authorize a source or change identity. Older payloads remain supported.
 - Linux driver: **31 passed**, including actual lifecycle methods with changed external bindings, strict generated CA/leaf verification, incomplete/truncated evidence, source/ownership gates and useful/provider/audit witnesses. Both endpoint lifecycle regressions fail against the pre-fix driver.
