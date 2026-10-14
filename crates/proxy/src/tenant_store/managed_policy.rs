@@ -12,7 +12,7 @@ use soup_wall_agent::AgentPolicySet;
 use super::{now_unix, TenantStore};
 
 const DOMAIN: &[u8] = b"soup-wall-agent-policy-bundle-v1\0";
-const MAX_YAML: usize = 64 * 1024;
+pub(super) const MAX_YAML: usize = 64 * 1024;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -60,17 +60,17 @@ pub struct AppliedReport {
 }
 
 pub struct ManagedIssuer {
-    key_id: String,
+    pub(super) key_id: String,
     pair: Ed25519KeyPair,
 }
 
-fn exact_id(s: &str) -> bool {
+pub(super) fn exact_id(s: &str) -> bool {
     !s.is_empty()
         && s.len() <= 128
         && s.bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
 }
-fn hex(bytes: &[u8]) -> String {
+pub(super) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 fn decode_seed(value: &str) -> Result<[u8; 32]> {
@@ -133,7 +133,7 @@ impl ManagedIssuer {
     pub fn public_key_hex(&self) -> String {
         hex(self.pair.public_key().as_ref())
     }
-    fn sign(&self, bundle: &mut SignedManagedBundle) -> Result<()> {
+    pub(super) fn sign(&self, bundle: &mut SignedManagedBundle) -> Result<()> {
         bundle.signature_hex = hex(self.pair.sign(&bundle.transcript()?).as_ref());
         Ok(())
     }
@@ -399,7 +399,27 @@ impl TenantStore {
                 report.policy_sha256
             ],
         )?;
-        Ok(changed == 1)
+        if changed == 1 {
+            return Ok(true);
+        }
+        let repeated: Option<i64> = db
+            .query_row(
+                "SELECT 1 FROM managed_agent_deployments WHERE tenant_id=?1 AND agent_id=?2
+             AND deployment_sequence=?3 AND revision=?4 AND policy_sha256=?5 AND status=?6
+             AND deployment_sequence=(SELECT MAX(deployment_sequence) FROM managed_agent_deployments
+                                      WHERE tenant_id=?1 AND agent_id=?2)",
+                params![
+                    tenant,
+                    agent,
+                    seq,
+                    report.revision,
+                    report.policy_sha256,
+                    report.status
+                ],
+                |r| r.get(0),
+            )
+            .optional()?;
+        Ok(repeated.is_some())
     }
     pub fn list_managed_deployments(
         &self,
@@ -437,6 +457,113 @@ impl TenantStore {
 mod tests {
     use super::*;
     use aws_lc_rs::signature::{UnparsedPublicKey, ED25519};
+
+    #[tokio::test]
+    async fn managed_async_ack_retry_is_idempotent_but_stale_or_conflicting_is_refused() {
+        let store = TenantStore::open(":memory:").unwrap();
+        let tenant = store.create_tenant("retry-test").unwrap();
+        let issued = store
+            .enroll_managed_agent_async(&tenant.id, "agent-a")
+            .await
+            .unwrap();
+        let bearer = format!("Bearer {}", issued.token);
+        assert!(store
+            .authenticate_managed_agent_async(Some(&bearer))
+            .await
+            .unwrap()
+            .is_some());
+        let signer = ManagedIssuer {
+            key_id: "k1".into(),
+            pair: Ed25519KeyPair::from_seed_unchecked(&[9u8; 32]).unwrap(),
+        };
+        store
+            .create_managed_revision_async(&tenant.id, "agent-a", "v1", "default: deny\n")
+            .await
+            .unwrap();
+        store
+            .approve_managed_revision_async(&tenant.id, "agent-a", "v1")
+            .await
+            .unwrap();
+        store
+            .deploy_managed_revision_async(&tenant.id, "agent-a", "v1", false, &signer)
+            .await
+            .unwrap();
+        let bundle = store
+            .deliver_managed_bundle_async(&tenant.id, "agent-a")
+            .await
+            .unwrap()
+            .unwrap();
+        let repeated = store
+            .deliver_managed_bundle_async(&tenant.id, "agent-a")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(&bundle).unwrap(),
+            serde_json::to_value(&repeated).unwrap()
+        );
+        let mut report = AppliedReport {
+            deployment_sequence: 1,
+            revision: "v1".into(),
+            policy_sha256: bundle.policy_sha256,
+            status: "applied".into(),
+        };
+        assert!(store
+            .acknowledge_managed_bundle_async(&tenant.id, "agent-a", &report)
+            .await
+            .unwrap());
+        let before = store
+            .list_managed_deployments_async(&tenant.id, "agent-a")
+            .await
+            .unwrap();
+        assert!(store
+            .acknowledge_managed_bundle_async(&tenant.id, "agent-a", &report)
+            .await
+            .unwrap());
+        let after = store
+            .list_managed_deployments_async(&tenant.id, "agent-a")
+            .await
+            .unwrap();
+        assert_eq!(before[0].applied_at_unix, after[0].applied_at_unix);
+        report.status = "rejected".into();
+        assert!(!store
+            .acknowledge_managed_bundle_async(&tenant.id, "agent-a", &report)
+            .await
+            .unwrap());
+        assert!(store
+            .deliver_managed_bundle_async(&tenant.id, "agent-a")
+            .await
+            .unwrap()
+            .is_none());
+        store
+            .deploy_managed_revision_async(&tenant.id, "agent-a", "v1", false, &signer)
+            .await
+            .unwrap();
+        report.status = "applied".into();
+        assert!(!store
+            .acknowledge_managed_bundle_async(&tenant.id, "agent-a", &report)
+            .await
+            .unwrap());
+        report.deployment_sequence = 2;
+        report.status = "rejected".into();
+        assert!(store
+            .acknowledge_managed_bundle_async(&tenant.id, "agent-a", &report)
+            .await
+            .unwrap());
+        assert!(store
+            .acknowledge_managed_bundle_async(&tenant.id, "agent-a", &report)
+            .await
+            .unwrap());
+        assert!(store
+            .revoke_managed_agent_async(&tenant.id, "agent-a")
+            .await
+            .unwrap());
+        assert!(store
+            .authenticate_managed_agent_async(Some(&bearer))
+            .await
+            .unwrap()
+            .is_none());
+    }
 
     #[test]
     fn approved_deployment_is_signed_and_rollback_increases_sequence() {

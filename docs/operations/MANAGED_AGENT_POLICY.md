@@ -88,6 +88,61 @@ Omitting `SOUP_MANAGED_AGENT_CONSOLE` disables managed polling entirely. The cur
 - **Revoked enrollment**: server refuses all future fetches and acknowledgements using the old Agent token. Already active policy is not remotely erased.
 - **Key rotation**: issuer seed/key ID and independently pinned Agent public key are operator-provisioned. Changing keys requires coordinated local reprovisioning/restart; an unexpected new key fails. There is no online trust-root update.
 - **Approval-grant boundary**: pending files are removed and a durable policy epoch is advanced under a cross-process OS file lock shared with CLI issuance and authoritative ledger redemption. A grant carries its signed epoch, so an already-loaded stale grant must fail even when its file was deleted. The hook also rechecks the running deployment after asynchronous judging and refuses a pre-tool decision that spans activation. These changes address the P2 review witness but still require completed exact-head CI and independent concurrency/security review before merge.
-- **Trust limits**: an authenticated Agent `applied` assertion is an observation of this software process, **not hardware remote attestation**. Local file/OS compromise is outside the bounded slice. SQLite-only managed-policy records have not been added to the PostgreSQL implementation.
+- **Trust limits**: an authenticated Agent `applied` assertion is an observation of this software process, **not hardware remote attestation**. Local file/OS compromise is outside the bounded slice.
+
+## PostgreSQL managed enrollment and rollout (SOU-42)
+
+Managed routes use the configured tenant-store backend through async store methods.
+With `tenant_store.backend: postgres`, explicitly run `llm-firewall migrate` with
+the migration role before starting Console. Migration 26 adds enrollment,
+immutable revision and deployment tables to an existing v25 database; ordinary
+startup checks the schema and performs no DDL. Use the existing PostgreSQL TLS
+configuration and database roles. SQLite remains supported with the same wire
+format and issuer transcript.
+
+Only the enrollment response returns the credential. Storage contains a
+domain-separated SHA-256 hash, and inventory exposes neither token nor hash.
+Revision approval is explicit. Revision payloads cannot be overwritten through
+the API. Every deployment locks the active tenant and enrolled Agent, selects the
+next sequence and stores the signed bundle in one transaction. Delivery and
+acknowledgement serialize on the same Agent row; revocation's row update shares
+that serialization boundary. Distinct tenants may use the same Agent ID without
+sharing credentials, revisions or sequences.
+
+Fetching a pending deployment again returns the identical signed bundle. An
+exact retry of the latest terminal acknowledgement returns HTTP 204 without
+changing its timestamp. Mismatched hashes/revisions, superseded sequences and
+conflicting terminal statuses return HTTP 409. A rejected deployment remains
+terminal. These retry semantics apply to SQLite too. An explicit deployment POST
+still issues a new sequence: the existing API has no deployment idempotency key,
+so clients must inspect deployment inventory after an ambiguous POST outcome.
+
+The separate Linux/Docker witness uses a pinned disposable PostgreSQL container
+with verified TLS, the actual Console, and the unchanged `agentfw serve` process
+over the existing loopback transport. It upgrades a populated v25 database using
+an unmodified base Console, tests concurrent deployment requests, retry/isolation
+and revocation boundaries, restarts the database and Console, and observes
+`deny -> defer -> deny` at the live hook with three matching applied records.
+Offline operation must retain the last accepted policy.
+
+```bash
+# Build the v25 fixture once from the reviewed pre-change source.
+git worktree add --detach target/managed-previous e6f6305
+CARGO_TARGET_DIR="$PWD/target" cargo build --locked --manifest-path target/managed-previous/Cargo.toml -p llm-firewall --bin llm-firewall
+cp target/debug/llm-firewall target/previous-console
+cargo build --locked -p llm-firewall -p agentfw
+python3 -m venv target/managed-driver
+target/managed-driver/bin/python -m pip install cryptography==50.0.2
+target/managed-driver/bin/python scripts/managed-policy-postgres-demo.py --no-build --previous-gateway target/previous-console
+```
+
+The witness accepts no operator database URL. Generated credentials stay in
+memory/private process environments; temporary logs and keys are removed with
+the fixture. Only sanitized checks, runtime observations, source/config/binary
+hashes and the pinned database version are retained in
+`target/sou42-managed-postgres-evidence.json`, after owned resources are cleaned
+up. CI runs this in `.github/workflows/managed-policy-postgres.yml`; the separate
+SQLite runtime demonstration remains enabled. Successful checks are evidence
+for independent review, not permission to self-approve or mark the task Done.
 
 SOU-15 retains responsibility for MCP/resource confinement; SOU-26 owns release publication. This PR must remain Draft until integration tests and security review pass for the exact final source.

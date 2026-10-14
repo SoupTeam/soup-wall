@@ -1,0 +1,55 @@
+name: Managed Agent PostgreSQL rollout
+
+on:
+  pull_request:
+    paths:
+      - 'crates/proxy/**'
+      - 'crates/agent/**'
+      - 'crates/agentfw/**'
+      - 'scripts/managed-policy-postgres-demo.py'
+      - 'scripts/keycloak-oidc-acceptance.py'
+      - 'scripts/keycloak-saml-acceptance.py'
+      - '.github/workflows/managed-policy-postgres.yml'
+      - 'Cargo.lock'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: managed-postgres-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  managed-postgres:
+    name: PostgreSQL migration and real Agent rollout
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the unmodified v25 migration fixture
+        run: |
+          git worktree add --detach target/managed-previous e6f6305
+          CARGO_TARGET_DIR="$PWD/target" cargo build --locked --manifest-path target/managed-previous/Cargo.toml -p llm-firewall --bin llm-firewall
+          cp target/debug/llm-firewall target/previous-console
+      - name: Build real Console and unchanged Agent
+        run: |
+          cargo build --locked -p llm-firewall -p agentfw
+          cargo test --locked -p llm-firewall managed
+          python3 -m venv target/managed-driver
+          target/managed-driver/bin/python -m pip install cryptography==50.0.2
+      - name: Run disposable PostgreSQL migration and rollout witness
+        run: target/managed-driver/bin/python scripts/managed-policy-postgres-demo.py --no-build --previous-gateway target/previous-console
+      - name: Retain sanitized evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: managed-postgres-evidence
+          path: target/sou42-managed-postgres-evidence.json
+          if-no-files-found: warn
+          retention-days: 30
