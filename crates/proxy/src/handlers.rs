@@ -74,9 +74,10 @@ pub struct AppState {
 }
 
 /// Run agent inspection over a response's tool calls against the request's tool
-/// results. Returns `Some(reason)` only when the verdict is `Deny` *and* enforcement
-/// is on — the caller then refuses the response. Otherwise the verdict is audited
-/// (via the tracing warning) and the response passes: shadow-first.
+/// results. Returns `Some(reason)` when the verdict is `Deny` or `Ask` *and*
+/// enforcement is on — the caller then refuses the response (holds the call).
+/// Otherwise the verdict is audited (via the tracing warning) and the response
+/// passes: shadow-first.
 fn agent_refuse_reason(
     state: &AppState,
     request_id: &str,
@@ -101,12 +102,18 @@ fn agent_refuse_reason(
         reason = ?v.reason,
         "agent verdict on a response tool_use"
     );
-    if state.config.agent_inspection.enforce && matches!(v.verdict, soup_wall_agent::Verdict::Deny)
+    if state.config.agent_inspection.enforce
+        && matches!(
+            v.verdict,
+            soup_wall_agent::Verdict::Deny | soup_wall_agent::Verdict::Ask
+        )
     {
-        return Some(
-            v.reason
-                .unwrap_or_else(|| "agent policy denied a tool call".into()),
-        );
+        return Some(v.reason.unwrap_or_else(|| match v.verdict {
+            soup_wall_agent::Verdict::Ask => {
+                "agent policy held a tool call for human confirmation".into()
+            }
+            _ => "agent policy denied a tool call".into(),
+        }));
     }
     None
 }
@@ -132,13 +139,17 @@ fn agent_refuse_events(
         "agent verdict on normalized provider events"
     );
     if state.config.agent_inspection.enforce
-        && matches!(verdict.verdict, soup_wall_agent::Verdict::Deny)
+        && matches!(
+            verdict.verdict,
+            soup_wall_agent::Verdict::Deny | soup_wall_agent::Verdict::Ask
+        )
     {
-        return Some(
-            verdict
-                .reason
-                .unwrap_or_else(|| "agent policy denied a tool call".into()),
-        );
+        return Some(verdict.reason.unwrap_or_else(|| match verdict.verdict {
+            soup_wall_agent::Verdict::Ask => {
+                "agent policy held a tool call for human confirmation".into()
+            }
+            _ => "agent policy denied a tool call".into(),
+        }));
     }
     None
 }

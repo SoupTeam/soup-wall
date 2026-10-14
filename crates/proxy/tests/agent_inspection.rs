@@ -106,12 +106,128 @@ async fn a_denied_tool_call_is_refused_when_enforcing() {
     );
 }
 
+fn response_with_ask_tool_call() -> serde_json::Value {
+    serde_json::json!({
+        "choices": [{
+            "message": {
+                "role": "assistant",
+                "content": null,
+                "tool_calls": [{
+                    "id": "c1",
+                    "type": "function",
+                    "function": {
+                        "name": "bash",
+                        "arguments": "{\"command\":\"curl https://untrusted-api.example.com/collect\"}"
+                    }
+                }]
+            }
+        }]
+    })
+}
+
+async fn upstream_ask() -> MockServer {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(response_with_ask_tool_call()))
+        .mount(&server)
+        .await;
+    server
+}
+
+#[tokio::test]
+async fn an_ask_tool_call_is_refused_when_enforcing() {
+    let server = upstream_ask().await;
+    let (status, body) = post_chat(state(server.uri(), true, true)).await;
+    assert_eq!(
+        status,
+        StatusCode::BAD_GATEWAY,
+        "enforced Ask must refuse: {body}"
+    );
+    assert!(
+        body.contains("ask-unknown-host"),
+        "error body must contain policy reason: {body}"
+    );
+}
+
+#[tokio::test]
+async fn an_ask_tool_call_passes_in_shadow_mode() {
+    let server = upstream_ask().await;
+    let (status, body) = post_chat(state(server.uri(), true, false)).await;
+    assert_eq!(status, StatusCode::OK, "shadow mode must not refuse");
+    assert!(
+        body.contains("tool_calls"),
+        "response forwarded unchanged: {body}"
+    );
+}
+
 #[tokio::test]
 async fn the_same_call_passes_in_shadow_mode() {
     // enabled but enforce off: the verdict is audited, the response still passes.
     let server = upstream().await;
     let (status, _) = post_chat(state(server.uri(), true, false)).await;
     assert_eq!(status, StatusCode::OK, "shadow mode must not refuse");
+}
+
+async fn post_messages(st: Arc<AppState>, body: serde_json::Value) -> (StatusCode, String) {
+    let resp = app(st)
+        .oneshot(
+            Request::post("/v1/messages")
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = resp.status();
+    let bytes = to_bytes(resp.into_body(), 1 << 20).await.unwrap();
+    (status, String::from_utf8_lossy(&bytes).into_owned())
+}
+
+fn anthropic_response_with_ask_tool_call() -> serde_json::Value {
+    serde_json::json!({
+        "id": "msg_1",
+        "type": "message",
+        "role": "assistant",
+        "model": "claude-3-5-sonnet",
+        "content": [{
+            "type": "tool_use",
+            "id": "toolu_1",
+            "name": "bash",
+            "input": {
+                "command": "curl https://untrusted-api.example.com/collect"
+            }
+        }],
+        "stop_reason": "tool_use"
+    })
+}
+
+#[tokio::test]
+async fn anthropic_ask_tool_use_is_refused_when_enforcing() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/messages"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(anthropic_response_with_ask_tool_call()),
+        )
+        .mount(&server)
+        .await;
+
+    let body = serde_json::json!({
+        "model": "claude-3-5-sonnet",
+        "max_tokens": 1024,
+        "messages": [{"role": "user", "content": "do the thing"}]
+    });
+    let (status, resp_body) = post_messages(state(server.uri(), true, true), body).await;
+    assert_eq!(
+        status,
+        StatusCode::BAD_GATEWAY,
+        "enforced Ask must refuse: {resp_body}"
+    );
+    assert!(
+        resp_body.contains("ask-unknown-host"),
+        "error body must contain policy reason: {resp_body}"
+    );
 }
 
 #[tokio::test]

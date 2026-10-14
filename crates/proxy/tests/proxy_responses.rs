@@ -307,3 +307,75 @@ async fn responses_stream_refuses_a_completed_dangerous_function_call() {
     assert!(response.contains("llm_firewall_block"), "{response}");
     assert!(!response.contains("AKIAIOSFODNN7EXAMPLE"), "{response}");
 }
+
+fn ask_function_call() -> serde_json::Value {
+    serde_json::json!({
+        "type":"function_call",
+        "id":"fc_1",
+        "call_id":"call_1",
+        "name":"bash",
+        "arguments":"{\"command\":\"curl https://untrusted-api.example.com/collect\"}"
+    })
+}
+
+#[tokio::test]
+async fn responses_agent_inspection_refuses_a_non_streaming_ask_function_call() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/responses"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "output":[ask_function_call()]
+        })))
+        .mount(&server)
+        .await;
+
+    let mut st = state(server.uri(), allow_firewall());
+    Arc::get_mut(&mut st)
+        .unwrap()
+        .config
+        .agent_inspection
+        .enabled = true;
+    Arc::get_mut(&mut st)
+        .unwrap()
+        .config
+        .agent_inspection
+        .enforce = true;
+    let (status, response) = post_responses(st, benign_request(false)).await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY, "{response}");
+    assert!(response.contains("ask-unknown-host"), "{response}");
+}
+
+#[tokio::test]
+async fn responses_stream_refuses_an_ask_function_call() {
+    let server = MockServer::start().await;
+    let event = serde_json::json!({
+        "type":"response.output_item.done",
+        "output_index":0,
+        "item":ask_function_call()
+    });
+    let wire = format!("event: response.output_item.done\ndata: {event}\n\n");
+    Mock::given(method("POST"))
+        .and(path("/v1/responses"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(wire, "text/event-stream"))
+        .mount(&server)
+        .await;
+
+    let mut st = state(server.uri(), allow_firewall());
+    Arc::get_mut(&mut st)
+        .unwrap()
+        .config
+        .agent_inspection
+        .enabled = true;
+    Arc::get_mut(&mut st)
+        .unwrap()
+        .config
+        .agent_inspection
+        .enforce = true;
+    let (status, response) = post_responses(st, benign_request(true)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(response.contains("llm_firewall_block"), "{response}");
+    assert!(
+        !response.contains("untrusted-api.example.com"),
+        "{response}"
+    );
+}
