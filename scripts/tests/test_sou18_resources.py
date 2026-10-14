@@ -21,6 +21,29 @@ def raw(value):
 
 def observation(case="absolute-read"):
     expected = PROBE.CASES[case]
+    if expected == "recovery":
+        row = observation()
+        row["case"] = case
+        row["submitted_frame"] = row["submitted_frame"].replace("absolute-read", case)
+        row["client_output_raw"] = row["client_output_raw"].replace("absolute-read", case)
+        final = row["classifications"][0]
+        final["host_call_id"] = case
+        response = json.loads(row["client_output_raw"].splitlines()[-1])
+        row["native_decisions"][-1]["content_sha256"] = PROBE.sha(raw(response).encode())
+        row.update(invalid_file="/owned/invalid.txt", read_errors=[])
+        emitted = []
+        predictions = []
+        for index in range(PROBE.RECOVERY_ERRORS):
+            call_id = f"read-error-{index}"
+            request = {"id": call_id, "params": {"name": "read_document", "arguments": {"path": row["invalid_file"]}}}
+            refusal = {"jsonrpc": "2.0", "id": call_id, "result": {"isError": True,
+                "content": [{"text": "Soup Wall withheld MCP invocation (resource_read_failed)", "type": "text"}]}}
+            row["read_errors"].append({"submitted_frame": raw(request), "released_raw": raw(refusal)})
+            emitted.append(raw(refusal))
+            predictions.append(dict(final, host_call_id=call_id))
+        row["client_output_raw"] = row["server_output_raw"] + "".join(emitted) + raw(response)
+        row["classifications"] = predictions + [final]
+        return row
     tool = "read_note" if case == "unsupported-tool" else "read_document"
     request = {"jsonrpc": "2.0", "id": case, "method": "tools/call",
                "params": {"name": tool, "arguments": {"path": "/owned/file"}}}
@@ -142,6 +165,16 @@ class ResourceEvidenceTests(unittest.TestCase):
                 row = observation()
                 row[key] = change(row[key])
                 self.assertEqual(PROBE.grade(row)["status"], "fail", key)
+
+    def test_repeated_failures_require_useful_followup_in_same_session(self):
+        for mutate in (lambda r: r.update(client_output_raw="\n".join(r["client_output_raw"].splitlines()[:-1]) + "\n"),
+                       lambda r: r.update(read_errors=r["read_errors"][:64]),
+                       lambda r: r["native_decisions"][-1].update(session="new-session"),
+                       lambda r: r["read_errors"][0].update(released_raw=raw({"id": "wrong"})),
+                       lambda r: r.update(collector_exit=1)):
+            row = observation("read-error-recovery")
+            mutate(row)
+            self.assertEqual(PROBE.grade(row)["status"], "fail")
 
     def test_fixture_records_original_call_and_never_reads_requested_file(self):
         with tempfile.TemporaryDirectory() as temporary:
