@@ -75,7 +75,7 @@ jobs:
       - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - run: cargo test --workspace --locked
       - run: cargo test --workspace --all-features --locked
-      - run: cargo audit --ignore RUSTSEC-2023-0071
+      - run: cargo audit
 
   build:
     name: ${{ matrix.target }}
@@ -334,7 +334,7 @@ jobs:
             echo "CRITICAL: Untrusted repository ($REPO)"
             exit 1
           fi
-          if [ "$STATUS" != "completed" ] \vert{}\vert{} [ "$CONCLUSION" != "success" ]; then
+          if [ "$STATUS" != "completed" ] || [ "$CONCLUSION" != "success" ]; then
             echo "CRITICAL: Preparation run ${{ inputs.promote_run_id }} is not successful ($STATUS/$CONCLUSION)"
             exit 1
           fi
