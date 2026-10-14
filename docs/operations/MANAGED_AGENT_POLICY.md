@@ -1,6 +1,6 @@
-# Signed managed Agent-policy rollout (SOU-30)
+# Signed managed Agent-policy rollout (SOU-30, SOU-42)
 
-> **Draft / review in progress.** This is a bounded **local SQLite Console + `agentfw serve`** integration. It is **not** general remote deployment, TLS/IdP certification or permission to publish a product release. Full current-head review remains required.
+> **Review in progress.** This bounded integration runs **Console with SQLite or PostgreSQL + `agentfw serve`** over the existing local transport. It does not establish general remote deployment, TLS/IdP certification or release acceptance. Independent review remains required.
 
 ## Purpose and policy separation
 
