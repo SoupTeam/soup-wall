@@ -100,6 +100,33 @@ cleanup of its own managed daemon before failing. The outer Windows CI launcher
 has a 600-second deadline and cleans only its disposable account and processes.
 These test deadlines do not change production startup or authorization limits.
 
+### Windows output pipe regression
+
+On 2026-10-14, the [standard-user Windows run](https://github.com/SoupTeam/soup-wall/actions/runs/38545040023/job/115788883563)
+executed all five cases: four passed and one failed. The tested merge commit was
+`d6467a7b798d3e8e2d889df1487402590b6f2947` (PR head
+`f526579242e453efbb01ff979d7dc3bdbd5645a0`). The retained artifact records Windows
+build 26100, PowerShell 7.6.6, a non-administrator token, matching user/profile
+owner SIDs, and successful cleanup.
+
+The `start` CLI exited with code zero and the managed Agent was healthy, but
+the captured output did not close within five seconds. The test stopped its
+authenticated daemon and reported a failure instead of waiting indefinitely.
+The daemon had inherited the CLI's output pipes despite using separate standard
+streams of its own.
+
+Windows lifecycle CLI commands now clear `HANDLE_FLAG_INHERIT` on their own
+standard handles before starting a runtime or child. This uses
+[SetHandleInformation](https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-sethandleinformation);
+the CLI keeps its streams open for its own output. The managed child still uses
+null input/output and its private launch log. This is CLI initialization, not a
+change to the caller's handles when using the `Manager` library API directly.
+The regression requires both output pipes to close and the CLI's success message
+to reach the caller while the managed Agent remains healthy. A passing run after
+the fix must retain all five executed cases under the standard user.
+
+### Manual Windows check
+
 The Windows script creates a disposable profile and uses an unused loopback
 port. It checks install, start, upgrade, rollback, failed startup restoration,
 stop, restart and removal. No service registration or host settings are
