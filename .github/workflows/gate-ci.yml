@@ -47,45 +47,61 @@ jobs:
           chmod +x ../scripts/validate_candidate.sh
 
           echo "--- Test 1: Missing approval file ---"
-          if ../scripts/validate_candidate.sh "missing.json" "$MANIFEST" "v0.3.0" "dummy_sha"; then exit 1; fi
+          if ../scripts/validate_candidate.sh "missing.json" "$MANIFEST" "v0.3.0" "dummy_sha" 2>/dev/null; then exit 1; fi
 
           echo "--- Test 2: Decision rejected ---"
           cat <<EOF > rec_rej.json
           {"decision": "rejected", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' "$MANIFEST"), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
           EOF
-          if ../scripts/validate_candidate.sh rec_rej.json "$MANIFEST" "v0.3.0" "dummy_sha"; then exit 1; fi
+          if ../scripts/validate_candidate.sh rec_rej.json "$MANIFEST" "v0.3.0" "dummy_sha" 2>/dev/null; then exit 1; fi
 
           echo "--- Test 3: Missing product gate ---"
           cat <<EOF > rec_missing_gate.json
           {"decision": "approved", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' "$MANIFEST"), "evidence_ref": "https://ref", "gates": {"operator": "passed", "license": "passed"}}
           EOF
-          if ../scripts/validate_candidate.sh rec_missing_gate.json "$MANIFEST" "v0.3.0" "dummy_sha"; then exit 1; fi
+          if ../scripts/validate_candidate.sh rec_missing_gate.json "$MANIFEST" "v0.3.0" "dummy_sha" 2>/dev/null; then exit 1; fi
 
           echo "--- Test 4: Mismatched tag/commit (Handoff Integrity) ---"
           cat <<EOF > rec_good.json
           {"decision": "approved", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' "$MANIFEST"), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
           EOF
-          if ../scripts/validate_candidate.sh rec_good.json "$MANIFEST" "v0.4.0" "dummy_sha"; then exit 1; fi
-          if ../scripts/validate_candidate.sh rec_good.json "$MANIFEST" "v0.3.0" "bad_checkout_sha"; then exit 1; fi
+          if ../scripts/validate_candidate.sh rec_good.json "$MANIFEST" "v0.4.0" "dummy_sha" 2>/dev/null; then exit 1; fi
+          if ../scripts/validate_candidate.sh rec_good.json "$MANIFEST" "v0.3.0" "bad_checkout_sha" 2>/dev/null; then exit 1; fi
 
-          echo "--- Test 5: Duplicated artifact / Wrong filename ---"
+          echo "--- Test 5: Duplicated artifact ---"
           jq '.checksums[0] = .checksums[1]' "$MANIFEST" > man_dup.json
           cat <<EOF > rec_dup.json
           {"decision": "approved", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' man_dup.json), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
           EOF
-          if ../scripts/validate_candidate.sh rec_dup.json man_dup.json "v0.3.0" "dummy_sha"; then exit 1; fi
+          if ../scripts/validate_candidate.sh rec_dup.json man_dup.json "v0.3.0" "dummy_sha" 2>/dev/null; then exit 1; fi
 
-          echo "--- Test 6: Successful exact-candidate ---"
+          echo "--- Test 6: Suffix alias injection (P1) ---"
+          jq '.checksums[10] = "'$H'  unpublished-soup-wall-image.tar"' "$MANIFEST" > man_suffix.json
+          cat <<EOF > rec_suffix.json
+          {"decision": "approved", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' man_suffix.json), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
+          EOF
+          if ../scripts/validate_candidate.sh rec_suffix.json man_suffix.json "v0.3.0" "dummy_sha" 2>/dev/null; then exit 1; fi
+
+          echo "--- Test 7: Path traversal injection (P1) ---"
+          jq '.checksums[10] = "'$H'  ../soup-wall-image.tar"' "$MANIFEST" > man_trav.json
+          cat <<EOF > rec_trav.json
+          {"decision": "approved", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' man_trav.json), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
+          EOF
+          if ../scripts/validate_candidate.sh rec_trav.json man_trav.json "v0.3.0" "dummy_sha" 2>/dev/null; then exit 1; fi
+
+          echo "--- Test 8: Extra unapproved files (P1) ---"
+          jq '.checksums += ["'$H'  extra-file.txt"]' "$MANIFEST" > man_extra.json
+          cat <<EOF > rec_extra.json
+          {"decision": "approved", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' man_extra.json), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
+          EOF
+          if ../scripts/validate_candidate.sh rec_extra.json man_extra.json "v0.3.0" "dummy_sha" 2>/dev/null; then exit 1; fi
+
+          echo "--- Test 9: Actual bytes mismatch (Artifact Binding) ---"
+          jq -r '.checksums[]' "$MANIFEST" > APPROVED_SUMS
+          touch soup-wall-v0.3.0-x86_64-unknown-linux-gnu.tar.gz
+          if sha256sum --strict -c APPROVED_SUMS 2>/dev/null; then exit 1; fi
+
+          echo "--- Test 10: Successful exact-candidate ---"
           ../scripts/validate_candidate.sh rec_good.json "$MANIFEST" "v0.3.0" "dummy_sha"
           
           echo "All SOU-26 validator matrix tests passed successfully!"
-
-          echo "--- Test 7: Actual bytes mismatch (Enforce Artifact Binding) ---"
-          # Simulate the release.yml binding step
-          jq -r '.checksums[]' "$MANIFEST" > APPROVED_SUMS
-          # Create an empty file that doesn't match the required hash
-          touch soup-wall-v0.3.0-x86_64-unknown-linux-gnu.tar.gz
-          if sha256sum --strict -c APPROVED_SUMS 2>/dev/null; then
-            echo "CRITICAL: Passed byte binding with invalid file!"
-            exit 1
-          fi

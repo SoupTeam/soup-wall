@@ -73,16 +73,26 @@ if [ "$TOTAL_FOUND" -ne 11 ]; then
   exit 1
 fi
 
+# [P1] Strict Inventory Grammar & Traversal Protection
+echo "Verifying exact inventory binding..."
 for expected_file in "${EXPECTED_FILENAMES[@]}"; do
-  # Escape file name for jq regex
-  MATCH=$(jq -r --arg file "$expected_file" '.checksums[] | select(endswith($file))' "$MANIFEST" || true)
+  # Require exact canonical filename format, prevent suffix matching
+  MATCH=$(jq -r '.checksums[]' "$MANIFEST" | awk -v f="$expected_file" 'NF==2 && $2==f {print $0}')
   
   if [ -z "$MATCH" ] || [ $(echo "$MATCH" | wc -l) -ne 1 ]; then
-    echo "CRITICAL: Missing or duplicate required artifact: $expected_file"
+    echo "CRITICAL: Missing or ambiguous required artifact exact match: $expected_file"
     exit 1
   fi
 
   HASH_PART=$(echo "$MATCH" | awk '{print $1}')
+  FILE_PART=$(echo "$MATCH" | awk '{print $2}')
+
+  # Reject unsafe paths (directory traversal, absolute paths)
+  if [[ "$FILE_PART" == *"/"* ]] || [[ "$FILE_PART" == *"\\"* ]] || [[ "$FILE_PART" == *".."* ]]; then
+    echo "CRITICAL: Non-canonical unsafe path detected: $FILE_PART"
+    exit 1
+  fi
+
   if ! [[ "$HASH_PART" =~ ^[a-f0-9]{64}$ ]]; then
     echo "CRITICAL: Invalid SHA-256 digest format for $expected_file: $HASH_PART"
     exit 1
