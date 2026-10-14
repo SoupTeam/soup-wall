@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+.git
+.github
+.env
+.env.*
+.worktrees
+target
+local-notes
+audit
+data
+datasets
+models
+docs
+research
+rivals
+.superpowers
+.vscode
+.idea
+.DS_Store
+crates/agent/tests
+crates/agentfw/tests
+crates/bench/tests
+crates/core/tests
+crates/proxy/tests
+scripts/tests
+scripts/benchmarks

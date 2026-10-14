@@ -1,0 +1,688 @@
+{
+  "schema_version": 1,
+  "status": "pass",
+  "executed": true,
+  "started_at_utc": "2026-10-14T08:12:56.604270+00:00",
+  "checks": [
+    {
+      "check": "fresh_project",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:12:57.504752+00:00"
+    },
+    {
+      "check": "immutable_source_image",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:13:45.978897+00:00",
+      "image_id": "sha256:59252774af86169a52b4a500a85fd56aaf335f47f35821d8643d55f71b6ade52"
+    },
+    {
+      "check": "receiver_certificate_chain_strict",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:13:46.756898+00:00",
+      "leaf_certificate_sha256": "e39e8d68f1a27a634ceb6a98199db7ce1bd6e599804beaa0e4e790076f15652b"
+    },
+    {
+      "check": "pinned_rules_and_regressions",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:13:47.444036+00:00"
+    },
+    {
+      "check": "postgres_ready",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:13:50.436857+00:00",
+      "elapsed_seconds": 2.379
+    },
+    {
+      "check": "gateway_owned_loopback_endpoint",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:13:51.839790+00:00",
+      "host_ip": "127.0.0.1",
+      "container_port": 8080,
+      "assigned_host_port": 55018
+    },
+    {
+      "check": "receiver_owned_loopback_endpoint",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:13:51.993107+00:00",
+      "host_ip": "127.0.0.1",
+      "container_port": 8443,
+      "assigned_host_port": 55017
+    },
+    {
+      "check": "prometheus_owned_loopback_endpoint",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:13:52.099580+00:00",
+      "host_ip": "127.0.0.1",
+      "container_port": 9090,
+      "assigned_host_port": 55020
+    },
+    {
+      "check": "alertmanager_owned_loopback_endpoint",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:13:52.203135+00:00",
+      "host_ip": "127.0.0.1",
+      "container_port": 9093,
+      "assigned_host_port": 55019
+    },
+    {
+      "check": "gateway_ready",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:13:52.225643+00:00",
+      "elapsed_seconds": 0.022
+    },
+    {
+      "check": "receiver_ready",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:13:52.242013+00:00",
+      "elapsed_seconds": 0.016
+    },
+    {
+      "check": "prometheus_ready",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:13:52.251779+00:00",
+      "elapsed_seconds": 0.009
+    },
+    {
+      "check": "alertmanager_ready",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:13:52.261308+00:00",
+      "elapsed_seconds": 0.009
+    },
+    {
+      "check": "owned_pinned_services_ready",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:13:52.987012+00:00"
+    },
+    {
+      "check": "authenticated_useful_tenant_configured",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:13:53.027440+00:00"
+    },
+    {
+      "check": "authentication_missing_refused",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:13:53.036994+00:00",
+      "http_status": 401
+    },
+    {
+      "check": "authentication_wrong_refused",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:13:53.041926+00:00",
+      "http_status": 401
+    },
+    {
+      "check": "malformed_message_refused",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:13:53.046893+00:00",
+      "http_status": 400
+    },
+    {
+      "check": "unrelated_target_refused",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:13:53.051667+00:00",
+      "http_status": 400
+    },
+    {
+      "check": "refusals_leave_no_durable_receipts",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:13:53.056538+00:00"
+    },
+    {
+      "check": "useful_before_outages",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:13:53.101703+00:00",
+      "http_status": 200,
+      "provider_entries_delta": 1,
+      "useful_response_sha256": "3183667812044f50262ed565283857833c756f7b3f49668d6554c2c6bc6b493f"
+    },
+    {
+      "check": "audit_persisted_before_outages",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:13:53.110571+00:00",
+      "elapsed_seconds": 0.008
+    },
+    {
+      "check": "durable_audit_witness_before_outages",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:13:53.111506+00:00",
+      "new_completed_audit_rows": 1
+    },
+    {
+      "check": "postgres_actual_readiness_loss",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:14:02.404277+00:00",
+      "elapsed_seconds": 8.633
+    },
+    {
+      "check": "postgres_scrape_remains_live",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:14:02.405731+00:00",
+      "readyz_status": 503,
+      "metrics_status": 200,
+      "control_plane": "unavailable",
+      "redis": "ready",
+      "metrics": {
+        "llm_firewall_control_plane_ready": 0.0,
+        "llm_firewall_redis_limits_ready": 1.0
+      },
+      "prometheus_up": "1"
+    },
+    {
+      "check": "postgres_unavailable_request_refused",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:14:02.419022+00:00",
+      "http_status": 503,
+      "provider_entries_delta": 0
+    },
+    {
+      "check": "postgres_real_rule_firing",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:16:12.492229+00:00",
+      "elapsed_seconds": 130.073
+    },
+    {
+      "check": "real_alertmanager_retry_while_receiver_down",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:16:43.087991+00:00",
+      "elapsed_seconds": 30.594
+    },
+    {
+      "check": "receiver_outage_delivery_failure_witness",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:16:43.091022+00:00",
+      "observed_failed_http_notification_attempts": 3.0
+    },
+    {
+      "check": "receiver_owned_loopback_endpoint",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:16:43.547104+00:00",
+      "host_ip": "127.0.0.1",
+      "container_port": 8443,
+      "assigned_host_port": 55021
+    },
+    {
+      "check": "postgres_authenticated_durable_firing",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:16:45.576098+00:00",
+      "elapsed_seconds": 2.028
+    },
+    {
+      "check": "receiver_owned_loopback_endpoint",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:16:46.168290+00:00",
+      "host_ip": "127.0.0.1",
+      "container_port": 8443,
+      "assigned_host_port": 55022
+    },
+    {
+      "check": "receiver_restart_retains_firing",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:16:48.189383+00:00",
+      "elapsed_seconds": 2.02
+    },
+    {
+      "check": "receiver_restart_preserves_identity",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:16:48.191611+00:00"
+    },
+    {
+      "check": "authenticated_replay_after_restart_is_duplicate",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:16:48.222418+00:00",
+      "http_status": 200
+    },
+    {
+      "check": "postgres_actual_readiness_recovered",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:16:48.499762+00:00",
+      "elapsed_seconds": 0.045
+    },
+    {
+      "check": "postgres_authenticated_durable_resolved",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:17:12.786682+00:00",
+      "elapsed_seconds": 24.286
+    },
+    {
+      "check": "postgres_correlated_cycle",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:17:12.789865+00:00",
+      "cycle_id": "187b62909160e26fa11a50799f1122b4559663358ac9e56f9ef32574d0060f1f",
+      "starts_at": "2026-10-14T08:16:11.363Z",
+      "recovered_readiness": {
+        "readyz_status": 200,
+        "metrics_status": 200,
+        "control_plane": "ready",
+        "redis": "ready",
+        "metrics": {
+          "llm_firewall_control_plane_ready": 1.0,
+          "llm_firewall_redis_limits_ready": 1.0
+        },
+        "prometheus_up": "1",
+        "matched": true
+      }
+    },
+    {
+      "check": "useful_after_postgres",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:17:12.864394+00:00",
+      "http_status": 200,
+      "provider_entries_delta": 1,
+      "useful_response_sha256": "3183667812044f50262ed565283857833c756f7b3f49668d6554c2c6bc6b493f"
+    },
+    {
+      "check": "audit_persisted_after_postgres",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:17:12.876155+00:00",
+      "elapsed_seconds": 0.011
+    },
+    {
+      "check": "durable_audit_witness_after_postgres",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:17:12.877046+00:00",
+      "new_completed_audit_rows": 1
+    },
+    {
+      "check": "redis_actual_readiness_loss",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:17:13.535040+00:00",
+      "elapsed_seconds": 0.298
+    },
+    {
+      "check": "redis_scrape_remains_live",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:17:13.537020+00:00",
+      "readyz_status": 503,
+      "metrics_status": 200,
+      "control_plane": "ready",
+      "redis": "unavailable",
+      "metrics": {
+        "llm_firewall_control_plane_ready": 1.0,
+        "llm_firewall_redis_limits_ready": 0.0
+      },
+      "prometheus_up": "1"
+    },
+    {
+      "check": "redis_unavailable_request_refused",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:17:13.814808+00:00",
+      "http_status": 503,
+      "provider_entries_delta": 0
+    },
+    {
+      "check": "redis_real_rule_firing",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:18:43.273519+00:00",
+      "elapsed_seconds": 89.458
+    },
+    {
+      "check": "redis_authenticated_durable_firing",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:19:11.760367+00:00",
+      "elapsed_seconds": 28.484
+    },
+    {
+      "check": "redis_actual_readiness_recovered",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:19:14.219638+00:00",
+      "elapsed_seconds": 2.091
+    },
+    {
+      "check": "redis_authenticated_durable_resolved",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:19:42.498026+00:00",
+      "elapsed_seconds": 28.277
+    },
+    {
+      "check": "redis_correlated_cycle",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:19:42.500674+00:00",
+      "cycle_id": "25ce441f772a4ef785d2e150769a53324412ebfdcfeaa24d39bf33baa7ea77fe",
+      "starts_at": "2026-10-14T08:18:41.363Z",
+      "recovered_readiness": {
+        "readyz_status": 200,
+        "metrics_status": 200,
+        "control_plane": "ready",
+        "redis": "ready",
+        "metrics": {
+          "llm_firewall_control_plane_ready": 1.0,
+          "llm_firewall_redis_limits_ready": 1.0
+        },
+        "prometheus_up": "1",
+        "matched": true
+      }
+    },
+    {
+      "check": "useful_after_redis",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:19:42.575459+00:00",
+      "http_status": 200,
+      "provider_entries_delta": 1,
+      "useful_response_sha256": "3183667812044f50262ed565283857833c756f7b3f49668d6554c2c6bc6b493f"
+    },
+    {
+      "check": "audit_persisted_after_redis",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:19:42.585868+00:00",
+      "elapsed_seconds": 0.01
+    },
+    {
+      "check": "durable_audit_witness_after_redis",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:19:42.586806+00:00",
+      "new_completed_audit_rows": 1
+    },
+    {
+      "check": "gateway_scrape_loss",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:19:47.114828+00:00",
+      "elapsed_seconds": 4.081
+    },
+    {
+      "check": "gateway_outage_has_no_invented_readiness_zero",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:19:47.137630+00:00"
+    },
+    {
+      "check": "gateway_real_rule_firing",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:22:11.477660+00:00",
+      "elapsed_seconds": 144.341
+    },
+    {
+      "check": "gateway_authenticated_durable_firing",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:22:41.848554+00:00",
+      "elapsed_seconds": 30.364
+    },
+    {
+      "check": "gateway_owned_loopback_endpoint",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:22:42.416400+00:00",
+      "host_ip": "127.0.0.1",
+      "container_port": 8080,
+      "assigned_host_port": 55023
+    },
+    {
+      "check": "gateway_ready_after_restart",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:22:42.431063+00:00",
+      "elapsed_seconds": 0.013
+    },
+    {
+      "check": "gateway_authenticated_durable_resolved",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:23:43.060178+00:00",
+      "elapsed_seconds": 60.629
+    },
+    {
+      "check": "gateway_correlated_cycle",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:23:43.063524+00:00",
+      "cycle_id": "9861577e2a859a72c0837df84b4f434dfb418a2f53acf0885dcf7ede0010012e",
+      "starts_at": "2026-10-14T08:22:11.363Z"
+    },
+    {
+      "check": "useful_after_gateway_restart",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:23:43.145153+00:00",
+      "http_status": 200,
+      "provider_entries_delta": 1,
+      "useful_response_sha256": "3183667812044f50262ed565283857833c756f7b3f49668d6554c2c6bc6b493f"
+    },
+    {
+      "check": "audit_persisted_after_gateway_restart",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:23:43.155411+00:00",
+      "elapsed_seconds": 0.009
+    },
+    {
+      "check": "durable_audit_witness_after_gateway_restart",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:23:43.156954+00:00",
+      "new_completed_audit_rows": 1
+    },
+    {
+      "check": "complete_declared_cycles_only",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:23:43.166628+00:00"
+    },
+    {
+      "check": "source_unchanged",
+      "outcome": "pass",
+      "observed_at_utc": "2026-10-14T08:23:43.312923+00:00"
+    }
+  ],
+  "scope": "SOU-41 controlled Linux notification/recovery slice",
+  "source": {
+    "commit": "98a7cf6f9ebfd96ac069d1d830eae2d67fa06d35",
+    "tree": "0ff5d5404d2d54954448b3c1ed48900b467ba49f",
+    "clean": true,
+    "cargo_lock_sha256": "b47634e7508864daa1df5826433f4cc31d967b013e5719dd09f3ab453f38618a"
+  },
+  "images": {
+    "schema_version": 1,
+    "scope": "SOU-41 private disposable Linux monitoring acceptance; not a release or redistribution approval",
+    "pin_kind": "official multi-platform image manifest digest",
+    "images": {
+      "prometheus": {
+        "image": "prom/prometheus@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e",
+        "version": "3.15.0",
+        "origin": "https://github.com/prometheus/prometheus",
+        "license": "Apache-2.0",
+        "role": "Real rule evaluation and scrape witnesses"
+      },
+      "alertmanager": {
+        "image": "prom/alertmanager@sha256:e9733bafb1bdef9b00e25a21f8f99dc26a22224bf16641ad754d1649f4c3357a",
+        "version": "0.34.1",
+        "origin": "https://github.com/prometheus/alertmanager",
+        "license": "Apache-2.0",
+        "role": "Real authenticated HTTPS delivery and retry"
+      },
+      "postgres": {
+        "image": "postgres@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416",
+        "version": "16.13-alpine",
+        "origin": "https://github.com/docker-library/postgres",
+        "license": "PostgreSQL",
+        "role": "Dedicated disposable Gateway tenant and audit storage"
+      },
+      "redis": {
+        "image": "redis@sha256:29e8589c3f9ba699b5f7aa4b3c7733c58852a3626439e619aa0ee78de08c6ca0",
+        "version": "7.2.16-alpine",
+        "origin": "https://github.com/redis/redis/tree/7.2",
+        "license": "BSD-3-Clause",
+        "role": "Dedicated disposable admission limiter; avoids Redis 7.4 source-available intake"
+      },
+      "python": {
+        "image": "python@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258",
+        "version": "3.12.15-slim-bookworm",
+        "origin": "https://github.com/docker-library/python",
+        "license": "PSF-2.0",
+        "role": "Receiver runtime and synthetic local provider"
+      },
+      "rust": {
+        "image": "rust@sha256:ff521445a372125ed4f76e1453a1f8098f2d05332d1601d30db1c1f62757e730",
+        "version": "1.98.1-slim-bookworm",
+        "origin": "https://github.com/rust-lang/docker-rust",
+        "license": "MIT OR Apache-2.0",
+        "role": "Build the exact archived Gateway source with its locked dependencies"
+      }
+    },
+    "notices": "These component labels do not replace the complete image/OS license inventory. Original upstream notices remain in the unmodified containers. The local test image preserves Soup Wall LICENSE, NOTICE and the vendored kryptering license; it is not published."
+  },
+  "rule_for_seconds": {
+    "postgres": 120,
+    "redis": 60,
+    "gateway": 120
+  },
+  "rule_evaluation_interval_seconds": 30,
+  "notification_group_wait_seconds": 30,
+  "notification_group_interval_seconds": 15,
+  "notification_group_interval_scope": "controlled drill override; production example remains 5m",
+  "network_scope": "dedicated standard bridge with numeric loopback publications; no network-level egress-denial claim",
+  "paid_models_or_external_incident_channels": false,
+  "production_routing_or_staffed_response_accepted": false,
+  "ownership": {
+    "project": "sou4148f5878a5ee58062",
+    "run_id": "bed431528702d378425b0551541f9480"
+  },
+  "gateway_image_id": "sha256:59252774af86169a52b4a500a85fd56aaf335f47f35821d8643d55f71b6ade52",
+  "gateway_binary_sha256": "a182e84b587656f6b73dc9ec79e877ef6db7de88f253c3ae0941b0d210ca704b",
+  "receiver_ca_sha256": "cda274ec489c1684492624df134e9090bd04c414937b726fa0b6948192d18874",
+  "configuration_sha256": {
+    "policy.json": "6d806909ce2519ec1bcea4ec172d9b9d4517165c7a343cb68606be0e2293d699",
+    "prometheus.yaml": "8d0c304048424ce0e82b2ee64914a1d7ea07956d68c5d6bfac5032daa34a6d24",
+    "alertmanager.yaml": "48ea2b5a90a1bb618d5a95a0745cf94871750025d91163a86713b286c0ed0fa1",
+    "firewall.yaml": "08e31061a46dca07d409c2d6663d83d1782630bbd6b83e10c890a164bc1e7c71"
+  },
+  "rule_configuration_sha256": {
+    "prometheus-alerts.test.yaml": "19fc76685a97520d440061e798bd5588635e0de4aa5119070b0714dc958fce0e",
+    "prometheus-alerts.yaml": "93a473c55fb99e9aefe1428c0965050a1b6ecd2ae646b32618c99ac27282e2b0"
+  },
+  "runtime_versions": {
+    "prometheus": "prometheus, version 3.15.0 (branch: HEAD, revision: 5241a27fe3c6983549fccc32f6e65917408c63cd)\n  build user:       root@4635dd007a60\n  build date:       20260925-07:36:49\n  go version:       go1.27.1\n  platform:         linux/arm64\n  tags:             netgo,builtinassets",
+    "alertmanager": "alertmanager, version 0.34.1 (branch: HEAD, revision: 73c6bfe7393929211294c1954f30d8ed78e4d0ad)\n  build user:       root@d3b71085e163\n  build date:       20260917-07:45:14\n  go version:       go1.26.8\n  platform:         linux/arm64\n  tags:             netgo",
+    "postgres": "postgres (PostgreSQL) 16.13",
+    "redis": "Redis server v=7.2.16 sha=00000000:0 malloc=jemalloc-5.3.0 bits=64 build=ec26ae8dbff88af0",
+    "receiver": "Python 3.12.15"
+  },
+  "receiver_receipts": {
+    "has_more": false,
+    "records": [
+      {
+        "changed_body_count": 1,
+        "cycle_id": "187b62909160e26fa11a50799f1122b4559663358ac9e56f9ef32574d0060f1f",
+        "duplicate_count": 1,
+        "ends_at": "0001-01-01T00:00:00Z",
+        "event_id": "e4223e8408737179bd8d1c5973416fdccd3562eb7b1f165e11bee45a4d62f6e4",
+        "first_body_sha256": "1a0d9ce4ffff10a0dfbf1380c8948bf57c83bd610866548ef93318921b7a6a10",
+        "first_received_at": 1791965803,
+        "labels": {
+          "alertname": "LLMFirewallControlPlaneUnavailable",
+          "component": "control-plane",
+          "instance": "gateway:8080",
+          "job": "soup-wall-gateway",
+          "severity": "critical"
+        },
+        "last_body_sha256": "28282e93fefa1f9c0100567eaf9d1fcfbe2cc13c0be9fda7689e44b021b4e4c8",
+        "last_received_at": 1791965808,
+        "starts_at": "2026-10-14T08:16:11.363Z",
+        "status": "firing"
+      },
+      {
+        "changed_body_count": 0,
+        "cycle_id": "187b62909160e26fa11a50799f1122b4559663358ac9e56f9ef32574d0060f1f",
+        "duplicate_count": 0,
+        "ends_at": "2026-10-14T08:17:11.363Z",
+        "event_id": "411c7c91e5441a3f94217f8a51bf2ed1f545e703bec035cabd25e32f7eb8d617",
+        "first_body_sha256": "cf20c33dc9877167c86e3557c2212edfbcdf6b89e8b575345a19e04f2373c11b",
+        "first_received_at": 1791965831,
+        "labels": {
+          "alertname": "LLMFirewallControlPlaneUnavailable",
+          "component": "control-plane",
+          "instance": "gateway:8080",
+          "job": "soup-wall-gateway",
+          "severity": "critical"
+        },
+        "last_body_sha256": "cf20c33dc9877167c86e3557c2212edfbcdf6b89e8b575345a19e04f2373c11b",
+        "last_received_at": 1791965831,
+        "starts_at": "2026-10-14T08:16:11.363Z",
+        "status": "resolved"
+      },
+      {
+        "changed_body_count": 0,
+        "cycle_id": "25ce441f772a4ef785d2e150769a53324412ebfdcfeaa24d39bf33baa7ea77fe",
+        "duplicate_count": 0,
+        "ends_at": "0001-01-01T00:00:00Z",
+        "event_id": "7740b805838a6b62f286716729969652adc185762a7b19546bdd76ce693674f0",
+        "first_body_sha256": "b35397c049032f7df467499750a1762b3fd67f0e4e1d21ada4a967d4b5969830",
+        "first_received_at": 1791965951,
+        "labels": {
+          "alertname": "LLMFirewallRedisLimitsUnavailable",
+          "component": "admission-limits",
+          "instance": "gateway:8080",
+          "job": "soup-wall-gateway",
+          "severity": "critical"
+        },
+        "last_body_sha256": "b35397c049032f7df467499750a1762b3fd67f0e4e1d21ada4a967d4b5969830",
+        "last_received_at": 1791965951,
+        "starts_at": "2026-10-14T08:18:41.363Z",
+        "status": "firing"
+      },
+      {
+        "changed_body_count": 0,
+        "cycle_id": "25ce441f772a4ef785d2e150769a53324412ebfdcfeaa24d39bf33baa7ea77fe",
+        "duplicate_count": 0,
+        "ends_at": "2026-10-14T08:19:41.363Z",
+        "event_id": "46c927f4fa198c2fe227e55ca21c757fb847418a1a7015b3b1e14d9209e1be74",
+        "first_body_sha256": "85f7fa6c318b87f5264f9e32c87a6de3362c959b021c7537503744688feaae24",
+        "first_received_at": 1791965981,
+        "labels": {
+          "alertname": "LLMFirewallRedisLimitsUnavailable",
+          "component": "admission-limits",
+          "instance": "gateway:8080",
+          "job": "soup-wall-gateway",
+          "severity": "critical"
+        },
+        "last_body_sha256": "85f7fa6c318b87f5264f9e32c87a6de3362c959b021c7537503744688feaae24",
+        "last_received_at": 1791965981,
+        "starts_at": "2026-10-14T08:18:41.363Z",
+        "status": "resolved"
+      },
+      {
+        "changed_body_count": 0,
+        "cycle_id": "9861577e2a859a72c0837df84b4f434dfb418a2f53acf0885dcf7ede0010012e",
+        "duplicate_count": 0,
+        "ends_at": "0001-01-01T00:00:00Z",
+        "event_id": "595dd50f19254087a88603a2590ee5b231f57b58e165c425b42c804ac7928680",
+        "first_body_sha256": "8d18198d6de76ac8a2a433dfef68e2490446fe69ab1264f5d804c5339f83c3ca",
+        "first_received_at": 1791966161,
+        "labels": {
+          "alertname": "LLMFirewallGatewayTargetDown",
+          "component": "gateway",
+          "instance": "gateway:8080",
+          "job": "soup-wall-gateway",
+          "severity": "critical"
+        },
+        "last_body_sha256": "8d18198d6de76ac8a2a433dfef68e2490446fe69ab1264f5d804c5339f83c3ca",
+        "last_received_at": 1791966161,
+        "starts_at": "2026-10-14T08:22:11.363Z",
+        "status": "firing"
+      },
+      {
+        "changed_body_count": 0,
+        "cycle_id": "9861577e2a859a72c0837df84b4f434dfb418a2f53acf0885dcf7ede0010012e",
+        "duplicate_count": 0,
+        "ends_at": "2026-10-14T08:23:11.363Z",
+        "event_id": "1ed98b79eae36257e4b8f180e6e579ba06b4f0f1392deba1983a0b847c36a07b",
+        "first_body_sha256": "0f9cc4858ec034c951f0bad40640a8cb01d14f525ab6d1fd07944406ac283b17",
+        "first_received_at": 1791966221,
+        "labels": {
+          "alertname": "LLMFirewallGatewayTargetDown",
+          "component": "gateway",
+          "instance": "gateway:8080",
+          "job": "soup-wall-gateway",
+          "severity": "critical"
+        },
+        "last_body_sha256": "0f9cc4858ec034c951f0bad40640a8cb01d14f525ab6d1fd07944406ac283b17",
+        "last_received_at": 1791966221,
+        "starts_at": "2026-10-14T08:22:11.363Z",
+        "status": "resolved"
+      }
+    ],
+    "retention_days": 30,
+    "returned_records": 6,
+    "total_unique_events": 6
+  },
+  "source_after": {
+    "commit": "98a7cf6f9ebfd96ac069d1d830eae2d67fa06d35",
+    "tree": "0ff5d5404d2d54954448b3c1ed48900b467ba49f",
+    "clean": true,
+    "cargo_lock_sha256": "b47634e7508864daa1df5826433f4cc31d967b013e5719dd09f3ab453f38618a"
+  },
+  "cleanup": {
+    "owned_services_stopped": true,
+    "private_profile_retained": false
+  },
+  "finished_at_utc": "2026-10-14T08:23:44.735833+00:00"
+}

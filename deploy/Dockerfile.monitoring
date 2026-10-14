@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: Apache-2.0
+# This controlled acceptance image is not a published product release.
+ARG RUST_IMAGE
+ARG PYTHON_IMAGE
+FROM ${RUST_IMAGE} AS build
+WORKDIR /src
+COPY . .
+ENV CARGO_INCREMENTAL=0 CARGO_PROFILE_RELEASE_DEBUG=0 CARGO_PROFILE_RELEASE_OPT_LEVEL=1 CARGO_PROFILE_RELEASE_LTO=false
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/src/target \
+    cargo build --locked --release -p llm-firewall && cp target/release/llm-firewall /tmp/gateway
+
+FROM ${PYTHON_IMAGE}
+WORKDIR /app
+COPY --from=build /tmp/gateway /usr/local/bin/soup-wall-gateway
+COPY LICENSE NOTICE /usr/share/doc/soup-wall/
+COPY vendor/kryptering/LICENSE /usr/share/doc/soup-wall/third-party/kryptering/LICENSE
+COPY scripts/alert_receiver.py scripts/alert-receiver.py scripts/monitoring_fixture.py /app/scripts/
+COPY policies/ /app/policies/
+USER 65532:65532
+ENTRYPOINT ["soup-wall-gateway"]

@@ -1,0 +1,62 @@
+name: protected-alert-recovery
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: protected-alert-recovery-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-alert-recovery:
+    name: Linux dependency alerts and protected durable recovery
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Check receiver and drill boundaries
+        run: |
+          python3 -m unittest discover -s scripts/tests -p 'test_alert_receiver.py' -v
+          python3 -m unittest discover -s scripts/tests -p 'test_linux_alert_acceptance.py' -v
+      - name: Run the exact-source Linux acceptance command
+        run: |
+          mkdir -p target
+          python3 scripts/linux-alert-acceptance.py --execute --expected-commit "$(git rev-parse HEAD)" --out target/linux-alert-evidence.json
+      - name: Show sanitized acceptance summary
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path("target/linux-alert-evidence.json")
+          if not path.is_file():
+              print(json.dumps({"status": "incomplete", "evidence_present": False}))
+          else:
+              evidence = json.loads(path.read_text())
+              checks = evidence.get("checks", [])
+              fields = ("phase", "command_sequence", "failure_kind", "return_code",
+                        "elapsed_seconds", "private_log_sha256")
+              summary = {"status": evidence.get("status", "incomplete"),
+                         "source_commit": evidence.get("source", {}).get("commit"),
+                         "passed_checks": sum(row.get("outcome") == "pass" for row in checks),
+                         "failed_checks": sum(row.get("outcome") == "fail" for row in checks),
+                         "error_type": evidence.get("error_type"),
+                         "command_failures": [{key: row.get(key) for key in fields}
+                                              for row in evidence.get("command_failures", [])]}
+              print(json.dumps(summary, sort_keys=True))
+          PY
+      - name: Retain sanitized raw outcomes, including incomplete runs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-alert-recovery-${{ github.sha }}
+          path: target/linux-alert-evidence.json
+          if-no-files-found: warn
+          retention-days: 14

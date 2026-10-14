@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "observation_kind": "GitHub Actions UI success/artifact metadata plus independent Git tree comparison",
+  "workflow": "protected-alert-recovery",
+  "run_id": 38538491261,
+  "job_id": 115767157039,
+  "url": "https://github.com/SoupTeam/soup-wall/actions/runs/38538491261/job/115767157039",
+  "status": "success",
+  "runner_scope": "ubuntu-24.04 Linux/amd64",
+  "job_duration_seconds": 740,
+  "pull_request_head": "ae3e742a41f4512e7114b05d6cd094adec55f801",
+  "workflow_event_commit": "49c70099d4d3687c3dde0d3e3c72c1bfb1ce1e6e",
+  "verified_head_and_event_tree": "0f2542c095e66b042e92fe094fd8cc5682797b07",
+  "git_diff_head_to_event_empty": true,
+  "artifact": {
+    "id": 11881289854,
+    "url": "https://github.com/SoupTeam/soup-wall/actions/runs/38538491261/artifacts/11881289854",
+    "name": "linux-alert-recovery-49c70099d4d3687c3dde0d3e3c72c1bfb1ce1e6e",
+    "archive_digest": "sha256:a0375929fbe11db70bd1a39c17c5d88eb7c01cac889f7455ca341cef70eaa1f7",
+    "retention_days": 14,
+    "raw_contents_downloaded": false
+  },
+  "scope": "Successful exact-source command and focused boundary job; not repository-wide code-scanning clearance or human approval."
+}
