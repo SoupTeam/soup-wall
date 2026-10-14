@@ -1,0 +1,6706 @@
+{
+ "caveats": "- **Development numbers, not a held-out result.** The train, validation and calibration splits were all\n  visible while the rules were written, so none of them is held out from the classifier. The closed test\n  (54 cases) is held by its custodian and was not used here.\n- **Provisional labels.** Every case carries `label_status: provisional`, and the exports measured here\n  predate the final dev-export and gold addendum. A \"miss\" can also be a label question.\n- **Partial labels.** Some cases have actions whose truth is not established (target null, `known_mask` 0).\n  Those actions are not scored as right or wrong; the tables below say how many known labels each number rests on.\n- **Synthetic data.** All cases come from the SOU-13 synthetic generator (`example.test` domains only);\n  they say little about the frequency of real tools.\n- **Denominators are cases, not tools.** Several cases share a template or family, so counts are not\n  independent samples.\n",
+ "classifiers": {
+  "baseline": {
+   "all": {
+    "abstention": {
+     "answered": 118,
+     "confident_when_expected_unknown": 0,
+     "exact_on_answered": 110,
+     "expected_unknown": 41,
+     "full_abstain": 51,
+     "reported_unknown": 70,
+     "unknown_when_expected_known": 29,
+     "unknown_when_expected_unknown": 41
+    },
+    "annotation": {
+     "fully_annotated": 147,
+     "fully_annotated_exact": 110,
+     "partial": 41,
+     "partial_contract_exact": 33,
+     "partial_known_labels_ok": 35
+    },
+    "cases": 188,
+    "coverage": 0.6277,
+    "critical": {
+     "definition": "a known-true write/delete/send_data/change_permissions is missing and unknown=false",
+     "risky_miss_flagged_unknown_pairs": 24,
+     "silent_pairs": [
+      [
+       "S13C2-4626F1F284A592251EFD08F08C67DAC7",
+       "write"
+      ],
+      [
+       "S13C2-6F959C05DF5ECAEF8C3051518F822B7F",
+       "write"
+      ],
+      [
+       "S13C2-916F85F087B8CA8E397B0EECC90E9050",
+       "write"
+      ],
+      [
+       "S13C2-935D36D53B0D58E6E41CDB2A131BF417",
+       "write"
+      ],
+      [
+       "S13C2-D1EF111B1B5775B713140CC25874969B",
+       "write"
+      ],
+      [
+       "S13C2-FB39FF7D369AB8B78C70B3B81EC15257",
+       "write"
+      ]
+     ],
+     "silent_risky_miss_cases": 6,
+     "silent_risky_miss_pairs": 6
+    },
+    "errors": [
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.text_stats",
+      "got": [],
+      "id": "S13C2-008B947968C9684B637D0C814D056585",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.vendor_bridge",
+      "got": [
+       "delete"
+      ],
+      "id": "S13C2-53492AF458F76889EF8D4A9448D13B86",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.text_stats",
+      "got": [],
+      "id": "S13C2-601473791ED5D1EDE0673EF1D2AE7537",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.text_stats",
+      "got": [],
+      "id": "S13C2-696B0B2636520B07152C3A3AA1D38A8A",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.text_stats",
+      "got": [],
+      "id": "S13C2-6B5458B68D34754F01950001900101DB",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.vendor_bridge",
+      "got": [
+       "send_data"
+      ],
+      "id": "S13C2-FB3CC0895DFCFE7EB437DD94C7008AEC",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.text_stats",
+      "got": [],
+      "id": "S13V03-DEV-12",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.queue_ack",
+      "got": [
+       "send_data"
+      ],
+      "id": "S13C2-11E7DD0EA52EF59D1B15F00CEC8C50C5",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.queue_ack",
+      "got": [
+       "send_data"
+      ],
+      "id": "S13C2-2436025ACA175F5B05DFF2638A7AFA23",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.json_validate",
+      "got": [],
+      "id": "S13C2-2A3A86920979586572D64F2E58570BAF",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.user_offboard",
+      "got": [],
+      "id": "S13C2-4657CA3741348451041BD0F97B49CB6E",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.user_offboard",
+      "got": [],
+      "id": "S13C2-5228B9D9D642B670207969B59B95FBFD",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.user_offboard",
+      "got": [],
+      "id": "S13C2-5386FE4E66B26D0CF44CB97BF91D2FF5",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.user_offboard",
+      "got": [],
+      "id": "S13C2-67715A3FDFD7C7E4C7EBC8A53766B053",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.user_offboard",
+      "got": [],
+      "id": "S13C2-722F94FD36C450BF5B74CC592F091323",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.json_validate",
+      "got": [],
+      "id": "S13C2-762D52D2FDD413B822D019CB84A38EFD",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.queue_ack",
+      "got": [
+       "send_data"
+      ],
+      "id": "S13C2-7773154E10A6495340273F38B116514F",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.json_validate",
+      "got": [],
+      "id": "S13C2-8696EB536ADDE2BEA8248390FB739D40",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.queue_ack",
+      "got": [
+       "send_data"
+      ],
+      "id": "S13C2-9DC73815CCBFACCD0B78E7367D1AC775",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.user_offboard",
+      "got": [],
+      "id": "S13C2-9DD3510CE0DCA6DC90D9B5EFBD74C6D4",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.json_validate",
+      "got": [],
+      "id": "S13C2-C5381A17F97E3A05B789043F19C0174F",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.queue_ack",
+      "got": [
+       "send_data"
+      ],
+      "id": "S13C2-CEE15F1F2B061AA926E546201B44767F",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.queue_ack",
+      "got": [
+       "send_data"
+      ],
+      "id": "S13C2-E60D88B42ACF022A43B6743D70F0EE27",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.json_validate",
+      "got": [],
+      "id": "S13C2-F7C2B261AE70367D1ED63B1A56D51658",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.json_validate",
+      "got": [],
+      "id": "S13C2-FF06E49B47E1D38D41C74630A093B413",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.plugin_job",
+      "got": [],
+      "id": "S13C2-17BB7D2554889F7B16C1965DFC426F54",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.rollout_plan",
+      "got": [],
+      "id": "S13C2-287AEC75D97560D2E6FEB90AD567FFA1",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.plugin_job",
+      "got": [],
+      "id": "S13C2-3BC3C54B45035066B44DCCFF54AEC356",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.ticket_reassign",
+      "got": [
+       "change_permissions"
+      ],
+      "id": "S13C2-4626F1F284A592251EFD08F08C67DAC7",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.rollout_plan",
+      "got": [],
+      "id": "S13C2-481B85FA17FEA38EFF76B02D5E4A51A7",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.plugin_job",
+      "got": [],
+      "id": "S13C2-4BFCD42628E7AB7F49470A77548B543D",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.write.migration_apply",
+      "got": [
+       "write"
+      ],
+      "id": "S13C2-4E2E3B34DEF2E0B76F1621EE4B2EC994",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.rollout_plan",
+      "got": [],
+      "id": "S13C2-4EEF0C06B1A59CF2F2AFED018059357E",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.ticket_reassign",
+      "got": [
+       "change_permissions"
+      ],
+      "id": "S13C2-6F959C05DF5ECAEF8C3051518F822B7F",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.ticket_reassign",
+      "got": [
+       "change_permissions"
+      ],
+      "id": "S13C2-916F85F087B8CA8E397B0EECC90E9050",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.ticket_reassign",
+      "got": [
+       "change_permissions"
+      ],
+      "id": "S13C2-935D36D53B0D58E6E41CDB2A131BF417",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.plugin_job",
+      "got": [],
+      "id": "S13C2-AC1B5E9A19D9F022116FD728BD9D64A5",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.plugin_job",
+      "got": [],
+      "id": "S13C2-AFE5A8353F47EDCA5DAC6E763702A4CE",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.rollout_plan",
+      "got": [],
+      "id": "S13C2-B4C987A1A9D32D65204E5C9C54AF6C36",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.ticket_reassign",
+      "got": [
+       "change_permissions"
+      ],
+      "id": "S13C2-D1EF111B1B5775B713140CC25874969B",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.rollout_plan",
+      "got": [],
+      "id": "S13C2-D2C2EF4A86529C876C1D7C44374B3FE5",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.plugin_job",
+      "got": [],
+      "id": "S13C2-DDD6CB6A00D64AB89261DAC0BF4273F3",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.rollout_plan",
+      "got": [],
+      "id": "S13C2-F383FB7C355F41B496D719D9441018F9",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.ticket_reassign",
+      "got": [
+       "change_permissions"
+      ],
+      "id": "S13C2-FB39FF7D369AB8B78C70B3B81EC15257",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.write.migration_apply",
+      "got": [
+       "write"
+      ],
+      "id": "S13C2-FD648144615D42665B5A8870CB6FD26E",
+      "known_labels_ok": false,
+      "unknown": false
+     }
+    ],
+    "exact": 143,
+    "exact_on_answered": 0.9322,
+    "mixed": {
+     "all_found": 16,
+     "cases": 28,
+     "exact_set": 16,
+     "flagged_miss": 6,
+     "silent_miss": 6
+    },
+    "per_label": {
+     "change_permissions": {
+      "fn": 6,
+      "fp": 0,
+      "known_false": 111,
+      "known_true": 36,
+      "precision": 1.0,
+      "recall": 0.8333,
+      "reported_on_unlabelled": 0,
+      "tn": 111,
+      "tp": 30,
+      "unlabelled": 41
+     },
+     "delete": {
+      "fn": 12,
+      "fp": 0,
+      "known_false": 118,
+      "known_true": 29,
+      "precision": 1.0,
+      "recall": 0.5862,
+      "reported_on_unlabelled": 1,
+      "tn": 118,
+      "tp": 17,
+      "unlabelled": 41
+     },
+     "read": {
+      "fn": 0,
+      "fp": 0,
+      "known_false": 117,
+      "known_true": 35,
+      "precision": 1.0,
+      "recall": 1.0,
+      "reported_on_unlabelled": 0,
+      "tn": 117,
+      "tp": 35,
+      "unlabelled": 36
+     },
+     "send_data": {
+      "fn": 0,
+      "fp": 6,
+      "known_false": 115,
+      "known_true": 38,
+      "precision": 0.8636,
+      "recall": 1.0,
+      "reported_on_unlabelled": 1,
+      "tn": 109,
+      "tp": 38,
+      "unlabelled": 35
+     },
+     "write": {
+      "fn": 12,
+      "fp": 2,
+      "known_false": 118,
+      "known_true": 35,
+      "precision": 0.92,
+      "recall": 0.6571,
+      "reported_on_unlabelled": 0,
+      "tn": 116,
+      "tp": 23,
+      "unlabelled": 35
+     }
+    },
+    "scored": 188,
+    "technical_failures": 0
+   },
+   "file": "rule_baseline.py",
+   "label": "frozen_d2d43d6f",
+   "latency": {
+    "cold_process_per_call": {
+     "attempts": 30,
+     "failed": 0,
+     "max_ms": 80.598,
+     "over_inner_timeout": 0,
+     "p50_ms": 57.872,
+     "p95_ms": 72.486,
+     "timed_out": 0,
+     "valid": 30
+    },
+    "in_process_call": {
+     "attempts": 500,
+     "failed": 0,
+     "max_ms": 2.32,
+     "over_inner_timeout": 0,
+     "p50_ms": 0.175,
+     "p95_ms": 0.346,
+     "timed_out": 0,
+     "valid": 500
+    },
+    "warm_process_round_trip": {
+     "attempts": 500,
+     "failed": 0,
+     "max_ms": 46.771,
+     "over_inner_timeout": 0,
+     "p50_ms": 0.453,
+     "p95_ms": 0.735,
+     "timed_out": 0,
+     "valid": 500
+    }
+   },
+   "sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+   "splits": {
+    "calibration": {
+     "abstention": {
+      "answered": 36,
+      "confident_when_expected_unknown": 0,
+      "exact_on_answered": 28,
+      "expected_unknown": 12,
+      "full_abstain": 18,
+      "reported_unknown": 18,
+      "unknown_when_expected_known": 6,
+      "unknown_when_expected_unknown": 12
+     },
+     "annotation": {
+      "fully_annotated": 42,
+      "fully_annotated_exact": 28,
+      "partial": 12,
+      "partial_contract_exact": 6,
+      "partial_known_labels_ok": 6
+     },
+     "cases": 54,
+     "coverage": 0.6667,
+     "critical": {
+      "definition": "a known-true write/delete/send_data/change_permissions is missing and unknown=false",
+      "risky_miss_flagged_unknown_pairs": 6,
+      "silent_pairs": [
+       [
+        "S13C2-4626F1F284A592251EFD08F08C67DAC7",
+        "write"
+       ],
+       [
+        "S13C2-6F959C05DF5ECAEF8C3051518F822B7F",
+        "write"
+       ],
+       [
+        "S13C2-916F85F087B8CA8E397B0EECC90E9050",
+        "write"
+       ],
+       [
+        "S13C2-935D36D53B0D58E6E41CDB2A131BF417",
+        "write"
+       ],
+       [
+        "S13C2-D1EF111B1B5775B713140CC25874969B",
+        "write"
+       ],
+       [
+        "S13C2-FB39FF7D369AB8B78C70B3B81EC15257",
+        "write"
+       ]
+      ],
+      "silent_risky_miss_cases": 6,
+      "silent_risky_miss_pairs": 6
+     },
+     "errors": [
+      {
+       "expected": [
+        "write"
+       ],
+       "expected_unknown": true,
+       "family": "fam.unknown.plugin_job",
+       "got": [],
+       "id": "S13C2-17BB7D2554889F7B16C1965DFC426F54",
+       "known_labels_ok": false,
+       "unknown": true
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.no_effect.rollout_plan",
+       "got": [],
+       "id": "S13C2-287AEC75D97560D2E6FEB90AD567FFA1",
+       "known_labels_ok": true,
+       "unknown": true
+      },
+      {
+       "expected": [
+        "write"
+       ],
+       "expected_unknown": true,
+       "family": "fam.unknown.plugin_job",
+       "got": [],
+       "id": "S13C2-3BC3C54B45035066B44DCCFF54AEC356",
+       "known_labels_ok": false,
+       "unknown": true
+      },
+      {
+       "expected": [
+        "change_permissions",
+        "write"
+       ],
+       "expected_unknown": false,
+       "family": "fam.mixed.ticket_reassign",
+       "got": [
+        "change_permissions"
+       ],
+       "id": "S13C2-4626F1F284A592251EFD08F08C67DAC7",
+       "known_labels_ok": false,
+       "unknown": false
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.no_effect.rollout_plan",
+       "got": [],
+       "id": "S13C2-481B85FA17FEA38EFF76B02D5E4A51A7",
+       "known_labels_ok": true,
+       "unknown": true
+      },
+      {
+       "expected": [
+        "write"
+       ],
+       "expected_unknown": true,
+       "family": "fam.unknown.plugin_job",
+       "got": [],
+       "id": "S13C2-4BFCD42628E7AB7F49470A77548B543D",
+       "known_labels_ok": false,
+       "unknown": true
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.write.migration_apply",
+       "got": [
+        "write"
+       ],
+       "id": "S13C2-4E2E3B34DEF2E0B76F1621EE4B2EC994",
+       "known_labels_ok": false,
+       "unknown": false
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.no_effect.rollout_plan",
+       "got": [],
+       "id": "S13C2-4EEF0C06B1A59CF2F2AFED018059357E",
+       "known_labels_ok": true,
+       "unknown": true
+      },
+      {
+       "expected": [
+        "change_permissions",
+        "write"
+       ],
+       "expected_unknown": false,
+       "family": "fam.mixed.ticket_reassign",
+       "got": [
+        "change_permissions"
+       ],
+       "id": "S13C2-6F959C05DF5ECAEF8C3051518F822B7F",
+       "known_labels_ok": false,
+       "unknown": false
+      },
+      {
+       "expected": [
+        "change_permissions",
+        "write"
+       ],
+       "expected_unknown": false,
+       "family": "fam.mixed.ticket_reassign",
+       "got": [
+        "change_permissions"
+       ],
+       "id": "S13C2-916F85F087B8CA8E397B0EECC90E9050",
+       "known_labels_ok": false,
+       "unknown": false
+      },
+      {
+       "expected": [
+        "change_permissions",
+        "write"
+       ],
+       "expected_unknown": false,
+       "family": "fam.mixed.ticket_reassign",
+       "got": [
+        "change_permissions"
+       ],
+       "id": "S13C2-935D36D53B0D58E6E41CDB2A131BF417",
+       "known_labels_ok": false,
+       "unknown": false
+      },
+      {
+       "expected": [
+        "write"
+       ],
+       "expected_unknown": true,
+       "family": "fam.unknown.plugin_job",
+       "got": [],
+       "id": "S13C2-AC1B5E9A19D9F022116FD728BD9D64A5",
+       "known_labels_ok": false,
+       "unknown": true
+      },
+      {
+       "expected": [
+        "write"
+       ],
+       "expected_unknown": true,
+       "family": "fam.unknown.plugin_job",
+       "got": [],
+       "id": "S13C2-AFE5A8353F47EDCA5DAC6E763702A4CE",
+       "known_labels_ok": false,
+       "unknown": true
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.no_effect.rollout_plan",
+       "got": [],
+       "id": "S13C2-B4C987A1A9D32D65204E5C9C54AF6C36",
+       "known_labels_ok": true,
+       "unknown": true
+      },
+      {
+       "expected": [
+        "change_permissions",
+        "write"
+       ],
+       "expected_unknown": false,
+       "family": "fam.mixed.ticket_reassign",
+       "got": [
+        "change_permissions"
+       ],
+       "id": "S13C2-D1EF111B1B5775B713140CC25874969B",
+       "known_labels_ok": false,
+       "unknown": false
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.no_effect.rollout_plan",
+       "got": [],
+       "id": "S13C2-D2C2EF4A86529C876C1D7C44374B3FE5",
+       "known_labels_ok": true,
+       "unknown": true
+      },
+      {
+       "expected": [
+        "write"
+       ],
+       "expected_unknown": true,
+       "family": "fam.unknown.plugin_job",
+       "got": [],
+       "id": "S13C2-DDD6CB6A00D64AB89261DAC0BF4273F3",
+       "known_labels_ok": false,
+       "unknown": true
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.no_effect.rollout_plan",
+       "got": [],
+       "id": "S13C2-F383FB7C355F41B496D719D9441018F9",
+       "known_labels_ok": true,
+       "unknown": true
+      },
+      {
+       "expected": [
+        "change_permissions",
+        "write"
+       ],
+       "expected_unknown": false,
+       "family": "fam.mixed.ticket_reassign",
+       "got": [
+        "change_permissions"
+       ],
+       "id": "S13C2-FB39FF7D369AB8B78C70B3B81EC15257",
+       "known_labels_ok": false,
+       "unknown": false
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.write.migration_apply",
+       "got": [
+        "write"
+       ],
+       "id": "S13C2-FD648144615D42665B5A8870CB6FD26E",
+       "known_labels_ok": false,
+       "unknown": false
+      }
+     ],
+     "exact": 34,
+     "exact_on_answered": 0.7778,
+     "mixed": {
+      "all_found": 0,
+      "cases": 6,
+      "exact_set": 0,
+      "flagged_miss": 0,
+      "silent_miss": 6
+     },
+     "per_label": {
+      "change_permissions": {
+       "fn": 0,
+       "fp": 0,
+       "known_false": 30,
+       "known_true": 12,
+       "precision": 1.0,
+       "recall": 1.0,
+       "reported_on_unlabelled": 0,
+       "tn": 30,
+       "tp": 12,
+       "unlabelled": 12
+      },
+      "delete": {
+       "fn": 0,
+       "fp": 0,
+       "known_false": 36,
+       "known_true": 6,
+       "precision": 1.0,
+       "recall": 1.0,
+       "reported_on_unlabelled": 0,
+       "tn": 36,
+       "tp": 6,
+       "unlabelled": 12
+      },
+      "read": {
+       "fn": 0,
+       "fp": 0,
+       "known_false": 36,
+       "known_true": 6,
+       "precision": 1.0,
+       "recall": 1.0,
+       "reported_on_unlabelled": 0,
+       "tn": 36,
+       "tp": 6,
+       "unlabelled": 12
+      },
+      "send_data": {
+       "fn": 0,
+       "fp": 0,
+       "known_false": 36,
+       "known_true": 6,
+       "precision": 1.0,
+       "recall": 1.0,
+       "reported_on_unlabelled": 0,
+       "tn": 36,
+       "tp": 6,
+       "unlabelled": 12
+      },
+      "write": {
+       "fn": 12,
+       "fp": 2,
+       "known_false": 32,
+       "known_true": 16,
+       "precision": 0.6667,
+       "recall": 0.25,
+       "reported_on_unlabelled": 0,
+       "tn": 30,
+       "tp": 4,
+       "unlabelled": 6
+      }
+     },
+     "scored": 54,
+     "technical_failures": 0
+    },
+    "train": {
+     "abstention": {
+      "answered": 58,
+      "confident_when_expected_unknown": 0,
+      "exact_on_answered": 58,
+      "expected_unknown": 17,
+      "full_abstain": 15,
+      "reported_unknown": 22,
+      "unknown_when_expected_known": 5,
+      "unknown_when_expected_unknown": 17
+     },
+     "annotation": {
+      "fully_annotated": 63,
+      "fully_annotated_exact": 58,
+      "partial": 17,
+      "partial_contract_exact": 15,
+      "partial_known_labels_ok": 17
+     },
+     "cases": 80,
+     "coverage": 0.725,
+     "critical": {
+      "definition": "a known-true write/delete/send_data/change_permissions is missing and unknown=false",
+      "risky_miss_flagged_unknown_pairs": 0,
+      "silent_pairs": [],
+      "silent_risky_miss_cases": 0,
+      "silent_risky_miss_pairs": 0
+     },
+     "errors": [
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.no_effect.text_stats",
+       "got": [],
+       "id": "S13C2-008B947968C9684B637D0C814D056585",
+       "known_labels_ok": true,
+       "unknown": true
+      },
+      {
+       "expected": [],
+       "expected_unknown": true,
+       "family": "fam.unknown.vendor_bridge",
+       "got": [
+        "delete"
+       ],
+       "id": "S13C2-53492AF458F76889EF8D4A9448D13B86",
+       "known_labels_ok": true,
+       "unknown": true
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.no_effect.text_stats",
+       "got": [],
+       "id": "S13C2-601473791ED5D1EDE0673EF1D2AE7537",
+       "known_labels_ok": true,
+       "unknown": true
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.no_effect.text_stats",
+       "got": [],
+       "id": "S13C2-696B0B2636520B07152C3A3AA1D38A8A",
+       "known_labels_ok": true,
+       "unknown": true
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.no_effect.text_stats",
+       "got": [],
+       "id": "S13C2-6B5458B68D34754F01950001900101DB",
+       "known_labels_ok": true,
+       "unknown": true
+      },
+      {
+       "expected": [],
+       "expected_unknown": true,
+       "family": "fam.unknown.vendor_bridge",
+       "got": [
+        "send_data"
+       ],
+       "id": "S13C2-FB3CC0895DFCFE7EB437DD94C7008AEC",
+       "known_labels_ok": true,
+       "unknown": true
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.no_effect.text_stats",
+       "got": [],
+       "id": "S13V03-DEV-12",
+       "known_labels_ok": true,
+       "unknown": true
+      }
+     ],
+     "exact": 73,
+     "exact_on_answered": 1.0,
+     "mixed": {
+      "all_found": 16,
+      "cases": 16,
+      "exact_set": 16,
+      "flagged_miss": 0,
+      "silent_miss": 0
+     },
+     "per_label": {
+      "change_permissions": {
+       "fn": 0,
+       "fp": 0,
+       "known_false": 51,
+       "known_true": 12,
+       "precision": 1.0,
+       "recall": 1.0,
+       "reported_on_unlabelled": 0,
+       "tn": 51,
+       "tp": 12,
+       "unlabelled": 17
+      },
+      "delete": {
+       "fn": 0,
+       "fp": 0,
+       "known_false": 52,
+       "known_true": 11,
+       "precision": 1.0,
+       "recall": 1.0,
+       "reported_on_unlabelled": 1,
+       "tn": 52,
+       "tp": 11,
+       "unlabelled": 17
+      },
+      "read": {
+       "fn": 0,
+       "fp": 0,
+       "known_false": 45,
+       "known_true": 23,
+       "precision": 1.0,
+       "recall": 1.0,
+       "reported_on_unlabelled": 0,
+       "tn": 45,
+       "tp": 23,
+       "unlabelled": 12
+      },
+      "send_data": {
+       "fn": 0,
+       "fp": 0,
+       "known_false": 43,
+       "known_true": 20,
+       "precision": 1.0,
+       "recall": 1.0,
+       "reported_on_unlabelled": 1,
+       "tn": 43,
+       "tp": 20,
+       "unlabelled": 17
+      },
+      "write": {
+       "fn": 0,
+       "fp": 0,
+       "known_false": 50,
+       "known_true": 13,
+       "precision": 1.0,
+       "recall": 1.0,
+       "reported_on_unlabelled": 0,
+       "tn": 50,
+       "tp": 13,
+       "unlabelled": 17
+      }
+     },
+     "scored": 80,
+     "technical_failures": 0
+    },
+    "validation": {
+     "abstention": {
+      "answered": 24,
+      "confident_when_expected_unknown": 0,
+      "exact_on_answered": 24,
+      "expected_unknown": 12,
+      "full_abstain": 18,
+      "reported_unknown": 30,
+      "unknown_when_expected_known": 18,
+      "unknown_when_expected_unknown": 12
+     },
+     "annotation": {
+      "fully_annotated": 42,
+      "fully_annotated_exact": 24,
+      "partial": 12,
+      "partial_contract_exact": 12,
+      "partial_known_labels_ok": 12
+     },
+     "cases": 54,
+     "coverage": 0.4444,
+     "critical": {
+      "definition": "a known-true write/delete/send_data/change_permissions is missing and unknown=false",
+      "risky_miss_flagged_unknown_pairs": 18,
+      "silent_pairs": [],
+      "silent_risky_miss_cases": 0,
+      "silent_risky_miss_pairs": 0
+     },
+     "errors": [
+      {
+       "expected": [
+        "delete"
+       ],
+       "expected_unknown": false,
+       "family": "fam.delete.queue_ack",
+       "got": [
+        "send_data"
+       ],
+       "id": "S13C2-11E7DD0EA52EF59D1B15F00CEC8C50C5",
+       "known_labels_ok": false,
+       "unknown": true
+      },
+      {
+       "expected": [
+        "delete"
+       ],
+       "expected_unknown": false,
+       "family": "fam.delete.queue_ack",
+       "got": [
+        "send_data"
+       ],
+       "id": "S13C2-2436025ACA175F5B05DFF2638A7AFA23",
+       "known_labels_ok": false,
+       "unknown": true
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.no_effect.json_validate",
+       "got": [],
+       "id": "S13C2-2A3A86920979586572D64F2E58570BAF",
+       "known_labels_ok": true,
+       "unknown": true
+      },
+      {
+       "expected": [
+        "change_permissions",
+        "delete"
+       ],
+       "expected_unknown": false,
+       "family": "fam.mixed.user_offboard",
+       "got": [],
+       "id": "S13C2-4657CA3741348451041BD0F97B49CB6E",
+       "known_labels_ok": false,
+       "unknown": true
+      },
+      {
+       "expected": [
+        "change_permissions",
+        "delete"
+       ],
+       "expected_unknown": false,
+       "family": "fam.mixed.user_offboard",
+       "got": [],
+       "id": "S13C2-5228B9D9D642B670207969B59B95FBFD",
+       "known_labels_ok": false,
+       "unknown": true
+      },
+      {
+       "expected": [
+        "change_permissions",
+        "delete"
+       ],
+       "expected_unknown": false,
+       "family": "fam.mixed.user_offboard",
+       "got": [],
+       "id": "S13C2-5386FE4E66B26D0CF44CB97BF91D2FF5",
+       "known_labels_ok": false,
+       "unknown": true
+      },
+      {
+       "expected": [
+        "change_permissions",
+        "delete"
+       ],
+       "expected_unknown": false,
+       "family": "fam.mixed.user_offboard",
+       "got": [],
+       "id": "S13C2-67715A3FDFD7C7E4C7EBC8A53766B053",
+       "known_labels_ok": false,
+       "unknown": true
+      },
+      {
+       "expected": [
+        "change_permissions",
+        "delete"
+       ],
+       "expected_unknown": false,
+       "family": "fam.mixed.user_offboard",
+       "got": [],
+       "id": "S13C2-722F94FD36C450BF5B74CC592F091323",
+       "known_labels_ok": false,
+       "unknown": true
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.no_effect.json_validate",
+       "got": [],
+       "id": "S13C2-762D52D2FDD413B822D019CB84A38EFD",
+       "known_labels_ok": true,
+       "unknown": true
+      },
+      {
+       "expected": [
+        "delete"
+       ],
+       "expected_unknown": false,
+       "family": "fam.delete.queue_ack",
+       "got": [
+        "send_data"
+       ],
+       "id": "S13C2-7773154E10A6495340273F38B116514F",
+       "known_labels_ok": false,
+       "unknown": true
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.no_effect.json_validate",
+       "got": [],
+       "id": "S13C2-8696EB536ADDE2BEA8248390FB739D40",
+       "known_labels_ok": true,
+       "unknown": true
+      },
+      {
+       "expected": [
+        "delete"
+       ],
+       "expected_unknown": false,
+       "family": "fam.delete.queue_ack",
+       "got": [
+        "send_data"
+       ],
+       "id": "S13C2-9DC73815CCBFACCD0B78E7367D1AC775",
+       "known_labels_ok": false,
+       "unknown": true
+      },
+      {
+       "expected": [
+        "change_permissions",
+        "delete"
+       ],
+       "expected_unknown": false,
+       "family": "fam.mixed.user_offboard",
+       "got": [],
+       "id": "S13C2-9DD3510CE0DCA6DC90D9B5EFBD74C6D4",
+       "known_labels_ok": false,
+       "unknown": true
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.no_effect.json_validate",
+       "got": [],
+       "id": "S13C2-C5381A17F97E3A05B789043F19C0174F",
+       "known_labels_ok": true,
+       "unknown": true
+      },
+      {
+       "expected": [
+        "delete"
+       ],
+       "expected_unknown": false,
+       "family": "fam.delete.queue_ack",
+       "got": [
+        "send_data"
+       ],
+       "id": "S13C2-CEE15F1F2B061AA926E546201B44767F",
+       "known_labels_ok": false,
+       "unknown": true
+      },
+      {
+       "expected": [
+        "delete"
+       ],
+       "expected_unknown": false,
+       "family": "fam.delete.queue_ack",
+       "got": [
+        "send_data"
+       ],
+       "id": "S13C2-E60D88B42ACF022A43B6743D70F0EE27",
+       "known_labels_ok": false,
+       "unknown": true
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.no_effect.json_validate",
+       "got": [],
+       "id": "S13C2-F7C2B261AE70367D1ED63B1A56D51658",
+       "known_labels_ok": true,
+       "unknown": true
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.no_effect.json_validate",
+       "got": [],
+       "id": "S13C2-FF06E49B47E1D38D41C74630A093B413",
+       "known_labels_ok": true,
+       "unknown": true
+      }
+     ],
+     "exact": 36,
+     "exact_on_answered": 1.0,
+     "mixed": {
+      "all_found": 0,
+      "cases": 6,
+      "exact_set": 0,
+      "flagged_miss": 6,
+      "silent_miss": 0
+     },
+     "per_label": {
+      "change_permissions": {
+       "fn": 6,
+       "fp": 0,
+       "known_false": 30,
+       "known_true": 12,
+       "precision": 1.0,
+       "recall": 0.5,
+       "reported_on_unlabelled": 0,
+       "tn": 30,
+       "tp": 6,
+       "unlabelled": 12
+      },
+      "delete": {
+       "fn": 12,
+       "fp": 0,
+       "known_false": 30,
+       "known_true": 12,
+       "precision": null,
+       "recall": 0.0,
+       "reported_on_unlabelled": 0,
+       "tn": 30,
+       "tp": 0,
+       "unlabelled": 12
+      },
+      "read": {
+       "fn": 0,
+       "fp": 0,
+       "known_false": 36,
+       "known_true": 6,
+       "precision": 1.0,
+       "recall": 1.0,
+       "reported_on_unlabelled": 0,
+       "tn": 36,
+       "tp": 6,
+       "unlabelled": 12
+      },
+      "send_data": {
+       "fn": 0,
+       "fp": 6,
+       "known_false": 36,
+       "known_true": 12,
+       "precision": 0.6667,
+       "recall": 1.0,
+       "reported_on_unlabelled": 0,
+       "tn": 30,
+       "tp": 12,
+       "unlabelled": 6
+      },
+      "write": {
+       "fn": 0,
+       "fp": 0,
+       "known_false": 36,
+       "known_true": 6,
+       "precision": 1.0,
+       "recall": 1.0,
+       "reported_on_unlabelled": 0,
+       "tn": 36,
+       "tp": 6,
+       "unlabelled": 12
+      }
+     },
+     "scored": 54,
+     "technical_failures": 0
+    }
+   }
+  },
+  "candidate": {
+   "all": {
+    "abstention": {
+     "answered": 141,
+     "confident_when_expected_unknown": 0,
+     "exact_on_answered": 139,
+     "expected_unknown": 41,
+     "full_abstain": 34,
+     "reported_unknown": 47,
+     "unknown_when_expected_known": 6,
+     "unknown_when_expected_unknown": 41
+    },
+    "annotation": {
+     "fully_annotated": 147,
+     "fully_annotated_exact": 139,
+     "partial": 41,
+     "partial_contract_exact": 33,
+     "partial_known_labels_ok": 35
+    },
+    "cases": 188,
+    "coverage": 0.75,
+    "critical": {
+     "definition": "a known-true write/delete/send_data/change_permissions is missing and unknown=false",
+     "risky_miss_flagged_unknown_pairs": 6,
+     "silent_pairs": [],
+     "silent_risky_miss_cases": 0,
+     "silent_risky_miss_pairs": 0
+    },
+    "errors": [
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.vendor_bridge",
+      "got": [
+       "delete"
+      ],
+      "id": "S13C2-53492AF458F76889EF8D4A9448D13B86",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.vendor_bridge",
+      "got": [
+       "send_data"
+      ],
+      "id": "S13C2-FB3CC0895DFCFE7EB437DD94C7008AEC",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.plugin_job",
+      "got": [],
+      "id": "S13C2-17BB7D2554889F7B16C1965DFC426F54",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.rollout_plan",
+      "got": [],
+      "id": "S13C2-287AEC75D97560D2E6FEB90AD567FFA1",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.plugin_job",
+      "got": [],
+      "id": "S13C2-3BC3C54B45035066B44DCCFF54AEC356",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.rollout_plan",
+      "got": [],
+      "id": "S13C2-481B85FA17FEA38EFF76B02D5E4A51A7",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.plugin_job",
+      "got": [],
+      "id": "S13C2-4BFCD42628E7AB7F49470A77548B543D",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.write.migration_apply",
+      "got": [
+       "write"
+      ],
+      "id": "S13C2-4E2E3B34DEF2E0B76F1621EE4B2EC994",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.rollout_plan",
+      "got": [],
+      "id": "S13C2-4EEF0C06B1A59CF2F2AFED018059357E",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.plugin_job",
+      "got": [],
+      "id": "S13C2-AC1B5E9A19D9F022116FD728BD9D64A5",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.plugin_job",
+      "got": [],
+      "id": "S13C2-AFE5A8353F47EDCA5DAC6E763702A4CE",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.rollout_plan",
+      "got": [],
+      "id": "S13C2-B4C987A1A9D32D65204E5C9C54AF6C36",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.rollout_plan",
+      "got": [],
+      "id": "S13C2-D2C2EF4A86529C876C1D7C44374B3FE5",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.plugin_job",
+      "got": [],
+      "id": "S13C2-DDD6CB6A00D64AB89261DAC0BF4273F3",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.rollout_plan",
+      "got": [],
+      "id": "S13C2-F383FB7C355F41B496D719D9441018F9",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.write.migration_apply",
+      "got": [
+       "write"
+      ],
+      "id": "S13C2-FD648144615D42665B5A8870CB6FD26E",
+      "known_labels_ok": false,
+      "unknown": false
+     }
+    ],
+    "exact": 172,
+    "exact_on_answered": 0.9858,
+    "mixed": {
+     "all_found": 28,
+     "cases": 28,
+     "exact_set": 28,
+     "flagged_miss": 0,
+     "silent_miss": 0
+    },
+    "per_label": {
+     "change_permissions": {
+      "fn": 0,
+      "fp": 0,
+      "known_false": 111,
+      "known_true": 36,
+      "precision": 1.0,
+      "recall": 1.0,
+      "reported_on_unlabelled": 0,
+      "tn": 111,
+      "tp": 36,
+      "unlabelled": 41
+     },
+     "delete": {
+      "fn": 0,
+      "fp": 0,
+      "known_false": 118,
+      "known_true": 29,
+      "precision": 1.0,
+      "recall": 1.0,
+      "reported_on_unlabelled": 1,
+      "tn": 118,
+      "tp": 29,
+      "unlabelled": 41
+     },
+     "read": {
+      "fn": 0,
+      "fp": 0,
+      "known_false": 117,
+      "known_true": 35,
+      "precision": 1.0,
+      "recall": 1.0,
+      "reported_on_unlabelled": 0,
+      "tn": 117,
+      "tp": 35,
+      "unlabelled": 36
+     },
+     "send_data": {
+      "fn": 0,
+      "fp": 0,
+      "known_false": 115,
+      "known_true": 38,
+      "precision": 1.0,
+      "recall": 1.0,
+      "reported_on_unlabelled": 1,
+      "tn": 115,
+      "tp": 38,
+      "unlabelled": 35
+     },
+     "write": {
+      "fn": 6,
+      "fp": 2,
+      "known_false": 118,
+      "known_true": 35,
+      "precision": 0.9355,
+      "recall": 0.8286,
+      "reported_on_unlabelled": 0,
+      "tn": 116,
+      "tp": 29,
+      "unlabelled": 35
+     }
+    },
+    "scored": 188,
+    "technical_failures": 0
+   },
+   "file": "rule_baseline.py",
+   "label": "candidate",
+   "latency": {
+    "cold_process_per_call": {
+     "attempts": 30,
+     "failed": 0,
+     "max_ms": 116.807,
+     "over_inner_timeout": 0,
+     "p50_ms": 70.19,
+     "p95_ms": 113.722,
+     "timed_out": 0,
+     "valid": 30
+    },
+    "in_process_call": {
+     "attempts": 500,
+     "failed": 0,
+     "max_ms": 1.617,
+     "over_inner_timeout": 0,
+     "p50_ms": 0.212,
+     "p95_ms": 0.378,
+     "timed_out": 0,
+     "valid": 500
+    },
+    "warm_process_round_trip": {
+     "attempts": 500,
+     "failed": 0,
+     "max_ms": 54.788,
+     "over_inner_timeout": 0,
+     "p50_ms": 0.497,
+     "p95_ms": 0.82,
+     "timed_out": 0,
+     "valid": 500
+    }
+   },
+   "sha256": "d0b4fc02720ee5ff38dec73d5992c6bdee9eda8595282e33015e60d07ce33ea5",
+   "splits": {
+    "calibration": {
+     "abstention": {
+      "answered": 36,
+      "confident_when_expected_unknown": 0,
+      "exact_on_answered": 34,
+      "expected_unknown": 12,
+      "full_abstain": 18,
+      "reported_unknown": 18,
+      "unknown_when_expected_known": 6,
+      "unknown_when_expected_unknown": 12
+     },
+     "annotation": {
+      "fully_annotated": 42,
+      "fully_annotated_exact": 34,
+      "partial": 12,
+      "partial_contract_exact": 6,
+      "partial_known_labels_ok": 6
+     },
+     "cases": 54,
+     "coverage": 0.6667,
+     "critical": {
+      "definition": "a known-true write/delete/send_data/change_permissions is missing and unknown=false",
+      "risky_miss_flagged_unknown_pairs": 6,
+      "silent_pairs": [],
+      "silent_risky_miss_cases": 0,
+      "silent_risky_miss_pairs": 0
+     },
+     "errors": [
+      {
+       "expected": [
+        "write"
+       ],
+       "expected_unknown": true,
+       "family": "fam.unknown.plugin_job",
+       "got": [],
+       "id": "S13C2-17BB7D2554889F7B16C1965DFC426F54",
+       "known_labels_ok": false,
+       "unknown": true
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.no_effect.rollout_plan",
+       "got": [],
+       "id": "S13C2-287AEC75D97560D2E6FEB90AD567FFA1",
+       "known_labels_ok": true,
+       "unknown": true
+      },
+      {
+       "expected": [
+        "write"
+       ],
+       "expected_unknown": true,
+       "family": "fam.unknown.plugin_job",
+       "got": [],
+       "id": "S13C2-3BC3C54B45035066B44DCCFF54AEC356",
+       "known_labels_ok": false,
+       "unknown": true
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.no_effect.rollout_plan",
+       "got": [],
+       "id": "S13C2-481B85FA17FEA38EFF76B02D5E4A51A7",
+       "known_labels_ok": true,
+       "unknown": true
+      },
+      {
+       "expected": [
+        "write"
+       ],
+       "expected_unknown": true,
+       "family": "fam.unknown.plugin_job",
+       "got": [],
+       "id": "S13C2-4BFCD42628E7AB7F49470A77548B543D",
+       "known_labels_ok": false,
+       "unknown": true
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.write.migration_apply",
+       "got": [
+        "write"
+       ],
+       "id": "S13C2-4E2E3B34DEF2E0B76F1621EE4B2EC994",
+       "known_labels_ok": false,
+       "unknown": false
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.no_effect.rollout_plan",
+       "got": [],
+       "id": "S13C2-4EEF0C06B1A59CF2F2AFED018059357E",
+       "known_labels_ok": true,
+       "unknown": true
+      },
+      {
+       "expected": [
+        "write"
+       ],
+       "expected_unknown": true,
+       "family": "fam.unknown.plugin_job",
+       "got": [],
+       "id": "S13C2-AC1B5E9A19D9F022116FD728BD9D64A5",
+       "known_labels_ok": false,
+       "unknown": true
+      },
+      {
+       "expected": [
+        "write"
+       ],
+       "expected_unknown": true,
+       "family": "fam.unknown.plugin_job",
+       "got": [],
+       "id": "S13C2-AFE5A8353F47EDCA5DAC6E763702A4CE",
+       "known_labels_ok": false,
+       "unknown": true
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.no_effect.rollout_plan",
+       "got": [],
+       "id": "S13C2-B4C987A1A9D32D65204E5C9C54AF6C36",
+       "known_labels_ok": true,
+       "unknown": true
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.no_effect.rollout_plan",
+       "got": [],
+       "id": "S13C2-D2C2EF4A86529C876C1D7C44374B3FE5",
+       "known_labels_ok": true,
+       "unknown": true
+      },
+      {
+       "expected": [
+        "write"
+       ],
+       "expected_unknown": true,
+       "family": "fam.unknown.plugin_job",
+       "got": [],
+       "id": "S13C2-DDD6CB6A00D64AB89261DAC0BF4273F3",
+       "known_labels_ok": false,
+       "unknown": true
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.no_effect.rollout_plan",
+       "got": [],
+       "id": "S13C2-F383FB7C355F41B496D719D9441018F9",
+       "known_labels_ok": true,
+       "unknown": true
+      },
+      {
+       "expected": [],
+       "expected_unknown": false,
+       "family": "fam.write.migration_apply",
+       "got": [
+        "write"
+       ],
+       "id": "S13C2-FD648144615D42665B5A8870CB6FD26E",
+       "known_labels_ok": false,
+       "unknown": false
+      }
+     ],
+     "exact": 40,
+     "exact_on_answered": 0.9444,
+     "mixed": {
+      "all_found": 6,
+      "cases": 6,
+      "exact_set": 6,
+      "flagged_miss": 0,
+      "silent_miss": 0
+     },
+     "per_label": {
+      "change_permissions": {
+       "fn": 0,
+       "fp": 0,
+       "known_false": 30,
+       "known_true": 12,
+       "precision": 1.0,
+       "recall": 1.0,
+       "reported_on_unlabelled": 0,
+       "tn": 30,
+       "tp": 12,
+       "unlabelled": 12
+      },
+      "delete": {
+       "fn": 0,
+       "fp": 0,
+       "known_false": 36,
+       "known_true": 6,
+       "precision": 1.0,
+       "recall": 1.0,
+       "reported_on_unlabelled": 0,
+       "tn": 36,
+       "tp": 6,
+       "unlabelled": 12
+      },
+      "read": {
+       "fn": 0,
+       "fp": 0,
+       "known_false": 36,
+       "known_true": 6,
+       "precision": 1.0,
+       "recall": 1.0,
+       "reported_on_unlabelled": 0,
+       "tn": 36,
+       "tp": 6,
+       "unlabelled": 12
+      },
+      "send_data": {
+       "fn": 0,
+       "fp": 0,
+       "known_false": 36,
+       "known_true": 6,
+       "precision": 1.0,
+       "recall": 1.0,
+       "reported_on_unlabelled": 0,
+       "tn": 36,
+       "tp": 6,
+       "unlabelled": 12
+      },
+      "write": {
+       "fn": 6,
+       "fp": 2,
+       "known_false": 32,
+       "known_true": 16,
+       "precision": 0.8333,
+       "recall": 0.625,
+       "reported_on_unlabelled": 0,
+       "tn": 30,
+       "tp": 10,
+       "unlabelled": 6
+      }
+     },
+     "scored": 54,
+     "technical_failures": 0
+    },
+    "train": {
+     "abstention": {
+      "answered": 63,
+      "confident_when_expected_unknown": 0,
+      "exact_on_answered": 63,
+      "expected_unknown": 17,
+      "full_abstain": 10,
+      "reported_unknown": 17,
+      "unknown_when_expected_known": 0,
+      "unknown_when_expected_unknown": 17
+     },
+     "annotation": {
+      "fully_annotated": 63,
+      "fully_annotated_exact": 63,
+      "partial": 17,
+      "partial_contract_exact": 15,
+      "partial_known_labels_ok": 17
+     },
+     "cases": 80,
+     "coverage": 0.7875,
+     "critical": {
+      "definition": "a known-true write/delete/send_data/change_permissions is missing and unknown=false",
+      "risky_miss_flagged_unknown_pairs": 0,
+      "silent_pairs": [],
+      "silent_risky_miss_cases": 0,
+      "silent_risky_miss_pairs": 0
+     },
+     "errors": [
+      {
+       "expected": [],
+       "expected_unknown": true,
+       "family": "fam.unknown.vendor_bridge",
+       "got": [
+        "delete"
+       ],
+       "id": "S13C2-53492AF458F76889EF8D4A9448D13B86",
+       "known_labels_ok": true,
+       "unknown": true
+      },
+      {
+       "expected": [],
+       "expected_unknown": true,
+       "family": "fam.unknown.vendor_bridge",
+       "got": [
+        "send_data"
+       ],
+       "id": "S13C2-FB3CC0895DFCFE7EB437DD94C7008AEC",
+       "known_labels_ok": true,
+       "unknown": true
+      }
+     ],
+     "exact": 78,
+     "exact_on_answered": 1.0,
+     "mixed": {
+      "all_found": 16,
+      "cases": 16,
+      "exact_set": 16,
+      "flagged_miss": 0,
+      "silent_miss": 0
+     },
+     "per_label": {
+      "change_permissions": {
+       "fn": 0,
+       "fp": 0,
+       "known_false": 51,
+       "known_true": 12,
+       "precision": 1.0,
+       "recall": 1.0,
+       "reported_on_unlabelled": 0,
+       "tn": 51,
+       "tp": 12,
+       "unlabelled": 17
+      },
+      "delete": {
+       "fn": 0,
+       "fp": 0,
+       "known_false": 52,
+       "known_true": 11,
+       "precision": 1.0,
+       "recall": 1.0,
+       "reported_on_unlabelled": 1,
+       "tn": 52,
+       "tp": 11,
+       "unlabelled": 17
+      },
+      "read": {
+       "fn": 0,
+       "fp": 0,
+       "known_false": 45,
+       "known_true": 23,
+       "precision": 1.0,
+       "recall": 1.0,
+       "reported_on_unlabelled": 0,
+       "tn": 45,
+       "tp": 23,
+       "unlabelled": 12
+      },
+      "send_data": {
+       "fn": 0,
+       "fp": 0,
+       "known_false": 43,
+       "known_true": 20,
+       "precision": 1.0,
+       "recall": 1.0,
+       "reported_on_unlabelled": 1,
+       "tn": 43,
+       "tp": 20,
+       "unlabelled": 17
+      },
+      "write": {
+       "fn": 0,
+       "fp": 0,
+       "known_false": 50,
+       "known_true": 13,
+       "precision": 1.0,
+       "recall": 1.0,
+       "reported_on_unlabelled": 0,
+       "tn": 50,
+       "tp": 13,
+       "unlabelled": 17
+      }
+     },
+     "scored": 80,
+     "technical_failures": 0
+    },
+    "validation": {
+     "abstention": {
+      "answered": 42,
+      "confident_when_expected_unknown": 0,
+      "exact_on_answered": 42,
+      "expected_unknown": 12,
+      "full_abstain": 6,
+      "reported_unknown": 12,
+      "unknown_when_expected_known": 0,
+      "unknown_when_expected_unknown": 12
+     },
+     "annotation": {
+      "fully_annotated": 42,
+      "fully_annotated_exact": 42,
+      "partial": 12,
+      "partial_contract_exact": 12,
+      "partial_known_labels_ok": 12
+     },
+     "cases": 54,
+     "coverage": 0.7778,
+     "critical": {
+      "definition": "a known-true write/delete/send_data/change_permissions is missing and unknown=false",
+      "risky_miss_flagged_unknown_pairs": 0,
+      "silent_pairs": [],
+      "silent_risky_miss_cases": 0,
+      "silent_risky_miss_pairs": 0
+     },
+     "errors": [],
+     "exact": 54,
+     "exact_on_answered": 1.0,
+     "mixed": {
+      "all_found": 6,
+      "cases": 6,
+      "exact_set": 6,
+      "flagged_miss": 0,
+      "silent_miss": 0
+     },
+     "per_label": {
+      "change_permissions": {
+       "fn": 0,
+       "fp": 0,
+       "known_false": 30,
+       "known_true": 12,
+       "precision": 1.0,
+       "recall": 1.0,
+       "reported_on_unlabelled": 0,
+       "tn": 30,
+       "tp": 12,
+       "unlabelled": 12
+      },
+      "delete": {
+       "fn": 0,
+       "fp": 0,
+       "known_false": 30,
+       "known_true": 12,
+       "precision": 1.0,
+       "recall": 1.0,
+       "reported_on_unlabelled": 0,
+       "tn": 30,
+       "tp": 12,
+       "unlabelled": 12
+      },
+      "read": {
+       "fn": 0,
+       "fp": 0,
+       "known_false": 36,
+       "known_true": 6,
+       "precision": 1.0,
+       "recall": 1.0,
+       "reported_on_unlabelled": 0,
+       "tn": 36,
+       "tp": 6,
+       "unlabelled": 12
+      },
+      "send_data": {
+       "fn": 0,
+       "fp": 0,
+       "known_false": 36,
+       "known_true": 12,
+       "precision": 1.0,
+       "recall": 1.0,
+       "reported_on_unlabelled": 0,
+       "tn": 36,
+       "tp": 12,
+       "unlabelled": 6
+      },
+      "write": {
+       "fn": 0,
+       "fp": 0,
+       "known_false": 36,
+       "known_true": 6,
+       "precision": 1.0,
+       "recall": 1.0,
+       "reported_on_unlabelled": 0,
+       "tn": 36,
+       "tp": 6,
+       "unlabelled": 12
+      }
+     },
+     "scored": 54,
+     "technical_failures": 0
+    }
+   }
+  }
+ },
+ "data": {
+  "cases": {
+   "calibration": 54,
+   "train": 80,
+   "validation": 54
+  },
+  "exports": "exports",
+  "provenance": {
+   "cp2_version": "0.4-cp2-phase1-draft",
+   "export_status": "DRAFT",
+   "files_sha256": {
+    "labels/calibration.jsonl": "827be697ea8fbafb5091fd69e6712e8e31f078b3f5c9a92fe7eb35e8f927cb38",
+    "labels/train.jsonl": "1b9f80471875e6525905724770e0ca03e87f057a986852d6036f085f6ebb9ff9",
+    "labels/validation.jsonl": "6b7b59a9fb9723b71ba704c16474f202fe29cdadff1391cafd69806d4dc94568",
+    "model_inputs/calibration.jsonl": "6cc93d475a30060445cca3971aec8932aadeec5fbc03a07f4f2a3b65940cd7b5",
+    "model_inputs/train.jsonl": "66114234e755707a3f51ea5cb54d04b98ec550e2c19dfc58e34efa32058d881b",
+    "model_inputs/validation.jsonl": "bb8b0868391628420def0d2df365c74b533c576568be67b433afec3f432cba05"
+   },
+   "label_status": {
+    "provisional": 188
+   },
+   "manifest_check": "ok"
+  }
+ },
+ "environment": {
+  "platform": "Linux-6.18.44-fc-v114-x86_64-with-glibc2.39",
+  "python": "3.13.16"
+ },
+ "kind": "sou14-dev-evaluation",
+ "references": {
+  "always_abstain": {
+   "all": {
+    "abstention": {
+     "answered": 0,
+     "confident_when_expected_unknown": 0,
+     "exact_on_answered": 0,
+     "expected_unknown": 41,
+     "full_abstain": 188,
+     "reported_unknown": 188,
+     "unknown_when_expected_known": 147,
+     "unknown_when_expected_unknown": 41
+    },
+    "annotation": {
+     "fully_annotated": 147,
+     "fully_annotated_exact": 0,
+     "partial": 41,
+     "partial_contract_exact": 24,
+     "partial_known_labels_ok": 24
+    },
+    "cases": 188,
+    "coverage": 0.0,
+    "critical": {
+     "definition": "a known-true write/delete/send_data/change_permissions is missing and unknown=false",
+     "risky_miss_flagged_unknown_pairs": 138,
+     "silent_pairs": [],
+     "silent_risky_miss_cases": 0,
+     "silent_risky_miss_pairs": 0
+    },
+    "errors": [
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.text_stats",
+      "got": [],
+      "id": "S13C2-008B947968C9684B637D0C814D056585",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.file_upload",
+      "got": [],
+      "id": "S13C2-02282DB1C81EDC0B0DF9E62D8364CBF6",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.document_delete",
+      "got": [],
+      "id": "S13C2-022D2E6793A81B363BADA25EFF467984",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.document_delete",
+      "got": [],
+      "id": "S13C2-0D468C66201674F773BB0E6FF763B579",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.role_grant",
+      "got": [],
+      "id": "S13C2-0D60B4A8D31706A71101E045B266141E",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.file_upload",
+      "got": [],
+      "id": "S13C2-158C8A82F06705251EF5F48BD292A968",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.webhook_post",
+      "got": [],
+      "id": "S13C2-25BAA44B1E8D45CEFA7B89224A85B968",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.http_get",
+      "got": [],
+      "id": "S13C2-27A0A665BACB827486F47CB494D7B282",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.share_invite",
+      "got": [],
+      "id": "S13C2-2A75AB419E814562C40258B15D872FF5",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.cache_purge",
+      "got": [],
+      "id": "S13C2-2F03DA7D1A819C171899356B6CA6CF00",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.workflow_steps",
+      "got": [],
+      "id": "S13C2-2FDBE1DA8A549840124E355C501E57D0",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.report_postprocess",
+      "got": [],
+      "id": "S13C2-3F1DEBC147BD25DA7BD9BE13A11978ED",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.audit_append",
+      "got": [],
+      "id": "S13C2-4582DA8E4404C9A859D2C0A81F715022",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.document_delete",
+      "got": [],
+      "id": "S13C2-458CE7C3ADA11D91B2DA5A0E55821025",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.note_create",
+      "got": [],
+      "id": "S13C2-488DE03E586466950CE5B2725654814F",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.document_delete",
+      "got": [],
+      "id": "S13C2-4A7CD49651AC886D471DBEE287F11D1D",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.audit_append",
+      "got": [],
+      "id": "S13C2-4C48F5165CB3416D01E3894E980E1F6A",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.workflow_steps",
+      "got": [],
+      "id": "S13C2-4E489F0DE9028954A29105D4280ABD6F",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.http_get",
+      "got": [],
+      "id": "S13C2-577899F7BCEF5B2196474D73BB747F6F",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.cache_purge",
+      "got": [],
+      "id": "S13C2-58B7AE91DEE1EA9D78173E435551E683",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.role_grant",
+      "got": [],
+      "id": "S13C2-5999CA68A1B6C441D7D22BE36C9318CE",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.report_postprocess",
+      "got": [],
+      "id": "S13C2-5F7BD0715B943DCB97FFB46587252170",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.text_stats",
+      "got": [],
+      "id": "S13C2-601473791ED5D1EDE0673EF1D2AE7537",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.audit_append",
+      "got": [],
+      "id": "S13C2-6254C004451B68A4822EDA930FD423F5",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.file_upload",
+      "got": [],
+      "id": "S13C2-65DF683657D885908C1FE8215A9FF548",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.note_create",
+      "got": [],
+      "id": "S13C2-67661C42F90D043E546FC1232E35B9F7",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.text_stats",
+      "got": [],
+      "id": "S13C2-696B0B2636520B07152C3A3AA1D38A8A",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.note_create",
+      "got": [],
+      "id": "S13C2-6AEF035F282F74547A44A911C4675278",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.text_stats",
+      "got": [],
+      "id": "S13C2-6B5458B68D34754F01950001900101DB",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.http_get",
+      "got": [],
+      "id": "S13C2-6FF12FB211F887E673D2B58787C8ADC2",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.audit_append",
+      "got": [],
+      "id": "S13C2-74F33324481150112CE2681976FE4928",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.document_delete",
+      "got": [],
+      "id": "S13C2-7F2D29063F28102F72B6AC068526F341",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.report_postprocess",
+      "got": [],
+      "id": "S13C2-8428AEA74E8577C4D5F9BE08B8263D3A",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.cache_purge",
+      "got": [],
+      "id": "S13C2-8DE7E461360A4A7735E99803E126F6B7",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.share_invite",
+      "got": [],
+      "id": "S13C2-914F397DF9EA36B044294BAACCE9F5D5",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.webhook_post",
+      "got": [],
+      "id": "S13C2-A0280BF143F9B209A9504ABACEA72A6D",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.role_grant",
+      "got": [],
+      "id": "S13C2-A3947F2F45C3F8C6A9F447F29D65B5D3",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.cache_purge",
+      "got": [],
+      "id": "S13C2-A6DC2205F0A091E5887581896A7FFB2C",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.share_invite",
+      "got": [],
+      "id": "S13C2-ADFDB51A0D835D1E7850A79853961DB8",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.webhook_post",
+      "got": [],
+      "id": "S13C2-B4F5AA76032D0015F4BE64FF2117595F",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.webhook_post",
+      "got": [],
+      "id": "S13C2-BD2A3C95BE0BFA80E94870770427D819",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.note_create",
+      "got": [],
+      "id": "S13C2-C100A3F977E1E36FF06EFDACB32AD519",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.audit_append",
+      "got": [],
+      "id": "S13C2-C65A0289F2BBD40BC8396C34A7C7645C",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.role_grant",
+      "got": [],
+      "id": "S13C2-C6F9C66E56A78021869E6286AA1AF2E4",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.http_get",
+      "got": [],
+      "id": "S13C2-C8EB5C753B4D13F17102F685F6042768",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.report_postprocess",
+      "got": [],
+      "id": "S13C2-C9B720FB8E324594F26F99B9FBFF0817",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.file_upload",
+      "got": [],
+      "id": "S13C2-CA13C3F83DDBB2626896AE454AD13DFC",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.share_invite",
+      "got": [],
+      "id": "S13C2-D0F54D290270D5FD5C762B38B5760EE9",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.http_get",
+      "got": [],
+      "id": "S13C2-E2BD06AE40DD173F66E2C69C5FD7B786",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.role_grant",
+      "got": [],
+      "id": "S13C2-ECAA2B5EE9F2B6F3DF4F9958DB06DFC4",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.file_upload",
+      "got": [],
+      "id": "S13C2-EFE9F6D4826F2BACE935839B3F5B9773",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.webhook_post",
+      "got": [],
+      "id": "S13C2-F096C6019A8C92A83FB3A4F97E89B532",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.audit_append",
+      "got": [],
+      "id": "S13C2-F4DBE3454FC7213165298E1DC9E38EC0",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.note_create",
+      "got": [],
+      "id": "S13C2-F75B43B2B2C942C93168716DC52676B7",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.http_get",
+      "got": [],
+      "id": "S13V03-DEV-01",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.webhook_post",
+      "got": [],
+      "id": "S13V03-DEV-02",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.document_delete",
+      "got": [],
+      "id": "S13V03-DEV-03",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.role_grant",
+      "got": [],
+      "id": "S13V03-DEV-04",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.file_upload",
+      "got": [],
+      "id": "S13V03-DEV-05",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.workflow_steps",
+      "got": [],
+      "id": "S13V03-DEV-06",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.note_create",
+      "got": [],
+      "id": "S13V03-DEV-07",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.cache_purge",
+      "got": [],
+      "id": "S13V03-DEV-08",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.report_postprocess",
+      "got": [],
+      "id": "S13V03-DEV-10",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.text_stats",
+      "got": [],
+      "id": "S13V03-DEV-12",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read",
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.shell.posix_sh",
+      "got": [],
+      "id": "S13V03-DEV-13",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.shell.posix_sh",
+      "got": [],
+      "id": "S13V03-DEV-14",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.shell.posix_sh",
+      "got": [],
+      "id": "S13V03-DEV-15",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.share_invite",
+      "got": [],
+      "id": "S13V03-DEV-16",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.flag_set",
+      "got": [],
+      "id": "S13C2-08E065FE30B1DDCDF4A64E1C7A33722F",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.queue_ack",
+      "got": [],
+      "id": "S13C2-11E7DD0EA52EF59D1B15F00CEC8C50C5",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.flag_set",
+      "got": [],
+      "id": "S13C2-161884E475C0C03DB8A981FE899A0F9B",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.sms_send",
+      "got": [],
+      "id": "S13C2-1FB079B568831E090D2F5D988DEC2FA3",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.queue_ack",
+      "got": [],
+      "id": "S13C2-2436025ACA175F5B05DFF2638A7AFA23",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.sms_send",
+      "got": [],
+      "id": "S13C2-29750E2CA04C9E8E50FE9D96A023224E",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.json_validate",
+      "got": [],
+      "id": "S13C2-2A3A86920979586572D64F2E58570BAF",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.sms_send",
+      "got": [],
+      "id": "S13C2-2B6E8A3C8B0D7E1898A32682FD50E2C8",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.flag_set",
+      "got": [],
+      "id": "S13C2-2D65DD96517238D51790FBEEBBB12AF2",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.sms_send",
+      "got": [],
+      "id": "S13C2-33366E5F767F432355349A7D3143B0D1",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.wiki_page_get",
+      "got": [],
+      "id": "S13C2-360268B43BF2C964C5AD69899931287A",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.member_remove",
+      "got": [],
+      "id": "S13C2-42C9A603D5D5FD23744F9306332CFB17",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.user_offboard",
+      "got": [],
+      "id": "S13C2-4657CA3741348451041BD0F97B49CB6E",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.member_remove",
+      "got": [],
+      "id": "S13C2-49CE43B68442F9992A23F13E82629684",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.notify_render",
+      "got": [],
+      "id": "S13C2-4B3E1D2B35614FE5119FAFBA05DD06EA",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.member_remove",
+      "got": [],
+      "id": "S13C2-4D63E35B7530C3E4C492D837219EA773",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.user_offboard",
+      "got": [],
+      "id": "S13C2-5228B9D9D642B670207969B59B95FBFD",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.user_offboard",
+      "got": [],
+      "id": "S13C2-5386FE4E66B26D0CF44CB97BF91D2FF5",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.user_offboard",
+      "got": [],
+      "id": "S13C2-67715A3FDFD7C7E4C7EBC8A53766B053",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.notify_render",
+      "got": [],
+      "id": "S13C2-6BC7109D0D13855F167FD88E3FC215CA",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.user_offboard",
+      "got": [],
+      "id": "S13C2-722F94FD36C450BF5B74CC592F091323",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.json_validate",
+      "got": [],
+      "id": "S13C2-762D52D2FDD413B822D019CB84A38EFD",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.queue_ack",
+      "got": [],
+      "id": "S13C2-7773154E10A6495340273F38B116514F",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.json_validate",
+      "got": [],
+      "id": "S13C2-8696EB536ADDE2BEA8248390FB739D40",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.wiki_page_get",
+      "got": [],
+      "id": "S13C2-970A20F7039AED63195B7E4522A8D88B",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.member_remove",
+      "got": [],
+      "id": "S13C2-97E2BCCEA719A750DB7D8E588CE47123",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.wiki_page_get",
+      "got": [],
+      "id": "S13C2-9BB52F40B34C8A746E8BF5AEA8C62A75",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.queue_ack",
+      "got": [],
+      "id": "S13C2-9DC73815CCBFACCD0B78E7367D1AC775",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.user_offboard",
+      "got": [],
+      "id": "S13C2-9DD3510CE0DCA6DC90D9B5EFBD74C6D4",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.flag_set",
+      "got": [],
+      "id": "S13C2-A774BA3039DA5616B4572938E2038DC2",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.flag_set",
+      "got": [],
+      "id": "S13C2-A80B681BA2687FA1C49D080309DB1D3A",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.notify_render",
+      "got": [],
+      "id": "S13C2-B167094C71002512954B8394E2220F5D",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.member_remove",
+      "got": [],
+      "id": "S13C2-B2718BB2BD8250F4491F51724CA3B915",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.member_remove",
+      "got": [],
+      "id": "S13C2-B84732C3AE522AFEBC3671A99B5C2B3A",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.flag_set",
+      "got": [],
+      "id": "S13C2-BEB61F3B96EBF1531E98AD0C2BB0A764",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.json_validate",
+      "got": [],
+      "id": "S13C2-C5381A17F97E3A05B789043F19C0174F",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.wiki_page_get",
+      "got": [],
+      "id": "S13C2-CB2570CA296D0852CE06F71627174F7F",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.queue_ack",
+      "got": [],
+      "id": "S13C2-CEE15F1F2B061AA926E546201B44767F",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.notify_render",
+      "got": [],
+      "id": "S13C2-D649D06DDE349D9504D8D8829A98DCF8",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.notify_render",
+      "got": [],
+      "id": "S13C2-DAAB02E303F9B1DC08C28C6BB32A5427",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.wiki_page_get",
+      "got": [],
+      "id": "S13C2-E2429B8503EDFA356FEC85725C8CD691",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.queue_ack",
+      "got": [],
+      "id": "S13C2-E60D88B42ACF022A43B6743D70F0EE27",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.notify_render",
+      "got": [],
+      "id": "S13C2-ECFE4BE5442A70E40ABA67D5357C6874",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.sms_send",
+      "got": [],
+      "id": "S13C2-F6AC9050845F9E0F0345D3C157367AB9",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.json_validate",
+      "got": [],
+      "id": "S13C2-F7C2B261AE70367D1ED63B1A56D51658",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.sms_send",
+      "got": [],
+      "id": "S13C2-F7F6F7388E6E12BCBCA5B9803FBD94DF",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.wiki_page_get",
+      "got": [],
+      "id": "S13C2-FA891ACB7A7BD92EB7A88308B764F751",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.json_validate",
+      "got": [],
+      "id": "S13C2-FF06E49B47E1D38D41C74630A093B413",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.migration_apply",
+      "got": [],
+      "id": "S13C2-0324444232873EEE962126DED8774878",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.prefix_remove",
+      "got": [],
+      "id": "S13C2-070F61F6A53F651B09CB5FB75C1693E4",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.chat_post",
+      "got": [],
+      "id": "S13C2-17B2697740AA1D8E8B9C0DAECFB06C1C",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.plugin_job",
+      "got": [],
+      "id": "S13C2-17BB7D2554889F7B16C1965DFC426F54",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.chat_post",
+      "got": [],
+      "id": "S13C2-1BA93EAE112F6ACCF010BCB2FAC19DAA",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.chat_post",
+      "got": [],
+      "id": "S13C2-1C3B6DCBF31567BAC2C45CD981466297",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.object_stat",
+      "got": [],
+      "id": "S13C2-27BDC6E184B8D319D828226724AD7CB7",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.object_stat",
+      "got": [],
+      "id": "S13C2-27D09F5467769C3EA6B8AA671AA829AE",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.rollout_plan",
+      "got": [],
+      "id": "S13C2-287AEC75D97560D2E6FEB90AD567FFA1",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.chat_post",
+      "got": [],
+      "id": "S13C2-2B2762B61686FFEDD697B910DEDDEE0B",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.prefix_remove",
+      "got": [],
+      "id": "S13C2-38B93EF04BE6A6F8DE0F792A171B5A14",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.migration_apply",
+      "got": [],
+      "id": "S13C2-3BB0FC1A594118A1CC4231D074E11218",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.plugin_job",
+      "got": [],
+      "id": "S13C2-3BC3C54B45035066B44DCCFF54AEC356",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.link_share",
+      "got": [],
+      "id": "S13C2-3D94DCD97C4A68168397101B10923B10",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.link_share",
+      "got": [],
+      "id": "S13C2-41DB2B8FA07EC36DB6FE811BE4A2477E",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.ticket_reassign",
+      "got": [],
+      "id": "S13C2-4626F1F284A592251EFD08F08C67DAC7",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.rollout_plan",
+      "got": [],
+      "id": "S13C2-481B85FA17FEA38EFF76B02D5E4A51A7",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.object_stat",
+      "got": [],
+      "id": "S13C2-48A94C02DE5B48F06D2DC7196F0385A9",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.plugin_job",
+      "got": [],
+      "id": "S13C2-4BFCD42628E7AB7F49470A77548B543D",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.write.migration_apply",
+      "got": [],
+      "id": "S13C2-4E2E3B34DEF2E0B76F1621EE4B2EC994",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.rollout_plan",
+      "got": [],
+      "id": "S13C2-4EEF0C06B1A59CF2F2AFED018059357E",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.link_share",
+      "got": [],
+      "id": "S13C2-5495EDAFCEBBECE492A513896C1394AB",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.prefix_remove",
+      "got": [],
+      "id": "S13C2-665625E0EE26F8502FF331E6FC6F113E",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.link_share",
+      "got": [],
+      "id": "S13C2-6EB96F2BCDABD697F73289BA74151CC9",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.ticket_reassign",
+      "got": [],
+      "id": "S13C2-6F959C05DF5ECAEF8C3051518F822B7F",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.link_share",
+      "got": [],
+      "id": "S13C2-72CE08CFC063B5358BD6353CDFF0B420",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.migration_apply",
+      "got": [],
+      "id": "S13C2-79FC6121573D0837978153D6FC687F38",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.chat_post",
+      "got": [],
+      "id": "S13C2-7B95CC41FBAFD0E1BB361FEE9B9D4F2B",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.link_share",
+      "got": [],
+      "id": "S13C2-7D1B02503DA3051E600EFF3E84443D47",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.prefix_remove",
+      "got": [],
+      "id": "S13C2-8E1B6248318C69575085D3E20B86282B",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.ticket_reassign",
+      "got": [],
+      "id": "S13C2-916F85F087B8CA8E397B0EECC90E9050",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.object_stat",
+      "got": [],
+      "id": "S13C2-929FF1F9FB13D49AAF1DB0402A250F07",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.ticket_reassign",
+      "got": [],
+      "id": "S13C2-935D36D53B0D58E6E41CDB2A131BF417",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.plugin_job",
+      "got": [],
+      "id": "S13C2-AC1B5E9A19D9F022116FD728BD9D64A5",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.plugin_job",
+      "got": [],
+      "id": "S13C2-AFE5A8353F47EDCA5DAC6E763702A4CE",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.prefix_remove",
+      "got": [],
+      "id": "S13C2-B28C6CC76CA23D7F4FDCF313473AEC6B",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.rollout_plan",
+      "got": [],
+      "id": "S13C2-B4C987A1A9D32D65204E5C9C54AF6C36",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.migration_apply",
+      "got": [],
+      "id": "S13C2-BCDAE22C4C0797DB6A1FE53CEA9043E8",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.chat_post",
+      "got": [],
+      "id": "S13C2-C740A2FA26DF7B37BED89656AFEB1AE0",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.ticket_reassign",
+      "got": [],
+      "id": "S13C2-D1EF111B1B5775B713140CC25874969B",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.rollout_plan",
+      "got": [],
+      "id": "S13C2-D2C2EF4A86529C876C1D7C44374B3FE5",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.plugin_job",
+      "got": [],
+      "id": "S13C2-DDD6CB6A00D64AB89261DAC0BF4273F3",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.object_stat",
+      "got": [],
+      "id": "S13C2-E54FC6B1B470119BA80F01CA378E70FB",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.prefix_remove",
+      "got": [],
+      "id": "S13C2-E7A6F22C2D9A97A454356B6B2EBF1A61",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.no_effect.rollout_plan",
+      "got": [],
+      "id": "S13C2-F383FB7C355F41B496D719D9441018F9",
+      "known_labels_ok": true,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.object_stat",
+      "got": [],
+      "id": "S13C2-F5C1F27FB47A3576D520D746FFE6B337",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.ticket_reassign",
+      "got": [],
+      "id": "S13C2-FB39FF7D369AB8B78C70B3B81EC15257",
+      "known_labels_ok": false,
+      "unknown": true
+     },
+     {
+      "expected": [],
+      "expected_unknown": false,
+      "family": "fam.write.migration_apply",
+      "got": [],
+      "id": "S13C2-FD648144615D42665B5A8870CB6FD26E",
+      "known_labels_ok": true,
+      "unknown": true
+     }
+    ],
+    "exact": 24,
+    "exact_on_answered": null,
+    "mixed": {
+     "all_found": 0,
+     "cases": 28,
+     "exact_set": 0,
+     "flagged_miss": 28,
+     "silent_miss": 0
+    },
+    "per_label": {
+     "change_permissions": {
+      "fn": 36,
+      "fp": 0,
+      "known_false": 111,
+      "known_true": 36,
+      "precision": null,
+      "recall": 0.0,
+      "reported_on_unlabelled": 0,
+      "tn": 111,
+      "tp": 0,
+      "unlabelled": 41
+     },
+     "delete": {
+      "fn": 29,
+      "fp": 0,
+      "known_false": 118,
+      "known_true": 29,
+      "precision": null,
+      "recall": 0.0,
+      "reported_on_unlabelled": 0,
+      "tn": 118,
+      "tp": 0,
+      "unlabelled": 41
+     },
+     "read": {
+      "fn": 35,
+      "fp": 0,
+      "known_false": 117,
+      "known_true": 35,
+      "precision": null,
+      "recall": 0.0,
+      "reported_on_unlabelled": 0,
+      "tn": 117,
+      "tp": 0,
+      "unlabelled": 36
+     },
+     "send_data": {
+      "fn": 38,
+      "fp": 0,
+      "known_false": 115,
+      "known_true": 38,
+      "precision": null,
+      "recall": 0.0,
+      "reported_on_unlabelled": 0,
+      "tn": 115,
+      "tp": 0,
+      "unlabelled": 35
+     },
+     "write": {
+      "fn": 35,
+      "fp": 0,
+      "known_false": 118,
+      "known_true": 35,
+      "precision": null,
+      "recall": 0.0,
+      "reported_on_unlabelled": 0,
+      "tn": 118,
+      "tp": 0,
+      "unlabelled": 35
+     }
+    },
+    "scored": 188,
+    "technical_failures": 0
+   }
+  },
+  "always_no_effect": {
+   "all": {
+    "abstention": {
+     "answered": 188,
+     "confident_when_expected_unknown": 41,
+     "exact_on_answered": 19,
+     "expected_unknown": 41,
+     "full_abstain": 0,
+     "reported_unknown": 0,
+     "unknown_when_expected_known": 0,
+     "unknown_when_expected_unknown": 0
+    },
+    "annotation": {
+     "fully_annotated": 147,
+     "fully_annotated_exact": 19,
+     "partial": 41,
+     "partial_contract_exact": 0,
+     "partial_known_labels_ok": 24
+    },
+    "cases": 188,
+    "coverage": 1.0,
+    "critical": {
+     "definition": "a known-true write/delete/send_data/change_permissions is missing and unknown=false",
+     "risky_miss_flagged_unknown_pairs": 0,
+     "silent_pairs": [
+      [
+       "S13C2-02282DB1C81EDC0B0DF9E62D8364CBF6",
+       "send_data"
+      ],
+      [
+       "S13C2-022D2E6793A81B363BADA25EFF467984",
+       "delete"
+      ],
+      [
+       "S13C2-0D468C66201674F773BB0E6FF763B579",
+       "delete"
+      ],
+      [
+       "S13C2-0D60B4A8D31706A71101E045B266141E",
+       "change_permissions"
+      ],
+      [
+       "S13C2-158C8A82F06705251EF5F48BD292A968",
+       "send_data"
+      ],
+      [
+       "S13C2-25BAA44B1E8D45CEFA7B89224A85B968",
+       "send_data"
+      ],
+      [
+       "S13C2-2A75AB419E814562C40258B15D872FF5",
+       "send_data"
+      ],
+      [
+       "S13C2-2A75AB419E814562C40258B15D872FF5",
+       "change_permissions"
+      ],
+      [
+       "S13C2-2F03DA7D1A819C171899356B6CA6CF00",
+       "delete"
+      ],
+      [
+       "S13C2-2FDBE1DA8A549840124E355C501E57D0",
+       "send_data"
+      ],
+      [
+       "S13C2-4582DA8E4404C9A859D2C0A81F715022",
+       "write"
+      ],
+      [
+       "S13C2-458CE7C3ADA11D91B2DA5A0E55821025",
+       "delete"
+      ],
+      [
+       "S13C2-488DE03E586466950CE5B2725654814F",
+       "write"
+      ],
+      [
+       "S13C2-4A7CD49651AC886D471DBEE287F11D1D",
+       "delete"
+      ],
+      [
+       "S13C2-4C48F5165CB3416D01E3894E980E1F6A",
+       "write"
+      ],
+      [
+       "S13C2-4E489F0DE9028954A29105D4280ABD6F",
+       "send_data"
+      ],
+      [
+       "S13C2-58B7AE91DEE1EA9D78173E435551E683",
+       "delete"
+      ],
+      [
+       "S13C2-5999CA68A1B6C441D7D22BE36C9318CE",
+       "change_permissions"
+      ],
+      [
+       "S13C2-6254C004451B68A4822EDA930FD423F5",
+       "write"
+      ],
+      [
+       "S13C2-65DF683657D885908C1FE8215A9FF548",
+       "send_data"
+      ],
+      [
+       "S13C2-67661C42F90D043E546FC1232E35B9F7",
+       "write"
+      ],
+      [
+       "S13C2-6AEF035F282F74547A44A911C4675278",
+       "write"
+      ],
+      [
+       "S13C2-74F33324481150112CE2681976FE4928",
+       "write"
+      ],
+      [
+       "S13C2-7F2D29063F28102F72B6AC068526F341",
+       "delete"
+      ],
+      [
+       "S13C2-8DE7E461360A4A7735E99803E126F6B7",
+       "delete"
+      ],
+      [
+       "S13C2-914F397DF9EA36B044294BAACCE9F5D5",
+       "send_data"
+      ],
+      [
+       "S13C2-914F397DF9EA36B044294BAACCE9F5D5",
+       "change_permissions"
+      ],
+      [
+       "S13C2-A0280BF143F9B209A9504ABACEA72A6D",
+       "send_data"
+      ],
+      [
+       "S13C2-A3947F2F45C3F8C6A9F447F29D65B5D3",
+       "change_permissions"
+      ],
+      [
+       "S13C2-A6DC2205F0A091E5887581896A7FFB2C",
+       "delete"
+      ],
+      [
+       "S13C2-ADFDB51A0D835D1E7850A79853961DB8",
+       "send_data"
+      ],
+      [
+       "S13C2-ADFDB51A0D835D1E7850A79853961DB8",
+       "change_permissions"
+      ],
+      [
+       "S13C2-B4F5AA76032D0015F4BE64FF2117595F",
+       "send_data"
+      ],
+      [
+       "S13C2-BD2A3C95BE0BFA80E94870770427D819",
+       "send_data"
+      ],
+      [
+       "S13C2-C100A3F977E1E36FF06EFDACB32AD519",
+       "write"
+      ],
+      [
+       "S13C2-C65A0289F2BBD40BC8396C34A7C7645C",
+       "write"
+      ],
+      [
+       "S13C2-C6F9C66E56A78021869E6286AA1AF2E4",
+       "change_permissions"
+      ],
+      [
+       "S13C2-CA13C3F83DDBB2626896AE454AD13DFC",
+       "send_data"
+      ],
+      [
+       "S13C2-D0F54D290270D5FD5C762B38B5760EE9",
+       "send_data"
+      ],
+      [
+       "S13C2-D0F54D290270D5FD5C762B38B5760EE9",
+       "change_permissions"
+      ],
+      [
+       "S13C2-ECAA2B5EE9F2B6F3DF4F9958DB06DFC4",
+       "change_permissions"
+      ],
+      [
+       "S13C2-EFE9F6D4826F2BACE935839B3F5B9773",
+       "send_data"
+      ],
+      [
+       "S13C2-F096C6019A8C92A83FB3A4F97E89B532",
+       "send_data"
+      ],
+      [
+       "S13C2-F4DBE3454FC7213165298E1DC9E38EC0",
+       "write"
+      ],
+      [
+       "S13C2-F75B43B2B2C942C93168716DC52676B7",
+       "write"
+      ],
+      [
+       "S13V03-DEV-02",
+       "send_data"
+      ],
+      [
+       "S13V03-DEV-03",
+       "delete"
+      ],
+      [
+       "S13V03-DEV-04",
+       "change_permissions"
+      ],
+      [
+       "S13V03-DEV-05",
+       "send_data"
+      ],
+      [
+       "S13V03-DEV-06",
+       "send_data"
+      ],
+      [
+       "S13V03-DEV-07",
+       "write"
+      ],
+      [
+       "S13V03-DEV-08",
+       "delete"
+      ],
+      [
+       "S13V03-DEV-13",
+       "write"
+      ],
+      [
+       "S13V03-DEV-15",
+       "change_permissions"
+      ],
+      [
+       "S13V03-DEV-16",
+       "send_data"
+      ],
+      [
+       "S13V03-DEV-16",
+       "change_permissions"
+      ],
+      [
+       "S13C2-08E065FE30B1DDCDF4A64E1C7A33722F",
+       "write"
+      ],
+      [
+       "S13C2-11E7DD0EA52EF59D1B15F00CEC8C50C5",
+       "delete"
+      ],
+      [
+       "S13C2-161884E475C0C03DB8A981FE899A0F9B",
+       "write"
+      ],
+      [
+       "S13C2-1FB079B568831E090D2F5D988DEC2FA3",
+       "send_data"
+      ],
+      [
+       "S13C2-2436025ACA175F5B05DFF2638A7AFA23",
+       "delete"
+      ],
+      [
+       "S13C2-29750E2CA04C9E8E50FE9D96A023224E",
+       "send_data"
+      ],
+      [
+       "S13C2-2B6E8A3C8B0D7E1898A32682FD50E2C8",
+       "send_data"
+      ],
+      [
+       "S13C2-2D65DD96517238D51790FBEEBBB12AF2",
+       "write"
+      ],
+      [
+       "S13C2-33366E5F767F432355349A7D3143B0D1",
+       "send_data"
+      ],
+      [
+       "S13C2-42C9A603D5D5FD23744F9306332CFB17",
+       "change_permissions"
+      ],
+      [
+       "S13C2-4657CA3741348451041BD0F97B49CB6E",
+       "delete"
+      ],
+      [
+       "S13C2-4657CA3741348451041BD0F97B49CB6E",
+       "change_permissions"
+      ],
+      [
+       "S13C2-49CE43B68442F9992A23F13E82629684",
+       "change_permissions"
+      ],
+      [
+       "S13C2-4B3E1D2B35614FE5119FAFBA05DD06EA",
+       "send_data"
+      ],
+      [
+       "S13C2-4D63E35B7530C3E4C492D837219EA773",
+       "change_permissions"
+      ],
+      [
+       "S13C2-5228B9D9D642B670207969B59B95FBFD",
+       "delete"
+      ],
+      [
+       "S13C2-5228B9D9D642B670207969B59B95FBFD",
+       "change_permissions"
+      ],
+      [
+       "S13C2-5386FE4E66B26D0CF44CB97BF91D2FF5",
+       "delete"
+      ],
+      [
+       "S13C2-5386FE4E66B26D0CF44CB97BF91D2FF5",
+       "change_permissions"
+      ],
+      [
+       "S13C2-67715A3FDFD7C7E4C7EBC8A53766B053",
+       "delete"
+      ],
+      [
+       "S13C2-67715A3FDFD7C7E4C7EBC8A53766B053",
+       "change_permissions"
+      ],
+      [
+       "S13C2-6BC7109D0D13855F167FD88E3FC215CA",
+       "send_data"
+      ],
+      [
+       "S13C2-722F94FD36C450BF5B74CC592F091323",
+       "delete"
+      ],
+      [
+       "S13C2-722F94FD36C450BF5B74CC592F091323",
+       "change_permissions"
+      ],
+      [
+       "S13C2-7773154E10A6495340273F38B116514F",
+       "delete"
+      ],
+      [
+       "S13C2-97E2BCCEA719A750DB7D8E588CE47123",
+       "change_permissions"
+      ],
+      [
+       "S13C2-9DC73815CCBFACCD0B78E7367D1AC775",
+       "delete"
+      ],
+      [
+       "S13C2-9DD3510CE0DCA6DC90D9B5EFBD74C6D4",
+       "delete"
+      ],
+      [
+       "S13C2-9DD3510CE0DCA6DC90D9B5EFBD74C6D4",
+       "change_permissions"
+      ],
+      [
+       "S13C2-A774BA3039DA5616B4572938E2038DC2",
+       "write"
+      ],
+      [
+       "S13C2-A80B681BA2687FA1C49D080309DB1D3A",
+       "write"
+      ],
+      [
+       "S13C2-B167094C71002512954B8394E2220F5D",
+       "send_data"
+      ],
+      [
+       "S13C2-B2718BB2BD8250F4491F51724CA3B915",
+       "change_permissions"
+      ],
+      [
+       "S13C2-B84732C3AE522AFEBC3671A99B5C2B3A",
+       "change_permissions"
+      ],
+      [
+       "S13C2-BEB61F3B96EBF1531E98AD0C2BB0A764",
+       "write"
+      ],
+      [
+       "S13C2-CEE15F1F2B061AA926E546201B44767F",
+       "delete"
+      ],
+      [
+       "S13C2-D649D06DDE349D9504D8D8829A98DCF8",
+       "send_data"
+      ],
+      [
+       "S13C2-DAAB02E303F9B1DC08C28C6BB32A5427",
+       "send_data"
+      ],
+      [
+       "S13C2-E60D88B42ACF022A43B6743D70F0EE27",
+       "delete"
+      ],
+      [
+       "S13C2-ECFE4BE5442A70E40ABA67D5357C6874",
+       "send_data"
+      ],
+      [
+       "S13C2-F6AC9050845F9E0F0345D3C157367AB9",
+       "send_data"
+      ],
+      [
+       "S13C2-F7F6F7388E6E12BCBCA5B9803FBD94DF",
+       "send_data"
+      ],
+      [
+       "S13C2-0324444232873EEE962126DED8774878",
+       "write"
+      ],
+      [
+       "S13C2-070F61F6A53F651B09CB5FB75C1693E4",
+       "delete"
+      ],
+      [
+       "S13C2-17B2697740AA1D8E8B9C0DAECFB06C1C",
+       "send_data"
+      ],
+      [
+       "S13C2-17BB7D2554889F7B16C1965DFC426F54",
+       "write"
+      ],
+      [
+       "S13C2-1BA93EAE112F6ACCF010BCB2FAC19DAA",
+       "send_data"
+      ],
+      [
+       "S13C2-1C3B6DCBF31567BAC2C45CD981466297",
+       "send_data"
+      ],
+      [
+       "S13C2-2B2762B61686FFEDD697B910DEDDEE0B",
+       "send_data"
+      ],
+      [
+       "S13C2-38B93EF04BE6A6F8DE0F792A171B5A14",
+       "delete"
+      ],
+      [
+       "S13C2-3BB0FC1A594118A1CC4231D074E11218",
+       "write"
+      ],
+      [
+       "S13C2-3BC3C54B45035066B44DCCFF54AEC356",
+       "write"
+      ],
+      [
+       "S13C2-3D94DCD97C4A68168397101B10923B10",
+       "change_permissions"
+      ],
+      [
+       "S13C2-41DB2B8FA07EC36DB6FE811BE4A2477E",
+       "change_permissions"
+      ],
+      [
+       "S13C2-4626F1F284A592251EFD08F08C67DAC7",
+       "write"
+      ],
+      [
+       "S13C2-4626F1F284A592251EFD08F08C67DAC7",
+       "change_permissions"
+      ],
+      [
+       "S13C2-4BFCD42628E7AB7F49470A77548B543D",
+       "write"
+      ],
+      [
+       "S13C2-5495EDAFCEBBECE492A513896C1394AB",
+       "change_permissions"
+      ],
+      [
+       "S13C2-665625E0EE26F8502FF331E6FC6F113E",
+       "delete"
+      ],
+      [
+       "S13C2-6EB96F2BCDABD697F73289BA74151CC9",
+       "change_permissions"
+      ],
+      [
+       "S13C2-6F959C05DF5ECAEF8C3051518F822B7F",
+       "write"
+      ],
+      [
+       "S13C2-6F959C05DF5ECAEF8C3051518F822B7F",
+       "change_permissions"
+      ],
+      [
+       "S13C2-72CE08CFC063B5358BD6353CDFF0B420",
+       "change_permissions"
+      ],
+      [
+       "S13C2-79FC6121573D0837978153D6FC687F38",
+       "write"
+      ],
+      [
+       "S13C2-7B95CC41FBAFD0E1BB361FEE9B9D4F2B",
+       "send_data"
+      ],
+      [
+       "S13C2-7D1B02503DA3051E600EFF3E84443D47",
+       "change_permissions"
+      ],
+      [
+       "S13C2-8E1B6248318C69575085D3E20B86282B",
+       "delete"
+      ],
+      [
+       "S13C2-916F85F087B8CA8E397B0EECC90E9050",
+       "write"
+      ],
+      [
+       "S13C2-916F85F087B8CA8E397B0EECC90E9050",
+       "change_permissions"
+      ],
+      [
+       "S13C2-935D36D53B0D58E6E41CDB2A131BF417",
+       "write"
+      ],
+      [
+       "S13C2-935D36D53B0D58E6E41CDB2A131BF417",
+       "change_permissions"
+      ],
+      [
+       "S13C2-AC1B5E9A19D9F022116FD728BD9D64A5",
+       "write"
+      ],
+      [
+       "S13C2-AFE5A8353F47EDCA5DAC6E763702A4CE",
+       "write"
+      ],
+      [
+       "S13C2-B28C6CC76CA23D7F4FDCF313473AEC6B",
+       "delete"
+      ],
+      [
+       "S13C2-BCDAE22C4C0797DB6A1FE53CEA9043E8",
+       "write"
+      ],
+      [
+       "S13C2-C740A2FA26DF7B37BED89656AFEB1AE0",
+       "send_data"
+      ],
+      [
+       "S13C2-D1EF111B1B5775B713140CC25874969B",
+       "write"
+      ],
+      [
+       "S13C2-D1EF111B1B5775B713140CC25874969B",
+       "change_permissions"
+      ],
+      [
+       "S13C2-DDD6CB6A00D64AB89261DAC0BF4273F3",
+       "write"
+      ],
+      [
+       "S13C2-E7A6F22C2D9A97A454356B6B2EBF1A61",
+       "delete"
+      ],
+      [
+       "S13C2-FB39FF7D369AB8B78C70B3B81EC15257",
+       "write"
+      ],
+      [
+       "S13C2-FB39FF7D369AB8B78C70B3B81EC15257",
+       "change_permissions"
+      ]
+     ],
+     "silent_risky_miss_cases": 121,
+     "silent_risky_miss_pairs": 138
+    },
+    "errors": [
+     {
+      "expected": [
+       "read",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.file_upload",
+      "got": [],
+      "id": "S13C2-02282DB1C81EDC0B0DF9E62D8364CBF6",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.document_delete",
+      "got": [],
+      "id": "S13C2-022D2E6793A81B363BADA25EFF467984",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.document_delete",
+      "got": [],
+      "id": "S13C2-0D468C66201674F773BB0E6FF763B579",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.role_grant",
+      "got": [],
+      "id": "S13C2-0D60B4A8D31706A71101E045B266141E",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.file_upload",
+      "got": [],
+      "id": "S13C2-158C8A82F06705251EF5F48BD292A968",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.webhook_post",
+      "got": [],
+      "id": "S13C2-25BAA44B1E8D45CEFA7B89224A85B968",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.http_get",
+      "got": [],
+      "id": "S13C2-27A0A665BACB827486F47CB494D7B282",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.share_invite",
+      "got": [],
+      "id": "S13C2-2A75AB419E814562C40258B15D872FF5",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.cache_purge",
+      "got": [],
+      "id": "S13C2-2F03DA7D1A819C171899356B6CA6CF00",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.workflow_steps",
+      "got": [],
+      "id": "S13C2-2FDBE1DA8A549840124E355C501E57D0",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.report_postprocess",
+      "got": [],
+      "id": "S13C2-3F1DEBC147BD25DA7BD9BE13A11978ED",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.audit_append",
+      "got": [],
+      "id": "S13C2-4582DA8E4404C9A859D2C0A81F715022",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.document_delete",
+      "got": [],
+      "id": "S13C2-458CE7C3ADA11D91B2DA5A0E55821025",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.note_create",
+      "got": [],
+      "id": "S13C2-488DE03E586466950CE5B2725654814F",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.document_delete",
+      "got": [],
+      "id": "S13C2-4A7CD49651AC886D471DBEE287F11D1D",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.audit_append",
+      "got": [],
+      "id": "S13C2-4C48F5165CB3416D01E3894E980E1F6A",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.workflow_steps",
+      "got": [],
+      "id": "S13C2-4E489F0DE9028954A29105D4280ABD6F",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.vendor_bridge",
+      "got": [],
+      "id": "S13C2-53492AF458F76889EF8D4A9448D13B86",
+      "known_labels_ok": true,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.http_get",
+      "got": [],
+      "id": "S13C2-577899F7BCEF5B2196474D73BB747F6F",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.cache_purge",
+      "got": [],
+      "id": "S13C2-58B7AE91DEE1EA9D78173E435551E683",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.role_grant",
+      "got": [],
+      "id": "S13C2-5999CA68A1B6C441D7D22BE36C9318CE",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.report_postprocess",
+      "got": [],
+      "id": "S13C2-5F7BD0715B943DCB97FFB46587252170",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.audit_append",
+      "got": [],
+      "id": "S13C2-6254C004451B68A4822EDA930FD423F5",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.file_upload",
+      "got": [],
+      "id": "S13C2-65DF683657D885908C1FE8215A9FF548",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.note_create",
+      "got": [],
+      "id": "S13C2-67661C42F90D043E546FC1232E35B9F7",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.note_create",
+      "got": [],
+      "id": "S13C2-6AEF035F282F74547A44A911C4675278",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.http_get",
+      "got": [],
+      "id": "S13C2-6FF12FB211F887E673D2B58787C8ADC2",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.audit_append",
+      "got": [],
+      "id": "S13C2-74F33324481150112CE2681976FE4928",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.document_delete",
+      "got": [],
+      "id": "S13C2-7F2D29063F28102F72B6AC068526F341",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.report_postprocess",
+      "got": [],
+      "id": "S13C2-8428AEA74E8577C4D5F9BE08B8263D3A",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.cache_purge",
+      "got": [],
+      "id": "S13C2-8DE7E461360A4A7735E99803E126F6B7",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.partner_rpc",
+      "got": [],
+      "id": "S13C2-911BAFBC5E07056E6A875AEBAA6F396F",
+      "known_labels_ok": true,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.share_invite",
+      "got": [],
+      "id": "S13C2-914F397DF9EA36B044294BAACCE9F5D5",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.vendor_bridge",
+      "got": [],
+      "id": "S13C2-91E5D2759290DFDDB450FA7866DBDD43",
+      "known_labels_ok": true,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.partner_rpc",
+      "got": [],
+      "id": "S13C2-93514F209FBE16032C6B346495EB777B",
+      "known_labels_ok": true,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.webhook_post",
+      "got": [],
+      "id": "S13C2-A0280BF143F9B209A9504ABACEA72A6D",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.role_grant",
+      "got": [],
+      "id": "S13C2-A3947F2F45C3F8C6A9F447F29D65B5D3",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.partner_rpc",
+      "got": [],
+      "id": "S13C2-A4052304B829BB4E81A9E04424F562A4",
+      "known_labels_ok": true,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.cache_purge",
+      "got": [],
+      "id": "S13C2-A6DC2205F0A091E5887581896A7FFB2C",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.partner_rpc",
+      "got": [],
+      "id": "S13C2-AA2332711F9C879975CB4C115065F0D1",
+      "known_labels_ok": true,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.partner_rpc",
+      "got": [],
+      "id": "S13C2-ABFA520322DF93F7422FD9E318C18BEE",
+      "known_labels_ok": true,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.share_invite",
+      "got": [],
+      "id": "S13C2-ADFDB51A0D835D1E7850A79853961DB8",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.webhook_post",
+      "got": [],
+      "id": "S13C2-B4F5AA76032D0015F4BE64FF2117595F",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.partner_rpc",
+      "got": [],
+      "id": "S13C2-B96B61F5300362A25836DB2D6A692B9D",
+      "known_labels_ok": true,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.webhook_post",
+      "got": [],
+      "id": "S13C2-BD2A3C95BE0BFA80E94870770427D819",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.note_create",
+      "got": [],
+      "id": "S13C2-C100A3F977E1E36FF06EFDACB32AD519",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.vendor_bridge",
+      "got": [],
+      "id": "S13C2-C4B3F6B08447854FDB64F8EC0C9D249E",
+      "known_labels_ok": true,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.audit_append",
+      "got": [],
+      "id": "S13C2-C65A0289F2BBD40BC8396C34A7C7645C",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.role_grant",
+      "got": [],
+      "id": "S13C2-C6F9C66E56A78021869E6286AA1AF2E4",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.http_get",
+      "got": [],
+      "id": "S13C2-C8EB5C753B4D13F17102F685F6042768",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.report_postprocess",
+      "got": [],
+      "id": "S13C2-C9B720FB8E324594F26F99B9FBFF0817",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.file_upload",
+      "got": [],
+      "id": "S13C2-CA13C3F83DDBB2626896AE454AD13DFC",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.workspace_tidy",
+      "got": [],
+      "id": "S13C2-CD55F6741D449195586945737B4F059D",
+      "known_labels_ok": true,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.share_invite",
+      "got": [],
+      "id": "S13C2-D0F54D290270D5FD5C762B38B5760EE9",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.http_get",
+      "got": [],
+      "id": "S13C2-E2BD06AE40DD173F66E2C69C5FD7B786",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.role_grant",
+      "got": [],
+      "id": "S13C2-ECAA2B5EE9F2B6F3DF4F9958DB06DFC4",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.file_upload",
+      "got": [],
+      "id": "S13C2-EFE9F6D4826F2BACE935839B3F5B9773",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.webhook_post",
+      "got": [],
+      "id": "S13C2-F096C6019A8C92A83FB3A4F97E89B532",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.audit_append",
+      "got": [],
+      "id": "S13C2-F4DBE3454FC7213165298E1DC9E38EC0",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.note_create",
+      "got": [],
+      "id": "S13C2-F75B43B2B2C942C93168716DC52676B7",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.vendor_bridge",
+      "got": [],
+      "id": "S13C2-FB3CC0895DFCFE7EB437DD94C7008AEC",
+      "known_labels_ok": true,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.http_get",
+      "got": [],
+      "id": "S13V03-DEV-01",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.webhook_post",
+      "got": [],
+      "id": "S13V03-DEV-02",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.document_delete",
+      "got": [],
+      "id": "S13V03-DEV-03",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.role_grant",
+      "got": [],
+      "id": "S13V03-DEV-04",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.file_upload",
+      "got": [],
+      "id": "S13V03-DEV-05",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.workflow_steps",
+      "got": [],
+      "id": "S13V03-DEV-06",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.note_create",
+      "got": [],
+      "id": "S13V03-DEV-07",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.cache_purge",
+      "got": [],
+      "id": "S13V03-DEV-08",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.report_postprocess",
+      "got": [],
+      "id": "S13V03-DEV-10",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.vendor_bridge",
+      "got": [],
+      "id": "S13V03-DEV-11",
+      "known_labels_ok": true,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read",
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.shell.posix_sh",
+      "got": [],
+      "id": "S13V03-DEV-13",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.shell.posix_sh",
+      "got": [],
+      "id": "S13V03-DEV-14",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.shell.posix_sh",
+      "got": [],
+      "id": "S13V03-DEV-15",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.share_invite",
+      "got": [],
+      "id": "S13V03-DEV-16",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.flag_set",
+      "got": [],
+      "id": "S13C2-08E065FE30B1DDCDF4A64E1C7A33722F",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.firmware_flash",
+      "got": [],
+      "id": "S13C2-0FDDF1917F43A476F8475EE70D21FC09",
+      "known_labels_ok": true,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.queue_ack",
+      "got": [],
+      "id": "S13C2-11E7DD0EA52EF59D1B15F00CEC8C50C5",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.flag_set",
+      "got": [],
+      "id": "S13C2-161884E475C0C03DB8A981FE899A0F9B",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.sms_send",
+      "got": [],
+      "id": "S13C2-1FB079B568831E090D2F5D988DEC2FA3",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.queue_ack",
+      "got": [],
+      "id": "S13C2-2436025ACA175F5B05DFF2638A7AFA23",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.sms_send",
+      "got": [],
+      "id": "S13C2-29750E2CA04C9E8E50FE9D96A023224E",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.sms_send",
+      "got": [],
+      "id": "S13C2-2B6E8A3C8B0D7E1898A32682FD50E2C8",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.flag_set",
+      "got": [],
+      "id": "S13C2-2D65DD96517238D51790FBEEBBB12AF2",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.sms_send",
+      "got": [],
+      "id": "S13C2-33366E5F767F432355349A7D3143B0D1",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.wiki_page_get",
+      "got": [],
+      "id": "S13C2-360268B43BF2C964C5AD69899931287A",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.member_remove",
+      "got": [],
+      "id": "S13C2-42C9A603D5D5FD23744F9306332CFB17",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.user_offboard",
+      "got": [],
+      "id": "S13C2-4657CA3741348451041BD0F97B49CB6E",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.member_remove",
+      "got": [],
+      "id": "S13C2-49CE43B68442F9992A23F13E82629684",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.notify_render",
+      "got": [],
+      "id": "S13C2-4B3E1D2B35614FE5119FAFBA05DD06EA",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.member_remove",
+      "got": [],
+      "id": "S13C2-4D63E35B7530C3E4C492D837219EA773",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.user_offboard",
+      "got": [],
+      "id": "S13C2-5228B9D9D642B670207969B59B95FBFD",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.user_offboard",
+      "got": [],
+      "id": "S13C2-5386FE4E66B26D0CF44CB97BF91D2FF5",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.firmware_flash",
+      "got": [],
+      "id": "S13C2-64E5E9C8392E14AE679A095075160848",
+      "known_labels_ok": true,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.user_offboard",
+      "got": [],
+      "id": "S13C2-67715A3FDFD7C7E4C7EBC8A53766B053",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.notify_render",
+      "got": [],
+      "id": "S13C2-6BC7109D0D13855F167FD88E3FC215CA",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.user_offboard",
+      "got": [],
+      "id": "S13C2-722F94FD36C450BF5B74CC592F091323",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.queue_ack",
+      "got": [],
+      "id": "S13C2-7773154E10A6495340273F38B116514F",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.firmware_flash",
+      "got": [],
+      "id": "S13C2-826D9FFC4F2B173075A492D0E9517D14",
+      "known_labels_ok": true,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.wiki_page_get",
+      "got": [],
+      "id": "S13C2-970A20F7039AED63195B7E4522A8D88B",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.member_remove",
+      "got": [],
+      "id": "S13C2-97E2BCCEA719A750DB7D8E588CE47123",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.wiki_page_get",
+      "got": [],
+      "id": "S13C2-9BB52F40B34C8A746E8BF5AEA8C62A75",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.queue_ack",
+      "got": [],
+      "id": "S13C2-9DC73815CCBFACCD0B78E7367D1AC775",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.user_offboard",
+      "got": [],
+      "id": "S13C2-9DD3510CE0DCA6DC90D9B5EFBD74C6D4",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.firmware_flash",
+      "got": [],
+      "id": "S13C2-A43A86A289F1773036CA6DF7DF33AE67",
+      "known_labels_ok": true,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.flag_set",
+      "got": [],
+      "id": "S13C2-A774BA3039DA5616B4572938E2038DC2",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.flag_set",
+      "got": [],
+      "id": "S13C2-A80B681BA2687FA1C49D080309DB1D3A",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.notify_render",
+      "got": [],
+      "id": "S13C2-B167094C71002512954B8394E2220F5D",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.member_remove",
+      "got": [],
+      "id": "S13C2-B2718BB2BD8250F4491F51724CA3B915",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.firmware_flash",
+      "got": [],
+      "id": "S13C2-B780B08D577603F0923ED8CD16B6DD3A",
+      "known_labels_ok": true,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.member_remove",
+      "got": [],
+      "id": "S13C2-B84732C3AE522AFEBC3671A99B5C2B3A",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.flag_set",
+      "got": [],
+      "id": "S13C2-BEB61F3B96EBF1531E98AD0C2BB0A764",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.wiki_page_get",
+      "got": [],
+      "id": "S13C2-CB2570CA296D0852CE06F71627174F7F",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.queue_ack",
+      "got": [],
+      "id": "S13C2-CEE15F1F2B061AA926E546201B44767F",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.notify_render",
+      "got": [],
+      "id": "S13C2-D649D06DDE349D9504D8D8829A98DCF8",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.notify_render",
+      "got": [],
+      "id": "S13C2-DAAB02E303F9B1DC08C28C6BB32A5427",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.firmware_flash",
+      "got": [],
+      "id": "S13C2-E13E3B7147647F908A32D470A2A1BFAD",
+      "known_labels_ok": true,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.wiki_page_get",
+      "got": [],
+      "id": "S13C2-E2429B8503EDFA356FEC85725C8CD691",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.queue_ack",
+      "got": [],
+      "id": "S13C2-E60D88B42ACF022A43B6743D70F0EE27",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.notify_render",
+      "got": [],
+      "id": "S13C2-ECFE4BE5442A70E40ABA67D5357C6874",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.sms_send",
+      "got": [],
+      "id": "S13C2-F6AC9050845F9E0F0345D3C157367AB9",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.sms_send",
+      "got": [],
+      "id": "S13C2-F7F6F7388E6E12BCBCA5B9803FBD94DF",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.wiki_page_get",
+      "got": [],
+      "id": "S13C2-FA891ACB7A7BD92EB7A88308B764F751",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.migration_apply",
+      "got": [],
+      "id": "S13C2-0324444232873EEE962126DED8774878",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.extension_hook",
+      "got": [],
+      "id": "S13C2-04D528EB551AF0B253931555255FA930",
+      "known_labels_ok": true,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.extension_hook",
+      "got": [],
+      "id": "S13C2-052DCAB725311328F44D7CE4628AB45D",
+      "known_labels_ok": true,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.prefix_remove",
+      "got": [],
+      "id": "S13C2-070F61F6A53F651B09CB5FB75C1693E4",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.chat_post",
+      "got": [],
+      "id": "S13C2-17B2697740AA1D8E8B9C0DAECFB06C1C",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.plugin_job",
+      "got": [],
+      "id": "S13C2-17BB7D2554889F7B16C1965DFC426F54",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.chat_post",
+      "got": [],
+      "id": "S13C2-1BA93EAE112F6ACCF010BCB2FAC19DAA",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.chat_post",
+      "got": [],
+      "id": "S13C2-1C3B6DCBF31567BAC2C45CD981466297",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.object_stat",
+      "got": [],
+      "id": "S13C2-27BDC6E184B8D319D828226724AD7CB7",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.object_stat",
+      "got": [],
+      "id": "S13C2-27D09F5467769C3EA6B8AA671AA829AE",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.chat_post",
+      "got": [],
+      "id": "S13C2-2B2762B61686FFEDD697B910DEDDEE0B",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.extension_hook",
+      "got": [],
+      "id": "S13C2-317C1D51541AADEF9A7FB405E8DCDB67",
+      "known_labels_ok": true,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.prefix_remove",
+      "got": [],
+      "id": "S13C2-38B93EF04BE6A6F8DE0F792A171B5A14",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.migration_apply",
+      "got": [],
+      "id": "S13C2-3BB0FC1A594118A1CC4231D074E11218",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.plugin_job",
+      "got": [],
+      "id": "S13C2-3BC3C54B45035066B44DCCFF54AEC356",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.link_share",
+      "got": [],
+      "id": "S13C2-3D94DCD97C4A68168397101B10923B10",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.link_share",
+      "got": [],
+      "id": "S13C2-41DB2B8FA07EC36DB6FE811BE4A2477E",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.extension_hook",
+      "got": [],
+      "id": "S13C2-446B0FAA25D480BA02640F6C6C978B5C",
+      "known_labels_ok": true,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.ticket_reassign",
+      "got": [],
+      "id": "S13C2-4626F1F284A592251EFD08F08C67DAC7",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.object_stat",
+      "got": [],
+      "id": "S13C2-48A94C02DE5B48F06D2DC7196F0385A9",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.plugin_job",
+      "got": [],
+      "id": "S13C2-4BFCD42628E7AB7F49470A77548B543D",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.link_share",
+      "got": [],
+      "id": "S13C2-5495EDAFCEBBECE492A513896C1394AB",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.prefix_remove",
+      "got": [],
+      "id": "S13C2-665625E0EE26F8502FF331E6FC6F113E",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.link_share",
+      "got": [],
+      "id": "S13C2-6EB96F2BCDABD697F73289BA74151CC9",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.ticket_reassign",
+      "got": [],
+      "id": "S13C2-6F959C05DF5ECAEF8C3051518F822B7F",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.link_share",
+      "got": [],
+      "id": "S13C2-72CE08CFC063B5358BD6353CDFF0B420",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.migration_apply",
+      "got": [],
+      "id": "S13C2-79FC6121573D0837978153D6FC687F38",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.chat_post",
+      "got": [],
+      "id": "S13C2-7B95CC41FBAFD0E1BB361FEE9B9D4F2B",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions"
+      ],
+      "expected_unknown": false,
+      "family": "fam.change_permissions.link_share",
+      "got": [],
+      "id": "S13C2-7D1B02503DA3051E600EFF3E84443D47",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.prefix_remove",
+      "got": [],
+      "id": "S13C2-8E1B6248318C69575085D3E20B86282B",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.ticket_reassign",
+      "got": [],
+      "id": "S13C2-916F85F087B8CA8E397B0EECC90E9050",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.object_stat",
+      "got": [],
+      "id": "S13C2-929FF1F9FB13D49AAF1DB0402A250F07",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.ticket_reassign",
+      "got": [],
+      "id": "S13C2-935D36D53B0D58E6E41CDB2A131BF417",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.plugin_job",
+      "got": [],
+      "id": "S13C2-AC1B5E9A19D9F022116FD728BD9D64A5",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.plugin_job",
+      "got": [],
+      "id": "S13C2-AFE5A8353F47EDCA5DAC6E763702A4CE",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.prefix_remove",
+      "got": [],
+      "id": "S13C2-B28C6CC76CA23D7F4FDCF313473AEC6B",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.write.migration_apply",
+      "got": [],
+      "id": "S13C2-BCDAE22C4C0797DB6A1FE53CEA9043E8",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "send_data"
+      ],
+      "expected_unknown": false,
+      "family": "fam.send_data.chat_post",
+      "got": [],
+      "id": "S13C2-C740A2FA26DF7B37BED89656AFEB1AE0",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.ticket_reassign",
+      "got": [],
+      "id": "S13C2-D1EF111B1B5775B713140CC25874969B",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "write"
+      ],
+      "expected_unknown": true,
+      "family": "fam.unknown.plugin_job",
+      "got": [],
+      "id": "S13C2-DDD6CB6A00D64AB89261DAC0BF4273F3",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.object_stat",
+      "got": [],
+      "id": "S13C2-E54FC6B1B470119BA80F01CA378E70FB",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "delete"
+      ],
+      "expected_unknown": false,
+      "family": "fam.delete.prefix_remove",
+      "got": [],
+      "id": "S13C2-E7A6F22C2D9A97A454356B6B2EBF1A61",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "read"
+      ],
+      "expected_unknown": false,
+      "family": "fam.read.object_stat",
+      "got": [],
+      "id": "S13C2-F5C1F27FB47A3576D520D746FFE6B337",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [
+       "change_permissions",
+       "write"
+      ],
+      "expected_unknown": false,
+      "family": "fam.mixed.ticket_reassign",
+      "got": [],
+      "id": "S13C2-FB39FF7D369AB8B78C70B3B81EC15257",
+      "known_labels_ok": false,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.extension_hook",
+      "got": [],
+      "id": "S13C2-FB7A996F8028E6900C4CD76179099463",
+      "known_labels_ok": true,
+      "unknown": false
+     },
+     {
+      "expected": [],
+      "expected_unknown": true,
+      "family": "fam.unknown.extension_hook",
+      "got": [],
+      "id": "S13C2-FCE476988AD027B89AC6A28089585D30",
+      "known_labels_ok": true,
+      "unknown": false
+     }
+    ],
+    "exact": 19,
+    "exact_on_answered": 0.1011,
+    "mixed": {
+     "all_found": 0,
+     "cases": 28,
+     "exact_set": 0,
+     "flagged_miss": 0,
+     "silent_miss": 28
+    },
+    "per_label": {
+     "change_permissions": {
+      "fn": 36,
+      "fp": 0,
+      "known_false": 111,
+      "known_true": 36,
+      "precision": null,
+      "recall": 0.0,
+      "reported_on_unlabelled": 0,
+      "tn": 111,
+      "tp": 0,
+      "unlabelled": 41
+     },
+     "delete": {
+      "fn": 29,
+      "fp": 0,
+      "known_false": 118,
+      "known_true": 29,
+      "precision": null,
+      "recall": 0.0,
+      "reported_on_unlabelled": 0,
+      "tn": 118,
+      "tp": 0,
+      "unlabelled": 41
+     },
+     "read": {
+      "fn": 35,
+      "fp": 0,
+      "known_false": 117,
+      "known_true": 35,
+      "precision": null,
+      "recall": 0.0,
+      "reported_on_unlabelled": 0,
+      "tn": 117,
+      "tp": 0,
+      "unlabelled": 36
+     },
+     "send_data": {
+      "fn": 38,
+      "fp": 0,
+      "known_false": 115,
+      "known_true": 38,
+      "precision": null,
+      "recall": 0.0,
+      "reported_on_unlabelled": 0,
+      "tn": 115,
+      "tp": 0,
+      "unlabelled": 35
+     },
+     "write": {
+      "fn": 35,
+      "fp": 0,
+      "known_false": 118,
+      "known_true": 35,
+      "precision": null,
+      "recall": 0.0,
+      "reported_on_unlabelled": 0,
+      "tn": 118,
+      "tp": 0,
+      "unlabelled": 35
+     }
+    },
+    "scored": 188,
+    "technical_failures": 0
+   }
+  }
+ },
+ "scoring_version": 2
+}
