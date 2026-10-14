@@ -1,0 +1,23 @@
+FROM rust:1.99-bookworm@sha256:114c7a4425406451c2866b6aafe69fe29b1b298832db1277d411ac73c82d04d6 AS build
+ENV RUSTUP_TOOLCHAIN=1.99.0
+WORKDIR /src
+COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY crates ./crates
+COPY vendor ./vendor
+RUN --mount=type=cache,id=sou38-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=sou38-target,target=/src/target \
+    cargo build --locked --release -p llm-firewall \
+    && cp target/release/llm-firewall /soup-wall-gateway
+
+FROM caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d AS edge
+
+FROM python:3.12-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258
+COPY --from=build /soup-wall-gateway /usr/local/bin/soup-wall-gateway
+COPY --from=edge /usr/bin/caddy /usr/local/bin/caddy
+RUN cp /usr/local/bin/caddy /tmp/caddy && mv /tmp/caddy /usr/local/bin/caddy
+COPY LICENSE NOTICE /usr/share/doc/soup-wall/
+COPY vendor/kryptering/LICENSE /usr/share/doc/soup-wall/third-party/kryptering/LICENSE
+ENV PYTHONDONTWRITEBYTECODE=1 HOME=/tmp
+ARG SOURCE_SHA256
+LABEL soup-wall.tls.source-sha256=$SOURCE_SHA256
+ENTRYPOINT ["python", "/source/scripts/tls-lifecycle.py", "--inside"]

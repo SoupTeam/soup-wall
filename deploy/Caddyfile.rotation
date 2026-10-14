@@ -1,0 +1,27 @@
+{
+	admin 127.0.0.1:2019
+	auto_https off
+}
+
+https://localhost:8443 {
+	bind 0.0.0.0
+	tls {$TLS_CERTIFICATE} {$TLS_PRIVATE_KEY}
+	encode gzip
+
+	request_body {
+		max_size 4194304
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+
+	@metrics path /metrics /metrics/*
+	respond @metrics 404
+	@admin path /admin /admin/*
+	respond @admin 404
+	reverse_proxy 127.0.0.1:8080
+}

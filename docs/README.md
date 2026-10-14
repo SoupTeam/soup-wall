@@ -24,6 +24,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Managed Agent lifecycle](operations/AGENT_LIFECYCLE.md) | Install, verify, upgrade, roll back and remove a user-scoped Agent |
 | [Upgrading](UPGRADING.md) | Existing deployment compatibility and migration guidance |
 | [Production runbook](operations/PRODUCTION_RUNBOOK.md) | Readiness, operations, alerts and recovery |
+| [TLS rotation and recovery](operations/TLS_ROTATION.md) | Disposable Caddy certificate rotation, verifying clients and recovery |
 | [Staging drills](operations/STAGING_DRILLS.md) | Explicit dependency and restore acceptance procedures |
 | [Guarded execution](operations/SANDBOX.md) | Supported process, file and retrieval boundaries |
 | [Windows Agent acceptance](operations/WINDOWS_AGENT_ACCEPTANCE.md) | Native installation, ACLs, hook posture and loopback configuration |
