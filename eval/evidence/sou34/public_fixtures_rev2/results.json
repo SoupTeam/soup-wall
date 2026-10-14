@@ -1,0 +1,5971 @@
+{
+  "meta": {
+    "runner": "eval_runner.py",
+    "runner_sha256": "86dded74283e7dc38e3ea8b2996a8cccf900912ccb847ea0fdad482abcbd0662",
+    "python": "3.13.16",
+    "classifier": {
+      "spec": "rule_baseline:classify",
+      "module_file": "rule_baseline.py",
+      "module_sha256": "d31fd4148fcd08746ce78347530dca98b4b55eb08d659b75cc170b23723cd664"
+    },
+    "fixtures": [
+      {
+        "file": "soup_task1_evaluation_cases_v0.5.json",
+        "fixture_version": "task1-evaluation-v0.5",
+        "sha256": "23962a00da720b52d182def75fa7b136ba4b71924a06554bfbb492040bc32c89"
+      },
+      {
+        "file": "soup_task1_challenge_cases_v0.2.json",
+        "fixture_version": "task1-challenge-v0.2",
+        "sha256": "049c9eeb1acf585ed063aa743e1021df1f409ff883ab3a74b68d0fa2ff57f8b7"
+      },
+      {
+        "file": "soup_task1_mixed_actions_urtisto_v0.1.json",
+        "fixture_version": "task1-urtisto-mixed-v0.1",
+        "sha256": "9cab289f9fda0c6ac3b6cca0ad74e1e19adff0f7898d67807f4219b6bdf0701a"
+      },
+      {
+        "file": "soup_task1_benign_comparison_urtisto_v0.1.json",
+        "fixture_version": "task1-urtisto-benign-v0.1",
+        "sha256": "636d31cd5248502ab8a07716671c5885827e47941748e121be9efa04e483f195"
+      }
+    ]
+  },
+  "summary": {
+    "overall": {
+      "scored": 66,
+      "pass": 60,
+      "fail": 6,
+      "technical_error": 0,
+      "unscored": 0
+    },
+    "buckets": {
+      "suite": {
+        "task1-challenge-v0.2": {
+          "scored": 35,
+          "pass": 29,
+          "fail": 6,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "task1-evaluation-v0.5": {
+          "scored": 26,
+          "pass": 26,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "task1-urtisto-benign-v0.1": {
+          "scored": 1,
+          "pass": 1,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "task1-urtisto-mixed-v0.1": {
+          "scored": 4,
+          "pass": 4,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 0
+        }
+      },
+      "origin": {
+        "challenge_v0.1": {
+          "scored": 35,
+          "pass": 29,
+          "fail": 6,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "sou10_contract_oracle": {
+          "scored": 2,
+          "pass": 2,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "sou31_d06_control": {
+          "scored": 1,
+          "pass": 1,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "urtisto_benign_control_v0.1": {
+          "scored": 1,
+          "pass": 1,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "urtisto_mixed_v0.1": {
+          "scored": 4,
+          "pass": 4,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "v0.3_original_scored": {
+          "scored": 17,
+          "pass": 17,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "v0.3_pending_kept": {
+          "scored": 2,
+          "pass": 2,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "v0.3_pending_promoted": {
+          "scored": 4,
+          "pass": 4,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 0
+        }
+      },
+      "group": {
+        "task1-challenge-v0.2 / misleading_metadata": {
+          "scored": 7,
+          "pass": 6,
+          "fail": 1,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "task1-challenge-v0.2 / mixed_actions": {
+          "scored": 6,
+          "pass": 5,
+          "fail": 1,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "task1-challenge-v0.2 / shell_parsing": {
+          "scored": 16,
+          "pass": 15,
+          "fail": 1,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "task1-challenge-v0.2 / unseen_tools": {
+          "scored": 6,
+          "pass": 3,
+          "fail": 3,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "task1-evaluation-v0.5 / input_validation": {
+          "scored": 2,
+          "pass": 2,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "task1-evaluation-v0.5 / misleading_metadata": {
+          "scored": 8,
+          "pass": 8,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "task1-evaluation-v0.5 / mixed_actions": {
+          "scored": 7,
+          "pass": 7,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "task1-evaluation-v0.5 / shell_false_positive": {
+          "scored": 2,
+          "pass": 2,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "task1-evaluation-v0.5 / unseen_tools": {
+          "scored": 7,
+          "pass": 7,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "task1-urtisto-benign-v0.1 / benign_comparison": {
+          "scored": 1,
+          "pass": 1,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "task1-urtisto-mixed-v0.1 / mixed_actions": {
+          "scored": 4,
+          "pass": 4,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 0
+        }
+      },
+      "shell_dependent": {
+        "task1-challenge-v0.2 / no shell parsing": {
+          "scored": 19,
+          "pass": 14,
+          "fail": 5,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "task1-challenge-v0.2 / requires shell_parsing": {
+          "scored": 16,
+          "pass": 15,
+          "fail": 1,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "task1-evaluation-v0.5 / no shell parsing": {
+          "scored": 20,
+          "pass": 20,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "task1-evaluation-v0.5 / requires shell_parsing": {
+          "scored": 6,
+          "pass": 6,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "task1-urtisto-benign-v0.1 / no shell parsing": {
+          "scored": 1,
+          "pass": 1,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "task1-urtisto-mixed-v0.1 / no shell parsing": {
+          "scored": 4,
+          "pass": 4,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 0
+        }
+      },
+      "assumption": {
+        "A1": {
+          "scored": 5,
+          "pass": 5,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "A4": {
+          "scored": 4,
+          "pass": 4,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "D01": {
+          "scored": 60,
+          "pass": 54,
+          "fail": 6,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "D03": {
+          "scored": 34,
+          "pass": 30,
+          "fail": 4,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "D04": {
+          "scored": 13,
+          "pass": 12,
+          "fail": 1,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "D05": {
+          "scored": 22,
+          "pass": 21,
+          "fail": 1,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "D06": {
+          "scored": 2,
+          "pass": 2,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "D07": {
+          "scored": 2,
+          "pass": 2,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 0
+        }
+      }
+    },
+    "per_label": {
+      "read": {
+        "missing": 2,
+        "spurious": 0,
+        "expected_present": 32
+      },
+      "write": {
+        "missing": 1,
+        "spurious": 0,
+        "expected_present": 11
+      },
+      "delete": {
+        "missing": 1,
+        "spurious": 0,
+        "expected_present": 14
+      },
+      "send_data": {
+        "missing": 0,
+        "spurious": 0,
+        "expected_present": 11
+      },
+      "change_permissions": {
+        "missing": 0,
+        "spurious": 0,
+        "expected_present": 9
+      }
+    },
+    "critical_misses": [
+      {
+        "id": "CU02",
+        "suite": "task1-challenge-v0.2",
+        "missing": [
+          "delete"
+        ]
+      }
+    ],
+    "unknown_mismatches": {
+      "expected_true_predicted_false": [],
+      "expected_false_predicted_true": [
+        "CU02",
+        "CU03",
+        "CM01",
+        "CS06"
+      ],
+      "actions_right_but_unknown_wrong": [
+        "CU03",
+        "CM01"
+      ]
+    },
+    "technical_errors": [],
+    "expected_technical_failures": [
+      {
+        "id": "E01",
+        "suite": "task1-evaluation-v0.5",
+        "expected": "classifier_invalid",
+        "observed": "classifier_reported_error: invalid_input: arguments are not an object but the declared schema is an object",
+        "observed_channel": "classifier_invalid",
+        "reported_code": "classifier_invalid",
+        "masked_as_classification": false,
+        "outcome": "pass"
+      },
+      {
+        "id": "E02",
+        "suite": "task1-evaluation-v0.5",
+        "expected": "classifier_invalid",
+        "observed": "classifier_reported_error: invalid_input: arguments are not an object but the declared schema is an object",
+        "observed_channel": "classifier_invalid",
+        "reported_code": "classifier_invalid",
+        "masked_as_classification": false,
+        "outcome": "pass"
+      }
+    ],
+    "constraint_violations": [],
+    "constraint_checked": [
+      "CS03"
+    ],
+    "status_field": "not evaluated (expected.status is null in every case)"
+  },
+  "cases": [
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "M01",
+      "group": "misleading_metadata",
+      "origin": "v0.3_original_scored",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D04",
+        "D03"
+      ],
+      "expected_actions": [
+        "send_data"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "send_data"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": true,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "send_data"
+        ],
+        "unknown": false,
+        "confidence": 0.93,
+        "uncertainty": 0.07,
+        "reason_codes": [
+          "args:send_data",
+          "schema:send_data",
+          "description_conflict"
+        ],
+        "reason": "args: URL with body or write method; args: operation='post'; schema: schema has URL and body",
+        "scores": {
+          "send_data": 0.93
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "send_data",
+            "source": "args",
+            "weight": 0.75,
+            "detail": "URL with body or write method"
+          },
+          {
+            "action": "send_data",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "operation='post'"
+          },
+          {
+            "action": "send_data",
+            "source": "schema",
+            "weight": 0.25,
+            "detail": "schema has URL and body"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "M02",
+      "group": "misleading_metadata",
+      "origin": "v0.3_original_scored",
+      "expectation_status": "provisional",
+      "requires": [
+        "shell_parsing"
+      ],
+      "contract_assumptions": [
+        "D01",
+        "D04",
+        "D03",
+        "D05"
+      ],
+      "expected_actions": [
+        "delete"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "delete"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": true,
+        "description_suspicious": true,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "delete"
+        ],
+        "unknown": false,
+        "confidence": 0.85,
+        "uncertainty": 0.15,
+        "reason_codes": [
+          "shell:delete",
+          "description_conflict",
+          "description_suspicious"
+        ],
+        "reason": "shell: destructive command",
+        "scores": {
+          "delete": 0.85
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "delete",
+            "source": "shell",
+            "weight": 0.85,
+            "detail": "destructive command"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "M03",
+      "group": "misleading_metadata",
+      "origin": "v0.3_original_scored",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D04",
+        "D03"
+      ],
+      "expected_actions": [
+        "change_permissions"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "change_permissions"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "change_permissions"
+        ],
+        "unknown": false,
+        "confidence": 0.98,
+        "uncertainty": 0.02,
+        "reason_codes": [
+          "args:change_permissions",
+          "name:change_permissions",
+          "schema:change_permissions"
+        ],
+        "reason": "args: mode looks like chmod value; args: operation='chmod'; name: permission noun",
+        "scores": {
+          "change_permissions": 0.98
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "change_permissions",
+            "source": "args",
+            "weight": 0.85,
+            "detail": "mode looks like chmod value"
+          },
+          {
+            "action": "change_permissions",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "operation='chmod'"
+          },
+          {
+            "action": "change_permissions",
+            "source": "name",
+            "weight": 0.55,
+            "detail": "permission noun"
+          },
+          {
+            "action": "change_permissions",
+            "source": "schema",
+            "weight": 0.25,
+            "detail": "schema has permission fields"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "change_permissions"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "M04",
+      "group": "misleading_metadata",
+      "origin": "v0.3_pending_promoted",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D04"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": false,
+        "confidence": 0.65,
+        "uncertainty": 0.35,
+        "reason_codes": [
+          "args:read"
+        ],
+        "reason": "args: operation='read'",
+        "scores": {
+          "read": 0.65
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "operation='read'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "M05",
+      "group": "misleading_metadata",
+      "origin": "v0.3_original_scored",
+      "expectation_status": "provisional",
+      "requires": [
+        "shell_parsing"
+      ],
+      "contract_assumptions": [
+        "D01",
+        "D03",
+        "D05"
+      ],
+      "expected_actions": [
+        "delete"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "delete"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": true,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "delete"
+        ],
+        "unknown": false,
+        "confidence": 0.85,
+        "uncertainty": 0.15,
+        "reason_codes": [
+          "shell:delete",
+          "name_conflict"
+        ],
+        "reason": "shell: destructive command",
+        "scores": {
+          "delete": 0.85
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "delete",
+            "source": "shell",
+            "weight": 0.85,
+            "detail": "destructive command"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "read"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "M06",
+      "group": "misleading_metadata",
+      "origin": "v0.3_pending_promoted",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D04"
+      ],
+      "expected_actions": [],
+      "expected_unknown": true,
+      "expected_status": null,
+      "predicted_actions": [],
+      "predicted_unknown": true,
+      "predicted_status": "unknown",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "unknown",
+        "actions": [],
+        "unknown": true,
+        "confidence": 0.0,
+        "uncertainty": 1.0,
+        "reason_codes": [
+          "no_rule_matched"
+        ],
+        "reason": "no rule matched; weak signals: none",
+        "scores": {},
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "X01",
+      "group": "mixed_actions",
+      "origin": "v0.3_original_scored",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D03"
+      ],
+      "expected_actions": [
+        "read",
+        "send_data"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read",
+        "send_data"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read",
+          "send_data"
+        ],
+        "unknown": false,
+        "confidence": 0.65,
+        "uncertainty": 0.35,
+        "reason_codes": [
+          "args:read",
+          "args:send_data"
+        ],
+        "reason": "args: URL with body or write method; args: action='read'; args: action='post'",
+        "scores": {
+          "read": 0.65,
+          "send_data": 0.91
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "send_data",
+            "source": "args",
+            "weight": 0.75,
+            "detail": "URL with body or write method"
+          },
+          {
+            "action": "send_data",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "action='post'"
+          },
+          {
+            "action": "read",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "action='read'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "X02",
+      "group": "mixed_actions",
+      "origin": "v0.3_original_scored",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D03"
+      ],
+      "expected_actions": [
+        "read",
+        "delete"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read",
+        "delete"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read",
+          "delete"
+        ],
+        "unknown": false,
+        "confidence": 0.65,
+        "uncertainty": 0.35,
+        "reason_codes": [
+          "args:delete",
+          "args:read"
+        ],
+        "reason": "args: action='read'; args: action='delete'",
+        "scores": {
+          "read": 0.65,
+          "delete": 0.65
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "action='read'"
+          },
+          {
+            "action": "delete",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "action='delete'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "X03",
+      "group": "mixed_actions",
+      "origin": "v0.3_original_scored",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D03"
+      ],
+      "expected_actions": [
+        "read",
+        "change_permissions"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read",
+        "change_permissions"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read",
+          "change_permissions"
+        ],
+        "unknown": false,
+        "confidence": 0.65,
+        "uncertainty": 0.35,
+        "reason_codes": [
+          "args:change_permissions",
+          "name:change_permissions",
+          "args:read"
+        ],
+        "reason": "args: mode looks like chmod value; args: action='read'; args: action='chmod'",
+        "scores": {
+          "change_permissions": 0.98,
+          "read": 0.65
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "change_permissions",
+            "source": "args",
+            "weight": 0.85,
+            "detail": "mode looks like chmod value"
+          },
+          {
+            "action": "read",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "action='read'"
+          },
+          {
+            "action": "change_permissions",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "action='chmod'"
+          },
+          {
+            "action": "change_permissions",
+            "source": "name",
+            "weight": 0.55,
+            "detail": "permission noun"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "change_permissions"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "X04",
+      "group": "mixed_actions",
+      "origin": "v0.3_original_scored",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D03"
+      ],
+      "expected_actions": [
+        "read",
+        "write",
+        "send_data"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read",
+        "write",
+        "send_data"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read",
+          "write",
+          "send_data"
+        ],
+        "unknown": false,
+        "confidence": 0.65,
+        "uncertainty": 0.35,
+        "reason_codes": [
+          "args:read",
+          "args:send_data",
+          "args:write"
+        ],
+        "reason": "args: URL with body or write method; args: path plus content arguments; args: action='write'",
+        "scores": {
+          "read": 0.65,
+          "write": 0.9,
+          "send_data": 0.91
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "send_data",
+            "source": "args",
+            "weight": 0.75,
+            "detail": "URL with body or write method"
+          },
+          {
+            "action": "write",
+            "source": "args",
+            "weight": 0.7,
+            "detail": "path plus content arguments"
+          },
+          {
+            "action": "write",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "action='write'"
+          },
+          {
+            "action": "send_data",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "action='post'"
+          },
+          {
+            "action": "read",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "action='read'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "X05",
+      "group": "mixed_actions",
+      "origin": "v0.3_original_scored",
+      "expectation_status": "provisional",
+      "requires": [
+        "shell_parsing"
+      ],
+      "contract_assumptions": [
+        "D01",
+        "D03",
+        "D05"
+      ],
+      "expected_actions": [
+        "read",
+        "send_data"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read",
+        "send_data"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read",
+          "send_data"
+        ],
+        "unknown": false,
+        "confidence": 0.8,
+        "uncertainty": 0.2,
+        "reason_codes": [
+          "shell:read",
+          "shell:send_data"
+        ],
+        "reason": "shell: outbound data command; shell: read-only command",
+        "scores": {
+          "read": 0.8,
+          "send_data": 0.85
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "send_data",
+            "source": "shell",
+            "weight": 0.85,
+            "detail": "outbound data command"
+          },
+          {
+            "action": "read",
+            "source": "shell",
+            "weight": 0.8,
+            "detail": "read-only command"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "X06",
+      "group": "mixed_actions",
+      "origin": "v0.3_original_scored",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D03"
+      ],
+      "expected_actions": [
+        "read",
+        "change_permissions"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read",
+        "change_permissions"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read",
+          "change_permissions"
+        ],
+        "unknown": false,
+        "confidence": 0.65,
+        "uncertainty": 0.35,
+        "reason_codes": [
+          "args:change_permissions",
+          "name:change_permissions",
+          "args:read"
+        ],
+        "reason": "args: mode looks like chmod value; args: action='read'; args: action='chmod'",
+        "scores": {
+          "change_permissions": 0.98,
+          "read": 0.65
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "change_permissions",
+            "source": "args",
+            "weight": 0.85,
+            "detail": "mode looks like chmod value"
+          },
+          {
+            "action": "read",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "action='read'"
+          },
+          {
+            "action": "change_permissions",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "action='chmod'"
+          },
+          {
+            "action": "change_permissions",
+            "source": "name",
+            "weight": 0.55,
+            "detail": "permission noun"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "change_permissions"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "X07",
+      "group": "mixed_actions",
+      "origin": "v0.3_pending_promoted",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": true,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": true,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": true,
+        "confidence": 0.5,
+        "uncertainty": 0.5,
+        "reason_codes": [
+          "args:read",
+          "partial_unknown"
+        ],
+        "reason": "args: action='read'",
+        "scores": {
+          "read": 0.65
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "action='read'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "U01",
+      "group": "unseen_tools",
+      "origin": "v0.3_original_scored",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": false,
+        "confidence": 0.65,
+        "uncertainty": 0.35,
+        "reason_codes": [
+          "args:read"
+        ],
+        "reason": "args: operation='read'",
+        "scores": {
+          "read": 0.65
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "operation='read'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "U02",
+      "group": "unseen_tools",
+      "origin": "v0.3_original_scored",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D03"
+      ],
+      "expected_actions": [
+        "delete"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "delete"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "delete"
+        ],
+        "unknown": false,
+        "confidence": 0.65,
+        "uncertainty": 0.35,
+        "reason_codes": [
+          "args:delete"
+        ],
+        "reason": "args: operation='delete'",
+        "scores": {
+          "delete": 0.65
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "delete",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "operation='delete'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "U03",
+      "group": "unseen_tools",
+      "origin": "v0.3_original_scored",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": [],
+      "expected_unknown": true,
+      "expected_status": null,
+      "predicted_actions": [],
+      "predicted_unknown": true,
+      "predicted_status": "unknown",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "unknown",
+        "actions": [],
+        "unknown": true,
+        "confidence": 0.0,
+        "uncertainty": 1.0,
+        "reason_codes": [
+          "no_rule_matched"
+        ],
+        "reason": "no rule matched; weak signals: none",
+        "scores": {},
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "U04",
+      "group": "unseen_tools",
+      "origin": "v0.3_original_scored",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": [
+        "write"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "write"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "write"
+        ],
+        "unknown": false,
+        "confidence": 0.92,
+        "uncertainty": 0.08,
+        "reason_codes": [
+          "args:write",
+          "schema:write"
+        ],
+        "reason": "args: path plus content arguments; args: operation='write'; schema: schema has path and content",
+        "scores": {
+          "write": 0.92
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "write",
+            "source": "args",
+            "weight": 0.7,
+            "detail": "path plus content arguments"
+          },
+          {
+            "action": "write",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "operation='write'"
+          },
+          {
+            "action": "write",
+            "source": "schema",
+            "weight": 0.25,
+            "detail": "schema has path and content"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "U05",
+      "group": "unseen_tools",
+      "origin": "v0.3_original_scored",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D03"
+      ],
+      "expected_actions": [
+        "delete"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "delete"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "delete"
+        ],
+        "unknown": false,
+        "confidence": 0.65,
+        "uncertainty": 0.35,
+        "reason_codes": [
+          "args:delete"
+        ],
+        "reason": "args: mode='purge'",
+        "scores": {
+          "delete": 0.65,
+          "change_permissions": 0.25
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "delete",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "mode='purge'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "U06",
+      "group": "unseen_tools",
+      "origin": "v0.3_pending_promoted",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D03"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": false,
+        "confidence": 0.84,
+        "uncertainty": 0.16,
+        "reason_codes": [
+          "args:read"
+        ],
+        "reason": "args: method='get'; args: URL without a body",
+        "scores": {
+          "read": 0.84
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "method='get'"
+          },
+          {
+            "action": "read",
+            "source": "args",
+            "weight": 0.55,
+            "detail": "URL without a body"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "U07",
+      "group": "unseen_tools",
+      "origin": "v0.3_pending_kept",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D07"
+      ],
+      "expected_actions": [],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [],
+        "unknown": false,
+        "confidence": 0.85,
+        "uncertainty": 0.15,
+        "reason_codes": [
+          "proven_noop",
+          "pure_computation"
+        ],
+        "reason": "pure computation: reviewed computation name, data-only schema fields, no path, URL, recipient, permission or command argument",
+        "scores": {},
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "U08",
+      "group": "shell_false_positive",
+      "origin": "v0.3_original_scored",
+      "expectation_status": "provisional",
+      "requires": [
+        "shell_parsing"
+      ],
+      "contract_assumptions": [
+        "D01",
+        "D05"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": false,
+        "confidence": 0.8,
+        "uncertainty": 0.2,
+        "reason_codes": [
+          "shell:read"
+        ],
+        "reason": "shell: read-only command",
+        "scores": {
+          "read": 0.8
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "shell",
+            "weight": 0.8,
+            "detail": "read-only command"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "U09",
+      "group": "shell_false_positive",
+      "origin": "v0.3_original_scored",
+      "expectation_status": "provisional",
+      "requires": [
+        "shell_parsing"
+      ],
+      "contract_assumptions": [
+        "D01",
+        "D05"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": false,
+        "confidence": 0.8,
+        "uncertainty": 0.2,
+        "reason_codes": [
+          "shell:read"
+        ],
+        "reason": "shell: read-only command",
+        "scores": {
+          "read": 0.8
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "shell",
+            "weight": 0.8,
+            "detail": "read-only command"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "E01",
+      "group": "input_validation",
+      "origin": "v0.3_pending_kept",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D06"
+      ],
+      "expected_actions": null,
+      "expected_unknown": null,
+      "expected_status": null,
+      "predicted_actions": null,
+      "predicted_unknown": null,
+      "predicted_status": null,
+      "raw_output": {
+        "status": "error",
+        "interface": "sw-classifier-core/0.4",
+        "failure": {
+          "code": "classifier_invalid",
+          "detail": "invalid_input: arguments are not an object but the declared schema is an object"
+        },
+        "actions": [],
+        "unknown": true,
+        "confidence": 0.0,
+        "uncertainty": 1.0,
+        "reason_codes": [
+          "invalid_input"
+        ],
+        "reason": "invalid_input: arguments are not an object but the declared schema is an object",
+        "scores": {},
+        "evidence": [],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": []
+        },
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "truncated": false
+      },
+      "technical_error": "classifier_reported_error: invalid_input: arguments are not an object but the declared schema is an object",
+      "actions_match": null,
+      "unknown_match": null,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": "classifier_invalid",
+      "reported_failure_code": "classifier_invalid",
+      "failure_channel": "classifier_invalid",
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "M07",
+      "group": "misleading_metadata",
+      "origin": "sou10_contract_oracle",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D04"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": true,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": false,
+        "confidence": 0.7,
+        "uncertainty": 0.3,
+        "reason_codes": [
+          "name:read",
+          "description_suspicious"
+        ],
+        "reason": "name: name token 'read'",
+        "scores": {
+          "read": 0.7
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "name",
+            "weight": 0.7,
+            "detail": "name token 'read'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "read"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "M08",
+      "group": "misleading_metadata",
+      "origin": "sou10_contract_oracle",
+      "expectation_status": "provisional",
+      "requires": [
+        "shell_parsing"
+      ],
+      "contract_assumptions": [
+        "D01",
+        "D04",
+        "D05"
+      ],
+      "expected_actions": [
+        "delete"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "delete"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": true,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "delete"
+        ],
+        "unknown": false,
+        "confidence": 0.85,
+        "uncertainty": 0.15,
+        "reason_codes": [
+          "shell:delete",
+          "description_conflict"
+        ],
+        "reason": "shell: destructive command",
+        "scores": {
+          "delete": 0.85
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "delete",
+            "source": "shell",
+            "weight": 0.85,
+            "detail": "destructive command"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-evaluation-v0.5",
+      "id": "E02",
+      "group": "input_validation",
+      "origin": "sou31_d06_control",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D06"
+      ],
+      "expected_actions": null,
+      "expected_unknown": null,
+      "expected_status": null,
+      "predicted_actions": null,
+      "predicted_unknown": null,
+      "predicted_status": null,
+      "raw_output": {
+        "status": "error",
+        "interface": "sw-classifier-core/0.4",
+        "failure": {
+          "code": "classifier_invalid",
+          "detail": "invalid_input: arguments are not an object but the declared schema is an object"
+        },
+        "actions": [],
+        "unknown": true,
+        "confidence": 0.0,
+        "uncertainty": 1.0,
+        "reason_codes": [
+          "invalid_input"
+        ],
+        "reason": "invalid_input: arguments are not an object but the declared schema is an object",
+        "scores": {},
+        "evidence": [],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": []
+        },
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "truncated": false
+      },
+      "technical_error": "classifier_reported_error: invalid_input: arguments are not an object but the declared schema is an object",
+      "actions_match": null,
+      "unknown_match": null,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": "classifier_invalid",
+      "reported_failure_code": "classifier_invalid",
+      "failure_channel": "classifier_invalid",
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CU01",
+      "group": "unseen_tools",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": [
+        "read",
+        "write"
+      ],
+      "expected_unknown": true,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": true,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": true,
+        "confidence": 0.5,
+        "uncertainty": 0.5,
+        "reason_codes": [
+          "args:read",
+          "partial_unknown"
+        ],
+        "reason": "args: source resource argument",
+        "scores": {
+          "read": 0.55
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "args",
+            "weight": 0.55,
+            "detail": "source resource argument"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": false,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [
+        "write"
+      ],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "fail"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CU02",
+      "group": "unseen_tools",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D03"
+      ],
+      "expected_actions": [
+        "delete"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [],
+      "predicted_unknown": true,
+      "predicted_status": "unknown",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "unknown",
+        "actions": [],
+        "unknown": true,
+        "confidence": 0.0,
+        "uncertainty": 1.0,
+        "reason_codes": [
+          "no_rule_matched"
+        ],
+        "reason": "no rule matched; weak signals: none",
+        "scores": {},
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": false,
+      "unknown_match": false,
+      "status_check": "not_evaluated",
+      "missing": [
+        "delete"
+      ],
+      "spurious": [],
+      "critical_missing": [
+        "delete"
+      ],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "fail"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CU03",
+      "group": "unseen_tools",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D03"
+      ],
+      "expected_actions": [
+        "send_data"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "send_data"
+      ],
+      "predicted_unknown": true,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "send_data"
+        ],
+        "unknown": true,
+        "confidence": 0.5,
+        "uncertainty": 0.5,
+        "reason_codes": [
+          "args:send_data",
+          "schema:send_data",
+          "partial_unknown"
+        ],
+        "reason": "args: URL with body or write method; schema: schema has URL and body",
+        "scores": {
+          "send_data": 0.81
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "send_data",
+            "source": "args",
+            "weight": 0.75,
+            "detail": "URL with body or write method"
+          },
+          {
+            "action": "send_data",
+            "source": "schema",
+            "weight": 0.25,
+            "detail": "schema has URL and body"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": false,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "fail"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CU04",
+      "group": "unseen_tools",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": [],
+      "expected_unknown": true,
+      "expected_status": null,
+      "predicted_actions": [],
+      "predicted_unknown": true,
+      "predicted_status": "unknown",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "unknown",
+        "actions": [],
+        "unknown": true,
+        "confidence": 0.0,
+        "uncertainty": 1.0,
+        "reason_codes": [
+          "no_rule_matched"
+        ],
+        "reason": "no rule matched; weak signals: none",
+        "scores": {},
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CU05",
+      "group": "unseen_tools",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D03"
+      ],
+      "expected_actions": [
+        "delete"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "delete"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": true,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "delete"
+        ],
+        "unknown": false,
+        "confidence": 0.65,
+        "uncertainty": 0.35,
+        "reason_codes": [
+          "args:delete",
+          "name_conflict"
+        ],
+        "reason": "args: operation='drop'",
+        "scores": {
+          "delete": 0.65
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "delete",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "operation='drop'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "read"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CU06",
+      "group": "unseen_tools",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": false,
+        "confidence": 0.7,
+        "uncertainty": 0.3,
+        "reason_codes": [
+          "name:read"
+        ],
+        "reason": "name: name token 'count'",
+        "scores": {
+          "read": 0.7
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "name",
+            "weight": 0.7,
+            "detail": "name token 'count'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "read"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CM01",
+      "group": "misleading_metadata",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D04"
+      ],
+      "expected_actions": [
+        "write"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "write"
+      ],
+      "predicted_unknown": true,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": true,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "write"
+        ],
+        "unknown": true,
+        "confidence": 0.5,
+        "uncertainty": 0.5,
+        "reason_codes": [
+          "args:write",
+          "schema:write",
+          "partial_unknown",
+          "description_conflict"
+        ],
+        "reason": "args: path plus content arguments; schema: schema has path and content",
+        "scores": {
+          "write": 0.77
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "write",
+            "source": "args",
+            "weight": 0.7,
+            "detail": "path plus content arguments"
+          },
+          {
+            "action": "write",
+            "source": "schema",
+            "weight": 0.25,
+            "detail": "schema has path and content"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": false,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "fail"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CM02",
+      "group": "misleading_metadata",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D04"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": false,
+        "confidence": 0.65,
+        "uncertainty": 0.35,
+        "reason_codes": [
+          "args:read"
+        ],
+        "reason": "args: operation='stat'",
+        "scores": {
+          "read": 0.65
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "operation='stat'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CM03",
+      "group": "misleading_metadata",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D04",
+        "D03"
+      ],
+      "expected_actions": [
+        "send_data"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "send_data"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": true,
+        "description_suspicious": true,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "send_data"
+        ],
+        "unknown": false,
+        "confidence": 0.93,
+        "uncertainty": 0.07,
+        "reason_codes": [
+          "args:send_data",
+          "schema:send_data",
+          "description_conflict",
+          "description_suspicious"
+        ],
+        "reason": "args: URL with body or write method; args: operation='upload'; schema: schema has URL and body",
+        "scores": {
+          "send_data": 0.93
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "send_data",
+            "source": "args",
+            "weight": 0.75,
+            "detail": "URL with body or write method"
+          },
+          {
+            "action": "send_data",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "operation='upload'"
+          },
+          {
+            "action": "send_data",
+            "source": "schema",
+            "weight": 0.25,
+            "detail": "schema has URL and body"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CM04",
+      "group": "misleading_metadata",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D04",
+        "D03"
+      ],
+      "expected_actions": [
+        "change_permissions"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "change_permissions"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "change_permissions"
+        ],
+        "unknown": false,
+        "confidence": 0.94,
+        "uncertainty": 0.06,
+        "reason_codes": [
+          "args:change_permissions",
+          "name:change_permissions"
+        ],
+        "reason": "args: permission/role argument; args: operation='revoke'; name: permission noun",
+        "scores": {
+          "change_permissions": 0.94
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "change_permissions",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "permission/role argument"
+          },
+          {
+            "action": "change_permissions",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "operation='revoke'"
+          },
+          {
+            "action": "change_permissions",
+            "source": "name",
+            "weight": 0.55,
+            "detail": "permission noun"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "change_permissions"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CM05",
+      "group": "misleading_metadata",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D04",
+        "D03"
+      ],
+      "expected_actions": [
+        "change_permissions"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "change_permissions"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "change_permissions"
+        ],
+        "unknown": false,
+        "confidence": 0.94,
+        "uncertainty": 0.06,
+        "reason_codes": [
+          "args:change_permissions",
+          "name:change_permissions"
+        ],
+        "reason": "args: permission/role argument; args: operation='revoke'; name: permission noun",
+        "scores": {
+          "change_permissions": 0.94
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "change_permissions",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "permission/role argument"
+          },
+          {
+            "action": "change_permissions",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "operation='revoke'"
+          },
+          {
+            "action": "change_permissions",
+            "source": "name",
+            "weight": 0.55,
+            "detail": "permission noun"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "change_permissions"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CM06",
+      "group": "misleading_metadata",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D03"
+      ],
+      "expected_actions": [
+        "change_permissions"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "change_permissions"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "change_permissions"
+        ],
+        "unknown": false,
+        "confidence": 0.94,
+        "uncertainty": 0.06,
+        "reason_codes": [
+          "args:change_permissions",
+          "name:change_permissions"
+        ],
+        "reason": "args: permission/role argument; args: operation='revoke'; name: permission noun",
+        "scores": {
+          "change_permissions": 0.94
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "change_permissions",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "permission/role argument"
+          },
+          {
+            "action": "change_permissions",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "operation='revoke'"
+          },
+          {
+            "action": "change_permissions",
+            "source": "name",
+            "weight": 0.55,
+            "detail": "permission noun"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "change_permissions"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CM07",
+      "group": "misleading_metadata",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D04",
+        "D03"
+      ],
+      "expected_actions": [
+        "change_permissions"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "change_permissions"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": true,
+        "description_suspicious": false,
+        "name_conflict": true,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "change_permissions"
+        ],
+        "unknown": false,
+        "confidence": 0.91,
+        "uncertainty": 0.09,
+        "reason_codes": [
+          "args:change_permissions",
+          "schema:change_permissions",
+          "description_conflict",
+          "name_conflict"
+        ],
+        "reason": "args: permission/role argument; args: operation='chown'; schema: schema has permission fields",
+        "scores": {
+          "change_permissions": 0.91
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "change_permissions",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "permission/role argument"
+          },
+          {
+            "action": "change_permissions",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "operation='chown'"
+          },
+          {
+            "action": "change_permissions",
+            "source": "schema",
+            "weight": 0.25,
+            "detail": "schema has permission fields"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "read"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CX01",
+      "group": "mixed_actions",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D03"
+      ],
+      "expected_actions": [
+        "read",
+        "send_data"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read",
+        "send_data"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read",
+          "send_data"
+        ],
+        "unknown": false,
+        "confidence": 0.88,
+        "uncertainty": 0.12,
+        "reason_codes": [
+          "args:read",
+          "args:send_data",
+          "name:send_data",
+          "schema:send_data"
+        ],
+        "reason": "name: name token 'mailer'; args: recipient plus content arguments; args: local file attachment path",
+        "scores": {
+          "send_data": 0.93,
+          "read": 0.88
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "send_data",
+            "source": "name",
+            "weight": 0.7,
+            "detail": "name token 'mailer'"
+          },
+          {
+            "action": "send_data",
+            "source": "args",
+            "weight": 0.7,
+            "detail": "recipient plus content arguments"
+          },
+          {
+            "action": "read",
+            "source": "args",
+            "weight": 0.7,
+            "detail": "local file attachment path"
+          },
+          {
+            "action": "read",
+            "source": "args",
+            "weight": 0.6,
+            "detail": "local path argument sent outward"
+          },
+          {
+            "action": "send_data",
+            "source": "schema",
+            "weight": 0.25,
+            "detail": "schema has recipient and content"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "send_data"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CX02",
+      "group": "mixed_actions",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D03"
+      ],
+      "expected_actions": [
+        "write",
+        "change_permissions"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "write",
+        "change_permissions"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "write",
+          "change_permissions"
+        ],
+        "unknown": false,
+        "confidence": 0.9,
+        "uncertainty": 0.1,
+        "reason_codes": [
+          "args:change_permissions",
+          "args:write"
+        ],
+        "reason": "args: mode looks like chmod value; args: path plus content arguments; args: action='write'",
+        "scores": {
+          "write": 0.9,
+          "change_permissions": 0.95
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "change_permissions",
+            "source": "args",
+            "weight": 0.85,
+            "detail": "mode looks like chmod value"
+          },
+          {
+            "action": "write",
+            "source": "args",
+            "weight": 0.7,
+            "detail": "path plus content arguments"
+          },
+          {
+            "action": "write",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "action='write'"
+          },
+          {
+            "action": "change_permissions",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "action='chmod'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CX03",
+      "group": "mixed_actions",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D03"
+      ],
+      "expected_actions": [
+        "read",
+        "delete"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read",
+        "delete"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read",
+          "delete"
+        ],
+        "unknown": false,
+        "confidence": 0.65,
+        "uncertainty": 0.35,
+        "reason_codes": [
+          "args:delete",
+          "args:read"
+        ],
+        "reason": "args: op='read'; args: op='delete'",
+        "scores": {
+          "read": 0.65,
+          "delete": 0.65
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "op='read'"
+          },
+          {
+            "action": "delete",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "op='delete'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CX04",
+      "group": "mixed_actions",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D03"
+      ],
+      "expected_actions": [
+        "delete"
+      ],
+      "expected_unknown": true,
+      "expected_status": null,
+      "predicted_actions": [
+        "delete"
+      ],
+      "predicted_unknown": true,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "delete"
+        ],
+        "unknown": true,
+        "confidence": 0.5,
+        "uncertainty": 0.5,
+        "reason_codes": [
+          "args:delete",
+          "partial_unknown"
+        ],
+        "reason": "args: action='delete'",
+        "scores": {
+          "delete": 0.65
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "delete",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "action='delete'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CX05",
+      "group": "mixed_actions",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D03"
+      ],
+      "expected_actions": [
+        "read",
+        "send_data"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read",
+        "send_data"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read",
+          "send_data"
+        ],
+        "unknown": false,
+        "confidence": 0.9,
+        "uncertainty": 0.1,
+        "reason_codes": [
+          "args:read",
+          "name:read",
+          "args:send_data",
+          "name:send_data"
+        ],
+        "reason": "args: URL with body or write method; name: name token 'read'; name: name token 'notify'",
+        "scores": {
+          "send_data": 0.97,
+          "read": 0.9
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "send_data",
+            "source": "args",
+            "weight": 0.75,
+            "detail": "URL with body or write method"
+          },
+          {
+            "action": "send_data",
+            "source": "name",
+            "weight": 0.7,
+            "detail": "name token 'notify'"
+          },
+          {
+            "action": "read",
+            "source": "name",
+            "weight": 0.7,
+            "detail": "name token 'read'"
+          },
+          {
+            "action": "send_data",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "action='post'"
+          },
+          {
+            "action": "read",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "action='read'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "read",
+            "send_data"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CX06",
+      "group": "mixed_actions",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01",
+        "D03"
+      ],
+      "expected_actions": [
+        "read",
+        "delete"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "delete"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": true,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "delete"
+        ],
+        "unknown": false,
+        "confidence": 0.65,
+        "uncertainty": 0.35,
+        "reason_codes": [
+          "args:delete",
+          "name_conflict"
+        ],
+        "reason": "args: action='delete'",
+        "scores": {
+          "delete": 0.65
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "delete",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "action='delete'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "read"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": false,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [
+        "read"
+      ],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "fail"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CS01",
+      "group": "shell_parsing",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [
+        "shell_parsing"
+      ],
+      "contract_assumptions": [
+        "D01",
+        "D05"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": false,
+        "confidence": 0.8,
+        "uncertainty": 0.2,
+        "reason_codes": [
+          "shell:read"
+        ],
+        "reason": "shell: read-only command",
+        "scores": {
+          "read": 0.8
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "shell",
+            "weight": 0.8,
+            "detail": "read-only command"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CS02",
+      "group": "shell_parsing",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [
+        "shell_parsing"
+      ],
+      "contract_assumptions": [
+        "D01",
+        "D05"
+      ],
+      "expected_actions": [
+        "write"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "write"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "write"
+        ],
+        "unknown": false,
+        "confidence": 0.85,
+        "uncertainty": 0.15,
+        "reason_codes": [
+          "shell:write"
+        ],
+        "reason": "shell: output redirection",
+        "scores": {
+          "write": 0.85
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "write",
+            "source": "shell",
+            "weight": 0.85,
+            "detail": "output redirection"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CS03",
+      "group": "shell_parsing",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [
+        "shell_parsing"
+      ],
+      "contract_assumptions": [
+        "D01",
+        "D05",
+        "D07"
+      ],
+      "expected_actions": [],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [],
+        "unknown": false,
+        "confidence": 0.9,
+        "uncertainty": 0.1,
+        "reason_codes": [
+          "proven_noop"
+        ],
+        "reason": "all commands are proven no-ops (echo/printf/true/false/:/sleep)",
+        "scores": {},
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [
+        "write",
+        "delete",
+        "send_data",
+        "change_permissions"
+      ],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CS04",
+      "group": "shell_parsing",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [
+        "shell_parsing"
+      ],
+      "contract_assumptions": [
+        "D01",
+        "D05"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": false,
+        "confidence": 0.8,
+        "uncertainty": 0.2,
+        "reason_codes": [
+          "shell:read"
+        ],
+        "reason": "shell: read-only command",
+        "scores": {
+          "read": 0.8
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "shell",
+            "weight": 0.8,
+            "detail": "read-only command"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CS05",
+      "group": "shell_parsing",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [
+        "shell_parsing"
+      ],
+      "contract_assumptions": [
+        "D01",
+        "D03",
+        "D05"
+      ],
+      "expected_actions": [
+        "read",
+        "delete"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read",
+        "delete"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read",
+          "delete"
+        ],
+        "unknown": false,
+        "confidence": 0.8,
+        "uncertainty": 0.2,
+        "reason_codes": [
+          "shell:delete",
+          "shell:read"
+        ],
+        "reason": "shell: destructive command; shell: read-only command",
+        "scores": {
+          "read": 0.8,
+          "delete": 0.85
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "delete",
+            "source": "shell",
+            "weight": 0.85,
+            "detail": "destructive command"
+          },
+          {
+            "action": "read",
+            "source": "shell",
+            "weight": 0.8,
+            "detail": "read-only command"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CS06",
+      "group": "shell_parsing",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [
+        "shell_parsing"
+      ],
+      "contract_assumptions": [
+        "D01",
+        "D03",
+        "D05"
+      ],
+      "expected_actions": [
+        "read",
+        "send_data"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "send_data"
+      ],
+      "predicted_unknown": true,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "send_data"
+        ],
+        "unknown": true,
+        "confidence": 0.5,
+        "uncertainty": 0.5,
+        "reason_codes": [
+          "shell:send_data",
+          "partial_unknown"
+        ],
+        "reason": "shell: outbound data command",
+        "scores": {
+          "send_data": 0.85
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "send_data",
+            "source": "shell",
+            "weight": 0.85,
+            "detail": "outbound data command"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": false,
+      "unknown_match": false,
+      "status_check": "not_evaluated",
+      "missing": [
+        "read"
+      ],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "fail"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CS07",
+      "group": "shell_parsing",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [
+        "shell_parsing"
+      ],
+      "contract_assumptions": [
+        "D01",
+        "D05"
+      ],
+      "expected_actions": [
+        "read",
+        "write"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read",
+        "write"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read",
+          "write"
+        ],
+        "unknown": false,
+        "confidence": 0.8,
+        "uncertainty": 0.2,
+        "reason_codes": [
+          "shell:read",
+          "shell:write"
+        ],
+        "reason": "shell: output redirection; shell: read-only command",
+        "scores": {
+          "write": 0.85,
+          "read": 0.8
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "write",
+            "source": "shell",
+            "weight": 0.85,
+            "detail": "output redirection"
+          },
+          {
+            "action": "read",
+            "source": "shell",
+            "weight": 0.8,
+            "detail": "read-only command"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CS08",
+      "group": "shell_parsing",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [
+        "shell_parsing"
+      ],
+      "contract_assumptions": [
+        "D01",
+        "D03",
+        "D05"
+      ],
+      "expected_actions": [
+        "change_permissions"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "change_permissions"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "change_permissions"
+        ],
+        "unknown": false,
+        "confidence": 0.85,
+        "uncertainty": 0.15,
+        "reason_codes": [
+          "shell:change_permissions"
+        ],
+        "reason": "shell: permission command",
+        "scores": {
+          "change_permissions": 0.85
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "change_permissions",
+            "source": "shell",
+            "weight": 0.85,
+            "detail": "permission command"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CS09",
+      "group": "shell_parsing",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [
+        "shell_parsing"
+      ],
+      "contract_assumptions": [
+        "D01",
+        "D05"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": false,
+        "confidence": 0.8,
+        "uncertainty": 0.2,
+        "reason_codes": [
+          "shell:read"
+        ],
+        "reason": "shell: read-only command",
+        "scores": {
+          "read": 0.8
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "shell",
+            "weight": 0.8,
+            "detail": "read-only command"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CS10",
+      "group": "shell_parsing",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [
+        "shell_parsing"
+      ],
+      "contract_assumptions": [
+        "D01",
+        "D03",
+        "D05"
+      ],
+      "expected_actions": [
+        "delete"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "delete"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "delete"
+        ],
+        "unknown": false,
+        "confidence": 0.85,
+        "uncertainty": 0.15,
+        "reason_codes": [
+          "shell:delete"
+        ],
+        "reason": "shell: destructive command",
+        "scores": {
+          "delete": 0.85
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "delete",
+            "source": "shell",
+            "weight": 0.85,
+            "detail": "destructive command"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CS11",
+      "group": "shell_parsing",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [
+        "shell_parsing"
+      ],
+      "contract_assumptions": [
+        "D01",
+        "D03",
+        "D05"
+      ],
+      "expected_actions": [
+        "delete"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "delete"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "delete"
+        ],
+        "unknown": false,
+        "confidence": 0.85,
+        "uncertainty": 0.15,
+        "reason_codes": [
+          "shell:delete"
+        ],
+        "reason": "shell: destructive command",
+        "scores": {
+          "delete": 0.85
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "delete",
+            "source": "shell",
+            "weight": 0.85,
+            "detail": "destructive command"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CS12",
+      "group": "shell_parsing",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [
+        "shell_parsing"
+      ],
+      "contract_assumptions": [
+        "D01",
+        "D05"
+      ],
+      "expected_actions": [
+        "write"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "write"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "write"
+        ],
+        "unknown": false,
+        "confidence": 0.85,
+        "uncertainty": 0.15,
+        "reason_codes": [
+          "shell:write"
+        ],
+        "reason": "shell: file/repo write command",
+        "scores": {
+          "write": 0.85
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "write",
+            "source": "shell",
+            "weight": 0.85,
+            "detail": "file/repo write command"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CS13",
+      "group": "shell_parsing",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [
+        "shell_parsing"
+      ],
+      "contract_assumptions": [
+        "D01",
+        "D05"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": false,
+        "confidence": 0.8,
+        "uncertainty": 0.2,
+        "reason_codes": [
+          "shell:read"
+        ],
+        "reason": "shell: read-only command",
+        "scores": {
+          "read": 0.8
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "shell",
+            "weight": 0.8,
+            "detail": "read-only command"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CS14",
+      "group": "shell_parsing",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [
+        "shell_parsing"
+      ],
+      "contract_assumptions": [
+        "D01",
+        "D05"
+      ],
+      "expected_actions": [],
+      "expected_unknown": true,
+      "expected_status": null,
+      "predicted_actions": [],
+      "predicted_unknown": true,
+      "predicted_status": "unknown",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "unknown",
+        "actions": [],
+        "unknown": true,
+        "confidence": 0.0,
+        "uncertainty": 1.0,
+        "reason_codes": [
+          "no_rule_matched"
+        ],
+        "reason": "no rule matched; weak signals: none",
+        "scores": {},
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CS15",
+      "group": "shell_parsing",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [
+        "shell_parsing"
+      ],
+      "contract_assumptions": [
+        "D01",
+        "D03",
+        "D05"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": false,
+        "confidence": 0.8,
+        "uncertainty": 0.2,
+        "reason_codes": [
+          "shell:read"
+        ],
+        "reason": "shell: read-only command",
+        "scores": {
+          "read": 0.8
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "shell",
+            "weight": 0.8,
+            "detail": "read-only command"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-challenge-v0.2",
+      "id": "CS16",
+      "group": "shell_parsing",
+      "origin": "challenge_v0.1",
+      "expectation_status": "provisional",
+      "requires": [
+        "shell_parsing"
+      ],
+      "contract_assumptions": [
+        "D01",
+        "D03",
+        "D05"
+      ],
+      "expected_actions": [
+        "read",
+        "send_data"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read",
+        "send_data"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read",
+          "send_data"
+        ],
+        "unknown": false,
+        "confidence": 0.8,
+        "uncertainty": 0.2,
+        "reason_codes": [
+          "shell:read",
+          "shell:send_data"
+        ],
+        "reason": "shell: outbound data command; shell: read-only command",
+        "scores": {
+          "read": 0.8,
+          "send_data": 0.85
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "send_data",
+            "source": "shell",
+            "weight": 0.85,
+            "detail": "outbound data command"
+          },
+          {
+            "action": "read",
+            "source": "shell",
+            "weight": 0.8,
+            "detail": "read-only command"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-urtisto-mixed-v0.1",
+      "id": "UX01",
+      "group": "mixed_actions",
+      "origin": "urtisto_mixed_v0.1",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "A1",
+        "A4"
+      ],
+      "expected_actions": [
+        "read",
+        "send_data"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read",
+        "send_data"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read",
+          "send_data"
+        ],
+        "unknown": false,
+        "confidence": 0.65,
+        "uncertainty": 0.35,
+        "reason_codes": [
+          "args:read",
+          "args:send_data"
+        ],
+        "reason": "args: recipient plus content arguments; args: action='send'; args: action='read'",
+        "scores": {
+          "read": 0.65,
+          "send_data": 0.9
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "send_data",
+            "source": "args",
+            "weight": 0.7,
+            "detail": "recipient plus content arguments"
+          },
+          {
+            "action": "send_data",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "action='send'"
+          },
+          {
+            "action": "read",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "action='read'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-urtisto-mixed-v0.1",
+      "id": "UX02",
+      "group": "mixed_actions",
+      "origin": "urtisto_mixed_v0.1",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "A1",
+        "A4"
+      ],
+      "expected_actions": [
+        "read",
+        "write"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read",
+        "write"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read",
+          "write"
+        ],
+        "unknown": false,
+        "confidence": 0.65,
+        "uncertainty": 0.35,
+        "reason_codes": [
+          "args:read",
+          "args:write"
+        ],
+        "reason": "args: path plus content arguments; args: action='write'; args: action='read'",
+        "scores": {
+          "read": 0.65,
+          "write": 0.9
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "write",
+            "source": "args",
+            "weight": 0.7,
+            "detail": "path plus content arguments"
+          },
+          {
+            "action": "write",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "action='write'"
+          },
+          {
+            "action": "read",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "action='read'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-urtisto-mixed-v0.1",
+      "id": "UX03",
+      "group": "mixed_actions",
+      "origin": "urtisto_mixed_v0.1",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "A1",
+        "A4"
+      ],
+      "expected_actions": [
+        "write"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "write"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "write"
+        ],
+        "unknown": false,
+        "confidence": 0.93,
+        "uncertainty": 0.07,
+        "reason_codes": [
+          "args:write",
+          "name:write",
+          "schema:write"
+        ],
+        "reason": "name: name token 'save'; args: path plus content arguments; schema: schema has path and content",
+        "scores": {
+          "write": 0.93
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "write",
+            "source": "name",
+            "weight": 0.7,
+            "detail": "name token 'save'"
+          },
+          {
+            "action": "write",
+            "source": "args",
+            "weight": 0.7,
+            "detail": "path plus content arguments"
+          },
+          {
+            "action": "write",
+            "source": "schema",
+            "weight": 0.25,
+            "detail": "schema has path and content"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "write"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-urtisto-mixed-v0.1",
+      "id": "UX04",
+      "group": "mixed_actions",
+      "origin": "urtisto_mixed_v0.1",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "A1",
+        "A4"
+      ],
+      "expected_actions": [
+        "write"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "write"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "write"
+        ],
+        "unknown": false,
+        "confidence": 0.93,
+        "uncertainty": 0.07,
+        "reason_codes": [
+          "args:write",
+          "name:write",
+          "schema:write"
+        ],
+        "reason": "name: name token 'save'; args: path plus content arguments; schema: schema has path and content",
+        "scores": {
+          "write": 0.93
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "write",
+            "source": "name",
+            "weight": 0.7,
+            "detail": "name token 'save'"
+          },
+          {
+            "action": "write",
+            "source": "args",
+            "weight": 0.7,
+            "detail": "path plus content arguments"
+          },
+          {
+            "action": "write",
+            "source": "schema",
+            "weight": 0.25,
+            "detail": "schema has path and content"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "write"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "task1-urtisto-benign-v0.1",
+      "id": "UX05",
+      "group": "benign_comparison",
+      "origin": "urtisto_benign_control_v0.1",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "A1"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": false,
+        "confidence": 0.65,
+        "uncertainty": 0.35,
+        "reason_codes": [
+          "args:read"
+        ],
+        "reason": "args: action='read'",
+        "scores": {
+          "read": 0.65
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "action='read'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    }
+  ]
+}
