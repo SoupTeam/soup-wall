@@ -102,10 +102,19 @@ jobs:
           if sha256sum --strict -c APPROVED_SUMS 2>/dev/null; then exit 1; fi
 
           echo "--- Test 10: Successful exact-candidate ---"
+          touch soup-wall-v0.3.0-aarch64-apple-darwin.tar.gz \
+                soup-wall-v0.3.0-x86_64-apple-darwin.tar.gz \
+                soup-wall-v0.3.0-x86_64-pc-windows-msvc.zip \
+                agentfw.cdx.json \
+                llm-firewall.cdx.json \
+                soup-wall-adapter.cdx.json \
+                soup-wall-agent.cdx.json \
+                soup-wall-bench.cdx.json \
+                soup-wall-core.cdx.json \
+                soup-wall-image.tar
           ../scripts/validate_candidate.sh rec_good.json "$MANIFEST" "v0.3.0" "dummy_sha"
           
           echo "--- Test 11: Embedded CR/LF injection (P1) ---"
-          # Injecting a newline and an extra 12th file directly into index 10 to bypass array length limits
           EVIL_STR="$H  soup-wall-image.tar\n$H  extra-owned.txt"
           jq --arg evil "$EVIL_STR" '.checksums[10] = $evil' "$MANIFEST" > man_embed.json
           cat <<EOF > rec_embed.json
