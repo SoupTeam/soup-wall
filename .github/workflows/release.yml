@@ -321,8 +321,13 @@ jobs:
           WORKFLOW_PATH=$(echo "$RUN_JSON" | jq -r '.path')
           EVENT=$(echo "$RUN_JSON" | jq -r '.event')
           REPO=$(echo "$RUN_JSON" | jq -r '.repository.full_name')
+          HEAD_BRANCH=$(echo "$RUN_JSON" | jq -r '.head_branch')
+          RUN_ATTEMPT=$(echo "$RUN_JSON" | jq -r '.run_attempt')
           
-          if [[ "$WORKFLOW_PATH" != ".github/workflows/release.yml"* ]]; then
+          echo "Evaluating preparation run attempt: $RUN_ATTEMPT"
+          
+          # Exact match instead of wildcard prefix
+          if [ "$WORKFLOW_PATH" != ".github/workflows/release.yml" ]; then
             echo "CRITICAL: Untrusted workflow path ($WORKFLOW_PATH)"
             exit 1
           fi
@@ -334,7 +339,7 @@ jobs:
             echo "CRITICAL: Untrusted repository ($REPO)"
             exit 1
           fi
-          if [ "$STATUS" != "completed" ] || [ "$CONCLUSION" != "success" ]; then
+          if [ "$STATUS" != "completed" ] \vert{}\vert{} [ "$CONCLUSION" != "success" ]; then
             echo "CRITICAL: Preparation run ${{ inputs.promote_run_id }} is not successful ($STATUS/$CONCLUSION)"
             exit 1
           fi
@@ -342,7 +347,11 @@ jobs:
             echo "CRITICAL: Preparation run SHA ($RUN_SHA) does not match expected tag SHA ($EXPECTED_SHA)"
             exit 1
           fi
-          echo "SUCCESS: Preparation run identity verified."
+          if [ "$HEAD_BRANCH" != "$TAG" ]; then
+            echo "CRITICAL: Preparation run ref ($HEAD_BRANCH) does not match expected tag ($TAG)"
+            exit 1
+          fi
+          echo "SUCCESS: Preparation run identity verified and tightly bound to candidate artifact."
 
       - name: Download Frozen Candidate
         env:
@@ -380,25 +389,37 @@ jobs:
           echo "SUCCESS: Actual file bytes perfectly match the approved manifest."
       
       - name: Load and Push Container
-        if: env.DRY_RUN != 'true'
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
           IMAGE_NAME="ghcr.io/${GITHUB_REPOSITORY,,}"
-          skopeo copy --all oci-archive:dist/soup-wall-image.tar docker://$IMAGE_NAME:${TAG}
-          if [[ "${TAG}" != *-* ]]; then
-            skopeo copy --all oci-archive:dist/soup-wall-image.tar docker://$IMAGE_NAME:latest
+          
+          echo "Verifying OCI archive integrity via skopeo (dry-run evidence)..."
+          skopeo inspect oci-archive:dist/soup-wall-image.tar
+          
+          if [ "${{ env.DRY_RUN }}" != "true" ]; then
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            skopeo copy --all oci-archive:dist/soup-wall-image.tar docker://$IMAGE_NAME:${TAG}
+            if [[ "${TAG}" != *-* ]]; then
+              skopeo copy --all oci-archive:dist/soup-wall-image.tar docker://$IMAGE_NAME:latest
+            fi
+          else
+            echo "DRY_RUN is true. Successfully evaluated container, skipping registry push."
           fi
 
       - name: Publish GitHub Release (P1 Strict Upload)
-        if: env.DRY_RUN != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           cd dist
           VALIDATED="${{ steps.files.outputs.validated_files }}"
-          if gh release view "${TAG}" >/dev/null 2>&1; then
-            gh release upload "${TAG}" $VALIDATED --clobber
+          echo "Approved artifacts to publish: $VALIDATED"
+          
+          if [ "${{ env.DRY_RUN }}" != "true" ]; then
+            if gh release view "${TAG}" >/dev/null 2>&1; then
+              gh release upload "${TAG}" $VALIDATED --clobber
+            else
+              gh release create "${TAG}" $VALIDATED --title "${TAG}" --generate-notes --verify-tag
+            fi
           else
-            gh release create "${TAG}" $VALIDATED --title "${TAG}" --generate-notes --verify-tag
+            echo "DRY_RUN is true. Successfully evaluated artifacts, skipping GitHub Release creation."
           fi

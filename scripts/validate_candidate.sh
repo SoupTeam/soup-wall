@@ -52,7 +52,7 @@ if [ "$REC_SHA" != "$MAN_SHA" ]; then
   exit 1
 fi
 
-# Exact Inventory Enforcement (4 archives, 6 SBOMs, 1 OCI image)
+# Exact Inventory Enforcement
 EXPECTED_FILENAMES=(
   "soup-wall-${MAN_TAG}-x86_64-unknown-linux-gnu.tar.gz"
   "soup-wall-${MAN_TAG}-aarch64-apple-darwin.tar.gz"
@@ -73,19 +73,29 @@ if [ "$TOTAL_FOUND" -ne 11 ]; then
   exit 1
 fi
 
-# [P1] Strict Inventory Grammar & Traversal Protection
+# Securely read jq output into a bash array.
+# If an attacker injects an embedded \n inside a JSON string, jq -r expands it,
+# creating >11 elements in this Bash array, which we immediately catch.
+readarray -t CHECKSUM_LINES < <(jq -r '.checksums[]' "$MANIFEST")
+
+if [ "${#CHECKSUM_LINES[@]}" -ne 11 ]; then
+  echo "CRITICAL: Embedded newline detected (line count mismatch). Expected 11, got ${#CHECKSUM_LINES[@]}"
+  exit 1
+fi
+
+declare -A FOUND_FILES
+
+# [P1] Strict Single-Line Grammar & Traversal Protection
 echo "Verifying exact inventory binding..."
-for expected_file in "${EXPECTED_FILENAMES[@]}"; do
-  # Require exact canonical filename format, prevent suffix matching
-  MATCH=$(jq -r '.checksums[]' "$MANIFEST" | awk -v f="$expected_file" 'NF==2 && $2==f {print $0}')
-  
-  if [ -z "$MATCH" ] || [ $(echo "$MATCH" | wc -l) -ne 1 ]; then
-    echo "CRITICAL: Missing or ambiguous required artifact exact match: $expected_file"
+for line in "${CHECKSUM_LINES[@]}"; do
+  # Require exact canonical filename format, single line, no spaces/specials in filename
+  if [[ ! "$line" =~ ^([a-f0-9]{64})\ \ ([a-zA-Z0-9_.-]+)$ ]]; then
+    echo "CRITICAL: Invalid checksum line grammar or control character detected: $line"
     exit 1
   fi
 
-  HASH_PART=$(echo "$MATCH" | awk '{print $1}')
-  FILE_PART=$(echo "$MATCH" | awk '{print $2}')
+  HASH_PART="${BASH_REMATCH[1]}"
+  FILE_PART="${BASH_REMATCH[2]}"
 
   # Reject unsafe paths (directory traversal, absolute paths)
   if [[ "$FILE_PART" == *"/"* ]] || [[ "$FILE_PART" == *"\\"* ]] || [[ "$FILE_PART" == *".."* ]]; then
@@ -93,8 +103,18 @@ for expected_file in "${EXPECTED_FILENAMES[@]}"; do
     exit 1
   fi
 
-  if ! [[ "$HASH_PART" =~ ^[a-f0-9]{64}$ ]]; then
-    echo "CRITICAL: Invalid SHA-256 digest format for $expected_file: $HASH_PART"
+  if [ ! -f "$FILE_PART" ] || [ -L "$FILE_PART" ]; then
+    echo "CRITICAL: Missing, non-regular, or symlink artifact: $FILE_PART"
+    exit 1
+  fi
+
+  FOUND_FILES["$FILE_PART"]="$HASH_PART"
+done
+
+# Ensure every expected canonical file was present and mapped
+for expected_file in "${EXPECTED_FILENAMES[@]}"; do
+  if [[ -z "${FOUND_FILES[$expected_file]:-}" ]]; then
+    echo "CRITICAL: Missing required canonical file exact match: $expected_file"
     exit 1
   fi
 done

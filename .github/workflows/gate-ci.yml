@@ -104,4 +104,15 @@ jobs:
           echo "--- Test 10: Successful exact-candidate ---"
           ../scripts/validate_candidate.sh rec_good.json "$MANIFEST" "v0.3.0" "dummy_sha"
           
+          echo "--- Test 11: Embedded CR/LF injection (P1) ---"
+          # Injecting a newline and an extra 12th file directly into index 10 to bypass array length limits
+          EVIL_STR="$H  soup-wall-image.tar\n$H  extra-owned.txt"
+          jq --arg evil "$EVIL_STR" '.checksums[10] = $evil' "$MANIFEST" > man_embed.json
+          cat <<EOF > rec_embed.json
+          {"decision": "approved", "source_sha": "dummy_sha", "checksums": $(jq -c '.checksums' man_embed.json), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
+          EOF
+          touch extra-owned.txt
+          if ../scripts/validate_candidate.sh rec_embed.json man_embed.json "v0.3.0" "dummy_sha" 2>/dev/null; then exit 1; fi
+          rm -f extra-owned.txt
+
           echo "All SOU-26 validator matrix tests passed successfully!"
