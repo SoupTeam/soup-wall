@@ -2876,9 +2876,19 @@ async fn sou15_operation_constrained_resource_executor_enforces_boundaries() {
         serde_json::from_str(&fixture.exchange(&unauth_call.to_string()).await.unwrap()).unwrap();
     assert_eq!(unauth_reply["id"], "res-policy-unauth");
     assert_eq!(unauth_reply["result"]["isError"], true);
+    #[cfg(unix)]
     assert!(unauth_reply
         .to_string()
         .contains("native_resource_not_allowed"));
+    #[cfg(not(unix))]
+    assert!(
+        unauth_reply
+            .to_string()
+            .contains("resource_executor_unsupported")
+            || unauth_reply
+                .to_string()
+                .contains("native_resource_not_allowed")
+    );
     assert_eq!(
         executed(&fixture.ledger).len(),
         0,
