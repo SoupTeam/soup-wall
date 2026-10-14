@@ -817,7 +817,7 @@ mod tests {
         let path = temp.path().join("grants-spent.json");
         let ledger = GrantLedger::open(&path);
         store
-            .issue(KEY, &action(), NOW, DEFAULT_TTL_MS, "cached".into())
+            .issue(KEY, &action(), NOW, DEFAULT_TTL_MS, crate::token::generate())
             .unwrap();
         let cached = store.pending().pop().unwrap();
         assert_eq!(cached.policy_epoch, 0);
@@ -840,12 +840,12 @@ mod tests {
         let store = GrantStore::new(&temp.path().join("grants"));
         let ledger = GrantLedger::open(&temp.path().join("grants-spent.json"));
         let (old, _) = store
-            .issue(KEY, &action(), NOW, DEFAULT_TTL_MS, "old-policy".into())
+            .issue(KEY, &action(), NOW, DEFAULT_TTL_MS, crate::token::generate())
             .unwrap();
         store.invalidate_all_for_policy_switch().unwrap();
         assert!(store.write(&old).is_err());
         let (new, _) = store
-            .issue(KEY, &action(), NOW, DEFAULT_TTL_MS, "new-policy".into())
+            .issue(KEY, &action(), NOW, DEFAULT_TTL_MS, crate::token::generate())
             .unwrap();
         assert_eq!(new.policy_epoch, 1);
         assert_eq!(redeem(KEY, &new, &action(), NOW + 1, &ledger), Ok(()));
@@ -860,7 +860,7 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         let worker_store = store.clone();
         let worker = std::thread::spawn(move || {
-            let result = worker_store.issue(KEY, &action(), NOW, DEFAULT_TTL_MS, "during".into());
+            let result = worker_store.issue(KEY, &action(), NOW, DEFAULT_TTL_MS, crate::token::generate());
             tx.send(result).unwrap();
         });
         lock.advance().unwrap();
@@ -883,7 +883,7 @@ mod tests {
                 &action(),
                 NOW,
                 DEFAULT_TTL_MS,
-                "before-corruption".into(),
+                crate::token::generate(),
             )
             .unwrap();
         fs::write(temp.path().join("approval-policy-epoch"), "corrupted").unwrap();
@@ -897,7 +897,7 @@ mod tests {
                 &action(),
                 NOW,
                 DEFAULT_TTL_MS,
-                "after-corruption".into()
+                crate::token::generate()
             )
             .is_err());
     }
