@@ -266,7 +266,9 @@ pub async fn hook(
     // old-policy Allow after a concurrent switch. No await is held under lock.
     let _final_policy_guard = st.firewall.lock().expect("firewall mutex");
     let changed_while_in_flight = is_pre
-        && _final_policy_guard.active_managed_policy().map(|p| p.deployment_sequence)
+        && _final_policy_guard
+            .active_managed_policy()
+            .map(|p| p.deployment_sequence)
             != inspected_deployment;
     let mut decision_rule = outcome.rule.clone();
     let mut decision_message = outcome.message.clone();
@@ -274,7 +276,8 @@ pub async fn hook(
         verdict = Verdict::Deny;
         decision_rule = Some("managed-policy-transition".into());
         decision_message = Some(
-            "Managed policy changed while this call was being evaluated; retry under the new policy.".into(),
+            "Managed policy changed while this call was being evaluated; retry under the new policy."
+                .into(),
         );
         tracing::warn!("refused in-flight old-policy pre-tool decision after managed activation");
     }
