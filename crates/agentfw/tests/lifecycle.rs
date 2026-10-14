@@ -1,18 +1,77 @@
 use agentfw::lifecycle::{sha256_file, Manager, Status};
 use std::fs;
+use std::io::Read;
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
+use std::sync::mpsc;
+use std::time::{Duration, Instant};
 use tempfile::tempdir;
 
 fn run(profile: &Path, args: &[&str]) -> Output {
+    eprintln!("Lifecycle command: {args:?}");
     let mut command = Command::new(env!("CARGO_BIN_EXE_agentfw"));
     command.arg("lifecycle").args(args);
     #[cfg(unix)]
     command.env("HOME", profile);
     #[cfg(windows)]
     command.env("USERPROFILE", profile);
-    command.output().unwrap()
+    let mut child = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let stdout = child.stdout.take().unwrap();
+    let stderr = child.stderr.take().unwrap();
+    let (send, receive) = mpsc::channel();
+    for (name, mut stream) in [
+        ("stdout", Box::new(stdout) as Box<dyn Read + Send>),
+        ("stderr", Box::new(stderr) as Box<dyn Read + Send>),
+    ] {
+        let send = send.clone();
+        std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            let result = stream.read_to_end(&mut bytes);
+            let _ = send.send((name, result, bytes));
+        });
+    }
+    drop(send);
+    let deadline = Instant::now() + Duration::from_secs(90);
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status;
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            let _ = Manager::new(profile.join(".agentfw")).stop();
+            panic!("lifecycle {args:?} did not exit within 90 seconds");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    let mut output = Output {
+        status,
+        stdout: Vec::new(),
+        stderr: Vec::new(),
+    };
+    for _ in 0..2 {
+        let (name, result, bytes) = receive.recv_timeout(Duration::from_secs(5)).unwrap_or_else(|error| {
+            // A daemon must not retain the CLI's output pipes after the CLI exits.
+            // Stop only the authenticated daemon in this disposable profile.
+            let manager = Manager::new(profile.join(".agentfw"));
+            let running = manager.status().map(|s| s.running);
+            let stopped = manager.stop();
+            panic!("lifecycle {args:?} exited ({status}) but output did not close within 5 seconds: {error}; managed running={running:?}; cleanup={stopped:?}");
+        });
+        result.unwrap();
+        if name == "stdout" {
+            output.stdout = bytes;
+        } else {
+            output.stderr = bytes;
+        }
+    }
+    output
 }
 
 fn success(profile: &Path, args: &[&str]) -> String {
