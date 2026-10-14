@@ -1,0 +1,25 @@
+{
+  "scope": "independent read-only checkpointed durable receiver state after owned cleanup; not complete runtime acceptance",
+  "source_commit": "234e172eb84f08b417f0fee665ce992d18d0d16a",
+  "original_host_port": 55012,
+  "observed_restart_host_port": 55016,
+  "wal_and_shm_absent": true,
+  "rows": [
+    {
+      "event_id": "0cbfae59a426fcb9a16d1677cfe089095d65eeb02e1f9ec0b3439a4215d296c4",
+      "cycle_id": "d0429e1335be37a324927117934e20dc8f110f5c888aba07f6839d3690c2e1c2",
+      "status": "firing",
+      "starts_at": "2026-10-14T08:00:41.363Z",
+      "ends_at": "0001-01-01T00:00:00Z",
+      "first_received_at": 1791964873,
+      "duplicate_count": 0,
+      "labels": {
+        "alertname": "LLMFirewallControlPlaneUnavailable",
+        "component": "control-plane",
+        "instance": "gateway:8080",
+        "job": "soup-wall-gateway",
+        "severity": "critical"
+      }
+    }
+  ]
+}

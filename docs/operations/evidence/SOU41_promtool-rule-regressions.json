@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "name": "promtool-rule-regressions",
+  "exit_code": 0,
+  "log_text_sha256": "8289a4919870ab5b28f5e90a86b4af3cdbd8c244516c02fca90d6e3f289a6711",
+  "log_text": "  SUCCESS\n\n"
+}

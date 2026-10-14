@@ -1,0 +1,38 @@
+{
+  "image": "prom/prometheus@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e",
+  "version": "3.15.0",
+  "baseline": "290e043",
+  "fixture_groups": 5,
+  "alert_assertions": 18,
+  "container_constraints": {
+    "network": "none",
+    "root_filesystem": "read_only",
+    "rules_mount": "read_only",
+    "test_tmpfs": "/tmp:rw,nosuid,noexec,size=128m"
+  },
+  "files": {
+    "prometheus-alerts.yaml": "93a473c55fb99e9aefe1428c0965050a1b6ecd2ae646b32618c99ac27282e2b0",
+    "prometheus-alerts.test.yaml": "19fc76685a97520d440061e798bd5588635e0de4aa5119070b0714dc958fce0e"
+  },
+  "results": [
+    {
+      "name": "promtool-rules-valid",
+      "exit_code": 0,
+      "log": "SOU41_promtool-rules-valid.json",
+      "log_sha256": "1b9fea72633bfe951d1aebb8e261f5747ec3bc602d289ef69ee3e141c5604ad2"
+    },
+    {
+      "name": "promtool-rule-regressions",
+      "exit_code": 0,
+      "log": "SOU41_promtool-rule-regressions.json",
+      "log_sha256": "8289a4919870ab5b28f5e90a86b4af3cdbd8c244516c02fca90d6e3f289a6711"
+    },
+    {
+      "name": "promtool-baseline-regression",
+      "exit_code": 1,
+      "log": "SOU41_promtool-baseline-regression.json",
+      "log_sha256": "b6e21a10e3ad8524577b6d9d7b9c7ad4bf32ba20c6889ecbf7dc2fc1961403e0"
+    }
+  ],
+  "sanitization": "Local absolute paths replaced with committed JSON envelope names; CLI output is retained byte-for-byte as UTF-8 log_text and its original SHA-256"
+}

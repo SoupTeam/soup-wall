@@ -238,3 +238,5 @@ must configure the actual monitoring source and receiver ownership, preserve
 retention and credentials, and collect evidence in the intended environment.
 The separate policy-event outbox and historical Windows release drill are not
 rerun by this procedure.
+
+Current controlled Linux evidence: [2026-10-14 protected receiver and dependency recovery report](evidence/MONITORING_RECOVERY_2026-10-14.md). Inspect the exact candidate PR checks and review before accepting the change.

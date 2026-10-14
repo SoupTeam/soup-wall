@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "name": "promtool-rules-valid",
+  "exit_code": 0,
+  "log_text_sha256": "1b9fea72633bfe951d1aebb8e261f5747ec3bc602d289ef69ee3e141c5604ad2",
+  "log_text": "Checking /rules/prometheus-alerts.yaml\n  SUCCESS: 7 rules found\n\n"
+}
