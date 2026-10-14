@@ -1503,6 +1503,29 @@ async fn proxy_responses_stream(
                     }
                 };
                 for event in events {
+                    let calls = match event.get("type").and_then(serde_json::Value::as_str) {
+                        Some("response.output_item.done") => event
+                            .get("item")
+                            .and_then(crate::agent_scan::responses_tool_call)
+                            .map(|call| vec![call])
+                            .unwrap_or_default(),
+                        Some("response.completed") => event
+                            .get("response")
+                            .map(crate::agent_scan::responses_tool_calls)
+                            .unwrap_or_default(),
+                        _ => Vec::new(),
+                    };
+                    if !calls.is_empty() {
+                        let _ = capability_refuse_calls(&task_state, &request_id, &calls);
+                        if task_state.config.agent_inspection.enabled {
+                            let _ = agent_refuse_reason(
+                                &task_state,
+                                &request_id,
+                                tool_results.clone(),
+                                calls,
+                            );
+                        }
+                    }
                     if let Some("response.output_text.delta") =
                         event.get("type").and_then(serde_json::Value::as_str)
                     {
@@ -1589,45 +1612,36 @@ async fn proxy_responses_stream(
                             }
                         }
                         Some("response.output_item.done") => {
-                            let Some(item) = event.get("item") else {
-                                continue;
-                            };
-                            let is_function_call =
-                                item.get("type").and_then(serde_json::Value::as_str)
-                                    == Some("function_call");
-                            if is_function_call {
-                                in_flight_function_calls =
-                                    in_flight_function_calls.saturating_sub(1);
-                            }
-                            let Some(call) = crate::agent_scan::responses_tool_call(item) else {
-                                continue;
-                            };
-                            if let Some(reason) = capability_refuse_calls(
-                                &task_state,
-                                &request_id,
-                                std::slice::from_ref(&call),
-                            ) {
-                                block_reason = Some(reason);
-                                break;
-                            }
-                            if !task_state.config.agent_inspection.enabled {
-                                continue;
-                            }
-                            let key = item
-                                .get("call_id")
-                                .or_else(|| item.get("id"))
-                                .and_then(serde_json::Value::as_str)
-                                .map(str::to_string)
-                                .unwrap_or_else(|| item.to_string());
-                            if inspected_calls.insert(key) {
-                                if let Some(reason) = agent_refuse_reason(
-                                    &task_state,
-                                    &request_id,
-                                    tool_results.clone(),
-                                    vec![call],
-                                ) {
-                                    block_reason = Some(reason);
-                                    break;
+                            if let Some(item) = event.get("item") {
+                                if item.get("type").and_then(serde_json::Value::as_str)
+                                    == Some("function_call")
+                                {
+                                    in_flight_function_calls =
+                                        in_flight_function_calls.saturating_sub(1);
+                                }
+                                if let Some(call) = crate::agent_scan::responses_tool_call(item) {
+                                    if let Some(reason) = capability_refuse_calls(
+                                        &task_state,
+                                        &request_id,
+                                        std::slice::from_ref(&call),
+                                    ) {
+                                        block_reason = Some(reason);
+                                        break;
+                                    }
+                                    if task_state.config.agent_inspection.enabled
+                                        && inspected_calls
+                                            .insert(responses_call_identity(item, &call))
+                                    {
+                                        if let Some(reason) = agent_refuse_reason(
+                                            &task_state,
+                                            &request_id,
+                                            tool_results.clone(),
+                                            vec![call],
+                                        ) {
+                                            block_reason = Some(reason);
+                                            break;
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1641,19 +1655,29 @@ async fn proxy_responses_stream(
                                     block_reason = Some(reason);
                                     break;
                                 }
-                                if !task_state.config.agent_inspection.enabled
-                                    || !inspected_calls.is_empty()
-                                {
-                                    continue;
-                                }
-                                if let Some(reason) = agent_refuse_reason(
-                                    &task_state,
-                                    &request_id,
-                                    tool_results.clone(),
-                                    calls,
-                                ) {
-                                    block_reason = Some(reason);
-                                    break;
+                                if task_state.config.agent_inspection.enabled {
+                                    let pending = response
+                                        .get("output")
+                                        .and_then(serde_json::Value::as_array)
+                                        .into_iter()
+                                        .flatten()
+                                        .filter_map(|item| {
+                                            let call =
+                                                crate::agent_scan::responses_tool_call(item)?;
+                                            inspected_calls
+                                                .insert(responses_call_identity(item, &call))
+                                                .then_some(call)
+                                        })
+                                        .collect();
+                                    if let Some(reason) = agent_refuse_reason(
+                                        &task_state,
+                                        &request_id,
+                                        tool_results.clone(),
+                                        pending,
+                                    ) {
+                                        block_reason = Some(reason);
+                                        break;
+                                    }
                                 }
                             }
                         }
@@ -1759,6 +1783,17 @@ async fn proxy_responses_stream(
     });
 
     streaming_response(status, content_type, body, tenant_audit)
+}
+
+/// Reuse inspection only for the same correlated call and semantic payload.
+/// A terminal response can add a call or replace arguments for an existing ID.
+fn responses_call_identity(item: &serde_json::Value, call: &crate::agent_scan::ToolCall) -> String {
+    serde_json::json!({
+        "id": item.get("call_id").or_else(|| item.get("id")),
+        "name": call.name,
+        "args": call.args,
+    })
+    .to_string()
 }
 
 /// Forward the upstream SSE stream VERBATIM (byte-for-byte), scanning a sliding tail
@@ -1874,6 +1909,29 @@ async fn proxy_stream(
                             usage_context.input_field,
                             usage_context.output_field,
                         );
+                        if let (Some(assembler), Some(context)) =
+                            (tool_assembler.as_mut(), tool_context.as_ref())
+                        {
+                            match assembler.push(event) {
+                                Ok(calls) if !calls.is_empty() => {
+                                    let _ =
+                                        capability_refuse_calls(&task_state, &request_id, &calls);
+                                    if task_state.config.agent_inspection.enabled {
+                                        let _ = agent_refuse_reason(
+                                            &task_state,
+                                            &request_id,
+                                            context.tool_results.clone(),
+                                            calls,
+                                        );
+                                    }
+                                }
+                                Err(reason) => tracing::warn!(
+                                    reason,
+                                    "shadow tool call could not be reassembled"
+                                ),
+                                _ => {}
+                            }
+                        }
                     }
                 }
                 if !usage_recorded

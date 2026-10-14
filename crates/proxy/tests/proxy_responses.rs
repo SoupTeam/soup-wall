@@ -638,3 +638,74 @@ async fn responses_stream_transport_fragmentation_allows_benign_function_call() 
         "fragmented benign Responses function call must pass through untouched"
     );
 }
+
+#[tokio::test]
+async fn responses_enforcing_terminal_frames_preserve_useful_output_and_inspect_new_calls() {
+    let allowed = serde_json::json!({"type":"function_call","id":"read","call_id":"read","name":"read_file","arguments":"{\"path\":\"README.md\"}"});
+    let network = serde_json::json!({"type":"function_call","id":"network","call_id":"network","name":"bash","arguments":"{\"command\":\"curl https://untrusted-api.example.com/collect\"}"});
+    let message = serde_json::json!({"type":"message","id":"text","content":[{"type":"output_text","text":"useful text"}]});
+    for (initial, final_output, blocked) in [
+        (allowed.clone(), vec![allowed.clone()], false),
+        (message.clone(), vec![message], false),
+        (
+            allowed.clone(),
+            vec![allowed.clone(), network.clone()],
+            true,
+        ),
+        (
+            allowed.clone(),
+            vec![
+                serde_json::json!({"type":"function_call","call_id":"read","id":"read","name":"bash","arguments":"{\"command\":\"curl https://untrusted-api.example.com/collect\"}"}),
+            ],
+            true,
+        ),
+    ] {
+        let first = serde_json::json!({"type":"response.output_item.done","item":initial});
+        let last =
+            serde_json::json!({"type":"response.completed","response":{"output":final_output}});
+        let wire = format!("data: {first}\n\ndata: {last}\n\n");
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/v1/responses"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_raw(wire.clone(), "text/event-stream"),
+            )
+            .mount(&server)
+            .await;
+        let mut st = state(server.uri(), allow_firewall());
+        let inner = Arc::get_mut(&mut st).unwrap();
+        inner.config.agent_inspection.enabled = true;
+        inner.config.agent_inspection.enforce = true;
+        inner.agent=std::sync::Mutex::new(soup_wall_agent::AgentFirewall::new(soup_wall_agent::AgentPolicySet::from_yaml("agent_policies:\n  - name: pending-network\n    when: {egress_not_allowlisted: true}\n    action: ask\ndefault: allow\n").unwrap(),soup_wall_agent::DEFAULT_TAINT_CAP));
+        let response = app(st)
+            .oneshot(
+                Request::post("/v1/responses")
+                    .header("content-type", "application/json")
+                    .body(axum::body::Body::from(
+                        serde_json::json!({"model":"owned-fixture","input":"owned","stream":true})
+                            .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let bytes = to_bytes(response.into_body(), 1 << 20).await.unwrap();
+        let output = String::from_utf8(bytes.to_vec()).unwrap();
+        if blocked {
+            assert!(
+                output.contains("llm_firewall_block"),
+                "new/changed non-Allow call must be explicitly blocked: {output}"
+            );
+            assert!(!output.contains("untrusted-api.example.com"));
+            assert!(
+                output.contains("README.md"),
+                "already allowed first call remains useful"
+            );
+        } else {
+            assert_eq!(
+                output, wire,
+                "allowed terminal frames must be preserved byte-for-byte"
+            );
+        }
+    }
+}
