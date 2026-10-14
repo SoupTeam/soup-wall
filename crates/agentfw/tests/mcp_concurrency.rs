@@ -117,3 +117,57 @@ fn partial_queued_resource_call_is_refused_before_native_execution() {
 fn sequential_resource_failures_keep_useful_same_session_continuation() {
     run("sequential");
 }
+
+fn run_backpressure(mode: &str) {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
+    let output = Command::new("python3")
+        .arg("-I")
+        .arg("-u")
+        .arg(repo.join("scripts/fixtures/mcp_resource_backpressure.py"))
+        .arg("--repo")
+        .arg(repo)
+        .arg("--agentfw")
+        .arg(env!("CARGO_BIN_EXE_agentfw"))
+        .arg("--mode")
+        .arg(mode)
+        .output()
+        .expect("owned backpressure fixture must start");
+    if let Ok(observation) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
+        eprintln!("SOU17_EVIDENCE {observation}");
+    }
+    assert!(
+        output.status.success(),
+        "resource reply backpressure ({mode}): stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn resource_reply_backpressure_refuses_queued_call() {
+    run_backpressure("complete");
+}
+
+#[test]
+fn resource_reply_backpressure_refuses_partial_call() {
+    run_backpressure("partial");
+}
+
+#[test]
+fn resource_reply_backpressure_refuses_cancellation() {
+    run_backpressure("cancel");
+}
+
+#[test]
+fn large_resource_replies_keep_sequential_calls_useful() {
+    run_backpressure("sequential");
+}
+
+#[test]
+fn large_resource_reply_finishes_once_after_client_eof() {
+    run_backpressure("eof");
+}
