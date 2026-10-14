@@ -11,6 +11,9 @@ The [combined-run evidence from October 12](evidence/SOU18_LOCAL_SUITE_2026-10-1
 records a fresh build after the accepted classifier updates.
 The [October 13 integration recheck](evidence/SOU18_INTEGRATION_2026-10-13.md)
 adds the accepted generic classifier/policy matrix and complete raw reports.
+The [October 14 resource-executor check](evidence/SOU18_RESOURCES_2026-10-14.md)
+tests the Windows lifecycle fixes together with SOU-15 PR #107. It records nine
+passing resource/startup cases and a failing same-session recovery case.
 
 ## Run the local probes together
 
@@ -90,6 +93,55 @@ This command covers the selected trusted local fixture. It keeps
 classifier accuracy or prove CodeQL merge protection. Repeat it on the final
 agreed candidate and complete the remaining host, constrained-resource and
 administrator checks separately.
+
+## Check operation-level resource execution
+
+After building the exact SOU-15 candidate, run the independent
+[resource probe](../../scripts/verify-sou18-resources.py) from a checkout containing
+this script and its [safe fixture](../../scripts/fixtures/mcp_resource_probe_server.py):
+
+```sh
+python3 scripts/verify-sou18-resources.py --run \
+  --repo "$CANDIDATE_DIR" --agentfw /absolute/path/to/matching/agentfw \
+  --expected-commit "$CANDIDATE_SHA" \
+  --output /absolute/path/outside/candidate/new-resource-run
+```
+
+Use native Linux or macOS Python 3.10+. Native Windows is explicitly incomplete
+for this probe. Omitting `--run` starts nothing. The output must be new; existing
+reports are never overwritten. Exit 0 means all bounded cases passed, 1 means an
+observed failure and 2 means incomplete evidence or invalid inputs. The probe
+retains `acceptance_passed=false` even when every case passes.
+
+The probe uses the existing daemon, real rule baseline, fixture policy and stdio
+client helper. Each case owns a temporary profile, synthetic files and a local
+receiver. Its discovery server records every input and any forwarded tool call;
+it never reads the requested file itself. A broker read therefore needs both a
+useful file result and an independently created empty child execution ledger.
+The server still starts for discovery. This does not prove containment of an
+arbitrary server process or protection from concurrent path replacement.
+
+The ten cases cover absolute/relative reads, an unlisted file, traversal,
+symlinks, unsupported operations, result withholding, workspace mismatch,
+missing-workspace startup failure and recovery after 70 invalid UTF-8 reads.
+The recovery case requires a useful allowed read in the same session after the
+errors; a new connection or zero child calls cannot replace that proof.
+
+`results.json` contains the original calls, complete client/server transcripts,
+classification and native decision records, timings, source/binary hashes and
+per-case grades. Per-case directories retain the corresponding raw witnesses,
+policy and registry with hashes. Original IDs and classified argument hashes are
+checked. The missing-workspace case records a pre-handshake startup error, with
+no tool call submitted; it is not a policy Deny. Result withholding is checked
+against the native result content hash, original ID and unreleased private
+fixture marker. Profiles and credentials are removed on ordinary completion.
+
+Keep the build manifest with these outputs. The supplied executor/classifier
+digests in the resource profile are operator declarations, not independent
+attestations. The combined runner above still covers its original four stages;
+run this probe separately and retain a failure even if those stages pass.
+The dated evidence does not supersede SOU-15 review findings. Rerun both commands
+after the executor changes and have SOU-17/SOU-18 use the same agreed candidate.
 
 ## Disposable installation and status checks
 
