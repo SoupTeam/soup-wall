@@ -156,4 +156,12 @@ jobs:
           jq 'del(.artifact_digest)' rec_good.json > rec_no_digest.json
           if ../scripts/validate_candidate.sh rec_no_digest.json /dev/null "v0.3.0" "dummy_sha" api_good.json api-only 2>/dev/null; then exit 1; fi
 
+          echo "--- Test 22: Manifest attempt must match the approved API attempt ---"
+          for attempt in 0 2 null; do
+            jq --argjson attempt "$attempt" '.run_attempt = $attempt' "$MANIFEST" > man_stale_attempt.json
+            if ../scripts/validate_candidate.sh rec_good.json man_stale_attempt.json "v0.3.0" "dummy_sha" api_good.json full 2>/dev/null; then exit 1; fi
+          done
+          jq 'del(.run_attempt)' "$MANIFEST" > man_missing_attempt.json
+          if ../scripts/validate_candidate.sh rec_good.json man_missing_attempt.json "v0.3.0" "dummy_sha" api_good.json full 2>/dev/null; then exit 1; fi
+
           echo "All SOU-26 validator matrix tests passed successfully!"

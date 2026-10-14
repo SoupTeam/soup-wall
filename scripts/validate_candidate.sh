@@ -126,6 +126,12 @@ if [ ! -f "$MANIFEST" ]; then
   exit 1
 fi
 
+MAN_ATTEMPT=$(jq -r '.run_attempt // empty' "$MANIFEST")
+if [ "$MAN_ATTEMPT" != "$REC_ATTEMPT" ]; then
+  echo "CRITICAL: Manifest attempt ($MAN_ATTEMPT) does not match approved/API attempt ($REC_ATTEMPT)"
+  exit 1
+fi
+
 MAN_TAG=$(jq -r '.tag' "$MANIFEST")
 if [ "$MAN_TAG" != "$EXPECTED_TAG" ]; then
   echo "CRITICAL: Manifest tag ($MAN_TAG) does not match expected workflow tag ($EXPECTED_TAG)"
