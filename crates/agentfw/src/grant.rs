@@ -52,6 +52,7 @@ impl PolicyEpochLock {
         let lock_path = home.join("approval-policy-epoch.lock");
         let lock = OpenOptions::new()
             .create(true)
+            .truncate(false)
             .read(true)
             .write(true)
             .open(&lock_path)?;
@@ -85,10 +86,7 @@ impl PolicyEpochLock {
             .epoch_file
             .with_extension(format!("tmp-{}", std::process::id()));
         let result = (|| -> io::Result<()> {
-            let mut file = OpenOptions::new()
-                .create_new(true)
-                .write(true)
-                .open(&tmp)?;
+            let mut file = OpenOptions::new().create_new(true).write(true).open(&tmp)?;
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
@@ -880,7 +878,13 @@ mod tests {
         let store = GrantStore::new(&temp.path().join("grants"));
         let ledger = GrantLedger::open(&temp.path().join("grants-spent.json"));
         let (grant, _) = store
-            .issue(KEY, &action(), NOW, DEFAULT_TTL_MS, "before-corruption".into())
+            .issue(
+                KEY,
+                &action(),
+                NOW,
+                DEFAULT_TTL_MS,
+                "before-corruption".into(),
+            )
             .unwrap();
         fs::write(temp.path().join("approval-policy-epoch"), "corrupted").unwrap();
         assert_eq!(
@@ -888,7 +892,13 @@ mod tests {
             Err(GrantError::StalePolicy)
         );
         assert!(store
-            .issue(KEY, &action(), NOW, DEFAULT_TTL_MS, "after-corruption".into())
+            .issue(
+                KEY,
+                &action(),
+                NOW,
+                DEFAULT_TTL_MS,
+                "after-corruption".into()
+            )
             .is_err());
     }
 
