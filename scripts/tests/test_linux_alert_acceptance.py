@@ -247,6 +247,8 @@ class LinuxAlertBoundaries(unittest.TestCase):
         runtime.gateway = Mock(return_value=(200, json.dumps(rows).encode()))
         self.assertEqual(runtime.completed_audit_ids(), {1})
         self.assertEqual(runtime.gateway.call_args.args[0], "/admin/v1/tenants/fixture-tenant/audit?limit=100")
+        self.assertEqual(runtime.gateway.call_args.kwargs["headers"],
+                         {"x-llm-firewall-admin-token": "Bearer fixture-admin-token"})
         for code, rows in [(503, []), (200, {}), (200, [{"id": 1}] * 100), (200, [{"id": "invalid"}])]:
             with self.subTest(code=code, count=len(rows)):
                 runtime.gateway.return_value = code, json.dumps(rows).encode()

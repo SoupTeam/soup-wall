@@ -488,7 +488,7 @@ subjectAltName = DNS:receiver,DNS:localhost,IP:127.0.0.1
 
     def completed_audit_ids(self):
         code, rows = decoded(self.gateway(f"/admin/v1/tenants/{self.tenant}/audit?limit=100",
-                                         headers={"x-llm-firewall-admin-token": self.admin}))
+                                         headers={"x-llm-firewall-admin-token": "Bearer " + self.admin}))
         if code != 200 or not isinstance(rows, list) or len(rows) >= 100:
             raise DrillError("durable audit witness unavailable or bounded history exhausted")
         if any(not isinstance(row, dict) or type(row.get("id")) is not int for row in rows):
@@ -525,7 +525,7 @@ subjectAltName = DNS:receiver,DNS:localhost,IP:127.0.0.1
                 "prometheus_up": rows[0]["value"][1] if rows else "missing", "matched": matched}
 
     def seed_tenant(self):
-        headers = {"x-llm-firewall-admin-token": self.admin}
+        headers = {"x-llm-firewall-admin-token": "Bearer " + self.admin}
         code, data = decoded(self.gateway("/admin/v1/tenants", body={"name": "SOU-41 controlled fixture"}, headers=headers))
         if code not in {200, 201}:
             raise DrillError("tenant fixture creation failed")
