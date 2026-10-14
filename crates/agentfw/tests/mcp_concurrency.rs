@@ -55,6 +55,38 @@ modules = [load(repo / 'scripts' / filename, 'concurrency_' + name) for name, fi
 with tempfile.TemporaryDirectory(prefix='sou17-concurrency-evidence-') as directory:
     case = 'read-error-recovery' if mode == 'sequential' else 'absolute-read'
     row = probe.run_case(repo, binary, pathlib.Path(directory) / 'case', case, modules)
+    errors = row.get('read_errors', [])
+    replies = row.get('client_output_raw', '').splitlines()
+    try:
+        last_reply_id = json.loads(replies[-1]).get('id') if replies else None
+    except (ValueError, AttributeError):
+        last_reply_id = 'malformed_final_response'
+    first_missing = next((index for index, item in enumerate(errors) if not item.get('released_raw')), None)
+    audit = []
+    for line in row.get('native_audit_raw', '').splitlines():
+        try:
+            audit.append(json.loads(line))
+        except ValueError:
+            pass
+    diagnostic = {
+        'boundary': 'production_mcp_resource_continuation', 'mode': mode,
+        'collector_exit': row.get('collector_exit'), 'stdout_complete': row.get('stdout_complete'),
+        'classification_count': len(row.get('classifications', [])),
+        'native_call_count': sum(item.get('event') == 'native_call' for item in row.get('native_decisions', [])),
+        'native_result_count': sum(item.get('event') == 'native_result' for item in row.get('native_decisions', [])),
+        'read_error_observation_count': len(errors), 'first_missing_read_reply_index': first_missing,
+        'last_reply_id': last_reply_id,
+        'native_session_end_observed': any(item.get('event') == 'native_session_end' for item in audit),
+        'overlap_refusal_diagnostic': 'concurrent MCP requests are not supported' in row.get('collector_raw', ''),
+        'stdio_write_timeout_diagnostic': 'MCP stdio write timed out' in row.get('collector_raw', ''),
+        'admission_unavailable_diagnostic': 'MCP admission unavailable' in row.get('collector_raw', ''),
+        'classifier_timeout_observed': any(item.get('failure') == 'classifier_timeout' for item in row.get('classifications', [])),
+        'child_ledger_empty': row.get('child_ledger_raw') == '',
+        'receiver_count': row.get('receiver_count'), 'file_bytes_unchanged': row.get('files_unchanged'),
+        'owned_profile_removed': row.get('owned_profile_removed'),
+        'error_type': (row.get('error') or '').split(':', 1)[0] or None,
+    }
+    print('SOU17_OBSERVATION ' + json.dumps(diagnostic), file=sys.stderr, flush=True)
     assert row['error'] is None if 'error' in row else True, row.get('error')
     assert row['child_ledger_raw'] == '' and row['ledger_present'] is True, row
     assert row['files_unchanged'] is True and row['receiver_count'] == 0, row
@@ -170,4 +202,19 @@ fn large_resource_replies_keep_sequential_calls_useful() {
 #[test]
 fn large_resource_reply_finishes_once_after_client_eof() {
     run_backpressure("eof");
+}
+
+#[test]
+fn immediate_next_resource_frame_after_lf_and_final_eof_remain_useful() {
+    run_backpressure("immediate-success");
+}
+
+#[test]
+fn immediate_resource_read_errors_recover_and_close_cleanly_after_final_lf() {
+    run_backpressure("immediate-errors");
+}
+
+#[test]
+fn immediate_resource_refusals_preserve_same_session_recovery_and_eof() {
+    run_backpressure("immediate-refusals");
 }

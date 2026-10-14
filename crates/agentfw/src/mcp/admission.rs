@@ -737,23 +737,21 @@ where
     }
 }
 
-// This private relay uses Tokio Stdout, whose Unix Blocking writer reports
-// write_all after copying bytes, before its OS write necessarily completes.
-// A real write(&[]) (not write_all(&[]), which skips poll_write) waits for that
-// Busy write to finish. Our newline-terminated frame also makes std::io::Stdout's
-// LineWriter flush the frame to the pipe in that completed blocking write.
-// Keep one pinned write-and-drain future across EOF. Completion wins over an
-// immediately ready sequential call. The later no-data flush shares the same
-// deadline but cannot falsely interrupt a client that already saw the frame.
-// An overlap cannot retract bytes already written by the admitted first call.
-async fn write_resource_reply<R>(
+// Unix admission uses direct nonblocking pipe writes: once the complete frame
+// is visible, its write future completes in the same poll. A blocking stdout
+// worker cannot provide that ordering because it may publish its completion
+// after the client has already submitted a legitimate sequential request.
+// Preserve one pinned write across EOF and give physical completion priority.
+// Refusing overlap cannot retract already-exposed first-call bytes.
+async fn write_resource_reply<R, W>(
     client: &mut R,
-    host: &mut tokio::io::Stdout,
+    host: &mut W,
     resource_bound: bool,
     raw: &[u8],
 ) -> anyhow::Result<()>
 where
     R: AsyncBufRead + Unpin,
+    W: AsyncWrite + Unpin,
 {
     if !resource_bound {
         return write(host, raw).await;
@@ -766,8 +764,15 @@ where
     let outcome = {
         let writing = tokio::time::timeout_at(deadline, async {
             host.write_all(raw).await?;
-            let written = host.write(&[]).await?;
-            ensure!(written == 0, "empty stdout drain wrote unexpected bytes");
+            #[cfg(unix)]
+            host.flush().await?;
+            #[cfg(not(unix))]
+            {
+                // Preserve the existing non-Unix transport; the bounded
+                // resource executor is explicitly unavailable there.
+                let written = host.write(&[]).await?;
+                ensure!(written == 0, "empty stdout drain wrote unexpected bytes");
+            }
             Ok::<_, anyhow::Error>(())
         });
         tokio::pin!(writing);
@@ -781,6 +786,7 @@ where
         }
     };
     outcome.context("MCP stdio write timed out")??;
+    #[cfg(not(unix))]
     tokio::time::timeout_at(deadline, host.flush())
         .await
         .context("MCP stdio write timed out")??;
@@ -1393,15 +1399,16 @@ fn unsupported_resource_inventory(id: &Value) -> Vec<u8> {
     raw
 }
 
-async fn relay<R, S, T>(
+async fn relay<R, W, S, T>(
     collector: &Collector<'_>,
     client: &mut R,
-    host: &mut tokio::io::Stdout,
+    host: &mut W,
     server: &mut S,
     child: &mut T,
 ) -> anyhow::Result<()>
 where
     R: AsyncBufRead + Unpin,
+    W: AsyncWrite + Unpin,
     S: AsyncBufRead + Unpin,
     T: AsyncWrite + Unpin,
 {
@@ -1866,6 +1873,15 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
         let workspace = std::env::var_os("AGENTFW_WORKSPACE")
             .map(std::path::PathBuf::from)
             .unwrap_or(cwd);
+        #[cfg(unix)]
+        let mut client =
+            BufReader::new(super::stdio::Pipe::stdin().context("unsupported MCP stdin")?);
+        #[cfg(unix)]
+        let mut host = super::stdio::Pipe::stdout().context("unsupported MCP stdout")?;
+        #[cfg(not(unix))]
+        let mut client = BufReader::new(tokio::io::stdin());
+        #[cfg(not(unix))]
+        let mut host = tokio::io::stdout();
         // A working directory is operational context, never a sandbox assertion.
         let mut process = Command::new(&config.command)
             .args(&config.args)
@@ -1889,8 +1905,6 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
                 .take()
                 .context("MCP server stdout unavailable")?,
         );
-        let mut client = BufReader::new(tokio::io::stdin());
-        let mut host = tokio::io::stdout();
         let outcome = relay(&collector, &mut client, &mut host, &mut server, &mut child).await;
         let _ = process.kill().await;
         outcome
