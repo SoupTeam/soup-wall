@@ -4,6 +4,7 @@ import contextlib
 import hashlib
 import importlib.util
 import io
+import itertools
 import json
 import os
 from pathlib import Path
@@ -450,6 +451,129 @@ class LinuxAlertBoundaries(unittest.TestCase):
             command = runtime.command.call_args_list[-1].args[0]
             self.assertEqual(command[command.index("python3") + 1], IMAGE_ID)
             self.assertEqual(runtime.report["gateway_image_id"], IMAGE_ID)
+
+
+class LinuxAlertEndpointRecovery(unittest.TestCase):
+    def cycle_fixture(self):
+        runtime = object.__new__(DRILL.Runtime)
+        runtime.report, runtime.output = {"checks": []}, Mock()
+        runtime.owner, runtime.project = "fixture-owned-run", "fixture-owned-project"
+        runtime.token, runtime.admin, runtime.tenant, runtime.tenant_token = "fixture-receiver-token", "fixture-admin", "fixture-tenant", "fixture-proxy-token"
+        runtime.ca = Path("fixture-ca.pem")
+        runtime.urls = {"receiver": "https://127.0.0.1:49151", "gateway": "http://127.0.0.1:49140",
+                        "prometheus": "http://127.0.0.1:49160", "alertmanager": "http://127.0.0.1:49161"}
+        state = {"receiver_port": 49151, "gateway_port": 49140, "receiver_running": True,
+                 "gateway_running": True, "postgres_running": True, "provider_count": 0,
+                 "audit": [], "records": [], "requests": []}
+        fixtures = {(row["labels"]["alertname"], row["status"]): row for row in complete_receipts()["records"]}
+        def accept(key, status):
+            row = fixtures[DRILL.ALERTS[key][0], status]
+            if all(item["event_id"] != row["event_id"] for item in state["records"]):
+                state["records"].append(row)
+        def compose(*args):
+            if args[:2] == ("ps", "--quiet"):
+                return ("a" if args[2] == "receiver" else "b") * 64
+            service = args[-1]
+            if args[0] == "stop":
+                state[service + "_running"] = False
+                if service == "gateway":
+                    accept("gateway", "firing")
+            elif args[0] in {"start", "restart"}:
+                state[service + "_running"] = True
+                if service in {"receiver", "gateway"}:
+                    state[service + "_port"] += 1
+                if service == "receiver" and not state["postgres_running"]:
+                    accept("postgres", "firing")
+                elif service == "postgres":
+                    accept("postgres", "resolved")
+                elif service == "gateway":
+                    accept("gateway", "resolved")
+            else:
+                raise AssertionError("unexpected external lifecycle command")
+            return ""
+        def inspect(args, **_):
+            self.assertEqual(args[:3], ["docker", "inspect", "--format"])
+            service = "receiver" if args[-1] == "a" * 64 else "gateway"
+            target = 8443 if service == "receiver" else 8080
+            return json.dumps({"owner": runtime.owner, "project": runtime.project, "service": service,
+                               "ports": {str(target) + "/tcp": [{"HostIp": "127.0.0.1", "HostPort": str(state[service + "_port"])}]}})
+        def request(url, *, body=None, headers=None, ca=None, **_):
+            parsed = DRILL.urllib.parse.urlsplit(url)
+            state["requests"].append(url)
+            def response(code, data):
+                return code, json.dumps(data).encode()
+            if parsed.scheme == "https":
+                if parsed.port != state["receiver_port"] or not state["receiver_running"]:
+                    raise urllib.error.URLError("stale fixture receiver endpoint")
+                self.assertEqual(ca, runtime.ca)
+                self.assertEqual(headers, {"Authorization": "Bearer " + runtime.token})
+                if parsed.path == "/receipts":
+                    return response(200, {"records": state["records"], "total_unique_events": len(state["records"]),
+                                          "returned_records": len(state["records"]), "has_more": False})
+                self.assertEqual(parsed.path, "/alerts")
+                self.assertEqual(body["receiver"], DRILL.RECEIVER)
+                self.assertEqual(body["externalURL"], DRILL.EXTERNAL_URL)
+                self.assertEqual(body["alerts"][0]["labels"]["job"], DRILL.JOB)
+                self.assertEqual(body["alerts"][0]["labels"]["instance"], DRILL.INSTANCE)
+                return response(200, {"duplicates": 1})
+            if parsed.port == 49160:
+                query = DRILL.urllib.parse.parse_qs(parsed.query)["query"][0]
+                if query.startswith("up{"):
+                    rows = [{"value": [0, "1" if state["gateway_running"] else "0"]}]
+                elif query.startswith("llm_firewall_control_plane_ready{"):
+                    rows = [] if not state["gateway_running"] else [{"value": [0, "1"]}]
+                else:
+                    self.assertTrue(query.startswith("ALERTS{"))
+                    rows = [{"value": [0, "1"]}]
+                return response(200, {"status": "success", "data": {"result": rows}})
+            if parsed.port == 49161:
+                self.assertFalse(state["receiver_running"])
+                return 200, b'alertmanager_notification_requests_failed_total{integration="webhook"} 2\n'
+            if parsed.port != state["gateway_port"] or not state["gateway_running"]:
+                raise urllib.error.URLError("stale fixture Gateway endpoint")
+            if parsed.path == "/readyz":
+                return response(200 if state["postgres_running"] else 503,
+                                {"control_plane": "ready" if state["postgres_running"] else "unavailable", "redis": "ready"})
+            if parsed.path == "/metrics":
+                value = "1" if state["postgres_running"] else "0"
+                return 200, ("llm_firewall_control_plane_ready " + value + "\nllm_firewall_redis_limits_ready 1\n").encode()
+            if parsed.path.endswith("/audit"):
+                self.assertEqual(headers, {"x-llm-firewall-admin-token": "Bearer " + runtime.admin})
+                return response(200, state["audit"])
+            self.assertEqual(parsed.path, "/v1/chat/completions")
+            self.assertEqual(headers, {"x-llm-firewall-token": "Bearer " + runtime.tenant_token, "Authorization": "Bearer fixture-only"})
+            if not state["postgres_running"]:
+                return response(503, {"error": "fixture unavailable"})
+            state["provider_count"] += 1
+            state["audit"].append({"id": state["provider_count"], "path": parsed.path, "status_code": 200, "outcome": "completed"})
+            return response(200, {"choices": [{"message": {"content": DRILL.TEXT}}]})
+        runtime.compose, runtime.command = Mock(side_effect=compose), Mock(side_effect=inspect)
+        runtime.provider_count = Mock(side_effect=lambda: state["provider_count"])
+        return runtime, state, request
+
+    def test_receiver_cycle_rebinds_before_receipts_and_authenticated_replay(self):
+        runtime, state, transport = self.cycle_fixture()
+        with patch.object(DRILL, "request", side_effect=transport),                 patch.object(DRILL.time, "monotonic", side_effect=itertools.count()),                 patch.object(DRILL.time, "sleep"), contextlib.redirect_stdout(io.StringIO()):
+            runtime.dependency_cycle("postgres", receiver_fault=True)
+        self.assertEqual(runtime.urls["receiver"], "https://127.0.0.1:49153")
+        self.assertFalse(any(url.startswith("https://127.0.0.1:49151/") for url in state["requests"]))
+        self.assertIn("https://127.0.0.1:49152/receipts?limit=1000", state["requests"])
+        self.assertIn("https://127.0.0.1:49153/alerts", state["requests"])
+        self.assertEqual(state["provider_count"], 1)
+        self.assertEqual(len(state["records"]), 2)
+        self.assertTrue(all(row["outcome"] == "pass" for row in runtime.report["checks"]))
+
+    def test_gateway_cycle_rebinds_before_readiness_and_useful_recovery(self):
+        runtime, state, transport = self.cycle_fixture()
+        with patch.object(DRILL, "request", side_effect=transport),                 patch.object(DRILL.time, "monotonic", side_effect=itertools.count()),                 patch.object(DRILL.time, "sleep"), contextlib.redirect_stdout(io.StringIO()):
+            runtime.gateway_cycle()
+        self.assertEqual(runtime.urls["gateway"], "http://127.0.0.1:49141")
+        self.assertFalse(any(url.startswith("http://127.0.0.1:49140/") for url in state["requests"]))
+        self.assertIn("http://127.0.0.1:49141/readyz", state["requests"])
+        self.assertIn("http://127.0.0.1:49141/v1/chat/completions", state["requests"])
+        self.assertEqual(state["provider_count"], 1)
+        self.assertEqual(len(state["records"]), 2)
+        self.assertTrue(all(row["outcome"] == "pass" for row in runtime.report["checks"]))
 
 
 @unittest.skipUnless(shutil.which("openssl"), "openssl is not installed")
