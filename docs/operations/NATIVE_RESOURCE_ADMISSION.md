@@ -38,12 +38,12 @@ Result/context events retain the call's contract version and ordinary grant fiel
 
 ## Operation-level constrained executor (SOU-15)
 
-Resource-aware execution enforces strict operation-level isolation. An unconfined server process cannot be trusted to self-enforce resource policies or confine file/network access. Therefore:
+The confined file-read executor is supported on Unix. Non-Unix platforms refuse resource-policy calls with `resource_executor_unsupported` before reserving native capacity; their zero-execution refusal is tested. Resource-aware execution enforces operation-level isolation within this declared scope. An unconfined server process cannot be trusted to self-enforce resource policies or confine file/network access. Therefore:
 
 - For supported workspace file read operations (`read_document`), the proxy itself serves as the constrained operation executor:
   1. Validates the target canonical path strictly against the canonical workspace boundary (`AGENTFW_WORKSPACE` / `policy.workspace`). Unsupported tools, unreviewed action classes, invalid destinations, or invalid workspaces fail closed early before reserving native call capacity (`resource_executor_unsupported`, `resource_destination_invalid`, `resource_workspace_invalid`).
   2. Derives native resource evidence with `fixed_destinations: true` and requests admission under `sw-native/resources/1`.
-  3. Directly opens and reads the target file through confined OS descriptor resolution (`agentfw::sandbox::read_workspace_file`), traversing component-by-component from the workspace root descriptor with `O_NOFOLLOW` and `O_DIRECTORY`. Parent directory swaps, intermediate symlinks, and leaf symlinks fail closed (`resource_read_failed`), reading the authorized opened file handle directly without TOCTOU races.
+  3. Pins the workspace directory descriptor before native admission and compares it with the initially observed root identity. Reads through `agentfw::sandbox::PinnedWorkspace` using component-by-component `openat` traversal with `O_NOFOLLOW` and `O_DIRECTORY`. A later root rename retains the originally pinned directory; intermediate and leaf symlinks are refused. Content is read from the opened file handle.
   4. Content reads are strictly bounded by `MAX_CONTENT` (256 KiB) and validated for valid UTF-8.
   5. Any post-admission failure (missing target, symlink refusal, invalid UTF-8, content size exceeded) immediately settles its call reservation via `collector.event("result", result_kind: "error")`, ensuring zero native session capacity leakage.
   6. On successful read, delivers the verified result through native result admission with bound host ID and release confirmation.

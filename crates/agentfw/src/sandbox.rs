@@ -798,7 +798,14 @@ impl PinnedWorkspace {
             let dev = file_meta.dev();
             let ino = file_meta.ino();
 
-            if canon_meta.dev() != dev || canon_meta.ino() != ino {
+            // The initial lstat establishes the root identity before canonicalize.
+            // Comparing only the later canonical path and fd permits a swap between
+            // those two observations to authorize a different workspace.
+            if root_meta.dev() != dev
+                || root_meta.ino() != ino
+                || canon_meta.dev() != dev
+                || canon_meta.ino() != ino
+            {
                 bail!("workspace root inode mismatch");
             }
 
