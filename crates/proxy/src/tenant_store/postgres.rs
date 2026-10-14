@@ -6,6 +6,9 @@
 //! client handle in memory: tenants, hashed tokens, policies, and audit events
 //! live in PostgreSQL and are therefore shared by every proxy instance.
 
+#[path = "managed_postgres.rs"]
+mod managed;
+
 use std::future::Future;
 use std::path::Path;
 use std::str::FromStr;
@@ -1422,11 +1425,15 @@ impl PostgresTenantStore {
             .await
             .context("failed to record PostgreSQL SAML invitation-state migration")?;
         }
+        // Release the earlier migration lease before the transactional migration
+        // checks out its connection (also works with a one-connection pool).
+        drop(client);
+        self.migrate_managed_agents().await?;
         Ok(())
     }
 
     async fn ensure_schema_current(&self) -> anyhow::Result<()> {
-        const VERSION: i64 = 25;
+        const VERSION: i64 = 26;
         let client = self.checkout().await?;
         let applied = self
             .bounded(client.query_opt(
