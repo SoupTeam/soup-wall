@@ -15,7 +15,30 @@ classification/policy gating, all five generic reply shapes and operation-level
 bounded Unix resource reads. No competing test-local pipeline replaces those
 production components. Unsupported mappings are explicitly refused.
 
-## Current candidate recheck — 2026-10-14
+## Current repaired candidate — 2026-10-14
+
+The [bb64321 repair verification](evidence/sou17_candidate_bb64321_2026-10-14.md)
+in [PR #113](https://github.com/SoupTeam/soup-wall/pull/113) passes 123/123 exact-source
+boundary regressions, the 15-case generic profile, ten-case constrained read
+profile, pending-admission and 64-Ask continuation checks. FIFO replacement is
+refused promptly and useful same-session reads recover. Unsupported overlap is
+refused at classification/admission/result gates and during large reply
+backpressure; already-permitted first reads and exposed bytes remain honestly
+recorded. Large sequential/EOF positive controls pass. The final serial 30-pair
+sample has zero authorized interruptions, mean paired overhead 40.312 ms and p99
+47.110 ms; it is a local child-backed fixture measurement, not a population or
+inline-executor performance claim.
+
+The [rejected 28001eb checkpoint](evidence/sou17_repair_28001eb_2026-10-14.md)
+retains the independently exposed reply-write gap and preceding experiments.
+The final report/archives retain original failures, source/binary/configuration,
+raw witnesses, checks, skips and reproducible commands. **SOU-17 remains open**
+for Nari's requested review, required CI/rescan disposition, merge and affected
+verification on actual updated main. Local verification does not establish a
+release or deployed protection. Any later code change requires affected checks
+again on its new exact revision.
+
+## Original main recheck — 2026-10-14
 
 The [current-main 5fc6d72 verification](evidence/sou17_candidate_5fc6d72_2026-10-14.md)
 records 112/112 existing regressions, the 15-case generic profile and ten-case
@@ -220,8 +243,9 @@ their regression pass count is not a general false-interruption rate.
 SOU-15 supplied the integrated main `5fc6d72…` candidate with its classifier,
 registry/schema/resource/policy configuration and selected bounded Unix read
 executor. The current report runs the prepared suites through that production
-boundary and independently records remaining failures. Reviewed focused repairs
-must be rerun on a new exact candidate, including invalid classifier outputs,
+boundary and independently records remaining failures. The focused repairs are
+locally verified on exact candidate `bb64321…`; required review/CI and the affected
+actual-main rerun remain pending. Preserve coverage of invalid classifier outputs,
 trusted hard-Deny versus weaker classification, Unknown/Ask, model-service failure,
 session isolation, replay/restart and independent execution/release witnesses.
 Record unsupported mapping, failure or skip explicitly. [The accepted contract](../../contract/updated_contract2.md) requires zero

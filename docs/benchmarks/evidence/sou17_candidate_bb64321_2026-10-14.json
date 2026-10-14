@@ -1,0 +1,3072 @@
+{
+  "schema_version": "sou17-repaired-candidate/1",
+  "acceptance_passed": false,
+  "status": "local_verification_passed_review_ci_merge_main_recheck_pending",
+  "source": {
+    "commit": "bb64321285f1ac81cdc65b013efcca94929a8280",
+    "tree": "e20d3a1e7eab18d0b391d64b5ac644e8697c2b26",
+    "clean_before_after": true,
+    "inputs_digest": "f5be4b9de5d274fb5e86d5c57a227c8149828e3a0573742009af117e0e874ab1",
+    "source_hashes_before_after_equal": true,
+    "selected_file_sha256": {
+      "Cargo.lock": "408062e53fc9330027e9d118499633755e8ba7e4c8bd0bd386266667f5f940ad",
+      "contract/updated_contract2.md": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0",
+      "crates/adapter/src/runner.rs": "99ef70172faa380c5e9b0fa466c25a777edd80a54624a4e8541cd6df2f92cc5a",
+      "crates/adapter/tests/resilience_tests.rs": "9664ea07735d4b1e2d3dafa436cb80c9fa8f9306e688a33078bdfaaf34bcf278",
+      "crates/agentfw/src/mcp/admission.rs": "e9213931d358f5c63b3b48950ac2d92b2c3120346e660081342acc608fc0a963",
+      "crates/agentfw/src/sandbox.rs": "ff43da9ce1ea36de5f00ecce0c6b042d5b218eb860c671501d101c452d2bb367",
+      "crates/agentfw/src/native/resource.rs": "87f246b42bcb6dbc4ef85e9f04988c9823b8bb751d3db8d86622c00ebba4e666",
+      "crates/agentfw/tests/mcp_admission.rs": "f8d51c9066e284658996eae0d96bae0d4a4d5fe7e04ef45eb23b913f67ee9376",
+      "crates/agentfw/tests/mcp_concurrency.rs": "30a83c75d0f904cd4f618ceba4cce17a85b973a6b4000d699b58583ea26bd3fa",
+      "crates/agentfw/tests/native_endpoint.rs": "0ecb8baa15887a07436dfb510265a4b2fe69c11b9231f718c1da6578c0e77b3b",
+      "scripts/verify-sou17.py": "6bc1f3e8c51ae4bc013278de25045881c3125675060cdd575bfc3b5d7388c978",
+      "scripts/verify-sou18-resources.py": "11b78abdb41d46ae56ee447c35d6f4fa95d4561d4eba0bbe2279573894d85532",
+      "scripts/fixtures/mcp_resource_probe_server.py": "fe79d9eb96dc784f8c3d9b9492ad8d9c14bc03ade8776dbf521bd30a48278d7e",
+      "rule_baseline/rule_baseline.py": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+    },
+    "agentfw_sha256": "29bb28b744eef7afba176a44fe97a5758874b18c6e91aba8da1f5741487e9553"
+  },
+  "environment": {
+    "host_os": "Darwin",
+    "host_architecture": "arm64",
+    "host_kernel": "25.3.0",
+    "host_python": "3.14.3",
+    "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)",
+    "cargo": "cargo 1.99.0 (5f94df478 2026-08-27)",
+    "build_settings": {
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_PROFILE_DEV_DEBUG": "0",
+      "CARGO_PROFILE_TEST_DEBUG": "0",
+      "CARGO_TARGET_DIR": "/Users/konung/projects/soup-wall/target"
+    }
+  },
+  "scope": {
+    "bounded_positive": "Unix bounded UTF-8 read_document resource profile; pinned workspace and approved regular paths",
+    "production_components": "Imported adapter/classifier/policy and actual native/MCP admission/execution/result boundary",
+    "reply_guard": "Resource-profile replies only; ordinary child-backed behavior unchanged",
+    "external_model_calls": 0,
+    "release_or_deployment_claim": false
+  },
+  "launcher": {
+    "status": "pass",
+    "total": 123,
+    "counts": {
+      "pass": 123,
+      "fail": 0,
+      "timeout": 0,
+      "skip": 0
+    },
+    "suites": [
+      {
+        "target": "resilience_tests",
+        "cases": 19,
+        "sha256": "81d695421a853e42e95ca098a86bf72c5f86d6850a5b74c194d388361099c03e"
+      },
+      {
+        "target": "mcp_admission",
+        "cases": 59,
+        "sha256": "4069b019ebca7aebb58d77afe5104054c967996ecd94ba0c516193e26a50b48d"
+      },
+      {
+        "target": "native_endpoint",
+        "cases": 37,
+        "sha256": "6ace7ee90a29feafdf171bb489ff80f01c2d393dec60bea56059af85e50a4e30"
+      },
+      {
+        "target": "mcp_concurrency",
+        "cases": 8,
+        "sha256": "272b1ebc768a38446bcf9072839941db98f5712edd55040d71a99ea7308610d8"
+      }
+    ],
+    "case_outcomes": [
+      {
+        "name": "allowed_call_preserves_arguments_and_identifiers_and_creates_witness",
+        "suite": "resilience_tests",
+        "status": "pass",
+        "elapsed_ms": 5.194,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "deny_survives_a_mixed_read_and_dangerous_classification",
+        "suite": "resilience_tests",
+        "status": "pass",
+        "elapsed_ms": 4.719,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "duplicate_top_level_fields_are_denied_without_executor_entry",
+        "suite": "resilience_tests",
+        "status": "pass",
+        "elapsed_ms": 5.048,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "hard_deny_survives_overlapping_allow_and_confirmation_signals",
+        "suite": "resilience_tests",
+        "status": "pass",
+        "elapsed_ms": 19.73,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "incorrect_required_field_types_are_denied_without_executor_entry",
+        "suite": "resilience_tests",
+        "status": "pass",
+        "elapsed_ms": 10.082,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "invalid_classifier_json_is_denied_without_executor_entry",
+        "suite": "resilience_tests",
+        "status": "pass",
+        "elapsed_ms": 5.01,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "invalid_event_identifiers_and_version_are_denied_without_panic",
+        "suite": "resilience_tests",
+        "status": "pass",
+        "elapsed_ms": 5.062,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "malformed_json_is_denied_without_executor_entry",
+        "suite": "resilience_tests",
+        "status": "pass",
+        "elapsed_ms": 10.061,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "misleading_description_cannot_release_a_delete",
+        "suite": "resilience_tests",
+        "status": "pass",
+        "elapsed_ms": 5.079,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "missing_required_fields_are_denied_without_executor_entry",
+        "suite": "resilience_tests",
+        "status": "pass",
+        "elapsed_ms": 4.981,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "regression_executor_error_does_not_erase_a_witnessed_effect",
+        "suite": "resilience_tests",
+        "status": "pass",
+        "elapsed_ms": 4.601,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "regression_invalid_classifier_scores_fail_closed",
+        "suite": "resilience_tests",
+        "status": "pass",
+        "elapsed_ms": 10.091,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "regression_permission_change_cannot_be_weakened_by_read",
+        "suite": "resilience_tests",
+        "status": "pass",
+        "elapsed_ms": 5.118,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "regression_schema_invalid_arguments_are_denied_before_executor_entry",
+        "suite": "resilience_tests",
+        "status": "pass",
+        "elapsed_ms": 5.012,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "regression_unknown_component_cannot_be_weakened_by_read",
+        "suite": "resilience_tests",
+        "status": "pass",
+        "elapsed_ms": 5.329,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "regression_unknown_name_with_read_substring_stays_blocked",
+        "suite": "resilience_tests",
+        "status": "pass",
+        "elapsed_ms": 5.206,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "uncertain_read_stays_blocked_at_and_above_policy_boundary",
+        "suite": "resilience_tests",
+        "status": "pass",
+        "elapsed_ms": 5.061,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "unknown_classifier_result_stays_blocked_in_headless_execution",
+        "suite": "resilience_tests",
+        "status": "pass",
+        "elapsed_ms": 5.341,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "unknown_tool_requires_confirmation_and_never_executes",
+        "suite": "resilience_tests",
+        "status": "pass",
+        "elapsed_ms": 5.001,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "classified_read_keeps_original_call_and_result_bytes",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 831.292,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "classifier_failures_never_reach_policy_or_the_server",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 2136.486,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "composed_refusals_do_not_reserve_native_capacity_or_block_useful_followup",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 4720.765,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_accepts_codex_discovery_and_calls_without_granting_authority",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 133.712,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_accepts_observed_claude_correlation_metadata_without_changing_call_bytes",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 130.733,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_allows_real_read_but_denies_secret_send_before_server_execution",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 133.05,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_cancellation_after_effect_withholds_result_without_undoing_execution",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 186.596,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_cancellation_while_call_admission_is_stalled_is_fail_closed",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 5284.689,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_checks_codex_results_before_releasing_original_content",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 128.564,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_concurrent_call_after_effect_never_reaches_second_executor",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 127.627,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_daemon_call_timeout_never_executes_call",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 5128.375,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_daemon_outage_after_execution_withholds_result",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 298.705,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_daemon_outage_after_manifest_never_executes_call",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 133.543,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_daemon_shadow_and_outage_never_spawn_server",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 40.226,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_denied_session_does_not_block_a_benign_peer_on_the_same_daemon",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 296.862,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_does_not_give_server_daemon_token_environment",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 133.072,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_keeps_ask_calls_blocked_before_server_execution",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 129.323,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_never_releases_unbound_or_nontext_server_results",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 350.969,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_preserves_the_original_correlated_jsonrpc_error",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 188.762,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_refuses_codex_resource_probes_without_forwarding_or_closing",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 131.925,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_rejects_ambiguous_and_unsupported_client_messages_before_execution",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 408.317,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_rejects_control_characters_in_ids_before_execution",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 75.307,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_rejects_prompt_instructions_and_extra_capabilities_in_initialization",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 298.127,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_rejects_replayed_client_id_and_concurrent_calls",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 128.864,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_rejects_uninspected_manifest_metadata_and_poisoned_descriptions",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 344.594,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_rejects_unknown_partial_and_unbounded_correlation_metadata",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 944.445,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_rejects_unsupported_discovery_metadata_before_forwarding",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 466.953,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_rejects_unvalidated_arguments_before_server_defaults_can_apply",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 184.486,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_replayed_id_with_changed_tool_and_arguments_adds_no_effect",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 242.74,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_restarted_daemon_rejects_old_completion_but_new_session_remains_useful",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 348.375,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_schema_drift_does_not_release_tools_or_execute",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 188.115,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_two_call_batch_never_executes_either_tool",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 132.723,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_unsupported_cancellation_before_call_never_executes",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 75.667,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_mcp_withholds_actual_result_then_allows_benign_followup",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 131.046,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "path_profiles_also_refuse_missing_execution_time_confinement",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 76.986,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "python_classifier_failures_block_before_execution",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 1988.018,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "real_baseline_preserves_frames_and_policy_enforcement",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 243.153,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "resource_profiles_cannot_promote_a_generic_executor_to_confined",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 242.61,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "sou11_annotation_text_is_untrusted_and_inspected",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 186.044,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "sou11_invalid_nested_input_never_reaches_server",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 188.801,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "sou11_list_change_invalidates_until_a_new_admitted_manifest",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 130.419,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "sou11_metadata_refresh_changes_prediction_identity",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 129.393,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "sou11_read_only_hint_cannot_grant_destructive_execution",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 77.947,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "sou11_stale_manifest_and_changed_schema_cannot_forward_calls",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 235.315,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "sou11_unfamiliar_nested_input_preserves_bytes_and_annotations",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 128.707,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "sou15_generic_resource_executor_refuses_both_destinations",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 77.778,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "sou15_leaf_symlink_and_oversized_content_bounds",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 10.892,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "sou15_multi_action_and_unknown_classification_handling",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 133.177,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "sou15_operation_constrained_resource_executor_enforces_boundaries",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 132.011,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "sou15_parent_swap_symlink_traversal_refuses_outside_canary",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 132.959,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "sou15_post_admission_read_failure_capacity_leak_prevented_and_continuation_succeeds",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 291.555,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "sou15_refusal_capacity_leak_prevented_and_continuation_succeeds",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 2912.047,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "sou15_root_directory_swap_refused_and_pinned_continuation",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 125.359,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "sou15_unexpected_resource_receipt_refused_before_server_effect",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 129.991,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "sou17_post_admission_fifo_refused_and_same_session_read_recovers",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 187.447,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "sou17_resource_overlap_during_classifier_refused_before_native_call",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 129.276,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "sou17_resource_overlap_during_native_gates_refused_with_useful_peer",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 895.883,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "sou24_readonly_write_with_high_uncertainty_is_hard_denied",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 5.755,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "understated_classification_keeps_trusted_network_restrictions",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 133.09,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "a_value_cannot_be_relabelled_as_an_error_in_the_final_context",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 79.541,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "completions_bind_arguments_and_session_and_fail_closed_after_mismatch",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 78.116,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "concurrent_context_completions_release_exactly_once",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 77.665,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "content_caps_cover_full_utf8_bytes_without_truncated_admission",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 128.835,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "context_audit_retains_detections_from_later_independent_blocks_without_raw_content",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 76.169,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "context_requires_bound_request_args_and_an_original_tool_envelope",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 73.511,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "contract_registry_and_per_call_privilege_claims_are_rejected",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 71.236,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "declared_read_only_tools_keep_dangerous_argument_upgrades",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 78.209,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "denied_resource_calls_leave_capacity_for_a_useful_authorized_call",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 133.16,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "explicit_result_deny_withholds_content_and_spends_the_completion",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 76.727,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "final_context_and_original_error_text_are_independently_inspected",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 77.971,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "held_model_result_does_not_taint_a_preplanned_batch_call_until_context_admission",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 76.842,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "hook_post_tool_use_still_returns_the_original_empty_contract",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 40.785,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "injection_result_is_withheld_without_redeeming_an_action_grant_or_recording_taint",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 77.968,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_and_hook_tokens_are_not_interchangeable",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 10.738,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "native_escalation_uses_the_declared_fallback_without_a_model",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 76.51,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "original_placeholder_arguments_are_preserved_with_their_pinned_shape",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 77.929,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "outstanding_calls_are_bounded_and_session_end_frees_capacity",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 40.713,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "parent_completion_cannot_be_replayed_or_promoted_to_model_context",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 77.824,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "parent_result_commits_taint_and_spans_before_parent_action_without_context",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 76.675,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "resource_call_binding_covers_original_identity_and_rejects_result_downgrade",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 77.041,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "resource_context_cannot_forge_arguments_revisions_or_untyped_metadata",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 10.695,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "resource_metadata_respects_the_configured_record_byte_cap",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 10.616,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "resource_policy_checks_canonical_path_and_does_not_allow_legacy_downgrade",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 77.678,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "resource_policy_checks_full_url_port_and_path_before_reservation",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 75.644,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "resource_policy_checks_mailbox_not_only_its_domain",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 75.013,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "resource_result_must_keep_the_bound_original_host_id",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 74.802,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "result_and_original_context_preserve_one_opaque_binding",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 77.691,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "result_delivery_is_required_and_cannot_be_claimed_on_a_context_request",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 77.903,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "session_end_invalidates_calls_and_restart_changes_binding_epoch",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 38.422,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "shadow_or_enabled_judge_cannot_claim_native_enforcement",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 10.758,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "sou12_empty_or_ambiguous_egress_never_receives_an_execution_grant",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 76.939,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "stages_cannot_be_replayed_or_completed_out_of_order",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 83.028,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "successive_parent_results_free_capacity_without_fabricating_model_context",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 77.828,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "typed_egress_checks_every_to_cc_and_bcc_recipient",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 76.754,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "typed_url_egress_does_not_accept_credentials_or_non_http_schemes",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 75.2,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "unknown_tools_and_changed_schema_are_not_admitted",
+        "suite": "native_endpoint",
+        "status": "pass",
+        "elapsed_ms": 40.77,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "large_resource_replies_keep_sequential_calls_useful",
+        "suite": "mcp_concurrency",
+        "status": "pass",
+        "elapsed_ms": 730.45,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "large_resource_reply_finishes_once_after_client_eof",
+        "suite": "mcp_concurrency",
+        "status": "pass",
+        "elapsed_ms": 672.764,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "partial_queued_resource_call_is_refused_before_native_execution",
+        "suite": "mcp_concurrency",
+        "status": "pass",
+        "elapsed_ms": 678.512,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "queued_resource_calls_are_refused_before_native_execution",
+        "suite": "mcp_concurrency",
+        "status": "pass",
+        "elapsed_ms": 679.869,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "resource_reply_backpressure_refuses_cancellation",
+        "suite": "mcp_concurrency",
+        "status": "pass",
+        "elapsed_ms": 681.518,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "resource_reply_backpressure_refuses_partial_call",
+        "suite": "mcp_concurrency",
+        "status": "pass",
+        "elapsed_ms": 672.543,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "resource_reply_backpressure_refuses_queued_call",
+        "suite": "mcp_concurrency",
+        "status": "pass",
+        "elapsed_ms": 678.02,
+        "exit_code": 0,
+        "timed_out": false
+      },
+      {
+        "name": "sequential_resource_failures_keep_useful_same_session_continuation",
+        "suite": "mcp_concurrency",
+        "status": "pass",
+        "elapsed_ms": 3703.413,
+        "exit_code": 0,
+        "timed_out": false
+      }
+    ],
+    "new_boundary_witnesses": [
+      {
+        "name": "sou17_post_admission_fifo_refused_and_same_session_read_recovers",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 187.447,
+        "evidence": [
+          {
+            "authentic_call_allow": true,
+            "boundary": "production_mcp_resource_executor",
+            "child_executor_entries": 0,
+            "fifo_refusal_raw": "{\"id\":\"fifo-after-real-allow\",\"jsonrpc\":\"2.0\",\"result\":{\"content\":[{\"text\":\"Soup Wall withheld MCP invocation (resource_read_failed)\",\"type\":\"text\"}],\"isError\":true}}",
+            "fixture_elapsed_ms": 115.910542,
+            "protected_contents_released": false,
+            "same_session_recovery": {
+              "id": "fifo-recovered-read",
+              "jsonrpc": "2.0",
+              "result": {
+                "content": [
+                  {
+                    "text": "recovered owned contents",
+                    "type": "text"
+                  }
+                ]
+              }
+            },
+            "test": "post_admission_fifo_same_session_recovery"
+          }
+        ]
+      },
+      {
+        "name": "sou17_resource_overlap_during_classifier_refused_before_native_call",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 129.276,
+        "evidence": [
+          {
+            "boundary": "production_mcp_resource_executor",
+            "broker_output_produced": false,
+            "child_executor_entries": 0,
+            "classifier_source": "staged pinned local Python fixture",
+            "client_tool_result_bytes": 0,
+            "ended_native_session": true,
+            "file_bytes_unchanged": true,
+            "native_call_events": 0,
+            "native_result_events": 0,
+            "protected_contents_released": false,
+            "test": "resource_overlap_classifier_gate"
+          }
+        ]
+      },
+      {
+        "name": "sou17_resource_overlap_during_native_gates_refused_with_useful_peer",
+        "suite": "mcp_admission",
+        "status": "pass",
+        "elapsed_ms": 895.883,
+        "evidence": [
+          {
+            "boundary": "production_mcp_resource_executor",
+            "broker_output_produced": false,
+            "child_executor_entries": 0,
+            "client_tool_result_bytes": 0,
+            "ended_native_session": true,
+            "file_bytes_unchanged": true,
+            "overlap": "complete",
+            "produced_result_raw": null,
+            "protected_contents_released": false,
+            "request_id": 3,
+            "same_daemon_peer_recovery": {
+              "id": 3,
+              "jsonrpc": "2.0",
+              "result": {
+                "content": [
+                  {
+                    "text": "SOU17_STAGED_RESOURCE_CANARY",
+                    "type": "text"
+                  }
+                ]
+              }
+            },
+            "stage": "call",
+            "test": "resource_overlap_native_gate"
+          },
+          {
+            "boundary": "production_mcp_resource_executor",
+            "broker_output_produced": false,
+            "child_executor_entries": 0,
+            "client_tool_result_bytes": 0,
+            "ended_native_session": true,
+            "file_bytes_unchanged": true,
+            "overlap": "partial",
+            "produced_result_raw": null,
+            "protected_contents_released": false,
+            "request_id": 3,
+            "same_daemon_peer_recovery": {
+              "id": 3,
+              "jsonrpc": "2.0",
+              "result": {
+                "content": [
+                  {
+                    "text": "SOU17_STAGED_RESOURCE_CANARY",
+                    "type": "text"
+                  }
+                ]
+              }
+            },
+            "stage": "call",
+            "test": "resource_overlap_native_gate"
+          },
+          {
+            "boundary": "production_mcp_resource_executor",
+            "broker_output_produced": true,
+            "child_executor_entries": 0,
+            "client_tool_result_bytes": 0,
+            "ended_native_session": true,
+            "file_bytes_unchanged": true,
+            "overlap": "complete",
+            "produced_result_raw": "{\"id\":3,\"jsonrpc\":\"2.0\",\"result\":{\"content\":[{\"text\":\"SOU17_STAGED_RESOURCE_CANARY\",\"type\":\"text\"}]}}\n",
+            "protected_contents_released": false,
+            "request_id": 3,
+            "same_daemon_peer_recovery": {
+              "id": 3,
+              "jsonrpc": "2.0",
+              "result": {
+                "content": [
+                  {
+                    "text": "SOU17_STAGED_RESOURCE_CANARY",
+                    "type": "text"
+                  }
+                ]
+              }
+            },
+            "stage": "result",
+            "test": "resource_overlap_native_gate"
+          },
+          {
+            "boundary": "production_mcp_resource_executor",
+            "broker_output_produced": true,
+            "child_executor_entries": 0,
+            "client_tool_result_bytes": 0,
+            "ended_native_session": true,
+            "file_bytes_unchanged": true,
+            "overlap": "partial",
+            "produced_result_raw": "{\"id\":3,\"jsonrpc\":\"2.0\",\"result\":{\"content\":[{\"text\":\"SOU17_STAGED_RESOURCE_CANARY\",\"type\":\"text\"}]}}\n",
+            "protected_contents_released": false,
+            "request_id": 3,
+            "same_daemon_peer_recovery": {
+              "id": 3,
+              "jsonrpc": "2.0",
+              "result": {
+                "content": [
+                  {
+                    "text": "SOU17_STAGED_RESOURCE_CANARY",
+                    "type": "text"
+                  }
+                ]
+              }
+            },
+            "stage": "result",
+            "test": "resource_overlap_native_gate"
+          },
+          {
+            "boundary": "production_mcp_resource_executor",
+            "broker_output_produced": true,
+            "child_executor_entries": 0,
+            "client_tool_result_bytes": 0,
+            "ended_native_session": true,
+            "file_bytes_unchanged": true,
+            "overlap": "cancel",
+            "produced_result_raw": "{\"id\":3,\"jsonrpc\":\"2.0\",\"result\":{\"content\":[{\"text\":\"SOU17_STAGED_RESOURCE_CANARY\",\"type\":\"text\"}]}}\n",
+            "protected_contents_released": false,
+            "request_id": 3,
+            "same_daemon_peer_recovery": {
+              "id": 3,
+              "jsonrpc": "2.0",
+              "result": {
+                "content": [
+                  {
+                    "text": "SOU17_STAGED_RESOURCE_CANARY",
+                    "type": "text"
+                  }
+                ]
+              }
+            },
+            "stage": "result",
+            "test": "resource_overlap_native_gate"
+          }
+        ]
+      },
+      {
+        "name": "large_resource_replies_keep_sequential_calls_useful",
+        "suite": "mcp_concurrency",
+        "status": "pass",
+        "elapsed_ms": 730.45,
+        "evidence": [
+          {
+            "actual_broker_reads": 2,
+            "boundary": "production_mcp_resource_stdout",
+            "child_executor_entries": 0,
+            "client_output_sha256": "da2aec62b3df9a80ff3b2f81316e5ceffc28c88d01c8626e6b181806804c1532",
+            "client_tool_result_bytes": 432182,
+            "collector_exit": 0,
+            "error": null,
+            "file_bytes_unchanged": true,
+            "mode": "sequential",
+            "native_call_ids": [
+              "l8iOj6QdNl7TrXi4r3VcknAJ5tVDgrS4TaV7_AZ6joU",
+              "rQwhLYLN9l5Wo2DtxUks1CqqzuVPxxzFC57vLvgaRcM"
+            ],
+            "native_gates": 4,
+            "owned_profile_removed": true,
+            "receiver_deliveries": 0,
+            "stdout_eof_observed": true,
+            "witness": {
+              "first_contents_bytes": 208000,
+              "first_reply_bytes_already_exposed_to_pipe": 65536,
+              "first_reply_complete_before_second": true,
+              "released_reply_ids": [
+                "absolute-read",
+                "second-before-drain"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "large_resource_reply_finishes_once_after_client_eof",
+        "suite": "mcp_concurrency",
+        "status": "pass",
+        "elapsed_ms": 672.764,
+        "evidence": [
+          {
+            "actual_broker_reads": 1,
+            "boundary": "production_mcp_resource_stdout",
+            "child_executor_entries": 0,
+            "client_output_sha256": "31ab6338b49f612ed3173afea650279d617d99d751f0b5af34b5f866a82074c5",
+            "client_tool_result_bytes": 216088,
+            "collector_exit": 0,
+            "error": null,
+            "file_bytes_unchanged": true,
+            "mode": "eof",
+            "native_call_ids": [
+              "9L50DC4XH_8TxnH5OkT1PL-5QtTZ2zhcxCdjbewnO0Y"
+            ],
+            "native_gates": 2,
+            "owned_profile_removed": true,
+            "receiver_deliveries": 0,
+            "stdout_eof_observed": true,
+            "witness": {
+              "first_contents_bytes": 208000,
+              "first_reply_bytes_already_exposed_to_pipe": 65536,
+              "first_reply_complete_before_second": false,
+              "released_reply_ids": [
+                "absolute-read"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "partial_queued_resource_call_is_refused_before_native_execution",
+        "suite": "mcp_concurrency",
+        "status": "pass",
+        "elapsed_ms": 678.512,
+        "evidence": [
+          {
+            "broker_output_produced": false,
+            "child_tool_calls": 0,
+            "client_tool_result_bytes": 0,
+            "files_unchanged": true,
+            "mode": "partial",
+            "native_gates": 0,
+            "native_session_cleanup_observed": true,
+            "owned_profile_removed": true,
+            "protected_contents_released": false,
+            "receiver_deliveries": 0,
+            "status": "pass"
+          }
+        ]
+      },
+      {
+        "name": "queued_resource_calls_are_refused_before_native_execution",
+        "suite": "mcp_concurrency",
+        "status": "pass",
+        "elapsed_ms": 679.869,
+        "evidence": [
+          {
+            "broker_output_produced": false,
+            "child_tool_calls": 0,
+            "client_tool_result_bytes": 0,
+            "files_unchanged": true,
+            "mode": "complete",
+            "native_gates": 0,
+            "native_session_cleanup_observed": true,
+            "owned_profile_removed": true,
+            "protected_contents_released": false,
+            "receiver_deliveries": 0,
+            "status": "pass"
+          }
+        ]
+      },
+      {
+        "name": "resource_reply_backpressure_refuses_cancellation",
+        "suite": "mcp_concurrency",
+        "status": "pass",
+        "elapsed_ms": 681.518,
+        "evidence": [
+          {
+            "actual_broker_reads": 1,
+            "boundary": "production_mcp_resource_stdout",
+            "child_executor_entries": 0,
+            "client_output_sha256": "31ab6338b49f612ed3173afea650279d617d99d751f0b5af34b5f866a82074c5",
+            "client_tool_result_bytes": 216088,
+            "collector_exit": 1,
+            "error": null,
+            "file_bytes_unchanged": true,
+            "mode": "cancel",
+            "native_call_ids": [
+              "Ziz20kuB9no47kTVg0jdRiR8bhyHJKOFn5aVrnnV8-8"
+            ],
+            "native_gates": 2,
+            "owned_profile_removed": true,
+            "receiver_deliveries": 0,
+            "stdout_eof_observed": true,
+            "witness": {
+              "first_contents_bytes": 208000,
+              "first_reply_bytes_already_exposed_to_pipe": 65536,
+              "first_reply_complete_before_second": false,
+              "released_reply_ids": [
+                "absolute-read"
+              ],
+              "session_ended_before_drain": true
+            }
+          }
+        ]
+      },
+      {
+        "name": "resource_reply_backpressure_refuses_partial_call",
+        "suite": "mcp_concurrency",
+        "status": "pass",
+        "elapsed_ms": 672.543,
+        "evidence": [
+          {
+            "actual_broker_reads": 1,
+            "boundary": "production_mcp_resource_stdout",
+            "child_executor_entries": 0,
+            "client_output_sha256": "31ab6338b49f612ed3173afea650279d617d99d751f0b5af34b5f866a82074c5",
+            "client_tool_result_bytes": 216088,
+            "collector_exit": 1,
+            "error": null,
+            "file_bytes_unchanged": true,
+            "mode": "partial",
+            "native_call_ids": [
+              "elnHXY1laS0-fThlxWMXksHfcBaJcGJBoR14pyQVmKI"
+            ],
+            "native_gates": 2,
+            "owned_profile_removed": true,
+            "receiver_deliveries": 0,
+            "stdout_eof_observed": true,
+            "witness": {
+              "first_contents_bytes": 208000,
+              "first_reply_bytes_already_exposed_to_pipe": 65536,
+              "first_reply_complete_before_second": false,
+              "released_reply_ids": [
+                "absolute-read"
+              ],
+              "session_ended_before_drain": true
+            }
+          }
+        ]
+      },
+      {
+        "name": "resource_reply_backpressure_refuses_queued_call",
+        "suite": "mcp_concurrency",
+        "status": "pass",
+        "elapsed_ms": 678.02,
+        "evidence": [
+          {
+            "actual_broker_reads": 1,
+            "boundary": "production_mcp_resource_stdout",
+            "child_executor_entries": 0,
+            "client_output_sha256": "31ab6338b49f612ed3173afea650279d617d99d751f0b5af34b5f866a82074c5",
+            "client_tool_result_bytes": 216088,
+            "collector_exit": 1,
+            "error": null,
+            "file_bytes_unchanged": true,
+            "mode": "complete",
+            "native_call_ids": [
+              "AEjuVbir3DbVhtlfm1G_zzxbIwYeAlGMi4toEPWf9BY"
+            ],
+            "native_gates": 2,
+            "owned_profile_removed": true,
+            "receiver_deliveries": 0,
+            "stdout_eof_observed": true,
+            "witness": {
+              "first_contents_bytes": 208000,
+              "first_reply_bytes_already_exposed_to_pipe": 65536,
+              "first_reply_complete_before_second": false,
+              "released_reply_ids": [
+                "absolute-read"
+              ],
+              "session_ended_before_drain": true
+            }
+          }
+        ]
+      },
+      {
+        "name": "sequential_resource_failures_keep_useful_same_session_continuation",
+        "suite": "mcp_concurrency",
+        "status": "pass",
+        "elapsed_ms": 3703.413,
+        "evidence": [
+          {
+            "broker_output_produced": true,
+            "child_tool_calls": 0,
+            "client_tool_result_bytes": 11272,
+            "files_unchanged": true,
+            "mode": "sequential",
+            "native_gates": 142,
+            "native_session_cleanup_observed": true,
+            "owned_profile_removed": true,
+            "protected_contents_released": true,
+            "receiver_deliveries": 0,
+            "status": "pass"
+          }
+        ]
+      }
+    ]
+  },
+  "profiles": {
+    "generic": {
+      "status": "pass",
+      "counts": {
+        "pass": 15,
+        "fail": 0,
+        "inconclusive": 0
+      },
+      "stable": true,
+      "execution_count": 4,
+      "released_original_result_bytes": 505,
+      "rows": [
+        {
+          "case": "single-read-before",
+          "host_call_id": "generic-single-read-before",
+          "execution_count": 1,
+          "released_original_result_bytes": 126,
+          "grade": {
+            "status": "pass",
+            "reason": "ordinary authoritative policy with exact execution/result/delivery witnesses"
+          }
+        },
+        {
+          "case": "empty-known-low",
+          "host_call_id": "generic-empty-known-low",
+          "execution_count": 1,
+          "released_original_result_bytes": 123,
+          "grade": {
+            "status": "pass",
+            "reason": "ordinary authoritative policy with exact execution/result/delivery witnesses"
+          }
+        },
+        {
+          "case": "empty-known-high",
+          "host_call_id": "generic-empty-known-high",
+          "execution_count": 0,
+          "released_original_result_bytes": 0,
+          "grade": {
+            "status": "pass",
+            "reason": "ordinary authoritative policy with exact execution/result/delivery witnesses"
+          }
+        },
+        {
+          "case": "authorized-mixed-send",
+          "host_call_id": "generic-authorized-mixed-send",
+          "execution_count": 1,
+          "released_original_result_bytes": 131,
+          "grade": {
+            "status": "pass",
+            "reason": "ordinary authoritative policy with exact execution/result/delivery witnesses"
+          }
+        },
+        {
+          "case": "unknown-empty-low",
+          "host_call_id": "generic-unknown-empty-low",
+          "execution_count": 0,
+          "released_original_result_bytes": 0,
+          "grade": {
+            "status": "pass",
+            "reason": "ordinary authoritative policy with exact execution/result/delivery witnesses"
+          }
+        },
+        {
+          "case": "read-plus-unknown-low",
+          "host_call_id": "generic-read-plus-unknown-low",
+          "execution_count": 0,
+          "released_original_result_bytes": 0,
+          "grade": {
+            "status": "pass",
+            "reason": "ordinary authoritative policy with exact execution/result/delivery witnesses"
+          }
+        },
+        {
+          "case": "delete-plus-unknown-low",
+          "host_call_id": "generic-delete-plus-unknown-low",
+          "execution_count": 0,
+          "released_original_result_bytes": 0,
+          "grade": {
+            "status": "pass",
+            "reason": "ordinary authoritative policy with exact execution/result/delivery witnesses"
+          }
+        },
+        {
+          "case": "delete-plus-unknown-high",
+          "host_call_id": "generic-delete-plus-unknown-high",
+          "execution_count": 0,
+          "released_original_result_bytes": 0,
+          "grade": {
+            "status": "pass",
+            "reason": "ordinary authoritative policy with exact execution/result/delivery witnesses"
+          }
+        },
+        {
+          "case": "readonly-write-plus-unknown-high",
+          "host_call_id": "generic-readonly-write-plus-unknown-high",
+          "execution_count": 0,
+          "released_original_result_bytes": 0,
+          "grade": {
+            "status": "pass",
+            "reason": "ordinary authoritative policy with exact execution/result/delivery witnesses"
+          }
+        },
+        {
+          "case": "duplicate-actions",
+          "host_call_id": "generic-duplicate-actions",
+          "execution_count": 0,
+          "released_original_result_bytes": 0,
+          "grade": {
+            "status": "pass",
+            "reason": "technical_not_reached with independent zero execution/result/delivery"
+          }
+        },
+        {
+          "case": "duplicate-confidence-json",
+          "host_call_id": "generic-duplicate-confidence-json",
+          "execution_count": 0,
+          "released_original_result_bytes": 0,
+          "grade": {
+            "status": "pass",
+            "reason": "technical_not_reached with independent zero execution/result/delivery"
+          }
+        },
+        {
+          "case": "missing-actions",
+          "host_call_id": "generic-missing-actions",
+          "execution_count": 0,
+          "released_original_result_bytes": 0,
+          "grade": {
+            "status": "pass",
+            "reason": "technical_not_reached with independent zero execution/result/delivery"
+          }
+        },
+        {
+          "case": "invalid-confidence",
+          "host_call_id": "generic-invalid-confidence",
+          "execution_count": 0,
+          "released_original_result_bytes": 0,
+          "grade": {
+            "status": "pass",
+            "reason": "technical_not_reached with independent zero execution/result/delivery"
+          }
+        },
+        {
+          "case": "nonfinite-uncertainty-json",
+          "host_call_id": "generic-nonfinite-uncertainty-json",
+          "execution_count": 0,
+          "released_original_result_bytes": 0,
+          "grade": {
+            "status": "pass",
+            "reason": "technical_not_reached with independent zero execution/result/delivery"
+          }
+        },
+        {
+          "case": "single-read-after",
+          "host_call_id": "generic-single-read-after",
+          "execution_count": 1,
+          "released_original_result_bytes": 125,
+          "grade": {
+            "status": "pass",
+            "reason": "ordinary authoritative policy with exact execution/result/delivery witnesses"
+          }
+        }
+      ]
+    },
+    "resources": {
+      "status": "pass",
+      "source_binary_stable": true,
+      "rows": [
+        {
+          "case": "absolute-read",
+          "grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          },
+          "request_ms": 83.78200000151992,
+          "child_executor_entries": 0,
+          "native_calls": 1,
+          "native_results": 1,
+          "classification_count": 1,
+          "owned_profile_removed": true
+        },
+        {
+          "case": "relative-read",
+          "grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          },
+          "request_ms": 84.02033400489017,
+          "child_executor_entries": 0,
+          "native_calls": 1,
+          "native_results": 1,
+          "classification_count": 1,
+          "owned_profile_removed": true
+        },
+        {
+          "case": "unlisted-file",
+          "grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          },
+          "request_ms": 43.29991599661298,
+          "child_executor_entries": 0,
+          "native_calls": 1,
+          "native_results": 0,
+          "classification_count": 1,
+          "owned_profile_removed": true
+        },
+        {
+          "case": "traversal",
+          "grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          },
+          "request_ms": 0.35187500179745257,
+          "child_executor_entries": 0,
+          "native_calls": 0,
+          "native_results": 0,
+          "classification_count": 0,
+          "owned_profile_removed": true
+        },
+        {
+          "case": "symlink",
+          "grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          },
+          "request_ms": 0.40262500988319516,
+          "child_executor_entries": 0,
+          "native_calls": 0,
+          "native_results": 0,
+          "classification_count": 0,
+          "owned_profile_removed": true
+        },
+        {
+          "case": "unsupported-tool",
+          "grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          },
+          "request_ms": 39.307375001953915,
+          "child_executor_entries": 0,
+          "native_calls": 0,
+          "native_results": 0,
+          "classification_count": 1,
+          "owned_profile_removed": true
+        },
+        {
+          "case": "result-withheld",
+          "grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          },
+          "request_ms": 73.7632090022089,
+          "child_executor_entries": 0,
+          "native_calls": 1,
+          "native_results": 1,
+          "classification_count": 1,
+          "owned_profile_removed": true
+        },
+        {
+          "case": "workspace-mismatch",
+          "grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          },
+          "request_ms": 0.16241701086983085,
+          "child_executor_entries": 0,
+          "native_calls": 0,
+          "native_results": 0,
+          "classification_count": 0,
+          "owned_profile_removed": true
+        },
+        {
+          "case": "workspace-missing",
+          "grade": {
+            "status": "pass",
+            "reason": "missing workspace stopped startup; no MCP call submitted or server startup observed"
+          },
+          "request_ms": null,
+          "child_executor_entries": 0,
+          "native_calls": 0,
+          "native_results": 0,
+          "classification_count": 0,
+          "owned_profile_removed": true
+        },
+        {
+          "case": "read-error-recovery",
+          "grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          },
+          "request_ms": 42.52487499616109,
+          "child_executor_entries": 0,
+          "native_calls": 71,
+          "native_results": 71,
+          "classification_count": 71,
+          "owned_profile_removed": true
+        }
+      ]
+    },
+    "pending": {
+      "status": "pass",
+      "counts": {
+        "pass": 11,
+        "fail": 0,
+        "technical_unsupported": 0,
+        "inconclusive": 0
+      },
+      "stable": true
+    },
+    "capacity": {
+      "status": "pass",
+      "limits": {
+        "ask_calls": 64,
+        "benign_followups": 1,
+        "total_deadline_seconds": 60
+      },
+      "observed": {
+        "classifier_invocations": 65,
+        "ledger_valid": true,
+        "ask_executor_count": 0,
+        "total_executor_count": 1,
+        "benign_executor_delta": 1,
+        "benign_original_server_result_count": 1,
+        "benign_client_bytes": 123,
+        "benign_original_result_released": true,
+        "benign_original_call_bytes_preserved": true,
+        "receiver_count": 0,
+        "gateway_exit_code": 0
+      }
+    }
+  },
+  "serial_latency": {
+    "scope": "Paired same local child-backed fixture; no other runtime/build jobs during sample; warmup/startup excluded; Python classifier process startup included",
+    "summary": {
+      "status": "pass",
+      "requested_pairs": 30,
+      "observed_rows": 60,
+      "source_binary_stable": true,
+      "complete_final_witnesses": true,
+      "failed_rows": 0,
+      "incomplete_rows": 0,
+      "fixture_false_interruptions": 0,
+      "unknown_interruption_rows": 0,
+      "execution_anomalies": 0,
+      "population_false_interruption_rate": "not measured",
+      "latency_limit": "not agreed; no numeric gate",
+      "direct_request_ms": {
+        "p50": 0.196667,
+        "p95": 0.31025,
+        "p99": 0.352375
+      },
+      "protected_request_ms": {
+        "p50": 40.139792,
+        "p95": 43.324541,
+        "p99": 47.462291
+      },
+      "paired_overhead_ms": {
+        "mean": 40.312482100000004,
+        "p50": 39.969541,
+        "p95": 43.15704100000001,
+        "p99": 47.109916,
+        "raw": [
+          40.211751,
+          39.426584,
+          40.262792,
+          39.408084,
+          39.83,
+          39.989501,
+          39.883208999999994,
+          39.550708,
+          39.110875,
+          39.810834,
+          39.24625,
+          40.10225,
+          39.266208000000006,
+          40.170790999999994,
+          40.814001,
+          40.726792,
+          47.109916,
+          43.15704100000001,
+          41.921876,
+          40.024834,
+          40.144958,
+          39.709042,
+          40.162041,
+          39.969541,
+          39.876375,
+          39.567625,
+          39.503083,
+          39.444625,
+          40.508626,
+          40.46425
+        ]
+      }
+    },
+    "rows": [
+      {
+        "pair": -1,
+        "warmup": true,
+        "path": "direct",
+        "host_call_id": "warmup",
+        "request_latency_ms": 0.263,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 106,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": -1,
+        "warmup": true,
+        "path": "protected",
+        "host_call_id": "warmup",
+        "request_latency_ms": 73.452208,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 106,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 0,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-0",
+        "request_latency_ms": 40.476417,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 0,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-0",
+        "request_latency_ms": 0.264666,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 1,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-1",
+        "request_latency_ms": 0.153833,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 1,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-1",
+        "request_latency_ms": 39.580417,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 2,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-2",
+        "request_latency_ms": 40.521584,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 2,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-2",
+        "request_latency_ms": 0.258792,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 3,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-3",
+        "request_latency_ms": 0.1615,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 3,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-3",
+        "request_latency_ms": 39.569584,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 4,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-4",
+        "request_latency_ms": 40.14025,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 4,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-4",
+        "request_latency_ms": 0.31025,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 5,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-5",
+        "request_latency_ms": 0.150291,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 5,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-5",
+        "request_latency_ms": 40.139792,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 6,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-6",
+        "request_latency_ms": 40.114459,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 6,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-6",
+        "request_latency_ms": 0.23125,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 7,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-7",
+        "request_latency_ms": 0.196667,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 7,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-7",
+        "request_latency_ms": 39.747375,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 8,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-8",
+        "request_latency_ms": 39.352666,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 8,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-8",
+        "request_latency_ms": 0.241791,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 9,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-9",
+        "request_latency_ms": 0.151083,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 9,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-9",
+        "request_latency_ms": 39.961917,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 10,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-10",
+        "request_latency_ms": 39.495834,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 10,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-10",
+        "request_latency_ms": 0.249584,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 11,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-11",
+        "request_latency_ms": 0.170375,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 11,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-11",
+        "request_latency_ms": 40.272625,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 12,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-12",
+        "request_latency_ms": 39.496208,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 12,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-12",
+        "request_latency_ms": 0.23,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 13,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-13",
+        "request_latency_ms": 0.143292,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 13,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-13",
+        "request_latency_ms": 40.314083,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 14,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-14",
+        "request_latency_ms": 41.101084,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 14,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-14",
+        "request_latency_ms": 0.287083,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 15,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-15",
+        "request_latency_ms": 0.170458,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 15,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-15",
+        "request_latency_ms": 40.89725,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 16,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-16",
+        "request_latency_ms": 47.462291,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 16,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-16",
+        "request_latency_ms": 0.352375,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 17,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-17",
+        "request_latency_ms": 0.1675,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 17,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-17",
+        "request_latency_ms": 43.324541,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 18,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-18",
+        "request_latency_ms": 42.155417,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 18,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-18",
+        "request_latency_ms": 0.233541,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 19,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-19",
+        "request_latency_ms": 0.153125,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 19,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-19",
+        "request_latency_ms": 40.177959,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 20,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-20",
+        "request_latency_ms": 40.401333,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 20,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-20",
+        "request_latency_ms": 0.256375,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 21,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-21",
+        "request_latency_ms": 0.150125,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 21,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-21",
+        "request_latency_ms": 39.859167,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 22,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-22",
+        "request_latency_ms": 40.398958,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 22,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-22",
+        "request_latency_ms": 0.236917,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 23,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-23",
+        "request_latency_ms": 0.158042,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 23,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-23",
+        "request_latency_ms": 40.127583,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 24,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-24",
+        "request_latency_ms": 40.101709,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 24,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-24",
+        "request_latency_ms": 0.225334,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 25,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-25",
+        "request_latency_ms": 0.148584,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 25,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-25",
+        "request_latency_ms": 39.716209,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 26,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-26",
+        "request_latency_ms": 39.751208,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 26,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-26",
+        "request_latency_ms": 0.248125,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 27,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-27",
+        "request_latency_ms": 0.195125,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 27,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-27",
+        "request_latency_ms": 39.63975,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 28,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-28",
+        "request_latency_ms": 40.745834,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 28,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-28",
+        "request_latency_ms": 0.237208,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 29,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-29",
+        "request_latency_ms": 0.149542,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 29,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-29",
+        "request_latency_ms": 40.613792,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      }
+    ]
+  },
+  "contributor_checks": {
+    "workspace_rust": {
+      "pass": 1024,
+      "fail": 0,
+      "ignored": 8,
+      "features": "default"
+    },
+    "fmt": "pass",
+    "workspace_all_targets_clippy_warnings_denied": "pass",
+    "python_scripts": {
+      "run": 461,
+      "pass": 451,
+      "individual_native_windows_skips": 10
+    },
+    "python_benchmarks": {
+      "run": 44,
+      "pass": 28,
+      "individual_skips": 16,
+      "additional_class_level_skip_records": 2
+    },
+    "grader_methods": 13,
+    "explicit_adversarial_mutations_rejected": 15
+  },
+  "historical_sources": {
+    "original_main": "5fc6d72fd73ebe9faa70c56607fc492163df1a42",
+    "original_main_report": "sou17_candidate_5fc6d72_2026-10-14.json",
+    "intermediate_rejected_source": "28001eb2ee151ad5bba83aa9bbab143dac383cfd",
+    "intermediate_backpressure": {
+      "issue": "SOU-45",
+      "source_head": "28001eb2ee151ad5bba83aa9bbab143dac383cfd",
+      "source_scope_literal": "local reviewed-but-uncommitted FIFO/resource-overlap patch; not pristine main acceptance",
+      "source_binary_stable": true,
+      "source_paths_sha256": {
+        "crates/agentfw/src/mcp/admission.rs": "ef93e646fc15308ada11f92f2e3087420fe4cb449de6bd8318c9c08a704e43ab",
+        "crates/agentfw/src/sandbox.rs": "ff43da9ce1ea36de5f00ecce0c6b042d5b218eb860c671501d101c452d2bb367",
+        "scripts/verify-sou18-resources.py": "11b78abdb41d46ae56ee447c35d6f4fa95d4561d4eba0bbe2279573894d85532"
+      },
+      "source_hashes_verified_against_commit": {
+        "crates/agentfw/src/mcp/admission.rs": true,
+        "crates/agentfw/src/sandbox.rs": true,
+        "scripts/verify-sou18-resources.py": true
+      },
+      "binary_sha256": "419b448fff837c390a1fd76cc6c23def82c3ad0f726d6724fd46cafb88559d5e",
+      "stdout_bytes_before_second_request": 65536,
+      "expected_first_result_bytes_lower_bound": 208000,
+      "reply_ids": [
+        "absolute-read",
+        "second-before-drain"
+      ],
+      "native_gates_before_second": 2,
+      "native_gates_final": 4,
+      "collector_exit": 0,
+      "first_read_already_allowed_and_partial_content_emitted": true,
+      "first_effect_or_released_bytes_must_not_be_reported_zero": true,
+      "raw_sha256": "ece644186797b07ad9f4ffd25fe9de09379ae585f00bc58104155788980f3415",
+      "raw_relative_path": "target/sou17-final-main/resource-validation/backpressure-benign/results.json",
+      "pending_fix": "Resource reply-write guard with red/green actual boundary regression and large sequential control; new exact source rerun required."
+    }
+  },
+  "code_scanning": {
+    "inventory_source": "5fc6d72fd73ebe9faa70c56607fc492163df1a42",
+    "open": 1,
+    "closed": 85,
+    "open_alert": 112,
+    "severity": "Critical",
+    "triage": "Evidence-backed permission-mode false positive pending coordinator review",
+    "repaired_source_rescan": "not claimed; required checks pending"
+  },
+  "remaining_gates": [
+    "Nari implementation review",
+    "Required repository CI/checks and new-source scan disposition",
+    "Merge and affected verification on actual updated main exact revision"
+  ],
+  "limits": [
+    "No arbitrary subprocess/network/write/delete/permissions confinement claim",
+    "No concurrent execution or immediate cancellation support",
+    "First permitted read and already-written stdout bytes remain honest during later overlap refusal",
+    "No population classifier accuracy/FPR or numeric latency gate claimed"
+  ],
+  "raw_evidence_archive": {
+    "file": "sou17_candidate_bb64321_2026-10-14_raw.tar.gz",
+    "bytes": 616577,
+    "sha256": "03f931346455d1a4023db4da56723b45f13faaf8bc5a163c96f0456d449efb74",
+    "entries": [
+      {
+        "archive_path": "target/sou17-final-complete/capacity/results.json",
+        "bytes": 136518,
+        "sha256": "6e71799c7f804757f014c077e09b9d01098bf265926add9c3cb3003d0d157417"
+      },
+      {
+        "archive_path": "target/sou17-final-complete/generic/results.json",
+        "bytes": 278872,
+        "sha256": "b5507109e2aff4ec430736a61224aeba284d71c81879af28718bf888d9234ebc"
+      },
+      {
+        "archive_path": "target/sou17-final-complete/latency/results.json",
+        "bytes": 403724,
+        "sha256": "c3c5c7b5e75002c3b447f04bed7a62c664167db2bc94dd137dbb328518a92c84"
+      },
+      {
+        "archive_path": "target/sou17-final-complete/pending/results.json",
+        "bytes": 208379,
+        "sha256": "96b819bece6e5126f52994633d0a858e6b0f6483e466e74bd733aa160fb62814"
+      },
+      {
+        "archive_path": "target/sou17-final-complete/regressions/run-v38le30e/results.json",
+        "bytes": 321687,
+        "sha256": "0714cbb3c117deef368a142c3187d04b125d0af6d7a74e3de4c225ba3792d89a"
+      },
+      {
+        "archive_path": "target/sou17-final-complete/resources/results.json",
+        "bytes": 747227,
+        "sha256": "df89b2d7de1a3fcde3acc4106d6e64e420d80659965aea8667ebe1ee58bbb182"
+      },
+      {
+        "archive_path": "target/sou17-final-fix/build.jsonl",
+        "bytes": 173237,
+        "sha256": "117be3f35ee4bcf723a00999703021899a7ef27125d67ef14eaaf8883a85d2f9"
+      },
+      {
+        "archive_path": "target/sou17-final-fix/clippy.log",
+        "bytes": 171,
+        "sha256": "b47035d5bcb5e67b084ef8c0ee873d0474e391580ba8f0b40649eff3dee97ebd"
+      },
+      {
+        "archive_path": "target/sou17-final-fix/fmt.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "archive_path": "target/sou17-final-fix/python-benchmarks.log",
+        "bytes": 8526,
+        "sha256": "a16d3b6ec330db0690275b28bb8ca03f4d232bb7dc34da696d4ac171996bc766"
+      },
+      {
+        "archive_path": "target/sou17-final-fix/python-tests.log",
+        "bytes": 80757,
+        "sha256": "80e52375714b24f7b08ebb9b6b7a1f000b22dd306f94a49ad43d12c5704389ca"
+      },
+      {
+        "archive_path": "target/sou17-final-fix/regressions/run-b0611s8n/results.json",
+        "bytes": 313160,
+        "sha256": "238f068e5b7f1a2514acd7d753a4555d8b4b08a6fed364a5a32a88ae02010111"
+      },
+      {
+        "archive_path": "target/sou17-final-fix/regressions/run-stcmwrpw/results.json",
+        "bytes": 85034,
+        "sha256": "c7acb783d98b7072621e55fe08ae4f7b7004de53ee483a5b8477dc83b7997403"
+      },
+      {
+        "archive_path": "target/sou17-final-fix/workspace-tests.log",
+        "bytes": 88770,
+        "sha256": "bcb90e868b3c1726065f720b4dcab94e54e43ec1c1ecfe8bb88c937af1aba0fd"
+      },
+      {
+        "archive_path": "target/sou17-final-main/resource-validation/backpressure-benign/results.json",
+        "bytes": 687587,
+        "sha256": "ece644186797b07ad9f4ffd25fe9de09379ae585f00bc58104155788980f3415"
+      },
+      {
+        "archive_path": "target/sou17-final-main/resource-validation/writer-backpressure-green.log",
+        "bytes": 12171,
+        "sha256": "7e46b55a7209d81bd6269802decd24734c2f6a457809c7a691d2524fd6807633"
+      },
+      {
+        "archive_path": "target/sou17-final-main/resource-validation/writer-backpressure-red.log",
+        "bytes": 9536,
+        "sha256": "fdb4efdea2a6624d2db76915c0f793e0672628c2383013db0db35fe042c6d831"
+      },
+      {
+        "archive_path": "target/sou17-final-main/resource-validation/writer-busy-drain-final.log",
+        "bytes": 5268,
+        "sha256": "9765a8dfcbf267de9ecd2cae10ad2db17a0a9ab3b76efe00acdee3ede730e5ac"
+      },
+      {
+        "archive_path": "target/sou17-final-main/resource-validation/writer-full-flush-control.log",
+        "bytes": 5292,
+        "sha256": "02df4462687bf873945393b71b0f9b9341d2f1fd6631fd03aeb78ee6c2b9235f"
+      }
+    ],
+    "credential_review": "Published synthetic data/local metadata only; profile token/config files and credential-bearing headers excluded; bearer/token/provider/private-key pattern checks no matches."
+  },
+  "pull_request": "https://github.com/SoupTeam/soup-wall/pull/113",
+  "reviewer_requested": "Nari-Ab",
+  "ci_rescan_status": "pending; no hosted pass claimed"
+}
