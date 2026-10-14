@@ -1533,7 +1533,11 @@ where
                                 }
                             }
                         }
-                        let mut pinned_resource_ws = None;
+                        #[cfg(unix)]
+                        let mut pinned_resource_ws: Option<(
+                            crate::sandbox::PinnedWorkspace,
+                            std::path::PathBuf,
+                        )> = None;
                         if let Some((_, ref derived)) = resource_admission {
                             let policy = installed.resource_policy.as_ref().unwrap();
                             if !(installed.action_class == ActionClass::ReadOnly
