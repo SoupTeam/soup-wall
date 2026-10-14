@@ -1,0 +1,1094 @@
+{
+  "schema_version": "sou38-tls/1",
+  "task": "SOU-38",
+  "started_at_utc": "2026-10-14T06:09:53.615568+00:00",
+  "status": "passed",
+  "checks": [
+    {
+      "name": "unprivileged_runtime",
+      "status": "passed"
+    },
+    {
+      "name": "focused_tests",
+      "status": "passed"
+    },
+    {
+      "name": "initial_handshake",
+      "status": "passed"
+    },
+    {
+      "name": "initial_authenticated_request",
+      "status": "passed",
+      "provider_calls_before": 0,
+      "provider_calls_after": 1
+    },
+    {
+      "name": "unauthenticated_request",
+      "status": "passed"
+    },
+    {
+      "name": "edge_boundary/metrics",
+      "status": "passed"
+    },
+    {
+      "name": "edge_boundary/metrics/anything",
+      "status": "passed"
+    },
+    {
+      "name": "edge_boundary/admin",
+      "status": "passed"
+    },
+    {
+      "name": "edge_boundary/admin/v1/tenants",
+      "status": "passed"
+    },
+    {
+      "name": "readiness",
+      "status": "passed"
+    },
+    {
+      "name": "body_bound",
+      "status": "passed"
+    },
+    {
+      "name": "rotation",
+      "status": "passed"
+    },
+    {
+      "name": "rotated_authenticated_request",
+      "status": "passed",
+      "provider_calls_before": 1,
+      "provider_calls_after": 2
+    },
+    {
+      "name": "malformed_material",
+      "status": "passed"
+    },
+    {
+      "name": "malformed_material_preserves_gateway",
+      "status": "passed",
+      "provider_calls_before": 2,
+      "provider_calls_after": 3
+    },
+    {
+      "name": "mismatched_key",
+      "status": "passed"
+    },
+    {
+      "name": "mismatched_key_preserves_gateway",
+      "status": "passed",
+      "provider_calls_before": 3,
+      "provider_calls_after": 4
+    },
+    {
+      "name": "expired_material",
+      "status": "passed"
+    },
+    {
+      "name": "expired_material_preserves_gateway",
+      "status": "passed",
+      "provider_calls_before": 4,
+      "provider_calls_after": 5
+    },
+    {
+      "name": "wrong_hostname_material",
+      "status": "passed"
+    },
+    {
+      "name": "wrong_hostname_material_preserves_gateway",
+      "status": "passed",
+      "provider_calls_before": 5,
+      "provider_calls_after": 6
+    },
+    {
+      "name": "untrusted_ca_material",
+      "status": "passed"
+    },
+    {
+      "name": "untrusted_ca_material_preserves_gateway",
+      "status": "passed",
+      "provider_calls_before": 6,
+      "provider_calls_after": 7
+    },
+    {
+      "name": "oversized_material",
+      "status": "passed"
+    },
+    {
+      "name": "oversized_material_preserves_gateway",
+      "status": "passed",
+      "provider_calls_before": 7,
+      "provider_calls_after": 8
+    },
+    {
+      "name": "symlink_material",
+      "status": "passed"
+    },
+    {
+      "name": "symlink_material_preserves_gateway",
+      "status": "passed",
+      "provider_calls_before": 8,
+      "provider_calls_after": 9
+    },
+    {
+      "name": "wrong_hostname_client",
+      "status": "passed"
+    },
+    {
+      "name": "untrusted_ca_client",
+      "status": "passed"
+    },
+    {
+      "name": "client_failures_preserve_gateway",
+      "status": "passed",
+      "provider_calls_before": 9,
+      "provider_calls_after": 10
+    },
+    {
+      "name": "caddy_rejects_mismatched_reload",
+      "status": "passed"
+    },
+    {
+      "name": "caddy_reload_failure_preserves_gateway",
+      "status": "passed",
+      "provider_calls_before": 10,
+      "provider_calls_after": 11
+    },
+    {
+      "name": "expired_server_client",
+      "status": "passed"
+    },
+    {
+      "name": "expired_server_recovery",
+      "status": "passed",
+      "provider_calls_before": 11,
+      "provider_calls_after": 12
+    },
+    {
+      "name": "interruption_before_reload_reached",
+      "status": "passed"
+    },
+    {
+      "name": "interruption_before_reload_observed",
+      "status": "passed"
+    },
+    {
+      "name": "recovery_before_reload",
+      "status": "passed"
+    },
+    {
+      "name": "recovery_before_reload_authenticated_request",
+      "status": "passed",
+      "provider_calls_before": 12,
+      "provider_calls_after": 13
+    },
+    {
+      "name": "interruption_after_reload_reached",
+      "status": "passed"
+    },
+    {
+      "name": "interruption_after_reload_observed",
+      "status": "passed"
+    },
+    {
+      "name": "recovery_after_reload",
+      "status": "passed"
+    },
+    {
+      "name": "recovery_after_reload_authenticated_request",
+      "status": "passed",
+      "provider_calls_before": 13,
+      "provider_calls_after": 14
+    },
+    {
+      "name": "reload_unavailable",
+      "status": "passed"
+    },
+    {
+      "name": "reload_unavailable_recovery",
+      "status": "passed",
+      "provider_calls_before": 14,
+      "provider_calls_after": 15
+    },
+    {
+      "name": "journal_cleared_after_recovery",
+      "status": "passed"
+    },
+    {
+      "name": "private_material_permissions",
+      "status": "passed"
+    },
+    {
+      "name": "owned_processes_stopped",
+      "status": "passed"
+    },
+    {
+      "name": "evidence_excludes_private_material",
+      "status": "passed"
+    },
+    {
+      "name": "private_workspace_removed",
+      "status": "passed"
+    }
+  ],
+  "witnesses": [
+    {
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "88175f5cbdb24439c5308180749fe51234208f7fde37ceefc55bace7ad7ea73e",
+      "hostname": "localhost",
+      "http_status": 200,
+      "method": "GET",
+      "not_after": "Nov 13 06:10:03 2026 GMT",
+      "not_before": "Oct 14 06:10:03 2026 GMT",
+      "path": "/healthz",
+      "response_bytes": 17,
+      "response_sha256": "290f663cc2ed7fec14d831023497265da83974028929bc73c4e9711e949c8780",
+      "tls_version": "TLSv1.3",
+      "verified": true,
+      "name": "initial_handshake",
+      "client_exit_code": 0,
+      "observed_at_utc": "2026-10-14T06:10:06.525309+00:00"
+    },
+    {
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "88175f5cbdb24439c5308180749fe51234208f7fde37ceefc55bace7ad7ea73e",
+      "hostname": "localhost",
+      "http_status": 200,
+      "method": "POST",
+      "not_after": "Nov 13 06:10:03 2026 GMT",
+      "not_before": "Oct 14 06:10:03 2026 GMT",
+      "path": "/v1/chat/completions",
+      "response_bytes": 221,
+      "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
+      "tls_version": "TLSv1.3",
+      "useful_response": true,
+      "verified": true,
+      "name": "initial_authenticated_request",
+      "client_exit_code": 0,
+      "observed_at_utc": "2026-10-14T06:10:07.668452+00:00"
+    },
+    {
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "88175f5cbdb24439c5308180749fe51234208f7fde37ceefc55bace7ad7ea73e",
+      "hostname": "localhost",
+      "http_status": 401,
+      "method": "POST",
+      "not_after": "Nov 13 06:10:03 2026 GMT",
+      "not_before": "Oct 14 06:10:03 2026 GMT",
+      "path": "/v1/chat/completions",
+      "response_bytes": 89,
+      "response_sha256": "26d743fc9f8481f10574dae807002d2e5b3889cd50055454752d3ae5de7c332f",
+      "tls_version": "TLSv1.3",
+      "verified": true,
+      "name": "unauthenticated_request",
+      "client_exit_code": 0,
+      "observed_at_utc": "2026-10-14T06:10:08.234691+00:00"
+    },
+    {
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "88175f5cbdb24439c5308180749fe51234208f7fde37ceefc55bace7ad7ea73e",
+      "hostname": "localhost",
+      "http_status": 404,
+      "method": "GET",
+      "not_after": "Nov 13 06:10:03 2026 GMT",
+      "not_before": "Oct 14 06:10:03 2026 GMT",
+      "path": "/metrics",
+      "response_bytes": 0,
+      "response_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tls_version": "TLSv1.3",
+      "verified": true,
+      "name": "edge_boundary/metrics",
+      "client_exit_code": 0,
+      "observed_at_utc": "2026-10-14T06:10:08.797789+00:00"
+    },
+    {
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "88175f5cbdb24439c5308180749fe51234208f7fde37ceefc55bace7ad7ea73e",
+      "hostname": "localhost",
+      "http_status": 404,
+      "method": "GET",
+      "not_after": "Nov 13 06:10:03 2026 GMT",
+      "not_before": "Oct 14 06:10:03 2026 GMT",
+      "path": "/metrics/anything",
+      "response_bytes": 0,
+      "response_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tls_version": "TLSv1.3",
+      "verified": true,
+      "name": "edge_boundary/metrics/anything",
+      "client_exit_code": 0,
+      "observed_at_utc": "2026-10-14T06:10:09.332639+00:00"
+    },
+    {
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "88175f5cbdb24439c5308180749fe51234208f7fde37ceefc55bace7ad7ea73e",
+      "hostname": "localhost",
+      "http_status": 404,
+      "method": "GET",
+      "not_after": "Nov 13 06:10:03 2026 GMT",
+      "not_before": "Oct 14 06:10:03 2026 GMT",
+      "path": "/admin",
+      "response_bytes": 0,
+      "response_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tls_version": "TLSv1.3",
+      "verified": true,
+      "name": "edge_boundary/admin",
+      "client_exit_code": 0,
+      "observed_at_utc": "2026-10-14T06:10:09.894449+00:00"
+    },
+    {
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "88175f5cbdb24439c5308180749fe51234208f7fde37ceefc55bace7ad7ea73e",
+      "hostname": "localhost",
+      "http_status": 404,
+      "method": "GET",
+      "not_after": "Nov 13 06:10:03 2026 GMT",
+      "not_before": "Oct 14 06:10:03 2026 GMT",
+      "path": "/admin/v1/tenants",
+      "response_bytes": 0,
+      "response_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tls_version": "TLSv1.3",
+      "verified": true,
+      "name": "edge_boundary/admin/v1/tenants",
+      "client_exit_code": 0,
+      "observed_at_utc": "2026-10-14T06:10:10.434000+00:00"
+    },
+    {
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "88175f5cbdb24439c5308180749fe51234208f7fde37ceefc55bace7ad7ea73e",
+      "hostname": "localhost",
+      "http_status": 200,
+      "method": "GET",
+      "not_after": "Nov 13 06:10:03 2026 GMT",
+      "not_before": "Oct 14 06:10:03 2026 GMT",
+      "path": "/readyz",
+      "response_bytes": 156,
+      "response_sha256": "e73b091365fd126b3cf45fff183e9bc5bbdb56c7b654cc9a4ae108ecbe008f4e",
+      "tls_version": "TLSv1.3",
+      "verified": true,
+      "name": "readiness",
+      "client_exit_code": 0,
+      "observed_at_utc": "2026-10-14T06:10:10.996166+00:00"
+    },
+    {
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "88175f5cbdb24439c5308180749fe51234208f7fde37ceefc55bace7ad7ea73e",
+      "hostname": "localhost",
+      "http_status": 413,
+      "method": "POST",
+      "not_after": "Nov 13 06:10:03 2026 GMT",
+      "not_before": "Oct 14 06:10:03 2026 GMT",
+      "path": "/v1/chat/completions",
+      "response_bytes": 0,
+      "response_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tls_version": "TLSv1.3",
+      "verified": true,
+      "name": "body_bound",
+      "client_exit_code": 0,
+      "observed_at_utc": "2026-10-14T06:10:11.500737+00:00"
+    },
+    {
+      "name": "rotation_confirmation",
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "hostname": "localhost",
+      "http_status": 200,
+      "method": "GET",
+      "not_after": "Nov 13 06:10:04 2026 GMT",
+      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "path": "/healthz",
+      "response_bytes": 17,
+      "response_sha256": "290f663cc2ed7fec14d831023497265da83974028929bc73c4e9711e949c8780",
+      "tls_version": "TLSv1.3",
+      "verified": true
+    },
+    {
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "hostname": "localhost",
+      "http_status": 200,
+      "method": "POST",
+      "not_after": "Nov 13 06:10:04 2026 GMT",
+      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "path": "/v1/chat/completions",
+      "response_bytes": 221,
+      "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
+      "tls_version": "TLSv1.3",
+      "useful_response": true,
+      "verified": true,
+      "name": "rotated_authenticated_request",
+      "client_exit_code": 0,
+      "observed_at_utc": "2026-10-14T06:10:12.886911+00:00"
+    },
+    {
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "hostname": "localhost",
+      "http_status": 200,
+      "method": "POST",
+      "not_after": "Nov 13 06:10:04 2026 GMT",
+      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "path": "/v1/chat/completions",
+      "response_bytes": 221,
+      "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
+      "tls_version": "TLSv1.3",
+      "useful_response": true,
+      "verified": true,
+      "name": "malformed_material_preserves_gateway",
+      "client_exit_code": 0,
+      "observed_at_utc": "2026-10-14T06:10:13.533370+00:00"
+    },
+    {
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "hostname": "localhost",
+      "http_status": 200,
+      "method": "POST",
+      "not_after": "Nov 13 06:10:04 2026 GMT",
+      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "path": "/v1/chat/completions",
+      "response_bytes": 221,
+      "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
+      "tls_version": "TLSv1.3",
+      "useful_response": true,
+      "verified": true,
+      "name": "mismatched_key_preserves_gateway",
+      "client_exit_code": 0,
+      "observed_at_utc": "2026-10-14T06:10:14.154132+00:00"
+    },
+    {
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "hostname": "localhost",
+      "http_status": 200,
+      "method": "POST",
+      "not_after": "Nov 13 06:10:04 2026 GMT",
+      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "path": "/v1/chat/completions",
+      "response_bytes": 221,
+      "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
+      "tls_version": "TLSv1.3",
+      "useful_response": true,
+      "verified": true,
+      "name": "expired_material_preserves_gateway",
+      "client_exit_code": 0,
+      "observed_at_utc": "2026-10-14T06:10:14.774366+00:00"
+    },
+    {
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "hostname": "localhost",
+      "http_status": 200,
+      "method": "POST",
+      "not_after": "Nov 13 06:10:04 2026 GMT",
+      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "path": "/v1/chat/completions",
+      "response_bytes": 221,
+      "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
+      "tls_version": "TLSv1.3",
+      "useful_response": true,
+      "verified": true,
+      "name": "wrong_hostname_material_preserves_gateway",
+      "client_exit_code": 0,
+      "observed_at_utc": "2026-10-14T06:10:15.312543+00:00"
+    },
+    {
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "hostname": "localhost",
+      "http_status": 200,
+      "method": "POST",
+      "not_after": "Nov 13 06:10:04 2026 GMT",
+      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "path": "/v1/chat/completions",
+      "response_bytes": 221,
+      "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
+      "tls_version": "TLSv1.3",
+      "useful_response": true,
+      "verified": true,
+      "name": "untrusted_ca_material_preserves_gateway",
+      "client_exit_code": 0,
+      "observed_at_utc": "2026-10-14T06:10:15.975061+00:00"
+    },
+    {
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "hostname": "localhost",
+      "http_status": 200,
+      "method": "POST",
+      "not_after": "Nov 13 06:10:04 2026 GMT",
+      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "path": "/v1/chat/completions",
+      "response_bytes": 221,
+      "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
+      "tls_version": "TLSv1.3",
+      "useful_response": true,
+      "verified": true,
+      "name": "oversized_material_preserves_gateway",
+      "client_exit_code": 0,
+      "observed_at_utc": "2026-10-14T06:10:16.566597+00:00"
+    },
+    {
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "hostname": "localhost",
+      "http_status": 200,
+      "method": "POST",
+      "not_after": "Nov 13 06:10:04 2026 GMT",
+      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "path": "/v1/chat/completions",
+      "response_bytes": 221,
+      "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
+      "tls_version": "TLSv1.3",
+      "useful_response": true,
+      "verified": true,
+      "name": "symlink_material_preserves_gateway",
+      "client_exit_code": 0,
+      "observed_at_utc": "2026-10-14T06:10:17.588794+00:00"
+    },
+    {
+      "diagnostic": "hostname mismatch",
+      "error": "certificate_verification_failed",
+      "hostname": "localhost",
+      "http_status": null,
+      "method": "GET",
+      "path": "/healthz",
+      "verification_client": "openssl",
+      "verified": false,
+      "verify_code": 62,
+      "verify_hostname": "wrong.invalid",
+      "name": "wrong_hostname_client",
+      "client_exit_code": 1,
+      "observed_at_utc": "2026-10-14T06:10:18.382008+00:00"
+    },
+    {
+      "diagnostic": "unable to get local issuer certificate",
+      "error": "certificate_verification_failed",
+      "hostname": "localhost",
+      "http_status": null,
+      "method": "GET",
+      "path": "/healthz",
+      "verified": false,
+      "verify_code": 20,
+      "name": "untrusted_ca_client",
+      "client_exit_code": 1,
+      "observed_at_utc": "2026-10-14T06:10:18.867242+00:00"
+    },
+    {
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "hostname": "localhost",
+      "http_status": 200,
+      "method": "POST",
+      "not_after": "Nov 13 06:10:04 2026 GMT",
+      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "path": "/v1/chat/completions",
+      "response_bytes": 221,
+      "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
+      "tls_version": "TLSv1.3",
+      "useful_response": true,
+      "verified": true,
+      "name": "client_failures_preserve_gateway",
+      "client_exit_code": 0,
+      "observed_at_utc": "2026-10-14T06:10:19.472097+00:00"
+    },
+    {
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "hostname": "localhost",
+      "http_status": 200,
+      "method": "POST",
+      "not_after": "Nov 13 06:10:04 2026 GMT",
+      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "path": "/v1/chat/completions",
+      "response_bytes": 221,
+      "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
+      "tls_version": "TLSv1.3",
+      "useful_response": true,
+      "verified": true,
+      "name": "caddy_reload_failure_preserves_gateway",
+      "client_exit_code": 0,
+      "observed_at_utc": "2026-10-14T06:10:20.133993+00:00"
+    },
+    {
+      "diagnostic": "certificate has expired",
+      "error": "certificate_verification_failed",
+      "hostname": "localhost",
+      "http_status": null,
+      "method": "GET",
+      "path": "/healthz",
+      "verified": false,
+      "verify_code": 10,
+      "name": "expired_server_client",
+      "client_exit_code": 1,
+      "observed_at_utc": "2026-10-14T06:10:20.803162+00:00"
+    },
+    {
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "hostname": "localhost",
+      "http_status": 200,
+      "method": "POST",
+      "not_after": "Nov 13 06:10:04 2026 GMT",
+      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "path": "/v1/chat/completions",
+      "response_bytes": 221,
+      "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
+      "tls_version": "TLSv1.3",
+      "useful_response": true,
+      "verified": true,
+      "name": "expired_server_recovery",
+      "client_exit_code": 0,
+      "observed_at_utc": "2026-10-14T06:10:22.013669+00:00"
+    },
+    {
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "hostname": "localhost",
+      "http_status": 200,
+      "method": "GET",
+      "not_after": "Nov 13 06:10:04 2026 GMT",
+      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "path": "/healthz",
+      "response_bytes": 17,
+      "response_sha256": "290f663cc2ed7fec14d831023497265da83974028929bc73c4e9711e949c8780",
+      "tls_version": "TLSv1.3",
+      "verified": true,
+      "name": "interruption_before_reload_served",
+      "client_exit_code": 0,
+      "observed_at_utc": "2026-10-14T06:10:23.088737+00:00"
+    },
+    {
+      "name": "recovery_before_reload",
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "hostname": "localhost",
+      "http_status": 200,
+      "method": "GET",
+      "not_after": "Nov 13 06:10:04 2026 GMT",
+      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "path": "/healthz",
+      "response_bytes": 17,
+      "response_sha256": "290f663cc2ed7fec14d831023497265da83974028929bc73c4e9711e949c8780",
+      "tls_version": "TLSv1.3",
+      "verified": true
+    },
+    {
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "hostname": "localhost",
+      "http_status": 200,
+      "method": "POST",
+      "not_after": "Nov 13 06:10:04 2026 GMT",
+      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "path": "/v1/chat/completions",
+      "response_bytes": 221,
+      "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
+      "tls_version": "TLSv1.3",
+      "useful_response": true,
+      "verified": true,
+      "name": "recovery_before_reload_authenticated_request",
+      "client_exit_code": 0,
+      "observed_at_utc": "2026-10-14T06:10:24.348817+00:00"
+    },
+    {
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "88175f5cbdb24439c5308180749fe51234208f7fde37ceefc55bace7ad7ea73e",
+      "hostname": "localhost",
+      "http_status": 200,
+      "method": "GET",
+      "not_after": "Nov 13 06:10:03 2026 GMT",
+      "not_before": "Oct 14 06:10:03 2026 GMT",
+      "path": "/healthz",
+      "response_bytes": 17,
+      "response_sha256": "290f663cc2ed7fec14d831023497265da83974028929bc73c4e9711e949c8780",
+      "tls_version": "TLSv1.3",
+      "verified": true,
+      "name": "interruption_after_reload_served",
+      "client_exit_code": 0,
+      "observed_at_utc": "2026-10-14T06:10:25.519213+00:00"
+    },
+    {
+      "name": "recovery_after_reload",
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "hostname": "localhost",
+      "http_status": 200,
+      "method": "GET",
+      "not_after": "Nov 13 06:10:04 2026 GMT",
+      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "path": "/healthz",
+      "response_bytes": 17,
+      "response_sha256": "290f663cc2ed7fec14d831023497265da83974028929bc73c4e9711e949c8780",
+      "tls_version": "TLSv1.3",
+      "verified": true
+    },
+    {
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "hostname": "localhost",
+      "http_status": 200,
+      "method": "POST",
+      "not_after": "Nov 13 06:10:04 2026 GMT",
+      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "path": "/v1/chat/completions",
+      "response_bytes": 221,
+      "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
+      "tls_version": "TLSv1.3",
+      "useful_response": true,
+      "verified": true,
+      "name": "recovery_after_reload_authenticated_request",
+      "client_exit_code": 0,
+      "observed_at_utc": "2026-10-14T06:10:26.822717+00:00"
+    },
+    {
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "hostname": "localhost",
+      "http_status": 200,
+      "method": "POST",
+      "not_after": "Nov 13 06:10:04 2026 GMT",
+      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "path": "/v1/chat/completions",
+      "response_bytes": 221,
+      "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
+      "tls_version": "TLSv1.3",
+      "useful_response": true,
+      "verified": true,
+      "name": "reload_unavailable_recovery",
+      "client_exit_code": 0,
+      "observed_at_utc": "2026-10-14T06:10:28.863326+00:00"
+    }
+  ],
+  "rotation_errors": [
+    {
+      "case": "malformed_material",
+      "diagnostic": "certificate trust, hostname and validity check failed (exit 2)"
+    },
+    {
+      "case": "mismatched_key",
+      "diagnostic": "certificate and private key do not match"
+    },
+    {
+      "case": "expired_material",
+      "diagnostic": "certificate trust, hostname and validity check failed (exit 2)"
+    },
+    {
+      "case": "wrong_hostname_material",
+      "diagnostic": "certificate trust, hostname and validity check failed (exit 2)"
+    },
+    {
+      "case": "untrusted_ca_material",
+      "diagnostic": "certificate trust, hostname and validity check failed (exit 2)"
+    },
+    {
+      "case": "oversized_material",
+      "diagnostic": "material is empty or exceeds 64 KiB"
+    },
+    {
+      "case": "symlink_material",
+      "diagnostic": "[Errno 40] Too many levels of symbolic links: '/tmp/sou38-ctj3eu8m/certificates/linked.pem'"
+    },
+    {
+      "case": "reload_unavailable",
+      "diagnostic": "rotation failed; recovery required: Caddy reload failed (exit 1)"
+    }
+  ],
+  "source": {
+    "commit": "219a19dba621ed2c08de08f7ccd50c48804aa0bc",
+    "gateway_inputs": {
+      "Cargo.lock": "050d12d3c526788bf719e5e7f877cc880b152bef37fec73f09fea0fe81f1fe57",
+      "Cargo.toml": "df5cf3632141f34e519b9693ce1455f53de74bec408697beb4f375b435514a5f",
+      "crates/adapter/Cargo.toml": "c3c4d960a8e9c10f9c975e2324335e9d15216a719fae60499ee16e5c7f33c21a",
+      "crates/adapter/src/lib.rs": "f43c41ff4c85c5ae77cb544c1e3c26fb5265f3fb68d8e470c4b9a2322c9d7afe",
+      "crates/adapter/src/runner.rs": "99ef70172faa380c5e9b0fa466c25a777edd80a54624a4e8541cd6df2f92cc5a",
+      "crates/adapter/src/tool_call.rs": "ffd672326b7ae4eaed94bfbe178c014eb188af9fedd95932927f2fe81b95db6d",
+      "crates/agent/Cargo.toml": "ef8416e70e30003b78dd9f5e73ad6b09221e8b1a4ce13040e33166d7fab5a87a",
+      "crates/agent/policies/agent-default.yaml": "8b2bfb66b14a988a29cf2698c482bc7cd91ba550fea14ccfa63540e815eb3c57",
+      "crates/agent/src/action.rs": "7069161402b26daf8d9b345aca453ccea473ee0fad5e72da381aba4c184163b2",
+      "crates/agent/src/authority.rs": "20a5724530f0b7834aec1e37884e24d9087e43bb4974f967331de32fb978ca1a",
+      "crates/agent/src/egress.rs": "9dc5091592cd8fac69296f9317e200a1c5e368e681671d9027ab40b7a0334d05",
+      "crates/agent/src/engine.rs": "79a340f115b63e00b0a291c79f1446fb588a39cb9865bc18b13e7576632ef163",
+      "crates/agent/src/event.rs": "904081b15eec9a3401e6f609c1b0e392291c639339706e9511914d45883612a9",
+      "crates/agent/src/facet.rs": "2225d0e1aeb4ae78b64712e089fc696fcda4e75a4cc177b2bd18301ac8e28e78",
+      "crates/agent/src/fingerprint.rs": "b1d2c6452fa9d5b27196b98f0b99c8b300e292c55263e85da2ca593af71c983c",
+      "crates/agent/src/lib.rs": "9abb757d1a3fb741e11f23fdf936768adb23fd85aea409bd47e729d1457d6784",
+      "crates/agent/src/policy.rs": "791c84cc81dd7d3587d3c5c755b4fef981b12481e40ab95f65fa1473528767d5",
+      "crates/agent/src/resolution.rs": "3e58e96e3e45dac6e37b41ac76d5a789711bcef041da5c299eff041cc04e0a0a",
+      "crates/agent/src/taint.rs": "ad3d6a52d20bc4d72aff9725046d3c211b1fd7c776aad961ecd1b64f95d063af",
+      "crates/agentfw/Cargo.toml": "8c6d80902c07011082a06a9e6e6724f7fe0820e8d6e17c5c64d498a4b89d253e",
+      "crates/agentfw/examples/policy_matrix.rs": "6a5c62003dff259f9973e469db218ef1fd2f1b8a1ce3250e73b7150bbbf37f27",
+      "crates/agentfw/src/audit.rs": "0f348a0e9ec9412d0898f1372b0b84a2c922832ceb4a63a258b2b03e3628a23b",
+      "crates/agentfw/src/config.rs": "4fb4ddb3859b6c30aff7ebb8e2178e7b947b37d5d6cab60fe9ac575689ef167a",
+      "crates/agentfw/src/decision.rs": "741b9a03d5fc09f0bdf522b6391c45f946722a77280a17b97e71ebed31f595db",
+      "crates/agentfw/src/grant.rs": "3d3267c60b2b32632c144f06a04283319c606bb52866098c70d23f82b8073a73",
+      "crates/agentfw/src/handlers.rs": "11aa76b82af67f1a42a882a15e02477841757c88a5719cfa64c3b01a8339b6e2",
+      "crates/agentfw/src/hook.rs": "ac67cd17a338cffffee347abe04a5c3203f5bf742f3a6bcbf534923b2e2ea402",
+      "crates/agentfw/src/install.rs": "c026246f4098b9fef9a46a60a6870b775bfcce1ce7b88e126e0e5bafa46eb7f6",
+      "crates/agentfw/src/judge.rs": "cd19617313163aafe3a9f37d3e81de2f339438813e162aefad1536fb8c59c449",
+      "crates/agentfw/src/lib.rs": "1cab8d4519e9b4e4655942b46689710948e9e4c4c4cc7452478bcfea6195e5d2",
+      "crates/agentfw/src/lifecycle.rs": "842b64d90424d7dff4b79409ac33f7ae49cf48bdfce23b3bee0f70792282d7fa",
+      "crates/agentfw/src/main.rs": "74654becadd0a611464ae916df0df916472fa4f51dd2d682e66eeefe3a28a449",
+      "crates/agentfw/src/managed_policy.rs": "b916ea915759c1cf3eae664375eca52444189edb27da6c7aed702660e583c0bd",
+      "crates/agentfw/src/managed_sync.rs": "cd589bae2d0e82f0a3842df412fa74225fccfe7f877a6f9f9cff87298178aaed",
+      "crates/agentfw/src/map.rs": "06765851b9c48eb66720af99459b23c6b19d9d206e4a0d53f3c6652106f85f4d",
+      "crates/agentfw/src/mcp/admission.rs": "86dc91114e1338c03312729d26d34e6b3605b89a974bf5f0fb2b700dbd7788a5",
+      "crates/agentfw/src/mcp/input.rs": "a21ac8ff86bb06706da1039e354fbd720a8955fdc3b8a3af836e20f69f2214de",
+      "crates/agentfw/src/mcp/jsonrpc.rs": "c77265bf4d7c851e3319c4f39bed8114980bde552b9a0cfc0836dd2c43dd147c",
+      "crates/agentfw/src/mcp/manifest.rs": "39673dd219863047f77dad5e73761ecf3f326dd38df196d886d718a4b9758803",
+      "crates/agentfw/src/mcp/mod.rs": "294a574b74746c3e4edb51f99f26df661adbac921cc59eb2a4b27daf6fc5a263",
+      "crates/agentfw/src/mcp/proxy.rs": "7b414e7b9b47697195f466daa66addb6ead4b1af76886f41149a9cdbc77a3ad7",
+      "crates/agentfw/src/mcp/resources.rs": "ba23b844c959806b1a0b8388f0818d02cfe03293dc2cc763e465cb0b98576f48",
+      "crates/agentfw/src/mcp/store.rs": "b39b680fb21af64d79f9a82ec12e2b5deda12d276c6371d1c111ea1892ddf25c",
+      "crates/agentfw/src/native.rs": "4d7a24631ef009328a2b96da0d11c595a704a56a8fc39ff4cf57fae5cf7e0a96",
+      "crates/agentfw/src/native/resource.rs": "87f246b42bcb6dbc4ef85e9f04988c9823b8bb751d3db8d86622c00ebba4e666",
+      "crates/agentfw/src/preflight.rs": "689f7ff7d2c4bd66d0505e2e75e2d9d78a8ed4e978aa3d5418f44747677bb8f6",
+      "crates/agentfw/src/private_file_windows.rs": "3731920a51c453e08b14ca16296c62b3952a82260569255cb2e8da76d9c889bb",
+      "crates/agentfw/src/provenance.rs": "4cd61e80219e0bed286cdf11c5f916e51baed204e24484f4a436d4bea62af677",
+      "crates/agentfw/src/replay.rs": "deda854b7ae10bc68eaf4251f44cc9524f0ae1e281e9efab976288906102a5c2",
+      "crates/agentfw/src/sandbox.rs": "779a33a43baa0d792bbd6e949f6ea4c72527ee3d631d3ce927c2c060b89219a1",
+      "crates/agentfw/src/spans.rs": "2dc37461c4fa689d70595d6c046a72702e47e5b7100271c3d3779b2992105c2f",
+      "crates/agentfw/src/token.rs": "edc3bfa80ace9ba4fc3e50501ed88849ef97fbcb3e334dc1ec406730ecb2e696",
+      "crates/bench/Cargo.toml": "a2251627f1b1c8c645321abb62045f0c0e22a11043234f1a7d027671a6e7eb16",
+      "crates/bench/corpora/README.md": "11b6bf39e97def4bd2737cdc5c8096b26f169b7527338f20f9fb732f52858512",
+      "crates/bench/corpora/agent_sessions.jsonl": "7c2adf977e786cdc2aa66b51a7ad7729f65259f816057a1db92fd4432e2622e9",
+      "crates/bench/corpora/agent_sessions.manifest.json": "11caf90d606503c65066cd057dc2be00c374f37f06651c658f7a5f447f9163a5",
+      "crates/bench/corpora/output_moderation/benign_security.jsonl": "3f17ef4e4b7c049eae8148ce5b4a009888c86bee9ec31a331f399c14bad7a85c",
+      "crates/bench/corpora/output_moderation/harmful.jsonl": "bd6351e7bde8d076dcf8e2ef7543c311256a6fa2998abadbb6cad364cdf1818f",
+      "crates/bench/src/agent_dataset.rs": "3cebe4adcd42f7f951f4c3bae54ca179db9a127437e0af8a4da09cc164043c96",
+      "crates/bench/src/agent_eval.rs": "c74151bc2234bc24334949fbf40c02f8d8c739578a03cd27f2d052939594fa08",
+      "crates/bench/src/agent_guard.rs": "223872ba654ce82341262c7b244f73bb0599d5767d2da49bf412770d30e1ed83",
+      "crates/bench/src/agent_report.rs": "28ef96796264c1f1ef87837254932329d1e29834b99c3235b25721221e9f590c",
+      "crates/bench/src/dataset.rs": "f4238a5f32028240de7a7cc1564e964ff71119a61c529cc548e0f5d361949c68",
+      "crates/bench/src/evaluate.rs": "a07872323d3dfb4218e4582fe0fce6843c5d985950870240262a847722ae6eb5",
+      "crates/bench/src/main.rs": "6e69b1e41cc0c42ef587d39ab764e93da3dfc4a5ab702c26c0cde17f7c88da4b",
+      "crates/bench/src/metrics.rs": "e6e13d18fcde9824c78df7630f234dd9523ef3d17ff3ca514dbe03b40e4145f9",
+      "crates/bench/src/report.rs": "a76c60e35b86494be9fe2a337412a74dbc01f0bb7e55cbd37e57eb93ecb01aac",
+      "crates/bench/src/rivals.rs": "b888844f84d58b188146c6de29653fb3dbacde2ae0dd9b4eb860eb668a30fc13",
+      "crates/bench/src/scorecard.rs": "46fd564d59a370f5cad066a4be01953438447e2cc75a53d20afaaab67764474c",
+      "crates/core/Cargo.toml": "195932b7d4fdc6cb5cbbd7082acb39874a6ab54c2a2fe80ca32f1ac679cfeca2",
+      "crates/core/examples/ml_probe.rs": "1e7a0f46257e60053abc85c32b0ea153b8b60a7628f0335899167a458316c797",
+      "crates/core/examples/moderation_probe.rs": "8b6a61ed938a9f4ca8434110474dcc797d2e56ee48fae4e07af8214554fa5a27",
+      "crates/core/src/context.rs": "686133cd213c5f4a418378d89154ad7b38113557948c7c4b1fb973cf645f4a77",
+      "crates/core/src/detector.rs": "66f4f063d5db534e6e805d8087ea9226e5ff214722775d9cbb11d678a08db4b5",
+      "crates/core/src/detectors/injection/heuristics.rs": "f06880f1886b38c6421d5ea8dcddc2bd10795368954fc47ea68825accf2b0e4c",
+      "crates/core/src/detectors/injection/ml.rs": "ef3db5295639a3b821d842e05d73dd60e26be4b463d32522be026f5f1972fa52",
+      "crates/core/src/detectors/injection/mod.rs": "30f509c20b93f339de83f3ff3f4515f5dabe427424887ac34dfc1074563f4433",
+      "crates/core/src/detectors/injection/signatures.rs": "e4b2a2d3d27e55bbc3336d2e34d427bd607dbc22ee2b6f369a834dfcd0c86397",
+      "crates/core/src/detectors/mod.rs": "e2954531ffd892f8db6f41c93c57aa9717342d0dc69fef35e4d0a47c80340f6e",
+      "crates/core/src/detectors/moderation.rs": "9b1feb4e5edc541fea0cf0f9a53ebef7294f922fa103a5c14a1ecf49e014d5b4",
+      "crates/core/src/detectors/output.rs": "e493ab6ba6f4489e46802ee12e61f5b05f52e687b17d17373b0fcdbfbb2bfea8",
+      "crates/core/src/detectors/pii.rs": "8af448adbeb4c8c4aa7cbe427bb32870d5ae2057f5f4e7006e5786d44d3e5e62",
+      "crates/core/src/detectors/secret.rs": "e26623583c6d936cb6a670c9c475d6c62efdfc355821ed964008da32e30a8892",
+      "crates/core/src/finding.rs": "bd0c5385dcaae9b44f6f78489cd3b04928a55f2443a949a70413ba8e9e9b72f1",
+      "crates/core/src/firewall.rs": "842ed4c1b83789514aca24e92f7c5faee9b9f6f4bcfd1043ea2c7bdbb2df6641",
+      "crates/core/src/lib.rs": "30893b4fbf80bf43175792347842e4fb48922596574bd10ee9a13dfb97d06a33",
+      "crates/core/src/masking.rs": "276e1afa622cac9920ea7c738225f9acd420444a2fa63fc1ed8b50b319daca5b",
+      "crates/core/src/normalize.rs": "ae28636882ba7360da2068f0ed866960f1115674fc23a5cbd72128c1ab1b337e",
+      "crates/core/src/policy.rs": "d05d4db813e1295d705f52b0740e739d04ef79675f2a3c9bcede324c0e54e496",
+      "crates/core/src/scoring.rs": "16db47c30b6b588af522e37e654457600111617c236c38be289c6c2eb218c968",
+      "crates/core/src/severity.rs": "1e6b0b2c58a95ead6f1b567c69ff2016e648bfa0f99dcb17f89f77d04b142179",
+      "crates/core/src/taxonomy.rs": "d6c944cae1160068dac3f3d3abbc163dbb5307cd54b63844a96aab474eef0d29",
+      "crates/core/src/util.rs": "ea8728493ac0c0a043fcec401533027432c92fd4cf00e2976d430754c54e8d8c",
+      "crates/proxy/Cargo.toml": "5faf43ebf33281a50865927c5b39ebc2b3c2d21ccf3e49a149a6b4b0074b3cbc",
+      "crates/proxy/examples/keycloak-oidc-bootstrap.rs": "fd1493f14d5ee283c57cc6902e7f4852f2ea92b4364f105dbca69e07c9d3b171",
+      "crates/proxy/examples/keycloak-saml-bootstrap.rs": "e4542b11aa75c1b8fb3e3fd9b54ebbf1c1474e4005007b3769311f84cacc2689",
+      "crates/proxy/examples/postgres-restore-fixture.rs": "8c220e1f7b894abf6c8ab49105aeb265d17d74c9c7bc0ff06994b2b4e553d9ce",
+      "crates/proxy/src/admin.rs": "1c3105a5d187d3578fd190a8c0b8a566aa23ec72ea295d8bbde2fab2cddf7c41",
+      "crates/proxy/src/admin_dashboard.html": "716ae6c2f0fe2b8b9babfff40765e781464c75c89fe4cb08ff53d4bab322a7bd",
+      "crates/proxy/src/admin_ui.rs": "a320672edab0b0fe1ab93a790584848b038ebd46e72d172cc40c75c7cc0a10f6",
+      "crates/proxy/src/agent_scan.rs": "490c9d5e3bd7d988af76656b2f786609a56e661e2d7f8c525cff0b64529b49e4",
+      "crates/proxy/src/anthropic.rs": "8cb3afb35b98a9fc60ba25e5b5d287f64f783d2c6022de8396e7a250ab262b5c",
+      "crates/proxy/src/audit.rs": "34f32c966218e965b8903bcef6ec614f7d5a95ceb94bb9983f89d209305da464",
+      "crates/proxy/src/auth.rs": "b1a54020595737c1238cc3df20dec95a5dadc7908f0b028de83cda2926f53c7e",
+      "crates/proxy/src/capability.rs": "e24388052d1bf78e18abf88a24fb860a1729835da8f023ec435a04cd8dcc1b1d",
+      "crates/proxy/src/config.rs": "cc39d924c437602d509b7de07fecf2037729909337505a8a746e617b23d3cabc",
+      "crates/proxy/src/control_plane.rs": "3cd02a69266303c16a05875e6cfef9937aac0755f0a8ce628a62ab82c6a69c4a",
+      "crates/proxy/src/customer_dashboard.html": "3463b890da9a08598c84260586a9463c99a6448e4a1e7f0e42f9c744a1ac1ef5",
+      "crates/proxy/src/customer_ui.rs": "356f06c0dba7bf965d6d6bd9ddd9570a6c43f856a14c0415ad845318886b0bac",
+      "crates/proxy/src/events.rs": "327dbd980704aa2a9a35d28056f3595bbd955c8aab9cbca724b3a3a5f0656fb7",
+      "crates/proxy/src/handlers.rs": "e904a762a400d0694ace5743bf0261eaaeedd9511e6656ed223cd7160e47df9a",
+      "crates/proxy/src/invitation_ui.rs": "845193abd430dbb89058dee6ada6e1fc87ecfba6f224a702457b6c8566b004bb",
+      "crates/proxy/src/lib.rs": "d5e8a80b6868f114fb970a70209409eafb282e40c20b9749b35a471edc458774",
+      "crates/proxy/src/main.rs": "36f9986f5b31d18e6291e4cbccfedddab2e3e0247ba232758548c83c68421370",
+      "crates/proxy/src/managed_agent_api.rs": "96d29c653ec7c74b77e299e810e2b22ae8c7c29357992640f19348d81156ec41",
+      "crates/proxy/src/moderation.rs": "317fcbb279ee6f7d21ae997d9294775d218b76d601601ef6ed3f56ff9dda36e3",
+      "crates/proxy/src/oidc.rs": "e0cb21fa426fdb8bc13cbb01795adce5ac06cf5f61e7389f9dc37d63f4e1a53e",
+      "crates/proxy/src/oidc_auth.rs": "1c62a1d826d5718077349b4dda703678e443c49c94873c9350c09e76530e6b61",
+      "crates/proxy/src/oidc_token.rs": "03faf92d77325568625f32461e169f26e86c65ebcb4d310ce1da8c7d258f7ec1",
+      "crates/proxy/src/openai.rs": "51eda1b8dcf267547d3c156f4980a3d81e516069abd8c98b4af321a0492812a1",
+      "crates/proxy/src/pipeline.rs": "fdeff5bfe16cbe6dced7cd32473ad7f6dd27e5a3558d5611d7da5f6b75361ec2",
+      "crates/proxy/src/rate_limit.rs": "f28dba75525add54302b532c99a990c1bb4d5e8e1367f7685103ab18b5c1d638",
+      "crates/proxy/src/redis_limits.rs": "8e40a2073d11da28fe08b7ca94a4371da501c2618c4f70be101c26ff8a492740",
+      "crates/proxy/src/responses.rs": "c5e0dac70dce20e89776aad50a742aef4cccf4420d0865dcf82bfc185f8a677f",
+      "crates/proxy/src/saml_auth.rs": "b370d25b7462726dd8a118689061b26daf4c9c9e1dd0dbfb43b6964a846418fe",
+      "crates/proxy/src/scim.rs": "f6fcfd85084326df11235bc5f75b660d99a94b06185ed2042a4b48fcb87c3809",
+      "crates/proxy/src/spend_limit.rs": "b567a43e574697c7833e8a6242ee238094d6672b7b35cf113729017b9b25cea0",
+      "crates/proxy/src/tenant_store.rs": "25b41851669590b3915cdf713a1164d413cce5fda0fdffaed7726f1920e7a0cc",
+      "crates/proxy/src/tenant_store/agent_enrollment.rs": "10273f0dee364625ae557d2f6ace489dc2d7c6527f45090f24ef8aee741c94e7",
+      "crates/proxy/src/tenant_store/managed_policy.rs": "f9e590dd294876f4673072a7489a8446153050bbe1571c4b080e500abbe69e1d",
+      "crates/proxy/src/tenant_store/postgres.rs": "4208b8696b440c9eb3eb549dce07b39b147d13c906ca1508e9b3d279fd4c7abf",
+      "crates/proxy/src/tenant_store/webhook_delivery_tests.rs": "343d68ed41462df8ead56632307e677bbe20a9a32a6c1efaf14e614a42f1bdc7",
+      "crates/proxy/src/tenant_store/webhook_recovery_tests.rs": "df4f43c6441b9693cf11b85a7ce65d770e768d5408ee024067f32bb9a182c3f2",
+      "crates/proxy/src/tenant_store/webhook_transport_tests.rs": "7bc6809aacb1bf11f3820797a2b24ef28068d33ad3c6f1031ab387b05c316e2d",
+      "crates/proxy/src/usage.rs": "5d663ab2df48fd3b3c68d16563b458b8acec723480bf4be03dd9144ff1d0d7e8",
+      "crates/proxy/src/workspace_invitation.html": "42fc4cfccaabe88d0e77d3d29951171c565ab18ff9a94077d1477393cb4fce61",
+      "rust-toolchain.toml": "a6a0bbd29ffaa8182dc22d1d9149709f1091e47df40ed96eb8a78a711c66a4ce",
+      "vendor/kryptering/CHANGELOG.md": "ed737b863a545497a9f8c7f70d990eccfa5dc3a9dc5e7c8983d25d0ba763bd82",
+      "vendor/kryptering/Cargo.toml": "9abefb63895f56186dba2fe78a2fff88557567e1ca57ad4ea74c89001397551a",
+      "vendor/kryptering/Cargo.toml.orig": "876edae1984d32ff2d39822c3fc09ced54fcde163f8f440237bf46996b3350ea",
+      "vendor/kryptering/LICENSE": "b9991aabd278e2ada92f076ef45880721f63ec67a06a11ecedeb189ead55e9b3",
+      "vendor/kryptering/PATCH.md": "155e549b70c2b8cfcdf95cabc8ebd1a4895353502ace67cbe6a7638b447073a9",
+      "vendor/kryptering/README.md": "bc816efee758b3e6d5ea9b1f6bd9e5bfbe1992dabbf5f6bd0a37f162de5e4ecd",
+      "vendor/kryptering/docs/adr/0001-rng-choice.md": "3277e6ef4100f2ce8b9cca1854b39515e360f9d502f6efa3c5627b3752351a87",
+      "vendor/kryptering/docs/adr/0002-compile-time-provider-boundary.md": "bed84903c731a203648e2e4fd35ebb94bcec2ebef2316000ff482dfea4a8a974",
+      "vendor/kryptering/docs/adr/0003-cryptographic-input-and-token-validation.md": "65f5a190cd68c69d6c804a1fcb6d66bef5f59fd878958d1338f9b619f7004bc8",
+      "vendor/kryptering/docs/ecosystem.md": "49f269f6dec6ae9d96edf34db17056f7a1e4086746207a7ac2f23726f6bbb555",
+      "vendor/kryptering/docs/providers.md": "ae6a2cba9efcbd9c13a6f948a5268f85c120dd378436d7c724e7fd3375a8fd9a",
+      "vendor/kryptering/src/algorithm.rs": "b036ed96c0dc3d91021f94cfdd32292a9aee0c45a9f89dbc2bc54ac779f55491",
+      "vendor/kryptering/src/alternate/digest.rs": "e3db2d33d68b5754220a99b996811c048e218c7d0d4524b86d1548d5b512d422",
+      "vendor/kryptering/src/alternate/hazmat.rs": "c1139b43e873f7420d1758f6781c45c12c4f9fe34261ca969df7d54cf00d9345",
+      "vendor/kryptering/src/alternate/kdf.rs": "c2659826723baf0f37ec4b96b846706d3998170691d8d825067896d61f0de0a0",
+      "vendor/kryptering/src/alternate/key.rs": "9889ac236121efce2e247fd77174833dd6c348fdd35a2d08279fde15a2129d68",
+      "vendor/kryptering/src/alternate/software.rs": "591b3823070896308cd4bd412ff122162dd6cdbce7dccfd923f5a1198efedaab",
+      "vendor/kryptering/src/backend.rs": "14af2fcbedeca8db3263d821ae0a6b48bbec4d552a5f53ed579282608928fcff",
+      "vendor/kryptering/src/digest.rs": "739f9bdf736619ac522b1d1126c5f8f132ea60ee88d99fd60a500b84606c360b",
+      "vendor/kryptering/src/ecdsa_encoding.rs": "5819f7af01847a3caebe17c020b88a1badefa6e21d8abd27174e2c78769f521c",
+      "vendor/kryptering/src/error.rs": "3132fdf5a4d3b16dc4d57a2ddfd23d49db7a3f853c19a8100bd605208ecf783f",
+      "vendor/kryptering/src/hazmat/aes_cbc.rs": "9386413bfd58216b1329655ca97260b2c0b31422d8290de53319255dd5a56922",
+      "vendor/kryptering/src/hazmat/dh.rs": "1a1a3f25565997f7eb34950e340bb922e4b64cf4fce83a90a6d60ac7b05440cb",
+      "vendor/kryptering/src/hazmat/mod.rs": "711ed6c3fca41f5c3fd5190466bc362423d438bab10b5cf8bbcf621009ca7a3b",
+      "vendor/kryptering/src/kdf.rs": "d49ce5da2218eb65080e280a108a6d0624293ed9e0ea10fafacdf0c21c81d2c9",
+      "vendor/kryptering/src/key.rs": "5dd71188a4aca8d031746401592e60a0828fcc9e54961bfe080c24436d8665bd",
+      "vendor/kryptering/src/lib.rs": "69b13b71a58c1af611f64c45a26da8aab652a62b4164cbb040610d72b329acae",
+      "vendor/kryptering/src/parameters.rs": "a7be2c242fbf0fbc2c6153d5a9baf5aa9d3023200c4ac32e82a6b5d867fd7dfd",
+      "vendor/kryptering/src/pkcs11/mod.rs": "afa013005fb6188c1bbb807e97551a7eb39758808ca650acd70c5277b331e4a8",
+      "vendor/kryptering/src/pkcs12.rs": "7485e6b0deaebde8ac4f52a552fbc91ba4aea9cbd2b46abfbdf2277905ea2fbc",
+      "vendor/kryptering/src/software/cipher.rs": "2d4bf82a09e3f2f04a980031b8bc0bcf565de66725b754151cb55fc94efc9cf7",
+      "vendor/kryptering/src/software/composite.rs": "2e184ad1bf295eb25f2fb60447210e7fd3ce1e498099e7d7988160304948b8bb",
+      "vendor/kryptering/src/software/kem.rs": "98df73990a3de786bcc9055a8f290aec108c7075b4f25a9aed9954f01ccbe9cc",
+      "vendor/kryptering/src/software/keyagreement.rs": "393cdaa75872e8123af4df19cc3fc702cc525a4628a2d19f834a76da8250e0d4",
+      "vendor/kryptering/src/software/keytransport.rs": "ec9446e5c01e86e496bb42c2ea4cddce914e292f238bc26a9469c234708af487",
+      "vendor/kryptering/src/software/keywrap.rs": "248f481c76d3d8481d5b3c95e6a7fb8a81b6627628267ca2f5c3baada56baf65",
+      "vendor/kryptering/src/software/mod.rs": "8e18376aa3a0bf96199ee8fc8a17d96a974368437999cd8dc7804d460100a7f5",
+      "vendor/kryptering/src/software/sign.rs": "b2c5a951e8beffd2cf4745d3c14eb3a55f21aa1789eb07143171d033788d73fd",
+      "vendor/kryptering/src/traits.rs": "da786f7f8e5e291f34179b4a6e403a158cfcbef2df93826cea58ae6cf79b62b2"
+    },
+    "gateway_source_sha256": "943ff842146dff98fb65b510c4e0a8d69728fbd55c3704ec3c0c3d7b443bb931",
+    "verification_inputs": {
+      "deploy/Dockerfile.tls": "58acf8c7dba4be3a47509b9ac35f655bcdb00659f29c9aeb439935ea2241a0dc",
+      "deploy/Caddyfile.rotation": "db0ac5714706b86413c29d94b6bd4768c9155fa741e109e05b10721b4c0db2b0",
+      ".dockerignore": "ab34fd34208213c299db07232bde61619d3e872385ffe8f379e7bf32b07a0707",
+      "scripts/tls-lifecycle.py": "c5edc9b6d48e4feb428aee9a3253c15b9811e55fdb4033c262843d4de234e8ee",
+      "scripts/fixtures/tls_edge.py": "3661f22fc67f5b7aafcffafab11ae81addcc861f943d11070d8301fda47ab20c",
+      "scripts/fixtures/tls_client.py": "b534fccc1ae5d2a28a1d052fc94b3a59dac51244dbe9707350f3379958e256c2",
+      "scripts/self-hosted-local-acceptance.py": "65fcafb1931c4e71e8a1f1bca9f93c113d9db264004b52be0f057cb34e699817",
+      "scripts/tests/test_tls_lifecycle.py": "32c3503f641e834950c17b758271a34f1ccb0aeea1be1a822b6b9e5254b305e1"
+    },
+    "verification_sha256": "47d650e455b93399a5a5cc5e28d9fce77a79f4a7e60336bc040d38e871a49027",
+    "working_tree_modified": true
+  },
+  "runtime": {
+    "image_id": "sha256:dd8536561ad0e0857f6246d52b667b4f9265a2c02dff5f062d6c3e21bb2f9da9",
+    "architecture": "amd64",
+    "os": "linux",
+    "caddy_image": "caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d",
+    "python_image": "python:3.12-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258",
+    "rust_image": "rust:1.99-bookworm@sha256:114c7a4425406451c2866b6aafe69fe29b1b298832db1277d411ac73c82d04d6",
+    "docker": "29.7.2",
+    "python": "3.12.15",
+    "kernel": "6.18.33.2-microsoft-standard-WSL2",
+    "uid": 65532,
+    "openssl": "OpenSSL 3.0.22 25 Aug 2026 (Library: OpenSSL 3.0.22 25 Aug 2026)",
+    "caddy": "v2.10.2 h1:g/gTYjGMD0dec+UgMw8SnfmJ3I9+M2TdvoRL/Ovu6U8=",
+    "gateway_binary_sha256": "ffb112745ce4df20e0b7c587fe29b912aa2da729df8bac3fd90fa0ee75ee0a24",
+    "caddy_binary_sha256": "4ef1f68c70219536b2711fd16547a79841a2dec2d6b4e56b1e3e5e9da76028e6"
+  },
+  "limits": [
+    "Controlled Linux/Docker localhost TLS with an operator-generated CA",
+    "No public ACME, customer domain or native Windows/macOS acceptance"
+  ],
+  "configuration": {
+    "gateway_sha256": "b0b0a26071160c766bfd455415e4e113e092684592006352e7d62ba98e97326a",
+    "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+    "edge_template_sha256": "db0ac5714706b86413c29d94b6bd4768c9155fa741e109e05b10721b4c0db2b0",
+    "gateway_bind": "127.0.0.1:8080",
+    "edge_bind": "0.0.0.0:8443",
+    "caddy_admin_bind": "127.0.0.1:2019",
+    "published_host_ports": [],
+    "body_bound_bytes": 4194304,
+    "committed_edge_sha256": "b50c7abc9b02643df367189b2e25bac2add19d9efae3d2d5aa911fa5a9435609"
+  },
+  "provider_calls": 15,
+  "certificates": {
+    "initial": "88175f5cbdb24439c5308180749fe51234208f7fde37ceefc55bace7ad7ea73e",
+    "rotated": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+    "ca_sha256": "0ac8b209bb25f6829eb7a8f3398ff3e18a7391233aafe4367fb31570c84dcb92"
+  },
+  "cleanup": {
+    "all_owned_processes_stopped": true,
+    "private_workspace_removed": true
+  },
+  "finished_at_utc": "2026-10-14T06:10:29.456856+00:00",
+  "artifacts": {
+    "build.log": {
+      "sha256": "85571ed3aa534b731b436dd9c6adc4e138f8c11e9a44963405fb82ae111d9566",
+      "bytes": 3623
+    },
+    "ca.pem": {
+      "sha256": "0ac8b209bb25f6829eb7a8f3398ff3e18a7391233aafe4367fb31570c84dcb92",
+      "bytes": 1139
+    },
+    "caddy.log": {
+      "sha256": "0c9ce0cf246677199bc133326d8910a9feab24da82f1631aa9dcbed6eb5c009c",
+      "bytes": 15776
+    },
+    "Caddyfile.initial": {
+      "sha256": "04d509c382786682fc0898f522fde866921950962f617b92471dbb521b4ad3ef",
+      "bytes": 513
+    },
+    "Caddyfile.rotated": {
+      "sha256": "b50c7abc9b02643df367189b2e25bac2add19d9efae3d2d5aa911fa5a9435609",
+      "bytes": 513
+    },
+    "expired.pem": {
+      "sha256": "5e32002e0efb6839a4d82d8bb24ddfc009d7fee51c104778733402f00dc44eda",
+      "bytes": 1168
+    },
+    "gateway-config.yaml": {
+      "sha256": "b0b0a26071160c766bfd455415e4e113e092684592006352e7d62ba98e97326a",
+      "bytes": 204
+    },
+    "gateway.log": {
+      "sha256": "2deabb0fbc013aad96dd3d3a2343fb340b5225907e66d82dbae3fbc5e1369ca8",
+      "bytes": 3934
+    },
+    "image.json": {
+      "sha256": "0223606369780662b42bfeb0743210c8b0daad407563e84387a661cb82ed7c40",
+      "bytes": 508
+    },
+    "initial.pem": {
+      "sha256": "d224472043f399a6339dee39d67a2f9ee930e519bd4976ec67bbbcdb4e070af2",
+      "bytes": 1188
+    },
+    "policy.yaml": {
+      "sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+      "bytes": 15
+    },
+    "rejected-reload.log": {
+      "sha256": "198153f27b61a509c7f03e7fef2bcd324f473c5319d6f44fe1abde37c8ddf656",
+      "bytes": 446
+    },
+    "rotated.pem": {
+      "sha256": "1395a8789bf4c1fdfad060a8e969bb00ebb1190ab52bbe85f9011249d21bf081",
+      "bytes": 1188
+    },
+    "source.json": {
+      "sha256": "ba9e774ae7650fecc18d731152a07fb3fe220b7020b35c9d8751eb2df5c5db51",
+      "bytes": 20449
+    },
+    "tests.log": {
+      "sha256": "d6b1810aa8738dea321db21c0f2079eb231a65cb4d0561f36a2c909c067f078e",
+      "bytes": 1963
+    }
+  }
+}
