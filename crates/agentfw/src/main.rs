@@ -277,7 +277,7 @@ fn main() -> anyhow::Result<()> {
                     .block_on(serve(home, Some(instance)));
             }
             #[cfg(windows)]
-            isolate_lifecycle_stdio()?;
+            prepare_lifecycle_process()?;
             let manager = agentfw::lifecycle::Manager::new(Config::home()?);
             match command {
                 LifecycleCommand::Install {
@@ -701,7 +701,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 #[cfg(windows)]
-fn isolate_lifecycle_stdio() -> anyhow::Result<()> {
+fn prepare_lifecycle_process() -> anyhow::Result<()> {
     use anyhow::Context;
     use windows_sys::Win32::Foundation::{
         SetHandleInformation, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE,
@@ -709,6 +709,14 @@ fn isolate_lifecycle_stdio() -> anyhow::Result<()> {
     use windows_sys::Win32::System::Console::{
         GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
     };
+    use windows_sys::Win32::System::Diagnostics::Debug::{
+        GetErrorMode, SetErrorMode, SEM_FAILCRITICALERRORS,
+    };
+
+    // SAFETY: This single-threaded CLI owns its process error mode. Preserve
+    // existing flags and return loader errors instead of waiting for a system
+    // dialog when an upgrade candidate is not a valid Windows executable.
+    unsafe { SetErrorMode(GetErrorMode() | SEM_FAILCRITICALERRORS) };
 
     // Do this in the single-threaded lifecycle CLI before starting any runtime
     // or child. Windows Command::spawn inherits additional inheritable handles

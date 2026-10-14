@@ -125,6 +125,16 @@ The regression requires both output pipes to close and the CLI's success message
 to reach the caller while the managed Agent remains healthy. A passing run after
 the fix must retain all five executed cases under the standard user.
 
+The [next run](https://github.com/SoupTeam/soup-wall/actions/runs/38545895102/job/115792036819)
+passed start, upgrade and rollback, then hit the 90-second command deadline while
+trying the deliberately invalid Windows executable. The lifecycle CLI also sets
+[`SEM_FAILCRITICALERRORS`](https://learn.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-seterrormode)
+at startup, preserving existing error-mode flags, so loader errors return to the
+CLI instead of waiting for a system dialog. The failed-upgrade regression requires
+an explicit restoration error and independently checks that the old Agent is
+running again. This setting is confined to the lifecycle CLI process and its
+children; it does not change Windows settings for other applications.
+
 ### Manual Windows check
 
 The Windows script creates a disposable profile and uses an unused loopback

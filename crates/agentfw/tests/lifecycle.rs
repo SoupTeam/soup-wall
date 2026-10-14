@@ -220,7 +220,7 @@ fn managed_lifecycle_restores_last_working_version() {
     #[cfg(windows)]
     fs::write(&failed, b"not a PE executable").unwrap();
     let failed_hash = sha256_file(&failed).unwrap();
-    failure(
+    let rejected = failure(
         &profile,
         &[
             "upgrade",
@@ -230,6 +230,11 @@ fn managed_lifecycle_restores_last_working_version() {
             &failed_hash,
         ],
     );
+    assert!(
+        rejected.contains("upgrade failed and the previous version was restored"),
+        "unexpected failed-upgrade result: {rejected}"
+    );
+    eprintln!("Invalid candidate was refused and recovered: {rejected}");
     let after_failure = status(&profile);
     assert_eq!(after_failure.active.unwrap().version, "one");
     assert!(after_failure.running);
