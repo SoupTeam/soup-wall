@@ -53,6 +53,217 @@ def complete_receipts():
     return {"records": rows, "total_unique_events": 6, "returned_records": 6, "has_more": False}
 
 
+@unittest.skipUnless(os.name == "posix", "protected fixture files require Unix ownership and permissions")
+class ProtectedFixtureFiles(unittest.TestCase):
+    def test_first_secret_byte_is_written_only_to_exclusive_0600_owned_file(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory, witness = Path(temporary), []
+            path = directory / "credentials"
+            original_fdopen = os.fdopen
+
+            class WitnessStream:
+                def __init__(self, stream):
+                    self.stream = stream
+
+                def __enter__(self):
+                    self.stream.__enter__()
+                    return self
+
+                def __exit__(self, *args):
+                    return self.stream.__exit__(*args)
+
+                def __getattr__(self, name):
+                    return getattr(self.stream, name)
+
+                def write(inner, content):
+                    details = os.fstat(inner.stream.fileno())
+                    self.assertEqual(details.st_mode & 0o777, 0o600)
+                    self.assertEqual(details.st_uid, os.geteuid())
+                    self.assertEqual(details.st_nlink, 1)
+                    self.assertFalse(path.exists(), "partial contents must not be published")
+                    witness.append(len(content))
+                    return inner.stream.write(content)
+
+            original_umask = os.umask(0)
+            try:
+                with patch.object(DRILL.os, "fdopen", side_effect=lambda *a, **kw: WitnessStream(original_fdopen(*a, **kw))):
+                    DRILL.protected_file(path, "synthetic disposable credential")
+            finally:
+                os.umask(original_umask)
+            self.assertEqual(witness, [31])
+            self.assertEqual(path.read_text(), "synthetic disposable credential")
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(path.stat().st_nlink, 1)
+            self.assertEqual(list(directory.iterdir()), [path])
+
+    def test_existing_files_and_links_are_never_followed_or_replaced(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            victim = directory / "existing"
+            victim.write_text("preserve existing owned data")
+            victim.chmod(0o640)
+            link = directory / "symlink"
+            link.symlink_to(victim)
+            hardlink = directory / "hardlink"
+            os.link(victim, hardlink)
+            for path in (victim, link, hardlink):
+                with self.subTest(path=path.name), self.assertRaises(FileExistsError):
+                    DRILL.protected_file(path, "must not be written")
+            self.assertEqual(victim.read_text(), "preserve existing owned data")
+            self.assertEqual(victim.stat().st_mode & 0o777, 0o640)
+            self.assertTrue(link.is_symlink())
+            self.assertEqual({p.name for p in directory.iterdir()}, {"existing", "symlink", "hardlink"})
+
+    def test_bad_parent_permissions_ownership_and_links_are_refused(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            unsafe = directory / "unsafe"
+            unsafe.mkdir(mode=0o700)
+            unsafe.chmod(0o777)
+            with self.assertRaises(DRILL.DrillError):
+                DRILL.protected_file(unsafe / "credential", "must not be written")
+            with patch.object(DRILL.os, "geteuid", return_value=os.geteuid() + 1), self.assertRaises(DRILL.DrillError):
+                DRILL.protected_file(directory / "credential", "must not be written")
+            linked = directory / "linked"
+            linked.symlink_to(unsafe)
+            with self.assertRaises(OSError):
+                DRILL.protected_file(linked / "credential", "must not be written")
+            self.assertEqual(list(unsafe.iterdir()), [])
+            self.assertFalse((directory / "credential").exists())
+
+    def test_write_failure_never_publishes_partial_data_and_removes_owned_temporary(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            original_fdopen = os.fdopen
+
+            class FailedStream:
+                def __init__(self, stream):
+                    self.stream = stream
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *args):
+                    return self.stream.__exit__(*args)
+
+                def write(self, _):
+                    self.stream.write("partial synthetic data")
+                    raise OSError("synthetic disk failure")
+
+            with patch.object(DRILL.os, "fdopen", side_effect=lambda *a, **kw: FailedStream(original_fdopen(*a, **kw))):
+                with self.assertRaises(OSError):
+                    DRILL.protected_file(directory / "credentials", "must not be published")
+            self.assertEqual(list(directory.iterdir()), [])
+
+    def test_public_readonly_config_and_exclusive_name_collision(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            public = directory / "public-config"
+            DRILL.protected_file(public, "public fixture configuration", 0o444)
+            self.assertEqual(public.stat().st_mode & 0o777, 0o444)
+            collision = directory / (".protected-" + "a" * 32)
+            collision.write_text("unrelated existing temporary")
+            with patch.object(DRILL.secrets, "token_hex", return_value="a" * 32), self.assertRaises(FileExistsError):
+                DRILL.protected_file(directory / "credentials", "must not be written")
+            self.assertEqual(collision.read_text(), "unrelated existing temporary")
+            self.assertFalse((directory / "credentials").exists())
+            with self.assertRaises(DRILL.DrillError):
+                DRILL.protected_file(directory / "unsafe-mode", "must not be written", 0o666)
+            self.assertFalse((directory / "unsafe-mode").exists())
+
+
+@unittest.skipUnless(os.name == "posix", "Linux fixture credential files require Unix permissions")
+class LinuxAlertCredentialStorage(unittest.TestCase):
+    def test_service_passwords_remain_in_child_environment_and_redis_uses_acl_hash(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            runtime = object.__new__(DRILL.Runtime)
+            runtime.directory = Path(temporary)
+            runtime.environment = os.environ.copy()
+            runtime.admin = "synthetic-admin-token-for-private-runtime"
+            before = dict(os.environ)
+            runtime.prepare_credentials()
+            self.assertTrue(dict(os.environ) == before, "global process environment was changed")
+            postgres_password = runtime.environment["SOUP_WALL_DRILL_POSTGRES_PASSWORD"]
+            redis_password = DRILL.urllib.parse.urlsplit(runtime.environment["SOUP_WALL_DRILL_REDIS_URL"]).password
+            self.assertTrue(len(postgres_password) == 64 and len(redis_password) == 64,
+                            "fixture password generation did not retain its entropy bound")
+            self.assertTrue(runtime.environment["SOUP_WALL_DRILL_ADMIN_TOKEN"] == runtime.admin,
+                            "runtime admin credential was not supplied to the child environment")
+            config = (runtime.directory / "redis.conf").read_text()
+            for secret in (postgres_password, redis_password, runtime.admin,
+                           runtime.environment["SOUP_WALL_DRILL_POSTGRES_URL"],
+                           runtime.environment["SOUP_WALL_DRILL_REDIS_URL"]):
+                self.assertTrue(secret not in config, "raw runtime credentials were written to Redis configuration")
+            self.assertIn("user default on resetpass #" + hashlib.sha256(redis_password.encode("ascii")).hexdigest(), config)
+            self.assertNotIn("requirepass", config)
+            self.assertNotIn("nopass", config)
+            self.assertEqual((runtime.directory / "redis.conf").stat().st_mode & 0o777, 0o600)
+            self.assertEqual({p.name for p in runtime.directory.iterdir()}, {"redis.conf"})
+
+    def test_saved_compose_contains_only_credential_references_and_protected_receiver_token(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            runtime = object.__new__(DRILL.Runtime)
+            runtime.report, runtime.output = plan_fixture(), Mock()
+            runtime.report["checks"] = []
+            runtime.directory, runtime.project, runtime.owner = Path(temporary), "owned-credential-test", "owned-run"
+            runtime.environment = os.environ.copy()
+            runtime.token, runtime.admin, runtime.tenant_token = "synthetic-receiver-bearer-token-0000", "synthetic-admin-token-00000000", None
+            runtime.urls, runtime.started = {}, False
+            runtime.prepare_tls = Mock()
+            class ConfigurationsReady(Exception):
+                pass
+            def command(arguments, **_):
+                if arguments[:3] == ["docker", "image", "inspect"]:
+                    return IMAGE_ID + " " + SOURCE["commit"]
+                if arguments[:2] == ["docker", "ps"]:
+                    return ""
+                if any("hashlib.sha256" in argument for argument in arguments):
+                    return "f" * 64
+                return "safe owned command response"
+            runtime.command = Mock(side_effect=command)
+            runtime.compose = Mock(side_effect=ConfigurationsReady)
+            def archive(arguments, **kwargs):
+                self.assertEqual(arguments[:2], ["git", "archive"])
+                with tarfile.open(fileobj=kwargs["stdout"], mode="w") as bundle:
+                    for name in ("prometheus-alerts.yaml", "prometheus-alerts.test.yaml"):
+                        content = b"groups: []\n"
+                        item = tarfile.TarInfo("deploy/" + name)
+                        item.size = len(content)
+                        bundle.addfile(item, io.BytesIO(content))
+                return subprocess.CompletedProcess(arguments, 0)
+            with patch.object(DRILL.subprocess, "run", side_effect=archive), contextlib.redirect_stdout(io.StringIO()):
+                with self.assertRaises(ConfigurationsReady):
+                    runtime.setup(skip_build=True)
+            saved = runtime.compose_file.read_text()
+            services = json.loads(saved)["services"]
+            expected = {
+                "POSTGRES_PASSWORD": "${SOUP_WALL_DRILL_POSTGRES_PASSWORD:?runtime PostgreSQL credential is required}",
+                "LLM_FW_ADMIN_TOKEN": "${SOUP_WALL_DRILL_ADMIN_TOKEN:?runtime admin credential is required}",
+                "LLM_FW_POSTGRES_URL": "${SOUP_WALL_DRILL_POSTGRES_URL:?runtime PostgreSQL URL is required}",
+                "LLM_FW_REDIS_URL": "${SOUP_WALL_DRILL_REDIS_URL:?runtime Redis URL is required}",
+            }
+            self.assertEqual(services["postgres"]["environment"]["POSTGRES_PASSWORD"], expected["POSTGRES_PASSWORD"])
+            for field in ("LLM_FW_ADMIN_TOKEN", "LLM_FW_POSTGRES_URL", "LLM_FW_REDIS_URL"):
+                self.assertEqual(services["gateway"]["environment"][field], expected[field])
+            raw_credentials = (runtime.environment["SOUP_WALL_DRILL_POSTGRES_PASSWORD"], runtime.admin,
+                               runtime.environment["SOUP_WALL_DRILL_POSTGRES_URL"],
+                               runtime.environment["SOUP_WALL_DRILL_REDIS_URL"],
+                               DRILL.urllib.parse.urlsplit(runtime.environment["SOUP_WALL_DRILL_REDIS_URL"]).password)
+            for path in runtime.directory.rglob("*"):
+                if path.is_file():
+                    contents = path.read_bytes()
+                    self.assertTrue(all(secret.encode() not in contents for secret in raw_credentials),
+                                    "raw PostgreSQL/Redis/admin credentials were persisted in a fixture artifact")
+            self.assertEqual((runtime.directory / "token").stat().st_mode & 0o777, 0o600)
+            self.assertTrue((runtime.directory / "token").read_text().strip() == runtime.token,
+                            "the protected standard Alertmanager credential input is missing")
+            self.assertTrue(all(secret not in json.dumps(runtime.report) for secret in raw_credentials),
+                            "raw runtime credentials reached report data")
+            arguments = json.dumps([call.args for call in runtime.command.call_args_list])
+            self.assertTrue(all(secret not in arguments for secret in raw_credentials),
+                            "raw runtime credentials reached subprocess arguments")
+
+
 class LinuxAlertEvidence(unittest.TestCase):
     def setUp(self):
         original = os.umask(0o077)
@@ -451,6 +662,89 @@ class LinuxAlertBoundaries(unittest.TestCase):
             command = runtime.command.call_args_list[-1].args[0]
             self.assertEqual(command[command.index("python3") + 1], IMAGE_ID)
             self.assertEqual(runtime.report["gateway_image_id"], IMAGE_ID)
+
+
+class LinuxCommandEvidence(unittest.TestCase):
+    def setUp(self):
+        original = os.umask(0o077)
+        self.addCleanup(os.umask, original)
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.runtime = object.__new__(DRILL.Runtime)
+        self.runtime.directory = Path(self.temporary.name)
+        self.runtime.sequence = 0
+        self.runtime.report, self.runtime.output = {"checks": [], "executed": False}, Mock()
+        self.runtime.environment = {"PATH": "/fixture-only", "FIXTURE_PRIVATE": "private-environment-token"}
+
+    def test_promtool_uses_the_private_rules_owner_without_changing_mount_permissions(self):
+        rules = self.runtime.directory / "rules"
+        rules.mkdir(mode=0o755)
+        self.assertEqual(rules.stat().st_mode & 0o777, 0o700)
+        self.runtime.command = Mock(return_value="SUCCESS")
+        images = {"prometheus": image_inventory()["prometheus"]["image"]}
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.runtime.verify_rules(images, rules)
+        self.assertEqual(self.runtime.command.call_count, 2)
+        for call in self.runtime.command.call_args_list:
+            args = call.args[0]
+            self.assertEqual(args[args.index("--user") + 1], f"{os.getuid()}:{os.getgid()}")
+            self.assertEqual(args[args.index("--network") + 1], "none")
+            self.assertIn("--read-only", args)
+            self.assertTrue(args[args.index("--mount") + 1].endswith("readonly"))
+            self.assertIn(call.kwargs["phase"], {"promtool_rule_check", "promtool_rule_tests"})
+        self.assertEqual(rules.stat().st_mode & 0o777, 0o700)
+
+    def test_failed_command_reports_phase_exit_and_log_hash_without_private_arguments(self):
+        secret = b"private-command-argument-and-private-stderr"
+        def failed(args, **kwargs):
+            kwargs["stdout"].write(secret)
+            self.assertEqual(kwargs["env"], self.runtime.environment)
+            return subprocess.CompletedProcess(args, 13)
+        with patch.object(DRILL.subprocess, "run", side_effect=failed), \
+                contextlib.redirect_stdout(io.StringIO()) as output:
+            with self.assertRaises(DRILL.DrillError):
+                self.runtime.command(["docker", "run", "--private", secret.decode()], phase="promtool_rule_tests")
+        record = self.runtime.report["command_failures"][0]
+        self.assertEqual(record["phase"], "promtool_rule_tests")
+        self.assertEqual(record["return_code"], 13)
+        self.assertEqual(record["failure_kind"], "nonzero_exit")
+        self.assertEqual(record["private_log_sha256"], hashlib.sha256(secret).hexdigest())
+        self.assertGreaterEqual(record["elapsed_seconds"], 0)
+        self.assertNotIn(secret.decode(), json.dumps(self.runtime.report) + output.getvalue())
+        self.assertNotIn("private-environment-token", json.dumps(self.runtime.report) + output.getvalue())
+        self.assertEqual(json.loads(output.getvalue())["command_failure"], record)
+        self.assertTrue(self.runtime.report["executed"])
+
+    def test_timeout_and_launch_error_preserve_safe_command_diagnostics(self):
+        for kind in ["timeout", "launch_error"]:
+            with self.subTest(kind=kind):
+                self.runtime.report["command_failures"] = []
+                def failing(args, **kwargs):
+                    kwargs["stdout"].write(b"private-output")
+                    if kind == "timeout":
+                        raise subprocess.TimeoutExpired(args, 1, output=b"private-exception-detail")
+                    raise OSError("private-exception-detail")
+                with patch.object(DRILL.subprocess, "run", side_effect=failing), \
+                        contextlib.redirect_stdout(io.StringIO()) as output:
+                    with self.assertRaises(DRILL.DrillError):
+                        self.runtime.command(["docker", "compose", "--project-name", "fixture",
+                                              "--file", "private-config-location", "up", "--detach"], timeout=1)
+                record = self.runtime.report["command_failures"][0]
+                self.assertEqual(record["phase"], "compose_start")
+                self.assertEqual(record["failure_kind"], kind)
+                self.assertIsNone(record["return_code"])
+                public = json.dumps(self.runtime.report) + output.getvalue()
+                for private in ["private-output", "private-exception-detail", "private-config-location"]:
+                    self.assertNotIn(private, public)
+
+    def test_unapproved_phase_cannot_leak_into_public_evidence(self):
+        with patch.object(DRILL.subprocess, "run") as execute:
+            with self.assertRaises(DRILL.DrillError):
+                self.runtime.command(["fixture"], phase="private-phase-secret")
+        execute.assert_not_called()
+        self.assertFalse(self.runtime.report["executed"])
+        self.assertNotIn("private-phase-secret", json.dumps(self.runtime.report))
+
 
 
 class LinuxAlertEndpointRecovery(unittest.TestCase):

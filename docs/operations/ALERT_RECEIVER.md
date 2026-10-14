@@ -86,6 +86,14 @@ ASCII token characters. Store the same token in the protected credential
 file read by the selected Alertmanager, using the deployment secret manager or
 an owned read-only secret mount. Do not copy it into public configuration.
 
+The bearer file and TLS private key are required runtime secrets, not encrypted
+receipt data. Protected permissions prevent ordinary users from reading them;
+host/root or Docker-daemon privileges remain outside that confidentiality
+boundary. Generated monitoring dependency/admin credentials use memory and
+scoped child environments instead of saved Compose values; see the
+[Linux drill credential boundary](LOCAL_MONITORING_ACCEPTANCE.md#current-source-linux-dependency-and-receiver-recovery).
+Sanitized receipt exports and public evidence must contain neither type of secret.
+
 Write `/var/lib/soup-wall-alerts/policy.json` with the exact selected values.
 It must be an owned regular file, without symbolic/hard links or group/other
 write permission; the accepted policy is bounded to 65,536 bytes.

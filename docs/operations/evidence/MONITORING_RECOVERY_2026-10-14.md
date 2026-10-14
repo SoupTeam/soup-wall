@@ -4,7 +4,7 @@ The controlled Linux/arm64 slice passed **65 checks**, with six authenticated du
 
 ## Exact source and reproduction
 
-Verified clean commit: `98a7cf6f9ebfd96ac069d1d830eae2d67fa06d35`; tree `0ff5d5404d2d54954448b3c1ed48900b467ba49f`. Base main: `290e043bee52b7d97682577af2d3fd09e715e13e`. The Gateway was built from `git archive` of this commit using its locked Cargo dependencies. The local test image uses release opt-level 1, without LTO/debug information; this is not a published release image or performance benchmark. The later evidence commit changes only documentation/artifacts. The runtime JSON verifies unchanged source before and after the complete drill.
+Verified clean commit: `98a7cf6f9ebfd96ac069d1d830eae2d67fa06d35`; tree `0ff5d5404d2d54954448b3c1ed48900b467ba49f`. Base main: `290e043bee52b7d97682577af2d3fd09e715e13e`. The Gateway was built from `git archive` of this commit using its locked Cargo dependencies. The local test image uses release opt-level 1, without LTO/debug information; this is not a published release image or performance benchmark. The evidence-only commit `30e75b7` changes documentation/artifacts; subsequent runtime repairs are described below and require separate verification. The runtime JSON verifies unchanged source before and after the complete drill.
 
 Run in a clean checkout of the verified commit with Python 3.12+, OpenSSL and a working Linux Docker daemon:
 
@@ -18,6 +18,52 @@ python3 scripts/linux-alert-acceptance.py --execute \
 Use a fresh output path; the command refuses existing evidence. See the [Linux procedure](../LOCAL_MONITORING_ACCEPTANCE.md#current-source-linux-dependency-and-receiver-recovery) and [receiver ownership/retention instructions](../ALERT_RECEIVER.md). The [six-image inventory](../../../deploy/monitoring-images.json) pins official multi-platform manifests; the independent [architecture metadata check](SOU41_image-platform-review.json) confirms Linux amd64/arm64 entries, not execution on both architectures. Local actual execution used Linux/arm64 containers on macOS Docker Desktop (Engine 29.2.1, Compose 5.1.0). The dedicated [CI job](../../../.github/workflows/monitoring.yml) runs the same command on Linux/amd64; inspect its exact-head result before accepting that platform.
 
 Rule evaluation remains 30 seconds, PostgreSQL/Gateway `for: 2m` and Redis `for: 1m`. The controlled fixture preserves `group_wait: 30s` but declares `group_interval: 15s` for notification scheduling; the production example remains 5 minutes. HTTPS used a fresh explicit per-run CA with strict chain/hostname verification and protected owner-only token/key/state files. The private standard Docker bridge publishes only owned loopback observer ports; PostgreSQL/Redis have no host ports.
+
+## Post-publication follow-up: current candidate verification pending
+
+[PR #105](https://github.com/SoupTeam/soup-wall/pull/105) preserves the successful
+`98a7cf6` run as historical exact-source evidence. Its first
+[Linux/amd64 CI attempt](https://github.com/SoupTeam/soup-wall/actions/runs/38535768567/job/115758140801)
+failed before completing the pinned promtool stage, after three recorded checks.
+The private rule mount was created under `umask 077`, while the image's default
+promtool user differed from the owner. The ownership/permission repair and its
+regression need fresh Linux execution; this failed attempt is not evidence that
+Linux/amd64 acceptance passed.
+
+[Code-scanning alert #113](https://github.com/SoupTeam/soup-wall/security/code-scanning/113)
+reported High `py/clear-text-storage-sensitive-data` on PR head `30e75b7`.
+Review confirmed generated PostgreSQL/Redis password values flowed into the
+private saved Compose document. The owner-only profile limited access; it did
+not make plaintext secret persistence a false positive. This is a confirmed
+fixture credential-storage defect, not evidence of a public credential leak or
+customer-secret exposure.
+
+The repair publishes harness-written configuration and bearer files exclusively
+and atomically with `0600` before their first byte. OpenSSL generates private
+TLS keys inside the fresh `0700` profile under `umask 077`; those keys retain
+`0600`, but are not published by the configuration helper.
+The Compose document uses required child-environment references for generated
+PostgreSQL/Redis/admin credentials. Redis's ACL contains only a hash of its
+high-entropy password. Credentials remain available to the owned services in
+process/container environments, which a privileged Docker-daemon or host/root
+operator can inspect; the change does not claim encrypted runtime secrets.
+Neither generated secret values nor privileged inspection output belongs in
+public evidence. Alertmanager's required bearer file and TLS keys remain
+protected runtime inputs rather than receipt fields.
+
+A separate [pinned Redis ACL compatibility check](SOU41_redis-acl-auth.json)
+confirmed valid authentication and rejection of missing/wrong credentials, using
+a disposable container with no network or published ports. Its owned cleanup
+passed. This component check is separate from complete candidate acceptance.
+The driver follow-up suite passed 42 tests, including first-byte permissions,
+non-overwriting publication, saved-secret absence, owned promtool execution and
+sanitized command failures.
+
+The changed candidate must complete a new exact-source Linux drill, relevant
+regressions and a new code scan. The historical 65-check result and raw outcomes
+below remain unchanged; they do not accept the repaired head. The finding is
+not dismissed or considered remediated before the exact fix and rescan are
+verified. Maintainer review and exact-head CI remain pending.
 
 ## Raw outcomes and witnesses
 
@@ -57,4 +103,4 @@ Incomplete attempts are retained rather than relabeled as passing. Every attempt
 | `9fc65be` | [cancelled/incomplete](SOU41_linux-alert-9fc65be.json) | Stopped gracefully after actual PostgreSQL readiness/refusal checks when primary-source review identified the pinned webhook's new metadata fields and per-attempt metric. This is not a completed firing/resolved cycle. |
 | `234e172` | [incomplete](SOU41_linux-alert-234e172.json) | Actual firing/retry succeeded, but the observer used the old ephemeral port after restart. A separate [read-only checkpointed SQLite witness](SOU41_independent-receiver-234e172.json) found one durable firing row after cleanup; it does not make this run complete. Refreshing owned endpoints fixed the observer. |
 
-Acceptance requires this successful run, maintainer-reviewed code and passing exact-head CI. The local result does not mark the issue Done while external review/checks remain; earlier partial outcomes are preserved to explain actual failures. Production receiver operation still requires a declared operator, durable-disk/backup monitoring, coordinated credential/certificate renewal, retained deduplication horizon and verified incident-routing ownership.
+Acceptance of the current candidate requires fresh verification of any affected runtime repairs, maintainer-reviewed code and passing exact-head CI; the historical successful run alone does not accept a changed revision. The local result does not mark the issue Done while external review/checks remain; earlier partial outcomes are preserved to explain actual failures. Production receiver operation still requires a declared operator, durable-disk/backup monitoring, coordinated credential/certificate renewal, retained deduplication horizon and verified incident-routing ownership.

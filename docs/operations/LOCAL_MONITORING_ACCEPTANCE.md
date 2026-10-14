@@ -173,6 +173,31 @@ owned local fixtures; the command never calls a paid model or incident channel.
 Docker internal networks can suppress host port bindings, so acceptance checks
 the actual owned container bindings before contacting any endpoint.
 
+Generated configuration and credential files are published exclusively and
+atomically in the owned private profile. Files start at `0600` before any byte
+is written; completed public fixture configuration may become `0444`. The writer
+refuses existing destinations and symbolic links. Receiver bearer credentials
+and TLS private keys intentionally remain owner-only plaintext files because
+Alertmanager and the TLS runtime consume them directly.
+
+PostgreSQL/Redis passwords and the Gateway admin token are generated in memory.
+The Compose document records required environment references, not those secret
+values. Only the scoped child environment supplies
+`SOUP_WALL_DRILL_POSTGRES_PASSWORD`, `SOUP_WALL_DRILL_ADMIN_TOKEN`,
+`SOUP_WALL_DRILL_POSTGRES_URL` and `SOUP_WALL_DRILL_REDIS_URL`; the harness does
+not print or persist these values in generated configuration or evidence.
+The Redis ACL stores a SHA-256 hash of its generated 256-bit password and clears
+the default password state; it does not store the password itself.
+
+This avoids plaintext dependency/admin secrets in saved profiles; it is not an
+encrypted-runtime attestation. Docker stores service environment metadata, and
+users with Docker-daemon or equivalent host/root privileges can inspect it.
+Use only an operator-controlled Docker daemon and disposable credentials.
+Do not publish `docker inspect`, rendered Compose output, child environments,
+private credential/key files or retained raw runtime logs. A failed profile
+retains evidence/configuration but its environment references alone are not a
+standalone deployment or recovery package.
+
 ```sh
 mkdir -p target
 python3 scripts/linux-alert-acceptance.py
@@ -239,4 +264,4 @@ retention and credentials, and collect evidence in the intended environment.
 The separate policy-event outbox and historical Windows release drill are not
 rerun by this procedure.
 
-Current controlled Linux evidence: [2026-10-14 protected receiver and dependency recovery report](evidence/MONITORING_RECOVERY_2026-10-14.md). Inspect the exact candidate PR checks and review before accepting the change.
+Recorded controlled Linux evidence: [2026-10-14 protected receiver and dependency recovery report](evidence/MONITORING_RECOVERY_2026-10-14.md). Its successful run is bound to the recorded commit. Subsequent credential-storage and CI portability changes require a fresh complete run, rescan and exact-head review/checks before accepting the current candidate.

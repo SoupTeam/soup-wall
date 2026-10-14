@@ -13,6 +13,7 @@ import re
 import secrets
 import shutil
 import ssl
+import stat
 import subprocess
 import tarfile
 import tempfile
@@ -141,8 +142,57 @@ class Output:
 
 
 def protected_file(path, content, mode=0o600):
-    path.write_text(content)
-    path.chmod(mode)
+    """Publish a complete owned file without an initial secret exposure window.
+
+    Runtime credentials must be consumed by the official disposable services as
+    files. Keep those at 0600; 0444 is reserved for explicitly public fixture
+    configuration. Both begin as exclusive 0600 files before the first byte.
+    """
+    if not isinstance(content, str) or type(mode) is not int or mode not in {0o600, 0o444}:
+        raise DrillError("unsupported protected file content or permissions")
+    path = Path(path)
+    if path.name in {"", ".", ".."}:
+        raise DrillError("protected file needs a regular owned destination")
+    parent = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    temporary, descriptor = None, None
+    try:
+        details = os.fstat(parent)
+        if (not stat.S_ISDIR(details.st_mode) or details.st_uid != os.geteuid()
+                or stat.S_IMODE(details.st_mode) & 0o022):
+            raise DrillError("protected file parent ownership or permissions are invalid")
+        try:
+            os.stat(path.name, dir_fd=parent, follow_symlinks=False)
+        except FileNotFoundError:
+            pass
+        else:
+            raise FileExistsError("protected files never replace an existing destination")
+        candidate = ".protected-" + secrets.token_hex(16)
+        descriptor = os.open(candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                             0o600, dir_fd=parent)
+        temporary = candidate
+        details = os.fstat(descriptor)
+        if (not stat.S_ISREG(details.st_mode) or details.st_uid != os.geteuid() or details.st_nlink != 1):
+            raise DrillError("protected temporary file ownership is invalid")
+        os.fchmod(descriptor, 0o600)
+        output = os.fdopen(descriptor, "w", encoding="utf-8", newline="\n")
+        descriptor = None  # The stream now owns the descriptor.
+        with output:
+            output.write(content)
+            output.flush()
+            os.fchmod(output.fileno(), mode)
+            os.fsync(output.fileno())
+        # link() atomically publishes the completed inode and refuses a target
+        # created concurrently, including a symlink. All paths use the owned fd.
+        os.link(temporary, path.name, src_dir_fd=parent, dst_dir_fd=parent, follow_symlinks=False)
+        os.unlink(temporary, dir_fd=parent)
+        temporary = None
+        os.fsync(parent)
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        if temporary is not None:
+            os.unlink(temporary, dir_fd=parent)
+        os.close(parent)
 
 
 def make_policy():
@@ -210,18 +260,70 @@ class Runtime:
         self.directory.chmod(0o700)
         self.started, self.compose_file, self.sequence = False, None, 0
         self.token, self.admin, self.tenant_token = secrets.token_urlsafe(32), secrets.token_urlsafe(32), None
+        self.environment = os.environ.copy()
         self.urls = {}
         report["ownership"] = {"project": self.project, "run_id": self.owner}
 
-    def command(self, args, *, timeout=180):
+    def command(self, args, *, timeout=180, phase=None):
+        phases = {"docker_info", "compose_version", "gateway_build", "gateway_image_inspect",
+                  "gateway_binary_fingerprint", "owned_container_inspect", "owned_project_inventory",
+                  "compose_start", "compose_stop", "compose_resume", "compose_restart", "compose_probe",
+                  "compose_migration", "compose_inventory", "compose_cleanup", "tls_ca_generation",
+                  "tls_csr_generation", "tls_certificate_signing", "tls_strict_verification",
+                  "promtool_rule_check", "promtool_rule_tests", "owned_command"}
+        if phase is None:
+            phase = "owned_command"
+            if args[:2] == ["docker", "compose"]:
+                operation = args[6] if len(args) > 6 else ""
+                phase = {"version": "compose_version", "up": "compose_start", "stop": "compose_stop",
+                         "start": "compose_resume", "restart": "compose_restart", "exec": "compose_probe",
+                         "run": "compose_migration", "ps": "compose_inventory", "down": "compose_cleanup"}.get(operation, "owned_command")
+                if args[2:] == ["version"]:
+                    phase = "compose_version"
+            elif args[:2] == ["docker", "info"]:
+                phase = "docker_info"
+            elif args[:2] == ["docker", "build"]:
+                phase = "gateway_build"
+            elif args[:3] == ["docker", "image", "inspect"]:
+                phase = "gateway_image_inspect"
+            elif args[:2] == ["docker", "inspect"]:
+                phase = "owned_container_inspect"
+            elif args[:2] == ["docker", "ps"]:
+                phase = "owned_project_inventory"
+            elif args[:2] == ["docker", "run"]:
+                phase = "gateway_binary_fingerprint"
+            elif args[:2] == ["openssl", "req"]:
+                phase = "tls_ca_generation" if "-x509" in args else "tls_csr_generation"
+            elif args[:2] == ["openssl", "x509"]:
+                phase = "tls_certificate_signing"
+            elif args[:2] == ["openssl", "verify"]:
+                phase = "tls_strict_verification"
+        if phase not in phases:
+            raise DrillError("unsupported command evidence phase")
         if not self.report["executed"]:
             self.report["executed"] = True
             self.output.save(self.report)
         self.sequence += 1
         path = self.directory / f"command-{self.sequence}.log"
-        with path.open("wb") as log:
-            result = subprocess.run(args, cwd=REPO, stdout=log, stderr=subprocess.STDOUT, timeout=timeout)
-        if result.returncode:
+        started = time.monotonic()
+        failure = None
+        try:
+            with path.open("wb") as log:
+                result = subprocess.run(args, cwd=REPO, stdout=log, stderr=subprocess.STDOUT,
+                                        timeout=timeout, env=getattr(self, "environment", None))
+            if result.returncode:
+                failure = {"failure_kind": "nonzero_exit", "return_code": result.returncode}
+        except subprocess.TimeoutExpired:
+            failure = {"failure_kind": "timeout", "return_code": None}
+        except OSError:
+            failure = {"failure_kind": "launch_error", "return_code": None}
+        if failure is not None:
+            failure.update(phase=phase, command_sequence=self.sequence,
+                           elapsed_seconds=round(time.monotonic() - started, 3),
+                           private_log_sha256=digest(path.read_bytes()) if path.is_file() else None)
+            self.report.setdefault("command_failures", []).append(failure)
+            self.output.save(self.report)
+            print(json.dumps({"command_failure": failure}), flush=True)
             raise DrillError("owned runtime command failed")
         return path.read_text(errors="replace")
 
@@ -247,6 +349,24 @@ class Runtime:
                 pass
             time.sleep(2)
         self.check(name, False, elapsed_seconds=round(time.monotonic() - start, 3))
+
+    def prepare_credentials(self):
+        """Keep service passwords in process memory and Docker child environments.
+
+        Docker administrators can inspect container environments; this does not
+        protect credentials from the operator controlling the disposable daemon.
+        Redis consumes an official SHA-256 ACL hash instead of a plaintext file.
+        """
+        postgres_password, redis_password = secrets.token_hex(32), secrets.token_hex(32)
+        self.environment.update(
+            SOUP_WALL_DRILL_POSTGRES_PASSWORD=postgres_password,
+            SOUP_WALL_DRILL_ADMIN_TOKEN=self.admin,
+            SOUP_WALL_DRILL_POSTGRES_URL=f"postgresql://firewall:{postgres_password}@postgres:5432/firewall?sslmode=disable",
+            SOUP_WALL_DRILL_REDIS_URL=f"redis://:{redis_password}@redis:6379/0",
+        )
+        password_hash = hashlib.sha256(redis_password.encode("ascii")).hexdigest()
+        protected_file(self.directory / "redis.conf", "bind 0.0.0.0\nprotected-mode yes\nappendonly yes\ndir /data\n"
+                       + "user default on resetpass #" + password_hash + " ~* &* +@all\n")
 
     def setup(self, skip_build=False):
         images = {k: v["image"] for k, v in self.report["images"]["images"].items()}
@@ -321,8 +441,7 @@ receivers:
           tls_config:
             ca_file: /config/ca.pem
 """
-        pg_password, redis_password = secrets.token_hex(32), secrets.token_hex(32)
-        protected_file(self.directory / "redis.conf", "bind 0.0.0.0\nprotected-mode yes\nappendonly yes\ndir /data\nrequirepass " + redis_password + "\n")
+        self.prepare_credentials()
         firewall = """bind: 0.0.0.0:8080
 proxy_auth: {enabled: false}
 tenant_store:
@@ -356,21 +475,19 @@ policy_file: policies/default.yaml
         def port(number):
             return [{"target": number, "published": "0", "host_ip": "127.0.0.1"}]
         services = {
-            "postgres": {"image": images["postgres"], "labels": labels, "environment": {"POSTGRES_USER": "firewall", "POSTGRES_DB": "firewall", "POSTGRES_PASSWORD": pg_password}, "volumes": ["postgres-data:/var/lib/postgresql/data"]},
+            "postgres": {"image": images["postgres"], "labels": labels, "environment": {"POSTGRES_USER": "firewall", "POSTGRES_DB": "firewall", "POSTGRES_PASSWORD": "${SOUP_WALL_DRILL_POSTGRES_PASSWORD:?runtime PostgreSQL credential is required}"}, "volumes": ["postgres-data:/var/lib/postgresql/data"]},
             "redis": {**common(images["redis"]), "command": ["redis-server", "/config/redis.conf"], "volumes": [mount("redis.conf", "/config/redis.conf"), mount("redis-data", "/data", False)]},
             "receiver": {**common(self.image), "entrypoint": ["python3", "/app/scripts/alert-receiver.py"],
                          "command": ["--listen", "0.0.0.0", "--port", "8443", "--data-dir", "/data", "--token-file", "/config/token", "--policy-file", "/config/policy.json", "--retention-days", "30", "--max-events", "1000", "--tls-cert", "/config/server.pem", "--tls-key", "/config/server.key"],
                          "ports": port(8443), "volumes": [mount("receiver-data", "/data", False), mount("token", "/config/token"), mount("policy.json", "/config/policy.json"), mount("server.pem", "/config/server.pem"), mount("server.key", "/config/server.key")]},
             "upstream": {**common(self.image), "entrypoint": ["python3", "/app/scripts/monitoring_fixture.py"], "command": ["--receipts", "/data/requests.jsonl"], "volumes": [mount("provider-data", "/data", False)]},
-            "gateway": {**common(self.image), "environment": {"LLM_FW_ADMIN_TOKEN": self.admin, "LLM_FW_POSTGRES_URL": f"postgresql://firewall:{pg_password}@postgres:5432/firewall?sslmode=disable", "LLM_FW_REDIS_URL": f"redis://:{redis_password}@redis:6379/0", "RUST_LOG": "warn"}, "ports": port(8080), "volumes": [mount("firewall.yaml", "/app/firewall.yaml")]},
+            "gateway": {**common(self.image), "environment": {"LLM_FW_ADMIN_TOKEN": "${SOUP_WALL_DRILL_ADMIN_TOKEN:?runtime admin credential is required}", "LLM_FW_POSTGRES_URL": "${SOUP_WALL_DRILL_POSTGRES_URL:?runtime PostgreSQL URL is required}", "LLM_FW_REDIS_URL": "${SOUP_WALL_DRILL_REDIS_URL:?runtime Redis URL is required}", "RUST_LOG": "warn"}, "ports": port(8080), "volumes": [mount("firewall.yaml", "/app/firewall.yaml")]},
             "prometheus": {**common(images["prometheus"]), "command": ["--config.file=/config/prometheus.yaml", "--storage.tsdb.path=/data", "--storage.tsdb.retention.time=1d"], "ports": port(9090), "volumes": [mount("prometheus.yaml", "/config/prometheus.yaml"), mount("rules/prometheus-alerts.yaml", "/config/prometheus-alerts.yaml"), mount("prometheus-data", "/data", False)]},
             "alertmanager": {**common(images["alertmanager"]), "command": ["--config.file=/config/alertmanager.yaml", "--storage.path=/data", "--cluster.listen-address=", "--web.external-url=" + EXTERNAL_URL], "ports": port(9093), "volumes": [mount("alertmanager.yaml", "/config/alertmanager.yaml"), mount("token", "/config/token"), mount("ca.pem", "/config/ca.pem"), mount("alertmanager-data", "/data", False)]},
         }
         self.compose_file = self.directory / "compose.json"
         protected_file(self.compose_file, json.dumps({"services": services, "volumes": {"postgres-data": {}}, "networks": {"default": {}}}, indent=2))
-        for args in [["check", "rules", "/rules/prometheus-alerts.yaml"], ["test", "rules", "/rules/prometheus-alerts.test.yaml"]]:
-            self.command(["docker", "run", "--rm", "--network", "none", "--read-only", "--tmpfs", "/tmp:rw,nosuid,noexec,size=128m", "--mount", f"type=bind,src={rules},dst=/rules,readonly", "--entrypoint", "/bin/promtool", images["prometheus"], *args])
-        self.check("pinned_rules_and_regressions", True)
+        self.verify_rules(images, rules)
         self.started = True
         self.compose("up", "--detach", "postgres", "redis", "receiver", "upstream")
         self.wait("postgres_ready", lambda: self.compose("exec", "--no-TTY", "postgres", "pg_isready", "-U", "firewall", "-d", "firewall").strip(), 60)
@@ -385,6 +502,16 @@ policy_file: policies/default.yaml
         self.report["runtime_versions"] = {service: self.compose("exec", "--no-TTY", service, *args).strip() for service, args in [
             ("prometheus", ["/bin/prometheus", "--version"]), ("alertmanager", ["/bin/alertmanager", "--version"]), ("postgres", ["postgres", "--version"]), ("redis", ["redis-server", "--version"]), ("receiver", ["python3", "--version"])]}
         self.check("owned_pinned_services_ready", True)
+
+    def verify_rules(self, images, rules):
+        user = f"{os.getuid()}:{os.getgid()}"
+        for args, phase in [(["check", "rules", "/rules/prometheus-alerts.yaml"], "promtool_rule_check"),
+                            (["test", "rules", "/rules/prometheus-alerts.test.yaml"], "promtool_rule_tests")]:
+            self.command(["docker", "run", "--rm", "--network", "none", "--read-only", "--user", user,
+                          "--tmpfs", "/tmp:rw,nosuid,noexec,size=128m", "--mount",
+                          f"type=bind,src={rules},dst=/rules,readonly", "--entrypoint", "/bin/promtool",
+                          images["prometheus"], *args], phase=phase)
+        self.check("pinned_rules_and_regressions", True)
 
     def prepare_tls(self):
         self.ca = self.directory / "ca.pem"

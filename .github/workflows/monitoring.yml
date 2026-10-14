@@ -29,6 +29,29 @@ jobs:
         run: |
           mkdir -p target
           python3 scripts/linux-alert-acceptance.py --execute --expected-commit "$(git rev-parse HEAD)" --out target/linux-alert-evidence.json
+      - name: Show sanitized acceptance summary
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path("target/linux-alert-evidence.json")
+          if not path.is_file():
+              print(json.dumps({"status": "incomplete", "evidence_present": False}))
+          else:
+              evidence = json.loads(path.read_text())
+              checks = evidence.get("checks", [])
+              fields = ("phase", "command_sequence", "failure_kind", "return_code",
+                        "elapsed_seconds", "private_log_sha256")
+              summary = {"status": evidence.get("status", "incomplete"),
+                         "source_commit": evidence.get("source", {}).get("commit"),
+                         "passed_checks": sum(row.get("outcome") == "pass" for row in checks),
+                         "failed_checks": sum(row.get("outcome") == "fail" for row in checks),
+                         "error_type": evidence.get("error_type"),
+                         "command_failures": [{key: row.get(key) for key in fields}
+                                              for row in evidence.get("command_failures", [])]}
+              print(json.dumps(summary, sort_keys=True))
+          PY
       - name: Retain sanitized raw outcomes, including incomplete runs
         if: always()
         uses: actions/upload-artifact@v7
