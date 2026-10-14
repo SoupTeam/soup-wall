@@ -158,3 +158,98 @@ checkpoint covers database preservation and queue/authentication behavior.
 Successful webhook delivery needs an owned public HTTPS receiver and retained
 signing key; real IdP login, managed TLS, provider traffic and staffed alert
 routing remain separate acceptance gates.
+
+
+## Webhook ownership and receiver recovery
+
+This SOU-33 drill uses the existing Gateway outbox, claim/finish functions and
+HTTP payload/signature sender. It introduces no alternate production dispatcher
+or permissive endpoint configuration. The scope is Phase 6 webhook reliability;
+it is independent of the Agent admission and policy-bundle work.
+
+From the repository root, run the fast SQLite and transport regressions:
+
+```sh
+cargo test --locked -p llm-firewall --lib webhook_
+```
+
+This normal run explicitly ignores the PostgreSQL suite, the subprocess receiver
+demo and its internal child helper. Run the two acceptance tests below separately;
+do not invoke all ignored tests indiscriminately. Cargo reports assertion errors
+as failures; missing PostgreSQL configuration is not a successful or skipped run.
+
+For PostgreSQL, supply **a dedicated disposable database** with migration rights
+and no pending/in-flight outbox entries. Never use a production database. One
+example using a local, loopback-bound PostgreSQL 16 container is:
+
+```sh
+docker run --detach --name soup-wall-webhook-pg \
+  -e POSTGRES_USER=firewall -e POSTGRES_PASSWORD=fixture-only \
+  -e POSTGRES_DB=webhook_fixture -p 127.0.0.1:55433:5432 postgres:16-alpine
+docker exec soup-wall-webhook-pg pg_isready -U firewall -d webhook_fixture
+export LLM_FW_TEST_POSTGRES_URL='postgresql://firewall:fixture-only@127.0.0.1:55433/webhook_fixture?sslmode=disable'
+cargo test --locked -p llm-firewall --lib \
+  tenant_store::webhook_recovery_tests::postgres_webhook_recovery_and_fenced_completion \
+  -- --ignored --exact --nocapture
+```
+
+Wait for `pg_isready` to succeed before the Cargo command. Use another unused
+port/name if this example is already running. The password is a synthetic local
+fixture, never a deployment credential. The suite retains its synthetic rows,
+refuses an existing nonterminal outbox, and never deletes another suite's data.
+Remove only this disposable container when finished:
+`docker rm --force soup-wall-webhook-pg`. CI runs the suite first on its fresh
+PostgreSQL service, before other control-plane tests can leave queued events.
+
+Both stores exercise late failure after newer success, late success after newer
+failure, expired/wrong attempt/lease rejection, backoff, exhausted retry and
+crash budgets, destination deactivation, and populated startup/migration reruns.
+The SQLite concurrency test opens separate connections behind a thread barrier;
+PostgreSQL uses separate stores/pools. Test-only timestamp changes accelerate
+long retry sequences; state transitions still invoke production claim/finish.
+There is no new schema migration: all ownership fields already exist. The tests
+check populated initialization/migration reruns without resetting delivery IDs,
+counts, status or a live lease.
+
+Run the disposable sender/receiver acceptance test (about 40 seconds, using real
+retry and lease clocks):
+
+```sh
+mkdir -p target
+SOUP_WALL_WEBHOOK_EVIDENCE="$(pwd)/target/webhook-receiver-evidence.json" \
+  cargo test --locked -p llm-firewall --lib \
+  tenant_store::webhook_delivery_tests::webhook_receiver_recovery_demo \
+  -- --ignored --exact --nocapture
+```
+
+The receiver binds an OS-assigned loopback port and independently verifies each
+HMAC over received bytes. Its receipt file is flushed to disk before responding.
+The test checks a useful delivery, HTTP 503 followed by a successful retry, then
+kills a child sender after the receiver's HTTP 200 but before outbox completion.
+A fresh sender opens the same database, waits for the real lease expiry and
+repeats the event. The receiver retains both receipts while applying one fixture
+effect per authenticated `(tenant_id, event_id)`. Tampered bytes are rejected;
+a changed unsigned delivery header cannot evade deduplication. IDs and payload
+hashes must match across the actual retries.
+
+Only the test binary supplies a loopback HTTP URL to the private request helper.
+Production still validates public DNS HTTPS destinations, pins resolved public
+addresses, verifies TLS and refuses redirects. The separate transport regressions
+check stored-URL revalidation, reserved addresses, redirect traps, timeout and
+connection-error redaction. The demo uses SQLite; PostgreSQL ownership/recovery
+is verified by the real database suite above. The receiver remains running during
+sender interruption: its dedup map is in memory and this is **not** a claim about
+receiver restart durability, a production receiver implementation, or exactly-once
+effects. TempDir fixtures are removed after the test; the optional output retains
+sanitized receipts and aggregates only (no body, signature, key or endpoint URL).
+
+Record `git rev-parse HEAD`, `git status --porcelain`, `Cargo.lock` SHA-256,
+Rust/Cargo versions, OS, database version, commands and exit codes alongside the
+JSON. A changed source revision requires affected checks to run again. Refer to
+[operator semantics and upgrades](PRODUCTION_RUNBOOK.md#policy-webhook-delivery-and-recovery)
+before deploying. Public HTTPS/TLS delivery in the intended environment remains
+a separate operator acceptance step; this local increment does not close all of
+Phase 6.
+
+The [2026-10-13 webhook checkpoint](evidence/WEBHOOK_RECOVERY_2026-10-13.md) retains the exact
+source, both-store baseline failure, passing candidate and receiver receipts.

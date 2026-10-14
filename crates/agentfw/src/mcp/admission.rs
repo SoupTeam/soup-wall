@@ -1065,6 +1065,7 @@ enum Pending {
         args: Value,
         call_id: Value,
         binding: Value,
+        contract_version: String,
     },
 }
 
@@ -1386,18 +1387,28 @@ where
                         if collector.config.resource_profiles.contains_key(name)
                             || installed.resource_policy.is_some()
                         {
-                            // No resource-aware constrained executor is shipped here.
-                            // Keep both URL and path guarantees unsupported, including
-                            // when an old fixed-destination environment flag is asserted.
                             let reasons = json!(["resource_executor_unsupported"]);
                             write(host, &withheld(request_id, "invocation", &reasons)).await?;
                             continue;
                         }
                         let mut prod_verdict = None;
                         if collector.config.classifier.is_some() {
-                            let snapshot = admitted_snapshot.as_ref().context("classifier discovery state missing")?;
-                            let egress_declared = installed.action_class == ActionClass::Network || !installed.egress.is_empty();
-                            match collector.classify(snapshot, request_id, name, &args, installed.action_class, egress_declared).await? {
+                            let snapshot = admitted_snapshot
+                                .as_ref()
+                                .context("classifier discovery state missing")?;
+                            let egress_declared = installed.action_class == ActionClass::Network
+                                || !installed.egress.is_empty();
+                            match collector
+                                .classify(
+                                    snapshot,
+                                    request_id,
+                                    name,
+                                    &args,
+                                    installed.action_class,
+                                    egress_declared,
+                                )
+                                .await?
+                            {
                                 Err(failure) => {
                                     write(host, &not_classified(request_id, failure)).await?;
                                     continue;
@@ -1412,27 +1423,46 @@ where
                                 ProductionVerdict::Allow => {}
                                 ProductionVerdict::Ask => {
                                     let reasons = json!(["policy_unconfirmed_ask"]);
-                                    write(host, &withheld(request_id, "invocation", &reasons)).await?;
+                                    write(host, &withheld(request_id, "invocation", &reasons))
+                                        .await?;
                                     continue;
                                 }
                                 ProductionVerdict::Deny => {
                                     let reasons = json!(["policy_denied"]);
-                                    write(host, &withheld(request_id, "invocation", &reasons)).await?;
+                                    write(host, &withheld(request_id, "invocation", &reasons))
+                                        .await?;
                                     continue;
                                 }
                             }
                         }
                         // A composed refusal must not reserve native capacity.
                         // Native trusted restrictions still gate every permitted call.
-                        let receipt = collector.event("call", json!({
-                            "tool": name, "args": args,
-                            "schema_sha256": installed.schema_sha256,
-                        })).await?;
+                        let receipt = collector
+                            .event(
+                                "call",
+                                json!({
+                                    "tool": name,
+                                    "args": args,
+                                    "schema_sha256": installed.schema_sha256,
+                                }),
+                            )
+                            .await?;
                         if receipt["release"] != true {
-                            write(host, &withheld(request_id, "invocation", &receipt["reason_codes"])).await?;
+                            write(
+                                host,
+                                &withheld(request_id, "invocation", &receipt["reason_codes"]),
+                            )
+                            .await?;
                             continue;
                         }
-                        Pending::Call { id: request_id.clone(), tool:name.into(), args, call_id:receipt["call_id"].clone(), binding:receipt["binding_sha256"].clone() }
+                        Pending::Call {
+                            id: request_id.clone(),
+                            tool: name.into(),
+                            args,
+                            call_id: receipt["call_id"].clone(),
+                            binding: receipt["binding_sha256"].clone(),
+                            contract_version: CONTRACT.to_string(),
+                        }
                     }
                     _ => bail!("unsupported MCP method"),
                 };
@@ -1473,10 +1503,10 @@ where
                         ready = true;
                     }
                     Pending::Ping(_) => { ensure!(value.get("error").is_none(), "MCP ping failed"); keys(&value["result"], &[])?; }
-                    Pending::Call { id, tool, args, call_id, binding } => {
+                    Pending::Call { id, tool, args, call_id, binding, contract_version } => {
                         let kind = result_kind(&value)?;
                         let content = std::str::from_utf8(&raw).context("MCP result is not UTF-8")?;
-                        let receipt = collector.event("result", json!({"tool":tool,"args":args,"call_id":call_id,"result_kind":kind,"delivery":"mcp_host","content":content,"expected_binding_sha256":binding})).await?;
+                        let receipt = collector.event("result", json!({"expected_contract_version":contract_version,"tool":tool,"args":args,"call_id":call_id,"result_kind":kind,"delivery":"mcp_host","content":content,"expected_binding_sha256":binding})).await?;
                         if receipt["release"] != true {
                             write(host, &withheld(&id, "result", &receipt["reason_codes"])).await?;
                             continue;

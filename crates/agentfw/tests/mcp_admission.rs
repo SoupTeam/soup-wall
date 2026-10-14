@@ -644,6 +644,88 @@ impl Fixture {
         }
     }
 
+    async fn with_resource_policy(
+        mode: &str,
+        enforce: bool,
+        classifier: Option<&str>,
+        policy_builder: impl FnOnce(&Path, &mut Value),
+    ) -> Self {
+        let classified_read = classifier == Some("read") || mode == "classified-read";
+        let root = std::env::temp_dir();
+        #[cfg(unix)]
+        let root = root.canonicalize().unwrap();
+        let dir = tempfile::tempdir_in(root).unwrap();
+        let home = dir.path().join(".agentfw");
+        let stderr = dir.path().join("gateway-stderr.log");
+        let bootstrap = tokio::time::timeout(
+            Duration::from_secs(10),
+            Command::new(env!("CARGO_BIN_EXE_agentfw"))
+                .arg("install")
+                .env(
+                    if cfg!(windows) { "USERPROFILE" } else { "HOME" },
+                    dir.path(),
+                )
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::from(
+                    std::fs::File::create(&stderr).unwrap(),
+                ))
+                .kill_on_drop(true)
+                .status(),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(
+            bootstrap.success(),
+            "fixture private Agent bootstrap failed"
+        );
+        let mut registry = registry_with_read_path(classified_read);
+        policy_builder(dir.path(), &mut registry);
+        let bytes = registry.to_string().into_bytes();
+        let digest = sha(&bytes);
+        let registry_path = dir.path().join("registry.json");
+        std::fs::write(&registry_path, &bytes).unwrap();
+        agentfw::token::load_or_create(&home.join("native-token")).unwrap();
+        agentfw::token::load_or_create(&home.join("token")).unwrap();
+        std::fs::write(home.join("native-token"), TOKEN).unwrap();
+        std::fs::write(home.join("token"), "fixture-hook-token").unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let daemon_faults = Arc::new(DaemonFaults::default());
+        let (daemon, daemon_shutdown) = start_daemon(
+            listener,
+            fixture_state(&home, port, enforce),
+            daemon_faults.clone(),
+        );
+        let path = registry_path.to_string_lossy().replace('\'', "''");
+        std::fs::write(home.join("config.yaml"), format!("port: {port}\nenforce: true\nnative:\n  registry_path: '{path}'\n  registry_sha256: '{digest}'\n")).unwrap();
+        let ledger = dir.path().join("executed.jsonl");
+
+        #[cfg(windows)]
+        let private_before_launch = [home.clone(), home.join("token"), home.join("native-token")]
+            .iter()
+            .all(|path| protected_dacl(path));
+        let (child, input, output) =
+            spawn_gateway_with_profiles(dir.path(), &ledger, mode, &stderr, classifier, None, true);
+        Self {
+            _dir: dir,
+            port,
+            enforce,
+            daemon,
+            daemon_shutdown: Some(daemon_shutdown),
+            daemon_faults,
+            child,
+            input,
+            output,
+            ledger,
+            audit: home.join("audit.jsonl"),
+            stderr,
+            #[cfg(windows)]
+            private_before_launch,
+        }
+    }
+
     async fn exchange(&mut self, raw: &str) -> Option<String> {
         let _ = self.input.write_all(format!("{raw}\n").as_bytes()).await;
         let _ = self.input.flush().await;
@@ -2366,7 +2448,12 @@ print(json.dumps({{'status':'ok','actions':[('read' if '{refusal}' == 'ask' else
             "params":{"name":"read_document","arguments":{}}});
             let reply: Value =
                 serde_json::from_str(&fixture.exchange(&call.to_string()).await.unwrap()).unwrap();
-            assert_eq!(reply["result"]["isError"], true);
+            assert_eq!(
+                reply["result"]["isError"],
+                true,
+                "expected {refusal} refusal at call {index}; synthetic reply: {reply}; classifier evidence: {:?}",
+                classifications(&fixture)
+            );
             assert!(reply.to_string().contains(if refusal == "ask" {
                 "policy_unconfirmed_ask"
             } else {
@@ -2690,5 +2777,64 @@ async fn sou24_readonly_write_with_high_uncertainty_is_hard_denied() {
         compose_production_policy(&cl_high, ActionClass::SideEffecting, false).unwrap(),
         ProductionVerdict::Ask,
         "high uncertainty write on SideEffecting must yield Ask"
+    );
+}
+
+#[tokio::test]
+async fn sou15_resource_policy_refuses_execution_without_confined_executor() {
+    let mut fixture =
+        Fixture::with_resource_policy("classified-read", true, None, |dir, registry| {
+            let file = dir.join("reviewed-input.txt");
+            std::fs::write(&file, "synthetic contents").unwrap();
+            let canonical_file = file.canonicalize().unwrap().to_str().unwrap().to_string();
+            let canonical_dir = dir.canonicalize().unwrap();
+            let schema = json!({
+                "type": "object",
+                "properties": { "path": { "type": "string" } },
+                "required": ["path"],
+                "additionalProperties": false
+            });
+            let profile = json!({
+                "server_id": "fixture",
+                "tool_name": "read_document",
+                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "selectors": [{ "pointer": "/path", "kind": "path" }]
+            });
+            registry["tools"][0]["resource_policy"] = json!({
+                "profile": profile,
+                "workspace": canonical_dir,
+                "cwd": canonical_dir,
+                "executor_sha256": "e".repeat(64),
+                "classifier_sha256": "c".repeat(64),
+                "allowed_resources": [{
+                    "kind": "path",
+                    "canonical": canonical_file
+                }]
+            });
+        })
+        .await;
+    fixture.ready().await;
+
+    let target_file = fixture._dir.path().join("reviewed-input.txt");
+    let call = json!({
+        "jsonrpc": "2.0",
+        "id": "res-policy-refusal",
+        "method": "tools/call",
+        "params": {
+            "name": "read_document",
+            "arguments": {
+                "path": target_file.to_str().unwrap()
+            }
+        }
+    });
+    let reply: Value =
+        serde_json::from_str(&fixture.exchange(&call.to_string()).await.unwrap()).unwrap();
+    assert_eq!(reply["id"], "res-policy-refusal");
+    assert_eq!(reply["result"]["isError"], true);
+    assert!(reply.to_string().contains("resource_executor_unsupported"));
+    assert_eq!(
+        executed(&fixture.ledger).len(),
+        0,
+        "resource-policy calls must be refused without execution until a confined executor is reviewed"
     );
 }

@@ -27,8 +27,10 @@ def module(name, path):
 SUITE = module("sou18_suite_tests", ROOT / "scripts/run-sou18-acceptance.py")
 STATUS_FIXTURE = module("suite_status_fixture", ROOT / "scripts/tests/test_sou18_status.py")
 LATENCY_FIXTURE = module("suite_latency_fixture", ROOT / "scripts/tests/test_sou17_latency.py")
+GENERIC_FIXTURE = module("suite_generic_fixture", ROOT / "scripts/tests/test_sou17_generic_boundary.py")
 HELPERS = {name: SUITE.load(ROOT, name) for name in SUITE.SCRIPTS}
-SOURCE = {"commit": "a" * 40, "dirty": False, "inputs_digest": "b" * 64}
+SOURCE = {"commit": "a" * 40, "dirty": False, "inputs_digest": "b" * 64,
+          "tracked_inputs_sha256": {"synthetic.py": "f" * 64}}
 BINARY = "c" * 64
 PROCESS = {"exit_code": 0, "timed_out": False}
 
@@ -60,6 +62,25 @@ def reports():
     return copy.deepcopy({"setup": setup, "status": status, "latency": latency})
 
 
+def generic_report():
+    rows = [GENERIC_FIXTURE.row_for(case) for case in HELPERS["generic"].cases()]
+    source = dict(SOURCE)
+    source["inputs_sha256"] = source.pop("tracked_inputs_sha256")
+    return {"schema_version": SUITE.SCHEMAS["generic"], "status": "pass", "stable": True,
+            "source": source, "source_after": source, "expected_commit": SOURCE["commit"],
+            "expected_binary_sha256": BINARY, "binary_sha256_before": BINARY, "binary_sha256_after": BINARY,
+            "script_sha256_before": "d" * 64, "script_sha256_after": "d" * 64,
+            "helper_sha256_before": "e" * 64, "helper_sha256_after": "e" * 64,
+            "expectations": HELPERS["generic"].cases(),
+            "observed": {"rows": rows, "classifier_sha256": GENERIC_FIXTURE.DIGEST,
+                         "classifier_sha256_after": GENERIC_FIXTURE.DIGEST,
+                         "native_audit_errors": [], "final_ledger_errors": [],
+                         "receiver_bodies": [HELPERS["generic"].SEND_BODY],
+                         "native_decisions": [item for row in rows for item in row["native_decisions"]],
+                         "classifications": [row["classifications"][0] for row in rows],
+                         "gateway_exit_code": 0, "transcript": GENERIC_FIXTURE.transcript_for(rows), "error": None}}
+
+
 class EvidenceTests(unittest.TestCase):
     def evaluate(self, name, data, process=None):
         return SUITE.evaluate(name, data, process or PROCESS, SOURCE, BINARY, 30, HELPERS)[0]
@@ -82,7 +103,7 @@ class EvidenceTests(unittest.TestCase):
             self.assertEqual(self.evaluate(name, data, {"exit_code": 1}), "fail")
 
     def test_source_and_binary_mismatch_cannot_pass(self):
-        for name in SUITE.SCRIPTS:
+        for name in SUITE.BASE_STAGES:
             data = reports()[name]
             if name == "latency":
                 data["agentfw"]["sha256"] = "wrong"
@@ -122,13 +143,46 @@ class EvidenceTests(unittest.TestCase):
             self.assertEqual(self.evaluate("latency", data), "incomplete")
 
     def test_incomplete_or_changed_run_cannot_pass(self):
-        stages = [{"name": name, "status": "pass"} for name in SUITE.SCRIPTS]
+        stages = [{"name": name, "status": "pass"} for name in SUITE.BASE_STAGES]
         self.assertEqual(SUITE.outcome(stages, True), "pass")
         self.assertEqual(SUITE.outcome(stages, False), "incomplete")
         self.assertEqual(SUITE.outcome(stages[:-1], True), "incomplete")
         for value in ("skip", "not_run", "unknown", "incomplete", "fail"):
             stages[-1]["status"] = value
             self.assertEqual(SUITE.outcome(stages, True), "fail" if value == "fail" else "incomplete")
+
+    def test_generic_success_requires_all_requested_stages_and_full_witnesses(self):
+        self.assertEqual(self.evaluate("generic", generic_report()), "pass")
+        stages = [{"name": name, "status": "pass"} for name in SUITE.BASE_STAGES]
+        self.assertEqual(SUITE.outcome(stages, True, (*SUITE.BASE_STAGES, "generic")), "incomplete")
+        stages.append({"name": "generic", "status": "pass"})
+        self.assertEqual(SUITE.outcome(stages, True, (*SUITE.BASE_STAGES, "generic")), "pass")
+
+    def test_generic_bad_schema_missing_cases_wrong_identity_or_incomplete_transcript_cannot_pass(self):
+        for change in (lambda d: d.update(schema_version="future"),
+                       lambda d: d.update(binary_sha256_after="wrong"),
+                       lambda d: d.update(expected_commit="wrong"),
+                       lambda d: d.update(source_after=dict(SOURCE, dirty=True)),
+                       lambda d: d.update(source_after=dict(d["source_after"], inputs_sha256={})),
+                       lambda d: d.update(helper_sha256_after="wrong"),
+                       lambda d: d.update(expectations=[]),
+                       lambda d: d["observed"].update(classifier_sha256_after="wrong"),
+                       lambda d: d["observed"]["rows"].pop(),
+                       lambda d: d["observed"]["transcript"].update(client_output_complete=False),
+                       lambda d: d["observed"].update(native_audit_errors=["invalid audit"])):
+            data = generic_report()
+            change(data)
+            self.assertEqual(self.evaluate("generic", data), "incomplete")
+
+    def test_generic_reported_pass_cannot_hide_forbidden_execution_or_late_delivery(self):
+        for witness in ("executor", "receiver"):
+            data = generic_report()
+            if witness == "executor":
+                row = data["observed"]["rows"][2]
+                row["executor_ledger_raw"] = row["submitted_frame"] + "\n"
+            else:
+                data["observed"]["receiver_bodies"].append("unexpected late delivery")
+            self.assertEqual(self.evaluate("generic", data), "fail")
 
 
 class RunnerTests(unittest.TestCase):
@@ -235,6 +289,30 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertEqual([name for name, _ in self.calls], ["setup", "status"])
         self.assertEqual(report["stages"][-1]["status"], "skip")
+
+    def test_opted_in_generic_probe_gets_binary_pin_and_its_own_report(self):
+        self.args.include_generic = True
+        self.payloads["generic"] = generic_report()
+
+        def pinned(command, repo, env, timeout):
+            if Path(command[2]).name == SUITE.SCRIPTS["generic"]:
+                self.assertEqual(command[command.index("--expected-binary-sha256") + 1], BINARY)
+            return self.execute(command, repo, env, timeout)
+
+        code, report = self.run_suite(execute=pinned, host="linux")
+        self.assertEqual(code, 0)
+        self.assertEqual(report["required_stages"], [*SUITE.BASE_STAGES, "generic"])
+        self.assertEqual(report["generic_candidate_acceptance"], "pending_sou15")
+        self.assertFalse(report["acceptance_passed"])
+        self.assertTrue((self.args.output / "generic/results.json").exists())
+
+    def test_opted_in_generic_skip_on_windows_is_explicit(self):
+        self.args.include_generic = True
+        code, report = self.run_suite(host="win32")
+        self.assertEqual(code, 2)
+        self.assertEqual([name for name, _ in self.calls], ["setup", "status"])
+        self.assertEqual([(row["name"], row["status"]) for row in report["stages"][2:]],
+                         [("latency", "skip"), ("generic", "skip")])
 
     def test_timeout_retains_evidence_and_stops_later_probes(self):
         def timeout(*args):

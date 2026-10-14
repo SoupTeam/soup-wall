@@ -6,6 +6,7 @@
 
 use serde::Deserialize;
 use soup_wall_core::{Finding, Severity};
+use std::sync::OnceLock;
 
 use crate::action::ActionClass;
 use crate::egress::is_allowed;
@@ -220,9 +221,29 @@ impl AgentPolicySet {
         Ok(p)
     }
 
-    /// First matching rule/default, tightened by the incomplete-history Ask floor.
+    /// First matching operator rule/default, then mandatory safety floors.
     pub fn evaluate(&self, s: &Signals) -> AgentDecision {
         let decision = self.evaluate_rules(s);
+        if decision.verdict == Verdict::Deny {
+            return decision;
+        }
+        // Reuse the shipped hard-refusal predicates rather than duplicating them.
+        // Operator ordering remains first-match within its configurable layer.
+        static SHIPPED: OnceLock<AgentPolicySet> = OnceLock::new();
+        let shipped = SHIPPED.get_or_init(|| {
+            Self::from_yaml(include_str!("../policies/agent-default.yaml"))
+                .expect("shipped policy must parse")
+        });
+        for rule in &shipped.agent_policies {
+            if rule.action == Verdict::Deny && self.matches(&rule.when, s) {
+                return AgentDecision {
+                    verdict: Verdict::Deny,
+                    rule: Some(rule.name.clone()),
+                    message: rule.message.clone(),
+                    fallback: None,
+                };
+            }
+        }
         let protected = s
             .action_class
             .is_some_and(|a| a >= ActionClass::SideEffecting || s.touches_sensitive_path);
@@ -302,12 +323,14 @@ impl AgentPolicySet {
                 return false;
             }
         }
-        if c.egress_not_allowlisted == Some(true) {
+        if let Some(want_unlisted) = c.egress_not_allowlisted {
             let any_unlisted = s
                 .egress_hosts
                 .iter()
                 .any(|h| !is_allowed(h, &self.egress_allowlist));
-            if !any_unlisted {
+            // A positive assertion that destinations are allowlisted requires
+            // actual evidence; an empty list cannot match that assertion.
+            if any_unlisted != want_unlisted || (!want_unlisted && s.egress_hosts.is_empty()) {
                 return false;
             }
         }

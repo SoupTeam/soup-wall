@@ -466,12 +466,44 @@ pub struct OidcHttpClient {
 
 impl OidcHttpClient {
     pub fn new() -> anyhow::Result<Self> {
-        let client = reqwest::Client::builder()
+        let pem = match std::env::var_os("LLM_FW_OIDC_CA_CERT_FILE") {
+            Some(path) => {
+                use std::io::Read;
+                let mut pem = Vec::new();
+                std::fs::File::open(path)
+                    .context("cannot open OIDC CA certificate file")?
+                    .take(64 * 1024 + 1)
+                    .read_to_end(&mut pem)
+                    .context("cannot read OIDC CA certificate file")?;
+                if pem.len() > 64 * 1024 {
+                    anyhow::bail!("OIDC CA certificate file exceeds 64 KiB");
+                }
+                Some(pem)
+            }
+            None => None,
+        };
+        Self::with_ca_certificate(pem.as_deref())
+    }
+
+    fn with_ca_certificate(pem: Option<&[u8]>) -> anyhow::Result<Self> {
+        let mut builder = reqwest::Client::builder()
             .https_only(true)
+            .no_proxy()
             .redirect(Policy::none())
             .connect_timeout(OIDC_HTTP_CONNECT_TIMEOUT)
             .timeout(OIDC_HTTP_REQUEST_TIMEOUT)
-            .user_agent("soup-wall-oidc/1")
+            .user_agent("soup-wall-oidc/1");
+        if let Some(pem) = pem {
+            let certificates = reqwest::Certificate::from_pem_bundle(pem)
+                .context("invalid OIDC CA certificate PEM")?;
+            if certificates.is_empty() {
+                anyhow::bail!("OIDC CA certificate file contains no certificates");
+            }
+            for certificate in certificates {
+                builder = builder.add_root_certificate(certificate);
+            }
+        }
+        let client = builder
             .build()
             .context("failed to build OIDC HTTP client")?;
         Ok(Self {
@@ -766,6 +798,17 @@ mod tests {
         MAX_DISCOVERY_DOCUMENT_BYTES, MAX_SEALED_AUTHORIZATION_STATE_BYTES,
     };
     use crate::tenant_store::OrganizationOidcConnection;
+
+    #[test]
+    fn oidc_private_ca_requires_a_valid_certificate() {
+        assert!(OidcHttpClient::with_ca_certificate(None).is_ok());
+        assert!(OidcHttpClient::with_ca_certificate(Some(b"not a certificate")).is_err());
+        assert!(OidcHttpClient::with_ca_certificate(Some(b"")).is_err());
+        assert!(OidcHttpClient::with_ca_certificate(Some(include_bytes!(
+            "../tests/fixtures/saml/local-idp-cert.pem"
+        )))
+        .is_ok());
+    }
 
     fn connection() -> OrganizationOidcConnection {
         OrganizationOidcConnection {

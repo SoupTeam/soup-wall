@@ -205,6 +205,21 @@ class DriverSafetyTests(unittest.TestCase):
         self.assertEqual(context.protocol, ssl.PROTOCOL_TLS_SERVER)
         self.assertEqual(context.minimum_version, ssl.TLSVersion.TLSv1_2)
 
+    def test_edge_preserves_separate_session_and_flow_cookie_headers(self):
+        from urllib3._collections import HTTPHeaderDict
+        raw_headers = HTTPHeaderDict()
+        cookies = ["__Host-session=new; Path=/; Secure; Max-Age=28800",
+                   "__Host-flow=; Path=/; Secure; Max-Age=0"]
+        for cookie in cookies:
+            raw_headers.add("Set-Cookie", cookie)
+        response = Mock(headers={"Set-Cookie": ", ".join(cookies)},
+                        raw=Mock(headers=raw_headers), status_code=303, content=b"")
+        handler = Mock(wfile=io.BytesIO())
+        DRIVER.write_gateway_response(handler, response)
+        sent = [call.args[1] for call in handler.send_header.call_args_list
+                if call.args[0] == "Set-Cookie"]
+        self.assertEqual(sent, cookies)
+
     def test_redirected_ignored_target_is_rejected_before_private_writes(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()

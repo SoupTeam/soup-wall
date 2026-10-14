@@ -21,6 +21,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | Guide | Purpose |
 | --- | --- |
 | [Self-hosting](SELF_HOSTING.md) | Build and run the Agent, Gateway and optional Console |
+| [Managed Agent lifecycle](operations/AGENT_LIFECYCLE.md) | Install, verify, upgrade, roll back and remove a user-scoped Agent |
 | [Upgrading](UPGRADING.md) | Existing deployment compatibility and migration guidance |
 | [Production runbook](operations/PRODUCTION_RUNBOOK.md) | Readiness, operations, alerts and recovery |
 | [Staging drills](operations/STAGING_DRILLS.md) | Explicit dependency and restore acceptance procedures |
@@ -31,6 +32,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Native resource admission](operations/NATIVE_RESOURCE_ADMISSION.md) | Resource permissions, receipt integrity and unsupported executor boundary |
 | [Identity interoperability](operations/IDENTITY_INTEROPERABILITY.md) | Local identity fixtures, external metadata probes and pilot gates |
 | [Keycloak SAML acceptance](operations/KEYCLOAK_SAML_ACCEPTANCE.md) | Pinned vendor-runtime setup and signed SAML checks |
+| [Keycloak OIDC Console acceptance](operations/KEYCLOAK_OIDC_ACCEPTANCE.md) | Real browser sign-in, local roles, sessions and Console logout |
 | [Local release acceptance](operations/LOCAL_RELEASE_ACCEPTANCE.md) | Downloaded binary and archive acceptance scope |
 | [Classified read seam evidence](operations/CLASSIFIED_READ_EVIDENCE.md) | Reproduce the Task 2 test-double read through protected MCP admission |
 | [Local monitoring acceptance](operations/LOCAL_MONITORING_ACCEPTANCE.md) | Scrape-outage and authenticated alert-delivery evidence |

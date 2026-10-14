@@ -36,6 +36,9 @@ pub struct Outcome {
     pub egress_hosts: Vec<String>,
     /// Set only when `verdict` is `Escalate` — what to do if no judge answers.
     pub fallback: Option<Verdict>,
+    /// A spawn still needs trusted, stateful resolution before child authority exists.
+    /// A projection of this intermediate result must not advertise Allow.
+    pub authority_pending: bool,
 }
 
 impl Outcome {
@@ -45,15 +48,17 @@ impl Outcome {
     /// deployment credentials. An `Escalate` that somehow reaches this boundary is
     /// tightened to its declared fallback, or to `Ask` when no fallback exists.
     pub fn adapter_response(&self, policy_version: impl Into<String>) -> DecisionResponse {
-        let verdict = match self.verdict {
+        let resolved = crate::resolution::resolve(self.verdict, self.fallback, false);
+        let resolved = if self.authority_pending && resolved == Verdict::Allow {
+            Verdict::Ask
+        } else {
+            resolved
+        };
+        let verdict = match resolved {
             Verdict::Allow => AdapterVerdict::Allow,
             Verdict::Ask => AdapterVerdict::Ask,
             Verdict::Deny => AdapterVerdict::Deny,
-            Verdict::Escalate => match self.fallback.unwrap_or(Verdict::Ask) {
-                Verdict::Allow => AdapterVerdict::Allow,
-                Verdict::Ask | Verdict::Escalate => AdapterVerdict::Ask,
-                Verdict::Deny => AdapterVerdict::Deny,
-            },
+            Verdict::Escalate => unreachable!("resolution always returns a concrete verdict"),
         };
         DecisionResponse {
             contract_version: CONTRACT_VERSION.into(),
@@ -199,6 +204,50 @@ impl AgentFirewall {
         self.inspect_inner(ev, None, true)
     }
 
+    /// Inspect, resolve and commit an exact spawn proposal in one exclusive borrow.
+    /// The trusted callback reports only whether the optional judge found injection;
+    /// documentation, unavailable/invalid replies and errors use `false` (fallback).
+    /// It runs only for Escalate and cannot weaken a concrete policy verdict.
+    ///
+    /// No deferred grant token or pending-state queue is created. The event is
+    /// immutably borrowed throughout and the callback cannot mutate this firewall.
+    /// For asynchronous judge hosts, hold exclusive ownership through this operation;
+    /// a detached Outcome or its adapter projection is never a grant commit API.
+    pub fn inspect_resolved(
+        &mut self,
+        ev: &AgentEvent,
+        judge_injection: impl FnOnce(&Outcome) -> bool,
+    ) -> Outcome {
+        let mut out = self.inspect(ev);
+        if out.verdict != Verdict::Escalate {
+            return out;
+        }
+        let injection = judge_injection(&out);
+        out.verdict = crate::resolution::resolve(out.verdict, out.fallback, injection);
+        if out.authority_pending && out.verdict == Verdict::Allow {
+            if let EventKind::SubagentSpawn {
+                name,
+                granted_tools,
+                ..
+            } = &ev.kind
+            {
+                let parent = ev.parent.as_deref().unwrap_or(&ev.agent);
+                // Revalidate the still-current parent grant at the actual commit.
+                if self
+                    .authority
+                    .spawn(&ev.session, parent, name, granted_tools)
+                    .is_some()
+                {
+                    out.verdict = Verdict::Deny;
+                    out.rule = Some("deny-subagent-escalation".into());
+                }
+            }
+        }
+        out.authority_pending = false;
+        out.fallback = None;
+        out
+    }
+
     /// Native hosts supply authoritative semantics through this library API,
     /// after looking up a tool in their immutable operator-installed registry.
     pub fn inspect_native_call(
@@ -249,6 +298,7 @@ impl AgentFirewall {
             _ => {}
         }
 
+        let mut proposed_authority = None;
         // 1. Run core's detectors over every projected facet.
         let projected = facets(ev);
         let mut findings: Vec<(Facet, Finding)> = Vec::new();
@@ -299,6 +349,9 @@ impl AgentFirewall {
                 self.taint.record(&ev.session, ev.seq, &source, content);
             }
             EventKind::ToolCall { tool, args } => {
+                if ev.parent.is_some() && !self.authority.holds(&ev.session, &ev.agent, tool) {
+                    signals.subagent_escalation = true;
+                }
                 signals.action_class = Some(native.map_or_else(
                     || classify(tool, args),
                     |(baseline, _)| classify_with_baseline(args, baseline),
@@ -330,10 +383,12 @@ impl AgentFirewall {
                 let parent = ev.parent.clone().unwrap_or_else(|| ev.agent.clone());
                 if self
                     .authority
-                    .spawn(&ev.session, &parent, name, granted_tools)
+                    .check_spawn(&ev.session, &parent, name, granted_tools)
                     .is_some()
                 {
                     signals.subagent_escalation = true;
+                } else {
+                    proposed_authority = Some((parent, name.clone(), granted_tools.clone()));
                 }
             }
             _ => {}
@@ -349,6 +404,14 @@ impl AgentFirewall {
             fallback,
         } = self.policy.evaluate(&signals);
 
+        let authority_pending = proposed_authority.is_some() && verdict == Verdict::Escalate;
+        // An unapproved spawn must not leave an effective child grant behind.
+        if verdict == Verdict::Allow {
+            if let Some((parent, child, tools)) = proposed_authority {
+                let _ = self.authority.spawn(&ev.session, &parent, &child, &tools);
+            }
+        }
+
         Outcome {
             verdict,
             rule,
@@ -359,6 +422,7 @@ impl AgentFirewall {
             risk_score,
             egress_hosts: signals.egress_hosts,
             fallback,
+            authority_pending,
         }
     }
 
@@ -423,6 +487,7 @@ impl AgentFirewall {
             risk_score,
             egress_hosts: vec![],
             fallback,
+            authority_pending: false,
         }
     }
 
@@ -456,6 +521,7 @@ impl AgentFirewall {
             risk_score: 0,
             egress_hosts: Vec::new(),
             fallback: None,
+            authority_pending: false,
         }
     }
 }
@@ -481,6 +547,7 @@ mod tests {
             risk_score: 71,
             egress_hosts: vec!["example.invalid".into()],
             fallback: None,
+            authority_pending: false,
         };
         let response = out.adapter_response("local-policy-1");
         assert_eq!(

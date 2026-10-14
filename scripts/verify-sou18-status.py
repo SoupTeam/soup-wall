@@ -135,7 +135,7 @@ def run(args):
               "actual_host": "not_run; scripted stdio client only", "rows": [],
               "limitations": ["Selected trusted local fixture and existing registry-only path; not arbitrary server containment.",
                               "Direct server launches, other host paths and independently launched OS commands are unprotected.",
-                              "Unknown/mixed mappings and generic resource execution remain SOU-15 acceptance dependencies.",
+                              "Constrained resource execution remains a SOU-15 acceptance dependency; this probe does not test generic classifier reply routing.",
                               "One sample per status case is not warm MCP overhead; use the paired SOU-17 measurement separately."]}
     credentials = []
     started = time.perf_counter()

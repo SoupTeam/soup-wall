@@ -14,8 +14,11 @@ use axum::{
     response::{IntoResponse, Redirect, Response},
     Json,
 };
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use subtle::ConstantTimeEq;
 
 use crate::{
     handlers::Shared,
@@ -36,6 +39,7 @@ use crate::{
 const AUTHORIZATION_STATE_TTL_SECONDS: i64 = 10 * 60;
 const BROWSER_SESSION_TTL_SECONDS: i64 = 8 * 60 * 60;
 const SESSION_COOKIE_NAME: &str = "__Host-llm-fw-session";
+const FLOW_COOKIE_NAME: &str = "__Host-llm-fw-oidc-flow";
 const CUSTOMER_CSRF_HEADER: &str = "x-llm-firewall-csrf-token";
 const MAX_BROWSER_SESSION_TOKEN_BYTES: usize = 256;
 const MAX_CUSTOMER_PRINCIPAL_ID_BYTES: usize = 256;
@@ -853,7 +857,13 @@ async fn start_login_for_workspace(
     }
 
     match authorization_url(&endpoints, &connection, &state_value, &pkce, &nonce) {
-        Ok(url) => Redirect::to(url.as_str()).into_response(),
+        Ok(url) => {
+            let mut response = Redirect::to(url.as_str()).into_response();
+            response
+                .headers_mut()
+                .append(header::SET_COOKIE, flow_cookie(&state_value));
+            response
+        }
         Err(error_value) => {
             tracing::error!(error = %error_value, "failed to build OIDC authorization redirect");
             control_plane_unavailable()
@@ -866,7 +876,16 @@ async fn start_login_for_workspace(
 /// retries a callback. A successful provider response still grants nothing
 /// unless the verified `(issuer, subject)` has an active local membership in
 /// the workspace sealed into state at login start.
-pub async fn callback(State(state): State<Shared>, Query(query): Query<CallbackQuery>) -> Response {
+pub async fn callback(
+    State(state): State<Shared>,
+    Query(query): Query<CallbackQuery>,
+    headers: HeaderMap,
+) -> Response {
+    // A valid encrypted state alone does not prove this browser started login.
+    // Reject cross-browser callbacks before consuming state or exchanging a code.
+    if !browser_started_flow(&headers, query.state.as_deref()) {
+        return login_failed();
+    }
     let client = match OidcHttpClient::new() {
         Ok(client) => client,
         Err(error_value) => {
@@ -874,7 +893,32 @@ pub async fn callback(State(state): State<Shared>, Query(query): Query<CallbackQ
             return control_plane_unavailable();
         }
     };
-    callback_with_client(state, query, client).await
+    let mut response = callback_with_client(state, query, client).await;
+    response.headers_mut().append(
+        header::SET_COOKIE,
+        HeaderValue::from_static(
+            "__Host-llm-fw-oidc-flow=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax",
+        ),
+    );
+    response
+}
+
+fn flow_cookie(state: &str) -> HeaderValue {
+    let binding = URL_SAFE_NO_PAD.encode(Sha256::digest(state.as_bytes()));
+    HeaderValue::from_str(&format!(
+        "{FLOW_COOKIE_NAME}={binding}; Path=/; Max-Age={AUTHORIZATION_STATE_TTL_SECONDS}; HttpOnly; Secure; SameSite=Lax"
+    )).expect("SHA-256 base64url is a valid cookie value")
+}
+
+fn browser_started_flow(headers: &HeaderMap, state: Option<&str>) -> bool {
+    let Some(state) = state.filter(|state| !state.is_empty()) else {
+        return false;
+    };
+    let Some(binding) = named_cookie_token(headers, FLOW_COOKIE_NAME) else {
+        return false;
+    };
+    let expected = URL_SAFE_NO_PAD.encode(Sha256::digest(state.as_bytes()));
+    binding.as_bytes().ct_eq(expected.as_bytes()).into()
 }
 
 async fn callback_with_client(
@@ -2962,6 +3006,10 @@ fn expired_session_cookie() -> HeaderValue {
 }
 
 fn session_cookie_token(headers: &HeaderMap) -> Option<&str> {
+    named_cookie_token(headers, SESSION_COOKIE_NAME)
+}
+
+fn named_cookie_token<'a>(headers: &'a HeaderMap, cookie_name: &str) -> Option<&'a str> {
     let mut session_token = None;
     for cookie in headers
         .get_all(header::COOKIE)
@@ -2972,7 +3020,7 @@ fn session_cookie_token(headers: &HeaderMap) -> Option<&str> {
         let Some((name, token)) = cookie.trim().split_once('=') else {
             continue;
         };
-        if name != SESSION_COOKIE_NAME {
+        if name != cookie_name {
             continue;
         }
         if session_token.is_some() || !is_valid_browser_session_token(token) {
@@ -3262,6 +3310,46 @@ mod tests {
         test_config,
     };
     use reqwest::Url;
+
+    #[test]
+    fn callback_binding_requires_the_browser_that_started_the_flow() {
+        let cookie = super::flow_cookie("encrypted-state-from-browser-a");
+        let text = cookie.to_str().unwrap();
+        for attribute in [
+            "Path=/",
+            "HttpOnly",
+            "Secure",
+            "SameSite=Lax",
+            "Max-Age=600",
+        ] {
+            assert!(text.contains(attribute));
+        }
+        assert!(!text.contains("encrypted-state"));
+        let mut headers = HeaderMap::new();
+        assert!(!super::browser_started_flow(
+            &headers,
+            Some("encrypted-state-from-browser-a")
+        ));
+        headers.insert(
+            header::COOKIE,
+            HeaderValue::from_str(text.split(';').next().unwrap()).unwrap(),
+        );
+        assert!(super::browser_started_flow(
+            &headers,
+            Some("encrypted-state-from-browser-a")
+        ));
+        assert!(!super::browser_started_flow(
+            &headers,
+            Some("encrypted-state-from-browser-b")
+        ));
+        assert!(!super::browser_started_flow(&headers, None));
+        assert!(!super::browser_started_flow(&headers, Some("")));
+        headers.append(header::COOKIE, headers[header::COOKIE].clone());
+        assert!(!super::browser_started_flow(
+            &headers,
+            Some("encrypted-state-from-browser-a")
+        ));
+    }
 
     fn connection() -> OrganizationOidcConnection {
         OrganizationOidcConnection {

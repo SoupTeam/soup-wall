@@ -1,0 +1,81 @@
+// SPDX-License-Identifier: Apache-2.0
+// Regression-only overlay against exact pre-fix source. No production code is changed.
+use super::*;
+
+async fn seed(store: &TenantStore) -> String {
+    let tenant = store.create_tenant_async(&random_id("sou33_baseline_tenant")).await.unwrap();
+    store.create_webhook_destination_async(&tenant.id, "https://hooks.example.test/events", &[]).await.unwrap();
+    let version = store.create_policy_version_async(
+        &tenant.id,
+        "baseline_operator",
+        TenantPolicyDocument::new(Some(TenantModelPolicy { allowed_models: vec!["baseline-model".into()] })),
+    ).await.unwrap();
+    store.approve_policy_version_async(&tenant.id, &version.id, "baseline_owner").await.unwrap();
+    store.deploy_policy_version_async(&tenant.id, &version.id, "baseline_owner", PolicyDeploymentAction::Activate).await.unwrap();
+    tenant.id
+}
+
+fn success() -> WebhookAttemptResult {
+    WebhookAttemptResult { http_status: Some(200), error: None }
+}
+
+fn delayed_failure() -> WebhookAttemptResult {
+    WebhookAttemptResult { http_status: Some(503), error: Some("old worker failure after newer success".into()) }
+}
+
+#[tokio::test]
+async fn sqlite_stale_failure_must_not_reset_newer_success() {
+    let store = TenantStore::open(":memory:").unwrap()
+        .with_webhook_signing_key_base64url(&base64url(&[17; 32])).unwrap();
+    let tenant_id = seed(&store).await;
+    let old = store.claim_webhook_delivery().unwrap().unwrap();
+    // Test-only clock advance: expire A's lease in storage, then let the actual
+    // production claim routine issue attempt B. There is no test-local runner.
+    store.connection().unwrap().execute(
+        "UPDATE tenant_webhook_deliveries SET locked_until_unix = ?2 WHERE id = ?1",
+        params![old.delivery.id, now_unix() - 1],
+    ).unwrap();
+    let new = store.claim_webhook_delivery().unwrap().unwrap();
+    assert_eq!(old.delivery.id, new.delivery.id);
+    assert_eq!(new.delivery.attempt_count, 2);
+    store.finish_webhook_delivery(&new.delivery.id, success()).unwrap();
+    let before = store.list_webhook_deliveries_async(&tenant_id, 10).await.unwrap().remove(0);
+    assert_eq!(before.status, WebhookDeliveryStatus::Delivered);
+    // This calls the baseline's actual completion function with old worker A.
+    store.finish_webhook_delivery(&old.delivery.id, delayed_failure()).unwrap();
+    let after = store.list_webhook_deliveries_async(&tenant_id, 10).await.unwrap().remove(0);
+    println!("SOU33_BASELINE SQLite before={:?} after={:?} attempts={} last_http_status={:?}", before.status, after.status, after.attempt_count, after.last_http_status);
+    assert_eq!(after.status, WebhookDeliveryStatus::Delivered, "a stale failure must not undo a newer delivered receipt");
+}
+
+#[tokio::test]
+async fn postgres_stale_failure_must_not_reset_newer_success() {
+    let url = std::env::var("SOU33_BASELINE_POSTGRES_URL").expect("dedicated disposable baseline PostgreSQL URL is required");
+    let parsed = Url::parse(&url).unwrap();
+    assert_eq!(parsed.host_str(), Some("127.0.0.1"));
+    assert_eq!(parsed.port(), Some(62293));
+    assert_eq!(parsed.path(), "/sou33_baseline");
+    let store = TenantStore::open_postgres_for_test(&url, 100).await.unwrap()
+        .with_webhook_signing_key_base64url(&base64url(&[17; 32])).unwrap();
+    let tenant_id = seed(&store).await;
+    let pg = store.postgres.as_ref().unwrap();
+    let old = pg.claim_webhook_delivery().await.unwrap().unwrap();
+    let (client, connection) = tokio_postgres::connect(&url, tokio_postgres::NoTls).await.unwrap();
+    let connection_task = tokio::spawn(async move { connection.await.unwrap() });
+    client.execute(
+        "UPDATE tenant_webhook_deliveries SET locked_until_unix = $2 WHERE id = $1",
+        &[&old.delivery.id, &(now_unix() - 1)],
+    ).await.unwrap();
+    let new = pg.claim_webhook_delivery().await.unwrap().unwrap();
+    assert_eq!(old.delivery.id, new.delivery.id);
+    assert_eq!(new.delivery.attempt_count, 2);
+    pg.finish_webhook_delivery(&new.delivery.id, success()).await.unwrap();
+    let before = store.list_webhook_deliveries_async(&tenant_id, 10).await.unwrap().remove(0);
+    assert_eq!(before.status, WebhookDeliveryStatus::Delivered);
+    pg.finish_webhook_delivery(&old.delivery.id, delayed_failure()).await.unwrap();
+    let after = store.list_webhook_deliveries_async(&tenant_id, 10).await.unwrap().remove(0);
+    println!("SOU33_BASELINE PostgreSQL before={:?} after={:?} attempts={} last_http_status={:?}", before.status, after.status, after.attempt_count, after.last_http_status);
+    drop(client);
+    connection_task.abort();
+    assert_eq!(after.status, WebhookDeliveryStatus::Delivered, "a stale failure must not undo a newer delivered receipt");
+}
