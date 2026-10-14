@@ -28,6 +28,7 @@ jobs:
           {
             "tag": "v0.3.0",
             "source_sha": "dummy_sha",
+            "run_attempt": "1",
             "checksums": [
               "$H  soup-wall-v0.3.0-x86_64-unknown-linux-gnu.tar.gz",
               "$H  soup-wall-v0.3.0-aarch64-apple-darwin.tar.gz",
@@ -47,54 +48,54 @@ jobs:
           chmod +x ../scripts/validate_candidate.sh
 
           echo "--- Test 1: Missing approval file ---"
-          if ../scripts/validate_candidate.sh "missing.json" "$MANIFEST" "v0.3.0" "dummy_sha" 2>/dev/null; then exit 1; fi
+          if ../scripts/validate_candidate.sh "missing.json" "$MANIFEST" "v0.3.0" "dummy_sha" "1" 2>/dev/null; then exit 1; fi
 
           echo "--- Test 2: Decision rejected ---"
           cat <<EOF > rec_rej.json
-          {"decision": "rejected", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' "$MANIFEST"), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
+          {"decision": "rejected", "run_attempt": "1", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' "$MANIFEST"), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
           EOF
-          if ../scripts/validate_candidate.sh rec_rej.json "$MANIFEST" "v0.3.0" "dummy_sha" 2>/dev/null; then exit 1; fi
+          if ../scripts/validate_candidate.sh rec_rej.json "$MANIFEST" "v0.3.0" "dummy_sha" "1" 2>/dev/null; then exit 1; fi
 
           echo "--- Test 3: Missing product gate ---"
           cat <<EOF > rec_missing_gate.json
-          {"decision": "approved", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' "$MANIFEST"), "evidence_ref": "https://ref", "gates": {"operator": "passed", "license": "passed"}}
+          {"decision": "approved", "run_attempt": "1", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' "$MANIFEST"), "evidence_ref": "https://ref", "gates": {"operator": "passed", "license": "passed"}}
           EOF
-          if ../scripts/validate_candidate.sh rec_missing_gate.json "$MANIFEST" "v0.3.0" "dummy_sha" 2>/dev/null; then exit 1; fi
+          if ../scripts/validate_candidate.sh rec_missing_gate.json "$MANIFEST" "v0.3.0" "dummy_sha" "1" 2>/dev/null; then exit 1; fi
 
           echo "--- Test 4: Mismatched tag/commit (Handoff Integrity) ---"
           cat <<EOF > rec_good.json
-          {"decision": "approved", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' "$MANIFEST"), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
+          {"decision": "approved", "run_attempt": "1", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' "$MANIFEST"), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
           EOF
-          if ../scripts/validate_candidate.sh rec_good.json "$MANIFEST" "v0.4.0" "dummy_sha" 2>/dev/null; then exit 1; fi
-          if ../scripts/validate_candidate.sh rec_good.json "$MANIFEST" "v0.3.0" "bad_checkout_sha" 2>/dev/null; then exit 1; fi
+          if ../scripts/validate_candidate.sh rec_good.json "$MANIFEST" "v0.4.0" "dummy_sha" "1" 2>/dev/null; then exit 1; fi
+          if ../scripts/validate_candidate.sh rec_good.json "$MANIFEST" "v0.3.0" "bad_checkout_sha" "1" 2>/dev/null; then exit 1; fi
 
           echo "--- Test 5: Duplicated artifact ---"
           jq '.checksums[0] = .checksums[1]' "$MANIFEST" > man_dup.json
           cat <<EOF > rec_dup.json
-          {"decision": "approved", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' man_dup.json), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
+          {"decision": "approved", "run_attempt": "1", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' man_dup.json), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
           EOF
-          if ../scripts/validate_candidate.sh rec_dup.json man_dup.json "v0.3.0" "dummy_sha" 2>/dev/null; then exit 1; fi
+          if ../scripts/validate_candidate.sh rec_dup.json man_dup.json "v0.3.0" "dummy_sha" "1" 2>/dev/null; then exit 1; fi
 
           echo "--- Test 6: Suffix alias injection (P1) ---"
           jq '.checksums[10] = "'$H'  unpublished-soup-wall-image.tar"' "$MANIFEST" > man_suffix.json
           cat <<EOF > rec_suffix.json
-          {"decision": "approved", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' man_suffix.json), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
+          {"decision": "approved", "run_attempt": "1", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' man_suffix.json), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
           EOF
-          if ../scripts/validate_candidate.sh rec_suffix.json man_suffix.json "v0.3.0" "dummy_sha" 2>/dev/null; then exit 1; fi
+          if ../scripts/validate_candidate.sh rec_suffix.json man_suffix.json "v0.3.0" "dummy_sha" "1" 2>/dev/null; then exit 1; fi
 
           echo "--- Test 7: Path traversal injection (P1) ---"
           jq '.checksums[10] = "'$H'  ../soup-wall-image.tar"' "$MANIFEST" > man_trav.json
           cat <<EOF > rec_trav.json
-          {"decision": "approved", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' man_trav.json), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
+          {"decision": "approved", "run_attempt": "1", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' man_trav.json), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
           EOF
-          if ../scripts/validate_candidate.sh rec_trav.json man_trav.json "v0.3.0" "dummy_sha" 2>/dev/null; then exit 1; fi
+          if ../scripts/validate_candidate.sh rec_trav.json man_trav.json "v0.3.0" "dummy_sha" "1" 2>/dev/null; then exit 1; fi
 
           echo "--- Test 8: Extra unapproved files (P1) ---"
           jq '.checksums += ["'$H'  extra-file.txt"]' "$MANIFEST" > man_extra.json
           cat <<EOF > rec_extra.json
-          {"decision": "approved", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' man_extra.json), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
+          {"decision": "approved", "run_attempt": "1", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' man_extra.json), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
           EOF
-          if ../scripts/validate_candidate.sh rec_extra.json man_extra.json "v0.3.0" "dummy_sha" 2>/dev/null; then exit 1; fi
+          if ../scripts/validate_candidate.sh rec_extra.json man_extra.json "v0.3.0" "dummy_sha" "1" 2>/dev/null; then exit 1; fi
 
           echo "--- Test 9: Actual bytes mismatch (Artifact Binding) ---"
           jq -r '.checksums[]' "$MANIFEST" > APPROVED_SUMS
@@ -112,16 +113,26 @@ jobs:
                 soup-wall-bench.cdx.json \
                 soup-wall-core.cdx.json \
                 soup-wall-image.tar
-          ../scripts/validate_candidate.sh rec_good.json "$MANIFEST" "v0.3.0" "dummy_sha"
+          ../scripts/validate_candidate.sh rec_good.json "$MANIFEST" "v0.3.0" "dummy_sha" "1"
           
           echo "--- Test 11: Embedded CR/LF injection (P1) ---"
           EVIL_STR="$H  soup-wall-image.tar\n$H  extra-owned.txt"
           jq --arg evil "$EVIL_STR" '.checksums[10] = $evil' "$MANIFEST" > man_embed.json
           cat <<EOF > rec_embed.json
-          {"decision": "approved", "source_sha": "dummy_sha", "checksums": $(jq -c '.checksums' man_embed.json), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
+          {"decision": "approved", "run_attempt": "1", "source_sha": "dummy_sha", "checksums": $(jq -c '.checksums' man_embed.json), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
           EOF
           touch extra-owned.txt
-          if ../scripts/validate_candidate.sh rec_embed.json man_embed.json "v0.3.0" "dummy_sha" 2>/dev/null; then exit 1; fi
+          if ../scripts/validate_candidate.sh rec_embed.json man_embed.json "v0.3.0" "dummy_sha" "1" 2>/dev/null; then exit 1; fi
           rm -f extra-owned.txt
+
+          echo "--- Test 12: Missing or stale run_attempt in record (P2) ---"
+          cat <<EOF > rec_no_attempt.json
+          {"decision": "approved", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' "$MANIFEST"), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
+          EOF
+          if ../scripts/validate_candidate.sh rec_no_attempt.json "$MANIFEST" "v0.3.0" "dummy_sha" "1" 2>/dev/null; then exit 1; fi
+
+          echo "--- Test 13: Stale attempt mismatch between record and manifest (P2) ---"
+          jq '.run_attempt = "2"' "$MANIFEST" > man_attempt2.json
+          if ../scripts/validate_candidate.sh rec_good.json man_attempt2.json "v0.3.0" "dummy_sha" "2" 2>/dev/null; then exit 1; fi
 
           echo "All SOU-26 validator matrix tests passed successfully!"

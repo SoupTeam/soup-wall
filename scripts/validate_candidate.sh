@@ -5,6 +5,7 @@ RECORD=$1
 MANIFEST=$2
 EXPECTED_TAG=$3
 EXPECTED_SHA=$4
+EXPECTED_ATTEMPT=${5:-""}
 
 if [ ! -f "$RECORD" ]; then
   echo "CRITICAL: Missing acceptance record ($RECORD)"
@@ -33,7 +34,7 @@ if [ "$EVIDENCE" == "none" ] || [ -z "$EVIDENCE" ]; then
   exit 1
 fi
 
-# Identity bindings checks
+# Identity & Attempt bindings checks
 MAN_TAG=$(jq -r '.tag' "$MANIFEST")
 if [ "$MAN_TAG" != "$EXPECTED_TAG" ]; then
   echo "CRITICAL: Manifest tag ($MAN_TAG) does not match expected workflow tag ($EXPECTED_TAG)"
@@ -49,6 +50,25 @@ fi
 REC_SHA=$(jq -r '.source_sha' "$RECORD")
 if [ "$REC_SHA" != "$MAN_SHA" ]; then
   echo "CRITICAL: Source SHA mismatch! Expected $MAN_SHA, got $REC_SHA"
+  exit 1
+fi
+
+# P2: Run Attempt Binding Check
+REC_ATTEMPT=$(jq -r '.run_attempt // "none"' "$RECORD")
+MAN_ATTEMPT=$(jq -r '.run_attempt // "none"' "$MANIFEST")
+
+if [ "$REC_ATTEMPT" == "none" ] || [ -z "$REC_ATTEMPT" ]; then
+  echo "CRITICAL: Acceptance record missing mandatory 'run_attempt' field"
+  exit 1
+fi
+
+if [ "$REC_ATTEMPT" != "$MAN_ATTEMPT" ]; then
+  echo "CRITICAL: Attempt mismatch! Record attempt ($REC_ATTEMPT) != Manifest attempt ($MAN_ATTEMPT)"
+  exit 1
+fi
+
+if [ -n "$EXPECTED_ATTEMPT" ] && [ "$REC_ATTEMPT" != "$EXPECTED_ATTEMPT" ]; then
+  echo "CRITICAL: Attempt mismatch! Expected attempt $EXPECTED_ATTEMPT, got $REC_ATTEMPT"
   exit 1
 fi
 
@@ -74,8 +94,6 @@ if [ "$TOTAL_FOUND" -ne 11 ]; then
 fi
 
 # Securely read jq output into a bash array.
-# If an attacker injects an embedded \n inside a JSON string, jq -r expands it,
-# creating >11 elements in this Bash array, which we immediately catch.
 readarray -t CHECKSUM_LINES < <(jq -r '.checksums[]' "$MANIFEST")
 
 if [ "${#CHECKSUM_LINES[@]}" -ne 11 ]; then
@@ -88,7 +106,6 @@ declare -A FOUND_FILES
 # [P1] Strict Single-Line Grammar & Traversal Protection
 echo "Verifying exact inventory binding..."
 for line in "${CHECKSUM_LINES[@]}"; do
-  # Require exact canonical filename format, single line, no spaces/specials in filename
   if [[ ! "$line" =~ ^([a-f0-9]{64})\ \ ([a-zA-Z0-9_.-]+)$ ]]; then
     echo "CRITICAL: Invalid checksum line grammar or control character detected: $line"
     exit 1
@@ -97,7 +114,6 @@ for line in "${CHECKSUM_LINES[@]}"; do
   HASH_PART="${BASH_REMATCH[1]}"
   FILE_PART="${BASH_REMATCH[2]}"
 
-  # Reject unsafe paths (directory traversal, absolute paths)
   if [[ "$FILE_PART" == *"/"* ]] || [[ "$FILE_PART" == *"\\"* ]] || [[ "$FILE_PART" == *".."* ]]; then
     echo "CRITICAL: Non-canonical unsafe path detected: $FILE_PART"
     exit 1
@@ -111,7 +127,6 @@ for line in "${CHECKSUM_LINES[@]}"; do
   FOUND_FILES["$FILE_PART"]="$HASH_PART"
 done
 
-# Ensure every expected canonical file was present and mapped
 for expected_file in "${EXPECTED_FILENAMES[@]}"; do
   if [[ -z "${FOUND_FILES[$expected_file]:-}" ]]; then
     echo "CRITICAL: Missing required canonical file exact match: $expected_file"
