@@ -325,9 +325,18 @@ jobs:
           
           EXPECTED_RUN_ID=$(jq -r '.run_id // empty' external-acceptance.json)
           EXPECTED_ARTIFACT_ID=$(jq -r '.artifact_id // empty' external-acceptance.json)
+          EXPECTED_ARTIFACT_DIGEST=$(jq -r '.artifact_digest // empty' external-acceptance.json)
           
-          if [ -z "$EXPECTED_RUN_ID" ] \vert{}\vert{} [ -z "$EXPECTED_ARTIFACT_ID" ]; then
-             echo "CRITICAL: Acceptance record must contain 'run_id' and 'artifact_id'."
+          if [ -z "$EXPECTED_RUN_ID" ]; then
+             echo "CRITICAL: Acceptance record must contain 'run_id'."
+             exit 1
+          fi
+          if [ -z "$EXPECTED_ARTIFACT_ID" ]; then
+             echo "CRITICAL: Acceptance record must contain 'artifact_id'."
+             exit 1
+          fi
+          if [ -z "$EXPECTED_ARTIFACT_DIGEST" ]; then
+             echo "CRITICAL: Acceptance record must contain 'artifact_digest'."
              exit 1
           fi
           if [ "$EXPECTED_RUN_ID" != "${{ inputs.promote_run_id }}" ]; then
@@ -340,6 +349,10 @@ jobs:
           WORKFLOW_PATH=$(echo "$RUN_JSON" | jq -r '.path')
           EVENT=$(echo "$RUN_JSON" | jq -r '.event')
           REPO=$(echo "$RUN_JSON" | jq -r '.repository.full_name')
+          STATUS=$(echo "$RUN_JSON" | jq -r '.status')
+          CONCLUSION=$(echo "$RUN_JSON" | jq -r '.conclusion')
+          HEAD_SHA=$(echo "$RUN_JSON" | jq -r '.head_sha')
+          HEAD_BRANCH=$(echo "$RUN_JSON" | jq -r '.head_branch')
 
           # --paginate to ensure we get all jobs in the attempt
           JOBS_JSON=$(gh api --paginate repos/${{ github.repository }}/actions/runs/${EXPECTED_RUN_ID}/attempts/${ACTUAL_ATTEMPT}/jobs)
@@ -357,13 +370,22 @@ jobs:
             --arg repo "$REPO" \
             --arg job "$PREPARE_JOB_STATUS" \
             --arg art "$ACTUAL_ARTIFACT_ID" \
-            '{run_id: $run_id, run_attempt: $attempt, workflow_path:$path, event: $event, repository:$repo, prepare_job_status: $job, artifact_id:$art}' > api-context.json
+            --arg status "$STATUS" \
+            --arg conclusion "$CONCLUSION" \
+            --arg sha "$HEAD_SHA" \
+            --arg branch "$HEAD_BRANCH" \
+            '{run_id: $run_id, run_attempt: $attempt, workflow_path:$path, event: $event, repository:$repo, prepare_job_status: $job, artifact_id:$art, status: $status, conclusion:$conclusion, head_sha: $sha, head_branch:$branch}' > api-context.json
             
           echo "Validating API Identity BEFORE Artifact Download..."
-          ../scripts/validate_candidate.sh external-acceptance.json /dev/null "${TAG}" "${{ steps.ref.outputs.sha }}" api-context.json api-only
+          scripts/validate_candidate.sh external-acceptance.json /dev/null "${TAG}" "${{ steps.ref.outputs.sha }}" api-context.json api-only
           
           echo "Identity strictly bound. Downloading physical artifact ID $EXPECTED_ARTIFACT_ID..."
           gh api repos/${{ github.repository }}/actions/artifacts/$EXPECTED_ARTIFACT_ID/zip > package.zip
+          
+          echo "Verifying downloaded archive digest..."
+          echo "$EXPECTED_ARTIFACT_DIGEST  package.zip" > archive.sha256
+          sha256sum --strict -c archive.sha256
+          
           mkdir dist
           unzip package.zip -d dist/
 

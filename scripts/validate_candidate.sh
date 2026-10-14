@@ -36,52 +36,83 @@ if [ "$EVIDENCE" == "none" ] || [ -z "$EVIDENCE" ]; then
 fi
 
 # [P2] Strict API Identity Binding (Run ID, Attempt, Artifact ID, Job Status)
-if [ -n "$API_CONTEXT" ] && [ -f "$API_CONTEXT" ]; then
-  REC_RUN_ID=$(jq -r '.run_id // "none"' "$RECORD")
-  REC_ATTEMPT=$(jq -r '.run_attempt // "none"' "$RECORD")
-  REC_ARTIFACT_ID=$(jq -r '.artifact_id // "none"' "$RECORD")
+# Must fail closed if API context is missing
+if [ -z "$API_CONTEXT" ]; then
+  echo "CRITICAL: API Context is mandatory. Missing context fails closed."
+  exit 1
+fi
+if [ ! -f "$API_CONTEXT" ]; then
+  echo "CRITICAL: API Context file not found ($API_CONTEXT)."
+  exit 1
+fi
 
-  if [ "$REC_RUN_ID" == "none" ] || [ "$REC_ATTEMPT" == "none" ] || [ "$REC_ARTIFACT_ID" == "none" ]; then
-    echo "CRITICAL: Acceptance record missing run_id, run_attempt, or artifact_id"
-    exit 1
-  fi
+REC_RUN_ID=$(jq -r '.run_id // "none"' "$RECORD")
+REC_ATTEMPT=$(jq -r '.run_attempt // "none"' "$RECORD")
+REC_ARTIFACT_ID=$(jq -r '.artifact_id // "none"' "$RECORD")
+REC_ARTIFACT_DIGEST=$(jq -r '.artifact_digest // "none"' "$RECORD")
 
-  API_RUN_ID=$(jq -r '.run_id' "$API_CONTEXT")
-  API_ATTEMPT=$(jq -r '.run_attempt' "$API_CONTEXT")
-  API_PATH=$(jq -r '.workflow_path' "$API_CONTEXT")
-  API_EVENT=$(jq -r '.event' "$API_CONTEXT")
-  API_REPO=$(jq -r '.repository' "$API_CONTEXT")
-  API_JOB=$(jq -r '.prepare_job_status' "$API_CONTEXT")
-  API_ARTIFACT_ID=$(jq -r '.artifact_id' "$API_CONTEXT")
+if [ "$REC_RUN_ID" == "none" ] || [ "$REC_ATTEMPT" == "none" ] || [ "$REC_ARTIFACT_ID" == "none" ] || [ "$REC_ARTIFACT_DIGEST" == "none" ]; then
+  echo "CRITICAL: Acceptance record missing run_id, run_attempt, artifact_id, or artifact_digest"
+  exit 1
+fi
 
-  if [ "$API_PATH" != ".github/workflows/release.yml" ]; then
-    echo "CRITICAL: Untrusted workflow path ($API_PATH)"
-    exit 1
-  fi
-  if [ "$API_EVENT" != "push" ] && [ "$API_EVENT" != "workflow_dispatch" ]; then
+API_RUN_ID=$(jq -r '.run_id' "$API_CONTEXT")
+API_ATTEMPT=$(jq -r '.run_attempt' "$API_CONTEXT")
+API_PATH=$(jq -r '.workflow_path' "$API_CONTEXT")
+API_EVENT=$(jq -r '.event' "$API_CONTEXT")
+API_REPO=$(jq -r '.repository' "$API_CONTEXT")
+API_JOB=$(jq -r '.prepare_job_status' "$API_CONTEXT")
+API_ARTIFACT_ID=$(jq -r '.artifact_id' "$API_CONTEXT")
+API_STATUS=$(jq -r '.status' "$API_CONTEXT")
+API_CONCLUSION=$(jq -r '.conclusion' "$API_CONTEXT")
+API_SHA=$(jq -r '.head_sha' "$API_CONTEXT")
+API_BRANCH=$(jq -r '.head_branch' "$API_CONTEXT")
+
+if [ "$API_PATH" != ".github/workflows/release.yml" ]; then
+  echo "CRITICAL: Untrusted workflow path ($API_PATH)"
+  exit 1
+fi
+if [ "$API_EVENT" != "push" ]; then
+  if [ "$API_EVENT" != "workflow_dispatch" ]; then
     echo "CRITICAL: Invalid preparation event ($API_EVENT)"
     exit 1
   fi
-  if [ "$API_REPO" != "SoupTeam/soup-wall" ]; then
-    echo "CRITICAL: Untrusted repository ($API_REPO)"
-    exit 1
-  fi
-  if [ "$API_JOB" != "success" ]; then
-    echo "CRITICAL: Prepare & Freeze Candidate job did not succeed (was $API_JOB)"
-    exit 1
-  fi
-  if [ "$REC_RUN_ID" != "$API_RUN_ID" ]; then
-    echo "CRITICAL: Run ID mismatch (Record: $REC_RUN_ID != API: $API_RUN_ID)"
-    exit 1
-  fi
-  if [ "$REC_ATTEMPT" != "$API_ATTEMPT" ]; then
-    echo "CRITICAL: Attempt mismatch (Record: $REC_ATTEMPT != API: $API_ATTEMPT)"
-    exit 1
-  fi
-  if [ "$REC_ARTIFACT_ID" != "$API_ARTIFACT_ID" ]; then
-    echo "CRITICAL: Artifact ID mismatch (Record: $REC_ARTIFACT_ID != API: $API_ARTIFACT_ID)"
-    exit 1
-  fi
+fi
+if [ "$API_REPO" != "SoupTeam/soup-wall" ]; then
+  echo "CRITICAL: Untrusted repository ($API_REPO)"
+  exit 1
+fi
+if [ "$API_JOB" != "success" ]; then
+  echo "CRITICAL: Prepare & Freeze Candidate job did not succeed (was $API_JOB)"
+  exit 1
+fi
+if [ "$API_STATUS" != "completed" ]; then
+  echo "CRITICAL: Preparation run not completed ($API_STATUS)"
+  exit 1
+fi
+if [ "$API_CONCLUSION" != "success" ]; then
+  echo "CRITICAL: Preparation run not successful ($API_CONCLUSION)"
+  exit 1
+fi
+if [ "$API_SHA" != "$EXPECTED_SHA" ]; then
+  echo "CRITICAL: API head_sha ($API_SHA) != expected SHA ($EXPECTED_SHA)"
+  exit 1
+fi
+if [ "$API_BRANCH" != "$EXPECTED_TAG" ]; then
+  echo "CRITICAL: API head_branch ($API_BRANCH) != expected tag ($EXPECTED_TAG)"
+  exit 1
+fi
+if [ "$REC_RUN_ID" != "$API_RUN_ID" ]; then
+  echo "CRITICAL: Run ID mismatch (Record: $REC_RUN_ID != API: $API_RUN_ID)"
+  exit 1
+fi
+if [ "$REC_ATTEMPT" != "$API_ATTEMPT" ]; then
+  echo "CRITICAL: Attempt mismatch (Record: $REC_ATTEMPT != API: $API_ATTEMPT)"
+  exit 1
+fi
+if [ "$REC_ARTIFACT_ID" != "$API_ARTIFACT_ID" ]; then
+  echo "CRITICAL: Artifact ID mismatch (Record: $REC_ARTIFACT_ID != API: $API_ARTIFACT_ID)"
+  exit 1
 fi
 
 if [ "$MODE" == "api-only" ]; then
@@ -90,6 +121,11 @@ if [ "$MODE" == "api-only" ]; then
 fi
 
 # Identity & Manifest checks
+if [ ! -f "$MANIFEST" ]; then
+  echo "CRITICAL: Missing manifest ($MANIFEST)"
+  exit 1
+fi
+
 MAN_TAG=$(jq -r '.tag' "$MANIFEST")
 if [ "$MAN_TAG" != "$EXPECTED_TAG" ]; then
   echo "CRITICAL: Manifest tag ($MAN_TAG) does not match expected workflow tag ($EXPECTED_TAG)"
@@ -129,7 +165,7 @@ if [ "$TOTAL_FOUND" -ne 11 ]; then
   exit 1
 fi
 
-# Securely read jq output into a bash array
+# Securely read jq output into a bash array.
 readarray -t CHECKSUM_LINES < <(jq -r '.checksums[]' "$MANIFEST")
 
 if [ "${#CHECKSUM_LINES[@]}" -ne 11 ]; then

@@ -49,11 +49,11 @@ jobs:
 
           # Setup base valid record
           cat <<EOF > rec_good.json
-          {"decision": "approved", "run_id": "123", "run_attempt": "1", "artifact_id": "999", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' "$MANIFEST"), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
+          {"decision": "approved", "run_id": "123", "run_attempt": "1", "artifact_id": "999", "artifact_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' "$MANIFEST"), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
           EOF
 
           # Setup base valid API context
-          API_GOOD='{"run_id":"123","run_attempt":"1","workflow_path":".github/workflows/release.yml","event":"push","repository":"SoupTeam/soup-wall","prepare_job_status":"success","artifact_id":"999"}'
+          API_GOOD='{"run_id":"123","run_attempt":"1","workflow_path":".github/workflows/release.yml","event":"push","repository":"SoupTeam/soup-wall","prepare_job_status":"success","artifact_id":"999","status":"completed","conclusion":"success","head_sha":"dummy_sha","head_branch":"v0.3.0"}'
           echo "$API_GOOD" > api_good.json
 
           echo "--- Test 1: Missing approval file ---"
@@ -140,5 +140,20 @@ jobs:
           echo "--- Test 17: Wrong Artifact ID negative (P2) ---"
           echo "$API_GOOD" | jq '.artifact_id = "777"' > api_wrong_art.json
           if ../scripts/validate_candidate.sh rec_good.json /dev/null "v0.3.0" "dummy_sha" api_wrong_art.json api-only 2>/dev/null; then exit 1; fi
+          
+          echo "--- Test 18: Missing API context fails closed (P2) ---"
+          if ../scripts/validate_candidate.sh rec_good.json /dev/null "v0.3.0" "dummy_sha" "" api-only 2>/dev/null; then exit 1; fi
+
+          echo "--- Test 19: API run not completed successfully (P2) ---"
+          echo "$API_GOOD" | jq '.status = "in_progress"' > api_prog.json
+          if ../scripts/validate_candidate.sh rec_good.json /dev/null "v0.3.0" "dummy_sha" api_prog.json api-only 2>/dev/null; then exit 1; fi
+          
+          echo "--- Test 20: API head_branch mismatch (P2) ---"
+          echo "$API_GOOD" | jq '.head_branch = "v0.9.0"' > api_branch.json
+          if ../scripts/validate_candidate.sh rec_good.json /dev/null "v0.3.0" "dummy_sha" api_branch.json api-only 2>/dev/null; then exit 1; fi
+          
+          echo "--- Test 21: Missing artifact_digest fails closed (P2) ---"
+          jq 'del(.artifact_digest)' rec_good.json > rec_no_digest.json
+          if ../scripts/validate_candidate.sh rec_no_digest.json /dev/null "v0.3.0" "dummy_sha" api_good.json api-only 2>/dev/null; then exit 1; fi
 
           echo "All SOU-26 validator matrix tests passed successfully!"
