@@ -21,7 +21,11 @@ concurrency:
 
 jobs:
   linux-vendor:
-    name: Genuine Keycloak OIDC on Linux
+    name: Genuine Keycloak OIDC on Linux (${{ matrix.backend }})
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [sqlite, postgres]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -42,12 +46,13 @@ jobs:
           export PATH="$PWD/target/oidc-driver/bin:$PATH"
           python3 -m unittest discover -s scripts/tests -p test_console_browser.py -v
           python3 -m unittest discover -s scripts/tests -p test_keycloak_oidc_acceptance.py -v
-          bash scripts/keycloak-oidc-acceptance.sh
+          cargo test --locked -p llm-firewall --example keycloak-oidc-bootstrap
+          bash scripts/keycloak-oidc-acceptance.sh "${{ matrix.backend }}"
       - name: Retain only sanitized checks and hashes
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: keycloak-oidc-linux-evidence
+          name: keycloak-oidc-linux-${{ matrix.backend }}-evidence
           path: target/oidc-evidence/*.json
           if-no-files-found: warn
           retention-days: 30

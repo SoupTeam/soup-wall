@@ -16,6 +16,7 @@ pub mod customer_ui;
 pub mod events;
 pub mod handlers;
 pub mod invitation_ui;
+pub mod managed_agent_api;
 pub mod moderation;
 pub mod oidc;
 pub mod oidc_auth;
@@ -94,6 +95,13 @@ pub fn app(state: Shared) -> Router {
         // admin header. Every data-changing request remains on the separately
         // authenticated /admin/v1 API below.
         let dashboard = Router::new().route("/admin", get(admin_ui::dashboard));
+        let managed_agent = Router::new()
+            .route("/agent/v1/whoami", get(managed_agent_api::whoami))
+            .route("/agent/v1/policy", get(managed_agent_api::fetch_policy))
+            .route(
+                "/agent/v1/policy/ack",
+                post(managed_agent_api::acknowledge_policy),
+            );
         let scim_api = Router::new()
             .route(
                 "/scim/v2/ServiceProviderConfig",
@@ -172,6 +180,34 @@ pub fn app(state: Shared) -> Router {
             .route(
                 "/admin/v1/tenants/:tenant_id/tokens",
                 post(admin::issue_token).get(admin::list_tokens),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents",
+                post(managed_agent_api::enroll).get(managed_agent_api::list),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/:agent_id/revoke",
+                post(managed_agent_api::revoke),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/:agent_id/revisions",
+                post(managed_agent_api::create_revision),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/:agent_id/revisions/:revision/approve",
+                post(managed_agent_api::approve_revision),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/:agent_id/revisions/:revision/deploy",
+                post(managed_agent_api::deploy_revision),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/:agent_id/deployments",
+                get(managed_agent_api::deployments),
+            )
+            .route(
+                "/admin/v1/managed-issuer",
+                get(managed_agent_api::issuer_public_key),
             )
             .route(
                 "/admin/v1/tenants/:tenant_id/limits",
@@ -278,6 +314,7 @@ pub fn app(state: Shared) -> Router {
             .merge(admin)
             .merge(dashboard)
             .merge(scim_api)
+            .merge(managed_agent)
     } else {
         probes.merge(api)
     };

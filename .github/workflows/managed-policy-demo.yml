@@ -1,0 +1,36 @@
+name: SOU-30 managed Agent rollout demonstration
+
+on:
+  pull_request:
+    paths:
+      - 'crates/agent/**'
+      - 'crates/agentfw/**'
+      - 'crates/proxy/**'
+      - 'scripts/managed-policy-demo.py'
+      - '.github/workflows/managed-policy-demo.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  managed-rollout-e2e:
+    name: Signed activation and rollback on real Agent
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check standalone demonstration syntax
+        run: python3 -m py_compile scripts/managed-policy-demo.py
+      - name: Build the real Console and Agent
+        run: cargo build --locked -p llm-firewall -p agentfw
+      - name: Verify signed delivery and runtime rollback
+        run: python3 scripts/managed-policy-demo.py --no-build
+      - name: Archive non-secret witness
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sou30-managed-policy-evidence
+          path: target/sou30-managed-rollout-evidence.json
+          if-no-files-found: warn
