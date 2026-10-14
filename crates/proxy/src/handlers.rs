@@ -32,7 +32,7 @@ use crate::pipeline::{
     decide_input, decide_input_anthropic, decide_input_responses, decide_output,
 };
 use crate::rate_limit::{client_id, tenant_client_id};
-use crate::responses::{ResponsesRequest, SseDecodeError, SseJsonDecoder};
+use crate::responses::{ResponsesRequest, SseJsonDecoder};
 use crate::spend_limit::{Reservation, ReserveError};
 use crate::tenant_store::TenantAccess;
 
@@ -1491,9 +1491,59 @@ async fn proxy_responses_stream(
                 }
                 return;
             }
+            if !enforce_tool_protection {
+                let events = match decoder.push(&bytes) {
+                    Ok(events) => events,
+                    Err(error) => {
+                        tracing::warn!(
+                            reason = error.reason(),
+                            "Responses stream failed to decode event"
+                        );
+                        Vec::new()
+                    }
+                };
+                for event in events {
+                    if let Some("response.output_text.delta") =
+                        event.get("type").and_then(serde_json::Value::as_str)
+                    {
+                        if let Some(delta) = event.get("delta").and_then(serde_json::Value::as_str)
+                        {
+                            append_tail(&mut output_tail, delta, window);
+                            if let Some(reason) = decide_output(&task_state.firewall, &output_tail)
+                            {
+                                audit_output_block(&request_id, &reason, started);
+                                finish_tenant_stream(&task_state, &task_audit, "blocked", 502)
+                                    .await;
+                                let _ = tx.send(Ok(responses_block_frame(&reason))).await;
+                                return;
+                            }
+                        }
+                    } else if let Some("response.completed") =
+                        event.get("type").and_then(serde_json::Value::as_str)
+                    {
+                        if let Some(response) = event.get("response") {
+                            terminal_response = Some(response.clone());
+                        }
+                    }
+                }
+                if !usage_recorded {
+                    if let Some(response) = &terminal_response {
+                        record_stream_usage(&task_state, &usage_context, &request_id, response)
+                            .await;
+                        usage_recorded = true;
+                    }
+                }
+                if tx.send(Ok(bytes)).await.is_err() {
+                    finish_tenant_stream(&task_state, &task_audit, "client_disconnected", 499)
+                        .await;
+                    return;
+                }
+                continue;
+            }
+
             let mut block_reason = None;
-            let events = match decoder.push(&bytes) {
-                Ok(events) => events,
+            let frames = match decoder.push_frames(&bytes) {
+                Ok(frames) => frames,
                 Err(error) if task_state.config.fail_mode == FailMode::FailClosed => {
                     block_reason = Some(error.reason().to_string());
                     Vec::new()
@@ -1507,109 +1557,144 @@ async fn proxy_responses_stream(
                 }
             };
 
-            for event in events {
-                match event.get("type").and_then(serde_json::Value::as_str) {
-                    Some("response.output_item.added") => {
-                        if event
-                            .pointer("/item/type")
-                            .and_then(serde_json::Value::as_str)
-                            == Some("function_call")
-                        {
-                            in_flight_function_calls += 1;
-                        }
-                    }
-                    Some("response.function_call_arguments.delta")
-                    | Some("response.function_call_arguments.done") => {
-                        if in_flight_function_calls == 0 {
-                            in_flight_function_calls = 1;
-                        }
-                    }
-                    Some("response.output_text.delta") => {
-                        if let Some(delta) = event.get("delta").and_then(serde_json::Value::as_str)
-                        {
-                            append_tail(&mut output_tail, delta, window);
-                            if let Some(reason) = decide_output(&task_state.firewall, &output_tail)
+            for frame in frames {
+                if let Some(event) = &frame.event {
+                    match event.get("type").and_then(serde_json::Value::as_str) {
+                        Some("response.output_item.added") => {
+                            if event
+                                .pointer("/item/type")
+                                .and_then(serde_json::Value::as_str)
+                                == Some("function_call")
                             {
-                                block_reason = Some(reason);
-                                break;
+                                in_flight_function_calls += 1;
                             }
                         }
-                    }
-                    Some("response.output_item.done") => {
-                        let Some(item) = event.get("item") else {
-                            continue;
-                        };
-                        let is_function_call = item.get("type").and_then(serde_json::Value::as_str)
-                            == Some("function_call");
-                        if is_function_call {
-                            in_flight_function_calls = in_flight_function_calls.saturating_sub(1);
+                        Some("response.function_call_arguments.delta")
+                        | Some("response.function_call_arguments.done") => {
+                            if in_flight_function_calls == 0 {
+                                in_flight_function_calls = 1;
+                            }
                         }
-                        let Some(call) = crate::agent_scan::responses_tool_call(item) else {
-                            continue;
-                        };
-                        if let Some(reason) = capability_refuse_calls(
-                            &task_state,
-                            &request_id,
-                            std::slice::from_ref(&call),
-                        ) {
-                            block_reason = Some(reason);
-                            break;
+                        Some("response.output_text.delta") => {
+                            if let Some(delta) =
+                                event.get("delta").and_then(serde_json::Value::as_str)
+                            {
+                                append_tail(&mut output_tail, delta, window);
+                                if let Some(reason) =
+                                    decide_output(&task_state.firewall, &output_tail)
+                                {
+                                    block_reason = Some(reason);
+                                    break;
+                                }
+                            }
                         }
-                        if !task_state.config.agent_inspection.enabled {
-                            continue;
-                        }
-                        let key = item
-                            .get("call_id")
-                            .or_else(|| item.get("id"))
-                            .and_then(serde_json::Value::as_str)
-                            .map(str::to_string)
-                            .unwrap_or_else(|| item.to_string());
-                        if inspected_calls.insert(key) {
-                            if let Some(reason) = agent_refuse_reason(
+                        Some("response.output_item.done") => {
+                            let Some(item) = event.get("item") else {
+                                continue;
+                            };
+                            let is_function_call =
+                                item.get("type").and_then(serde_json::Value::as_str)
+                                    == Some("function_call");
+                            if is_function_call {
+                                in_flight_function_calls =
+                                    in_flight_function_calls.saturating_sub(1);
+                            }
+                            let Some(call) = crate::agent_scan::responses_tool_call(item) else {
+                                continue;
+                            };
+                            if let Some(reason) = capability_refuse_calls(
                                 &task_state,
                                 &request_id,
-                                tool_results.clone(),
-                                vec![call],
+                                std::slice::from_ref(&call),
                             ) {
                                 block_reason = Some(reason);
                                 break;
                             }
-                        }
-                    }
-                    Some("response.completed") => {
-                        if let Some(response) = event.get("response") {
-                            terminal_response = Some(response.clone());
-                            let calls = crate::agent_scan::responses_tool_calls(response);
-                            if let Some(reason) =
-                                capability_refuse_calls(&task_state, &request_id, &calls)
-                            {
-                                block_reason = Some(reason);
-                                break;
-                            }
-                            if !task_state.config.agent_inspection.enabled
-                                || !inspected_calls.is_empty()
-                            {
+                            if !task_state.config.agent_inspection.enabled {
                                 continue;
                             }
-                            if let Some(reason) = agent_refuse_reason(
-                                &task_state,
-                                &request_id,
-                                tool_results.clone(),
-                                calls,
-                            ) {
-                                block_reason = Some(reason);
-                                break;
+                            let key = item
+                                .get("call_id")
+                                .or_else(|| item.get("id"))
+                                .and_then(serde_json::Value::as_str)
+                                .map(str::to_string)
+                                .unwrap_or_else(|| item.to_string());
+                            if inspected_calls.insert(key) {
+                                if let Some(reason) = agent_refuse_reason(
+                                    &task_state,
+                                    &request_id,
+                                    tool_results.clone(),
+                                    vec![call],
+                                ) {
+                                    block_reason = Some(reason);
+                                    break;
+                                }
                             }
                         }
+                        Some("response.completed") => {
+                            if let Some(response) = event.get("response") {
+                                terminal_response = Some(response.clone());
+                                let calls = crate::agent_scan::responses_tool_calls(response);
+                                if let Some(reason) =
+                                    capability_refuse_calls(&task_state, &request_id, &calls)
+                                {
+                                    block_reason = Some(reason);
+                                    break;
+                                }
+                                if !task_state.config.agent_inspection.enabled
+                                    || !inspected_calls.is_empty()
+                                {
+                                    continue;
+                                }
+                                if let Some(reason) = agent_refuse_reason(
+                                    &task_state,
+                                    &request_id,
+                                    tool_results.clone(),
+                                    calls,
+                                ) {
+                                    block_reason = Some(reason);
+                                    break;
+                                }
+                            }
+                        }
+                        _ => {}
                     }
-                    _ => {}
                 }
-            }
 
-            if !usage_recorded {
-                if let Some(response) = &terminal_response {
-                    record_stream_usage(&task_state, &usage_context, &request_id, response).await;
-                    usage_recorded = true;
+                if block_reason.is_some() {
+                    break;
+                }
+
+                if in_flight_function_calls > 0 {
+                    buffered_bytes_total = buffered_bytes_total.saturating_add(frame.raw.len());
+                    if buffered_bytes_total > tool_buffer_limit {
+                        drop(buffered_function_chunks);
+                        let reason = "streamed tool call exceeded inspection buffer limit";
+                        audit_output_block(&request_id, reason, started);
+                        finish_tenant_stream(&task_state, &task_audit, "blocked", 502).await;
+                        let _ = tx.send(Ok(responses_block_frame(reason))).await;
+                        return;
+                    }
+                    buffered_function_chunks.push(frame.raw);
+                } else {
+                    for chunk in buffered_function_chunks.drain(..) {
+                        if tx.send(Ok(chunk)).await.is_err() {
+                            finish_tenant_stream(
+                                &task_state,
+                                &task_audit,
+                                "client_disconnected",
+                                499,
+                            )
+                            .await;
+                            return;
+                        }
+                    }
+                    buffered_bytes_total = 0;
+                    if tx.send(Ok(frame.raw)).await.is_err() {
+                        finish_tenant_stream(&task_state, &task_audit, "client_disconnected", 499)
+                            .await;
+                        return;
+                    }
                 }
             }
 
@@ -1623,49 +1708,29 @@ async fn proxy_responses_stream(
                 return;
             }
 
-            if !enforce_tool_protection {
-                if tx.send(Ok(bytes)).await.is_err() {
-                    finish_tenant_stream(&task_state, &task_audit, "client_disconnected", 499)
-                        .await;
-                    return;
-                }
-            } else if in_flight_function_calls > 0 {
-                buffered_bytes_total = buffered_bytes_total.saturating_add(bytes.len());
-                if buffered_bytes_total > tool_buffer_limit {
-                    drop(buffered_function_chunks);
-                    let reason = "streamed tool call exceeded inspection buffer limit";
-                    audit_output_block(&request_id, reason, started);
-                    finish_tenant_stream(&task_state, &task_audit, "blocked", 502).await;
-                    let _ = tx.send(Ok(responses_block_frame(reason))).await;
-                    return;
-                }
-                buffered_function_chunks.push(bytes);
-            } else {
-                for chunk in buffered_function_chunks.drain(..) {
-                    if tx.send(Ok(chunk)).await.is_err() {
-                        finish_tenant_stream(&task_state, &task_audit, "client_disconnected", 499)
-                            .await;
-                        return;
-                    }
-                }
-                buffered_bytes_total = 0;
-                if tx.send(Ok(bytes)).await.is_err() {
-                    finish_tenant_stream(&task_state, &task_audit, "client_disconnected", 499)
-                        .await;
-                    return;
+            if !usage_recorded {
+                if let Some(response) = &terminal_response {
+                    record_stream_usage(&task_state, &usage_context, &request_id, response).await;
+                    usage_recorded = true;
                 }
             }
         }
 
-        if enforce_tool_protection
-            && (in_flight_function_calls > 0 || !buffered_function_chunks.is_empty())
-        {
-            drop(buffered_function_chunks);
-            let reason = "stream truncated before function call completed inspection";
-            audit_output_block(&request_id, reason, started);
-            finish_tenant_stream(&task_state, &task_audit, "blocked", 502).await;
-            let _ = tx.send(Ok(responses_block_frame(reason))).await;
-            return;
+        if enforce_tool_protection {
+            let incomplete_framing = decoder.has_pending();
+            let holding_call = in_flight_function_calls > 0 || !buffered_function_chunks.is_empty();
+            if incomplete_framing || holding_call {
+                drop(buffered_function_chunks);
+                let reason = if incomplete_framing {
+                    "stream ended with incomplete framing"
+                } else {
+                    "stream truncated before function call completed inspection"
+                };
+                audit_output_block(&request_id, reason, started);
+                finish_tenant_stream(&task_state, &task_audit, "blocked", 502).await;
+                let _ = tx.send(Ok(responses_block_frame(reason))).await;
+                return;
+            }
         }
 
         finish_tenant_stream(
@@ -1801,110 +1866,26 @@ async fn proxy_stream(
                 }
                 return;
             }
-            // One decode serves both usage evidence and tool-call reassembly.
-            let mut tool_block = None;
-            let decoded = match usage_decoder.push(&bytes) {
-                Ok(events) => events,
-                Err(error) => {
-                    // Only an oversized frame means a tool call we could not inspect
-                    // but the client still receives and parses: that fails closed.
-                    // A payload that is not JSON is not a tool call the provider's
-                    // own client could execute either, so refusing every stream that
-                    // contains one would deny legitimate traffic for no security
-                    // gain — warn and carry on.
-                    if error == SseDecodeError::TooLarge
-                        && tool_assembler.is_some()
-                        && task_state.config.fail_mode == FailMode::FailClosed
-                    {
-                        tool_block = Some(error.reason().to_string());
-                    } else {
-                        tracing::warn!(
-                            reason = error.reason(),
-                            "stream event could not be decoded"
+            if !enforce_tool_protection {
+                if let Ok(events) = usage_decoder.push(&bytes) {
+                    for event in &events {
+                        usage_evidence.observe(
+                            event,
+                            usage_context.input_field,
+                            usage_context.output_field,
                         );
                     }
-                    Vec::new()
                 }
-            };
-            for event in &decoded {
-                usage_evidence.observe(
-                    event,
-                    usage_context.input_field,
-                    usage_context.output_field,
-                );
-            }
-            // Reassemble tool calls split across frames and judge only completed
-            // ones, before the frame that completes them is forwarded.
-            if let (Some(assembler), Some(context)) =
-                (tool_assembler.as_mut(), tool_context.as_ref())
-            {
-                for event in &decoded {
-                    if tool_block.is_some() {
-                        break;
-                    }
-                    let completed = match assembler.push(event) {
-                        Ok(calls) => calls,
-                        Err(reason) => {
-                            if task_state.config.fail_mode == FailMode::FailClosed {
-                                tool_block = Some(reason.to_string());
-                                break;
-                            }
-                            tracing::warn!(reason, "streamed tool call not reassembled");
-                            Vec::new()
-                        }
-                    };
-                    if completed.is_empty() {
-                        continue;
-                    }
-                    if let Some(reason) =
-                        capability_refuse_calls(&task_state, &request_id, &completed)
-                    {
-                        tool_block = Some(reason);
-                        break;
-                    }
-                    if task_state.config.agent_inspection.enabled {
-                        if let Some(reason) = agent_refuse_reason(
-                            &task_state,
-                            &request_id,
-                            context.tool_results.clone(),
-                            completed,
-                        ) {
-                            tool_block = Some(reason);
-                            break;
-                        }
-                    }
+                if !usage_recorded
+                    && (usage_decoder.saw_done() || usage_evidence.saw_terminal)
+                    && status.is_success()
+                {
+                    let terminal_body = std::mem::take(&mut usage_evidence)
+                        .terminal_body(usage_context.input_field, usage_context.output_field);
+                    record_stream_usage(&task_state, &usage_context, &request_id, &terminal_body)
+                        .await;
+                    usage_recorded = true;
                 }
-            }
-            if let Some(reason) = tool_block {
-                drop(buffered_tool_chunks);
-                AuditRecord {
-                    request_id: request_id.clone(),
-                    direction: "output".into(),
-                    decision: "block".into(),
-                    score: 0,
-                    reasons: vec![reason],
-                    owasp: Vec::new(),
-                    atlas: Vec::new(),
-                    latency_ms: started.elapsed().as_millis(),
-                }
-                .emit();
-                finish_tenant_stream(&task_state, &task_audit, "blocked", 502).await;
-                if tx.send(Ok(Bytes::from_static(block_frame))).await.is_err() {
-                    return;
-                }
-                return;
-            }
-            if !usage_recorded
-                && (usage_decoder.saw_done() || usage_evidence.saw_terminal)
-                && status.is_success()
-            {
-                let terminal_body = std::mem::take(&mut usage_evidence)
-                    .terminal_body(usage_context.input_field, usage_context.output_field);
-                record_stream_usage(&task_state, &usage_context, &request_id, &terminal_body).await;
-                usage_recorded = true;
-            }
-
-            if !enforce_tool_protection {
                 append_tail(&mut acc, &String::from_utf8_lossy(&bytes), window);
                 if decide_output(&task_state.firewall, &acc).is_some() {
                     AuditRecord {
@@ -1929,10 +1910,81 @@ async fn proxy_stream(
                         .await;
                     return;
                 }
-            } else {
+                continue;
+            }
+
+            // One decode serves both usage evidence and tool-call reassembly.
+            let mut tool_block = None;
+            let frames = match usage_decoder.push_frames(&bytes) {
+                Ok(frames) => frames,
+                Err(error) => {
+                    if task_state.config.fail_mode == FailMode::FailClosed {
+                        tool_block = Some(error.reason().to_string());
+                    } else {
+                        tracing::warn!(
+                            reason = error.reason(),
+                            "stream event could not be decoded"
+                        );
+                    }
+                    Vec::new()
+                }
+            };
+
+            for frame in frames {
+                if let Some(event) = &frame.event {
+                    usage_evidence.observe(
+                        event,
+                        usage_context.input_field,
+                        usage_context.output_field,
+                    );
+                }
+
+                // Reassemble tool calls split across frames and judge only completed
+                // ones, before the frame that completes them is forwarded.
+                if let (Some(assembler), Some(context)) =
+                    (tool_assembler.as_mut(), tool_context.as_ref())
+                {
+                    if let Some(event) = &frame.event {
+                        let completed = match assembler.push(event) {
+                            Ok(calls) => calls,
+                            Err(reason) => {
+                                if task_state.config.fail_mode == FailMode::FailClosed {
+                                    tool_block = Some(reason.to_string());
+                                    break;
+                                }
+                                tracing::warn!(reason, "streamed tool call not reassembled");
+                                Vec::new()
+                            }
+                        };
+                        if !completed.is_empty() {
+                            if let Some(reason) =
+                                capability_refuse_calls(&task_state, &request_id, &completed)
+                            {
+                                tool_block = Some(reason);
+                                break;
+                            }
+                            if task_state.config.agent_inspection.enabled {
+                                if let Some(reason) = agent_refuse_reason(
+                                    &task_state,
+                                    &request_id,
+                                    context.tool_results.clone(),
+                                    completed,
+                                ) {
+                                    tool_block = Some(reason);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if tool_block.is_some() {
+                    break;
+                }
+
                 let is_holding = tool_assembler.as_ref().is_some_and(|a| a.is_holding());
                 if is_holding {
-                    buffered_bytes_total = buffered_bytes_total.saturating_add(bytes.len());
+                    buffered_bytes_total = buffered_bytes_total.saturating_add(frame.raw.len());
                     if buffered_bytes_total > tool_buffer_limit {
                         drop(buffered_tool_chunks);
                         let reason = "streamed tool call exceeded inspection buffer limit";
@@ -1951,7 +2003,7 @@ async fn proxy_stream(
                         let _ = tx.send(Ok(Bytes::from_static(block_frame))).await;
                         return;
                     }
-                    buffered_tool_chunks.push(bytes);
+                    buffered_tool_chunks.push(frame.raw);
                 } else {
                     for chunk in buffered_tool_chunks.drain(..) {
                         append_tail(&mut acc, &String::from_utf8_lossy(&chunk), window);
@@ -1983,7 +2035,7 @@ async fn proxy_stream(
                         }
                     }
                     buffered_bytes_total = 0;
-                    append_tail(&mut acc, &String::from_utf8_lossy(&bytes), window);
+                    append_tail(&mut acc, &String::from_utf8_lossy(&frame.raw), window);
                     if decide_output(&task_state.firewall, &acc).is_some() {
                         AuditRecord {
                             request_id: request_id.clone(),
@@ -2000,39 +2052,76 @@ async fn proxy_stream(
                         let _ = tx.send(Ok(Bytes::from_static(block_frame))).await;
                         return;
                     }
-                    if tx.send(Ok(bytes)).await.is_err() {
+                    if tx.send(Ok(frame.raw)).await.is_err() {
                         finish_tenant_stream(&task_state, &task_audit, "client_disconnected", 499)
                             .await;
                         return;
                     }
                 }
             }
-        }
-        if enforce_tool_protection
-            && (tool_assembler.as_ref().is_some_and(|a| a.is_holding())
-                || !buffered_tool_chunks.is_empty())
-        {
-            drop(buffered_tool_chunks);
-            let reason = "stream truncated before tool call completed inspection";
-            tracing::warn!(
-                cycle = %request_id,
-                reason,
-                "stream closed prematurely with unconfirmed tool call; blocked"
-            );
-            AuditRecord {
-                request_id: request_id.clone(),
-                direction: "output".into(),
-                decision: "block".into(),
-                score: 0,
-                reasons: vec![reason.into()],
-                owasp: Vec::new(),
-                atlas: Vec::new(),
-                latency_ms: started.elapsed().as_millis(),
+
+            if let Some(reason) = tool_block {
+                drop(buffered_tool_chunks);
+                AuditRecord {
+                    request_id: request_id.clone(),
+                    direction: "output".into(),
+                    decision: "block".into(),
+                    score: 0,
+                    reasons: vec![reason],
+                    owasp: Vec::new(),
+                    atlas: Vec::new(),
+                    latency_ms: started.elapsed().as_millis(),
+                }
+                .emit();
+                finish_tenant_stream(&task_state, &task_audit, "blocked", 502).await;
+                if tx.send(Ok(Bytes::from_static(block_frame))).await.is_err() {
+                    return;
+                }
+                return;
             }
-            .emit();
-            finish_tenant_stream(&task_state, &task_audit, "blocked", 502).await;
-            let _ = tx.send(Ok(Bytes::from_static(block_frame))).await;
-            return;
+
+            if !usage_recorded
+                && (usage_decoder.saw_done() || usage_evidence.saw_terminal)
+                && status.is_success()
+            {
+                let terminal_body = std::mem::take(&mut usage_evidence)
+                    .terminal_body(usage_context.input_field, usage_context.output_field);
+                record_stream_usage(&task_state, &usage_context, &request_id, &terminal_body).await;
+                usage_recorded = true;
+            }
+        }
+
+        if enforce_tool_protection {
+            let incomplete_framing = usage_decoder.has_pending();
+            let holding_tool = tool_assembler.as_ref().is_some_and(|a| a.is_holding())
+                || !buffered_tool_chunks.is_empty();
+            if incomplete_framing || holding_tool {
+                drop(buffered_tool_chunks);
+                let reason = if incomplete_framing {
+                    "stream ended with incomplete framing"
+                } else {
+                    "stream truncated before tool call completed inspection"
+                };
+                tracing::warn!(
+                    cycle = %request_id,
+                    reason,
+                    "stream closed prematurely with unconfirmed tool call; blocked"
+                );
+                AuditRecord {
+                    request_id: request_id.clone(),
+                    direction: "output".into(),
+                    decision: "block".into(),
+                    score: 0,
+                    reasons: vec![reason.into()],
+                    owasp: Vec::new(),
+                    atlas: Vec::new(),
+                    latency_ms: started.elapsed().as_millis(),
+                }
+                .emit();
+                finish_tenant_stream(&task_state, &task_audit, "blocked", 502).await;
+                let _ = tx.send(Ok(Bytes::from_static(block_frame))).await;
+                return;
+            }
         }
 
         // Observability for shadow mode or non-enforcing paths

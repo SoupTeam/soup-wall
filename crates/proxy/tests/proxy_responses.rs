@@ -484,3 +484,157 @@ async fn responses_stream_blocks_function_call_with_deltas_without_leaking() {
         "withheld function call deltas must not leak on block: {response}"
     );
 }
+
+#[tokio::test]
+async fn responses_stream_without_frame_delimiter_at_eof_is_withheld_and_blocks() {
+    let server = MockServer::start().await;
+    let added = serde_json::json!({
+        "type": "response.output_item.added",
+        "output_index": 0,
+        "item": {
+            "id": "fc_1",
+            "type": "function_call",
+            "name": "write_marker",
+            "arguments": "{}"
+        }
+    });
+    // Deliberately omit trailing delimiter \n\n
+    let wire = format!("event: response.output_item.added\ndata: {added}");
+    Mock::given(method("POST"))
+        .and(path("/v1/responses"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(wire, "text/event-stream"))
+        .mount(&server)
+        .await;
+
+    let mut st = state(server.uri(), allow_firewall());
+    Arc::get_mut(&mut st)
+        .unwrap()
+        .config
+        .agent_inspection
+        .enabled = true;
+    Arc::get_mut(&mut st)
+        .unwrap()
+        .config
+        .agent_inspection
+        .enforce = true;
+    let (status, response) = post_responses(st, benign_request(true)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(response.contains("llm_firewall_block"), "{response}");
+    assert!(
+        !response.contains("write_marker"),
+        "unframed Responses function call must not leak: {response}"
+    );
+}
+
+#[tokio::test]
+async fn responses_stream_malformed_json_in_enforcing_fail_closed_blocks() {
+    let server = MockServer::start().await;
+    let wire = "data: {not-valid-json}\n\n";
+    Mock::given(method("POST"))
+        .and(path("/v1/responses"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(wire, "text/event-stream"))
+        .mount(&server)
+        .await;
+
+    let mut st = state(server.uri(), allow_firewall());
+    Arc::get_mut(&mut st)
+        .unwrap()
+        .config
+        .agent_inspection
+        .enabled = true;
+    Arc::get_mut(&mut st)
+        .unwrap()
+        .config
+        .agent_inspection
+        .enforce = true;
+    let (status, response) = post_responses(st, benign_request(true)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        response.contains("llm_firewall_block"),
+        "malformed Responses stream JSON in fail-closed mode must be blocked: {response}"
+    );
+}
+
+async fn responses_chunked_upstream(chunks: Vec<String>) -> (String, tokio::task::JoinHandle<()>) {
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .unwrap();
+    let addr = listener.local_addr().unwrap();
+    let handle = tokio::spawn(async move {
+        if let Ok((mut socket, _)) = listener.accept().await {
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            let mut buf = [0u8; 4096];
+            let _ = socket.read(&mut buf).await;
+            let header = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n";
+            let _ = socket.write_all(header.as_bytes()).await;
+            for chunk in chunks {
+                let chunk_hdr = format!("{:X}\r\n", chunk.len());
+                let _ = socket.write_all(chunk_hdr.as_bytes()).await;
+                let _ = socket.write_all(chunk.as_bytes()).await;
+                let _ = socket.write_all(b"\r\n").await;
+                let _ = socket.flush().await;
+                tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+            }
+            let _ = socket.write_all(b"0\r\n\r\n").await;
+            let _ = socket.flush().await;
+        }
+    });
+    (format!("http://{addr}"), handle)
+}
+
+#[tokio::test]
+async fn responses_stream_transport_fragmentation_allows_benign_function_call() {
+    let added = serde_json::json!({
+        "type": "response.output_item.added",
+        "output_index": 0,
+        "item": {
+            "id": "fc_1",
+            "type": "function_call",
+            "name": "lookup_weather",
+            "arguments": ""
+        }
+    });
+    let delta = serde_json::json!({
+        "type": "response.function_call_arguments.delta",
+        "output_index": 0,
+        "item_id": "fc_1",
+        "delta": "{\"location\":\"Astana\"}"
+    });
+    let done = serde_json::json!({
+        "type": "response.output_item.done",
+        "output_index": 0,
+        "item": {
+            "id": "fc_1",
+            "type": "function_call",
+            "name": "lookup_weather",
+            "arguments": "{\"location\":\"Astana\"}"
+        }
+    });
+    let wire = format!(
+        "event: response.output_item.added\ndata: {added}\n\nevent: response.function_call_arguments.delta\ndata: {delta}\n\nevent: response.output_item.done\ndata: {done}\n\n"
+    );
+    let chunks: Vec<String> = wire
+        .as_bytes()
+        .chunks(8)
+        .map(|c| String::from_utf8_lossy(c).into_owned())
+        .collect();
+    let (base_url, _handle) = responses_chunked_upstream(chunks).await;
+
+    let mut st = state(base_url, allow_firewall());
+    Arc::get_mut(&mut st)
+        .unwrap()
+        .config
+        .agent_inspection
+        .enabled = true;
+    Arc::get_mut(&mut st)
+        .unwrap()
+        .config
+        .agent_inspection
+        .enforce = true;
+    let (status, response) = post_responses(st, benign_request(true)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        response, wire,
+        "fragmented benign Responses function call must pass through untouched"
+    );
+}
