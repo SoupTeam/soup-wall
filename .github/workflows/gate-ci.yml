@@ -79,3 +79,13 @@ jobs:
           ../scripts/validate_candidate.sh rec_good.json "$MANIFEST" "v0.3.0" "dummy_sha"
           
           echo "All SOU-26 validator matrix tests passed successfully!"
+
+          echo "--- Test 7: Actual bytes mismatch (Enforce Artifact Binding) ---"
+          # Simulate the release.yml binding step
+          jq -r '.checksums[]' "$MANIFEST" > APPROVED_SUMS
+          # Create an empty file that doesn't match the required hash
+          touch soup-wall-v0.3.0-x86_64-unknown-linux-gnu.tar.gz
+          if sha256sum --strict -c APPROVED_SUMS 2>/dev/null; then
+            echo "CRITICAL: Passed byte binding with invalid file!"
+            exit 1
+          fi
