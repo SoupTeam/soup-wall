@@ -1747,4 +1747,18 @@ mod tests {
         assert!(validate_proxy_url("https://proxy.example/path").is_err());
         assert!(validate_proxy_url("http://127.0.0.1:8080/").is_ok());
     }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_guarded_file_open_refuses_fifo_without_blocking() {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = PinnedWorkspace::open(temp.path()).unwrap();
+        let fifo_path = temp.path().join("fifo_target");
+        let c_path = std::ffi::CString::new(fifo_path.to_str().unwrap()).unwrap();
+        let res = unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) };
+        assert_eq!(res, 0);
+
+        let err = workspace.open_file(&fifo_path).unwrap_err().to_string();
+        assert!(err.contains("not a regular file"));
+    }
 }
