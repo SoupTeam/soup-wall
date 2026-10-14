@@ -1,7 +1,7 @@
 {
   "schema_version": "sou38-tls/1",
   "task": "SOU-38",
-  "started_at_utc": "2026-10-14T06:09:53.615568+00:00",
+  "started_at_utc": "2026-10-14T12:01:47.955977+00:00",
   "status": "passed",
   "checks": [
     {
@@ -234,12 +234,12 @@
   "witnesses": [
     {
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "88175f5cbdb24439c5308180749fe51234208f7fde37ceefc55bace7ad7ea73e",
+      "fingerprint_sha256": "add8ed282854a08e0f61911ee3ea3fd2d33bb2da8a791c32ebde5be50f2387e0",
       "hostname": "localhost",
       "http_status": 200,
       "method": "GET",
-      "not_after": "Nov 13 06:10:03 2026 GMT",
-      "not_before": "Oct 14 06:10:03 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/healthz",
       "response_bytes": 17,
       "response_sha256": "290f663cc2ed7fec14d831023497265da83974028929bc73c4e9711e949c8780",
@@ -247,16 +247,16 @@
       "verified": true,
       "name": "initial_handshake",
       "client_exit_code": 0,
-      "observed_at_utc": "2026-10-14T06:10:06.525309+00:00"
+      "observed_at_utc": "2026-10-14T12:01:55.084569+00:00"
     },
     {
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "88175f5cbdb24439c5308180749fe51234208f7fde37ceefc55bace7ad7ea73e",
+      "fingerprint_sha256": "add8ed282854a08e0f61911ee3ea3fd2d33bb2da8a791c32ebde5be50f2387e0",
       "hostname": "localhost",
       "http_status": 200,
       "method": "POST",
-      "not_after": "Nov 13 06:10:03 2026 GMT",
-      "not_before": "Oct 14 06:10:03 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/v1/chat/completions",
       "response_bytes": 221,
       "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
@@ -265,16 +265,16 @@
       "verified": true,
       "name": "initial_authenticated_request",
       "client_exit_code": 0,
-      "observed_at_utc": "2026-10-14T06:10:07.668452+00:00"
+      "observed_at_utc": "2026-10-14T12:01:55.718676+00:00"
     },
     {
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "88175f5cbdb24439c5308180749fe51234208f7fde37ceefc55bace7ad7ea73e",
+      "fingerprint_sha256": "add8ed282854a08e0f61911ee3ea3fd2d33bb2da8a791c32ebde5be50f2387e0",
       "hostname": "localhost",
       "http_status": 401,
       "method": "POST",
-      "not_after": "Nov 13 06:10:03 2026 GMT",
-      "not_before": "Oct 14 06:10:03 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/v1/chat/completions",
       "response_bytes": 89,
       "response_sha256": "26d743fc9f8481f10574dae807002d2e5b3889cd50055454752d3ae5de7c332f",
@@ -282,16 +282,16 @@
       "verified": true,
       "name": "unauthenticated_request",
       "client_exit_code": 0,
-      "observed_at_utc": "2026-10-14T06:10:08.234691+00:00"
+      "observed_at_utc": "2026-10-14T12:01:56.202673+00:00"
     },
     {
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "88175f5cbdb24439c5308180749fe51234208f7fde37ceefc55bace7ad7ea73e",
+      "fingerprint_sha256": "add8ed282854a08e0f61911ee3ea3fd2d33bb2da8a791c32ebde5be50f2387e0",
       "hostname": "localhost",
       "http_status": 404,
       "method": "GET",
-      "not_after": "Nov 13 06:10:03 2026 GMT",
-      "not_before": "Oct 14 06:10:03 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/metrics",
       "response_bytes": 0,
       "response_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -299,16 +299,16 @@
       "verified": true,
       "name": "edge_boundary/metrics",
       "client_exit_code": 0,
-      "observed_at_utc": "2026-10-14T06:10:08.797789+00:00"
+      "observed_at_utc": "2026-10-14T12:01:57.229667+00:00"
     },
     {
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "88175f5cbdb24439c5308180749fe51234208f7fde37ceefc55bace7ad7ea73e",
+      "fingerprint_sha256": "add8ed282854a08e0f61911ee3ea3fd2d33bb2da8a791c32ebde5be50f2387e0",
       "hostname": "localhost",
       "http_status": 404,
       "method": "GET",
-      "not_after": "Nov 13 06:10:03 2026 GMT",
-      "not_before": "Oct 14 06:10:03 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/metrics/anything",
       "response_bytes": 0,
       "response_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -316,16 +316,16 @@
       "verified": true,
       "name": "edge_boundary/metrics/anything",
       "client_exit_code": 0,
-      "observed_at_utc": "2026-10-14T06:10:09.332639+00:00"
+      "observed_at_utc": "2026-10-14T12:01:58.001376+00:00"
     },
     {
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "88175f5cbdb24439c5308180749fe51234208f7fde37ceefc55bace7ad7ea73e",
+      "fingerprint_sha256": "add8ed282854a08e0f61911ee3ea3fd2d33bb2da8a791c32ebde5be50f2387e0",
       "hostname": "localhost",
       "http_status": 404,
       "method": "GET",
-      "not_after": "Nov 13 06:10:03 2026 GMT",
-      "not_before": "Oct 14 06:10:03 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/admin",
       "response_bytes": 0,
       "response_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -333,16 +333,16 @@
       "verified": true,
       "name": "edge_boundary/admin",
       "client_exit_code": 0,
-      "observed_at_utc": "2026-10-14T06:10:09.894449+00:00"
+      "observed_at_utc": "2026-10-14T12:01:58.675816+00:00"
     },
     {
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "88175f5cbdb24439c5308180749fe51234208f7fde37ceefc55bace7ad7ea73e",
+      "fingerprint_sha256": "add8ed282854a08e0f61911ee3ea3fd2d33bb2da8a791c32ebde5be50f2387e0",
       "hostname": "localhost",
       "http_status": 404,
       "method": "GET",
-      "not_after": "Nov 13 06:10:03 2026 GMT",
-      "not_before": "Oct 14 06:10:03 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/admin/v1/tenants",
       "response_bytes": 0,
       "response_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -350,16 +350,16 @@
       "verified": true,
       "name": "edge_boundary/admin/v1/tenants",
       "client_exit_code": 0,
-      "observed_at_utc": "2026-10-14T06:10:10.434000+00:00"
+      "observed_at_utc": "2026-10-14T12:01:59.680802+00:00"
     },
     {
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "88175f5cbdb24439c5308180749fe51234208f7fde37ceefc55bace7ad7ea73e",
+      "fingerprint_sha256": "add8ed282854a08e0f61911ee3ea3fd2d33bb2da8a791c32ebde5be50f2387e0",
       "hostname": "localhost",
       "http_status": 200,
       "method": "GET",
-      "not_after": "Nov 13 06:10:03 2026 GMT",
-      "not_before": "Oct 14 06:10:03 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/readyz",
       "response_bytes": 156,
       "response_sha256": "e73b091365fd126b3cf45fff183e9bc5bbdb56c7b654cc9a4ae108ecbe008f4e",
@@ -367,16 +367,16 @@
       "verified": true,
       "name": "readiness",
       "client_exit_code": 0,
-      "observed_at_utc": "2026-10-14T06:10:10.996166+00:00"
+      "observed_at_utc": "2026-10-14T12:02:00.248682+00:00"
     },
     {
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "88175f5cbdb24439c5308180749fe51234208f7fde37ceefc55bace7ad7ea73e",
+      "fingerprint_sha256": "add8ed282854a08e0f61911ee3ea3fd2d33bb2da8a791c32ebde5be50f2387e0",
       "hostname": "localhost",
       "http_status": 413,
       "method": "POST",
-      "not_after": "Nov 13 06:10:03 2026 GMT",
-      "not_before": "Oct 14 06:10:03 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/v1/chat/completions",
       "response_bytes": 0,
       "response_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -384,17 +384,17 @@
       "verified": true,
       "name": "body_bound",
       "client_exit_code": 0,
-      "observed_at_utc": "2026-10-14T06:10:11.500737+00:00"
+      "observed_at_utc": "2026-10-14T12:02:01.278082+00:00"
     },
     {
       "name": "rotation_confirmation",
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "fingerprint_sha256": "8e71c6c0b2ecd452a2e73108ff43d764f8eefbae3045c8dc7477e848d069ebb7",
       "hostname": "localhost",
       "http_status": 200,
       "method": "GET",
-      "not_after": "Nov 13 06:10:04 2026 GMT",
-      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/healthz",
       "response_bytes": 17,
       "response_sha256": "290f663cc2ed7fec14d831023497265da83974028929bc73c4e9711e949c8780",
@@ -403,12 +403,12 @@
     },
     {
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "fingerprint_sha256": "8e71c6c0b2ecd452a2e73108ff43d764f8eefbae3045c8dc7477e848d069ebb7",
       "hostname": "localhost",
       "http_status": 200,
       "method": "POST",
-      "not_after": "Nov 13 06:10:04 2026 GMT",
-      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/v1/chat/completions",
       "response_bytes": 221,
       "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
@@ -417,16 +417,16 @@
       "verified": true,
       "name": "rotated_authenticated_request",
       "client_exit_code": 0,
-      "observed_at_utc": "2026-10-14T06:10:12.886911+00:00"
+      "observed_at_utc": "2026-10-14T12:02:03.543113+00:00"
     },
     {
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "fingerprint_sha256": "8e71c6c0b2ecd452a2e73108ff43d764f8eefbae3045c8dc7477e848d069ebb7",
       "hostname": "localhost",
       "http_status": 200,
       "method": "POST",
-      "not_after": "Nov 13 06:10:04 2026 GMT",
-      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/v1/chat/completions",
       "response_bytes": 221,
       "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
@@ -435,16 +435,16 @@
       "verified": true,
       "name": "malformed_material_preserves_gateway",
       "client_exit_code": 0,
-      "observed_at_utc": "2026-10-14T06:10:13.533370+00:00"
+      "observed_at_utc": "2026-10-14T12:02:04.578236+00:00"
     },
     {
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "fingerprint_sha256": "8e71c6c0b2ecd452a2e73108ff43d764f8eefbae3045c8dc7477e848d069ebb7",
       "hostname": "localhost",
       "http_status": 200,
       "method": "POST",
-      "not_after": "Nov 13 06:10:04 2026 GMT",
-      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/v1/chat/completions",
       "response_bytes": 221,
       "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
@@ -453,16 +453,16 @@
       "verified": true,
       "name": "mismatched_key_preserves_gateway",
       "client_exit_code": 0,
-      "observed_at_utc": "2026-10-14T06:10:14.154132+00:00"
+      "observed_at_utc": "2026-10-14T12:02:05.641711+00:00"
     },
     {
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "fingerprint_sha256": "8e71c6c0b2ecd452a2e73108ff43d764f8eefbae3045c8dc7477e848d069ebb7",
       "hostname": "localhost",
       "http_status": 200,
       "method": "POST",
-      "not_after": "Nov 13 06:10:04 2026 GMT",
-      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/v1/chat/completions",
       "response_bytes": 221,
       "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
@@ -471,16 +471,16 @@
       "verified": true,
       "name": "expired_material_preserves_gateway",
       "client_exit_code": 0,
-      "observed_at_utc": "2026-10-14T06:10:14.774366+00:00"
+      "observed_at_utc": "2026-10-14T12:02:06.738228+00:00"
     },
     {
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "fingerprint_sha256": "8e71c6c0b2ecd452a2e73108ff43d764f8eefbae3045c8dc7477e848d069ebb7",
       "hostname": "localhost",
       "http_status": 200,
       "method": "POST",
-      "not_after": "Nov 13 06:10:04 2026 GMT",
-      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/v1/chat/completions",
       "response_bytes": 221,
       "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
@@ -489,16 +489,16 @@
       "verified": true,
       "name": "wrong_hostname_material_preserves_gateway",
       "client_exit_code": 0,
-      "observed_at_utc": "2026-10-14T06:10:15.312543+00:00"
+      "observed_at_utc": "2026-10-14T12:02:07.582803+00:00"
     },
     {
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "fingerprint_sha256": "8e71c6c0b2ecd452a2e73108ff43d764f8eefbae3045c8dc7477e848d069ebb7",
       "hostname": "localhost",
       "http_status": 200,
       "method": "POST",
-      "not_after": "Nov 13 06:10:04 2026 GMT",
-      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/v1/chat/completions",
       "response_bytes": 221,
       "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
@@ -507,16 +507,16 @@
       "verified": true,
       "name": "untrusted_ca_material_preserves_gateway",
       "client_exit_code": 0,
-      "observed_at_utc": "2026-10-14T06:10:15.975061+00:00"
+      "observed_at_utc": "2026-10-14T12:02:08.450282+00:00"
     },
     {
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "fingerprint_sha256": "8e71c6c0b2ecd452a2e73108ff43d764f8eefbae3045c8dc7477e848d069ebb7",
       "hostname": "localhost",
       "http_status": 200,
       "method": "POST",
-      "not_after": "Nov 13 06:10:04 2026 GMT",
-      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/v1/chat/completions",
       "response_bytes": 221,
       "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
@@ -525,16 +525,16 @@
       "verified": true,
       "name": "oversized_material_preserves_gateway",
       "client_exit_code": 0,
-      "observed_at_utc": "2026-10-14T06:10:16.566597+00:00"
+      "observed_at_utc": "2026-10-14T12:02:09.122884+00:00"
     },
     {
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "fingerprint_sha256": "8e71c6c0b2ecd452a2e73108ff43d764f8eefbae3045c8dc7477e848d069ebb7",
       "hostname": "localhost",
       "http_status": 200,
       "method": "POST",
-      "not_after": "Nov 13 06:10:04 2026 GMT",
-      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/v1/chat/completions",
       "response_bytes": 221,
       "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
@@ -543,7 +543,7 @@
       "verified": true,
       "name": "symlink_material_preserves_gateway",
       "client_exit_code": 0,
-      "observed_at_utc": "2026-10-14T06:10:17.588794+00:00"
+      "observed_at_utc": "2026-10-14T12:02:09.932466+00:00"
     },
     {
       "diagnostic": "hostname mismatch",
@@ -558,7 +558,7 @@
       "verify_hostname": "wrong.invalid",
       "name": "wrong_hostname_client",
       "client_exit_code": 1,
-      "observed_at_utc": "2026-10-14T06:10:18.382008+00:00"
+      "observed_at_utc": "2026-10-14T12:02:11.073469+00:00"
     },
     {
       "diagnostic": "unable to get local issuer certificate",
@@ -571,16 +571,16 @@
       "verify_code": 20,
       "name": "untrusted_ca_client",
       "client_exit_code": 1,
-      "observed_at_utc": "2026-10-14T06:10:18.867242+00:00"
+      "observed_at_utc": "2026-10-14T12:02:11.792353+00:00"
     },
     {
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "fingerprint_sha256": "8e71c6c0b2ecd452a2e73108ff43d764f8eefbae3045c8dc7477e848d069ebb7",
       "hostname": "localhost",
       "http_status": 200,
       "method": "POST",
-      "not_after": "Nov 13 06:10:04 2026 GMT",
-      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/v1/chat/completions",
       "response_bytes": 221,
       "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
@@ -589,16 +589,16 @@
       "verified": true,
       "name": "client_failures_preserve_gateway",
       "client_exit_code": 0,
-      "observed_at_utc": "2026-10-14T06:10:19.472097+00:00"
+      "observed_at_utc": "2026-10-14T12:02:12.852550+00:00"
     },
     {
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "fingerprint_sha256": "8e71c6c0b2ecd452a2e73108ff43d764f8eefbae3045c8dc7477e848d069ebb7",
       "hostname": "localhost",
       "http_status": 200,
       "method": "POST",
-      "not_after": "Nov 13 06:10:04 2026 GMT",
-      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/v1/chat/completions",
       "response_bytes": 221,
       "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
@@ -607,7 +607,7 @@
       "verified": true,
       "name": "caddy_reload_failure_preserves_gateway",
       "client_exit_code": 0,
-      "observed_at_utc": "2026-10-14T06:10:20.133993+00:00"
+      "observed_at_utc": "2026-10-14T12:02:14.035235+00:00"
     },
     {
       "diagnostic": "certificate has expired",
@@ -620,16 +620,16 @@
       "verify_code": 10,
       "name": "expired_server_client",
       "client_exit_code": 1,
-      "observed_at_utc": "2026-10-14T06:10:20.803162+00:00"
+      "observed_at_utc": "2026-10-14T12:02:15.070765+00:00"
     },
     {
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "fingerprint_sha256": "8e71c6c0b2ecd452a2e73108ff43d764f8eefbae3045c8dc7477e848d069ebb7",
       "hostname": "localhost",
       "http_status": 200,
       "method": "POST",
-      "not_after": "Nov 13 06:10:04 2026 GMT",
-      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/v1/chat/completions",
       "response_bytes": 221,
       "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
@@ -638,16 +638,16 @@
       "verified": true,
       "name": "expired_server_recovery",
       "client_exit_code": 0,
-      "observed_at_utc": "2026-10-14T06:10:22.013669+00:00"
+      "observed_at_utc": "2026-10-14T12:02:17.206902+00:00"
     },
     {
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "fingerprint_sha256": "8e71c6c0b2ecd452a2e73108ff43d764f8eefbae3045c8dc7477e848d069ebb7",
       "hostname": "localhost",
       "http_status": 200,
       "method": "GET",
-      "not_after": "Nov 13 06:10:04 2026 GMT",
-      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/healthz",
       "response_bytes": 17,
       "response_sha256": "290f663cc2ed7fec14d831023497265da83974028929bc73c4e9711e949c8780",
@@ -655,17 +655,17 @@
       "verified": true,
       "name": "interruption_before_reload_served",
       "client_exit_code": 0,
-      "observed_at_utc": "2026-10-14T06:10:23.088737+00:00"
+      "observed_at_utc": "2026-10-14T12:02:18.569922+00:00"
     },
     {
       "name": "recovery_before_reload",
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "fingerprint_sha256": "8e71c6c0b2ecd452a2e73108ff43d764f8eefbae3045c8dc7477e848d069ebb7",
       "hostname": "localhost",
       "http_status": 200,
       "method": "GET",
-      "not_after": "Nov 13 06:10:04 2026 GMT",
-      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/healthz",
       "response_bytes": 17,
       "response_sha256": "290f663cc2ed7fec14d831023497265da83974028929bc73c4e9711e949c8780",
@@ -674,12 +674,12 @@
     },
     {
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "fingerprint_sha256": "8e71c6c0b2ecd452a2e73108ff43d764f8eefbae3045c8dc7477e848d069ebb7",
       "hostname": "localhost",
       "http_status": 200,
       "method": "POST",
-      "not_after": "Nov 13 06:10:04 2026 GMT",
-      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/v1/chat/completions",
       "response_bytes": 221,
       "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
@@ -688,16 +688,16 @@
       "verified": true,
       "name": "recovery_before_reload_authenticated_request",
       "client_exit_code": 0,
-      "observed_at_utc": "2026-10-14T06:10:24.348817+00:00"
+      "observed_at_utc": "2026-10-14T12:02:20.512845+00:00"
     },
     {
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "88175f5cbdb24439c5308180749fe51234208f7fde37ceefc55bace7ad7ea73e",
+      "fingerprint_sha256": "add8ed282854a08e0f61911ee3ea3fd2d33bb2da8a791c32ebde5be50f2387e0",
       "hostname": "localhost",
       "http_status": 200,
       "method": "GET",
-      "not_after": "Nov 13 06:10:03 2026 GMT",
-      "not_before": "Oct 14 06:10:03 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/healthz",
       "response_bytes": 17,
       "response_sha256": "290f663cc2ed7fec14d831023497265da83974028929bc73c4e9711e949c8780",
@@ -705,17 +705,17 @@
       "verified": true,
       "name": "interruption_after_reload_served",
       "client_exit_code": 0,
-      "observed_at_utc": "2026-10-14T06:10:25.519213+00:00"
+      "observed_at_utc": "2026-10-14T12:02:22.286920+00:00"
     },
     {
       "name": "recovery_after_reload",
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "fingerprint_sha256": "8e71c6c0b2ecd452a2e73108ff43d764f8eefbae3045c8dc7477e848d069ebb7",
       "hostname": "localhost",
       "http_status": 200,
       "method": "GET",
-      "not_after": "Nov 13 06:10:04 2026 GMT",
-      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/healthz",
       "response_bytes": 17,
       "response_sha256": "290f663cc2ed7fec14d831023497265da83974028929bc73c4e9711e949c8780",
@@ -724,12 +724,12 @@
     },
     {
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "fingerprint_sha256": "8e71c6c0b2ecd452a2e73108ff43d764f8eefbae3045c8dc7477e848d069ebb7",
       "hostname": "localhost",
       "http_status": 200,
       "method": "POST",
-      "not_after": "Nov 13 06:10:04 2026 GMT",
-      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/v1/chat/completions",
       "response_bytes": 221,
       "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
@@ -738,16 +738,16 @@
       "verified": true,
       "name": "recovery_after_reload_authenticated_request",
       "client_exit_code": 0,
-      "observed_at_utc": "2026-10-14T06:10:26.822717+00:00"
+      "observed_at_utc": "2026-10-14T12:02:24.544500+00:00"
     },
     {
       "cipher": "TLS_AES_128_GCM_SHA256",
-      "fingerprint_sha256": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
+      "fingerprint_sha256": "8e71c6c0b2ecd452a2e73108ff43d764f8eefbae3045c8dc7477e848d069ebb7",
       "hostname": "localhost",
       "http_status": 200,
       "method": "POST",
-      "not_after": "Nov 13 06:10:04 2026 GMT",
-      "not_before": "Oct 14 06:10:04 2026 GMT",
+      "not_after": "Nov 13 12:01:53 2026 GMT",
+      "not_before": "Oct 14 12:01:53 2026 GMT",
       "path": "/v1/chat/completions",
       "response_bytes": 221,
       "response_sha256": "90564fc2309c5c2ce4a43adc73573bbb3e007dfeb4f9f0c712ba7b1f6062eedc",
@@ -756,7 +756,7 @@
       "verified": true,
       "name": "reload_unavailable_recovery",
       "client_exit_code": 0,
-      "observed_at_utc": "2026-10-14T06:10:28.863326+00:00"
+      "observed_at_utc": "2026-10-14T12:02:27.188044+00:00"
     }
   ],
   "rotation_errors": [
@@ -786,7 +786,7 @@
     },
     {
       "case": "symlink_material",
-      "diagnostic": "[Errno 40] Too many levels of symbolic links: '/tmp/sou38-ctj3eu8m/certificates/linked.pem'"
+      "diagnostic": "[Errno 40] Too many levels of symbolic links: '/tmp/sou38-i2nrw30h/certificates/linked.pem'"
     },
     {
       "case": "reload_unavailable",
@@ -794,9 +794,9 @@
     }
   ],
   "source": {
-    "commit": "219a19dba621ed2c08de08f7ccd50c48804aa0bc",
+    "commit": "159f5efadeb4bc811596003c93300a9e7c4bf32c",
     "gateway_inputs": {
-      "Cargo.lock": "050d12d3c526788bf719e5e7f877cc880b152bef37fec73f09fea0fe81f1fe57",
+      "Cargo.lock": "408062e53fc9330027e9d118499633755e8ba7e4c8bd0bd386266667f5f940ad",
       "Cargo.toml": "df5cf3632141f34e519b9693ce1455f53de74bec408697beb4f375b435514a5f",
       "crates/adapter/Cargo.toml": "c3c4d960a8e9c10f9c975e2324335e9d15216a719fae60499ee16e5c7f33c21a",
       "crates/adapter/src/lib.rs": "f43c41ff4c85c5ae77cb544c1e3c26fb5265f3fb68d8e470c4b9a2322c9d7afe",
@@ -815,7 +815,7 @@
       "crates/agent/src/policy.rs": "791c84cc81dd7d3587d3c5c755b4fef981b12481e40ab95f65fa1473528767d5",
       "crates/agent/src/resolution.rs": "3e58e96e3e45dac6e37b41ac76d5a789711bcef041da5c299eff041cc04e0a0a",
       "crates/agent/src/taint.rs": "ad3d6a52d20bc4d72aff9725046d3c211b1fd7c776aad961ecd1b64f95d063af",
-      "crates/agentfw/Cargo.toml": "8c6d80902c07011082a06a9e6e6724f7fe0820e8d6e17c5c64d498a4b89d253e",
+      "crates/agentfw/Cargo.toml": "4ed791ac4f63a1e13e4dc7b95f4c366f72d54f5d2e22f79feb8a16f4f35ea438",
       "crates/agentfw/examples/policy_matrix.rs": "6a5c62003dff259f9973e469db218ef1fd2f1b8a1ce3250e73b7150bbbf37f27",
       "crates/agentfw/src/audit.rs": "0f348a0e9ec9412d0898f1372b0b84a2c922832ceb4a63a258b2b03e3628a23b",
       "crates/agentfw/src/config.rs": "4fb4ddb3859b6c30aff7ebb8e2178e7b947b37d5d6cab60fe9ac575689ef167a",
@@ -831,7 +831,7 @@
       "crates/agentfw/src/managed_policy.rs": "b916ea915759c1cf3eae664375eca52444189edb27da6c7aed702660e583c0bd",
       "crates/agentfw/src/managed_sync.rs": "cd589bae2d0e82f0a3842df412fa74225fccfe7f877a6f9f9cff87298178aaed",
       "crates/agentfw/src/map.rs": "06765851b9c48eb66720af99459b23c6b19d9d206e4a0d53f3c6652106f85f4d",
-      "crates/agentfw/src/mcp/admission.rs": "86dc91114e1338c03312729d26d34e6b3605b89a974bf5f0fb2b700dbd7788a5",
+      "crates/agentfw/src/mcp/admission.rs": "7b0366a49d029e68e92832f032c34a1423611bb0b0db60740e42e5a8fbbdbdfd",
       "crates/agentfw/src/mcp/input.rs": "a21ac8ff86bb06706da1039e354fbd720a8955fdc3b8a3af836e20f69f2214de",
       "crates/agentfw/src/mcp/jsonrpc.rs": "c77265bf4d7c851e3319c4f39bed8114980bde552b9a0cfc0836dd2c43dd147c",
       "crates/agentfw/src/mcp/manifest.rs": "39673dd219863047f77dad5e73761ecf3f326dd38df196d886d718a4b9758803",
@@ -845,7 +845,7 @@
       "crates/agentfw/src/private_file_windows.rs": "3731920a51c453e08b14ca16296c62b3952a82260569255cb2e8da76d9c889bb",
       "crates/agentfw/src/provenance.rs": "4cd61e80219e0bed286cdf11c5f916e51baed204e24484f4a436d4bea62af677",
       "crates/agentfw/src/replay.rs": "deda854b7ae10bc68eaf4251f44cc9524f0ae1e281e9efab976288906102a5c2",
-      "crates/agentfw/src/sandbox.rs": "779a33a43baa0d792bbd6e949f6ea4c72527ee3d631d3ce927c2c060b89219a1",
+      "crates/agentfw/src/sandbox.rs": "7e9146c5a44021f21128982be799d04d53b399da08efdd013f18635dd8af299a",
       "crates/agentfw/src/spans.rs": "2dc37461c4fa689d70595d6c046a72702e47e5b7100271c3d3779b2992105c2f",
       "crates/agentfw/src/token.rs": "edc3bfa80ace9ba4fc3e50501ed88849ef97fbcb3e334dc1ec406730ecb2e696",
       "crates/bench/Cargo.toml": "a2251627f1b1c8c645321abb62045f0c0e22a11043234f1a7d027671a6e7eb16",
@@ -896,7 +896,7 @@
       "crates/proxy/src/admin.rs": "1c3105a5d187d3578fd190a8c0b8a566aa23ec72ea295d8bbde2fab2cddf7c41",
       "crates/proxy/src/admin_dashboard.html": "716ae6c2f0fe2b8b9babfff40765e781464c75c89fe4cb08ff53d4bab322a7bd",
       "crates/proxy/src/admin_ui.rs": "a320672edab0b0fe1ab93a790584848b038ebd46e72d172cc40c75c7cc0a10f6",
-      "crates/proxy/src/agent_scan.rs": "490c9d5e3bd7d988af76656b2f786609a56e661e2d7f8c525cff0b64529b49e4",
+      "crates/proxy/src/agent_scan.rs": "a788938a13fc381c33b2b2988ccd73f0e8e5cc8bec2ea84c56fe9ff6383e22dd",
       "crates/proxy/src/anthropic.rs": "8cb3afb35b98a9fc60ba25e5b5d287f64f783d2c6022de8396e7a250ab262b5c",
       "crates/proxy/src/audit.rs": "34f32c966218e965b8903bcef6ec614f7d5a95ceb94bb9983f89d209305da464",
       "crates/proxy/src/auth.rs": "b1a54020595737c1238cc3df20dec95a5dadc7908f0b028de83cda2926f53c7e",
@@ -906,11 +906,11 @@
       "crates/proxy/src/customer_dashboard.html": "3463b890da9a08598c84260586a9463c99a6448e4a1e7f0e42f9c744a1ac1ef5",
       "crates/proxy/src/customer_ui.rs": "356f06c0dba7bf965d6d6bd9ddd9570a6c43f856a14c0415ad845318886b0bac",
       "crates/proxy/src/events.rs": "327dbd980704aa2a9a35d28056f3595bbd955c8aab9cbca724b3a3a5f0656fb7",
-      "crates/proxy/src/handlers.rs": "e904a762a400d0694ace5743bf0261eaaeedd9511e6656ed223cd7160e47df9a",
+      "crates/proxy/src/handlers.rs": "52e36e3eb45c311bd4777ffc48ba46767650e76a62a88cb79cded9a41e71f09b",
       "crates/proxy/src/invitation_ui.rs": "845193abd430dbb89058dee6ada6e1fc87ecfba6f224a702457b6c8566b004bb",
       "crates/proxy/src/lib.rs": "d5e8a80b6868f114fb970a70209409eafb282e40c20b9749b35a471edc458774",
       "crates/proxy/src/main.rs": "36f9986f5b31d18e6291e4cbccfedddab2e3e0247ba232758548c83c68421370",
-      "crates/proxy/src/managed_agent_api.rs": "96d29c653ec7c74b77e299e810e2b22ae8c7c29357992640f19348d81156ec41",
+      "crates/proxy/src/managed_agent_api.rs": "08688e6066d3dc24f9f17fd3522f79fbcf1a585a7c83963d64a2fbf9cadad046",
       "crates/proxy/src/moderation.rs": "317fcbb279ee6f7d21ae997d9294775d218b76d601601ef6ed3f56ff9dda36e3",
       "crates/proxy/src/oidc.rs": "e0cb21fa426fdb8bc13cbb01795adce5ac06cf5f61e7389f9dc37d63f4e1a53e",
       "crates/proxy/src/oidc_auth.rs": "1c62a1d826d5718077349b4dda703678e443c49c94873c9350c09e76530e6b61",
@@ -919,14 +919,16 @@
       "crates/proxy/src/pipeline.rs": "fdeff5bfe16cbe6dced7cd32473ad7f6dd27e5a3558d5611d7da5f6b75361ec2",
       "crates/proxy/src/rate_limit.rs": "f28dba75525add54302b532c99a990c1bb4d5e8e1367f7685103ab18b5c1d638",
       "crates/proxy/src/redis_limits.rs": "8e40a2073d11da28fe08b7ca94a4371da501c2618c4f70be101c26ff8a492740",
-      "crates/proxy/src/responses.rs": "c5e0dac70dce20e89776aad50a742aef4cccf4420d0865dcf82bfc185f8a677f",
+      "crates/proxy/src/responses.rs": "2ebe73ec671ead6977500336c750684d270fcd22b664eab85d6502145ba30133",
       "crates/proxy/src/saml_auth.rs": "b370d25b7462726dd8a118689061b26daf4c9c9e1dd0dbfb43b6964a846418fe",
       "crates/proxy/src/scim.rs": "f6fcfd85084326df11235bc5f75b660d99a94b06185ed2042a4b48fcb87c3809",
       "crates/proxy/src/spend_limit.rs": "b567a43e574697c7833e8a6242ee238094d6672b7b35cf113729017b9b25cea0",
-      "crates/proxy/src/tenant_store.rs": "25b41851669590b3915cdf713a1164d413cce5fda0fdffaed7726f1920e7a0cc",
-      "crates/proxy/src/tenant_store/agent_enrollment.rs": "10273f0dee364625ae557d2f6ace489dc2d7c6527f45090f24ef8aee741c94e7",
-      "crates/proxy/src/tenant_store/managed_policy.rs": "f9e590dd294876f4673072a7489a8446153050bbe1571c4b080e500abbe69e1d",
-      "crates/proxy/src/tenant_store/postgres.rs": "4208b8696b440c9eb3eb549dce07b39b147d13c906ca1508e9b3d279fd4c7abf",
+      "crates/proxy/src/tenant_store.rs": "fbc63db81ee8a97bf1df96d56d5dc1d8c033deb791a21995a7c93200633a6222",
+      "crates/proxy/src/tenant_store/agent_enrollment.rs": "157dec7f698c62f368030ff1a20a5abb1ee42734f347702f2f02b79e7f05629f",
+      "crates/proxy/src/tenant_store/managed_async.rs": "38b171a240c670ccbc3434c36717684081825caa37793401c6082621fb3eb155",
+      "crates/proxy/src/tenant_store/managed_policy.rs": "4294184493649444d6b1452318eeb95cbdddcce7faae375879d01234c5480a35",
+      "crates/proxy/src/tenant_store/managed_postgres.rs": "c1e299f0ba04a3878740849d70d5a91859bac0677aead5af90d06719ad7b5095",
+      "crates/proxy/src/tenant_store/postgres.rs": "9e2d45f95d8030a94c46bd69923941344cda37926a45708a062b691dc479dd01",
       "crates/proxy/src/tenant_store/webhook_delivery_tests.rs": "343d68ed41462df8ead56632307e677bbe20a9a32a6c1efaf14e614a42f1bdc7",
       "crates/proxy/src/tenant_store/webhook_recovery_tests.rs": "df4f43c6441b9693cf11b85a7ce65d770e768d5408ee024067f32bb9a182c3f2",
       "crates/proxy/src/tenant_store/webhook_transport_tests.rs": "7bc6809aacb1bf11f3820797a2b24ef28068d33ad3c6f1031ab387b05c316e2d",
@@ -973,7 +975,7 @@
       "vendor/kryptering/src/software/sign.rs": "b2c5a951e8beffd2cf4745d3c14eb3a55f21aa1789eb07143171d033788d73fd",
       "vendor/kryptering/src/traits.rs": "da786f7f8e5e291f34179b4a6e403a158cfcbef2df93826cea58ae6cf79b62b2"
     },
-    "gateway_source_sha256": "943ff842146dff98fb65b510c4e0a8d69728fbd55c3704ec3c0c3d7b443bb931",
+    "gateway_source_sha256": "6419e825a4dac71d79e307e5d9eb1acb29d32f1bbe56a3d5a4d03db29ffeafb1",
     "verification_inputs": {
       "deploy/Dockerfile.tls": "58acf8c7dba4be3a47509b9ac35f655bcdb00659f29c9aeb439935ea2241a0dc",
       "deploy/Caddyfile.rotation": "db0ac5714706b86413c29d94b6bd4768c9155fa741e109e05b10721b4c0db2b0",
@@ -985,10 +987,10 @@
       "scripts/tests/test_tls_lifecycle.py": "32c3503f641e834950c17b758271a34f1ccb0aeea1be1a822b6b9e5254b305e1"
     },
     "verification_sha256": "47d650e455b93399a5a5cc5e28d9fce77a79f4a7e60336bc040d38e871a49027",
-    "working_tree_modified": true
+    "working_tree_modified": false
   },
   "runtime": {
-    "image_id": "sha256:dd8536561ad0e0857f6246d52b667b4f9265a2c02dff5f062d6c3e21bb2f9da9",
+    "image_id": "sha256:4315716fb36c6bf2e1bd932ff31ac53cdc5f64ccf7696f0fdef91bbc466ded4c",
     "architecture": "amd64",
     "os": "linux",
     "caddy_image": "caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d",
@@ -1000,7 +1002,7 @@
     "uid": 65532,
     "openssl": "OpenSSL 3.0.22 25 Aug 2026 (Library: OpenSSL 3.0.22 25 Aug 2026)",
     "caddy": "v2.10.2 h1:g/gTYjGMD0dec+UgMw8SnfmJ3I9+M2TdvoRL/Ovu6U8=",
-    "gateway_binary_sha256": "ffb112745ce4df20e0b7c587fe29b912aa2da729df8bac3fd90fa0ee75ee0a24",
+    "gateway_binary_sha256": "b333a983456a8c45b958fa0359fd6e7d1b3a1275ffe747a5f39666735e4c66cd",
     "caddy_binary_sha256": "4ef1f68c70219536b2711fd16547a79841a2dec2d6b4e56b1e3e5e9da76028e6"
   },
   "limits": [
@@ -1008,7 +1010,7 @@
     "No public ACME, customer domain or native Windows/macOS acceptance"
   ],
   "configuration": {
-    "gateway_sha256": "b0b0a26071160c766bfd455415e4e113e092684592006352e7d62ba98e97326a",
+    "gateway_sha256": "c9d748e085032fccde266113d2013b91bfe1b9ae1f63557045a28d4275473e9c",
     "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
     "edge_template_sha256": "db0ac5714706b86413c29d94b6bd4768c9155fa741e109e05b10721b4c0db2b0",
     "gateway_bind": "127.0.0.1:8080",
@@ -1016,78 +1018,78 @@
     "caddy_admin_bind": "127.0.0.1:2019",
     "published_host_ports": [],
     "body_bound_bytes": 4194304,
-    "committed_edge_sha256": "b50c7abc9b02643df367189b2e25bac2add19d9efae3d2d5aa911fa5a9435609"
+    "committed_edge_sha256": "8b3ab6bb8ff7e4b71749117db569c23da39ba3f568d35d7313c9dfbea8d61ea1"
   },
   "provider_calls": 15,
   "certificates": {
-    "initial": "88175f5cbdb24439c5308180749fe51234208f7fde37ceefc55bace7ad7ea73e",
-    "rotated": "36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb",
-    "ca_sha256": "0ac8b209bb25f6829eb7a8f3398ff3e18a7391233aafe4367fb31570c84dcb92"
+    "initial": "add8ed282854a08e0f61911ee3ea3fd2d33bb2da8a791c32ebde5be50f2387e0",
+    "rotated": "8e71c6c0b2ecd452a2e73108ff43d764f8eefbae3045c8dc7477e848d069ebb7",
+    "ca_sha256": "e7421da07003d3b0afe4cb535eab694a9c4e6ed17597e9dffc90f776b5d852dd"
   },
   "cleanup": {
     "all_owned_processes_stopped": true,
     "private_workspace_removed": true
   },
-  "finished_at_utc": "2026-10-14T06:10:29.456856+00:00",
+  "finished_at_utc": "2026-10-14T12:02:27.984451+00:00",
   "artifacts": {
     "build.log": {
-      "sha256": "85571ed3aa534b731b436dd9c6adc4e138f8c11e9a44963405fb82ae111d9566",
-      "bytes": 3623
+      "sha256": "5c31197256e762e42e1c1449a01984b5a2499436dbcdfb919833c62bbca4c0b1",
+      "bytes": 4130
     },
     "ca.pem": {
-      "sha256": "0ac8b209bb25f6829eb7a8f3398ff3e18a7391233aafe4367fb31570c84dcb92",
+      "sha256": "e7421da07003d3b0afe4cb535eab694a9c4e6ed17597e9dffc90f776b5d852dd",
       "bytes": 1139
     },
     "caddy.log": {
-      "sha256": "0c9ce0cf246677199bc133326d8910a9feab24da82f1631aa9dcbed6eb5c009c",
-      "bytes": 15776
+      "sha256": "5e51d220870afed2835035f18651f18f6b72afc0384e38ad110dd15c84a936a5",
+      "bytes": 15944
     },
     "Caddyfile.initial": {
-      "sha256": "04d509c382786682fc0898f522fde866921950962f617b92471dbb521b4ad3ef",
+      "sha256": "6af2504e22356c2579f981436adf6e16e39dfe023dee7f65bc24308d0a177113",
       "bytes": 513
     },
     "Caddyfile.rotated": {
-      "sha256": "b50c7abc9b02643df367189b2e25bac2add19d9efae3d2d5aa911fa5a9435609",
+      "sha256": "8b3ab6bb8ff7e4b71749117db569c23da39ba3f568d35d7313c9dfbea8d61ea1",
       "bytes": 513
     },
     "expired.pem": {
-      "sha256": "5e32002e0efb6839a4d82d8bb24ddfc009d7fee51c104778733402f00dc44eda",
+      "sha256": "f2bce10cdddbdf619934498ceafbf87ab9d82171c954700822fbad9aee8700c2",
       "bytes": 1168
     },
     "gateway-config.yaml": {
-      "sha256": "b0b0a26071160c766bfd455415e4e113e092684592006352e7d62ba98e97326a",
+      "sha256": "c9d748e085032fccde266113d2013b91bfe1b9ae1f63557045a28d4275473e9c",
       "bytes": 204
     },
     "gateway.log": {
-      "sha256": "2deabb0fbc013aad96dd3d3a2343fb340b5225907e66d82dbae3fbc5e1369ca8",
-      "bytes": 3934
+      "sha256": "5225c177fde6365d3ff8e8c898fcd6ff17ed493a3695fbf6fd89d84387872ccd",
+      "bytes": 3933
     },
     "image.json": {
-      "sha256": "0223606369780662b42bfeb0743210c8b0daad407563e84387a661cb82ed7c40",
+      "sha256": "190876a554f0109b5229199eb2854db74c8abf28c66efa421ba19053254ea4c3",
       "bytes": 508
     },
     "initial.pem": {
-      "sha256": "d224472043f399a6339dee39d67a2f9ee930e519bd4976ec67bbbcdb4e070af2",
-      "bytes": 1188
+      "sha256": "4c48d4667c1a11a21b30cfb0a25e3c02299910b6c7e9a332a7fba2d63f7ab927",
+      "bytes": 1184
     },
     "policy.yaml": {
       "sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
       "bytes": 15
     },
     "rejected-reload.log": {
-      "sha256": "198153f27b61a509c7f03e7fef2bcd324f473c5319d6f44fe1abde37c8ddf656",
-      "bytes": 446
+      "sha256": "e07225e1e5b851b4bd7c47af4efa03f4734fca469190601460fe118562c638d3",
+      "bytes": 504
     },
     "rotated.pem": {
-      "sha256": "1395a8789bf4c1fdfad060a8e969bb00ebb1190ab52bbe85f9011249d21bf081",
+      "sha256": "f6bddeff552be77579dc6966a1daaddbcc66cea4d9eea8dbb42041a4f73f6107",
       "bytes": 1188
     },
     "source.json": {
-      "sha256": "ba9e774ae7650fecc18d731152a07fb3fe220b7020b35c9d8751eb2df5c5db51",
-      "bytes": 20449
+      "sha256": "fa71b6cba8101e4223e0207e02c4232fa9ef880315f8011d9e9577b3cc5eb936",
+      "bytes": 20699
     },
     "tests.log": {
-      "sha256": "d6b1810aa8738dea321db21c0f2079eb231a65cb4d0561f36a2c909c067f078e",
+      "sha256": "d27ac30be2054065e56fd3a8fd67fc825ffa78451a167b02dd59c7c7fdb090e9",
       "bytes": 1963
     }
   }

@@ -10,12 +10,12 @@ Result: local Linux/Docker verification passed.
 
 The drill runs the current Gateway, Caddy 2.10.2 and separate verifying clients
 in a disposable Linux container. It uses generated certificates and explicit
-client CA trust. The Gateway and Caddy admin API listen on loopback. Docker
+client CA trust. The Gateway and Caddy admin API listen on loopback. Docker`
 publishes no host ports and disables external networking.
 
-The source baseline is [`219a19d`](https://github.com/SoupTeam/soup-wall/commit/219a19dba621ed2c08de08f7ccd50c48804aa0bc),
-which contains the SOU-38 starting commit `290e043`. The local changes add the
-rotation tooling, tests and deployment fixture; the working tree remains modified.
+The tested revision is [`159f5ef`](https://github.com/SoupTeam/soup-wall/commit/159f5efadeb4bc811596003c93300a9e7c4bf32c).
+It includes the TLS tooling on main `5fc6d72`, which contains the SOU-38 starting
+commit `290e043` and the updated Gateway TLS dependencies.
 The [JSON evidence](tls-rotation-2026-10-14.json) identifies the Gateway source and
 the verification files by their actual content hashes.
 
@@ -77,17 +77,20 @@ expired material before changing the active configuration.
 
 SHA-256 values:
 
-- Gateway binary: `ffb112745ce4df20e0b7c587fe29b912aa2da729df8bac3fd90fa0ee75ee0a24`
-- Gateway source manifest: `943ff842146dff98fb65b510c4e0a8d69728fbd55c3704ec3c0c3d7b443bb931`
+- Gateway binary: `b333a983456a8c45b958fa0359fd6e7d1b3a1275ffe747a5f39666735e4c66cd`
+- Gateway source manifest: `6419e825a4dac71d79e307e5d9eb1acb29d32f1bbe56a3d5a4d03db29ffeafb1`
 - Verification source manifest: `47d650e455b93399a5a5cc5e28d9fce77a79f4a7e60336bc040d38e871a49027`
-- Initial served certificate: `88175f5cbdb24439c5308180749fe51234208f7fde37ceefc55bace7ad7ea73e`
-- Rotated served certificate: `36874b9c6cc2093cc9332ebfae63e5037ff3e1bc86135411a17de28025cf85fb`
+- Initial served certificate: `add8ed282854a08e0f61911ee3ea3fd2d33bb2da8a791c32ebde5be50f2387e0`
+- Rotated served certificate: `8e71c6c0b2ecd452a2e73108ff43d764f8eefbae3045c8dc7477e848d069ebb7`
 
 The JSON includes the pinned image digests, local image ID, Caddy binary hash,
-configuration hashes, certificate fingerprints and diagnostics. Raw logs, public
-certificates, configuration snapshots and the outer Docker cleanup record remain
-under `target/tls-evidence/final-2026-10-14/`. Source checks before and after the
-run matched. The evidence scan found no private key material or generated token.
+configuration hashes, certificate fingerprints and diagnostics.
+The [witness archive](tls-rotation-2026-10-14.zip) contains raw logs, public
+certificates, configuration snapshots and the outer Docker cleanup record.
+Archive SHA-256: `3f29872cac9ba3035ae94b014ec581810718dd8b435fe81cc426846bc0f329f1`.
+The local run remains under `target/tls-evidence/pr-current-2026-10-14/`.
+Source checks before and after the run matched. The evidence scan found no
+private key material or generated token.
 
 ## Acceptance Boundary
 
