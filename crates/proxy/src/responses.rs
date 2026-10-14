@@ -77,6 +77,16 @@ impl SseDecodeError {
 }
 
 /// Incrementally splits SSE frames and decodes only their JSON `data:` payloads.
+use axum::body::Bytes;
+
+/// A completely framed SSE event containing both original wire bytes and decoded JSON.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SseFrame {
+    pub raw: Bytes,
+    pub event: Option<serde_json::Value>,
+    pub is_done: bool,
+}
+
 /// Holding incomplete UTF-8 and event boundaries as bytes prevents chunk splits
 /// from changing what the firewall inspects.
 #[derive(Debug, Default)]
@@ -86,9 +96,9 @@ pub struct SseJsonDecoder {
 }
 
 impl SseJsonDecoder {
-    pub fn push(&mut self, chunk: &[u8]) -> Result<Vec<serde_json::Value>, SseDecodeError> {
+    pub fn push_frames(&mut self, chunk: &[u8]) -> Result<Vec<SseFrame>, SseDecodeError> {
         self.pending.extend_from_slice(chunk);
-        let mut events = Vec::new();
+        let mut frames = Vec::new();
 
         while let Some((end, separator_len)) = find_frame_end(&self.pending) {
             if end > MAX_SSE_EVENT_BYTES {
@@ -99,24 +109,40 @@ impl SseJsonDecoder {
                 .pending
                 .drain(..end + separator_len)
                 .collect::<Vec<_>>();
-            if frame_is_done(&frame[..end]) {
+            let is_done = frame_is_done(&frame[..end]);
+            if is_done {
                 self.saw_done = true;
-                continue;
             }
-            if let Some(value) = decode_frame(&frame[..end])? {
-                events.push(value);
-            }
+            let event = decode_frame(&frame[..end])?;
+            frames.push(SseFrame {
+                raw: Bytes::from(frame),
+                event,
+                is_done,
+            });
         }
 
         if self.pending.len() > MAX_SSE_EVENT_BYTES {
             self.pending.clear();
             return Err(SseDecodeError::TooLarge);
         }
-        Ok(events)
+        Ok(frames)
+    }
+
+    pub fn push(&mut self, chunk: &[u8]) -> Result<Vec<serde_json::Value>, SseDecodeError> {
+        let frames = self.push_frames(chunk)?;
+        Ok(frames.into_iter().filter_map(|f| f.event).collect())
     }
 
     pub fn saw_done(&self) -> bool {
         self.saw_done
+    }
+
+    pub fn has_pending(&self) -> bool {
+        self.pending.iter().any(|&b| !b.is_ascii_whitespace())
+    }
+
+    pub fn pending_len(&self) -> usize {
+        self.pending.len()
     }
 }
 

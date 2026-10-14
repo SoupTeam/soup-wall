@@ -23,21 +23,27 @@ pub struct ToolCall {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ScanVerdict {
     pub verdict: Verdict,
+    pub fallback: Option<Verdict>,
     pub reason: Option<String>,
 }
 
 impl ScanVerdict {
+    /// Return the resolved authoritative verdict under local proxy rules.
+    pub fn resolved_verdict(&self) -> Verdict {
+        soup_wall_agent::resolution::resolve(self.verdict, self.fallback, false)
+    }
+
     /// Project a provider-cycle result onto the shared adapter contract.
     ///
     /// The proxy currently has no remote adapter configured, so this is a local
     /// response with no expiry/signature. An unexpected `Escalate` is tightened to
-    /// `Ask`; only a later remote adapter may provide a signed, expiring answer.
+    /// its declared fallback, or to `Ask` when no fallback exists.
     pub fn adapter_response(&self, policy_version: impl Into<String>) -> DecisionResponse {
-        let verdict = match self.verdict {
+        let verdict = match self.resolved_verdict() {
             Verdict::Allow => AdapterVerdict::Allow,
             Verdict::Ask => AdapterVerdict::Ask,
             Verdict::Deny => AdapterVerdict::Deny,
-            Verdict::Escalate => AdapterVerdict::Ask,
+            Verdict::Escalate => unreachable!("resolution always returns a concrete verdict"),
         };
         DecisionResponse {
             contract_version: CONTRACT_VERSION.into(),
@@ -187,6 +193,7 @@ pub fn inspect_cycle(
     }
     let mut worst = ScanVerdict {
         verdict: Verdict::Allow,
+        fallback: None,
         reason: None,
     };
     for call in tool_calls {
@@ -202,9 +209,11 @@ pub fn inspect_cycle(
                 args: call.args.clone(),
             },
         });
-        if verdict_rank(out.verdict) > verdict_rank(worst.verdict) {
+        let out_resolved = soup_wall_agent::resolution::resolve(out.verdict, out.fallback, false);
+        if verdict_rank(out_resolved) > verdict_rank(worst.resolved_verdict()) {
             worst = ScanVerdict {
                 verdict: out.verdict,
+                fallback: out.fallback,
                 reason: out.rule.map(|r| match out.message {
                     Some(m) => format!("[{r}] {m}"),
                     None => format!("[{r}]"),
@@ -377,6 +386,11 @@ impl StreamingToolCalls {
             StreamProtocol::OpenAiChat => self.push_openai(event),
             StreamProtocol::AnthropicMessages => self.push_anthropic(event),
         }
+    }
+
+    /// Return whether any tool call is currently in-flight / partially accumulated.
+    pub fn is_holding(&self) -> bool {
+        !self.partial.is_empty()
     }
 
     /// Complete whatever is still open, so a call whose terminal marker never
@@ -643,6 +657,7 @@ mod tests {
     fn adapter_projection_is_privacy_safe_and_tightens_escalate() {
         let v = ScanVerdict {
             verdict: Verdict::Escalate,
+            fallback: None,
             reason: Some("operator policy text".into()),
         };
         let response = v.adapter_response("proxy-local");
@@ -651,6 +666,36 @@ mod tests {
         assert!(!serde_json::to_string(&response)
             .unwrap()
             .contains("operator policy text"));
+    }
+
+    #[test]
+    fn adapter_projection_resolves_fallback() {
+        let v_ask = ScanVerdict {
+            verdict: Verdict::Escalate,
+            fallback: Some(Verdict::Ask),
+            reason: None,
+        };
+        assert_eq!(v_ask.adapter_response("test").verdict, AdapterVerdict::Ask);
+
+        let v_deny = ScanVerdict {
+            verdict: Verdict::Escalate,
+            fallback: Some(Verdict::Deny),
+            reason: None,
+        };
+        assert_eq!(
+            v_deny.adapter_response("test").verdict,
+            AdapterVerdict::Deny
+        );
+
+        let v_allow = ScanVerdict {
+            verdict: Verdict::Escalate,
+            fallback: Some(Verdict::Allow),
+            reason: None,
+        };
+        assert_eq!(
+            v_allow.adapter_response("test").verdict,
+            AdapterVerdict::Allow
+        );
     }
 
     /// The core property: a call split across frames reassembles into exactly the

