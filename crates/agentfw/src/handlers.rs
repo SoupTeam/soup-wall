@@ -225,9 +225,11 @@ pub async fn hook(
     // `AgentFirewall::inspect` takes `&mut self`, so the guard must be held across
     // the call. Scoped in its own block so the `std::sync::Mutex` guard is dropped
     // before the function's first `.await` — nothing here awaits while it is held.
-    let outcome = {
+    let (outcome, inspected_deployment) = {
         let mut fw = st.firewall.lock().expect("firewall mutex");
-        fw.inspect(&event)
+        let outcome = fw.inspect(&event);
+        let deployment = fw.active_managed_policy().map(|p| p.deployment_sequence);
+        (outcome, deployment)
     };
 
     // Resolve `Escalate` into a concrete verdict via the judge before deciding. The
@@ -256,6 +258,25 @@ pub async fn hook(
             judged = Some(format!("{j:?}"));
             verdict = resolve_escalation(j, outcome.fallback);
         }
+    }
+
+    // The judge may have awaited while managed policy activation acquired the
+    // firewall mutex. Recheck the authoritative live deployment and serialize
+    // approval redemption + final decision against activation; never emit an
+    // old-policy Allow after a concurrent switch. No await is held under lock.
+    let _final_policy_guard = st.firewall.lock().expect("firewall mutex");
+    let changed_while_in_flight = is_pre
+        && _final_policy_guard.active_managed_policy().map(|p| p.deployment_sequence)
+            != inspected_deployment;
+    let mut decision_rule = outcome.rule.clone();
+    let mut decision_message = outcome.message.clone();
+    if changed_while_in_flight {
+        verdict = Verdict::Deny;
+        decision_rule = Some("managed-policy-transition".into());
+        decision_message = Some(
+            "Managed policy changed while this call was being evaluated; retry under the new policy.".into(),
+        );
+        tracing::warn!("refused in-flight old-policy pre-tool decision after managed activation");
     }
 
     // A human approval, if the operator issued one for exactly this call. Only
@@ -297,8 +318,8 @@ pub async fn hook(
 
     let d = decision::decide(
         verdict,
-        outcome.rule.as_deref(),
-        outcome.message.as_deref(),
+        decision_rule.as_deref(),
+        decision_message.as_deref(),
         st.config.enforce,
     );
 
@@ -310,7 +331,7 @@ pub async fn hook(
         tool: payload.tool_name.clone(),
         verdict: verdict_str(d.would_have_been).to_string(),
         shadow: d.shadow,
-        rule: outcome.rule.clone(),
+        rule: decision_rule.clone(),
         risk_score: outcome.risk_score,
         findings: outcome
             .findings
