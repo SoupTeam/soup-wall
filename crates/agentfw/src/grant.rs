@@ -817,7 +817,13 @@ mod tests {
         let path = temp.path().join("grants-spent.json");
         let ledger = GrantLedger::open(&path);
         store
-            .issue(KEY, &action(), NOW, DEFAULT_TTL_MS, crate::token::generate())
+            .issue(
+                KEY,
+                &action(),
+                NOW,
+                DEFAULT_TTL_MS,
+                crate::token::generate(),
+            )
             .unwrap();
         let cached = store.pending().pop().unwrap();
         assert_eq!(cached.policy_epoch, 0);
@@ -840,12 +846,24 @@ mod tests {
         let store = GrantStore::new(&temp.path().join("grants"));
         let ledger = GrantLedger::open(&temp.path().join("grants-spent.json"));
         let (old, _) = store
-            .issue(KEY, &action(), NOW, DEFAULT_TTL_MS, crate::token::generate())
+            .issue(
+                KEY,
+                &action(),
+                NOW,
+                DEFAULT_TTL_MS,
+                crate::token::generate(),
+            )
             .unwrap();
         store.invalidate_all_for_policy_switch().unwrap();
         assert!(store.write(&old).is_err());
         let (new, _) = store
-            .issue(KEY, &action(), NOW, DEFAULT_TTL_MS, crate::token::generate())
+            .issue(
+                KEY,
+                &action(),
+                NOW,
+                DEFAULT_TTL_MS,
+                crate::token::generate(),
+            )
             .unwrap();
         assert_eq!(new.policy_epoch, 1);
         assert_eq!(redeem(KEY, &new, &action(), NOW + 1, &ledger), Ok(()));
@@ -860,7 +878,13 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         let worker_store = store.clone();
         let worker = std::thread::spawn(move || {
-            let result = worker_store.issue(KEY, &action(), NOW, DEFAULT_TTL_MS, crate::token::generate());
+            let result = worker_store.issue(
+                KEY,
+                &action(),
+                NOW,
+                DEFAULT_TTL_MS,
+                crate::token::generate(),
+            );
             tx.send(result).unwrap();
         });
         lock.advance().unwrap();
