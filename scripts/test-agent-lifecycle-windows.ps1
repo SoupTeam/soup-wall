@@ -26,9 +26,18 @@ function Invoke-Agent {
     $start.RedirectStandardError = $capture
     $process = [Diagnostics.Process]::Start($start)
     try {
-        $output = if ($capture) { $process.StandardOutput.ReadToEnd() } else { '' }
-        $errors = if ($capture) { $process.StandardError.ReadToEnd() } else { '' }
-        $process.WaitForExit()
+        $outputTask = if ($capture) { $process.StandardOutput.ReadToEndAsync() } else { $null }
+        $errorTask = if ($capture) { $process.StandardError.ReadToEndAsync() } else { $null }
+        if (!$process.WaitForExit(90000)) {
+            $process.Kill($true)
+            $process.WaitForExit(5000) | Out-Null
+            throw "Lifecycle command exceeded 90 seconds: $($Arguments[0])"
+        }
+        if ($capture -and (!$outputTask.Wait(5000) -or !$errorTask.Wait(5000))) {
+            throw "Lifecycle command exited but output did not close: $($Arguments[0])"
+        }
+        $output = if ($capture) { $outputTask.Result } else { '' }
+        $errors = if ($capture) { $errorTask.Result } else { '' }
         $succeeded = $process.ExitCode -eq 0
     } finally {
         $process.Dispose()
