@@ -34,6 +34,12 @@ An authenticated notification outside that scope is still refused. Source
 labels constrain authenticated content; they do not substitute for bearer
 verification or network controls.
 
+The pinned Alertmanager 0.34.1 webhook may also include `notification_reason`
+and `routeLabels`. The receiver accepts only the known bounded reason values
+and declared partial labels, then discards this metadata. Neither field can
+authorize a source or change an alert identity. Older webhook payloads without
+these fields remain accepted.
+
 Treat the entire notification as untrusted. Validate bounded JSON and all alert
 records before changing durable state. Do not use arbitrary `fingerprint`,
 header values, annotations or message text as an authorization or deduplication

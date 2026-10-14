@@ -148,6 +148,56 @@ class ReceiverTests(unittest.TestCase):
         self.assertNotIn("runbook", json.dumps(self.store.receipts()))
         self.assertNotIn("Admission remains", json.dumps(self.store.receipts()))
 
+    def test_pinned_alertmanager_0341_payload_metadata_is_supported_and_discarded(self):
+        # Official default webhook embeds template.Data, including these two
+        # fields (prometheus/alertmanager v0.34.1 template/template.go).
+        message = payload()
+        message["notification_reason"] = "first notification"
+        message["routeLabels"] = {}
+        self.assertEqual(self.request(encoded(message))[0], 200)
+        event_id = self.store.receipts()["records"][0]["event_id"]
+        message["notification_reason"] = "repeat interval elapsed"
+        message["routeLabels"] = {"severity": "critical", "environment": "local"}
+        self.assertEqual(self.request(encoded(message))[1]["duplicates"], 1)
+        record = self.store.receipts()["records"][0]
+        self.assertEqual(record["event_id"], event_id)
+        self.assertNotIn("notification_reason", json.dumps(record))
+        self.assertNotIn("routeLabels", json.dumps(record))
+        # Metadata cannot supply approved alert source labels or change identity.
+        self.assertNotIn("environment", record["labels"])
+        resolved = payload("resolved")
+        resolved.update(notification_reason="all alerts resolved", routeLabels={})
+        self.assertEqual(self.request(encoded(resolved))[0], 200)
+        self.assertEqual(self.store.receipts()["total_unique_events"], 2)
+
+    def test_pinned_alertmanager_metadata_cannot_bypass_strict_validation(self):
+        for value in (None, False, [], {}, "", "unexpected reason", "x" * 65, "\ud800"):
+            message = payload()
+            message.update(notification_reason=value, routeLabels={})
+            self.assertEqual(self.request(encoded(message))[0], 400)
+        for value in (None, False, [], "labels", {"private": "secret"},
+                      {"severity": "x" * 257}, {"environment": "other"},
+                      {"job": 1}, {"severity": "\ud800"}):
+            message = payload()
+            message.update(notification_reason="first notification", routeLabels=value)
+            self.assertEqual(self.request(encoded(message))[0], 400)
+        message = payload()
+        message.update(notification_reason="first notification", routeLabels={}, unrelatedMetadata="ignored?")
+        self.assertEqual(self.request(encoded(message))[0], 400)
+        message = payload()
+        message.update(notification_reason="first notification", routeLabels={"job": "soup-wall-gateway"})
+        message["alerts"][0]["labels"].pop("job")
+        self.assertEqual(self.request(encoded(message))[0], 400)
+        self.assertEqual(self.store.receipts()["total_unique_events"], 0)
+
+    def test_notification_reason_enum_accepts_only_upstream_wire_values(self):
+        for reason in ("none", "first notification", "new alerts added", "some alerts resolved",
+                       "all alerts resolved", "repeat interval elapsed", "unknown"):
+            message = payload()
+            message.update(notification_reason=reason, routeLabels={})
+            self.assertEqual(self.request(encoded(message))[0], 200)
+        self.assertEqual(self.store.receipts()["total_unique_events"], 1)
+
     def test_malformed_json_and_protocol_fields_are_refused(self):
         messages = [b"", b"{", b"[]", b"null", b"\xff", b'{"version":"4","version":"4"}',
                     encoded(payload()).replace(b'"truncatedAlerts":0', b'"truncatedAlerts":NaN'),

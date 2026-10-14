@@ -470,7 +470,7 @@ subjectAltName = DNS:receiver,DNS:localhost,IP:127.0.0.1
         status, data = request(self.urls["alertmanager"] + "/metrics")
         if status != 200:
             raise DrillError("Alertmanager metrics unavailable")
-        value = metric(data.decode(), "alertmanager_notifications_failed_total", 'integration="webhook"')
+        value = metric(data.decode(), "alertmanager_notification_requests_failed_total", 'integration="webhook"')
         if value is None or not math.isfinite(value) or value < 0:
             raise DrillError("Alertmanager retry counter unavailable or invalid")
         return value
@@ -569,7 +569,7 @@ subjectAltName = DNS:receiver,DNS:localhost,IP:127.0.0.1
         if receiver_fault:
             def retried():
                 failures = self.failures()
-                return {"observed_failed_notifications": failures} if failures >= 2 else None
+                return {"observed_failed_http_notification_attempts": failures} if failures >= 2 else None
             retry_witness = self.wait("real_alertmanager_retry_while_receiver_down", retried, 90)
             self.check("receiver_outage_delivery_failure_witness", True, **retry_witness)
             self.compose("start", "receiver")

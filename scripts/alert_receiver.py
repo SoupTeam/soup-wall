@@ -34,6 +34,11 @@ MAX_ALERTS = 128
 SOURCE_LABELS = frozenset({"job", "instance", "alertname", "severity", "component"})
 TOP_FIELDS = frozenset({"version", "groupKey", "truncatedAlerts", "status", "receiver",
                         "groupLabels", "commonLabels", "commonAnnotations", "externalURL", "alerts"})
+OPTIONAL_TOP_FIELDS = frozenset({"notification_reason", "routeLabels"})
+# Pinned Alertmanager v0.34.1 notify.NotifyReason.String() wire values. These
+# delivery metadata are validated and discarded, never trusted as identity.
+NOTIFICATION_REASONS = frozenset({"none", "first notification", "new alerts added", "some alerts resolved",
+                                  "all alerts resolved", "repeat interval elapsed", "unknown"})
 ALERT_FIELDS = frozenset({"status", "labels", "annotations", "startsAt", "endsAt", "generatorURL", "fingerprint"})
 RFC3339 = re.compile(r"(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})\Z")
 LABEL_NAME = re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*\Z")
@@ -219,8 +224,17 @@ class ReceiverPolicy:
         if not raw or len(raw) > MAX_BODY_BYTES:
             raise ValidationError("invalid body size")
         value = strict_json(raw)
-        if not isinstance(value, dict) or set(value) != TOP_FIELDS:
+        if (not isinstance(value, dict) or not TOP_FIELDS.issubset(value)
+                or set(value) - TOP_FIELDS - OPTIONAL_TOP_FIELDS):
             raise ValidationError("unsupported webhook fields")
+        if "notification_reason" in value:
+            reason = _text(value["notification_reason"], 64)
+            if reason not in NOTIFICATION_REASONS:
+                raise ValidationError("unsupported notification reason")
+        if "routeLabels" in value:
+            # Alertmanager renders these from configured route labels, not
+            # alert identity. Limit them to the operator-approved partial map.
+            self.labels(value["routeLabels"], complete=False)
         if value["version"] != "4" or value["receiver"] != self.receiver or value["externalURL"] != self.external_url:
             raise ValidationError("unapproved webhook source")
         if type(value["truncatedAlerts"]) is not int or value["truncatedAlerts"] != 0:

@@ -224,7 +224,7 @@ class LinuxAlertBoundaries(unittest.TestCase):
         runtime = self.runtime()
         runtime.urls = {"alertmanager": "http://127.0.0.1:9093"}
         for value in ["NaN", "+Inf", "-Inf", "-1"]:
-            content = ('alertmanager_notifications_failed_total{integration="webhook"} ' + value + "\n").encode()
+            content = ('alertmanager_notification_requests_failed_total{integration="webhook"} ' + value + "\n").encode()
             with self.subTest(value=value), patch.object(DRILL, "request", return_value=(200, content)):
                 with self.assertRaises(DRILL.DrillError):
                     runtime.failures()
