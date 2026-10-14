@@ -23,6 +23,7 @@ use sha2::{Digest, Sha256};
 use tokio::sync::mpsc;
 
 mod agent_enrollment;
+mod managed_async;
 mod managed_policy;
 pub use managed_policy::{
     AppliedReport, ManagedDeployment, ManagedIssuer, ManagedRevision, SignedManagedBundle,

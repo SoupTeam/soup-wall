@@ -40,8 +40,10 @@ pub async fn enroll(
             "managed Agent enrollment unavailable",
         );
     };
-    let result = tokio::task::spawn_blocking(move || {
-        store.enroll_managed_agent(&tenant_id, &input.agent_id)
+    let result = tokio::task::spawn(async move {
+        store
+            .enroll_managed_agent_async(&tenant_id, &input.agent_id)
+            .await
     })
     .await;
     match result {
@@ -68,7 +70,8 @@ pub async fn list(State(state): State<Shared>, Path(tenant_id): Path<String>) ->
             "managed Agent enrollment unavailable",
         );
     };
-    match tokio::task::spawn_blocking(move || store.list_managed_agents(&tenant_id)).await {
+    match tokio::task::spawn(async move { store.list_managed_agents_async(&tenant_id).await }).await
+    {
         Ok(Ok(agents)) => Json(agents).into_response(),
         Ok(Err(error_value)) => {
             tracing::error!(error = %error_value, "managed Agent inventory unavailable");
@@ -95,8 +98,12 @@ pub async fn revoke(
             "managed Agent enrollment unavailable",
         );
     };
-    match tokio::task::spawn_blocking(move || store.revoke_managed_agent(&tenant_id, &agent_id))
-        .await
+    match tokio::task::spawn(async move {
+        store
+            .revoke_managed_agent_async(&tenant_id, &agent_id)
+            .await
+    })
+    .await
     {
         Ok(Ok(true)) => StatusCode::NO_CONTENT.into_response(),
         Ok(Ok(false)) => failure(StatusCode::NOT_FOUND, "Agent enrollment not found"),
@@ -123,8 +130,12 @@ pub async fn whoami(State(state): State<Shared>, headers: HeaderMap) -> Response
             "managed Agent enrollment unavailable",
         );
     };
-    match tokio::task::spawn_blocking(move || store.authenticate_managed_agent(auth.as_deref()))
-        .await
+    match tokio::task::spawn(async move {
+        store
+            .authenticate_managed_agent_async(auth.as_deref())
+            .await
+    })
+    .await
     {
         Ok(Ok(Some(identity))) => Json(identity).into_response(),
         Ok(Ok(None)) => failure(StatusCode::UNAUTHORIZED, "Agent authentication required"),
@@ -169,8 +180,9 @@ pub async fn create_revision(
             "Console storage unavailable",
         );
     };
-    match tokio::task::spawn_blocking(move || {
-        db.create_managed_revision(&tenant, &agent, &input.revision, &input.policy_yaml)
+    match tokio::task::spawn(async move {
+        db.create_managed_revision_async(&tenant, &agent, &input.revision, &input.policy_yaml)
+            .await
     })
     .await
     {
@@ -196,8 +208,9 @@ pub async fn approve_revision(
             "Console storage unavailable",
         );
     };
-    match tokio::task::spawn_blocking(move || {
-        db.approve_managed_revision(&tenant, &agent, &revision)
+    match tokio::task::spawn(async move {
+        db.approve_managed_revision_async(&tenant, &agent, &revision)
+            .await
     })
     .await
     {
@@ -224,9 +237,10 @@ pub async fn deploy_revision(
             "Console storage unavailable",
         );
     };
-    match tokio::task::spawn_blocking(move || {
+    match tokio::task::spawn(async move {
         let issuer = ManagedIssuer::from_environment()?;
-        db.deploy_managed_revision(&tenant, &agent, &revision, input.rollback, &issuer)
+        db.deploy_managed_revision_async(&tenant, &agent, &revision, input.rollback, &issuer)
+            .await
     })
     .await
     {
@@ -264,7 +278,11 @@ pub async fn deployments(
             "Console storage unavailable",
         );
     };
-    match tokio::task::spawn_blocking(move || db.list_managed_deployments(&tenant, &agent)).await {
+    match tokio::task::spawn(
+        async move { db.list_managed_deployments_async(&tenant, &agent).await },
+    )
+    .await
+    {
         Ok(Ok(items)) => Json(items).into_response(),
         _ => failure(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -281,10 +299,12 @@ async fn principal(state: &Shared, headers: &HeaderMap) -> Option<(TenantStore, 
         .to_owned();
     let lookup = db.clone();
     let identity =
-        tokio::task::spawn_blocking(move || lookup.authenticate_managed_agent(Some(&bearer)))
-            .await
-            .ok()?
-            .ok()??;
+        tokio::task::spawn(
+            async move { lookup.authenticate_managed_agent_async(Some(&bearer)).await },
+        )
+        .await
+        .ok()?
+        .ok()??;
     Some((db, identity))
 }
 
@@ -293,8 +313,9 @@ pub async fn fetch_policy(State(state): State<Shared>, headers: HeaderMap) -> Re
     let Some((db, who)) = principal(&state, &headers).await else {
         return failure(StatusCode::UNAUTHORIZED, "Agent authentication required");
     };
-    match tokio::task::spawn_blocking(move || {
-        db.deliver_managed_bundle(&who.tenant_id, &who.agent_id)
+    match tokio::task::spawn(async move {
+        db.deliver_managed_bundle_async(&who.tenant_id, &who.agent_id)
+            .await
     })
     .await
     {
@@ -325,8 +346,9 @@ pub async fn acknowledge_policy(
     let Some((db, who)) = principal(&state, &headers).await else {
         return failure(StatusCode::UNAUTHORIZED, "Agent authentication required");
     };
-    match tokio::task::spawn_blocking(move || {
-        db.acknowledge_managed_bundle(&who.tenant_id, &who.agent_id, &report)
+    match tokio::task::spawn(async move {
+        db.acknowledge_managed_bundle_async(&who.tenant_id, &who.agent_id, &report)
+            .await
     })
     .await
     {
