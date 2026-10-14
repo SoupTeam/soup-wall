@@ -70,11 +70,35 @@ cargo test --locked -p agentfw
 cargo clippy --locked -p agentfw --all-targets -- -D warnings
 ```
 
-On Windows, run the native check against a locally built Windows executable:
+On Windows, use PowerShell 7 under a standard user whose temporary directories
+are owned by that user. Run the native check against a locally built executable:
 
 ```powershell
 .\scripts\test-agent-lifecycle-windows.ps1 -AgentBinary .\target\debug\agentfw.exe
+cargo test --locked -p agentfw --test lifecycle -- --ignored --nocapture --test-threads=1
 ```
+
+The five Rust lifecycle tests are explicitly ignored in ordinary Windows test
+runs, which can use an Administrators-owned hosted-runner profile. They must be
+run separately with `--ignored`; an inaccessible profile then fails instead of
+returning early as a successful test. A green ordinary test run alone is not
+Windows lifecycle acceptance.
+
+The Windows CI job uses `scripts/ci-windows-lifecycle.ps1` to provision a unique,
+temporary standard user, copy the compiled Agent and lifecycle test binary, and
+run all five tests. Its retained `windows-lifecycle-standard-user` artifact
+records the source commit, binary hashes, actual user/owner SIDs, non-admin
+status, case counts, raw test output, timeouts and cleanup outcome. Success
+requires five executed passes, zero ignored cases, matching binaries and
+successful account/staging cleanup. Provisioning is restricted to ephemeral
+GitHub Actions runners; workstation users should run the commands above.
+
+Each lifecycle CLI call has a 90-second test deadline. After the CLI exits,
+captured output must close within five seconds. A retained pipe is reported
+separately from a command that never exits; the Rust test attempts authenticated
+cleanup of its own managed daemon before failing. The outer Windows CI launcher
+has a 600-second deadline and cleans only its disposable account and processes.
+These test deadlines do not change production startup or authorization limits.
 
 The Windows script creates a disposable profile and uses an unused loopback
 port. It checks install, start, upgrade, rollback, failed startup restoration,
