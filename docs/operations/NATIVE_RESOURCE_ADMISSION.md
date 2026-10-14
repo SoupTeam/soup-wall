@@ -36,6 +36,20 @@ For hashing, deserialize profiles/evidence into typed Rust shapes, serialize the
 
 Result/context events retain the call's contract version and ordinary grant fields. A `delivery: "mcp_host"` result must retain the bound original JSON-RPC ID. A wrong stage/version/ID spends the grant and refuses release. Legacy binding bytes remain unchanged without resource admission. An installed resource policy cannot be bypassed with a legacy call.
 
+## Operation-level constrained executor (SOU-15)
+
+The confined file-read executor is supported on Unix. Non-Unix platforms refuse resource-policy calls with `resource_executor_unsupported` before reserving native capacity; their zero-execution refusal is tested. Resource-aware execution enforces operation-level isolation within this declared scope. An unconfined server process cannot be trusted to self-enforce resource policies or confine file/network access. Therefore:
+
+- For supported workspace file read operations (`read_document`), the proxy itself serves as the constrained operation executor:
+  1. Validates the target canonical path strictly against the canonical workspace boundary (`AGENTFW_WORKSPACE` / `policy.workspace`). Unsupported tools, unreviewed action classes, invalid destinations, or invalid workspaces fail closed early before reserving native call capacity (`resource_executor_unsupported`, `resource_destination_invalid`, `resource_workspace_invalid`).
+  2. Derives native resource evidence with `fixed_destinations: true` and requests admission under `sw-native/resources/1`.
+  3. Pins the workspace directory descriptor before native admission and compares it with the initially observed root identity. Reads through `agentfw::sandbox::PinnedWorkspace` using component-by-component `openat` traversal with `O_NOFOLLOW` and `O_DIRECTORY`. A later root rename retains the originally pinned directory; intermediate and leaf symlinks are refused. Content is read from the opened file handle.
+  4. Content reads are strictly bounded by `MAX_CONTENT` (256 KiB) and validated for valid UTF-8.
+  5. Any post-admission failure (missing target, symlink refusal, invalid UTF-8, content size exceeded) immediately settles its call reservation via `collector.event("result", result_kind: "error")`, ensuring zero native session capacity leakage.
+  6. On successful read, delivers the verified result through native result admission with bound host ID and release confirmation.
+  7. Directly returns the result to the host, ensuring the unconfined server child process is **never invoked** for the operation.
+- Any unsupported operation, arbitrary tool, or network egress under resource policy is rejected immediately with `resource_executor_unsupported`, preventing unconfined server execution.
+
 ## Verification and remaining work
 
 ```sh
@@ -45,4 +59,5 @@ cargo test --locked -p agentfw resource_receipt_tests
 python3 scripts/verify-sou17.py --allow-dirty --offline
 ```
 
-These exercise the real native router and stdio boundary, positive legacy execution and negative unsupported resource execution. They do not establish arbitrary-server containment, actual Claude Code availability, generic classification coverage or complete SOU-15 acceptance. Resource-aware execution requires a separately reviewed operation-level constrained executor.
+These exercise the real native router and stdio boundary, positive legacy execution, operation-level constrained file reads, and fail-closed unsupported/unauthorized boundaries. Arbitrary-server containment is not claimed; confinement is strictly guaranteed by the verified operation executor.
+

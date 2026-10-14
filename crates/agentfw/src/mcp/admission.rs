@@ -1384,13 +1384,111 @@ where
                         let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
                         ensure!(args.is_object(), "MCP call arguments must be an object");
                         schemas.get(name).context("MCP tool schema not installed")?.validate(&args)?;
-                        if collector.config.resource_profiles.contains_key(name)
-                            || installed.resource_policy.is_some()
-                        {
+                        let resource_admission = if let Some(policy) = &installed.resource_policy {
+                            if let Some(agentfw_ws) = std::env::var_os("AGENTFW_WORKSPACE") {
+                                let policy_ws_canon = policy.workspace.canonicalize().ok();
+                                let agentfw_ws_canon =
+                                    std::path::PathBuf::from(agentfw_ws).canonicalize().ok();
+                                if let (Some(policy_ws_canon), Some(agentfw_ws_canon)) =
+                                    (policy_ws_canon, agentfw_ws_canon)
+                                {
+                                    if policy_ws_canon != agentfw_ws_canon {
+                                        let reasons = json!(["resource_workspace_mismatch"]);
+                                        write(host, &withheld(request_id, "invocation", &reasons))
+                                            .await?;
+                                        continue;
+                                    }
+                                }
+                            }
+                            let snapshot = admitted_snapshot
+                                .as_ref()
+                                .context("classifier discovery state missing")?;
+                            let admitted_tool = snapshot
+                                .tools
+                                .get(name)
+                                .context("admitted tool snapshot missing")?;
+                            let source = collector
+                                .config
+                                .classifier
+                                .as_ref()
+                                .map(|c| c.source())
+                                .unwrap_or("unconfigured");
+                            let revision = collector
+                                .config
+                                .classifier
+                                .as_ref()
+                                .and_then(|c| c.revision())
+                                .map(str::to_owned);
+                            let input_sha256 = prediction_identity(
+                                &collector.config.server_id,
+                                snapshot,
+                                admitted_tool,
+                                name,
+                                &args,
+                                source,
+                                revision.as_deref(),
+                            );
+                            let input = Invocation {
+                                server_id: policy.profile.server_id.clone(),
+                                host_call_id: request_id.clone(),
+                                registry_sha256: collector.config.native.registry_sha256.clone(),
+                                snapshot_sha256: snapshot.sha256.clone(),
+                                schema_sha256: installed.schema_sha256.clone(),
+                                tool: name.into(),
+                                description: admitted_tool.description.clone(),
+                                schema: admitted_tool.schema.clone(),
+                                definition: admitted_tool.definition.clone(),
+                                server_info: snapshot.server_info.clone(),
+                                definition_sha256: admitted_tool.definition_sha256.clone(),
+                                input_sha256: input_sha256.clone(),
+                                classifier_revision: revision.clone(),
+                                args: args.clone(),
+                                baseline: installed.action_class,
+                            };
+                            let context = super::resources::ExecutorContext {
+                                os: std::env::consts::OS,
+                                workspace: &policy.workspace,
+                                cwd: &policy.cwd,
+                                fixed_destinations: true,
+                            };
+                            let derived =
+                                super::resources::extract(&input, &policy.profile, &context);
+                            if !derived.complete() {
+                                let reasons = if !derived.issues.is_empty() {
+                                    json!(derived
+                                        .issues
+                                        .iter()
+                                        .map(|i| i.reason)
+                                        .collect::<Vec<_>>())
+                                } else {
+                                    json!(["resource_extraction_incomplete"])
+                                };
+                                write(host, &withheld(request_id, "invocation", &reasons)).await?;
+                                continue;
+                            }
+                            let profile_sha256 = crate::native::canonical_digest(
+                                &serde_json::to_value(&policy.profile)
+                                    .context("profile serializes")?,
+                            );
+                            let admission = crate::native::resource::Admission {
+                                server_id: policy.profile.server_id.clone(),
+                                host_call_id: request_id.clone(),
+                                profile_sha256,
+                                executor_sha256: policy.executor_sha256.clone(),
+                                classifier_sha256: policy.classifier_sha256.clone(),
+                                snapshot_sha256: snapshot.sha256.clone(),
+                                definition_sha256: admitted_tool.definition_sha256.clone(),
+                                input_sha256,
+                                resources: derived.resources.clone(),
+                            };
+                            Some((admission, derived))
+                        } else if collector.config.resource_profiles.contains_key(name) {
                             let reasons = json!(["resource_executor_unsupported"]);
                             write(host, &withheld(request_id, "invocation", &reasons)).await?;
                             continue;
-                        }
+                        } else {
+                            None
+                        };
                         let mut prod_verdict = None;
                         if collector.config.classifier.is_some() {
                             let snapshot = admitted_snapshot
@@ -1435,18 +1533,68 @@ where
                                 }
                             }
                         }
+                        #[cfg(unix)]
+                        let mut pinned_resource_ws: Option<(
+                            crate::sandbox::PinnedWorkspace,
+                            std::path::PathBuf,
+                        )> = None;
+                        #[cfg(not(unix))]
+                        if resource_admission.is_some() {
+                            let reasons = json!(["resource_executor_unsupported"]);
+                            write(host, &withheld(request_id, "invocation", &reasons)).await?;
+                            continue;
+                        }
+                        #[cfg(unix)]
+                        if let Some((_, ref derived)) = resource_admission {
+                            let policy = installed.resource_policy.as_ref().unwrap();
+                            if !(installed.action_class == ActionClass::ReadOnly
+                                && name == "read_document")
+                            {
+                                let reasons = json!(["resource_executor_unsupported"]);
+                                write(host, &withheld(request_id, "invocation", &reasons)).await?;
+                                continue;
+                            }
+                            let first_res = derived.resources.first().map(|r| &r.resource);
+                                let Some(super::resources::Resource::Path { canonical }) = first_res
+                                else {
+                                    let reasons = json!(["resource_destination_invalid"]);
+                                    write(host, &withheld(request_id, "invocation", &reasons)).await?;
+                                    continue;
+                                };
+                                let pinned = match crate::sandbox::PinnedWorkspace::open(
+                                    &policy.workspace,
+                                ) {
+                                    Ok(ws) => ws,
+                                    Err(_) => {
+                                        let reasons = json!(["resource_workspace_invalid"]);
+                                        write(host, &withheld(request_id, "invocation", &reasons))
+                                            .await?;
+                                        continue;
+                                    }
+                                };
+                                let target_path = std::path::Path::new(canonical);
+                                if pinned.relative_path(target_path).is_err() {
+                                    let reasons = json!(["resource_target_outside_workspace"]);
+                                    write(host, &withheld(request_id, "invocation", &reasons)).await?;
+                                    continue;
+                                }
+                                pinned_resource_ws = Some((pinned, target_path.to_path_buf()));
+                            }
                         // A composed refusal must not reserve native capacity.
                         // Native trusted restrictions still gate every permitted call.
-                        let receipt = collector
-                            .event(
-                                "call",
-                                json!({
-                                    "tool": name,
-                                    "args": args,
-                                    "schema_sha256": installed.schema_sha256,
-                                }),
-                            )
-                            .await?;
+                        let mut call_fields = json!({
+                            "tool": name,
+                            "args": args,
+                            "schema_sha256": installed.schema_sha256,
+                        });
+                        let contract_version = if let Some((ref admission, _)) = resource_admission
+                        {
+                            call_fields["resource_admission"] = serde_json::to_value(admission)?;
+                            crate::native::resource::CONTRACT.to_string()
+                        } else {
+                            CONTRACT.to_string()
+                        };
+                        let receipt = collector.event("call", call_fields).await?;
                         if receipt["release"] != true {
                             write(
                                 host,
@@ -1455,13 +1603,102 @@ where
                             .await?;
                             continue;
                         }
+                        if resource_admission.is_some() {
+                            #[cfg(unix)]
+                            {
+                                let (pinned, target_path) = pinned_resource_ws
+                                    .expect("pinned workspace initialized on unix");
+                                let content = match pinned.read_file(&target_path) {
+                                    Ok(c) => c,
+                                    Err(err) => {
+                                        let err_msg = err.to_string();
+                                        let reasons = if err_msg.contains("outside the workspace")
+                                            || err_msg.contains("path traversal")
+                                        {
+                                            json!(["resource_target_outside_workspace"])
+                                        } else {
+                                            json!(["resource_read_failed"])
+                                        };
+                                        let withheld_bytes =
+                                            withheld(request_id, "invocation", &reasons);
+                                        let withheld_content = std::str::from_utf8(&withheld_bytes)
+                                            .context("withheld is UTF-8")?;
+                                        let _ = collector
+                                            .event(
+                                                "result",
+                                                json!({
+                                                    "expected_contract_version": contract_version,
+                                                    "tool": name,
+                                                    "args": args,
+                                                    "call_id": receipt["call_id"],
+                                                    "result_kind": "error",
+                                                    "delivery": "mcp_host",
+                                                    "content": withheld_content,
+                                                    "expected_binding_sha256": receipt["binding_sha256"]
+                                                }),
+                                            )
+                                            .await;
+                                        write(host, &withheld_bytes).await?;
+                                        continue;
+                                    }
+                                };
+                                let result_envelope = json!({
+                                    "content": [{
+                                        "type": "text",
+                                        "text": content
+                                    }]
+                                });
+                                let response = json!({
+                                    "jsonrpc": "2.0",
+                                    "id": request_id,
+                                    "result": result_envelope
+                                });
+                                let mut raw_response = response.to_string().into_bytes();
+                                raw_response.push(b'\n');
+                                let result_content = std::str::from_utf8(&raw_response)
+                                    .context("result is UTF-8")?;
+                                let res_receipt = collector
+                                    .event(
+                                        "result",
+                                        json!({
+                                            "expected_contract_version": contract_version,
+                                            "tool": name,
+                                            "args": args,
+                                            "call_id": receipt["call_id"],
+                                            "result_kind": "value",
+                                            "delivery": "mcp_host",
+                                            "content": result_content,
+                                            "expected_binding_sha256": receipt["binding_sha256"]
+                                        }),
+                                    )
+                                    .await?;
+                                if res_receipt["release"] != true {
+                                    write(
+                                        host,
+                                        &withheld(
+                                            request_id,
+                                            "result",
+                                            &res_receipt["reason_codes"],
+                                        ),
+                                    )
+                                    .await?;
+                                    continue;
+                                }
+                                write(host, &raw_response).await?;
+                                continue;
+                            }
+                            #[cfg(not(unix))]
+                            {
+                                unreachable!("non-unix platforms are refused before reserving call");
+                            }
+                        }
                         Pending::Call {
                             id: request_id.clone(),
                             tool: name.into(),
                             args,
                             call_id: receipt["call_id"].clone(),
                             binding: receipt["binding_sha256"].clone(),
-                            contract_version: CONTRACT.to_string(),
+                            contract_version,
                         }
                     }
                     _ => bail!("unsupported MCP method"),
