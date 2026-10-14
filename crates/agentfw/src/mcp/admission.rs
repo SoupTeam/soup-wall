@@ -1533,6 +1533,7 @@ where
                                 }
                             }
                         }
+                        let mut pinned_resource_ws = None;
                         if let Some((_, ref derived)) = resource_admission {
                             let policy = installed.resource_policy.as_ref().unwrap();
                             if !(installed.action_class == ActionClass::ReadOnly
@@ -1542,32 +1543,39 @@ where
                                 write(host, &withheld(request_id, "invocation", &reasons)).await?;
                                 continue;
                             }
-                            let first_res = derived.resources.first().map(|r| &r.resource);
-                            let Some(super::resources::Resource::Path { canonical }) = first_res
-                            else {
-                                let reasons = json!(["resource_destination_invalid"]);
+                            #[cfg(not(unix))]
+                            {
+                                let reasons = json!(["resource_executor_unsupported"]);
                                 write(host, &withheld(request_id, "invocation", &reasons)).await?;
                                 continue;
-                            };
-                            let canonical_ws = match crate::sandbox::validate_workspace_path(
-                                &policy.workspace,
-                            ) {
-                                Ok(ws) => ws,
-                                Err(_) => {
-                                    let reasons = json!(["resource_workspace_invalid"]);
-                                    write(host, &withheld(request_id, "invocation", &reasons))
-                                        .await?;
+                            }
+                            #[cfg(unix)]
+                            {
+                                let first_res = derived.resources.first().map(|r| &r.resource);
+                                let Some(super::resources::Resource::Path { canonical }) = first_res
+                                else {
+                                    let reasons = json!(["resource_destination_invalid"]);
+                                    write(host, &withheld(request_id, "invocation", &reasons)).await?;
+                                    continue;
+                                };
+                                let pinned = match crate::sandbox::PinnedWorkspace::open(
+                                    &policy.workspace,
+                                ) {
+                                    Ok(ws) => ws,
+                                    Err(_) => {
+                                        let reasons = json!(["resource_workspace_invalid"]);
+                                        write(host, &withheld(request_id, "invocation", &reasons))
+                                            .await?;
+                                        continue;
+                                    }
+                                };
+                                let target_path = std::path::Path::new(canonical);
+                                if pinned.relative_path(target_path).is_err() {
+                                    let reasons = json!(["resource_target_outside_workspace"]);
+                                    write(host, &withheld(request_id, "invocation", &reasons)).await?;
                                     continue;
                                 }
-                            };
-                            let target_path = std::path::Path::new(canonical);
-                            if target_path.is_absolute()
-                                && !target_path.starts_with(&canonical_ws)
-                                && !target_path.starts_with(&policy.workspace)
-                            {
-                                let reasons = json!(["resource_target_outside_workspace"]);
-                                write(host, &withheld(request_id, "invocation", &reasons)).await?;
-                                continue;
+                                pinned_resource_ws = Some((pinned, target_path.to_path_buf()));
                             }
                         }
                         // A composed refusal must not reserve native capacity.
@@ -1593,148 +1601,94 @@ where
                             .await?;
                             continue;
                         }
-                        if let Some((_admission, derived)) = resource_admission {
-                            let policy = installed.resource_policy.as_ref().unwrap();
-                            let first_res = derived.resources.first().map(|r| &r.resource);
-                            let target_path = match first_res {
-                                Some(super::resources::Resource::Path { canonical }) => {
-                                    std::path::Path::new(canonical)
-                                }
-                                _ => {
-                                    let reasons = json!(["resource_destination_invalid"]);
-                                    let withheld_bytes =
-                                        withheld(request_id, "invocation", &reasons);
-                                    let withheld_content = std::str::from_utf8(&withheld_bytes)
-                                        .context("withheld is UTF-8")?;
-                                    let _ = collector
-                                        .event(
-                                            "result",
-                                            json!({
-                                                "expected_contract_version": contract_version,
-                                                "tool": name,
-                                                "args": args,
-                                                "call_id": receipt["call_id"],
-                                                "result_kind": "error",
-                                                "delivery": "mcp_host",
-                                                "content": withheld_content,
-                                                "expected_binding_sha256": receipt["binding_sha256"]
-                                            }),
-                                        )
-                                        .await;
-                                    write(host, &withheld_bytes).await?;
-                                    continue;
-                                }
-                            };
-                            let workspace = match crate::sandbox::validate_workspace_path(
-                                &policy.workspace,
-                            ) {
-                                Ok(ws) => ws,
-                                Err(_) => {
-                                    let reasons = json!(["resource_workspace_invalid"]);
-                                    let withheld_bytes =
-                                        withheld(request_id, "invocation", &reasons);
-                                    let withheld_content = std::str::from_utf8(&withheld_bytes)
-                                        .context("withheld is UTF-8")?;
-                                    let _ = collector
-                                        .event(
-                                            "result",
-                                            json!({
-                                                "expected_contract_version": contract_version,
-                                                "tool": name,
-                                                "args": args,
-                                                "call_id": receipt["call_id"],
-                                                "result_kind": "error",
-                                                "delivery": "mcp_host",
-                                                "content": withheld_content,
-                                                "expected_binding_sha256": receipt["binding_sha256"]
-                                            }),
-                                        )
-                                        .await;
-                                    write(host, &withheld_bytes).await?;
-                                    continue;
-                                }
-                            };
-                            let content = match crate::sandbox::read_workspace_file(
-                                &workspace,
-                                target_path,
-                            ) {
-                                Ok(c) => c,
-                                Err(err) => {
-                                    let err_msg = err.to_string();
-                                    let reasons = if err_msg.contains("outside the workspace")
-                                        || err_msg.contains("path traversal")
-                                    {
-                                        json!(["resource_target_outside_workspace"])
-                                    } else {
-                                        json!(["resource_read_failed"])
-                                    };
-                                    let withheld_bytes =
-                                        withheld(request_id, "invocation", &reasons);
-                                    let withheld_content = std::str::from_utf8(&withheld_bytes)
-                                        .context("withheld is UTF-8")?;
-                                    let _ = collector
-                                        .event(
-                                            "result",
-                                            json!({
-                                                "expected_contract_version": contract_version,
-                                                "tool": name,
-                                                "args": args,
-                                                "call_id": receipt["call_id"],
-                                                "result_kind": "error",
-                                                "delivery": "mcp_host",
-                                                "content": withheld_content,
-                                                "expected_binding_sha256": receipt["binding_sha256"]
-                                            }),
-                                        )
-                                        .await;
-                                    write(host, &withheld_bytes).await?;
-                                    continue;
-                                }
-                            };
-                            let result_envelope = json!({
-                                "content": [{
-                                    "type": "text",
-                                    "text": content
-                                }]
-                            });
-                            let response = json!({
-                                "jsonrpc": "2.0",
-                                "id": request_id,
-                                "result": result_envelope
-                            });
-                            let mut raw_response = response.to_string().into_bytes();
-                            raw_response.push(b'\n');
-                            let result_content = std::str::from_utf8(&raw_response)
-                                .context("result is UTF-8")?;
-                            let res_receipt = collector
-                                .event(
-                                    "result",
-                                    json!({
-                                        "expected_contract_version": contract_version,
-                                        "tool": name,
-                                        "args": args,
-                                        "call_id": receipt["call_id"],
-                                        "result_kind": "value",
-                                        "delivery": "mcp_host",
-                                        "content": result_content,
-                                        "expected_binding_sha256": receipt["binding_sha256"]
-                                    }),
-                                )
-                                .await?;
-                            if res_receipt["release"] != true {
-                                write(
-                                    host,
-                                    &withheld(
-                                        request_id,
+                        if let Some((_admission, _derived)) = resource_admission {
+                            #[cfg(unix)]
+                            {
+                                let (pinned, target_path) = pinned_resource_ws
+                                    .expect("pinned workspace initialized on unix");
+                                let content = match pinned.read_file(&target_path) {
+                                    Ok(c) => c,
+                                    Err(err) => {
+                                        let err_msg = err.to_string();
+                                        let reasons = if err_msg.contains("outside the workspace")
+                                            || err_msg.contains("path traversal")
+                                        {
+                                            json!(["resource_target_outside_workspace"])
+                                        } else {
+                                            json!(["resource_read_failed"])
+                                        };
+                                        let withheld_bytes =
+                                            withheld(request_id, "invocation", &reasons);
+                                        let withheld_content = std::str::from_utf8(&withheld_bytes)
+                                            .context("withheld is UTF-8")?;
+                                        let _ = collector
+                                            .event(
+                                                "result",
+                                                json!({
+                                                    "expected_contract_version": contract_version,
+                                                    "tool": name,
+                                                    "args": args,
+                                                    "call_id": receipt["call_id"],
+                                                    "result_kind": "error",
+                                                    "delivery": "mcp_host",
+                                                    "content": withheld_content,
+                                                    "expected_binding_sha256": receipt["binding_sha256"]
+                                                }),
+                                            )
+                                            .await;
+                                        write(host, &withheld_bytes).await?;
+                                        continue;
+                                    }
+                                };
+                                let result_envelope = json!({
+                                    "content": [{
+                                        "type": "text",
+                                        "text": content
+                                    }]
+                                });
+                                let response = json!({
+                                    "jsonrpc": "2.0",
+                                    "id": request_id,
+                                    "result": result_envelope
+                                });
+                                let mut raw_response = response.to_string().into_bytes();
+                                raw_response.push(b'\n');
+                                let result_content = std::str::from_utf8(&raw_response)
+                                    .context("result is UTF-8")?;
+                                let res_receipt = collector
+                                    .event(
                                         "result",
-                                        &res_receipt["reason_codes"],
-                                    ),
-                                )
-                                .await?;
+                                        json!({
+                                            "expected_contract_version": contract_version,
+                                            "tool": name,
+                                            "args": args,
+                                            "call_id": receipt["call_id"],
+                                            "result_kind": "value",
+                                            "delivery": "mcp_host",
+                                            "content": result_content,
+                                            "expected_binding_sha256": receipt["binding_sha256"]
+                                        }),
+                                    )
+                                    .await?;
+                                if res_receipt["release"] != true {
+                                    write(
+                                        host,
+                                        &withheld(
+                                            request_id,
+                                            "result",
+                                            &res_receipt["reason_codes"],
+                                        ),
+                                    )
+                                    .await?;
+                                    continue;
+                                }
+                                write(host, &raw_response).await?;
                                 continue;
                             }
-                            write(host, &raw_response).await?;
-                            continue;
+                            #[cfg(not(unix))]
+                            {
+                                unreachable!("non-unix platforms are refused before reserving call");
+                            }
                         }
                         Pending::Call {
                             id: request_id.clone(),

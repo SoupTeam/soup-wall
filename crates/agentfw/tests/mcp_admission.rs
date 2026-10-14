@@ -2831,16 +2831,32 @@ async fn sou15_operation_constrained_resource_executor_enforces_boundaries() {
     let reply: Value =
         serde_json::from_str(&fixture.exchange(&call.to_string()).await.unwrap()).unwrap();
     assert_eq!(reply["id"], "res-policy-auth");
-    assert!(reply["result"]["isError"].is_null() || reply["result"]["isError"] == false);
-    assert_eq!(
-        reply["result"]["content"][0]["text"].as_str().unwrap(),
-        "synthetic contents"
-    );
-    assert_eq!(
-        executed(&fixture.ledger).len(),
-        0,
-        "constrained executor handles read directly; child process must never execute"
-    );
+    #[cfg(unix)]
+    {
+        assert!(reply["result"]["isError"].is_null() || reply["result"]["isError"] == false);
+        assert_eq!(
+            reply["result"]["content"][0]["text"].as_str().unwrap(),
+            "synthetic contents"
+        );
+        assert_eq!(
+            executed(&fixture.ledger).len(),
+            0,
+            "constrained executor handles read directly; child process must never execute"
+        );
+    }
+    #[cfg(not(unix))]
+    {
+        assert_eq!(reply["result"]["isError"], true);
+        assert!(
+            reply.to_string().contains("resource_executor_unsupported"),
+            "expected resource_executor_unsupported, got {reply}"
+        );
+        assert_eq!(
+            executed(&fixture.ledger).len(),
+            0,
+            "unsupported platform refuses before reserving call; child process must never execute"
+        );
+    }
 
     // 2. Unauthorized workspace target is refused by native resource admission.
     let unauthorized_file = fixture._dir.path().join("unauthorized.txt");
@@ -2964,68 +2980,89 @@ async fn sou15_parent_swap_symlink_traversal_refuses_outside_canary() {
         }
     });
 
-    // 1. Initial benign read succeeds and returns inside content
-    let reply: Value =
-        serde_json::from_str(&fixture.exchange(&read_call.to_string()).await.unwrap()).unwrap();
-    assert_eq!(reply["id"], "benign-sub-read");
-    assert_eq!(
-        reply["result"]["content"][0]["text"].as_str().unwrap(),
-        "inside trusted content"
-    );
-    assert_eq!(executed(&fixture.ledger).len(), 0);
-
-    // 2. Perform parent directory swap: rename 'sub' to 'sub_orig' and create symlink 'sub -> outside_dir'
-    let sub_path = fixture._dir.path().join("sub");
-    let sub_orig = fixture._dir.path().join("sub_orig");
-    std::fs::rename(&sub_path, &sub_orig).unwrap();
     #[cfg(unix)]
-    std::os::unix::fs::symlink(&outside_dir, &sub_path).unwrap();
+    {
+        // 1. Initial benign read succeeds and returns inside content
+        let reply: Value =
+            serde_json::from_str(&fixture.exchange(&read_call.to_string()).await.unwrap()).unwrap();
+        assert_eq!(reply["id"], "benign-sub-read");
+        assert_eq!(
+            reply["result"]["content"][0]["text"].as_str().unwrap(),
+            "inside trusted content"
+        );
+        assert_eq!(executed(&fixture.ledger).len(), 0);
 
-    // 3. Attempt read of sub/input.txt after parent directory swap:
-    // Must fail closed with resource_read_failed / resource_path_link; outside canary MUST NEVER be returned.
-    let swapped_call = json!({
-        "jsonrpc": "2.0",
-        "id": "swapped-sub-read",
-        "method": "tools/call",
-        "params": {
-            "name": "read_document",
-            "arguments": {
-                "path": target_file.to_str().unwrap()
+        // 2. Perform parent directory swap: rename 'sub' to 'sub_orig' and create symlink 'sub -> outside_dir'
+        let sub_path = fixture._dir.path().join("sub");
+        let sub_orig = fixture._dir.path().join("sub_orig");
+        std::fs::rename(&sub_path, &sub_orig).unwrap();
+        std::os::unix::fs::symlink(&outside_dir, &sub_path).unwrap();
+
+        // 3. Attempt read of sub/input.txt after parent directory swap:
+        // Must fail closed with resource_read_failed / resource_path_link; outside canary MUST NEVER be returned.
+        let swapped_call = json!({
+            "jsonrpc": "2.0",
+            "id": "swapped-sub-read",
+            "method": "tools/call",
+            "params": {
+                "name": "read_document",
+                "arguments": {
+                    "path": target_file.to_str().unwrap()
+                }
             }
-        }
-    });
-    let swapped_reply: Value =
-        serde_json::from_str(&fixture.exchange(&swapped_call.to_string()).await.unwrap()).unwrap();
-    assert_eq!(swapped_reply["id"], "swapped-sub-read");
-    assert_eq!(swapped_reply["result"]["isError"], true);
-    let reply_str = swapped_reply.to_string();
-    assert!(
-        !reply_str.contains("REVIEW107_PARENT_SWAP"),
-        "outside canary content must never be leaked through parent symlink swap"
-    );
-    assert!(
-        reply_str.contains("resource_path_link")
-            || reply_str.contains("resource_read_failed")
-            || reply_str.contains("resource_target_outside_workspace"),
-        "expected refusal reason in {reply_str}"
-    );
-    assert_eq!(
-        executed(&fixture.ledger).len(),
-        0,
-        "parent swapped read must never execute child process"
-    );
+        });
+        let swapped_reply: Value =
+            serde_json::from_str(&fixture.exchange(&swapped_call.to_string()).await.unwrap())
+                .unwrap();
+        assert_eq!(swapped_reply["id"], "swapped-sub-read");
+        assert_eq!(swapped_reply["result"]["isError"], true);
+        let reply_str = swapped_reply.to_string();
+        assert!(
+            !reply_str.contains("REVIEW107_PARENT_SWAP"),
+            "outside canary content must never be leaked through parent symlink swap"
+        );
+        assert!(
+            reply_str.contains("resource_path_link")
+                || reply_str.contains("resource_read_failed")
+                || reply_str.contains("resource_target_outside_workspace"),
+            "expected refusal reason in {reply_str}"
+        );
+        assert_eq!(
+            executed(&fixture.ledger).len(),
+            0,
+            "parent swapped read must never execute child process"
+        );
 
-    // 4. Test production read helper directly against parent swap (reproducing Baubek's exact probe)
-    let direct_result = agentfw::sandbox::read_workspace_file(fixture._dir.path(), &target_file);
-    assert!(
-        direct_result.is_err(),
-        "direct read helper must refuse parent swapped target"
-    );
-    let err_msg = direct_result.unwrap_err().to_string();
-    assert!(
-        err_msg.contains("symlink") || err_msg.contains("outside the workspace"),
-        "expected symlink refusal, got {err_msg}"
-    );
+        // 4. Test production read helper directly against parent swap (reproducing Baubek's exact probe)
+        let direct_result =
+            agentfw::sandbox::read_workspace_file(fixture._dir.path(), &target_file);
+        assert!(
+            direct_result.is_err(),
+            "direct read helper must refuse parent swapped target"
+        );
+        let err_msg = direct_result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("symlink") || err_msg.contains("outside the workspace"),
+            "expected symlink refusal, got {err_msg}"
+        );
+    }
+    #[cfg(not(unix))]
+    {
+        let reply: Value =
+            serde_json::from_str(&fixture.exchange(&read_call.to_string()).await.unwrap()).unwrap();
+        assert_eq!(reply["id"], "benign-sub-read");
+        assert_eq!(reply["result"]["isError"], true);
+        assert!(reply.to_string().contains("resource_executor_unsupported"));
+        assert_eq!(executed(&fixture.ledger).len(), 0);
+
+        let direct_result =
+            agentfw::sandbox::read_workspace_file(fixture._dir.path(), &target_file);
+        assert!(direct_result.is_err());
+        assert!(direct_result
+            .unwrap_err()
+            .to_string()
+            .contains("unsupported"));
+    }
 }
 
 #[tokio::test]
@@ -3065,15 +3102,76 @@ async fn sou15_post_admission_read_failure_capacity_leak_prevented_and_continuat
 
     let target_file = fixture._dir.path().join("permitted-doc.txt");
 
-    // Replace permitted file with invalid UTF-8 bytes to trigger post-admission resource_read_failed
-    std::fs::write(&target_file, [0xFF, 0xFE, 0xFD, 0xFC]).unwrap();
+    #[cfg(unix)]
+    {
+        // Replace permitted file with invalid UTF-8 bytes to trigger post-admission resource_read_failed
+        std::fs::write(&target_file, [0xFF, 0xFE, 0xFD, 0xFC]).unwrap();
 
-    // Perform 70 consecutive failing reads (> 64 session capacity cap).
-    // If post-admission failures leak reservations, request 65 will fail with native_capacity_exceeded.
-    for i in 0..70 {
+        // Perform 70 consecutive failing reads (> 64 session capacity cap).
+        // If post-admission failures leak reservations, request 65 will fail with native_capacity_exceeded.
+        for i in 0..70 {
+            let failing_call = json!({
+                "jsonrpc": "2.0",
+                "id": format!("utf8-fail-{i}"),
+                "method": "tools/call",
+                "params": {
+                    "name": "read_document",
+                    "arguments": {
+                        "path": target_file.to_str().unwrap()
+                    }
+                }
+            });
+            let reply: Value =
+                serde_json::from_str(&fixture.exchange(&failing_call.to_string()).await.unwrap())
+                    .unwrap();
+            assert_eq!(reply["id"], format!("utf8-fail-{i}"));
+            assert_eq!(reply["result"]["isError"], true);
+            assert!(
+                reply.to_string().contains("resource_read_failed"),
+                "expected resource_read_failed, got {reply}"
+            );
+        }
+        assert_eq!(
+            executed(&fixture.ledger).len(),
+            0,
+            "failed reads must have zero server execution"
+        );
+
+        // Restore valid UTF-8 content to the permitted file
+        std::fs::write(&target_file, "recovered valid document content").unwrap();
+
+        // Call 71 in the SAME session must succeed and return the valid content
+        let success_call = json!({
+            "jsonrpc": "2.0",
+            "id": "success-call-71",
+            "method": "tools/call",
+            "params": {
+                "name": "read_document",
+                "arguments": {
+                    "path": target_file.to_str().unwrap()
+                }
+            }
+        });
+        let reply: Value =
+            serde_json::from_str(&fixture.exchange(&success_call.to_string()).await.unwrap())
+                .unwrap();
+        assert_eq!(reply["id"], "success-call-71");
+        assert!(reply["result"]["isError"].is_null() || reply["result"]["isError"] == false);
+        assert_eq!(
+            reply["result"]["content"][0]["text"].as_str().unwrap(),
+            "recovered valid document content"
+        );
+        assert_eq!(
+            executed(&fixture.ledger).len(),
+            0,
+            "constrained read handles success directly with zero child execution"
+        );
+    }
+    #[cfg(not(unix))]
+    {
         let failing_call = json!({
             "jsonrpc": "2.0",
-            "id": format!("utf8-fail-{i}"),
+            "id": "unsupported-call-win",
             "method": "tools/call",
             "params": {
                 "name": "read_document",
@@ -3085,26 +3183,115 @@ async fn sou15_post_admission_read_failure_capacity_leak_prevented_and_continuat
         let reply: Value =
             serde_json::from_str(&fixture.exchange(&failing_call.to_string()).await.unwrap())
                 .unwrap();
-        assert_eq!(reply["id"], format!("utf8-fail-{i}"));
+        assert_eq!(reply["id"], "unsupported-call-win");
         assert_eq!(reply["result"]["isError"], true);
+        assert!(reply.to_string().contains("resource_executor_unsupported"));
+        assert_eq!(executed(&fixture.ledger).len(), 0);
+    }
+}
+
+#[tokio::test]
+async fn sou15_leaf_symlink_and_oversized_content_bounds() {
+    let temp = tempfile::tempdir().unwrap();
+    let ws = temp.path().canonicalize().unwrap();
+
+    #[cfg(unix)]
+    {
+        // 1. Regular file read succeeds
+        let normal_file = ws.join("normal.txt");
+        std::fs::write(&normal_file, "clean content").unwrap();
+        assert_eq!(
+            agentfw::sandbox::read_workspace_file(&ws, &normal_file).unwrap(),
+            "clean content"
+        );
+
+        // 2. Symlink leaf file fails closed
+        let outside_temp = tempfile::tempdir().unwrap();
+        let outside_target = outside_temp.path().join("canary.txt");
+        std::fs::write(&outside_target, "CANARY_SECRET").unwrap();
+        let symlink_file = ws.join("symlink_leaf.txt");
+        std::os::unix::fs::symlink(&outside_target, &symlink_file).unwrap();
+        let symlink_err = agentfw::sandbox::read_workspace_file(&ws, &symlink_file).unwrap_err();
         assert!(
-            reply.to_string().contains("resource_read_failed"),
-            "expected resource_read_failed, got {reply}"
+            symlink_err.to_string().contains("symlink"),
+            "expected symlink refusal, got {symlink_err}"
+        );
+
+        // 3. Oversized content exceeding MAX_CONTENT fails closed
+        let oversized_file = ws.join("oversized.txt");
+        let large_data = vec![b'A'; agentfw::sandbox::MAX_RESOURCE_READ_BYTES + 1024];
+        std::fs::write(&oversized_file, &large_data).unwrap();
+        let size_err = agentfw::sandbox::read_workspace_file(&ws, &oversized_file).unwrap_err();
+        assert!(
+            size_err
+                .to_string()
+                .contains("exceeds maximum allowed size"),
+            "expected size limit refusal, got {size_err}"
         );
     }
-    assert_eq!(
-        executed(&fixture.ledger).len(),
-        0,
-        "failed reads must have zero server execution"
-    );
+    #[cfg(not(unix))]
+    {
+        let normal_file = ws.join("normal.txt");
+        std::fs::write(&normal_file, "clean content").unwrap();
+        let res = agentfw::sandbox::read_workspace_file(&ws, &normal_file);
+        assert!(res.is_err());
+        assert!(res.unwrap_err().to_string().contains("unsupported"));
+    }
+}
 
-    // Restore valid UTF-8 content to the permitted file
-    std::fs::write(&target_file, "recovered valid document content").unwrap();
+#[tokio::test]
+async fn sou15_root_directory_swap_refused_and_pinned_continuation() {
+    let outside_temp = tempfile::tempdir().unwrap();
+    let outside_dir = outside_temp.path().canonicalize().unwrap();
+    let outside_canary_file = outside_dir.join("input.txt");
+    std::fs::write(
+        &outside_canary_file,
+        "REVIEW107_ROOT_SWAP authorized_inside=true actual_outside_canary=true",
+    )
+    .unwrap();
 
-    // Call 71 in the SAME session must succeed and return the valid content
-    let success_call = json!({
+    let mut fixture =
+        Fixture::with_resource_policy("classified-read", true, None, |dir, registry| {
+            let canonical_dir = dir.canonicalize().unwrap();
+            let input_file = dir.join("input.txt");
+            std::fs::write(&input_file, "inside canary content").unwrap();
+            let canonical_input = input_file
+                .canonicalize()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string();
+            let schema = json!({
+                "type": "object",
+                "properties": { "path": { "type": "string" } },
+                "required": ["path"],
+                "additionalProperties": false
+            });
+            let profile = json!({
+                "server_id": "fixture",
+                "tool_name": "read_document",
+                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "selectors": [{ "pointer": "/path", "kind": "path" }]
+            });
+            registry["tools"][0]["resource_policy"] = json!({
+                "profile": profile,
+                "workspace": canonical_dir,
+                "cwd": canonical_dir,
+                "executor_sha256": "e".repeat(64),
+                "classifier_sha256": "c".repeat(64),
+                "allowed_resources": [{
+                    "kind": "path",
+                    "canonical": canonical_input
+                }]
+            });
+        })
+        .await;
+    fixture.ready().await;
+
+    let target_file = fixture._dir.path().join("input.txt");
+    let read_call = json!({
         "jsonrpc": "2.0",
-        "id": "success-call-71",
+        "id": "benign-root-read",
         "method": "tools/call",
         "params": {
             "name": "read_document",
@@ -3113,56 +3300,116 @@ async fn sou15_post_admission_read_failure_capacity_leak_prevented_and_continuat
             }
         }
     });
-    let reply: Value =
-        serde_json::from_str(&fixture.exchange(&success_call.to_string()).await.unwrap()).unwrap();
-    assert_eq!(reply["id"], "success-call-71");
-    assert!(reply["result"]["isError"].is_null() || reply["result"]["isError"] == false);
-    assert_eq!(
-        reply["result"]["content"][0]["text"].as_str().unwrap(),
-        "recovered valid document content"
-    );
-    assert_eq!(
-        executed(&fixture.ledger).len(),
-        0,
-        "constrained read handles success directly with zero child execution"
-    );
-}
 
-#[tokio::test]
-async fn sou15_leaf_symlink_and_oversized_content_bounds() {
-    let temp = tempfile::tempdir().unwrap();
-    let ws = temp.path().canonicalize().unwrap();
-
-    // 1. Regular file read succeeds
-    let normal_file = ws.join("normal.txt");
-    std::fs::write(&normal_file, "clean content").unwrap();
-    assert_eq!(
-        agentfw::sandbox::read_workspace_file(&ws, &normal_file).unwrap(),
-        "clean content"
-    );
-
-    // 2. Symlink leaf file fails closed
-    let outside_temp = tempfile::tempdir().unwrap();
-    let outside_target = outside_temp.path().join("canary.txt");
-    std::fs::write(&outside_target, "CANARY_SECRET").unwrap();
-    let symlink_file = ws.join("symlink_leaf.txt");
     #[cfg(unix)]
-    std::os::unix::fs::symlink(&outside_target, &symlink_file).unwrap();
-    let symlink_err = agentfw::sandbox::read_workspace_file(&ws, &symlink_file).unwrap_err();
-    assert!(
-        symlink_err.to_string().contains("symlink"),
-        "expected symlink refusal, got {symlink_err}"
-    );
+    {
+        // 1. Initial benign read succeeds and returns inside content
+        let reply: Value =
+            serde_json::from_str(&fixture.exchange(&read_call.to_string()).await.unwrap()).unwrap();
+        assert_eq!(reply["id"], "benign-root-read");
+        assert_eq!(
+            reply["result"]["content"][0]["text"].as_str().unwrap(),
+            "inside canary content"
+        );
+        assert_eq!(executed(&fixture.ledger).len(), 0);
 
-    // 3. Oversized content exceeding MAX_CONTENT fails closed
-    let oversized_file = ws.join("oversized.txt");
-    let large_data = vec![b'A'; agentfw::sandbox::MAX_RESOURCE_READ_BYTES + 1024];
-    std::fs::write(&oversized_file, &large_data).unwrap();
-    let size_err = agentfw::sandbox::read_workspace_file(&ws, &oversized_file).unwrap_err();
-    assert!(
-        size_err
-            .to_string()
-            .contains("exceeds maximum allowed size"),
-        "expected size limit refusal, got {size_err}"
-    );
+        // 2. Pin the trusted workspace before root substitution
+        let pinned = agentfw::sandbox::PinnedWorkspace::open(fixture._dir.path()).unwrap();
+        assert!(pinned.verify_root_identity());
+
+        // 3. Reproduce Baubek's exact probe:
+        // Rename the owned workspace directory, replace the original root path with a symlink to outside_dir
+        let ws_parent = fixture._dir.path().parent().unwrap().to_path_buf();
+        let ws_name = fixture._dir.path().file_name().unwrap().to_os_string();
+        let ws_path = fixture._dir.path().to_path_buf();
+        let ws_renamed = ws_parent.join(format!("{}_orig", ws_name.to_str().unwrap()));
+
+        std::fs::rename(&ws_path, &ws_renamed).unwrap();
+        std::os::unix::fs::symlink(&outside_dir, &ws_path).unwrap();
+
+        // 4. Verify refusal controls on swapped root path:
+        // Direct read via the swapped path MUST fail closed and MUST NEVER leak the outside canary.
+        let direct_res = agentfw::sandbox::read_workspace_file(&ws_path, &target_file);
+        assert!(
+            direct_res.is_err(),
+            "direct read helper must refuse swapped root symlink"
+        );
+        let err_msg = direct_res.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("symlink") || err_msg.contains("outside the workspace"),
+            "expected symlink refusal, got {err_msg}"
+        );
+        assert!(
+            !err_msg.contains("REVIEW107_ROOT_SWAP"),
+            "outside canary content must never be leaked"
+        );
+
+        // 5. Verify root identity check on pinned workspace detects the substitution
+        assert!(
+            !pinned.verify_root_identity(),
+            "verify_root_identity must return false when root path is swapped"
+        );
+        let strict_err = pinned
+            .read_file_refusing_swapped_root(&target_file)
+            .unwrap_err();
+        assert!(
+            strict_err
+                .to_string()
+                .contains("refuses a substituted workspace root"),
+            "expected refusal on substituted root"
+        );
+
+        // 6. Verify useful old-root continuation on the pinned handle:
+        // Pinned workspace continues reading from the pinned kernel directory descriptor!
+        let continued_content = pinned.read_file(&target_file).unwrap();
+        assert_eq!(
+            continued_content, "inside canary content",
+            "pinned handle continues reading authorized inside content"
+        );
+        assert!(
+            !continued_content.contains("REVIEW107_ROOT_SWAP"),
+            "pinned handle must never read the outside canary"
+        );
+
+        // 7. Verify MCP exchange with swapped root path fails closed before admission:
+        let swapped_call = json!({
+            "jsonrpc": "2.0",
+            "id": "swapped-root-exchange",
+            "method": "tools/call",
+            "params": {
+                "name": "read_document",
+                "arguments": {
+                    "path": target_file.to_str().unwrap()
+                }
+            }
+        });
+        let swapped_reply: Value =
+            serde_json::from_str(&fixture.exchange(&swapped_call.to_string()).await.unwrap())
+                .unwrap();
+        assert_eq!(swapped_reply["id"], "swapped-root-exchange");
+        assert_eq!(swapped_reply["result"]["isError"], true);
+        let swapped_reply_str = swapped_reply.to_string();
+        assert!(
+            !swapped_reply_str.contains("REVIEW107_ROOT_SWAP"),
+            "MCP broker must never leak outside canary on swapped root"
+        );
+        assert_eq!(
+            executed(&fixture.ledger).len(),
+            0,
+            "swapped root read must never execute child process"
+        );
+
+        // Clean up symlink so fixture tempdir can remove cleanly
+        let _ = std::fs::remove_file(&ws_path);
+        let _ = std::fs::rename(&ws_renamed, &ws_path);
+    }
+    #[cfg(not(unix))]
+    {
+        let reply: Value =
+            serde_json::from_str(&fixture.exchange(&read_call.to_string()).await.unwrap()).unwrap();
+        assert_eq!(reply["id"], "benign-root-read");
+        assert_eq!(reply["result"]["isError"], true);
+        assert!(reply.to_string().contains("resource_executor_unsupported"));
+        assert_eq!(executed(&fixture.ledger).len(), 0);
+    }
 }
