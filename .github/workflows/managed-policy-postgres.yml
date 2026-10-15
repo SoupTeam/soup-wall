@@ -34,8 +34,9 @@ jobs:
       - name: Build the unmodified v25 migration fixture
         run: |
           git worktree add --detach "$RUNNER_TEMP/managed-previous" e6f6305de53943d8657f88ffcb5495aa60d17411
-          CARGO_TARGET_DIR="$PWD/target" cargo build --locked --manifest-path "$RUNNER_TEMP/managed-previous/Cargo.toml" -p llm-firewall --bin llm-firewall
-          cp target/debug/llm-firewall "$RUNNER_TEMP/previous-console"
+          # Keep historical artifacts separate from the current Agent API.
+          CARGO_TARGET_DIR="$RUNNER_TEMP/managed-previous-target" cargo build --locked --manifest-path "$RUNNER_TEMP/managed-previous/Cargo.toml" -p llm-firewall --bin llm-firewall
+          cp "$RUNNER_TEMP/managed-previous-target/debug/llm-firewall" "$RUNNER_TEMP/previous-console"
       - name: Build real Console and unchanged Agent
         run: |
           cargo build --locked -p llm-firewall -p agentfw

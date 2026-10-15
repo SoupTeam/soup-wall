@@ -5,7 +5,7 @@
 
 use std::path::PathBuf;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 fn default_bind() -> String {
     "127.0.0.1".into()
@@ -36,7 +36,7 @@ fn default_max_span() -> usize {
 }
 
 /// Optional local-model escalation tier. Off unless a model is actually available.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct JudgeCfg {
     #[serde(default)]
@@ -113,7 +113,7 @@ fn is_loopback_url(url: &str) -> bool {
 
 /// Daemon configuration. Every field has a safe default, so an absent config file
 /// is equivalent to an empty one.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     /// Loopback only. A non-loopback value is rejected at parse time.
@@ -149,7 +149,7 @@ pub struct Config {
     pub native: Option<NativeCfg>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct NativeCfg {
     pub registry_path: PathBuf,
@@ -197,7 +197,7 @@ impl Config {
     }
 
     /// Reject anything that would expose the daemon beyond this machine.
-    fn validate(&self) -> anyhow::Result<()> {
+    pub(crate) fn validate(&self) -> anyhow::Result<()> {
         if let Some(native) = &self.native {
             anyhow::ensure!(
                 self.enforce && !self.judge.enabled,
@@ -235,6 +235,13 @@ impl Config {
             );
         }
         Ok(())
+    }
+
+    /// Resolve the profile path without creating directories or changing permissions.
+    pub fn home_path() -> anyhow::Result<PathBuf> {
+        platform_home_dir()
+            .map(|p| p.join(".agentfw"))
+            .ok_or_else(|| anyhow::anyhow!("cannot determine home directory"))
     }
 
     /// `~/.agentfw`, created if absent.

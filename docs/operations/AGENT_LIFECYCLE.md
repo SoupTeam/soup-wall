@@ -263,3 +263,80 @@ The [upstream unit limiter](https://github.com/systemd/systemd/blob/v259/src/cor
 and [service lifecycle documentation](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html)
 describe the relevant systemd behavior. Complete upgrade/rollback and interruption
 acceptance belongs to the second SOU-52 PR; a core pass does not close SOU-52.
+
+
+## Authenticated runtime protection diagnostics
+
+`agentfw protection-status` queries `GET /diagnostics/v1/protection` using the
+existing hook token. It is separate from `preflight`, `lifecycle status`, `/health`
+and managed-policy `/health` metadata; their schemas and behavior are unchanged.
+The endpoint contract is `sw-protection-status/1` and requires Bearer authentication
+plus a fresh 16–128 character `x-agentfw-status-nonce` challenge. Responses echo the
+challenge and have `Cache-Control: no-store`. Prefer the CLI so credentials are not
+put into shell history or copied into reports:
+
+```sh
+agentfw protection-status
+agentfw protection-status --home /absolute/profile/.agentfw --query-only
+agentfw protection-status --query-only --require-enforce --expect-instance INSTANCE
+agentfw protection-status --expect-policy-sha256 DIGEST --expect-registry-sha256 DIGEST
+```
+
+Exit codes are **1** for unavailable/authentication/malformed/stale/mismatched
+responses, **2** for unknown protection or unmet `--require-enforce`, and **0** only
+with explicit `--query-only` after successful validation. Query-only confirms
+retrieval, never execution coverage. Shadow mode remains shadow; a healthy daemon
+never turns an unknown path into protected. The output distinguishes `query` from
+`protection`. Errors contain fixed codes, never raw server bodies, credentials,
+config parser details, tool calls or local file paths. No token, profile, lifecycle
+lock or configuration is created or rewritten by the query. Redirects and proxies
+are disabled; reads and response size are bounded, with a 1–5 second timeout.
+
+The snapshot reads the **actual active Agent policy** under the engine mutex,
+including its managed revision/sequence/source digest at the same instant. Its
+`agent-policy-json/1` SHA256 hashes the parsed operator policy serialized in Rust
+struct field order, including rule order, messages and defaults; it is not the
+original YAML byte hash. The binary digest identifies the engine and its mandatory
+safety floors. Managed source SHA256 remains separate. Config uses the same JSON
+struct serialization (`Config`) and reports the loaded startup configuration,
+not a new parse of disk. The CLI compares this digest with its current local config
+and rejects drift. Editing policy/registry files alone never changes reported active
+state; policy changes in the engine do. Registry ID/digest/tool count come from the
+installed in-memory native registry; absent evidence is `unknown`, never an empty
+unrestricted capability. Policy/registry expectation flags compare explicit known
+identities. A running instance has a fresh ID, PID and start time; managed instances
+reuse the existing lifecycle identity. Its raw lifecycle config digest is labelled
+separately from the loaded JSON config digest. Missing binary evidence stays null.
+
+| Path | Capability and limit |
+| --- | --- |
+| Legacy HTTP hook | Supported inspection; **fail-open** on unavailable daemon, timeout or internal failure; configured host wiring is unknown |
+| MCP manifest | Supported metadata check, not execution coverage |
+| Native admission | Supported only with loaded registry, enforcing mode and no optional judge; requires a trusted collector |
+| Unbound/unsupported MCP resource executor | `unsupported`, reason `resource_executor_unsupported` |
+| Bound resource executor | Configured resource policy presence is reported; actual executor/runtime coverage stays `unknown` |
+| Arbitrary-server containment | `unsupported` |
+| Verified model consumption | `unknown` |
+
+All path `execution_coverage` values remain **unknown**. Three bounded counters and
+last-seen timestamps record authenticated HTTP contact with `/hook`, `/mcp` and
+`/native/v1`, including malformed/fail-open requests. They do not claim inspection,
+execution, result delivery or model consumption. Unauthenticated requests and status
+queries do not advance counters. No raw content or per-session history is retained.
+Policy/config/registry and counters are captured under a consistent lock order;
+concurrent rollout cannot mix an old policy digest with a new managed revision.
+
+Reproduce the focused runtime, loopback-client and real-binary CLI tests:
+
+```sh
+cargo test --locked -p agentfw --test protection_status
+```
+
+CI retains source SHA, source-file hashes, results and the real test daemon's
+`runtime.json` snapshot in `runtime-protection-status`.
+Fixtures cover authentication, live policy replacement and concurrency, disk drift,
+missing registry, legacy fail-open contact, native contact, shadow/unavailable,
+nonce/instance/digest mismatch, stale/overclaimed replies, bounded errors, and a real
+daemon's PID/binary identity. These component checks do not complete SOU-15 or
+independent SOU-18 installation/active-protection acceptance. They add no grants,
+activation, managed-bundle, executor or lifecycle transaction behavior.

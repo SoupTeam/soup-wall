@@ -11,7 +11,7 @@ use agentfw::sandbox::{
     GuardedFileDeleteSpec, GuardedFileRenameSpec, GuardedFileWriteSpec, GuardedNetworkFetchSpec,
     NetworkPolicy, SandboxSpec,
 };
-use agentfw::{app, Config};
+use agentfw::Config;
 use clap::{Parser, Subcommand};
 use soup_wall_agent::{AgentFirewall, AgentPolicySet, DEFAULT_TAINT_CAP};
 
@@ -26,6 +26,8 @@ struct Cli {
 enum Cmd {
     /// Run the daemon.
     Serve,
+    /// Query authenticated runtime diagnostics; unknown protection exits 2.
+    ProtectionStatus(agentfw::protection_status::QueryArgs),
     /// Summarize an audit log: what would this policy have done?
     Replay {
         /// Path to the audit log (defaults to ~/.agentfw/audit.jsonl).
@@ -263,6 +265,9 @@ enum ServiceCommand {
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.cmd {
+        Cmd::ProtectionStatus(args) => {
+            std::process::exit(agentfw::protection_status::run_cli(args))
+        }
         Cmd::Serve => {
             #[cfg(target_os = "linux")]
             let _direct_guard =
@@ -913,6 +918,14 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
         tokio::spawn(managed.run(state.clone()));
     }
 
+    let diagnostics =
+        agentfw::protection_status::Runtime::new(&cfg).with_binary(if managed.is_none() {
+            std::env::current_exe()
+                .ok()
+                .and_then(|p| agentfw::lifecycle::sha256_file(&p).ok())
+        } else {
+            None
+        });
     let addr = cfg.socket_address();
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     tracing::info!(
@@ -941,13 +954,16 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
                 Err(error) => return Err(error.into()),
             },
         };
+        let diagnostics = diagnostics
+            .with_binary(Some(health.binary_digest.clone()))
+            .with_lifecycle(health.clone());
         let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
         let shutdown = Arc::new(Mutex::new(Some(shutdown_tx)));
         let read_health = health.clone();
         let read_token = state.token.clone();
         let stop_health = health;
         let stop_token = state.token.clone();
-        let router = app(state).route(
+        let router = agentfw::app_with_diagnostics(state, Arc::new(diagnostics)).route(
             "/lifecycle/v1",
             get(move |headers: HeaderMap| {
                 let health = read_health.clone();
@@ -997,7 +1013,11 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
             })
             .await?;
     } else {
-        axum::serve(listener, app(state)).await?;
+        axum::serve(
+            listener,
+            agentfw::app_with_diagnostics(state, Arc::new(diagnostics)),
+        )
+        .await?;
     }
     Ok(())
 }
