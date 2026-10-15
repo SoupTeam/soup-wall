@@ -86,8 +86,10 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self.send_response(response.status)
             self.send_header("Content-Length", str(len(payload)))
-            if response.getheader("Content-Type"):
-                self.send_header("Content-Type", response.getheader("Content-Type"))
+            # The HTTPS test edge proxies only JSON Agent API responses.
+            # Never echo arbitrary upstream header bytes into TLS responses.
+            if payload and self.path.startswith("/agent/v1/"):
+                self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(payload)
         except (OSError, http.client.HTTPException):
