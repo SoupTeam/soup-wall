@@ -334,11 +334,14 @@ def run(args):
             def login(ctx, user, organization=None, workspace=None, success=True, capture=None):
                 page = ctx.new_page()
                 page.set_default_timeout(45000)
+                log_offset = (directory / "gateway.log").stat().st_size
                 observation = {"subject": user["username"]}
                 def observe(response):
                     if response.url == callback:
                         observation["acs_status"] = response.status
                         observation["browser_binding_sent"] = "__Host-llm-fw-saml-flow=" in response.request.all_headers().get("cookie", "")
+                    elif response.request.is_navigation_request() and response.url.startswith(vendor_base + "/"):
+                        observation["vendor_status"] = response.status
                 page.on("response", observe)
                 if capture is not None:
                     def hold(route):
@@ -371,11 +374,18 @@ def run(args):
                         # raw error text or private runtime logs in evidence.
                         observation["at_acs"] = page.url == callback
                         observation["at_console"] = page.url == gateway_base + "/customer"
-                        log_text = (directory / "gateway.log").read_text(errors="replace").lower()
+                        observation["at_vendor"] = page.url.startswith(vendor_base + "/")
+                        visible = page.locator("body").inner_text(timeout=3000).lower()
+                        observation["vendor_error_categories"] = [label for label in (
+                            "invalid username or password", "invalid user", "account is disabled", "account is not fully set up",
+                            "expired", "timed out", "cookie", "invalid requester", "invalid signature", "unexpected error",
+                            "verify your email", "update password", "update account information") if label in visible]
+                        log_text = (directory / "gateway.log").read_bytes()[log_offset:].decode(errors="replace").lower()
                         last = log_text.rsplit("saml response validation failed", 1)
                         observation["validation_error_categories"] = [word for word in
                             ("expired", "signature", "audience", "issuer", "destination", "recipient", "request", "replay", "notbefore", "not yet valid")
                             if len(last) == 2 and word in last[-1]]
+                        observation["local_authorization_error"] = "failed to authorize saml identity" in log_text
                         report["failed_login"] = observation
                         raise
                 else:
