@@ -48,7 +48,8 @@ CASES = ("allow-json", "allow-text", "cookie-state", "native-deny", "native-ask"
          "unsupported-charset", "http-error", "result-withheld", "repeated-failures", "cross-session", "replayed-id",
          "queued-cancellation", "queued-overlap", "unsupported-chunked", "massive-header", "informational-response",
          "truncated-body", "duplicate-content-length")
-PROTOCOL = {"replayed-id", "queued-cancellation", "queued-overlap"}
+SCHEMA_REFUSALS = {"caller-headers", "caller-method", "caller-body"}
+PROTOCOL = {"replayed-id", "queued-cancellation", "queued-overlap"} | SCHEMA_REFUSALS
 HELD = {"queued-cancellation", "queued-overlap"}
 PROXIED = HELD | {"native-url-substitution", "native-authority-substitution", "cross-session"}
 SUCCESS = {"allow-json", "allow-text", "cookie-state", "proxy-poisoning", "cross-session", "replayed-id"}
@@ -57,12 +58,12 @@ ZERO = {"native-deny", "native-ask", "classifier-deny", "classifier-ask", "url-s
         "url-credentials", "metadata-address", "private-address", "loopback-without-exception", "dns-address-substitution",
         "native-url-substitution", "native-authority-substitution"} | HELD
 TLS_FAILURES = {"tls-hostname", "tls-untrusted", "tls-expired", "tls-invalid"}
-ERRORS = {"redirect": {"unsupported_http_response"}, "timeout": {"request_timeout"}, "oversize": {"response_too_large"},
+ERRORS = {"redirect": {"redirect_refused"}, "timeout": {"request_timeout"}, "oversize": {"response_too_large"},
           "invalid-utf8": {"invalid_response_utf8"}, "invalid-json": {"invalid_response_json"},
           "unsupported-compression": {"unsupported_content_encoding"}, "unsupported-content": {"unsupported_content_type"},
-          "unsupported-charset": {"unsupported_content_type"}, "http-error": {"unsupported_http_response"},
+          "unsupported-charset": {"unsupported_content_type"}, "http-error": {"unsupported_status"},
           "unsupported-chunked": {"unsupported_transfer_encoding"}, "massive-header": {"response_headers_too_large"},
-          "informational-response": {"unsupported_http_response"}, "truncated-body": {"incomplete_response_body", "response_read_failed"},
+          "informational-response": {"unsupported_status"}, "truncated-body": {"incomplete_response_body", "response_read_failed"},
           "duplicate-content-length": {"invalid_content_length"}, "repeated-failures": {"invalid_response_utf8"},
           "dns-address-substitution": {"dns_address_substitution"}, **{name: {"tls_verification_failed"} for name in TLS_FAILURES}}
 
@@ -71,12 +72,37 @@ class ExpectedStartupRefusal(Exception):
     """Control flow for one deliberately invalid operator installation."""
 
 
+def expected_sessions(name):
+    if name == "cross-session":
+        return ["primary", "second-session", "fresh-after-refusal"]
+    if name in PROTOCOL:
+        return ["primary", "fresh-after-refusal"]
+    return ["primary"]
+
+
+def abnormal_session(name, label):
+    return ((name in PROTOCOL and label == "primary")
+            or (name == "cross-session" and label == "second-session"))
+
+
+def successful_fetch(name, label):
+    """Case expectations are reviewed inputs, never claims from observations."""
+    return name in SUCCESS and label == "primary"
+
+
+def expected_attempts(name, label):
+    """Only replies already observed are attempts; held/aborted calls have none."""
+    if label != "primary" or name in HELD | SCHEMA_REFUSALS:
+        return 0
+    return REPEATED if name == "repeated-failures" else 2 if name == "cookie-state" else 1
+
+
 def certificates(root):
     """Create a real owned CA and valid, wrong-host and expired leaves, without dependencies."""
     root.mkdir(mode=0o700)
     def openssl(*args):
         return subprocess.run(["openssl", *args], cwd=root, check=True, stdin=subprocess.DEVNULL,
-                              capture_output=True, timeout=15)
+                              capture_output=True, timeout=15, env=H.private_environment(root))
     openssl("req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes",
             "-subj", "/CN=SOU56-Disposable-CA", "-days", "2", "-keyout", "ca.key", "-out", "ca.pem",
             "-addext", "basicConstraints=critical,CA:TRUE", "-addext", "keyUsage=critical,keyCertSign,cRLSign",
@@ -271,6 +297,10 @@ def grade(row):
         name = row["case"]
         H.require(name in CASES and row.get("error") is None, "unknown or incomplete observation")
         H.require(row["workspace_before"] == row["workspace_after"], "network executor changed owned workspace")
+        configuration = row["configuration"]
+        H.require(H.sha(H.canonical(configuration["registry"])) == configuration["registry_sha256"]
+                  and H.sha(configuration["policy"].encode()) == configuration["policy_sha256"],
+                  "retained registry/policy bytes disagree with installed identities")
         receiver = H.json_lines(row["receiver_raw"].encode())
         secondary = H.json_lines(row["secondary_raw"].encode())
         poison = H.json_lines(row["proxy_receiver_raw"].encode())
@@ -312,10 +342,12 @@ def grade(row):
                       "unsafe operator configuration was not explicitly refused at startup")
             return {"status": "pass", "reason": "invalid loopback authority refused at startup; independent receivers saw zero transport"}
         native = H.json_lines(row["native_audit_raw"].encode())
+        H.require(all(value.get("registry_sha256") == configuration["registry_sha256"] for value in native),
+                  "native gates used another installed registry")
         starts = [value for value in native if value.get("event") == "native_session_start"]
         ends = [value for value in native if value.get("event") == "native_session_end"]
         sessions = row["sessions"]
-        H.require(len(sessions) == (2 if name in PROTOCOL or name == "cross-session" else 1), "wrong MCP session count")
+        H.require([session["label"] for session in sessions] == expected_sessions(name), "wrong MCP session sequence")
         H.require(len(starts) == len(ends) == len(sessions) and len({value["session"] for value in starts}) == len(sessions)
                   and {value["session"] for value in starts} == {value["session"] for value in ends},
                   "native session cleanup/isolation missing")
@@ -326,19 +358,24 @@ def grade(row):
             H.require([value.get("method") for value in child_input] == ["initialize", "notifications/initialized", "tools/list"],
                       "unexpected discovery traffic")
             clients = H.json_lines(session["client_raw"].encode())
-            H.require(H.json_lines(session["child_output_raw"].encode()) == clients[:2], "discovery response changed")
+            client_frames = session["client_raw"].splitlines(keepends=True)
+            H.require(len(client_frames) == len(clients) and all(value.endswith("\n") for value in client_frames)
+                      and session["child_output_raw"] == "".join(client_frames[:2]), "discovery/client frame bytes changed")
             closure = session["closure"]
             H.require(closure.get("stdout_eof") is True and closure.get("reader_joined") is True
                       and closure.get("forced_cleanup") is False, "collector closure incomplete")
-            abnormal = name in PROTOCOL and session["label"] == "primary"
+            abnormal = abnormal_session(name, session["label"])
             if abnormal:
-                reason = "replayed MCP request" if name == "replayed-id" else "concurrent MCP requests are not supported"
+                reason = ("replayed MCP request" if name == "replayed-id" else "MCP admission request rejected"
+                          if name == "cross-session" else "unknown MCP argument" if name in SCHEMA_REFUSALS
+                          else "concurrent MCP requests are not supported")
                 H.require(closure.get("exit_code") != 0 and reason in session["collector_raw"], "unrelated failure is not protocol refusal")
                 H.require(len(clients) == (3 if name == "replayed-id" else 2), "reply released after protocol refusal")
             else:
                 H.require(closure.get("exit_code") == 0 and session["child_closed_raw"] == "closed\n", "MCP session did not close cleanly")
                 follow = H.strict_json(session["useful"]["reply_raw"])
-                H.require(follow == clients[-1] and follow.get("id") == session["useful"]["request"]["id"]
+                H.require(session["useful"]["reply_raw"] == client_frames[-1]
+                          and follow == clients[-1] and follow.get("id") == session["useful"]["request"]["id"]
                           and follow.get("result", {}).get("isError") is not True
                           and follow.get("result", {}).get("content") == [{"type": "text", "text": READ_TEXT}],
                           "useful same-session continuation missing")
@@ -349,15 +386,27 @@ def grade(row):
                           and all(value.get("released") is True and value.get("shadow") is False
                                   and value.get("verdict") == "allow" for value in useful_gates),
                           "useful continuation bypassed enforcing native gates")
+                H.require(useful_gates[0].get("call_id") == useful_gates[1].get("call_id")
+                          and useful_gates[0].get("binding_sha256") == useful_gates[1].get("binding_sha256")
+                          and useful_gates[1].get("delivery") == "mcp_host"
+                          and useful_gates[1].get("content_sha256") == H.sha(session["useful"]["reply_raw"].encode()),
+                          "useful continuation content/call correlation changed")
             attempts = session.get("attempts", [])
+            H.require(len(attempts) == expected_attempts(name, session["label"]),
+                      "case did not exercise the required fetch attempts")
             H.require(len(clients) == 2 + len(attempts) + (0 if abnormal else 1), "missing/extra released responses")
             for index, attempt in enumerate(attempts):
+                success = successful_fetch(name, session["label"])
+                H.require(attempt.get("success") is success, "attempt success claim contradicts the reviewed case")
                 response = H.strict_json(attempt["reply_raw"])
-                H.require(response == clients[index + 2] and response.get("id") == attempt["request"]["id"]
+                H.require(attempt["reply_raw"] == client_frames[index + 2]
+                          and response == clients[index + 2] and response.get("id") == attempt["request"]["id"]
                           and response.get("jsonrpc") == "2.0", "original MCP response/ID bytes changed")
+                H.require(attempt["request"].get("jsonrpc") == "2.0" and attempt["request"].get("method") == "tools/call"
+                          and attempt["request"]["params"].get("name") == "https_get", "original MCP tool/method changed")
                 result = response.get("result")
                 H.require(isinstance(result, dict), "ordinary MCP result/refusal missing")
-                if attempt["success"]:
+                if success:
                     H.require(result.get("isError") is not True, "useful allowed fetch interrupted")
                     H.require(len(result["content"]) == 2 and all(value.get("type") == "text" for value in result["content"]),
                               "metadata/raw fetched content boundary missing")
@@ -393,6 +442,11 @@ def grade(row):
                 if attempt:
                     H.require(prediction.get("args_sha256") == H.sha(H.canonical(attempt["request"]["params"]["arguments"])),
                               "classification original arguments changed")
+            if name in SUCCESS | set(ERRORS) | {"native-deny", "native-ask", "classifier-deny", "classifier-ask", "result-withheld",
+                                              "native-url-substitution", "native-authority-substitution"}:
+                for attempt in attempts:
+                    H.require(sum(prediction.get("host_call_id") == attempt["request"]["id"] for prediction in predictions) == 1,
+                              "supported fetch did not exercise exactly one classifier boundary")
         executions = [value for session in sessions for value in H.classify_rows(session["collector_raw"].encode(), "mcp_https_get_execution")]
         execution_count = 0 if name in ZERO - {"dns-address-substitution"} else REPEATED if name == "repeated-failures" else 2 if name == "cookie-state" else 1
         H.require(len(executions) == execution_count, "actual broker execution boundary count missing or inconsistent")
@@ -400,7 +454,7 @@ def grade(row):
             attempt = next((value for session in sessions for value in session.get("attempts", [])
                             if value["request"]["id"] == execution.get("host_call_id")), None)
             H.require(attempt is not None, "execution lost original host-call identifier")
-            if name == "result-withheld" or attempt["success"]:
+            if name == "result-withheld" or successful_fetch(name, "primary"):
                 H.require(execution.get("result_kind") == "value" and execution.get("request_issued") is True
                           and execution.get("error") is None, "actual successful execution/effect witness missing")
             elif name in ERRORS:
@@ -410,18 +464,37 @@ def grade(row):
         fetch_calls = [value for value in native if value.get("event") == "native_call" and value.get("tool") == "https_get"]
         fetch_results = [value for value in native if value.get("event") == "native_result" and value.get("tool") == "https_get"]
         if name in SUCCESS | {"result-withheld"} | set(ERRORS):
-            H.require(any(value.get("verdict") == "allow" and value.get("released") is True and value.get("shadow") is False
-                          for value in fetch_calls), "real native execution Allow missing")
-            H.require(fetch_results, "actual result/error never reached native inspection")
+            allowed_calls = [value for value in fetch_calls if value.get("verdict") == "allow"
+                             and value.get("released") is True and value.get("shadow") is False]
+            H.require(len(allowed_calls) == len(fetch_results) == execution_count,
+                      "each actual execution needs exactly one real native Allow and inspected result")
             for result in fetch_results:
-                matches = [value for value in fetch_calls if value.get("call_id") == result.get("call_id")
+                matches = [value for value in allowed_calls if value.get("call_id") == result.get("call_id")
                            and value.get("binding_sha256") == result.get("binding_sha256") and value.get("session") == result.get("session")]
                 H.require(len(matches) == 1 and result.get("call_id") and result.get("binding_sha256"), "native result correlation lost")
+                H.require(result.get("shadow") is False and result.get("delivery") == "mcp_host"
+                          and isinstance(result.get("content_sha256"), str) and len(result["content_sha256"]) == 64,
+                          "actual enforcing MCP result content receipt missing")
+                if name != "result-withheld":
+                    released = [attempt for session in sessions if session["native_session_id"] == result["session"]
+                                for attempt in session.get("attempts", [])
+                                if H.sha(attempt["reply_raw"].encode()) == result["content_sha256"]]
+                    H.require(len(released) == 1 and result.get("released") is True and result.get("verdict") == "allow",
+                              "client bytes lack an exact successful native content release")
             if name == "result-withheld":
-                H.require(len(fetch_results) == 1 and fetch_results[0].get("released") is False, "withheld result release changed")
+                H.require(len(fetch_results) == 1 and fetch_results[0].get("released") is False
+                          and fetch_results[0].get("verdict") == "deny"
+                          and any(value.get("detector") == "injection" for value in fetch_results[0].get("findings", [])),
+                          "actual untrusted document was not blocked by native result inspection")
         if name in {"native-deny", "native-ask", "classifier-deny", "classifier-ask"}:
             H.require(not fetch_results and not any(value.get("released") is True for value in fetch_calls),
                       "Deny/unapproved Ask obtained execution/result release")
+            if name.startswith("native-"):
+                H.require(len(fetch_calls) == 1 and fetch_calls[0].get("shadow") is False
+                          and fetch_calls[0].get("verdict") == name.removeprefix("native-"),
+                          "the requested native Deny/Ask boundary was not exercised")
+            else:
+                H.require(not fetch_calls, "classifier Deny/Ask reached native execution admission")
         if name in PROXIED:
             H.require(row["proxy_closed_cleanly"] is True and row["proxy_exchanges"], "authenticated native proxy incomplete")
             for exchange in row["proxy_exchanges"]:
@@ -434,6 +507,14 @@ def grade(row):
             if name in {"native-url-substitution", "native-authority-substitution", "cross-session"}:
                 H.require(len(changed) == 1 and H.strict_json(changed[0]["reply_raw"]).get("release") is False,
                           "real daemon accepted substituted/cross-session authority")
+                if name == "cross-session":
+                    original, forwarded = (H.strict_json(changed[0][key + "_raw"]) for key in ("original", "forwarded"))
+                    H.require(row.get("closed_session_substitution") is True and changed[0]["upstream_status"] == 409
+                              and H.strict_json(changed[0]["reply_raw"]).get("error_code") == "native_session_unknown"
+                              and original["session_id"] != forwarded["session_id"]
+                              and {key: value for key, value in original.items() if key != "session_id"}
+                              == {key: value for key, value in forwarded.items() if key != "session_id"},
+                              "cross-session control did not retain a genuine closed-session refusal")
             if name in HELD:
                 held = [value for value in row["proxy_exchanges"] if value.get("held")]
                 H.require(len(held) == 1 and row["session_end_before_release"] is True
@@ -586,6 +667,9 @@ def run_case(repo, binary, name, binary_digest, certificate_dir, certificate_wit
                 H.require(row["session_end_before_release"], "native session not ended before held receipt release")
                 row["release_at"] = time.monotonic()
                 proxy.release.set()
+            elif name in SCHEMA_REFUSALS:
+                row["schema_refused_frame"] = H.frame("fetch-1", "https_get", arguments)
+                primary["collector"].send(row["schema_refused_frame"], reply=False)
             else:
                 for index in range(REPEATED if name == "repeated-failures" else 2 if name == "cookie-state" else 1):
                     original = fetch(primary, "fetch-" + str(index + 1), arguments, name in SUCCESS)
@@ -602,8 +686,16 @@ def run_case(repo, binary, name, binary_digest, certificate_dir, certificate_wit
                 primary["closure"] = primary["collector"].close()
                 primary["closed"] = True
                 second = start("second-session")
-                fetch(second, "cross-session-fetch", arguments, False)
-                useful(second)
+                # The proxy changes only this call's session to the already
+                # ended first session. Keep the daemon's genuine 409 refusal;
+                # a failed native receipt ends this collector without a reply.
+                row["closed_session_substitution"] = True
+                row["cross_session_frame"] = H.frame("cross-session-fetch", "https_get", arguments)
+                second["collector"].send(row["cross_session_frame"], reply=False)
+                second["closure"] = second["collector"].close()
+                second["closed"] = True
+                fresh = start("fresh-after-refusal")
+                useful(fresh)
             else:
                 useful(primary)
         except ExpectedStartupRefusal:
@@ -672,6 +764,7 @@ def run(args):
             "Proxy controls retain authenticated request/reply bodies but never Authorization headers and never fabricate Allow.",
             "Result withholding cannot undo an already issued GET; the receiver witness is retained.",
             "Unsupported overlap/cancellation/replay ends the original session; useful recovery then uses a fresh session.",
+            "The cross-session transport control substitutes an ended session ID, retains the real daemon 409, and proves useful recovery in a third session.",
             "Binary digests identify artifacts; matching build logs establish build provenance."]}
     try:
         if platform.system() != "Linux":

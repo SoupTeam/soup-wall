@@ -49,11 +49,14 @@ def observation(name="allow-json"):
     listing = {"jsonrpc": "2.0", "id": "list", "result": {"tools": P.F.TOOLS}}
     native = [{"event": "native_session_start", "session": "owned-session"}]
     for event in ("native_call", "native_result"):
-        if event == "native_result" and name in P.ZERO:
+        if name in P.ZERO and (event == "native_result" or name not in {"native-deny", "native-ask"}):
             continue
         native.append({"event": event, "tool": "https_get", "session": "owned-session", "call_id": "fetch-native",
                        "binding_sha256": "b" * 64, "released": name not in P.ZERO and not (event == "native_result" and name == "result-withheld"),
-                       "verdict": "deny" if name in P.ZERO or (event == "native_result" and name == "result-withheld") else "allow", "shadow": False})
+                       "verdict": "ask" if name == "native-ask" else "deny" if name in P.ZERO or (event == "native_result" and name == "result-withheld") else "allow",
+                       "shadow": False, "delivery": "mcp_host" if event == "native_result" else None,
+                       "content_sha256": P.H.sha(raw(reply).encode()) if event == "native_result" else None,
+                       "findings": [{"detector": "injection", "severity": "high"}] if name == "result-withheld" and event == "native_result" else []})
     for event in ("native_call", "native_result"):
         native.append({"event": event, "tool": "read_document", "session": "owned-session", "released": True,
                        "verdict": "allow", "shadow": False, "call_id": "useful-native", "binding_sha256": "d" * 64})
@@ -66,10 +69,20 @@ def observation(name="allow-json"):
             body = P.F.INJECTION if name == "result-withheld" else P.F.DOCUMENT
             receiver.append({"event": "response", "status": 200, "bytes": len(body.encode()), "sha256": P.H.sha(body.encode())})
     receiver.append({"event": "receiver_closed"})
+    configured_registry = P.registry(Path("/owned/workspace"), request["params"]["arguments"]["url"], 1234,
+                                     "PUBLIC-CA-PEM", "a" * 64, "c" * 64, name)
+    registry_digest = P.H.sha(P.H.canonical(configured_registry))
+    for event in native:
+        event["registry_sha256"] = registry_digest
+        if event.get("event") == "native_result" and event.get("tool") == "read_document":
+            event.update(delivery="mcp_host", content_sha256=P.H.sha(raw(useful).encode()))
     return {"case": name, "workspace_before": {}, "workspace_after": {}, "owned_fixture_removed": True,
         "receiver_raw": "".join(raw(value) for value in receiver), "secondary_raw": raw({"event": "receiver_started"}) + raw({"event": "receiver_closed"}),
         "proxy_receiver_raw": raw({"event": "receiver_started"}) + raw({"event": "receiver_closed"}), "expected_host": "127.0.0.1:1234",
-        "configuration": {"classifier_sha256": "c" * 64}, "native_audit_raw": "".join(raw(value) for value in native),
+        "configuration": {"classifier_sha256": "c" * 64, "registry": configured_registry,
+                          "registry_sha256": registry_digest, "policy": P.policy_for(name),
+                          "policy_sha256": P.H.sha(P.policy_for(name).encode())},
+        "native_audit_raw": "".join(raw(value) for value in native),
         "sessions": [{"label": "primary", "child_ledger_present": True, "child_started_raw": "started\n", "child_closed_raw": "closed\n", "child_ledger_raw": "",
             "child_input_raw": raw({"method": "initialize"}) + raw({"method": "notifications/initialized"}) + raw({"method": "tools/list"}),
             "child_output_raw": raw(initialize) + raw(listing), "client_raw": raw(initialize) + raw(listing) + raw(reply) + raw(useful),
@@ -144,11 +157,52 @@ class EvidenceControls(unittest.TestCase):
             next(value for value in values if value.get("event") == "native_call" and value.get("tool") == "https_get")[field] = replacement
             row["native_audit_raw"] = "".join(raw(value) for value in values)
             self.assertEqual(P.grade(row)["status"], "fail")
+
+    def test_observation_cannot_downgrade_a_required_success_to_an_error(self):
+        row = observation()
+        session = row["sessions"][0]
+        attempt = session["attempts"][0]
+        original = attempt["reply_raw"]
+        failure = {"jsonrpc": "2.0", "id": attempt["request"]["id"], "result": {
+            "isError": True, "content": [{"type": "text", "text": "unrelated bounded refusal"}]}}
+        attempt.update(success=False, reply_raw=raw(failure))
+        session["client_raw"] = session["client_raw"].replace(original, attempt["reply_raw"])
+        values = P.H.json_lines(row["native_audit_raw"].encode())
+        next(value for value in values if value.get("event") == "native_result" and value.get("tool") == "https_get")["content_sha256"] = P.H.sha(attempt["reply_raw"].encode())
+        row["native_audit_raw"] = "".join(raw(value) for value in values)
+        self.assertEqual(P.grade(row)["status"], "fail")
+
+    def test_zero_request_cases_must_actually_attempt_the_refused_call(self):
+        for name in ("native-deny", "native-ask", "classifier-deny", "query-substitution", "metadata-address"):
+            row = observation(name)
+            session = row["sessions"][0]
+            attempt = session["attempts"].pop()
+            session["client_raw"] = session["client_raw"].replace(attempt["reply_raw"], "")
+            self.assertEqual(P.grade(row)["status"], "fail", name)
+
+    def test_released_fetch_bytes_need_an_enforcing_exact_native_result_gate(self):
+        for field, replacement in (("released", False), ("verdict", "ask"), ("shadow", True),
+                                   ("content_sha256", "f" * 64), ("delivery", "model")):
+            row = observation()
+            values = P.H.json_lines(row["native_audit_raw"].encode())
+            next(value for value in values if value.get("event") == "native_result" and value.get("tool") == "https_get")[field] = replacement
+            row["native_audit_raw"] = "".join(raw(value) for value in values)
+            self.assertEqual(P.grade(row)["status"], "fail", field)
         for key in ("call_id", "binding_sha256", "session"):
             row = observation()
             values = P.H.json_lines(row["native_audit_raw"].encode())
             next(value for value in values if value.get("event") == "native_result" and value.get("tool") == "https_get")[key] = "wrong"
             row["native_audit_raw"] = "".join(raw(value) for value in values)
+            self.assertEqual(P.grade(row)["status"], "fail")
+
+    def test_installed_registry_policy_and_classifier_evidence_cannot_be_substituted(self):
+        for mutate in (lambda row: row["configuration"].update(registry_sha256="f" * 64),
+                       lambda row: row["configuration"].update(policy="agent_policies: []\ndefault: deny\n"),
+                       lambda row: row["configuration"]["registry"]["tools"][0].update(action_class="read_only"),
+                       lambda row: row["sessions"][0].update(collector_raw=raw({"event": "mcp_classification",
+                           "host_call_id": "useful-primary", "classifier_sha256": "c" * 64}))):
+            row = observation()
+            mutate(row)
             self.assertEqual(P.grade(row)["status"], "fail")
 
     def test_result_withholding_retains_already_issued_get(self):
