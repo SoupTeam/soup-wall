@@ -29,6 +29,8 @@ Repeating start for the same active candidate and issuer returns the same rollou
 
 Rollback creates new, higher-sequence signed deployments of the frozen approved baselines, including when an Agent already ran the candidate before this plan and its baseline is that same immutable revision. The cohort includes only Agents that received candidate deployments after this plan's initial sequences. Baseline-free Agents remain explicitly unresolved; successful restoration of other Agents cannot turn that into `rolled_back`. Rollback never silently adopts a newer baseline from later deployment history.
 
+Manual rollback checks every affected Agent before issuance. A newer individual deployment or another active plan's frozen inventory produces a conflict, including when that other plan has not issued its standard wave. A completed plan cannot reclaim those Agents by overwriting their newer ownership. The failed request preserves the plan and all deployment sequences.
+
 ## Operator API and status
 
 Use `x-llm-firewall-admin-token: Bearer <token>`. All group mutations require Owner; Viewer and Operator can inspect, and Agent credentials cannot authorize an admin operation. Tenant and Agent identity checks remain in the storage and authentication layers.
@@ -68,7 +70,7 @@ cargo clippy --all-targets -- -D warnings
 cargo fmt --check
 ```
 
-`managed_group_rollout` covers HTTP/authorization and rollout regressions. The shared SQLite/PostgreSQL controls inject failure on the second pilot, second standard worker and second rollback deployment; race independent store handles and competing overlapping groups; reopen persisted plans; check retries, superseded workers, bounded deadlines, rollback rejection and populated legacy migration. The PostgreSQL control requires an explicit disposable database and also exercises a one-connection pool.
+`managed_group_rollout` covers HTTP/authorization and rollout regressions. The shared SQLite/PostgreSQL controls inject failure on revision insertion, plan insertion/update, the second pilot, second standard worker and second rollback deployment; race independent store handles and competing overlapping groups; reopen persisted plans; check retries, superseded workers, bounded deadlines, rollback rejection, rollback ownership conflicts and populated legacy migration. The PostgreSQL control requires an explicit disposable database and also exercises a one-connection pool.
 
 With native `age` and `age-keygen` on PATH, run the four-Agent SQLite witness:
 

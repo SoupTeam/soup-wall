@@ -611,6 +611,9 @@ async fn controls(f: Fixture) {
         RolloutPhase::RolledBack
     );
 
+    rollback_conflicts(&f).await;
+    start_persistence_failures(&f).await;
+
     // Upgrade a populated legacy group schema: preserve identities and rows;
     // an old in-flight plan lacking sequence snapshots must never auto-promote.
     let tenant = setup(&f.store).await;
@@ -676,6 +679,160 @@ async fn controls(f: Fixture) {
                 .unwrap()
                 .len(),
             1
+        );
+    }
+}
+
+async fn start_persistence_failures(f: &Fixture) {
+    for (table, operation) in [
+        ("managed_agent_revisions", "INSERT"),
+        ("managed_group_rollouts", "INSERT"),
+        ("managed_group_rollouts", "UPDATE"),
+    ] {
+        let tenant = setup(&f.store).await;
+        let sqlite = format!("CREATE TRIGGER fail_boundary BEFORE {operation} ON {table} BEGIN SELECT RAISE(ABORT,'injected persistence failure'); END;");
+        let postgres = format!("CREATE FUNCTION fail_boundary() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected persistence failure'; END $$; CREATE TRIGGER fail_boundary BEFORE {operation} ON {table} FOR EACH ROW EXECUTE FUNCTION fail_boundary();");
+        f.sql(&sqlite, &postgres).await;
+        assert!(f
+            .store
+            .start_managed_group_rollout_async(&tenant, "group", "candidate", &issuer())
+            .await
+            .is_err());
+        let reopened = f.reopen().await;
+        assert!(reopened
+            .get_managed_group_rollout_async(&tenant, "group")
+            .await
+            .unwrap()
+            .is_none());
+        for agent in ["p1", "p2", "w1", "w2"] {
+            assert_eq!(
+                reopened
+                    .list_managed_deployments_async(&tenant, agent)
+                    .await
+                    .unwrap()
+                    .len(),
+                1
+            );
+        }
+        f.sql(
+            "DROP TRIGGER fail_boundary;",
+            &format!("DROP TRIGGER fail_boundary ON {table}; DROP FUNCTION fail_boundary();"),
+        )
+        .await;
+        let plan = reopened
+            .start_managed_group_rollout_async(&tenant, "group", "candidate", &issuer())
+            .await
+            .unwrap();
+        assert_eq!(plan.phase, RolloutPhase::Pilot);
+        assert_eq!(
+            plan.active_deployments
+                .values()
+                .copied()
+                .collect::<Vec<_>>(),
+            [2, 2]
+        );
+    }
+}
+
+async fn rollback_conflicts(f: &Fixture) {
+    for competing_group in [false, true] {
+        let tenant = setup(&f.store).await;
+        let signer = issuer();
+        let pilots = f
+            .store
+            .start_managed_group_rollout_async(&tenant, "group", "candidate", &signer)
+            .await
+            .unwrap();
+        for agent in ["p1", "p2"] {
+            ack(&f.store, &tenant, agent, &pilots).await;
+        }
+        let workers = f
+            .store
+            .advance_managed_group_rollout_async(&tenant, "group", Some(&signer))
+            .await
+            .unwrap()
+            .unwrap();
+        for agent in ["w1", "w2"] {
+            ack(&f.store, &tenant, agent, &workers).await;
+        }
+        assert_eq!(
+            f.store
+                .get_managed_group_rollout_async(&tenant, "group")
+                .await
+                .unwrap()
+                .unwrap()
+                .phase,
+            RolloutPhase::Completed
+        );
+        if competing_group {
+            // The other plan owns w1 but has not issued its standard wave yet.
+            f.store
+                .enroll_managed_agent_async(&tenant, "other-pilot")
+                .await
+                .unwrap();
+            f.store
+                .create_managed_group_async(&tenant, "other", "Other")
+                .await
+                .unwrap();
+            for (agent, pilot) in [("other-pilot", true), ("w1", false)] {
+                f.store
+                    .add_managed_group_member_async(&tenant, "other", agent, pilot)
+                    .await
+                    .unwrap();
+            }
+            f.store
+                .create_managed_group_revision_async(&tenant, "other", "next", "default: allow\n")
+                .await
+                .unwrap();
+            f.store
+                .approve_managed_group_revision_async(&tenant, "other", "next")
+                .await
+                .unwrap();
+            f.store
+                .start_managed_group_rollout_async(&tenant, "other", "next", &signer)
+                .await
+                .unwrap();
+        } else {
+            // A later individual deployment must not be silently overwritten.
+            f.store
+                .deploy_managed_revision_async(&tenant, "p2", "base", false, &signer)
+                .await
+                .unwrap();
+        }
+        let mut before = Vec::new();
+        for agent in ["p1", "p2", "w1", "w2"] {
+            before.push(
+                f.store
+                    .list_managed_deployments_async(&tenant, agent)
+                    .await
+                    .unwrap()
+                    .len(),
+            );
+        }
+        let error = f
+            .store
+            .rollback_managed_group_rollout_async(&tenant, "group", &signer)
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("conflict"), "{error:#}");
+        for (agent, count) in ["p1", "p2", "w1", "w2"].into_iter().zip(before) {
+            assert_eq!(
+                f.store
+                    .list_managed_deployments_async(&tenant, agent)
+                    .await
+                    .unwrap()
+                    .len(),
+                count
+            );
+        }
+        assert_eq!(
+            f.store
+                .get_managed_group_rollout_async(&tenant, "group")
+                .await
+                .unwrap()
+                .unwrap()
+                .phase,
+            RolloutPhase::Completed
         );
     }
 }

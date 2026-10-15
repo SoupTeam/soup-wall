@@ -1824,6 +1824,35 @@ impl PostgresTenantStore {
             }
         }
 
+        // The tenant lease makes this ownership check and all issuance atomic.
+        let other_plans = self.bounded(client.query(
+            "SELECT pilot_agents_json, standard_agents_json FROM managed_group_rollouts
+             WHERE tenant_id=$1 AND rollout_id<>$2 AND phase IN ('pilot','standard','paused','rolling_back')",
+            &[&tenant, &rollout.rollout_id],
+        )).await?;
+        for plan in other_plans {
+            let pilots: Vec<String> = serde_json::from_str(plan.get::<_, &str>(0))?;
+            let workers: Vec<String> = serde_json::from_str(plan.get::<_, &str>(1))?;
+            for agent in &deployed_agents {
+                ensure!(
+                    !pilots.contains(agent) && !workers.contains(agent),
+                    "conflict: agent '{}' is owned by another active rollout",
+                    agent
+                );
+            }
+        }
+        for agent in &deployed_agents {
+            let latest: i64 = self.bounded(client.query_one(
+                "SELECT COALESCE(MAX(deployment_sequence),0) FROM managed_agent_deployments WHERE tenant_id=$1 AND agent_id=$2",
+                &[&tenant, agent],
+            )).await?.get(0);
+            ensure!(
+                rollout.active_deployments.get(agent).copied() == Some(u64::try_from(latest)?),
+                "conflict: agent '{}' deployment was superseded before rollback",
+                agent
+            );
+        }
+
         let mut to_rollback = Vec::new();
         let mut unresolved = Vec::new();
         for agent in &deployed_agents {

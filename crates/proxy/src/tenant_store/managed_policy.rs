@@ -2434,6 +2434,39 @@ impl TenantStore {
                 }
             }
 
+            // A terminal plan no longer owns its Agents. Reclaim them only if no
+            // newer plan or individual deployment has taken ownership.
+            let mut other_plans = db.prepare(
+                "SELECT pilot_agents_json, standard_agents_json FROM managed_group_rollouts
+                 WHERE tenant_id=?1 AND rollout_id<>?2 AND phase IN ('pilot','standard','paused','rolling_back')",
+            )?;
+            let inventories = other_plans.query_map(params![tenant, rollout_id], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+            })?;
+            for inventory in inventories {
+                let (pilots, workers) = inventory?;
+                let members: Vec<String> = serde_json::from_str(&pilots)?;
+                let workers: Vec<String> = serde_json::from_str(&workers)?;
+                for agent in &deployed_agents {
+                    ensure!(
+                        !members.contains(agent) && !workers.contains(agent),
+                        "conflict: agent '{}' is owned by another active rollout",
+                        agent
+                    );
+                }
+            }
+            for agent in &deployed_agents {
+                let latest: i64 = db.query_row(
+                    "SELECT COALESCE(MAX(deployment_sequence),0) FROM managed_agent_deployments WHERE tenant_id=?1 AND agent_id=?2",
+                    params![tenant, agent], |r| r.get(0),
+                )?;
+                ensure!(
+                    active_deployments.get(agent).copied() == Some(u64::try_from(latest)?),
+                    "conflict: agent '{}' deployment was superseded before rollback",
+                    agent
+                );
+            }
+
             let mut to_rollback = Vec::new();
             let mut unresolved = Vec::new();
             for agent in &deployed_agents {
