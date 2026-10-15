@@ -44,11 +44,13 @@ SUCCESS = {"allow-relative", "allow-absolute", "replayed-id"}
 ABNORMAL = {"native-session-mismatch", "daemon-loss", "queued-cancellation"}
 GUARDED = set(CASES) - SUCCESS - {"invalid-utf8", "oversize", "result-withheld"}
 HELD = {"post-allow-share-denial", "queued-cancellation"}
+EARLY_REFUSALS = {"traversal", "unlisted", "ads", "device", "unc", "drive-relative", "root-relative", "trailing-dot",
+                  "missing", "directory", "hard-link", "junction"}
 NATIVE_TESTS = ("reads_exact_regular_utf8_and_binds_identity", "bounded_utf8_contract_refuses_binary_and_oversize",
     "refuses_original_aliases_before_opening", "refuses_case_aliases_and_hard_links", "refuses_nonregular_and_outside_targets",
     "metadata_pin_prevents_root_ancestor_leaf_swap_and_writer", "standard_user_junction_is_refused_as_root_and_ancestor",
     "leaf_replaced_before_prepare_is_bound_to_new_identity", "canceled_worker_refuses_before_acquiring_data_access",
-    "refuses_existing_write_or_delete_handles")
+    "refuses_existing_write_or_delete_handles", "oplock_does_not_stall_metadata_preparation_or_data_open")
 
 
 def load(path, name):
@@ -566,6 +568,8 @@ def grade(row):
         require(useful_predictions[0].get("authoritative_verdict") == "allow"
                 and useful_predictions[0].get("classification", {}).get("actions") == ["read"],
                 "useful read did not pass the enforcing production classifier composition")
+        if name in EARLY_REFUSALS:
+            require(not probe_predictions, "unsafe Windows path reached classification before metadata refusal")
         if name in executed | {"native-deny", "native-ask", "classifier-deny", "classifier-ask", "native-args-mismatch"} | ABNORMAL:
             verdict = "deny" if name == "classifier-deny" else "ask" if name == "classifier-ask" else "allow"
             require(len(probe_predictions) == 1 and probe_predictions[0].get("authoritative_verdict") == verdict,

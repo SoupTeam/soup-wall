@@ -45,7 +45,6 @@ use windows_sys::Win32::System::IO::{
 
 const OBJ_DONT_REPARSE: u32 = 0x1000;
 const FILE_OPEN: u32 = 1;
-const FILE_DIRECTORY_FILE: u32 = 0x0000_0001;
 const FILE_NON_DIRECTORY_FILE: u32 = 0x0000_0040;
 const FILE_SYNCHRONOUS_IO_NONALERT: u32 = 0x0000_0020;
 const FILE_COMPLETE_IF_OPLOCKED: u32 = 0x0000_0100;
@@ -466,42 +465,61 @@ fn open_child(parent: &File, name: &str, directory: bool, data: bool) -> anyhow:
     };
     let mut status = IoStatusBlock::default();
     let mut handle = null_mut();
-    // No synchronous I/O option: the post-Allow data handle supports bounded
-    // overlapped reads. Metadata opens never request FILE_READ_DATA.
+    let access = FILE_READ_ATTRIBUTES | SYNCHRONIZE | if data { FILE_READ_DATA } else { 0 };
+    // FILE_DIRECTORY_FILE has a narrower documented set of compatible options.
+    // Open directory candidates without a type flag to retain no-follow,
+    // no-recall, and immediate oplock completion together. pin_directory checks
+    // the resulting handle's type before it can become a traversal parent.
+    let options = FILE_OPEN_REPARSE_POINT
+        | FILE_OPEN_NO_RECALL
+        | FILE_COMPLETE_IF_OPLOCKED
+        | if data {
+            0
+        } else {
+            FILE_SYNCHRONOUS_IO_NONALERT
+        }
+        | if directory {
+            0
+        } else {
+            FILE_NON_DIRECTORY_FILE
+        };
+    let class = if directory {
+        "directory-metadata"
+    } else if data {
+        "leaf-data"
+    } else {
+        "leaf-metadata"
+    };
+    // No synchronous I/O option on data handles: post-Allow ReadFile uses
+    // overlapped I/O. Metadata opens never request FILE_READ_DATA.
     let result = unsafe {
         NtCreateFile(
             &mut handle,
-            FILE_READ_ATTRIBUTES | SYNCHRONIZE | if data { FILE_READ_DATA } else { 0 },
+            access,
             &attributes,
             &mut status,
             null(),
             0,
             FILE_SHARE_READ,
             FILE_OPEN,
-            FILE_OPEN_REPARSE_POINT
-                | FILE_OPEN_NO_RECALL
-                | FILE_COMPLETE_IF_OPLOCKED
-                | if data {
-                    0
-                } else {
-                    FILE_SYNCHRONOUS_IO_NONALERT
-                }
-                | if directory {
-                    FILE_DIRECTORY_FILE
-                } else {
-                    FILE_NON_DIRECTORY_FILE
-                },
+            options,
             null(),
             0,
         )
     };
-    // Only STATUS_SUCCESS is accepted; alternate/pending statuses fail closed.
+    // Create requests are inherently synchronous, including when the returned
+    // handle supports later asynchronous I/O. NtCreateFile's IO_STATUS_BLOCK
+    // contains the final result on return. Only final STATUS_SUCCESS is
+    // admitted; alternate completions such as OPLOCK_BREAK_IN_PROGRESS refuse.
+    // https://learn.microsoft.com/windows-hardware/drivers/kernel/dispatchcreate--dispatchclose--and-dispatchcreateclose-routines
     if result != 0 {
         if !handle.is_null() && handle != INVALID_HANDLE_VALUE {
             // SAFETY: any returned handle must be closed even on refusal.
             drop(unsafe { File::from_raw_handle(handle) });
         }
-        bail!("Windows read component open refused: NTSTATUS={result:#010x}");
+        bail!(
+            "Windows read component open refused: class={class} access={access:#010x} options={options:#010x} attributes={OBJ_DONT_REPARSE:#010x} NTSTATUS={result:#010x}"
+        );
     }
     ensure!(
         !handle.is_null() && handle != INVALID_HANDLE_VALUE,
@@ -741,6 +759,74 @@ mod tests {
     use std::fs;
     use std::os::windows::fs::OpenOptionsExt;
     use windows_sys::Win32::System::IO::DeviceIoControl;
+
+    // A real pending FSCTL, never a production race hook. The fixture owns its
+    // OVERLAPPED storage until cancellation/completion has been drained.
+    struct ExclusiveOplock {
+        file: File,
+        overlapped: Box<OVERLAPPED>,
+        _event: OwnedHandle,
+        pending: bool,
+    }
+
+    impl ExclusiveOplock {
+        fn acquire(path: &Path) -> Self {
+            let file = fs::OpenOptions::new()
+                .read(true)
+                .share_mode(FILE_SHARE_READ)
+                .custom_flags(0x4000_0000) // FILE_FLAG_OVERLAPPED
+                .open(path)
+                .unwrap();
+            let handle = unsafe { CreateEventW(null(), 1, 0, null()) };
+            assert!(!handle.is_null());
+            let event = unsafe { OwnedHandle::from_raw_handle(handle) };
+            let mut overlapped: Box<OVERLAPPED> = Box::new(unsafe { zeroed() });
+            overlapped.hEvent = event.as_raw_handle();
+            let mut lock = Self {
+                file,
+                overlapped,
+                _event: event,
+                pending: false,
+            };
+            let mut returned = 0;
+            let ok = unsafe {
+                DeviceIoControl(
+                    lock.file.as_raw_handle(),
+                    0x0009_0000, // FSCTL_REQUEST_OPLOCK_LEVEL_1
+                    null(),
+                    0,
+                    null_mut(),
+                    0,
+                    &mut returned,
+                    lock.overlapped.as_mut(),
+                )
+            };
+            let error = io::Error::last_os_error();
+            lock.pending = ok == 0 && error.raw_os_error() == Some(ERROR_IO_PENDING as i32);
+            assert!(
+                lock.pending,
+                "exclusive oplock fixture was not granted: {error}"
+            );
+            lock
+        }
+    }
+
+    impl Drop for ExclusiveOplock {
+        fn drop(&mut self) {
+            if self.pending {
+                let mut transferred = 0;
+                unsafe {
+                    CancelIoEx(self.file.as_raw_handle(), self.overlapped.as_ref());
+                    GetOverlappedResult(
+                        self.file.as_raw_handle(),
+                        self.overlapped.as_ref(),
+                        &mut transferred,
+                        1,
+                    );
+                }
+            }
+        }
+    }
 
     fn fixture() -> (tempfile::TempDir, std::path::PathBuf) {
         let temp = tempfile::tempdir().unwrap();
@@ -993,6 +1079,56 @@ mod tests {
         assert!(prepare(&root, "Readme.txt").is_err());
         drop(deleter);
         assert!(prepare(&root, "Readme.txt").is_ok());
+    }
+
+    #[test]
+    fn oplock_does_not_stall_metadata_preparation_or_data_open() {
+        let (_temp, root) = fixture();
+        let path = root.join("Readme.txt");
+        fs::write(&path, b"inside").unwrap();
+        let canonical = path.canonicalize().unwrap().to_str().unwrap().to_owned();
+        let lock = ExclusiveOplock::acquire(&path);
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let worker_root = root.clone();
+        let worker = std::thread::spawn(move || {
+            sender
+                .send(PreparedRead::prepare(
+                    &worker_root,
+                    &worker_root,
+                    "Readme.txt",
+                    &canonical,
+                ))
+                .unwrap();
+        });
+        // READ_ATTRIBUTES | SYNCHRONIZE does not break an oplock. Preparation
+        // must finish while the exclusive holder has not acknowledged a break.
+        let prepared = receiver.recv_timeout(Duration::from_secs(2));
+        if prepared.is_err() {
+            drop(lock);
+            worker.join().unwrap();
+            panic!("metadata preparation stalled behind an exclusive oplock");
+        }
+        worker.join().unwrap();
+        let prepared = prepared.unwrap().unwrap();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            sender
+                .send(prepared.read_on_worker(64, &AtomicBool::new(false)))
+                .unwrap();
+        });
+        let result = receiver.recv_timeout(Duration::from_secs(2));
+        if result.is_err() {
+            drop(lock);
+            worker.join().unwrap();
+            panic!("data open stalled instead of refusing an unacknowledged oplock break");
+        }
+        worker.join().unwrap();
+        let error = result.unwrap().unwrap_err().to_string();
+        assert!(
+            error.contains("class=leaf-data") && error.contains("NTSTATUS=0x00000108"),
+            "{error}"
+        );
+        drop(lock);
     }
 
     #[test]

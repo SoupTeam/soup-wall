@@ -63,8 +63,9 @@ def passing_row(name="post-allow-share-denial"):
                 "schema_sha256": D.sha(D.canonical(D.F.SCHEMA)), "registry_sha256": config["registry_sha256"],
                 "server_id": "sou58", "tool": "read_document", "authoritative_verdict": verdict,
                 "classification": {"actions": ["delete"] if verdict == "deny" else ["read"]}}
-    row["collector_raw"] = line(prediction("probe", attack_request["params"]["arguments"],
-                                           "deny" if name == "classifier-deny" else "ask" if name == "classifier-ask" else "allow"))
+    row["collector_raw"] = ("" if name in D.EARLY_REFUSALS else
+                            line(prediction("probe", attack_request["params"]["arguments"],
+                                            "deny" if name == "classifier-deny" else "ask" if name == "classifier-ask" else "allow")))
     row["collector_raw"] += line(prediction("useful-followup", {"path": "document.txt"}))
     init = line({"jsonrpc": "2.0", "id": "init", "result": {"protocolVersion": "2024-11-05"}})
     listing = line({"jsonrpc": "2.0", "id": "list", "result": {"tools": D.F.TOOLS}})
@@ -277,12 +278,24 @@ class WindowsReadGradingControls(unittest.TestCase):
             self.assertFalse(D.H.native_test_passed({"exit_code": 0, "stdout": raw}))
 
     def test_exact_native_boundary_tests_must_all_execute_without_ignores(self):
-        output = ("running 10 tests\n" + "".join("test windows_read::tests::" + name + " ... ok\n" for name in D.NATIVE_TESTS)
-                  + "test result: ok. 10 passed; 0 failed; 0 ignored; 1 filtered out;\n")
+        output = ("running 11 tests\n" + "".join("test windows_read::tests::" + name + " ... ok\n" for name in D.NATIVE_TESTS)
+                  + "test result: ok. 11 passed; 0 failed; 0 ignored; 1 filtered out;\n")
         self.assertTrue(D.native_tests_passed({"exit_code": 0, "stdout": output}))
         for broken in (output.replace(D.NATIVE_TESTS[0], "unrelated_test"), output.replace("0 ignored", "1 ignored"),
-                       output.replace("10 passed", "9 passed"), output.replace(" ... ok", " ... ignored", 1)):
+                       output.replace("11 passed", "10 passed"), output.replace(" ... ok", " ... ignored", 1)):
             self.assertFalse(D.native_tests_passed({"exit_code": 0, "stdout": broken}))
+
+    def test_metadata_refusals_precede_classifier_and_still_allow_useful_read(self):
+        for name in D.EARLY_REFUSALS:
+            with self.subTest(case=name):
+                row = passing_row(name)
+                predictions = D.json_lines(row["collector_raw"].encode())
+                self.assertEqual([item["host_call_id"] for item in predictions], ["useful-followup"])
+                self.assertEqual(D.grade(row)["status"], "pass")
+                forged = dict(predictions[0], host_call_id="probe",
+                              args_sha256=D.sha(D.canonical(row["attack"]["request"]["params"]["arguments"])))
+                row["collector_raw"] = line(forged) + row["collector_raw"]
+                self.assertFails(row)
 
     def test_classifier_revision_args_registry_and_schema_must_correlate(self):
         for field, value in (("classifier_sha256", "f" * 64), ("args_sha256", "f" * 64),

@@ -1555,7 +1555,40 @@ where
                         let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
                         ensure!(args.is_object(), "MCP call arguments must be an object");
                         schemas.get(name).context("MCP tool schema not installed")?.validate(&args)?;
+                        #[cfg(windows)]
+                        let mut prepared_windows_read = None;
                         let resource_admission = if let Some(policy) = &installed.resource_policy {
+                            #[cfg(windows)]
+                            if policy.is_windows_read() {
+                                // Refuse different roots and raw path aliases before
+                                // generic extraction can follow an untrusted junction
+                                // or mapped drive even for filesystem metadata.
+                                let actual = std::env::var_os("AGENTFW_WORKSPACE")
+                                    .map(std::path::PathBuf::from)
+                                    .or_else(|| std::env::current_dir().ok());
+                                let normal = |path: &std::path::Path| path.to_str()
+                                    .map(|text| text.strip_prefix("\\\\?\\").unwrap_or(text).to_owned());
+                                if actual.as_deref().and_then(normal).is_none()
+                                    || actual.as_deref().and_then(normal) != normal(&policy.workspace) {
+                                    write_resource_reply(client, host, true,
+                                        &withheld(request_id, "invocation", &json!(["resource_workspace_mismatch"]))).await?;
+                                    continue;
+                                }
+                                let [super::resources::Resource::Path { canonical }] = policy.allowed_resources.as_slice() else {
+                                    bail!("validated Windows read authority missing");
+                                };
+                                let original = args["path"].as_str().context("validated Windows path missing")?;
+                                let prepared = match crate::windows_read::PreparedRead::prepare(
+                                    &policy.workspace, &policy.cwd, original, canonical) {
+                                    Ok(prepared) => prepared,
+                                    Err(_) => {
+                                        write_resource_reply(client, host, true,
+                                            &withheld(request_id, "invocation", &json!(["resource_windows_read_prepare_failed"]))).await?;
+                                        continue;
+                                    }
+                                };
+                                prepared_windows_read = Some(prepared);
+                            }
                             if policy.is_create_file() || policy.is_https_get() || policy.is_windows_read() {
                                 if collector.config.server_id != policy.profile.server_id {
                                     write_resource_reply(client, host, true,
@@ -1771,8 +1804,6 @@ where
                         let mut resource_admission = resource_admission;
                         #[cfg(target_os = "linux")]
                         let mut prepared_create = None;
-                        #[cfg(windows)]
-                        let mut prepared_windows_read = None;
                         let https_get = installed.resource_policy.as_ref().is_some_and(|policy| policy.is_https_get());
                         if https_get && !cfg!(target_os = "linux") {
                             write_resource_reply(client, host, true,
@@ -1865,26 +1896,16 @@ where
                                     &withheld(request_id, "invocation", &json!(["resource_executor_unsupported"]))).await?;
                                 continue;
                             }
-                            let Some(super::resources::Resource::Path { canonical }) = derived.resources.first().map(|r| &r.resource) else {
+                            let Some(super::resources::Resource::Path { .. }) = derived.resources.first().map(|r| &r.resource) else {
                                 write_resource_reply(client, host, true,
                                     &withheld(request_id, "invocation", &json!(["resource_destination_invalid"]))).await?;
                                 continue;
                             };
-                            let original = args["path"].as_str().context("validated Windows path missing")?;
                             // Metadata-only handles pin every ancestor and the leaf.
                             // No data handle or read is issued before native Allow.
-                            let prepared = match crate::windows_read::PreparedRead::prepare(
-                                &policy.workspace, &policy.cwd, original, canonical) {
-                                Ok(prepared) => prepared,
-                                Err(_) => {
-                                    write_resource_reply(client, host, true,
-                                        &withheld(request_id, "invocation", &json!(["resource_windows_read_prepare_failed"]))).await?;
-                                    continue;
-                                }
-                            };
+                            let prepared = prepared_windows_read.as_ref().context("Windows metadata not pinned before extraction")?;
                             admission.windows_read = Some(crate::native::resource::windows_read_binding_with_identity(
                                 policy, &args, prepared.identity()).map_err(anyhow::Error::msg)?);
-                            prepared_windows_read = Some(prepared);
                         }
                         // A composed refusal must not reserve native capacity.
                         // Native trusted restrictions still gate every permitted call.
@@ -2227,6 +2248,42 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
         let workspace = std::env::var_os("AGENTFW_WORKSPACE")
             .map(std::path::PathBuf::from)
             .unwrap_or(cwd);
+        #[cfg(windows)]
+        let windows_spawn_pins = {
+            let normal = |path: &std::path::Path| {
+                path.to_str()
+                    .map(|text| text.strip_prefix("\\\\?\\").unwrap_or(text).to_owned())
+            };
+            let mut pins = Vec::new();
+            for policy in config.native.registry.tools.iter().filter_map(|tool| {
+                tool.resource_policy
+                    .as_ref()
+                    .filter(|policy| policy.is_windows_read())
+            }) {
+                // Compare names before any ordinary path API can resolve a
+                // distinct environment-selected junction or mapped drive.
+                ensure!(
+                    normal(&workspace).is_some() && normal(&workspace) == normal(&policy.workspace),
+                    "MCP Windows read startup workspace mismatch"
+                );
+                let [super::resources::Resource::Path { canonical }] =
+                    policy.allowed_resources.as_slice()
+                else {
+                    bail!("MCP Windows read startup authority invalid");
+                };
+                let original = canonical.strip_prefix("\\\\?\\").unwrap_or(canonical);
+                pins.push(
+                    crate::windows_read::PreparedRead::prepare(
+                        &policy.workspace,
+                        &policy.cwd,
+                        original,
+                        canonical,
+                    )
+                    .map_err(|_| anyhow::anyhow!("MCP Windows read startup metadata refused"))?,
+                );
+            }
+            pins
+        };
         #[cfg(unix)]
         let mut client =
             BufReader::new(super::stdio::Pipe::stdin().context("unsupported MCP stdin")?);
@@ -2249,6 +2306,10 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
             .stderr(Stdio::inherit())
             .kill_on_drop(true)
             .spawn()?;
+        // The startup pins protect current_dir resolution only. Per-call
+        // metadata pins are acquired independently before resource extraction.
+        #[cfg(windows)]
+        drop(windows_spawn_pins);
         let mut child = process
             .stdin
             .take()

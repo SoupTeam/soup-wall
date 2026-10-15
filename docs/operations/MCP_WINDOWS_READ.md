@@ -98,7 +98,10 @@ The dedicated Windows workflow runs the actual built Agent and executor tests
 under a disposable nonadministrator identity. Reports retain source/binary
 identities, identity/membership checks, original stdio replies, native receipts,
 the server execution ledger, calibrated OS read-exclusion witnesses and
-deterministic native replacement-race results. Cleanup is confined to its owned
+deterministic native replacement-race results. All eleven mandatory executor
+tests must pass without ignored tests, including the real held-oplock regression.
+The file-symlink test runs separately with its required Windows privilege.
+Cleanup is confined to its owned
 account, processes and fixture directories. A mocked Windows API, WSL run or
 Linux regression pass is not native Windows acceptance.
 

@@ -43,7 +43,7 @@ $report = [ordered]@{
 }
 try {
     $password = ConvertTo-SecureString ('Aa1!' + [guid]::NewGuid().ToString('N') + [guid]::NewGuid().ToString('N')) -AsPlainText -Force
-    $user = New-LocalUser -Name $name -Password $password -Description 'Disposable Soup Wall native Windows read acceptance'
+    $user = New-LocalUser -Name $name -Password $password -Description 'Disposable Soup Wall Windows read CI'
     Add-LocalGroupMember -Group (Get-LocalGroup -SID 'S-1-5-32-545') -Member $user
     $credential = [Management.Automation.PSCredential]::new("$env:COMPUTERNAME\$name", $password)
     [IO.Directory]::CreateDirectory($stage) | Out-Null

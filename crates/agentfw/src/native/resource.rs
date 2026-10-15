@@ -329,12 +329,6 @@ impl Policy {
                 && self.profile.selectors.len() <= 32
                 && self.workspace.is_absolute()
                 && self.cwd.is_absolute()
-                && self.workspace.is_dir()
-                && self.cwd.is_dir()
-                && self
-                    .cwd
-                    .canonicalize()?
-                    .starts_with(self.workspace.canonicalize()?)
                 && super::is_digest(&self.executor_sha256)
                 && super::is_digest(&self.classifier_sha256)
                 && !self.allowed_resources.is_empty()
@@ -379,22 +373,36 @@ impl Policy {
                     && matches!(&self.allowed_resources[0], Resource::Path { .. }),
                 "invalid operator Windows read policy"
             );
-            #[cfg(windows)]
-            {
-                let Resource::Path { canonical } = &self.allowed_resources[0] else {
-                    unreachable!("path authority validated above")
-                };
-                // This spelling is generated from trusted operator authority,
-                // not accepted as an alias in original invocation arguments.
-                let original = canonical.strip_prefix("\\\\?\\").unwrap_or(canonical);
-                crate::windows_read::PreparedRead::prepare(
-                    &self.workspace,
-                    &self.cwd,
-                    original,
-                    canonical,
-                )?;
-            }
         }
+        // V4 validates and locks each component before any ordinary path API
+        // can follow an intermediate reparse point or a mapped remote drive.
+        // Retain the metadata handles through every canonicalization below.
+        #[cfg(windows)]
+        let _windows_validation_pin = if self.is_windows_read() {
+            let Resource::Path { canonical } = &self.allowed_resources[0] else {
+                unreachable!("path authority validated above")
+            };
+            // This spelling is generated from trusted operator authority,
+            // not accepted as an alias in original invocation arguments.
+            let original = canonical.strip_prefix("\\\\?\\").unwrap_or(canonical);
+            Some(crate::windows_read::PreparedRead::prepare(
+                &self.workspace,
+                &self.cwd,
+                original,
+                canonical,
+            )?)
+        } else {
+            None
+        };
+        anyhow::ensure!(
+            self.workspace.is_dir()
+                && self.cwd.is_dir()
+                && self
+                    .cwd
+                    .canonicalize()?
+                    .starts_with(self.workspace.canonicalize()?),
+            "invalid operator resource workspace"
+        );
         if let Some(network) = &self.network {
             network.validate().map_err(anyhow::Error::msg)?;
             let selector = &self.profile.selectors[0];
@@ -753,8 +761,37 @@ pub fn authorize(
             return Err("native_https_binding_mismatch");
         }
     }
+    // Keep the no-follow metadata pins alive through semantic extraction.
+    // A caller cannot race this daemon's generic path checks into following a
+    // newly substituted junction after the identity binding has been checked.
+    #[cfg(windows)]
+    let windows_read_pin = if admission.windows_read.is_some() {
+        let (original, canonical) = windows_read_arguments(policy, args)?;
+        Some(
+            crate::windows_read::PreparedRead::prepare(
+                &policy.workspace,
+                &policy.cwd,
+                original,
+                canonical,
+            )
+            .map_err(|_| "native_windows_read_target_invalid")?,
+        )
+    } else {
+        None
+    };
     if let Some(bound) = &admission.windows_read {
-        if &windows_read_binding(policy, args)? != bound {
+        #[cfg(windows)]
+        let derived_binding = windows_read_binding_with_identity(
+            policy,
+            args,
+            windows_read_pin
+                .as_ref()
+                .expect("Windows read metadata pinned")
+                .identity(),
+        )?;
+        #[cfg(not(windows))]
+        let derived_binding = windows_read_binding(policy, args)?;
+        if &derived_binding != bound {
             return Err("native_windows_read_binding_mismatch");
         }
     }
