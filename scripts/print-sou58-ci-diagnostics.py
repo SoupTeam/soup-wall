@@ -47,8 +47,17 @@ def diagnostics(root):
     if acceptance.is_file():
         try:
             report = json.loads(read_text(acceptance))
-            sections.append(("Standard-user acceptance status", json.dumps({key: report.get(key) for key in
-                ("status", "acceptance_passed", "error", "summary", "standard_user", "source_binary_stable")}, indent=2), 7000))
+            status = {key: report.get(key) for key in
+                ("status", "acceptance_passed", "error", "summary", "standard_user", "source_binary_stable",
+                 "binary_sha256", "native_test_binary_sha256", "driver_sha256", "fixture_sha256",
+                 "reused_helpers_sha256", "kill_on_close_process_job")}
+            # Provenance is explicitly selected: no working paths, transcripts,
+            # security descriptors, arguments or additional report fields.
+            source = report.get("source_before") or {}
+            environment = report.get("environment") or {}
+            status["source_before"] = {key: source.get(key) for key in ("commit", "tracked_dirty", "untracked_present")}
+            status["environment"] = {key: environment.get(key) for key in ("os", "architecture", "python")}
+            sections.append(("Standard-user acceptance status", json.dumps(status, indent=2), 7000))
             native = report.get("native_tests") or {}
             sections.append(("Standard-user native tests stdout", str(native.get("stdout", "Native test stdout unavailable.")), 40000))
             sections.append(("Standard-user native tests stderr", str(native.get("stderr", "Native test stderr unavailable.")), 10000))

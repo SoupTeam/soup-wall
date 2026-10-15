@@ -591,8 +591,36 @@ def ordinary_reply(raw, expected_id):
     return reply["result"]
 
 
+def utf8_file_witness(path):
+    """Hash and retain the same actual bytes, preserving Windows CRLF exactly."""
+    raw = path.read_bytes()
+    return raw.decode("utf-8"), sha(raw)
+
+
 def grade(row):
     """Reviewed expectations, independently parsed transcripts and OS witnesses."""
+    failures, failures_truncated = [], False
+
+    def reject(message):
+        nonlocal failures_truncated
+        if message not in failures:
+            if len(failures) < 16:
+                failures.append(message)
+            else:
+                failures_truncated = True
+
+    def require(condition, message):
+        # This grader performs no actions. Continue independent assertions on a
+        # complete owned observation so one bad witness does not hide others.
+        # Structural parsing errors still end grading; every recorded failure
+        # unconditionally prevents a passing verdict.
+        if not condition:
+            reject(message)
+
+    def failed():
+        return {"status": "fail", "reason": failures[0], "check_failures": failures,
+                "check_failures_truncated": failures_truncated}
+
     try:
         name = row["case"]
         require(name in CASES and not row.get("error"), "incomplete observation")
@@ -805,9 +833,12 @@ def grade(row):
             verdict = "deny" if name == "classifier-deny" else "ask" if name == "classifier-ask" else "allow"
             require(len(probe_predictions) == 1 and probe_predictions[0].get("authoritative_verdict") == verdict,
                     "expected enforcing classifier verdict was not reached")
+        if failures:
+            return failed()
         return {"status": "pass", "reason": "native, stdio, calibrated OS read exclusion and independent child witnesses agree"}
     except (KeyError, ValueError, TypeError, IndexError) as error:
-        return {"status": "fail", "reason": str(error)}
+        reject(str(error))
+        return failed()
 
 
 def run_case(repo, binary, name, standard_user_sid):
@@ -844,7 +875,7 @@ def run_case(repo, binary, name, standard_user_sid):
             registry_bytes = canonical(registry(workspace, row["classifier_sha256"]))
             registry_path, policy_path = root / "registry.json", root / "policy.yaml"
             registry_path.write_bytes(registry_bytes)
-            policy_path.write_text(policy_for(name), encoding="utf-8")
+            policy_path.write_bytes(policy_for(name).encode("utf-8"))
             with socket.socket() as probe:
                 probe.bind(("127.0.0.1", 0))
                 port = probe.getsockname()[1]
@@ -852,8 +883,9 @@ def run_case(repo, binary, name, standard_user_sid):
                       "native": {"registry_path": str(registry_path), "registry_sha256": sha(registry_bytes)}}
             config_path = home / ".agentfw/config.yaml"
             config_path.write_bytes(canonical(config))
+            retained_policy, retained_policy_sha256 = utf8_file_witness(policy_path)
             row["configuration"] = {"registry": strict_json(registry_bytes), "registry_sha256": sha(registry_bytes),
-                                    "policy": policy_path.read_text(), "policy_sha256": sha(policy_path.read_bytes())}
+                                    "policy": retained_policy, "policy_sha256": retained_policy_sha256}
             with daemon_log.open("wb") as daemon_stream, collector_log.open("wb") as collector_stream:
                 daemon = subprocess.Popen([str(binary), "serve"], env=env, cwd=root, stdout=daemon_stream, stderr=daemon_stream)
                 require(H.healthy(port, daemon), "real enforcing Windows daemon did not become healthy")

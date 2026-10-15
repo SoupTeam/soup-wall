@@ -172,6 +172,34 @@ class WindowsReadGradingControls(unittest.TestCase):
             with self.subTest(case=name):
                 self.assertEqual(D.grade(passing_row(name))["status"], "pass", D.grade(passing_row(name)))
 
+    def test_policy_witness_preserves_installed_crlf_bytes_and_digest(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "policy.yaml"
+            raw = b"agent_policies: []\r\ndefault: allow\r\n"
+            path.write_bytes(raw)
+            text, digest = D.utf8_file_witness(path)
+            self.assertEqual(text.encode("utf-8"), raw)
+            self.assertEqual(digest, D.sha(raw))
+            row = passing_row()
+            row["configuration"].update(policy=text, policy_sha256=digest)
+            self.assertEqual(D.grade(row)["status"], "pass", D.grade(row))
+            row["configuration"]["policy"] = text.replace("\r\n", "\n")
+            self.assertFails(row)
+
+    def test_grader_keeps_first_failure_and_reports_later_independent_failures(self):
+        row = passing_row()
+        row["configuration"]["policy"] += "# mismatched bytes\n"
+        row["read_exclusions"][0]["metadata_open"] = False
+        predictions = D.json_lines(row["collector_raw"].encode())
+        predictions[-1]["authoritative_verdict"] = "deny"
+        row["collector_raw"] = "".join(line(item) for item in predictions)
+        result = D.grade(row)
+        self.assertEqual(result["status"], "fail")
+        self.assertEqual(result["reason"], "retained installed configuration digest mismatch")
+        self.assertIn("independent calibrated zero-successful-data-read witness missing", result["check_failures"])
+        self.assertIn("useful read did not pass the enforcing production classifier composition", result["check_failures"])
+        self.assertFalse(result["check_failures_truncated"])
+
     def test_child_zero_calls_without_read_exclusion_is_not_pass(self):
         row = passing_row()
         del row["read_exclusions"]
@@ -431,6 +459,26 @@ class WindowsReadGradingControls(unittest.TestCase):
             self.assertIn("[REDACTED]", text)
             self.assertIn("[TRUNCATED:", text)
             self.assertLess(len(text.encode()), 150000)
+
+    def test_ci_provenance_whitelist_exposes_hashes_and_excludes_raw_report_fields(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            output = root / "sou58-standard-user"
+            output.mkdir()
+            report = {"status": "pass", "acceptance_passed": True,
+                      "source_before": {"commit": "a" * 40, "tracked_dirty": False, "untracked_present": False,
+                                        "working_directory": "DO-NOT-PUBLISH-PATH"},
+                      "environment": {"os": "Windows", "architecture": "AMD64", "python": "3.12.0",
+                                      "private_env": "DO-NOT-PUBLISH-ENV"},
+                      "collector_raw": "DO-NOT-PUBLISH-TRANSCRIPT", "security_descriptor_hex": "DO-NOT-PUBLISH-ACL",
+                      "binary_sha256": "b" * 64, "native_test_binary_sha256": "c" * 64,
+                      "driver_sha256": "d" * 64, "fixture_sha256": "e" * 64, "reused_helpers_sha256": "f" * 64,
+                      "kill_on_close_process_job": True}
+            (output / "acceptance.json").write_text(json.dumps(report), encoding="utf-8")
+            text = DIAGNOSTICS.diagnostics(root)
+            for value in ("a" * 40, "b" * 64, "c" * 64, "d" * 64, "e" * 64, "f" * 64, "AMD64"):
+                self.assertIn(value, text)
+            self.assertNotIn("DO-NOT-PUBLISH", text)
 
 
 if __name__ == "__main__":
