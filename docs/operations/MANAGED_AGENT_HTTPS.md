@@ -1,6 +1,6 @@
 # SOU-43 — managed Agent HTTPS transport
 
-> **Draft scope (Oct 15, 2026):** This document describes the initial Agent transport changes in PR #121. The required isolated-network HTTPS Console→Agent demo and full certificate/redirect/offline evidence are **not complete yet**. Do not claim SOU-43 accepted or production-certified.
+> **Reviewed scope pending (Oct 15, 2026):** The [real owned-network HTTPS Console→Agent demonstration](https://github.com/SoupTeam/soup-wall/actions/runs/38689382326) now passes on source head `365ff415b690de18fa38c279778dd2f2722ca9d9`, with independently downloadable non-secret artifact `sou43-remote-https-agent-evidence`. This proves the stated isolated Linux Docker-bridge test case, **not** general remote production/multi-host TLS certification. PR #121 still requires full exact-head CI and independent security review before merge.
 
 ## Configuration
 
@@ -20,9 +20,21 @@ SOUP_MANAGED_AGENT_TLS_CA_FILE="/absolute/path/to/operator-root-ca.pem" # option
 
 ## Test scope and acceptance gap
 
-- Initial Rust unit checks cover allowed HTTPS/local origins, remote plaintext refusal, embedded credentials, path/query/fragment/ambiguous URL refusal and invalid/oversized CA inputs. **These are not yet real network handshakes**.
-- Required independent deliverable: use an isolated disposable nonloopback network with an HTTPS edge and operator-generated test CA to route to the existing SQLite Console; run the **real `agentfw serve`** with `SOUP_MANAGED_AGENT_CONSOLE=https://...` and its CA file; verify ordered deny → defer → deny with matched authenticated applied acknowledgements and monotonic rollback.
-- Add controlled negative tests for wrong hostname, untrusted/expired certificates, redirect credential forwarding, revoked Agent credential, unreachable Console and retained last accepted policy. No rejected exchange may change the running policy or create an applied acknowledgement. Record actual source SHA, certificate fingerprint, keyring/config identity and sanitized evidence without secrets.
+- Rust unit checks cover allowed HTTPS/local origins, remote plaintext refusal, embedded credentials, path/query/fragment/ambiguous URL refusal and invalid/oversized CA inputs. The dedicated hosted demo additionally executes **real TLS handshakes**, a real Console and a real Agent.
+- **Implemented and passed on the stated hosted run:** a disposable Docker bridge with nonloopback HTTPS edge and operator-generated test CA routes to the existing SQLite Console. Real `agentfw serve` uses `SOUP_MANAGED_AGENT_CONSOLE=https://...` with locally installed CA and demonstrates ordered deny → defer → deny, three matched authenticated applied acknowledgements and signed monotonically increasing rollback. The edge-to-Console leg is **private bridge-local HTTP**, so this is not TLS-to-Console end-to-end certification.
+- **Implemented and passed:** wrong hostname, untrusted and expired certificates, credential-forwarding redirect refusal (attacker capture receives no Agent token), revoked Agent credential refusal, unavailable Console and last accepted policy retention. Unsuccessful pre-activation exchanges create no applied acknowledgement. The artifact records exact tested Git SHA, binaries and fixture SHA-256, served certificate DER SHA-256, CA fingerprint and sanitized network/test scope; it contains no signing seed, Bearer token or private key.
 - Existing SOU-30 loopback demo does not prove SOU-43. Remote production, cross-host trust distribution and edge certificate rotation are **outside this bounded issue** and require separate operational acceptance.
 
 Tracking: [SOU-43](https://linear.app/soup-wall/issue/SOU-43/enable-verified-remote-https-console-to-agent-policy-transport) · [Draft PR #121](https://github.com/SoupTeam/soup-wall/pull/121).
+
+## Reproduce the owned-network demonstration
+
+Requirements: Ubuntu/Linux host with Docker Engine, Python 3, OpenSSL and a Rust toolchain. Docker will pull the pinned Python test-edge image. The script creates temporary keys, a private bridge, a disposable SQLite Console and Agent home, and removes test containers/network after execution. It never contacts an external model/provider.
+
+```sh
+python3 scripts/managed-policy-tls-demo.py
+# If binaries have already been built:
+python3 scripts/managed-policy-tls-demo.py --no-build
+```
+
+Inspect the sanitized generated `target/sou43-managed-policy-tls-evidence.json`, the [hosted workflow](https://github.com/SoupTeam/soup-wall/actions/workflows/managed-policy-tls.yml) and the PR source. Test identity includes Git source SHA and the actual binary/fixture/certificate digests. No public DNS or public CA is required. CI **does not** prove multi-host deployment, hardened edge termination, remote IdP enrollment or key rotation.
