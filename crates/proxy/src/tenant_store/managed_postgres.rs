@@ -1376,7 +1376,16 @@ impl PostgresTenantStore {
         agent: &str,
     ) -> Result<()> {
         let client = self.checkout().await?;
-        self.ensure_group_tables(&client).await?;
+        let has_groups = self
+            .bounded(client.query_opt(
+                "SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='managed_agent_groups'",
+                &[],
+            ))
+            .await?
+            .is_some();
+        if !has_groups {
+            return Ok(());
+        }
         let rows = self
             .bounded(client.query(
                 "SELECT group_id, rollout_id, issuer_key_id, phase, active_deployments_json
