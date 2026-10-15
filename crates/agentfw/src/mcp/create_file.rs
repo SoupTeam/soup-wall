@@ -278,9 +278,9 @@ mod linux {
             let matches = |metadata: fs::Metadata| {
                 metadata.is_dir() && metadata.dev() == self.dev && metadata.ino() == self.ino
             };
-            if !self.root.metadata().is_ok_and(&matches)
-                || !fs::symlink_metadata(&self.canonical).is_ok_and(&matches)
-                || !fs::symlink_metadata(&self.original).is_ok_and(&matches)
+            if !self.root.metadata().is_ok_and(matches)
+                || !fs::symlink_metadata(&self.canonical).is_ok_and(matches)
+                || !fs::symlink_metadata(&self.original).is_ok_and(matches)
             {
                 return Err(CreateFileError::new("workspace_root_substituted"));
             }
