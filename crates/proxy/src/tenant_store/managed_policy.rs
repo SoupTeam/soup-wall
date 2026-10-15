@@ -2,7 +2,7 @@
 //! SOU-30 SQLite Console issuer for approved, signed AgentPolicySet revisions.
 //! Deliberately distinct from the Gateway TenantPolicyDocument API.
 
-use anyhow::{ensure, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use aws_lc_rs::signature::{Ed25519KeyPair, KeyPair};
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -936,19 +936,22 @@ impl TenantStore {
             group_schema(&db)?;
             eligible_group(&db, tenant, group_id)?;
 
-            let active: Option<String> = db
+            let active: Option<(String, String)> = db
                 .query_row(
-                    "SELECT rollout_id FROM managed_group_rollouts
-                 WHERE tenant_id=?1 AND group_id=?2 AND phase IN ('pilot','standard')",
+                    "SELECT rollout_id, phase FROM managed_group_rollouts
+                 WHERE tenant_id=?1 AND group_id=?2 AND phase IN ('pilot','standard','paused','rolling_back')",
                     params![tenant, group_id],
-                    |r| r.get(0),
+                    |r| Ok((r.get(0)?, r.get(1)?)),
                 )
                 .optional()?;
-            ensure!(
-                active.is_none(),
-                "active rollout already in progress for group '{}'",
-                group_id
-            );
+            if let Some((active_id, active_phase)) = active {
+                bail!(
+                    "active rollout '{}' already in progress (phase '{}') for group '{}'",
+                    active_id,
+                    active_phase,
+                    group_id
+                );
+            }
 
             let rev_row: Option<(String, String)> = db
                 .query_row(
@@ -990,6 +993,66 @@ impl TenantStore {
                 !pilots.is_empty(),
                 "group has no pilot agents for staged rollout"
             );
+
+            let mut all_new_members = std::collections::BTreeSet::new();
+            for p in &pilots {
+                all_new_members.insert(p.clone());
+            }
+            for s in &standards {
+                all_new_members.insert(s.clone());
+            }
+
+            let mut active_rollout_stmt = db.prepare(
+                "SELECT group_id, rollout_id, phase, pilot_agents_json, standard_agents_json
+                 FROM managed_group_rollouts
+                 WHERE tenant_id=?1 AND phase IN ('pilot','standard','paused','rolling_back')",
+            )?;
+            let active_rollouts = active_rollout_stmt
+                .query_map(params![tenant], |r| {
+                    let gid: String = r.get(0)?;
+                    let ro_id: String = r.get(1)?;
+                    let ph: String = r.get(2)?;
+                    let pilots_json: String = r.get(3)?;
+                    let stds_json: String = r.get(4)?;
+                    Ok((gid, ro_id, ph, pilots_json, stds_json))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+
+            for (other_gid, other_roid, other_ph, pilots_json, stds_json) in active_rollouts {
+                let other_pilots: Vec<String> =
+                    serde_json::from_str(&pilots_json).unwrap_or_default();
+                let other_stds: Vec<String> = serde_json::from_str(&stds_json).unwrap_or_default();
+                for member in &all_new_members {
+                    if other_pilots.contains(member) || other_stds.contains(member) {
+                        bail!(
+                            "agent '{}' is already enrolled in active rollout '{}' (group '{}', phase '{}')",
+                            member,
+                            other_roid,
+                            other_gid,
+                            other_ph
+                        );
+                    }
+                }
+            }
+
+            for member in &all_new_members {
+                let unacked: Option<i64> = db
+                    .query_row(
+                        "SELECT deployment_sequence FROM managed_agent_deployments
+                         WHERE tenant_id=?1 AND agent_id=?2 AND status IN ('issued','delivered')
+                         ORDER BY deployment_sequence DESC LIMIT 1",
+                        params![tenant, member],
+                        |r| r.get(0),
+                    )
+                    .optional()?;
+                if let Some(seq) = unacked {
+                    bail!(
+                        "agent '{}' has unacknowledged deployment (sequence {}) and cannot join a new rollout",
+                        member,
+                        seq
+                    );
+                }
+            }
 
             let mut prevs = std::collections::BTreeMap::new();
             for pilot in &pilots {
@@ -1138,11 +1201,15 @@ impl TenantStore {
         &self,
         tenant: &str,
         group_id: &str,
-        issuer: &ManagedIssuer,
+        issuer: Option<&ManagedIssuer>,
     ) -> Result<Option<ManagedGroupRollout>> {
         enum NextAction {
             None,
             StillRunning(ManagedGroupRollout),
+            Fail {
+                rollout: ManagedGroupRollout,
+                reason: String,
+            },
             Rollback {
                 rollout: ManagedGroupRollout,
                 to_rollback: Vec<(String, String)>,
@@ -1243,21 +1310,42 @@ impl TenantStore {
                 RolloutPhase::Paused => NextAction::StillRunning(base_rollout),
                 RolloutPhase::RollingBack => {
                     let mut all_applied = true;
+                    let mut conflict = None;
                     for (agent, seq) in &active_deployments {
-                        let st: Option<String> = db
+                        let latest: Option<(i64, String, String, String)> = db
                             .query_row(
-                                "SELECT status FROM managed_agent_deployments
-                             WHERE tenant_id=?1 AND agent_id=?2 AND deployment_sequence=?3",
-                                params![tenant, agent, *seq as i64],
-                                |r| r.get(0),
+                                "SELECT deployment_sequence, revision, policy_sha256, status
+                                 FROM managed_agent_deployments
+                                 WHERE tenant_id=?1 AND agent_id=?2
+                                 ORDER BY deployment_sequence DESC LIMIT 1",
+                                params![tenant, agent],
+                                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
                             )
                             .optional()?;
-                        if st.as_deref() != Some("applied") {
-                            all_applied = false;
-                            break;
+                        match latest {
+                            Some((latest_seq, _rev, _sha, st)) => {
+                                if latest_seq != *seq as i64 {
+                                    conflict = Some(format!(
+                                        "conflict: rollback deployment {} for agent '{}' was superseded by sequence {}",
+                                        seq, agent, latest_seq
+                                    ));
+                                    break;
+                                }
+                                if st != "applied" {
+                                    all_applied = false;
+                                }
+                            }
+                            None => {
+                                all_applied = false;
+                            }
                         }
                     }
-                    if all_applied && !active_deployments.is_empty() {
+                    if let Some(reason) = conflict {
+                        NextAction::Fail {
+                            rollout: base_rollout,
+                            reason,
+                        }
+                    } else if all_applied && !active_deployments.is_empty() {
                         NextAction::ConfirmRollback(base_rollout)
                     } else {
                         NextAction::StillRunning(base_rollout)
@@ -1266,48 +1354,58 @@ impl TenantStore {
                 RolloutPhase::Pilot => {
                     let mut any_rejected = None;
                     let mut all_applied = true;
+                    let mut conflict = None;
                     for p in &pilot_agents {
                         let seq = match active_deployments.get(p) {
-                            Some(&s) => s,
+                            Some(&s) => s as i64,
                             None => {
                                 all_applied = false;
                                 continue;
                             }
                         };
-                        let dep_info: Option<(String, String, i64)> = db
+                        let latest: Option<(i64, String, String, String, i64)> = db
                             .query_row(
-                                "SELECT status, policy_sha256, issued_at_unix FROM managed_agent_deployments
-                             WHERE tenant_id=?1 AND agent_id=?2 AND deployment_sequence=?3",
-                                params![tenant, p, seq as i64],
-                                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                                "SELECT deployment_sequence, revision, policy_sha256, status, issued_at_unix
+                                 FROM managed_agent_deployments
+                                 WHERE tenant_id=?1 AND agent_id=?2
+                                 ORDER BY deployment_sequence DESC LIMIT 1",
+                                params![tenant, p],
+                                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
                             )
                             .optional()?;
 
-                        match dep_info {
-                            Some((st, _dep_sha, _)) if st == "rejected" => {
-                                any_rejected = Some((
-                                    p.clone(),
-                                    format!(
-                                        "pilot agent '{}' rejected candidate policy revision '{}'",
-                                        p, revision
-                                    ),
-                                ));
-                                break;
-                            }
-                            Some((st, dep_sha, _)) if st == "applied" => {
-                                if dep_sha != policy_sha256 {
-                                    // Acknowledged revision has different digest from candidate!
-                                    all_applied = false;
-                                }
-                            }
-                            Some((_, _, issued_at)) => {
-                                all_applied = false;
-                                if now - issued_at > 300 {
-                                    any_rejected = Some((
-                                        p.clone(),
-                                        format!("pilot agent '{}' timed out awaiting policy acknowledgement (>300s)", p),
+                        match latest {
+                            Some((latest_seq, latest_rev, latest_sha, st, issued_at)) => {
+                                if latest_seq != seq
+                                    || latest_rev != revision
+                                    || latest_sha != policy_sha256
+                                {
+                                    conflict = Some(format!(
+                                        "conflict: canary deployment {} for pilot agent '{}' was superseded by sequence {} (rev '{}')",
+                                        seq, p, latest_seq, latest_rev
                                     ));
                                     break;
+                                }
+                                if st == "rejected" {
+                                    any_rejected = Some((
+                                        p.clone(),
+                                        format!(
+                                            "pilot agent '{}' rejected candidate policy revision '{}'",
+                                            p, revision
+                                        ),
+                                    ));
+                                    break;
+                                } else if st == "applied" {
+                                    // Acknowledged matching candidate
+                                } else {
+                                    all_applied = false;
+                                    if now - issued_at > 300 {
+                                        any_rejected = Some((
+                                            p.clone(),
+                                            format!("pilot agent '{}' timed out awaiting policy acknowledgement (>300s)", p),
+                                        ));
+                                        break;
+                                    }
                                 }
                             }
                             None => {
@@ -1316,7 +1414,12 @@ impl TenantStore {
                         }
                     }
 
-                    if let Some((_rejected_agent, reason)) = any_rejected {
+                    if let Some(reason) = conflict {
+                        NextAction::Fail {
+                            rollout: base_rollout,
+                            reason,
+                        }
+                    } else if let Some((_rejected_agent, reason)) = any_rejected {
                         let mut to_rollback = Vec::new();
                         for (agent, seq) in &active_deployments {
                             let prev = Self::find_last_applied_revision_before_conn(
@@ -1373,44 +1476,55 @@ impl TenantStore {
                 RolloutPhase::Standard => {
                     let mut any_rejected = None;
                     let mut all_applied = true;
+                    let mut conflict = None;
                     for w in &standard_agents {
                         let seq = match active_deployments.get(w) {
-                            Some(&s) => s,
+                            Some(&s) => s as i64,
                             None => {
                                 all_applied = false;
                                 continue;
                             }
                         };
-                        let dep_info: Option<(String, String, i64)> = db
+                        let latest: Option<(i64, String, String, String, i64)> = db
                             .query_row(
-                                "SELECT status, policy_sha256, issued_at_unix FROM managed_agent_deployments
-                             WHERE tenant_id=?1 AND agent_id=?2 AND deployment_sequence=?3",
-                                params![tenant, w, seq as i64],
-                                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                                "SELECT deployment_sequence, revision, policy_sha256, status, issued_at_unix
+                                 FROM managed_agent_deployments
+                                 WHERE tenant_id=?1 AND agent_id=?2
+                                 ORDER BY deployment_sequence DESC LIMIT 1",
+                                params![tenant, w],
+                                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
                             )
                             .optional()?;
 
-                        match dep_info {
-                            Some((st, _dep_sha, _)) if st == "rejected" => {
-                                any_rejected = Some((
-                                    w.clone(),
-                                    format!("standard agent '{}' rejected candidate policy revision '{}'", w, revision),
-                                ));
-                                break;
-                            }
-                            Some((st, dep_sha, _)) if st == "applied" => {
-                                if dep_sha != policy_sha256 {
-                                    all_applied = false;
-                                }
-                            }
-                            Some((_, _, issued_at)) => {
-                                all_applied = false;
-                                if now - issued_at > 300 {
-                                    any_rejected = Some((
-                                        w.clone(),
-                                        format!("standard agent '{}' timed out awaiting policy acknowledgement (>300s)", w),
+                        match latest {
+                            Some((latest_seq, latest_rev, latest_sha, st, issued_at)) => {
+                                if latest_seq != seq
+                                    || latest_rev != revision
+                                    || latest_sha != policy_sha256
+                                {
+                                    conflict = Some(format!(
+                                        "conflict: standard deployment {} for agent '{}' was superseded by sequence {} (rev '{}')",
+                                        seq, w, latest_seq, latest_rev
                                     ));
                                     break;
+                                }
+                                if st == "rejected" {
+                                    any_rejected = Some((
+                                        w.clone(),
+                                        format!("standard agent '{}' rejected candidate policy revision '{}'", w, revision),
+                                    ));
+                                    break;
+                                } else if st == "applied" {
+                                    // Acknowledged matching candidate
+                                } else {
+                                    all_applied = false;
+                                    if now - issued_at > 300 {
+                                        any_rejected = Some((
+                                            w.clone(),
+                                            format!("standard agent '{}' timed out awaiting policy acknowledgement (>300s)", w),
+                                        ));
+                                        break;
+                                    }
                                 }
                             }
                             None => {
@@ -1419,7 +1533,12 @@ impl TenantStore {
                         }
                     }
 
-                    if let Some((_rejected_agent, reason)) = any_rejected {
+                    if let Some(reason) = conflict {
+                        NextAction::Fail {
+                            rollout: base_rollout,
+                            reason,
+                        }
+                    } else if let Some((_rejected_agent, reason)) = any_rejected {
                         let mut to_rollback = Vec::new();
                         for (agent, seq) in &active_deployments {
                             let prev = Self::find_last_applied_revision_before_conn(
@@ -1451,6 +1570,22 @@ impl TenantStore {
         match action {
             NextAction::None => Ok(None),
             NextAction::StillRunning(r) => Ok(Some(r)),
+            NextAction::Fail {
+                mut rollout,
+                reason,
+            } => {
+                let db = self.connection()?;
+                db.execute(
+                    "UPDATE managed_group_rollouts
+                     SET phase='failed', failure_reason=?3, updated_at_unix=?4
+                     WHERE tenant_id=?1 AND group_id=?2 AND rollout_id=?5",
+                    params![tenant, group_id, reason, now, rollout.rollout_id],
+                )?;
+                rollout.phase = RolloutPhase::Failed;
+                rollout.failure_reason = Some(reason);
+                rollout.updated_at_unix = now;
+                Ok(Some(rollout))
+            }
             NextAction::ConfirmRollback(mut rollout) => {
                 let db = self.connection()?;
                 db.execute(
@@ -1469,7 +1604,16 @@ impl TenantStore {
                 reason,
             } => {
                 let default_issuer = ManagedIssuer::from_environment().ok();
-                let signing_issuer = default_issuer.as_ref().unwrap_or(issuer);
+                let signing_issuer = default_issuer.as_ref().or(issuer);
+                let signing_issuer = match signing_issuer {
+                    Some(iss) => iss,
+                    None => {
+                        bail!(
+                            "configured signing issuer is unavailable for rollback deployment: {}",
+                            reason
+                        );
+                    }
+                };
                 for (agent, prev) in to_rollback {
                     let dep =
                         self.deploy_managed_revision(tenant, &agent, &prev, true, signing_issuer)?;
@@ -1501,8 +1645,20 @@ impl TenantStore {
                 standards,
                 revision,
             } => {
+                let default_issuer =
+                    ManagedIssuer::from_environment_for_key(rollout.issuer_key_id.as_deref()).ok();
+                let signing_issuer = default_issuer.as_ref().or(issuer);
+                let signing_issuer = match signing_issuer {
+                    Some(iss) => iss,
+                    None => {
+                        bail!(
+                            "configured signing issuer is unavailable for standard wave deployment"
+                        );
+                    }
+                };
                 for w in standards {
-                    let dep = self.deploy_managed_revision(tenant, &w, &revision, false, issuer)?;
+                    let dep =
+                        self.deploy_managed_revision(tenant, &w, &revision, false, signing_issuer)?;
                     rollout
                         .active_deployments
                         .insert(w, dep.deployment_sequence);
@@ -1724,7 +1880,13 @@ impl TenantStore {
         };
 
         let default_issuer = ManagedIssuer::from_environment().ok();
-        let signing_issuer = default_issuer.as_ref().unwrap_or(issuer);
+        let signing_issuer = default_issuer.as_ref().or(Some(issuer));
+        let signing_issuer = match signing_issuer {
+            Some(iss) => iss,
+            None => {
+                bail!("configured signing issuer is unavailable for rollback");
+            }
+        };
         for (agent, prev) in to_rollback {
             let dep = self.deploy_managed_revision(tenant, &agent, &prev, true, signing_issuer)?;
             rollout
@@ -1838,7 +2000,7 @@ impl TenantStore {
         rollout.failure_reason = None;
         rollout.updated_at_unix = now;
 
-        self.advance_managed_group_rollout(tenant, group_id, issuer)
+        self.advance_managed_group_rollout(tenant, group_id, Some(issuer))
     }
 
     pub fn check_and_advance_active_rollouts_for_agent(
@@ -1883,19 +2045,8 @@ impl TenantStore {
                 .flatten()
             };
 
-            let issuer =
-                ManagedIssuer::from_environment_for_key(issuer_key_id.as_deref()).or_else(|_| {
-                    let pair = Ed25519KeyPair::from_seed_unchecked(&[0u8; 32])
-                        .map_err(|e| anyhow::anyhow!("fallback key pair failed: {e:?}"))?;
-                    Ok::<_, anyhow::Error>(ManagedIssuer {
-                        key_id: issuer_key_id.clone().unwrap_or_else(|| "ephemeral".into()),
-                        pair,
-                    })
-                });
-
-            if let Ok(issuer) = issuer {
-                let _ = self.advance_managed_group_rollout(tenant, &gid, &issuer);
-            }
+            let issuer = ManagedIssuer::from_environment_for_key(issuer_key_id.as_deref()).ok();
+            let _ = self.advance_managed_group_rollout(tenant, &gid, issuer.as_ref());
         }
         Ok(())
     }
@@ -2223,7 +2374,7 @@ mod tests {
 
         // Advance rollout
         let advanced = store
-            .advance_managed_group_rollout(&tenant.id, "cluster-a", &signer)
+            .advance_managed_group_rollout(&tenant.id, "cluster-a", Some(&signer))
             .unwrap()
             .unwrap();
         assert_eq!(advanced.phase, RolloutPhase::Standard);
@@ -2337,7 +2488,7 @@ mod tests {
 
         // Advance rollout: should detect rejection, trigger rollback to v1, set phase = RollingBack
         let ro_after = store
-            .advance_managed_group_rollout(&tenant.id, "cluster-b", &signer)
+            .advance_managed_group_rollout(&tenant.id, "cluster-b", Some(&signer))
             .unwrap()
             .unwrap();
         assert_eq!(ro_after.phase, RolloutPhase::RollingBack);

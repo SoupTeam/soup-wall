@@ -260,7 +260,7 @@ impl TenantStore {
         &self,
         tenant: &str,
         group_id: &str,
-        issuer: &ManagedIssuer,
+        issuer: Option<&ManagedIssuer>,
     ) -> anyhow::Result<Option<ManagedGroupRollout>> {
         match &self.postgres {
             Some(pg) => {

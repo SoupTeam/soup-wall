@@ -9,10 +9,10 @@ use crate::tenant_store::{
     ManagedAgentGroup, ManagedDeployment, ManagedGroupMember, ManagedGroupRevision,
     ManagedGroupRollout, ManagedIssuer, ManagedRevision, RolloutPhase, SignedManagedBundle,
 };
-use anyhow::{ensure, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use sha2::{Digest, Sha256};
 use soup_wall_agent::AgentPolicySet;
-use tokio_postgres::{Row, Transaction};
+use tokio_postgres::{Client, Row, Transaction};
 
 fn enrollment(row: Row) -> EnrolledAgent {
     EnrolledAgent {
@@ -80,55 +80,45 @@ impl PostgresTenantStore {
             ))
             .await?;
         }
-        if self
-            .bounded(tx.query_opt(
-                "SELECT version FROM llm_firewall_schema_migrations WHERE version=27",
-                &[],
-            ))
-            .await?
-            .is_none()
-        {
-            self.bounded(tx.batch_execute(
-                "CREATE TABLE managed_agent_groups (
-                    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-                    group_id TEXT NOT NULL, name TEXT NOT NULL,
-                    created_at_unix BIGINT NOT NULL,
-                    PRIMARY KEY(tenant_id, group_id));
-                 CREATE TABLE managed_agent_group_members (
-                    tenant_id TEXT NOT NULL, group_id TEXT NOT NULL, agent_id TEXT NOT NULL,
-                    is_pilot BOOLEAN NOT NULL DEFAULT FALSE,
-                    joined_at_unix BIGINT NOT NULL,
-                    PRIMARY KEY(tenant_id, group_id, agent_id),
-                    FOREIGN KEY(tenant_id, group_id) REFERENCES managed_agent_groups(tenant_id, group_id) ON DELETE CASCADE,
-                    FOREIGN KEY(tenant_id, agent_id) REFERENCES managed_agent_enrollments(tenant_id, agent_id) ON DELETE CASCADE);
-                 CREATE TABLE managed_group_revisions (
-                    tenant_id TEXT NOT NULL, group_id TEXT NOT NULL, revision TEXT NOT NULL,
-                    policy_yaml TEXT NOT NULL, policy_sha256 TEXT NOT NULL,
-                    approved_at_unix BIGINT,
-                    PRIMARY KEY(tenant_id, group_id, revision),
-                    FOREIGN KEY(tenant_id, group_id) REFERENCES managed_agent_groups(tenant_id, group_id) ON DELETE CASCADE);
-                 CREATE TABLE managed_group_rollouts (
-                    tenant_id TEXT NOT NULL, group_id TEXT NOT NULL, rollout_id TEXT NOT NULL,
-                    revision TEXT NOT NULL, policy_sha256 TEXT NOT NULL,
-                    issuer_key_id TEXT,
-                    phase TEXT NOT NULL CHECK(phase IN ('pilot','standard','paused','rolling_back','completed','rolled_back','failed')),
-                    pilot_agents_json TEXT NOT NULL,
-                    standard_agents_json TEXT NOT NULL,
-                    active_deployments_json TEXT NOT NULL,
-                    previous_revisions_json TEXT NOT NULL,
-                    failure_reason TEXT,
-                    created_at_unix BIGINT NOT NULL,
-                    updated_at_unix BIGINT NOT NULL,
-                    PRIMARY KEY(tenant_id, group_id, rollout_id),
-                    FOREIGN KEY(tenant_id, group_id) REFERENCES managed_agent_groups(tenant_id, group_id) ON DELETE CASCADE);"
-            )).await?;
-            self.bounded(tx.execute(
-                "INSERT INTO llm_firewall_schema_migrations(version,applied_at_unix) VALUES(27,$1)",
-                &[&now_unix()],
-            ))
-            .await?;
-        }
         self.bounded(tx.commit()).await?;
+        Ok(())
+    }
+
+    async fn ensure_group_tables(&self, client: &Client) -> Result<()> {
+        self.bounded(client.batch_execute(
+            "CREATE TABLE IF NOT EXISTS managed_agent_groups (
+                tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+                group_id TEXT NOT NULL, name TEXT NOT NULL,
+                created_at_unix BIGINT NOT NULL,
+                PRIMARY KEY(tenant_id, group_id));
+             CREATE TABLE IF NOT EXISTS managed_agent_group_members (
+                tenant_id TEXT NOT NULL, group_id TEXT NOT NULL, agent_id TEXT NOT NULL,
+                is_pilot BOOLEAN NOT NULL DEFAULT FALSE,
+                joined_at_unix BIGINT NOT NULL,
+                PRIMARY KEY(tenant_id, group_id, agent_id),
+                FOREIGN KEY(tenant_id, group_id) REFERENCES managed_agent_groups(tenant_id, group_id) ON DELETE CASCADE,
+                FOREIGN KEY(tenant_id, agent_id) REFERENCES managed_agent_enrollments(tenant_id, agent_id) ON DELETE CASCADE);
+             CREATE TABLE IF NOT EXISTS managed_group_revisions (
+                tenant_id TEXT NOT NULL, group_id TEXT NOT NULL, revision TEXT NOT NULL,
+                policy_yaml TEXT NOT NULL, policy_sha256 TEXT NOT NULL,
+                approved_at_unix BIGINT,
+                PRIMARY KEY(tenant_id, group_id, revision),
+                FOREIGN KEY(tenant_id, group_id) REFERENCES managed_agent_groups(tenant_id, group_id) ON DELETE CASCADE);
+             CREATE TABLE IF NOT EXISTS managed_group_rollouts (
+                tenant_id TEXT NOT NULL, group_id TEXT NOT NULL, rollout_id TEXT NOT NULL,
+                revision TEXT NOT NULL, policy_sha256 TEXT NOT NULL,
+                issuer_key_id TEXT,
+                phase TEXT NOT NULL CHECK(phase IN ('pilot','standard','paused','rolling_back','completed','rolled_back','failed')),
+                pilot_agents_json TEXT NOT NULL,
+                standard_agents_json TEXT NOT NULL,
+                active_deployments_json TEXT NOT NULL,
+                previous_revisions_json TEXT NOT NULL,
+                failure_reason TEXT,
+                created_at_unix BIGINT NOT NULL,
+                updated_at_unix BIGINT NOT NULL,
+                PRIMARY KEY(tenant_id, group_id, rollout_id),
+                FOREIGN KEY(tenant_id, group_id) REFERENCES managed_agent_groups(tenant_id, group_id) ON DELETE CASCADE);"
+        )).await?;
         Ok(())
     }
 
@@ -342,6 +332,9 @@ impl PostgresTenantStore {
         let applied = (report.status == "applied").then(now_unix);
         self.bounded(tx.execute("UPDATE managed_agent_deployments SET status=$4,applied_at_unix=$5 WHERE tenant_id=$1 AND agent_id=$2 AND deployment_sequence=$3", &[&tenant,&agent,&seq,&report.status,&applied])).await?;
         self.bounded(tx.commit()).await?;
+        let _ = self
+            .check_and_advance_active_rollouts_for_agent(tenant, agent)
+            .await;
         Ok(true)
     }
     pub(in crate::tenant_store) async fn list_managed_deployments(
@@ -366,6 +359,7 @@ impl PostgresTenantStore {
         );
         ensure!(!name.is_empty() && name.len() <= 256, "invalid group name");
         let mut client = self.checkout().await?;
+        self.ensure_group_tables(&client).await?;
         let tx = self.bounded(client.transaction()).await?;
         self.lock_managed_tenant(&tx, tenant).await?;
         let now = now_unix();
@@ -388,6 +382,7 @@ impl PostgresTenantStore {
     ) -> Result<Vec<ManagedAgentGroup>> {
         ensure!(exact_id(tenant), "invalid tenant identifier");
         let client = self.checkout().await?;
+        self.ensure_group_tables(&client).await?;
         let rows = self.bounded(client.query(
             "SELECT group_id, name, created_at_unix FROM managed_agent_groups WHERE tenant_id=$1 ORDER BY created_at_unix ASC",
             &[&tenant],
@@ -410,6 +405,7 @@ impl PostgresTenantStore {
     ) -> Result<Option<ManagedAgentGroup>> {
         ensure!(exact_id(tenant) && exact_id(group_id), "invalid identifier");
         let client = self.checkout().await?;
+        self.ensure_group_tables(&client).await?;
         let row = self.bounded(client.query_opt(
             "SELECT name, created_at_unix FROM managed_agent_groups WHERE tenant_id=$1 AND group_id=$2",
             &[&tenant, &group_id],
@@ -429,9 +425,10 @@ impl PostgresTenantStore {
     ) -> Result<bool> {
         ensure!(exact_id(tenant) && exact_id(group_id), "invalid identifier");
         let mut client = self.checkout().await?;
+        self.ensure_group_tables(&client).await?;
         let tx = self.bounded(client.transaction()).await?;
         let active = self.bounded(tx.query_opt(
-            "SELECT 1 FROM managed_group_rollouts WHERE tenant_id=$1 AND group_id=$2 AND phase IN ('pilot','standard')",
+            "SELECT 1 FROM managed_group_rollouts WHERE tenant_id=$1 AND group_id=$2 AND phase IN ('pilot','standard','paused','rolling_back')",
             &[&tenant, &group_id],
         )).await?;
         ensure!(
@@ -460,6 +457,7 @@ impl PostgresTenantStore {
             "invalid identifier"
         );
         let mut client = self.checkout().await?;
+        self.ensure_group_tables(&client).await?;
         let tx = self.bounded(client.transaction()).await?;
         self.lock_managed_agent(&tx, tenant, agent_id).await?;
         let now = now_unix();
@@ -490,6 +488,7 @@ impl PostgresTenantStore {
             "invalid identifier"
         );
         let client = self.checkout().await?;
+        self.ensure_group_tables(&client).await?;
         let count = self.bounded(client.execute(
             "DELETE FROM managed_agent_group_members WHERE tenant_id=$1 AND group_id=$2 AND agent_id=$3",
             &[&tenant, &group_id, &agent_id],
@@ -504,6 +503,7 @@ impl PostgresTenantStore {
     ) -> Result<Vec<ManagedGroupMember>> {
         ensure!(exact_id(tenant) && exact_id(group_id), "invalid identifier");
         let client = self.checkout().await?;
+        self.ensure_group_tables(&client).await?;
         let rows = self
             .bounded(client.query(
                 "SELECT agent_id, is_pilot, joined_at_unix FROM managed_agent_group_members
@@ -538,6 +538,7 @@ impl PostgresTenantStore {
         AgentPolicySet::from_yaml(yaml).context("invalid AgentPolicySet YAML")?;
         let digest = hex(&Sha256::digest(yaml.as_bytes()));
         let mut client = self.checkout().await?;
+        self.ensure_group_tables(&client).await?;
         let tx = self.bounded(client.transaction()).await?;
         self.lock_managed_tenant(&tx, tenant).await?;
         self.bounded(tx.execute(
@@ -562,6 +563,7 @@ impl PostgresTenantStore {
         revision: &str,
     ) -> Result<bool> {
         let client = self.checkout().await?;
+        self.ensure_group_tables(&client).await?;
         let count = self
             .bounded(client.execute(
                 "UPDATE managed_group_revisions SET approved_at_unix=$4
@@ -579,6 +581,7 @@ impl PostgresTenantStore {
     ) -> Result<Vec<ManagedGroupRevision>> {
         ensure!(exact_id(tenant) && exact_id(group_id), "invalid identifier");
         let client = self.checkout().await?;
+        self.ensure_group_tables(&client).await?;
         let rows = self
             .bounded(client.query(
                 "SELECT revision, policy_sha256, approved_at_unix FROM managed_group_revisions
@@ -610,8 +613,9 @@ impl PostgresTenantStore {
     ) -> Result<ManagedGroupRollout> {
         let (_policy_yaml, policy_sha256, pilots, standards, prevs) = {
             let client = self.checkout().await?;
+            self.ensure_group_tables(&client).await?;
             let active = self.bounded(client.query_opt(
-                "SELECT rollout_id FROM managed_group_rollouts WHERE tenant_id=$1 AND group_id=$2 AND phase IN ('pilot','standard')",
+                "SELECT 1 FROM managed_group_rollouts WHERE tenant_id=$1 AND group_id=$2 AND phase IN ('pilot','standard','paused','rolling_back')",
                 &[&tenant, &group_id],
             )).await?;
             ensure!(
@@ -644,6 +648,60 @@ impl PostgresTenantStore {
                 !pilots.is_empty(),
                 "group has no pilot agents for staged rollout"
             );
+
+            let mut all_new_members = std::collections::BTreeSet::new();
+            for p in &pilots {
+                all_new_members.insert(p.clone());
+            }
+            for s in &standards {
+                all_new_members.insert(s.clone());
+            }
+
+            let active_rollouts = self
+                .bounded(client.query(
+                    "SELECT group_id, rollout_id, phase, pilot_agents_json, standard_agents_json
+                 FROM managed_group_rollouts
+                 WHERE tenant_id=$1 AND phase IN ('pilot','standard','paused','rolling_back')",
+                    &[&tenant],
+                ))
+                .await?;
+
+            for r in active_rollouts {
+                let other_gid: String = r.get(0);
+                let other_roid: String = r.get(1);
+                let other_ph: String = r.get(2);
+                let pilots_json: String = r.get(3);
+                let stds_json: String = r.get(4);
+                let other_pilots: Vec<String> =
+                    serde_json::from_str(&pilots_json).unwrap_or_default();
+                let other_stds: Vec<String> = serde_json::from_str(&stds_json).unwrap_or_default();
+                for member in &all_new_members {
+                    if other_pilots.contains(member) || other_stds.contains(member) {
+                        bail!(
+                            "agent '{}' is already enrolled in active rollout '{}' (group '{}', phase '{}')",
+                            member, other_roid, other_gid, other_ph
+                        );
+                    }
+                }
+            }
+
+            for member in &all_new_members {
+                let unacked = self
+                    .bounded(client.query_opt(
+                        "SELECT deployment_sequence FROM managed_agent_deployments
+                     WHERE tenant_id=$1 AND agent_id=$2 AND status IN ('issued','delivered')
+                     ORDER BY deployment_sequence DESC LIMIT 1",
+                        &[&tenant, member],
+                    ))
+                    .await?;
+                if let Some(r) = unacked {
+                    let seq: i64 = r.get(0);
+                    bail!(
+                        "agent '{}' has unacknowledged deployment (sequence {}) and cannot join a new rollout",
+                        member, seq
+                    );
+                }
+            }
 
             let mut prevs = std::collections::BTreeMap::new();
             for pilot in &pilots {
@@ -772,6 +830,7 @@ impl PostgresTenantStore {
     ) -> Result<Option<ManagedGroupRollout>> {
         ensure!(exact_id(tenant) && exact_id(group_id), "invalid identifier");
         let client = self.checkout().await?;
+        self.ensure_group_tables(&client).await?;
         let row = self.bounded(client.query_opt(
             "SELECT rollout_id, revision, policy_sha256, issuer_key_id, phase,
                     pilot_agents_json, standard_agents_json, active_deployments_json,
@@ -807,7 +866,7 @@ impl PostgresTenantStore {
         &self,
         tenant: &str,
         group_id: &str,
-        issuer: &ManagedIssuer,
+        issuer: Option<&ManagedIssuer>,
     ) -> Result<Option<ManagedGroupRollout>> {
         let current = self.get_managed_group_rollout(tenant, group_id).await?;
         let Some(mut rollout) = current else {
@@ -824,19 +883,50 @@ impl PostgresTenantStore {
         let now = now_unix();
 
         match rollout.phase {
+            RolloutPhase::Paused => Ok(Some(rollout)),
             RolloutPhase::RollingBack => {
                 let mut all_applied = true;
+                let mut conflict = None;
                 for (agent, seq) in &rollout.active_deployments {
                     let s = *seq as i64;
-                    let st = self.bounded(client.query_opt(
-                        "SELECT status FROM managed_agent_deployments WHERE tenant_id=$1 AND agent_id=$2 AND deployment_sequence=$3",
-                        &[&tenant, agent, &s],
-                    )).await?;
-                    let status: Option<String> = st.map(|r| r.get(0));
-                    if status.as_deref() != Some("applied") {
-                        all_applied = false;
-                        break;
+                    let latest = self
+                        .bounded(client.query_opt(
+                            "SELECT deployment_sequence, revision, policy_sha256, status
+                         FROM managed_agent_deployments
+                         WHERE tenant_id=$1 AND agent_id=$2
+                         ORDER BY deployment_sequence DESC LIMIT 1",
+                            &[&tenant, agent],
+                        ))
+                        .await?;
+                    match latest {
+                        Some(r) => {
+                            let latest_seq: i64 = r.get(0);
+                            let status: String = r.get(3);
+                            if latest_seq != s {
+                                conflict = Some(format!(
+                                    "conflict: rollback deployment {} for agent '{}' was superseded by sequence {}",
+                                    seq, agent, latest_seq
+                                ));
+                                break;
+                            }
+                            if status != "applied" {
+                                all_applied = false;
+                            }
+                        }
+                        None => {
+                            all_applied = false;
+                        }
                     }
+                }
+                if let Some(reason) = conflict {
+                    self.bounded(client.execute(
+                        "UPDATE managed_group_rollouts SET phase='failed', failure_reason=$3, updated_at_unix=$4 WHERE tenant_id=$1 AND group_id=$2 AND rollout_id=$5",
+                        &[&tenant, &group_id, &reason, &now, &rollout.rollout_id],
+                    )).await?;
+                    rollout.phase = RolloutPhase::Failed;
+                    rollout.failure_reason = Some(reason);
+                    rollout.updated_at_unix = now;
+                    return Ok(Some(rollout));
                 }
                 if all_applied && !rollout.active_deployments.is_empty() {
                     self.bounded(client.execute(
@@ -852,6 +942,7 @@ impl PostgresTenantStore {
             RolloutPhase::Pilot => {
                 let mut any_rejected = None;
                 let mut all_applied = true;
+                let mut conflict = None;
                 for p in &rollout.pilot_agents {
                     let seq = match rollout.active_deployments.get(p) {
                         Some(&s) => s as i64,
@@ -860,46 +951,80 @@ impl PostgresTenantStore {
                             continue;
                         }
                     };
-                    let dep_row = self.bounded(client.query_opt(
-                        "SELECT status, policy_sha256, issued_at_unix FROM managed_agent_deployments WHERE tenant_id=$1 AND agent_id=$2 AND deployment_sequence=$3",
-                        &[&tenant, p, &seq],
+                    let latest = self.bounded(client.query_opt(
+                        "SELECT deployment_sequence, revision, policy_sha256, status, issued_at_unix
+                         FROM managed_agent_deployments
+                         WHERE tenant_id=$1 AND agent_id=$2
+                         ORDER BY deployment_sequence DESC LIMIT 1",
+                        &[&tenant, p],
                     )).await?;
 
-                    if let Some(r) = dep_row {
-                        let status: String = r.get(0);
-                        let dep_sha: String = r.get(1);
-                        let issued_at: i64 = r.get(2);
-                        if status == "rejected" {
-                            any_rejected = Some((
-                                p.clone(),
-                                format!(
-                                    "pilot agent '{}' rejected candidate policy revision '{}'",
-                                    p, rollout.revision
-                                ),
-                            ));
-                            break;
-                        } else if status == "applied" {
-                            if dep_sha != rollout.policy_sha256 {
-                                all_applied = false;
-                            }
-                        } else {
-                            all_applied = false;
-                            if now - issued_at > 300 {
-                                any_rejected = Some((
-                                    p.clone(),
-                                    format!("pilot agent '{}' timed out awaiting policy acknowledgement (>300s)", p),
+                    match latest {
+                        Some(r) => {
+                            let latest_seq: i64 = r.get(0);
+                            let latest_rev: String = r.get(1);
+                            let latest_sha: String = r.get(2);
+                            let status: String = r.get(3);
+                            let issued_at: i64 = r.get(4);
+
+                            if latest_seq != seq
+                                || latest_rev != rollout.revision
+                                || latest_sha != rollout.policy_sha256
+                            {
+                                conflict = Some(format!(
+                                    "conflict: canary deployment {} for agent '{}' was superseded by sequence {} (rev '{}')",
+                                    seq, p, latest_seq, latest_rev
                                 ));
                                 break;
                             }
+                            if status == "rejected" {
+                                any_rejected = Some((
+                                    p.clone(),
+                                    format!(
+                                        "pilot agent '{}' rejected candidate policy revision '{}'",
+                                        p, rollout.revision
+                                    ),
+                                ));
+                                break;
+                            } else if status == "applied" {
+                                // Acknowledged matching candidate
+                            } else {
+                                all_applied = false;
+                                if now - issued_at > 300 {
+                                    any_rejected = Some((
+                                        p.clone(),
+                                        format!("pilot agent '{}' timed out awaiting policy acknowledgement (>300s)", p),
+                                    ));
+                                    break;
+                                }
+                            }
                         }
-                    } else {
-                        all_applied = false;
+                        None => {
+                            all_applied = false;
+                        }
                     }
+                }
+
+                if let Some(reason) = conflict {
+                    self.bounded(client.execute(
+                        "UPDATE managed_group_rollouts SET phase='failed', failure_reason=$3, updated_at_unix=$4 WHERE tenant_id=$1 AND group_id=$2 AND rollout_id=$5",
+                        &[&tenant, &group_id, &reason, &now, &rollout.rollout_id],
+                    )).await?;
+                    rollout.phase = RolloutPhase::Failed;
+                    rollout.failure_reason = Some(reason);
+                    rollout.updated_at_unix = now;
+                    return Ok(Some(rollout));
                 }
 
                 if let Some((_rejected_agent, reason)) = any_rejected {
                     let default_issuer = ManagedIssuer::from_environment().ok();
-                    let signing_issuer = default_issuer.as_ref().unwrap_or(issuer);
+                    let signing_issuer = default_issuer.as_ref().or(issuer);
+                    let signing_issuer = match signing_issuer {
+                        Some(iss) => iss,
+                        None => {
+                            bail!("configured signing issuer is unavailable for rollback deployment: {}", reason);
+                        }
+                    };
                     for (agent, seq) in rollout.active_deployments.clone() {
                         let prev = self
                             .find_last_applied_revision_before(tenant, &agent, Some(seq))
@@ -934,6 +1059,17 @@ impl PostgresTenantStore {
                         return Ok(Some(rollout));
                     }
 
+                    let default_issuer =
+                        ManagedIssuer::from_environment_for_key(rollout.issuer_key_id.as_deref())
+                            .ok();
+                    let signing_issuer = default_issuer.as_ref().or(issuer);
+                    let signing_issuer = match signing_issuer {
+                        Some(iss) => iss,
+                        None => {
+                            bail!("configured signing issuer is unavailable for standard wave deployment");
+                        }
+                    };
+
                     let yaml_row = self.bounded(client.query_one(
                         "SELECT policy_yaml FROM managed_group_revisions WHERE tenant_id=$1 AND group_id=$2 AND revision=$3",
                         &[&tenant, &group_id, &rollout.revision],
@@ -960,7 +1096,13 @@ impl PostgresTenantStore {
                             )).await?;
                         }
                         let dep = self
-                            .deploy_managed_revision(tenant, w, &rollout.revision, false, issuer)
+                            .deploy_managed_revision(
+                                tenant,
+                                w,
+                                &rollout.revision,
+                                false,
+                                signing_issuer,
+                            )
                             .await?;
                         rollout
                             .active_deployments
@@ -981,6 +1123,7 @@ impl PostgresTenantStore {
             RolloutPhase::Standard => {
                 let mut any_rejected = None;
                 let mut all_applied = true;
+                let mut conflict = None;
                 for w in &rollout.standard_agents {
                     let seq = match rollout.active_deployments.get(w) {
                         Some(&s) => s as i64,
@@ -989,46 +1132,80 @@ impl PostgresTenantStore {
                             continue;
                         }
                     };
-                    let dep_row = self.bounded(client.query_opt(
-                        "SELECT status, policy_sha256, issued_at_unix FROM managed_agent_deployments WHERE tenant_id=$1 AND agent_id=$2 AND deployment_sequence=$3",
-                        &[&tenant, w, &seq],
+                    let latest = self.bounded(client.query_opt(
+                        "SELECT deployment_sequence, revision, policy_sha256, status, issued_at_unix
+                         FROM managed_agent_deployments
+                         WHERE tenant_id=$1 AND agent_id=$2
+                         ORDER BY deployment_sequence DESC LIMIT 1",
+                        &[&tenant, w],
                     )).await?;
 
-                    if let Some(r) = dep_row {
-                        let status: String = r.get(0);
-                        let dep_sha: String = r.get(1);
-                        let issued_at: i64 = r.get(2);
-                        if status == "rejected" {
-                            any_rejected = Some((
-                                w.clone(),
-                                format!(
-                                    "standard agent '{}' rejected candidate policy revision '{}'",
-                                    w, rollout.revision
-                                ),
-                            ));
-                            break;
-                        } else if status == "applied" {
-                            if dep_sha != rollout.policy_sha256 {
-                                all_applied = false;
-                            }
-                        } else {
-                            all_applied = false;
-                            if now - issued_at > 300 {
-                                any_rejected = Some((
-                                    w.clone(),
-                                    format!("standard agent '{}' timed out awaiting policy acknowledgement (>300s)", w),
+                    match latest {
+                        Some(r) => {
+                            let latest_seq: i64 = r.get(0);
+                            let latest_rev: String = r.get(1);
+                            let latest_sha: String = r.get(2);
+                            let status: String = r.get(3);
+                            let issued_at: i64 = r.get(4);
+
+                            if latest_seq != seq
+                                || latest_rev != rollout.revision
+                                || latest_sha != rollout.policy_sha256
+                            {
+                                conflict = Some(format!(
+                                    "conflict: standard deployment {} for agent '{}' was superseded by sequence {} (rev '{}')",
+                                    seq, w, latest_seq, latest_rev
                                 ));
                                 break;
                             }
+                            if status == "rejected" {
+                                any_rejected = Some((
+                                    w.clone(),
+                                    format!(
+                                        "standard agent '{}' rejected candidate policy revision '{}'",
+                                        w, rollout.revision
+                                    ),
+                                ));
+                                break;
+                            } else if status == "applied" {
+                                // Acknowledged matching candidate
+                            } else {
+                                all_applied = false;
+                                if now - issued_at > 300 {
+                                    any_rejected = Some((
+                                        w.clone(),
+                                        format!("standard agent '{}' timed out awaiting policy acknowledgement (>300s)", w),
+                                    ));
+                                    break;
+                                }
+                            }
                         }
-                    } else {
-                        all_applied = false;
+                        None => {
+                            all_applied = false;
+                        }
                     }
+                }
+
+                if let Some(reason) = conflict {
+                    self.bounded(client.execute(
+                        "UPDATE managed_group_rollouts SET phase='failed', failure_reason=$3, updated_at_unix=$4 WHERE tenant_id=$1 AND group_id=$2 AND rollout_id=$5",
+                        &[&tenant, &group_id, &reason, &now, &rollout.rollout_id],
+                    )).await?;
+                    rollout.phase = RolloutPhase::Failed;
+                    rollout.failure_reason = Some(reason);
+                    rollout.updated_at_unix = now;
+                    return Ok(Some(rollout));
                 }
 
                 if let Some((_rejected_agent, reason)) = any_rejected {
                     let default_issuer = ManagedIssuer::from_environment().ok();
-                    let signing_issuer = default_issuer.as_ref().unwrap_or(issuer);
+                    let signing_issuer = default_issuer.as_ref().or(issuer);
+                    let signing_issuer = match signing_issuer {
+                        Some(iss) => iss,
+                        None => {
+                            bail!("configured signing issuer is unavailable for rollback deployment: {}", reason);
+                        }
+                    };
                     for (agent, seq) in rollout.active_deployments.clone() {
                         let prev = self
                             .find_last_applied_revision_before(tenant, &agent, Some(seq))
@@ -1086,7 +1263,13 @@ impl PostgresTenantStore {
         }
 
         let default_issuer = ManagedIssuer::from_environment().ok();
-        let signing_issuer = default_issuer.as_ref().unwrap_or(issuer);
+        let signing_issuer = default_issuer.as_ref().or(Some(issuer));
+        let signing_issuer = match signing_issuer {
+            Some(iss) => iss,
+            None => {
+                bail!("configured signing issuer is unavailable for rollback");
+            }
+        };
         for (agent, seq) in rollout.active_deployments.clone() {
             let prev = self
                 .find_last_applied_revision_before(tenant, &agent, Some(seq))
@@ -1183,7 +1366,40 @@ impl PostgresTenantStore {
         rollout.failure_reason = None;
         rollout.updated_at_unix = now;
 
-        self.advance_managed_group_rollout(tenant, group_id, issuer)
+        self.advance_managed_group_rollout(tenant, group_id, Some(issuer))
             .await
+    }
+
+    pub(in crate::tenant_store) async fn check_and_advance_active_rollouts_for_agent(
+        &self,
+        tenant: &str,
+        agent: &str,
+    ) -> Result<()> {
+        let client = self.checkout().await?;
+        self.ensure_group_tables(&client).await?;
+        let rows = self
+            .bounded(client.query(
+                "SELECT group_id, rollout_id, issuer_key_id, phase, active_deployments_json
+             FROM managed_group_rollouts
+             WHERE tenant_id=$1 AND phase IN ('pilot','standard','rolling_back')",
+                &[&tenant],
+            ))
+            .await?;
+
+        for r in rows {
+            let gid: String = r.get(0);
+            let active_json: String = r.get(4);
+            let active_deps: std::collections::BTreeMap<String, u64> =
+                serde_json::from_str(&active_json).unwrap_or_default();
+            if !active_deps.contains_key(agent) {
+                continue;
+            }
+            let issuer_key_id: Option<String> = r.get(2);
+            let issuer = ManagedIssuer::from_environment_for_key(issuer_key_id.as_deref()).ok();
+            let _ = self
+                .advance_managed_group_rollout(tenant, &gid, issuer.as_ref())
+                .await;
+        }
+        Ok(())
     }
 }

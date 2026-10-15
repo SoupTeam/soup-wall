@@ -673,7 +673,9 @@ pub async fn start_group_rollout(
         Ok(Err(e)) => {
             let msg = e.to_string();
             tracing::warn!(error = %msg, "group rollout start refused");
-            if msg.contains("already in progress") {
+            if msg.contains("already in progress")
+                || msg.contains("already enrolled in active rollout")
+            {
                 failure(StatusCode::CONFLICT, "active rollout already in progress")
             } else {
                 failure(StatusCode::BAD_REQUEST, "rollout cannot be started")
@@ -718,8 +720,8 @@ pub async fn advance_group_rollout(
     };
     let target_key = body.and_then(|b| b.0.issuer_key_id);
     match tokio::task::spawn(async move {
-        let issuer = ManagedIssuer::from_environment_for_key(target_key.as_deref())?;
-        db.advance_managed_group_rollout_async(&tenant_id, &group_id, &issuer)
+        let issuer = ManagedIssuer::from_environment_for_key(target_key.as_deref()).ok();
+        db.advance_managed_group_rollout_async(&tenant_id, &group_id, issuer.as_ref())
             .await
     })
     .await

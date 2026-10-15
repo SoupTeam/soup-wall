@@ -890,3 +890,269 @@ async fn test_group_rollout_pause_and_resume() {
         .unwrap();
     assert_eq!(w_fetch2.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+async fn test_group_rollout_rejects_paused_and_cross_group_conflict() {
+    let state = test_state();
+    let store = state.tenant_store.as_ref().unwrap();
+    let tenant = store.create_tenant("Exclusivity Test Tenant").unwrap();
+
+    store
+        .create_managed_group(&tenant.id, "grp-1", "Group 1")
+        .unwrap();
+    store
+        .create_managed_group(&tenant.id, "grp-2", "Group 2")
+        .unwrap();
+
+    store
+        .enroll_managed_agent(&tenant.id, "pilot-shared")
+        .unwrap();
+    store.enroll_managed_agent(&tenant.id, "worker-1").unwrap();
+    store.enroll_managed_agent(&tenant.id, "worker-2").unwrap();
+
+    store
+        .add_managed_group_member(&tenant.id, "grp-1", "pilot-shared", true)
+        .unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "grp-1", "worker-1", false)
+        .unwrap();
+
+    store
+        .add_managed_group_member(&tenant.id, "grp-2", "pilot-shared", true)
+        .unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "grp-2", "worker-2", false)
+        .unwrap();
+
+    store
+        .create_managed_group_revision(&tenant.id, "grp-1", "rev-1", "default: allow\n")
+        .unwrap();
+    store
+        .approve_managed_group_revision(&tenant.id, "grp-1", "rev-1")
+        .unwrap();
+
+    store
+        .create_managed_group_revision(&tenant.id, "grp-2", "rev-1", "default: allow\n")
+        .unwrap();
+    store
+        .approve_managed_group_revision(&tenant.id, "grp-2", "rev-1")
+        .unwrap();
+
+    // Start rollout on grp-1
+    let start_resp = app(state.clone())
+        .oneshot(
+            Request::post(format!(
+                "/admin/v1/tenants/{}/groups/grp-1/rollout",
+                tenant.id
+            ))
+            .header("content-type", "application/json")
+            .header("x-llm-firewall-admin-token", OWNER_HEADER)
+            .body(axum::body::Body::from(r#"{"revision":"rev-1"}"#))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(start_resp.status(), StatusCode::CREATED);
+
+    // Pause rollout on grp-1
+    let pause_resp = app(state.clone())
+        .oneshot(
+            Request::post(format!(
+                "/admin/v1/tenants/{}/groups/grp-1/rollout/pause",
+                tenant.id
+            ))
+            .header("x-llm-firewall-admin-token", OWNER_HEADER)
+            .body(axum::body::Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(pause_resp.status(), StatusCode::OK);
+
+    // Starting another rollout on grp-1 while paused must fail (active rollout in paused phase)
+    let start_paused_resp = app(state.clone())
+        .oneshot(
+            Request::post(format!(
+                "/admin/v1/tenants/{}/groups/grp-1/rollout",
+                tenant.id
+            ))
+            .header("content-type", "application/json")
+            .header("x-llm-firewall-admin-token", OWNER_HEADER)
+            .body(axum::body::Body::from(r#"{"revision":"rev-1"}"#))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(start_paused_resp.status(), StatusCode::CONFLICT);
+
+    // Starting rollout on grp-2 must fail because pilot-shared is enrolled in grp-1's active rollout!
+    let start_grp2_resp = app(state.clone())
+        .oneshot(
+            Request::post(format!(
+                "/admin/v1/tenants/{}/groups/grp-2/rollout",
+                tenant.id
+            ))
+            .header("content-type", "application/json")
+            .header("x-llm-firewall-admin-token", OWNER_HEADER)
+            .body(axum::body::Body::from(r#"{"revision":"rev-1"}"#))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(start_grp2_resp.status(), StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn test_group_rollout_fails_on_superseded_canary() {
+    let state = test_state();
+    let store = state.tenant_store.as_ref().unwrap();
+    let tenant = store.create_tenant("Superseded Test Tenant").unwrap();
+
+    store
+        .create_managed_group(&tenant.id, "sup-grp", "Superseded Group")
+        .unwrap();
+    let _cred_pilot = store.enroll_managed_agent(&tenant.id, "sup-pilot").unwrap();
+    store
+        .enroll_managed_agent(&tenant.id, "sup-worker")
+        .unwrap();
+
+    store
+        .add_managed_group_member(&tenant.id, "sup-grp", "sup-pilot", true)
+        .unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "sup-grp", "sup-worker", false)
+        .unwrap();
+
+    store
+        .create_managed_group_revision(&tenant.id, "sup-grp", "rev-group-1", "default: allow\n")
+        .unwrap();
+    store
+        .approve_managed_group_revision(&tenant.id, "sup-grp", "rev-group-1")
+        .unwrap();
+
+    // Start rollout
+    let start_resp = app(state.clone())
+        .oneshot(
+            Request::post(format!(
+                "/admin/v1/tenants/{}/groups/sup-grp/rollout",
+                tenant.id
+            ))
+            .header("content-type", "application/json")
+            .header("x-llm-firewall-admin-token", OWNER_HEADER)
+            .body(axum::body::Body::from(r#"{"revision":"rev-group-1"}"#))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(start_resp.status(), StatusCode::CREATED);
+
+    // Now an operator overrides sup-pilot individually with an out-of-band revision!
+    store
+        .create_managed_revision(
+            &tenant.id,
+            "sup-pilot",
+            "rev-manual-override",
+            "default: deny\n",
+        )
+        .unwrap();
+    store
+        .approve_managed_revision(&tenant.id, "sup-pilot", "rev-manual-override")
+        .unwrap();
+    let issuer = llm_firewall::tenant_store::ManagedIssuer::from_environment().unwrap();
+    store
+        .deploy_managed_revision(
+            &tenant.id,
+            "sup-pilot",
+            "rev-manual-override",
+            false,
+            &issuer,
+        )
+        .unwrap();
+
+    // Advancing rollout now MUST detect that canary deployment was superseded and fail the rollout!
+    let adv_resp = app(state.clone())
+        .oneshot(
+            Request::post(format!(
+                "/admin/v1/tenants/{}/groups/sup-grp/rollout/advance",
+                tenant.id
+            ))
+            .header("x-llm-firewall-admin-token", OWNER_HEADER)
+            .body(axum::body::Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(adv_resp.status(), StatusCode::OK);
+    let adv_body = json_body(adv_resp).await;
+    assert_eq!(adv_body["phase"], "failed");
+    assert!(adv_body["failure_reason"]
+        .as_str()
+        .unwrap()
+        .contains("superseded"));
+}
+
+#[tokio::test]
+async fn test_group_rollout_fails_cleanly_when_issuer_unavailable() {
+    let state = test_state();
+    let store = state.tenant_store.as_ref().unwrap();
+    let tenant = store.create_tenant("Signer Test Tenant").unwrap();
+
+    store
+        .create_managed_group(&tenant.id, "signer-grp", "Signer Group")
+        .unwrap();
+    let _cred_pilot = store.enroll_managed_agent(&tenant.id, "pilot-s").unwrap();
+    store.enroll_managed_agent(&tenant.id, "worker-s").unwrap();
+
+    store
+        .add_managed_group_member(&tenant.id, "signer-grp", "pilot-s", true)
+        .unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "signer-grp", "worker-s", false)
+        .unwrap();
+
+    store
+        .create_managed_group_revision(&tenant.id, "signer-grp", "rev-s", "default: allow\n")
+        .unwrap();
+    store
+        .approve_managed_group_revision(&tenant.id, "signer-grp", "rev-s")
+        .unwrap();
+
+    // Start with a custom key that does not exist in environment
+    let custom_issuer = llm_firewall::tenant_store::ManagedIssuer::new(
+        "unconfigured-custom-key".into(),
+        TEST_SEED_HEX,
+    )
+    .unwrap();
+    store
+        .start_managed_group_rollout(&tenant.id, "signer-grp", "rev-s", &custom_issuer)
+        .unwrap();
+
+    // Pilot acknowledges policy
+    let pilot_dep = store
+        .list_managed_deployments(&tenant.id, "pilot-s")
+        .unwrap();
+    let ro = store
+        .get_managed_group_rollout(&tenant.id, "signer-grp")
+        .unwrap()
+        .unwrap();
+    store
+        .acknowledge_managed_bundle(
+            &tenant.id,
+            "pilot-s",
+            &llm_firewall::tenant_store::AppliedReport {
+                deployment_sequence: pilot_dep[0].deployment_sequence,
+                revision: "rev-s".into(),
+                policy_sha256: ro.policy_sha256,
+                status: "applied".into(),
+            },
+        )
+        .unwrap();
+
+    // Advancing to standard without passing an issuer must fail because rollout's issuer_key_id is unconfigured in env
+    let err = store
+        .advance_managed_group_rollout(&tenant.id, "signer-grp", None)
+        .unwrap_err();
+    assert!(err
+        .to_string()
+        .contains("configured signing issuer is unavailable for standard wave deployment"));
+}
