@@ -26,7 +26,8 @@ mod agent_enrollment;
 mod managed_async;
 mod managed_policy;
 pub use managed_policy::{
-    AppliedReport, ManagedDeployment, ManagedIssuer, ManagedRevision, SignedManagedBundle,
+    AppliedReport, ManagedAgentGroup, ManagedDeployment, ManagedGroupMember, ManagedGroupRevision,
+    ManagedGroupRollout, ManagedIssuer, ManagedRevision, RolloutPhase, SignedManagedBundle,
 };
 mod postgres;
 pub use agent_enrollment::{EnrolledAgent, IssuedAgentCredential};

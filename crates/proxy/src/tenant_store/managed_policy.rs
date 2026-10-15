@@ -59,6 +59,86 @@ pub struct AppliedReport {
     pub status: String,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ManagedAgentGroup {
+    pub tenant_id: String,
+    pub group_id: String,
+    pub name: String,
+    pub created_at_unix: i64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ManagedGroupMember {
+    pub tenant_id: String,
+    pub group_id: String,
+    pub agent_id: String,
+    pub is_pilot: bool,
+    pub joined_at_unix: i64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ManagedGroupRevision {
+    pub tenant_id: String,
+    pub group_id: String,
+    pub revision: String,
+    pub policy_sha256: String,
+    pub approved: bool,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RolloutPhase {
+    Pilot,
+    Standard,
+    Completed,
+    RolledBack,
+    Failed,
+}
+
+impl RolloutPhase {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            RolloutPhase::Pilot => "pilot",
+            RolloutPhase::Standard => "standard",
+            RolloutPhase::Completed => "completed",
+            RolloutPhase::RolledBack => "rolled_back",
+            RolloutPhase::Failed => "failed",
+        }
+    }
+}
+
+impl std::str::FromStr for RolloutPhase {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self> {
+        match s {
+            "pilot" => Ok(RolloutPhase::Pilot),
+            "standard" => Ok(RolloutPhase::Standard),
+            "completed" => Ok(RolloutPhase::Completed),
+            "rolled_back" => Ok(RolloutPhase::RolledBack),
+            "failed" => Ok(RolloutPhase::Failed),
+            other => anyhow::bail!("unknown rollout phase: {}", other),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ManagedGroupRollout {
+    pub tenant_id: String,
+    pub group_id: String,
+    pub rollout_id: String,
+    pub revision: String,
+    pub policy_sha256: String,
+    pub issuer_key_id: Option<String>,
+    pub phase: RolloutPhase,
+    pub pilot_agents: Vec<String>,
+    pub standard_agents: Vec<String>,
+    pub active_deployments: std::collections::BTreeMap<String, u64>,
+    pub previous_revisions: std::collections::BTreeMap<String, Option<String>>,
+    pub failure_reason: Option<String>,
+    pub created_at_unix: i64,
+    pub updated_at_unix: i64,
+}
+
 pub struct ManagedIssuer {
     pub(super) key_id: String,
     pair: Ed25519KeyPair,
@@ -215,9 +295,69 @@ fn schema(db: &rusqlite::Connection) -> Result<()> {
            PRIMARY KEY(tenant_id,agent_id,deployment_sequence),
            FOREIGN KEY(tenant_id,agent_id,revision)
              REFERENCES managed_agent_revisions(tenant_id,agent_id,revision)
+        );
+        CREATE TABLE IF NOT EXISTS managed_agent_groups (
+           tenant_id TEXT NOT NULL,
+           group_id TEXT NOT NULL,
+           name TEXT NOT NULL,
+           created_at_unix INTEGER NOT NULL,
+           PRIMARY KEY(tenant_id, group_id),
+           FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS managed_agent_group_members (
+           tenant_id TEXT NOT NULL,
+           group_id TEXT NOT NULL,
+           agent_id TEXT NOT NULL,
+           is_pilot INTEGER NOT NULL DEFAULT 0,
+           joined_at_unix INTEGER NOT NULL,
+           PRIMARY KEY(tenant_id, group_id, agent_id),
+           FOREIGN KEY(tenant_id, group_id) REFERENCES managed_agent_groups(tenant_id, group_id) ON DELETE CASCADE,
+           FOREIGN KEY(tenant_id, agent_id) REFERENCES managed_agent_enrollments(tenant_id, agent_id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS managed_group_revisions (
+           tenant_id TEXT NOT NULL,
+           group_id TEXT NOT NULL,
+           revision TEXT NOT NULL,
+           policy_yaml TEXT NOT NULL,
+           policy_sha256 TEXT NOT NULL,
+           approved_at_unix INTEGER,
+           PRIMARY KEY(tenant_id, group_id, revision),
+           FOREIGN KEY(tenant_id, group_id) REFERENCES managed_agent_groups(tenant_id, group_id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS managed_group_rollouts (
+           tenant_id TEXT NOT NULL,
+           group_id TEXT NOT NULL,
+           rollout_id TEXT NOT NULL,
+           revision TEXT NOT NULL,
+           policy_sha256 TEXT NOT NULL,
+           issuer_key_id TEXT,
+           phase TEXT NOT NULL CHECK(phase IN ('pilot','standard','completed','rolled_back','failed')),
+           pilot_agents_json TEXT NOT NULL,
+           standard_agents_json TEXT NOT NULL,
+           active_deployments_json TEXT NOT NULL,
+           previous_revisions_json TEXT NOT NULL,
+           failure_reason TEXT,
+           created_at_unix INTEGER NOT NULL,
+           updated_at_unix INTEGER NOT NULL,
+           PRIMARY KEY(tenant_id, group_id, rollout_id),
+           FOREIGN KEY(tenant_id, group_id) REFERENCES managed_agent_groups(tenant_id, group_id) ON DELETE CASCADE
         );",
     )
     .context("cannot prepare managed policy tables")
+}
+
+fn eligible_group(db: &rusqlite::Connection, tenant: &str, group: &str) -> Result<()> {
+    ensure!(exact_id(tenant) && exact_id(group), "invalid group identity");
+    let exists: Option<i64> = db
+        .query_row(
+            "SELECT 1 FROM managed_agent_groups g JOIN tenants t ON t.id=g.tenant_id
+             WHERE g.tenant_id=?1 AND g.group_id=?2 AND t.active=1",
+            params![tenant, group],
+            |r| r.get(0),
+        )
+        .optional()?;
+    ensure!(exists.is_some(), "group not found or tenant inactive");
+    Ok(())
 }
 
 fn eligible(db: &rusqlite::Connection, tenant: &str, agent: &str) -> Result<()> {
@@ -450,6 +590,8 @@ impl TenantStore {
             ],
         )?;
         if changed == 1 {
+            drop(db);
+            let _ = self.check_and_advance_active_rollouts_for_agent(tenant, agent);
             return Ok(true);
         }
         let repeated: Option<i64> = db
@@ -500,6 +642,947 @@ impl TenantStore {
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    pub fn create_managed_group(
+        &self,
+        tenant: &str,
+        group_id: &str,
+        name: &str,
+    ) -> Result<ManagedAgentGroup> {
+        ensure!(exact_id(tenant) && exact_id(group_id), "invalid group identifier");
+        ensure!(!name.is_empty() && name.len() <= 256, "invalid group name");
+        let db = self.connection()?;
+        schema(&db)?;
+        let tenant_active: Option<i64> = db
+            .query_row(
+                "SELECT 1 FROM tenants WHERE id=?1 AND active=1",
+                params![tenant],
+                |r| r.get(0),
+            )
+            .optional()?;
+        ensure!(tenant_active.is_some(), "tenant not found or inactive");
+        let now = now_unix();
+        db.execute(
+            "INSERT INTO managed_agent_groups (tenant_id, group_id, name, created_at_unix)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![tenant, group_id, name, now],
+        )
+        .context("group already exists or cannot be created")?;
+        Ok(ManagedAgentGroup {
+            tenant_id: tenant.into(),
+            group_id: group_id.into(),
+            name: name.into(),
+            created_at_unix: now,
+        })
+    }
+
+    pub fn list_managed_groups(&self, tenant: &str) -> Result<Vec<ManagedAgentGroup>> {
+        ensure!(exact_id(tenant), "invalid tenant identifier");
+        let db = self.connection()?;
+        schema(&db)?;
+        let mut stmt = db.prepare(
+            "SELECT group_id, name, created_at_unix FROM managed_agent_groups
+             WHERE tenant_id=?1 ORDER BY created_at_unix ASC",
+        )?;
+        let rows = stmt.query_map(params![tenant], |r| {
+            Ok(ManagedAgentGroup {
+                tenant_id: tenant.into(),
+                group_id: r.get(0)?,
+                name: r.get(1)?,
+                created_at_unix: r.get(2)?,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    pub fn get_managed_group(&self, tenant: &str, group_id: &str) -> Result<Option<ManagedAgentGroup>> {
+        ensure!(exact_id(tenant) && exact_id(group_id), "invalid identifier");
+        let db = self.connection()?;
+        schema(&db)?;
+        let res = db
+            .query_row(
+                "SELECT name, created_at_unix FROM managed_agent_groups WHERE tenant_id=?1 AND group_id=?2",
+                params![tenant, group_id],
+                |r| {
+                    Ok(ManagedAgentGroup {
+                        tenant_id: tenant.into(),
+                        group_id: group_id.into(),
+                        name: r.get(0)?,
+                        created_at_unix: r.get(1)?,
+                    })
+                },
+            )
+            .optional()?;
+        Ok(res)
+    }
+
+    pub fn delete_managed_group(&self, tenant: &str, group_id: &str) -> Result<bool> {
+        ensure!(exact_id(tenant) && exact_id(group_id), "invalid identifier");
+        let db = self.connection()?;
+        schema(&db)?;
+        let active: Option<i64> = db
+            .query_row(
+                "SELECT 1 FROM managed_group_rollouts WHERE tenant_id=?1 AND group_id=?2 AND phase IN ('pilot','standard')",
+                params![tenant, group_id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        ensure!(active.is_none(), "cannot delete group with active rollout in progress");
+        let count = db.execute(
+            "DELETE FROM managed_agent_groups WHERE tenant_id=?1 AND group_id=?2",
+            params![tenant, group_id],
+        )?;
+        Ok(count > 0)
+    }
+
+    pub fn add_managed_group_member(
+        &self,
+        tenant: &str,
+        group_id: &str,
+        agent_id: &str,
+        is_pilot: bool,
+    ) -> Result<ManagedGroupMember> {
+        let db = self.connection()?;
+        schema(&db)?;
+        eligible_group(&db, tenant, group_id)?;
+        eligible(&db, tenant, agent_id)?;
+        let now = now_unix();
+        db.execute(
+            "INSERT INTO managed_agent_group_members (tenant_id, group_id, agent_id, is_pilot, joined_at_unix)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(tenant_id, group_id, agent_id) DO UPDATE SET is_pilot=excluded.is_pilot",
+            params![tenant, group_id, agent_id, if is_pilot { 1 } else { 0 }, now],
+        )?;
+        Ok(ManagedGroupMember {
+            tenant_id: tenant.into(),
+            group_id: group_id.into(),
+            agent_id: agent_id.into(),
+            is_pilot,
+            joined_at_unix: now,
+        })
+    }
+
+    pub fn remove_managed_group_member(&self, tenant: &str, group_id: &str, agent_id: &str) -> Result<bool> {
+        ensure!(exact_id(tenant) && exact_id(group_id) && exact_id(agent_id), "invalid identifier");
+        let db = self.connection()?;
+        schema(&db)?;
+        let count = db.execute(
+            "DELETE FROM managed_agent_group_members WHERE tenant_id=?1 AND group_id=?2 AND agent_id=?3",
+            params![tenant, group_id, agent_id],
+        )?;
+        Ok(count > 0)
+    }
+
+    pub fn list_managed_group_members(&self, tenant: &str, group_id: &str) -> Result<Vec<ManagedGroupMember>> {
+        ensure!(exact_id(tenant) && exact_id(group_id), "invalid identifier");
+        let db = self.connection()?;
+        schema(&db)?;
+        eligible_group(&db, tenant, group_id)?;
+        let mut stmt = db.prepare(
+            "SELECT agent_id, is_pilot, joined_at_unix FROM managed_agent_group_members
+             WHERE tenant_id=?1 AND group_id=?2 ORDER BY is_pilot DESC, joined_at_unix ASC",
+        )?;
+        let rows = stmt.query_map(params![tenant, group_id], |r| {
+            let is_pilot_num: i64 = r.get(1)?;
+            Ok(ManagedGroupMember {
+                tenant_id: tenant.into(),
+                group_id: group_id.into(),
+                agent_id: r.get(0)?,
+                is_pilot: is_pilot_num == 1,
+                joined_at_unix: r.get(2)?,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    pub fn create_managed_group_revision(
+        &self,
+        tenant: &str,
+        group_id: &str,
+        revision: &str,
+        yaml: &str,
+    ) -> Result<ManagedGroupRevision> {
+        ensure!(exact_id(revision), "invalid immutable revision");
+        ensure!(
+            !yaml.is_empty() && yaml.len() <= MAX_YAML,
+            "Agent policy size out of bounds"
+        );
+        AgentPolicySet::from_yaml(yaml).context("invalid AgentPolicySet YAML")?;
+        let digest = hex(&Sha256::digest(yaml.as_bytes()));
+        let db = self.connection()?;
+        schema(&db)?;
+        eligible_group(&db, tenant, group_id)?;
+        db.execute(
+            "INSERT INTO managed_group_revisions (tenant_id, group_id, revision, policy_yaml, policy_sha256)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![tenant, group_id, revision, yaml, digest],
+        )
+        .context("group revision exists or cannot be created")?;
+        Ok(ManagedGroupRevision {
+            tenant_id: tenant.into(),
+            group_id: group_id.into(),
+            revision: revision.into(),
+            policy_sha256: digest,
+            approved: false,
+        })
+    }
+
+    pub fn approve_managed_group_revision(&self, tenant: &str, group_id: &str, revision: &str) -> Result<bool> {
+        let db = self.connection()?;
+        schema(&db)?;
+        eligible_group(&db, tenant, group_id)?;
+        let changed = db.execute(
+            "UPDATE managed_group_revisions SET approved_at_unix=?4
+             WHERE tenant_id=?1 AND group_id=?2 AND revision=?3 AND approved_at_unix IS NULL",
+            params![tenant, group_id, revision, now_unix()],
+        )?;
+        Ok(changed == 1)
+    }
+
+    pub fn list_managed_group_revisions(&self, tenant: &str, group_id: &str) -> Result<Vec<ManagedGroupRevision>> {
+        ensure!(exact_id(tenant) && exact_id(group_id), "invalid identifier");
+        let db = self.connection()?;
+        schema(&db)?;
+        eligible_group(&db, tenant, group_id)?;
+        let mut stmt = db.prepare(
+            "SELECT revision, policy_sha256, approved_at_unix FROM managed_group_revisions
+             WHERE tenant_id=?1 AND group_id=?2 ORDER BY revision ASC",
+        )?;
+        let rows = stmt.query_map(params![tenant, group_id], |r| {
+            let approved: Option<i64> = r.get(2)?;
+            Ok(ManagedGroupRevision {
+                tenant_id: tenant.into(),
+                group_id: group_id.into(),
+                revision: r.get(0)?,
+                policy_sha256: r.get(1)?,
+                approved: approved.is_some(),
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    pub fn start_managed_group_rollout(
+        &self,
+        tenant: &str,
+        group_id: &str,
+        revision: &str,
+        issuer: &ManagedIssuer,
+    ) -> Result<ManagedGroupRollout> {
+        let (_policy_yaml, policy_sha256, pilot_agents, standard_agents, previous_revisions) = {
+            let db = self.connection()?;
+            schema(&db)?;
+            eligible_group(&db, tenant, group_id)?;
+
+            let active: Option<String> = db
+                .query_row(
+                    "SELECT rollout_id FROM managed_group_rollouts
+                 WHERE tenant_id=?1 AND group_id=?2 AND phase IN ('pilot','standard')",
+                    params![tenant, group_id],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            ensure!(
+                active.is_none(),
+                "active rollout already in progress for group '{}'",
+                group_id
+            );
+
+            let rev_row: Option<(String, String)> = db
+                .query_row(
+                    "SELECT policy_yaml, policy_sha256 FROM managed_group_revisions
+                 WHERE tenant_id=?1 AND group_id=?2 AND revision=?3 AND approved_at_unix IS NOT NULL",
+                    params![tenant, group_id, revision],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .optional()?;
+            let (policy_yaml, policy_sha256) =
+                rev_row.context("group revision not approved or not found")?;
+
+            let mut stmt = db.prepare(
+                "SELECT agent_id, is_pilot FROM managed_agent_group_members
+                 WHERE tenant_id=?1 AND group_id=?2 ORDER BY is_pilot DESC, joined_at_unix ASC",
+            )?;
+            let member_rows = stmt
+                .query_map(params![tenant, group_id], |r| {
+                    let agent_id: String = r.get(0)?;
+                    let is_pilot: i64 = r.get(1)?;
+                    Ok((agent_id, is_pilot == 1))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            ensure!(!member_rows.is_empty(), "cannot start rollout on empty group");
+
+            let mut pilots = Vec::new();
+            let mut standards = Vec::new();
+            for (agent_id, is_pilot) in member_rows {
+                if is_pilot {
+                    pilots.push(agent_id);
+                } else {
+                    standards.push(agent_id);
+                }
+            }
+            ensure!(
+                !pilots.is_empty(),
+                "group has no pilot agents for staged rollout"
+            );
+
+            let mut prevs = std::collections::BTreeMap::new();
+            for pilot in &pilots {
+                let prev: Option<String> = db
+                    .query_row(
+                        "SELECT revision FROM managed_agent_deployments
+                     WHERE tenant_id=?1 AND agent_id=?2 ORDER BY deployment_sequence DESC LIMIT 1",
+                        params![tenant, pilot],
+                        |r| r.get(0),
+                    )
+                    .optional()?;
+                prevs.insert(pilot.clone(), prev);
+            }
+            for std in &standards {
+                let prev: Option<String> = db
+                    .query_row(
+                        "SELECT revision FROM managed_agent_deployments
+                     WHERE tenant_id=?1 AND agent_id=?2 ORDER BY deployment_sequence DESC LIMIT 1",
+                        params![tenant, std],
+                        |r| r.get(0),
+                    )
+                    .optional()?;
+                prevs.insert(std.clone(), prev);
+            }
+
+            for pilot in &pilots {
+                let exists: Option<i64> = db
+                    .query_row(
+                        "SELECT 1 FROM managed_agent_revisions WHERE tenant_id=?1 AND agent_id=?2 AND revision=?3",
+                        params![tenant, pilot, revision],
+                        |r| r.get(0),
+                    )
+                    .optional()?;
+                if exists.is_none() {
+                    db.execute(
+                        "INSERT INTO managed_agent_revisions (tenant_id, agent_id, revision, policy_yaml, policy_sha256, approved_at_unix)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                        params![tenant, pilot, revision, policy_yaml, policy_sha256, now_unix()],
+                    )?;
+                }
+            }
+
+            (policy_yaml, policy_sha256, pilots, standards, prevs)
+        };
+
+        let mut active_deployments = std::collections::BTreeMap::new();
+        for pilot in &pilot_agents {
+            let dep = self.deploy_managed_revision(tenant, pilot, revision, false, issuer)?;
+            active_deployments.insert(pilot.clone(), dep.deployment_sequence);
+        }
+
+        let rollout_id = format!("ro_{}", super::random_base64url(12));
+        let now = now_unix();
+        let phase = RolloutPhase::Pilot;
+
+        {
+            let db = self.connection()?;
+            db.execute(
+                "INSERT INTO managed_group_rollouts
+                 (tenant_id, group_id, rollout_id, revision, policy_sha256, issuer_key_id, phase,
+                  pilot_agents_json, standard_agents_json, active_deployments_json, previous_revisions_json,
+                  failure_reason, created_at_unix, updated_at_unix)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, NULL, ?12, ?12)",
+                params![
+                    tenant,
+                    group_id,
+                    rollout_id,
+                    revision,
+                    policy_sha256,
+                    issuer.key_id(),
+                    phase.as_str(),
+                    serde_json::to_string(&pilot_agents)?,
+                    serde_json::to_string(&standard_agents)?,
+                    serde_json::to_string(&active_deployments)?,
+                    serde_json::to_string(&previous_revisions)?,
+                    now,
+                ],
+            )?;
+        }
+
+        Ok(ManagedGroupRollout {
+            tenant_id: tenant.into(),
+            group_id: group_id.into(),
+            rollout_id,
+            revision: revision.into(),
+            policy_sha256,
+            issuer_key_id: Some(issuer.key_id().into()),
+            phase,
+            pilot_agents,
+            standard_agents,
+            active_deployments,
+            previous_revisions,
+            failure_reason: None,
+            created_at_unix: now,
+            updated_at_unix: now,
+        })
+    }
+
+    pub fn advance_managed_group_rollout(
+        &self,
+        tenant: &str,
+        group_id: &str,
+        issuer: &ManagedIssuer,
+    ) -> Result<Option<ManagedGroupRollout>> {
+        enum NextAction {
+            None,
+            StillRunning(ManagedGroupRollout),
+            Rollback {
+                rollout: ManagedGroupRollout,
+                to_rollback: Vec<(String, String)>,
+                reason: String,
+            },
+            PromoteToStandard {
+                rollout: ManagedGroupRollout,
+                standards: Vec<String>,
+                revision: String,
+            },
+            Complete(ManagedGroupRollout),
+        }
+
+        let action = {
+            let db = self.connection()?;
+            schema(&db)?;
+            let row: Option<(
+                String,
+                String,
+                String,
+                Option<String>,
+                String,
+                String,
+                String,
+                String,
+                String,
+                Option<String>,
+                i64,
+                i64,
+            )> = db
+                .query_row(
+                    "SELECT rollout_id, revision, policy_sha256, issuer_key_id, phase,
+                        pilot_agents_json, standard_agents_json, active_deployments_json,
+                        previous_revisions_json, failure_reason, created_at_unix, updated_at_unix
+                 FROM managed_group_rollouts
+                 WHERE tenant_id=?1 AND group_id=?2 AND phase IN ('pilot','standard')
+                 ORDER BY created_at_unix DESC LIMIT 1",
+                    params![tenant, group_id],
+                    |r| {
+                        Ok((
+                            r.get(0)?,
+                            r.get(1)?,
+                            r.get(2)?,
+                            r.get(3)?,
+                            r.get(4)?,
+                            r.get(5)?,
+                            r.get(6)?,
+                            r.get(7)?,
+                            r.get(8)?,
+                            r.get(9)?,
+                            r.get(10)?,
+                            r.get(11)?,
+                        ))
+                    },
+                )
+                .optional()?;
+
+            let Some((
+                rollout_id,
+                revision,
+                policy_sha256,
+                issuer_key_id,
+                phase_str,
+                pilot_json,
+                standard_json,
+                active_json,
+                prev_json,
+                failure_reason,
+                created_at,
+                updated_at,
+            )) = row
+            else {
+                return Ok(None);
+            };
+
+            let current_phase: RolloutPhase = phase_str.parse()?;
+            let pilot_agents: Vec<String> = serde_json::from_str(&pilot_json)?;
+            let standard_agents: Vec<String> = serde_json::from_str(&standard_json)?;
+            let active_deployments: std::collections::BTreeMap<String, u64> =
+                serde_json::from_str(&active_json)?;
+            let previous_revisions: std::collections::BTreeMap<String, Option<String>> =
+                serde_json::from_str(&prev_json)?;
+
+            let yaml: String = db.query_row(
+                "SELECT policy_yaml FROM managed_group_revisions WHERE tenant_id=?1 AND group_id=?2 AND revision=?3",
+                params![tenant, group_id, revision],
+                |r| r.get(0),
+            )?;
+
+            let base_rollout = ManagedGroupRollout {
+                tenant_id: tenant.into(),
+                group_id: group_id.into(),
+                rollout_id,
+                revision: revision.clone(),
+                policy_sha256: policy_sha256.clone(),
+                issuer_key_id,
+                phase: current_phase,
+                pilot_agents: pilot_agents.clone(),
+                standard_agents: standard_agents.clone(),
+                active_deployments: active_deployments.clone(),
+                previous_revisions: previous_revisions.clone(),
+                failure_reason,
+                created_at_unix: created_at,
+                updated_at_unix: updated_at,
+            };
+
+            match current_phase {
+                RolloutPhase::Pilot => {
+                    let mut any_rejected = None;
+                    let mut all_applied = true;
+                    for p in &pilot_agents {
+                        let seq = match active_deployments.get(p) {
+                            Some(&s) => s,
+                            None => {
+                                all_applied = false;
+                                continue;
+                            }
+                        };
+                        let st: Option<String> = db
+                            .query_row(
+                                "SELECT status FROM managed_agent_deployments
+                             WHERE tenant_id=?1 AND agent_id=?2 AND deployment_sequence=?3",
+                                params![tenant, p, seq as i64],
+                                |r| r.get(0),
+                            )
+                            .optional()?;
+                        match st.as_deref() {
+                            Some("rejected") => {
+                                any_rejected = Some(p.clone());
+                                break;
+                            }
+                            Some("applied") => {}
+                            _ => {
+                                all_applied = false;
+                            }
+                        }
+                    }
+
+                    if let Some(rejected_agent) = any_rejected {
+                        let reason = format!(
+                            "pilot agent '{}' rejected candidate policy revision '{}'",
+                            rejected_agent, revision
+                        );
+                        let mut to_rollback = Vec::new();
+                        for (agent, _) in &active_deployments {
+                            if let Some(Some(prev)) = previous_revisions.get(agent) {
+                                to_rollback.push((agent.clone(), prev.clone()));
+                            }
+                        }
+                        NextAction::Rollback {
+                            rollout: base_rollout,
+                            to_rollback,
+                            reason,
+                        }
+                    } else if all_applied {
+                        if standard_agents.is_empty() {
+                            NextAction::Complete(base_rollout)
+                        } else {
+                            for w in &standard_agents {
+                                let exists: Option<i64> = db
+                                    .query_row(
+                                        "SELECT 1 FROM managed_agent_revisions WHERE tenant_id=?1 AND agent_id=?2 AND revision=?3",
+                                        params![tenant, w, revision],
+                                        |r| r.get(0),
+                                    )
+                                    .optional()?;
+                                if exists.is_none() {
+                                    db.execute(
+                                        "INSERT INTO managed_agent_revisions (tenant_id, agent_id, revision, policy_yaml, policy_sha256, approved_at_unix)
+                                         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                                        params![tenant, w, revision, yaml, policy_sha256, now_unix()],
+                                    )?;
+                                }
+                            }
+                            NextAction::PromoteToStandard {
+                                rollout: base_rollout,
+                                standards: standard_agents,
+                                revision,
+                            }
+                        }
+                    } else {
+                        NextAction::StillRunning(base_rollout)
+                    }
+                }
+                RolloutPhase::Standard => {
+                    let mut any_rejected = None;
+                    let mut all_applied = true;
+                    for w in &standard_agents {
+                        let seq = match active_deployments.get(w) {
+                            Some(&s) => s,
+                            None => {
+                                all_applied = false;
+                                continue;
+                            }
+                        };
+                        let st: Option<String> = db
+                            .query_row(
+                                "SELECT status FROM managed_agent_deployments
+                             WHERE tenant_id=?1 AND agent_id=?2 AND deployment_sequence=?3",
+                                params![tenant, w, seq as i64],
+                                |r| r.get(0),
+                            )
+                            .optional()?;
+                        match st.as_deref() {
+                            Some("rejected") => {
+                                any_rejected = Some(w.clone());
+                                break;
+                            }
+                            Some("applied") => {}
+                            _ => {
+                                all_applied = false;
+                            }
+                        }
+                    }
+
+                    if let Some(rejected_agent) = any_rejected {
+                        let reason = format!(
+                            "standard agent '{}' rejected candidate policy revision '{}'",
+                            rejected_agent, revision
+                        );
+                        let mut to_rollback = Vec::new();
+                        for (agent, _) in &active_deployments {
+                            if let Some(Some(prev)) = previous_revisions.get(agent) {
+                                to_rollback.push((agent.clone(), prev.clone()));
+                            }
+                        }
+                        NextAction::Rollback {
+                            rollout: base_rollout,
+                            to_rollback,
+                            reason,
+                        }
+                    } else if all_applied {
+                        NextAction::Complete(base_rollout)
+                    } else {
+                        NextAction::StillRunning(base_rollout)
+                    }
+                }
+                _ => NextAction::None,
+            }
+        };
+
+        let now = now_unix();
+        match action {
+            NextAction::None => Ok(None),
+            NextAction::StillRunning(r) => Ok(Some(r)),
+            NextAction::Rollback {
+                mut rollout,
+                to_rollback,
+                reason,
+            } => {
+                for (agent, prev) in to_rollback {
+                    let _ = self.deploy_managed_revision(tenant, &agent, &prev, true, issuer);
+                }
+                let db = self.connection()?;
+                db.execute(
+                    "UPDATE managed_group_rollouts
+                     SET phase='rolled_back', failure_reason=?3, updated_at_unix=?4
+                     WHERE tenant_id=?1 AND group_id=?2 AND rollout_id=?5",
+                    params![tenant, group_id, reason, now, rollout.rollout_id],
+                )?;
+                rollout.phase = RolloutPhase::RolledBack;
+                rollout.failure_reason = Some(reason);
+                rollout.updated_at_unix = now;
+                Ok(Some(rollout))
+            }
+            NextAction::PromoteToStandard {
+                mut rollout,
+                standards,
+                revision,
+            } => {
+                for w in standards {
+                    let dep = self.deploy_managed_revision(tenant, &w, &revision, false, issuer)?;
+                    rollout.active_deployments.insert(w, dep.deployment_sequence);
+                }
+                let db = self.connection()?;
+                db.execute(
+                    "UPDATE managed_group_rollouts
+                     SET phase='standard', active_deployments_json=?3, updated_at_unix=?4
+                     WHERE tenant_id=?1 AND group_id=?2 AND rollout_id=?5",
+                    params![
+                        tenant,
+                        group_id,
+                        serde_json::to_string(&rollout.active_deployments)?,
+                        now,
+                        rollout.rollout_id
+                    ],
+                )?;
+                rollout.phase = RolloutPhase::Standard;
+                rollout.updated_at_unix = now;
+                Ok(Some(rollout))
+            }
+            NextAction::Complete(mut rollout) => {
+                let db = self.connection()?;
+                db.execute(
+                    "UPDATE managed_group_rollouts
+                     SET phase='completed', updated_at_unix=?3
+                     WHERE tenant_id=?1 AND group_id=?2 AND rollout_id=?4",
+                    params![tenant, group_id, now, rollout.rollout_id],
+                )?;
+                rollout.phase = RolloutPhase::Completed;
+                rollout.updated_at_unix = now;
+                Ok(Some(rollout))
+            }
+        }
+    }
+
+    pub fn get_managed_group_rollout(
+        &self,
+        tenant: &str,
+        group_id: &str,
+    ) -> Result<Option<ManagedGroupRollout>> {
+        ensure!(exact_id(tenant) && exact_id(group_id), "invalid identifier");
+        let db = self.connection()?;
+        schema(&db)?;
+        let row: Option<(
+            String,
+            String,
+            String,
+            Option<String>,
+            String,
+            String,
+            String,
+            String,
+            String,
+            Option<String>,
+            i64,
+            i64,
+        )> = db
+            .query_row(
+                "SELECT rollout_id, revision, policy_sha256, issuer_key_id, phase,
+                    pilot_agents_json, standard_agents_json, active_deployments_json,
+                    previous_revisions_json, failure_reason, created_at_unix, updated_at_unix
+             FROM managed_group_rollouts
+             WHERE tenant_id=?1 AND group_id=?2
+             ORDER BY created_at_unix DESC LIMIT 1",
+                params![tenant, group_id],
+                |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        r.get(3)?,
+                        r.get(4)?,
+                        r.get(5)?,
+                        r.get(6)?,
+                        r.get(7)?,
+                        r.get(8)?,
+                        r.get(9)?,
+                        r.get(10)?,
+                        r.get(11)?,
+                    ))
+                },
+            )
+            .optional()?;
+
+        let Some((
+            rollout_id,
+            revision,
+            policy_sha256,
+            issuer_key_id,
+            phase_str,
+            pilot_json,
+            standard_json,
+            active_json,
+            prev_json,
+            failure_reason,
+            created_at,
+            updated_at,
+        )) = row
+        else {
+            return Ok(None);
+        };
+
+        Ok(Some(ManagedGroupRollout {
+            tenant_id: tenant.into(),
+            group_id: group_id.into(),
+            rollout_id,
+            revision,
+            policy_sha256,
+            issuer_key_id,
+            phase: phase_str.parse()?,
+            pilot_agents: serde_json::from_str(&pilot_json)?,
+            standard_agents: serde_json::from_str(&standard_json)?,
+            active_deployments: serde_json::from_str(&active_json)?,
+            previous_revisions: serde_json::from_str(&prev_json)?,
+            failure_reason,
+            created_at_unix: created_at,
+            updated_at_unix: updated_at,
+        }))
+    }
+
+    pub fn rollback_managed_group_rollout(
+        &self,
+        tenant: &str,
+        group_id: &str,
+        issuer: &ManagedIssuer,
+    ) -> Result<Option<ManagedGroupRollout>> {
+        let (mut rollout, to_rollback) = {
+            let db = self.connection()?;
+            schema(&db)?;
+            let row: Option<(
+                String,
+                String,
+                String,
+                Option<String>,
+                String,
+                String,
+                String,
+                String,
+                String,
+                Option<String>,
+                i64,
+                i64,
+            )> = db
+                .query_row(
+                    "SELECT rollout_id, revision, policy_sha256, issuer_key_id, phase,
+                        pilot_agents_json, standard_agents_json, active_deployments_json,
+                        previous_revisions_json, failure_reason, created_at_unix, updated_at_unix
+                 FROM managed_group_rollouts
+                 WHERE tenant_id=?1 AND group_id=?2 AND phase IN ('pilot','standard')
+                 ORDER BY created_at_unix DESC LIMIT 1",
+                    params![tenant, group_id],
+                    |r| {
+                        Ok((
+                            r.get(0)?,
+                            r.get(1)?,
+                            r.get(2)?,
+                            r.get(3)?,
+                            r.get(4)?,
+                            r.get(5)?,
+                            r.get(6)?,
+                            r.get(7)?,
+                            r.get(8)?,
+                            r.get(9)?,
+                            r.get(10)?,
+                            r.get(11)?,
+                        ))
+                    },
+                )
+                .optional()?;
+
+            let Some((
+                rollout_id,
+                revision,
+                policy_sha256,
+                issuer_key_id,
+                _phase_str,
+                pilot_json,
+                standard_json,
+                active_json,
+                prev_json,
+                _failure_reason,
+                created_at,
+                _updated_at,
+            )) = row
+            else {
+                return Ok(None);
+            };
+
+            let pilot_agents: Vec<String> = serde_json::from_str(&pilot_json)?;
+            let standard_agents: Vec<String> = serde_json::from_str(&standard_json)?;
+            let active_deployments: std::collections::BTreeMap<String, u64> =
+                serde_json::from_str(&active_json)?;
+            let previous_revisions: std::collections::BTreeMap<String, Option<String>> =
+                serde_json::from_str(&prev_json)?;
+
+            let mut to_rollback = Vec::new();
+            for (agent, _) in &active_deployments {
+                if let Some(Some(prev)) = previous_revisions.get(agent) {
+                    to_rollback.push((agent.clone(), prev.clone()));
+                }
+            }
+
+            let r = ManagedGroupRollout {
+                tenant_id: tenant.into(),
+                group_id: group_id.into(),
+                rollout_id,
+                revision,
+                policy_sha256,
+                issuer_key_id,
+                phase: RolloutPhase::RolledBack,
+                pilot_agents,
+                standard_agents,
+                active_deployments,
+                previous_revisions,
+                failure_reason: Some("operator requested rollback".to_string()),
+                created_at_unix: created_at,
+                updated_at_unix: now_unix(),
+            };
+            (r, to_rollback)
+        };
+
+        for (agent, prev) in to_rollback {
+            let _ = self.deploy_managed_revision(tenant, &agent, &prev, true, issuer);
+        }
+
+        let now = now_unix();
+        let reason = "operator requested rollback".to_string();
+        {
+            let db = self.connection()?;
+            db.execute(
+                "UPDATE managed_group_rollouts
+                 SET phase='rolled_back', failure_reason=?3, updated_at_unix=?4
+                 WHERE tenant_id=?1 AND group_id=?2 AND rollout_id=?5",
+                params![tenant, group_id, reason, now, rollout.rollout_id],
+            )?;
+        }
+        rollout.updated_at_unix = now;
+        Ok(Some(rollout))
+    }
+
+    pub fn check_and_advance_active_rollouts_for_agent(
+        &self,
+        tenant: &str,
+        agent: &str,
+    ) -> Result<()> {
+        let group_ids = {
+            let db = self.connection()?;
+            schema(&db)?;
+            let mut stmt = db.prepare(
+                "SELECT DISTINCT m.group_id FROM managed_agent_group_members m
+                 JOIN managed_group_rollouts r ON r.tenant_id=m.tenant_id AND r.group_id=m.group_id
+                 WHERE m.tenant_id=?1 AND m.agent_id=?2 AND r.phase IN ('pilot','standard')",
+            )?;
+            let ids = stmt
+                .query_map(params![tenant, agent], |r| r.get::<_, String>(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            ids
+        };
+
+        for gid in group_ids {
+            let issuer_key_id: Option<String> = {
+                let db = self.connection()?;
+                db.query_row(
+                    "SELECT issuer_key_id FROM managed_group_rollouts
+                 WHERE tenant_id=?1 AND group_id=?2 AND phase IN ('pilot','standard')
+                 ORDER BY created_at_unix DESC LIMIT 1",
+                    params![tenant, gid],
+                    |r| r.get(0),
+                )
+                .optional()?
+                .flatten()
+            };
+
+            if let Ok(issuer) =
+                ManagedIssuer::from_environment_for_key(issuer_key_id.as_deref())
+            {
+                let _ = self.advance_managed_group_rollout(tenant, &gid, &issuer);
+            }
+        }
+        Ok(())
     }
 }
 
@@ -709,4 +1792,277 @@ mod tests {
             3
         );
     }
+
+    #[test]
+    fn test_group_lifecycle_membership_and_revisions() {
+        let store = TenantStore::open(":memory:").unwrap();
+        let tenant = store.create_tenant("group-tenant").unwrap();
+        store.enroll_managed_agent(&tenant.id, "pilot-1").unwrap();
+        store.enroll_managed_agent(&tenant.id, "worker-1").unwrap();
+
+        // 1. Create group
+        let group = store
+            .create_managed_group(&tenant.id, "prod-agents", "Production Agents")
+            .unwrap();
+        assert_eq!(group.group_id, "prod-agents");
+        assert_eq!(group.name, "Production Agents");
+
+        // 2. Add members: pilot and standard
+        let m1 = store
+            .add_managed_group_member(&tenant.id, "prod-agents", "pilot-1", true)
+            .unwrap();
+        assert!(m1.is_pilot);
+        let m2 = store
+            .add_managed_group_member(&tenant.id, "prod-agents", "worker-1", false)
+            .unwrap();
+        assert!(!m2.is_pilot);
+
+        let members = store
+            .list_managed_group_members(&tenant.id, "prod-agents")
+            .unwrap();
+        assert_eq!(members.len(), 2);
+
+        // 3. Group revisions
+        let rev = store
+            .create_managed_group_revision(
+                &tenant.id,
+                "prod-agents",
+                "v1",
+                "default: deny\n",
+            )
+            .unwrap();
+        assert_eq!(rev.revision, "v1");
+        assert!(!rev.approved);
+
+        assert!(store
+            .approve_managed_group_revision(&tenant.id, "prod-agents", "v1")
+            .unwrap());
+    }
+
+    #[test]
+    fn test_staged_group_rollout_pilot_success_promotes_to_standard() {
+        let store = TenantStore::open(":memory:").unwrap();
+        let tenant = store.create_tenant("rollout-tenant").unwrap();
+        store.enroll_managed_agent(&tenant.id, "pilot-1").unwrap();
+        store.enroll_managed_agent(&tenant.id, "worker-1").unwrap();
+
+        store
+            .create_managed_group(&tenant.id, "cluster-a", "Cluster A")
+            .unwrap();
+        store
+            .add_managed_group_member(&tenant.id, "cluster-a", "pilot-1", true)
+            .unwrap();
+        store
+            .add_managed_group_member(&tenant.id, "cluster-a", "worker-1", false)
+            .unwrap();
+
+        let signer = ManagedIssuer {
+            key_id: "k1".into(),
+            pair: Ed25519KeyPair::from_seed_unchecked(&[9u8; 32]).unwrap(),
+        };
+
+        // Baseline revision v1 deployed to both
+        store
+            .create_managed_group_revision(
+                &tenant.id,
+                "cluster-a",
+                "v1",
+                "default: deny\n",
+            )
+            .unwrap();
+        store
+            .approve_managed_group_revision(&tenant.id, "cluster-a", "v1")
+            .unwrap();
+
+        // Target candidate revision v2
+        store
+            .create_managed_group_revision(
+                &tenant.id,
+                "cluster-a",
+                "v2",
+                "default: allow\n",
+            )
+            .unwrap();
+        store
+            .approve_managed_group_revision(&tenant.id, "cluster-a", "v2")
+            .unwrap();
+
+        // Start rollout
+        let ro = store
+            .start_managed_group_rollout(&tenant.id, "cluster-a", "v2", &signer)
+            .unwrap();
+        assert_eq!(ro.phase, RolloutPhase::Pilot);
+        assert_eq!(ro.pilot_agents, vec!["pilot-1"]);
+        assert_eq!(ro.standard_agents, vec!["worker-1"]);
+
+        // Pilot received v2 deployment
+        let p_bundle = store
+            .deliver_managed_bundle(&tenant.id, "pilot-1")
+            .unwrap()
+            .unwrap();
+        assert_eq!(p_bundle.revision, "v2");
+        // Worker did NOT receive v2 deployment yet
+        let w_bundle = store
+            .deliver_managed_bundle(&tenant.id, "worker-1")
+            .unwrap();
+        assert!(w_bundle.is_none());
+
+        // Pilot acknowledges applied
+        store
+            .acknowledge_managed_bundle(
+                &tenant.id,
+                "pilot-1",
+                &AppliedReport {
+                    deployment_sequence: p_bundle.deployment_sequence,
+                    revision: "v2".into(),
+                    policy_sha256: p_bundle.policy_sha256.clone(),
+                    status: "applied".into(),
+                },
+            )
+            .unwrap();
+
+        // Advance rollout
+        let advanced = store
+            .advance_managed_group_rollout(&tenant.id, "cluster-a", &signer)
+            .unwrap()
+            .unwrap();
+        assert_eq!(advanced.phase, RolloutPhase::Standard);
+
+        // Now worker receives v2 deployment
+        let w_bundle = store
+            .deliver_managed_bundle(&tenant.id, "worker-1")
+            .unwrap()
+            .unwrap();
+        assert_eq!(w_bundle.revision, "v2");
+
+        // Worker acknowledges applied
+        store
+            .acknowledge_managed_bundle(
+                &tenant.id,
+                "worker-1",
+                &AppliedReport {
+                    deployment_sequence: w_bundle.deployment_sequence,
+                    revision: "v2".into(),
+                    policy_sha256: w_bundle.policy_sha256.clone(),
+                    status: "applied".into(),
+                },
+            )
+            .unwrap();
+
+        let finished = store
+            .advance_managed_group_rollout(&tenant.id, "cluster-a", &signer)
+            .unwrap()
+            .unwrap();
+        assert_eq!(finished.phase, RolloutPhase::Completed);
+    }
+
+    #[test]
+    fn test_staged_group_rollout_pilot_rejection_auto_rollbacks_and_spares_standard() {
+        let store = TenantStore::open(":memory:").unwrap();
+        let tenant = store.create_tenant("rollback-tenant").unwrap();
+        store.enroll_managed_agent(&tenant.id, "pilot-1").unwrap();
+        store.enroll_managed_agent(&tenant.id, "worker-1").unwrap();
+
+        store
+            .create_managed_group(&tenant.id, "cluster-b", "Cluster B")
+            .unwrap();
+        store
+            .add_managed_group_member(&tenant.id, "cluster-b", "pilot-1", true)
+            .unwrap();
+        store
+            .add_managed_group_member(&tenant.id, "cluster-b", "worker-1", false)
+            .unwrap();
+
+        let signer = ManagedIssuer {
+            key_id: "k1".into(),
+            pair: Ed25519KeyPair::from_seed_unchecked(&[9u8; 32]).unwrap(),
+        };
+
+        // Deploy initial baseline v1 to pilot-1
+        store
+            .create_managed_revision(&tenant.id, "pilot-1", "v1", "default: allow\n")
+            .unwrap();
+        store
+            .approve_managed_revision(&tenant.id, "pilot-1", "v1")
+            .unwrap();
+        let p_v1 = store
+            .deploy_managed_revision(&tenant.id, "pilot-1", "v1", false, &signer)
+            .unwrap();
+        store
+            .deliver_managed_bundle(&tenant.id, "pilot-1")
+            .unwrap();
+        store
+            .acknowledge_managed_bundle(
+                &tenant.id,
+                "pilot-1",
+                &AppliedReport {
+                    deployment_sequence: p_v1.deployment_sequence,
+                    revision: "v1".into(),
+                    policy_sha256: p_v1.policy_sha256.clone(),
+                    status: "applied".into(),
+                },
+            )
+            .unwrap();
+
+        // Candidate revision v2 on group
+        store
+            .create_managed_group_revision(
+                &tenant.id,
+                "cluster-b",
+                "v2",
+                "default: deny\n",
+            )
+            .unwrap();
+        store
+            .approve_managed_group_revision(&tenant.id, "cluster-b", "v2")
+            .unwrap();
+
+        let ro = store
+            .start_managed_group_rollout(&tenant.id, "cluster-b", "v2", &signer)
+            .unwrap();
+        assert_eq!(ro.phase, RolloutPhase::Pilot);
+
+        // Pilot delivers bundle and REJECTS it
+        let p_bundle = store
+            .deliver_managed_bundle(&tenant.id, "pilot-1")
+            .unwrap()
+            .unwrap();
+        assert_eq!(p_bundle.revision, "v2");
+
+        store
+            .acknowledge_managed_bundle(
+                &tenant.id,
+                "pilot-1",
+                &AppliedReport {
+                    deployment_sequence: p_bundle.deployment_sequence,
+                    revision: "v2".into(),
+                    policy_sha256: p_bundle.policy_sha256.clone(),
+                    status: "rejected".into(),
+                },
+            )
+            .unwrap();
+
+        // Advance rollout: should detect rejection, trigger rollback to v1, set phase = RolledBack
+        let ro_after = store
+            .advance_managed_group_rollout(&tenant.id, "cluster-b", &signer)
+            .unwrap()
+            .unwrap();
+        assert_eq!(ro_after.phase, RolloutPhase::RolledBack);
+        assert!(ro_after.failure_reason.unwrap().contains("rejected"));
+
+        // Pilot now has a rollback deployment for v1 with higher sequence!
+        let rollback_bundle = store
+            .deliver_managed_bundle(&tenant.id, "pilot-1")
+            .unwrap()
+            .unwrap();
+        assert_eq!(rollback_bundle.revision, "v1");
+        assert!(rollback_bundle.deployment_sequence > p_bundle.deployment_sequence);
+
+        // Worker was NEVER deployed candidate v2
+        let worker_deployments = store
+            .list_managed_deployments(&tenant.id, "worker-1")
+            .unwrap();
+        assert!(worker_deployments.is_empty());
+    }
 }
+
