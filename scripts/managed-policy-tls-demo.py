@@ -301,6 +301,13 @@ def main():
             "SOUP_MANAGED_AGENT_ID": "agent-demo",
             "SOUP_MANAGED_AGENT_KEY_ID": "demo-issuer-1",
             "SOUP_MANAGED_AGENT_PUBLIC_KEY_HEX": issuer["public_key_hex"],
+            # An inherited HTTPS proxy would be unreachable. Real HTTPS
+            # rollout proves ManagedSync's explicit no_proxy() ignores it.
+            "HTTPS_PROXY": "http://127.0.0.1:1",
+            "HTTP_PROXY": "http://127.0.0.1:1",
+            "ALL_PROXY": "http://127.0.0.1:1",
+            "NO_PROXY": "",
+            "no_proxy": "",
         })
         local = proc(stack, [str(agent_binary), "serve"], temp, agent_env, temp / "agent.log")
         def active(expected):
@@ -452,6 +459,7 @@ def main():
                 "edge_image": EDGE_IMAGE,
                 "inherited_proxies_disabled": True,
                 "cross_origin_redirects_disabled": True,
+                "poisoned_inherited_proxy_ignored": True,
             },
             "remote_https_origin": origin,
             "remote_address": edge_ip,
