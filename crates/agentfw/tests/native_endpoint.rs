@@ -1438,6 +1438,192 @@ fn resource_context(profile: &Value, resources: Value) -> Value {
         "resources":resources})
 }
 
+#[cfg(not(windows))]
+#[tokio::test]
+async fn windows_read_v4_requests_are_unavailable_on_other_platforms() {
+    let fixture = Fixture::new(ALLOW);
+    fixture.start("windows-read-platform").await;
+    let mut request = fixture.call(
+        "windows-read-platform",
+        "read_document",
+        &json!({"path":"file.txt"}),
+    );
+    request["contract_version"] = json!(agentfw::native::resource::WINDOWS_READ_CONTRACT);
+    request["resource_admission"] = resource_context(
+        &json!({
+            "server_id":"resource-fixture","tool_name":"read_document",
+            "schema_sha256":schema(),"selectors":[]
+        }),
+        json!([]),
+    );
+    let (status, refused) = fixture.post(&request).await;
+    assert_failure(status, &refused, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        refused["error_code"],
+        "native_windows_read_platform_unsupported"
+    );
+}
+
+#[cfg(windows)]
+fn windows_read_fixture() -> (Fixture, agentfw::native::resource::Policy) {
+    use agentfw::native::resource::{
+        windows_read_executor_sha256, windows_read_schema, WINDOWS_READ_EXECUTOR_PROFILE,
+        WINDOWS_READ_MAX_CONTENT,
+    };
+    let mut fixture = Fixture::new(ALLOW);
+    let workspace = fixture.dir.path().join("windows-read-workspace");
+    std::fs::create_dir(&workspace).unwrap();
+    let workspace = workspace.canonicalize().unwrap();
+    let target = workspace.join("approved.txt");
+    std::fs::write(&target, "approved bytes").unwrap();
+    let schema_sha256 = agentfw::native::canonical_digest(&windows_read_schema());
+    let resource_policy = json!({
+        "profile":{"server_id":"windows-native-fixture","tool_name":"read_document",
+            "schema_sha256":schema_sha256,"selectors":[{"pointer":"/path","kind":"path"}]},
+        "workspace":workspace,"cwd":workspace,
+        "executor_sha256":windows_read_executor_sha256(),"classifier_sha256":"c".repeat(64),
+        "allowed_resources":[{"kind":"path","canonical":target}],
+        "windows_read":{"executor_profile":WINDOWS_READ_EXECUTOR_PROFILE,
+            "max_content_bytes":WINDOWS_READ_MAX_CONTENT}
+    });
+    let policy = serde_json::from_value(resource_policy.clone()).unwrap();
+    let mut configured = registry();
+    let tool = configured["tools"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|tool| tool["name"] == "read_document")
+        .unwrap();
+    tool["schema_sha256"] = json!(schema_sha256);
+    tool["resource_policy"] = resource_policy;
+    let bytes = serde_json::to_vec(&configured).unwrap();
+    fixture.registry_sha256 = sha(&bytes);
+    fixture.state = make_state(
+        fixture.dir.path(),
+        Config {
+            enforce: true,
+            ..Config::default()
+        },
+        ALLOW,
+        &bytes,
+        &fixture.registry_sha256,
+    );
+    (fixture, policy)
+}
+
+#[cfg(windows)]
+fn windows_read_call(
+    fixture: &Fixture,
+    policy: &agentfw::native::resource::Policy,
+    session: &str,
+    args: &Value,
+) -> Value {
+    let admission = agentfw::native::resource::Admission {
+        server_id: policy.profile.server_id.clone(),
+        host_call_id: json!("original-windows-read-id"),
+        profile_sha256: agentfw::native::canonical_digest(
+            &serde_json::to_value(&policy.profile).unwrap(),
+        ),
+        executor_sha256: policy.executor_sha256.clone(),
+        classifier_sha256: policy.classifier_sha256.clone(),
+        snapshot_sha256: "d".repeat(64),
+        definition_sha256: "f".repeat(64),
+        input_sha256: "a".repeat(64),
+        resources: vec![agentfw::mcp::resources::ResourceEvidence {
+            pointer: "/path".into(),
+            source: agentfw::mcp::resources::EvidenceSource::Argument,
+            resource: policy.allowed_resources[0].clone(),
+        }],
+        execution: None,
+        network: None,
+        windows_read: Some(agentfw::native::resource::windows_read_binding(policy, args).unwrap()),
+    };
+    let mut request = fixture.call(session, "read_document", args);
+    request["contract_version"] = json!(agentfw::native::resource::WINDOWS_READ_CONTRACT);
+    request["schema_sha256"] = json!(policy.profile.schema_sha256);
+    request["resource_admission"] = serde_json::to_value(admission).unwrap();
+    request
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn windows_read_v4_native_binds_identity_arguments_and_single_use_result() {
+    let (fixture, policy) = windows_read_fixture();
+    fixture.start("windows-bound").await;
+    let args = json!({"path":"approved.txt"});
+    let request = windows_read_call(&fixture, &policy, "windows-bound", &args);
+    for field in [
+        "policy_sha256",
+        "args_sha256",
+        "workspace_sha256",
+        "target_sha256",
+    ] {
+        let mut changed = request.clone();
+        changed["resource_admission"]["windows_read"][field] = json!("0".repeat(64));
+        let (status, refused) = fixture.post(&changed).await;
+        assert_eq!(status, StatusCode::OK, "{refused}");
+        assert_eq!(refused["release"], false);
+        assert_eq!(
+            refused["reason_codes"],
+            json!(["native_windows_read_binding_mismatch"])
+        );
+        assert!(refused["call_id"].is_null());
+    }
+    let mut changed = request.clone();
+    changed["args"]["path"] = json!(policy.workspace.join("approved.txt"));
+    let (_, refused) = fixture.post(&changed).await;
+    assert_eq!(refused["release"], false, "{refused}");
+    let (_, allowed) = fixture.post(&request).await;
+    assert_eq!(allowed["release"], true, "{allowed}");
+    assert_eq!(
+        allowed["contract_version"],
+        agentfw::native::resource::WINDOWS_READ_CONTRACT
+    );
+    let mut result = fixture.result(
+        "windows-bound",
+        &allowed,
+        "read_document",
+        &args,
+        "value",
+        "approved bytes",
+    );
+    result["contract_version"] = json!(agentfw::native::resource::WINDOWS_READ_CONTRACT);
+    let (_, released) = fixture.post(&result).await;
+    assert_eq!(released["release"], true, "{released}");
+    let (_, replayed) = fixture.post(&result).await;
+    assert_eq!(replayed["release"], false, "{replayed}");
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn windows_read_v4_native_refuses_downgrade_and_replaced_leaf() {
+    let (fixture, policy) = windows_read_fixture();
+    fixture.start("windows-replaced").await;
+    let args = json!({"path":"approved.txt"});
+    let request = windows_read_call(&fixture, &policy, "windows-replaced", &args);
+    for contract in [
+        agentfw::native::resource::CONTRACT,
+        agentfw::native::resource::CREATE_CONTRACT,
+        agentfw::native::resource::NETWORK_CONTRACT,
+    ] {
+        let mut changed = request.clone();
+        changed["contract_version"] = json!(contract);
+        let (status, refused) = fixture.post(&changed).await;
+        assert_failure(status, &refused, StatusCode::BAD_REQUEST);
+        assert_eq!(refused["error_code"], "native_resource_contract_mismatch");
+    }
+    let original = policy.workspace.join("approved.txt");
+    std::fs::rename(&original, policy.workspace.join("original.txt")).unwrap();
+    std::fs::write(&original, "substituted bytes").unwrap();
+    let (_, refused) = fixture.post(&request).await;
+    assert_eq!(refused["release"], false, "{refused}");
+    assert_eq!(
+        refused["reason_codes"],
+        json!(["native_windows_read_binding_mismatch"])
+    );
+    assert!(refused["call_id"].is_null());
+}
+
 fn resource_call(
     fixture: &Fixture,
     session: &str,
@@ -1844,6 +2030,7 @@ fn create_file_call(
         }],
         execution: Some(agentfw::native::resource::create_file_binding(policy, args).unwrap()),
         network: None,
+        windows_read: None,
     };
     let mut body = fixture.event(session, "call");
     body["contract_version"] = json!(agentfw::native::resource::CREATE_CONTRACT);
@@ -2031,6 +2218,7 @@ fn https_get_call(
         }],
         execution: None,
         network: Some(agentfw::native::resource::https_get_binding(policy, &args).unwrap()),
+        windows_read: None,
     };
     let mut body = fixture.event(session, "call");
     body["contract_version"] = json!(agentfw::native::resource::NETWORK_CONTRACT);
