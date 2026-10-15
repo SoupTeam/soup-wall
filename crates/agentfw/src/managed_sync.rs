@@ -113,12 +113,38 @@ fn private_ca_from_environment(is_https: bool) -> Result<Option<Vec<u8>>> {
         is_https,
         "private CA is only supported for HTTPS Console origins"
     );
-    let path = PathBuf::from(raw);
+    private_ca_from_path(&PathBuf::from(raw)).map(Some)
+}
+
+fn private_ca_from_path(path: &Path) -> Result<Vec<u8>> {
     ensure!(
         path.is_absolute(),
         "SOUP_MANAGED_AGENT_TLS_CA_FILE must be an absolute path"
     );
-    let mut reader = fs::File::open(&path).context("cannot open operator private CA")?;
+    let metadata = fs::metadata(path).context("cannot inspect operator private CA")?;
+    ensure!(
+        metadata.is_file() && metadata.len() <= MAX_PRIVATE_CA_BYTES as u64,
+        "operator private CA must be a regular file no larger than 64 KiB"
+    );
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        // A regular file can be replaced after the path check. Never block on
+        // an opened FIFO; validate the actual descriptor before reading bytes.
+        options.custom_flags(libc::O_NONBLOCK);
+    }
+    let mut reader = options
+        .open(path)
+        .context("cannot open operator private CA")?;
+    let opened = reader
+        .metadata()
+        .context("cannot inspect opened private CA")?;
+    ensure!(
+        opened.is_file() && opened.len() <= MAX_PRIVATE_CA_BYTES as u64,
+        "operator private CA must be a regular file no larger than 64 KiB"
+    );
     let mut data = Vec::new();
     (&mut reader)
         .take((MAX_PRIVATE_CA_BYTES + 1) as u64)
@@ -153,7 +179,7 @@ fn private_ca_from_environment(is_https: bool) -> Result<Option<Vec<u8>>> {
         "supply exactly one operator private CA PEM certificate"
     );
     reqwest::Certificate::from_pem(&data).context("invalid operator private CA PEM")?;
-    Ok(Some(data))
+    Ok(data)
 }
 
 impl ManagedSync {
@@ -574,23 +600,27 @@ mod https_transport_tests {
     }
 
     #[test]
-    fn private_ca_is_bounded_and_invalid_pem_is_rejected() {
+    fn private_ca_file_validation_uses_the_real_loader() {
         let temp = tempfile::tempdir().unwrap();
         let file = temp.path().join("private-root.pem");
+        assert!(private_ca_from_path(Path::new("relative.pem")).is_err());
+        assert!(private_ca_from_path(temp.path()).is_err());
+        assert!(private_ca_from_path(&file).is_err());
         fs::write(&file, vec![b'x'; MAX_PRIVATE_CA_BYTES + 1]).unwrap();
-        // Validate bounded stream read without inheriting process env in parallel tests.
-        let mut reader = fs::File::open(&file).unwrap();
-        let mut bytes = Vec::new();
-        (&mut reader)
-            .take((MAX_PRIVATE_CA_BYTES + 1) as u64)
-            .read_to_end(&mut bytes)
-            .unwrap();
-        assert_eq!(bytes.len(), MAX_PRIVATE_CA_BYTES + 1);
-        assert!(
-            CertificateDer::pem_slice_iter(b"not a certificate")
-                .next()
-                .is_none(),
-            "non-PEM input must not contain a trusted certificate"
-        );
+        assert!(private_ca_from_path(&file).is_err());
+        fs::write(&file, b"not a certificate").unwrap();
+        assert!(private_ca_from_path(&file).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn private_ca_fifo_is_refused_without_waiting_for_a_writer() {
+        let temp = tempfile::tempdir().unwrap();
+        let file = temp.path().join("private-root.pem");
+        let path = std::ffi::CString::new(file.as_os_str().as_encoded_bytes()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(path.as_ptr(), 0o600) }, 0);
+        let started = std::time::Instant::now();
+        assert!(private_ca_from_path(&file).is_err());
+        assert!(started.elapsed() < Duration::from_secs(1));
     }
 }
