@@ -37,7 +37,9 @@ def observation(name="utf8-relative"):
         if name not in PROBE.SUCCESS or name == "result-withheld":
             text = {"classifier-ask": "policy_unconfirmed_ask", "classifier-deny": "policy_denied",
                     "native-ask": "sou54-explicit-ask", "native-deny": "sou54-explicit-deny",
-                    "result-withheld": "Soup Wall withheld MCP result"}.get(name, "resource_create_failed")
+                    "result-withheld": "Soup Wall withheld MCP result",
+                    "relative-dot-path": "native_create_destination_unsupported", "absolute-double-slash": "native_create_destination_unsupported",
+                    "server-id-mismatch": "resource_server_identity_mismatch", "cwd-workspace-mismatch": "resource_workspace_mismatch"}.get(name, "resource_create_failed")
             result = {"isError": True, "content": [{"type": "text", "text": text}]}
         response = {"jsonrpc": "2.0", "id": request["id"], "result": result}
         attempts.append({"request": request, "reply_raw": raw(response), "latency_ms": 1.25})
@@ -118,8 +120,24 @@ class EvidenceTests(unittest.TestCase):
         self.assertFalse(value["acceptance_passed"])
 
     def test_usable_create_and_result_withhold_have_honest_effect_witnesses(self):
-        for name in ("utf8-relative", "result-withheld", "native-deny", "native-ask", "classifier-ask", "classifier-deny", "repeated-failures"):
+        for name in ("utf8-relative", "result-withheld", "native-deny", "native-ask", "classifier-ask", "classifier-deny", "repeated-failures", "server-id-mismatch", "cwd-workspace-mismatch"):
             self.assertEqual(PROBE.grade(observation(name))["status"], "pass", name)
+
+    def test_ambiguous_raw_path_spellings_require_the_specific_refusal(self):
+        for name in ("relative-dot-path", "absolute-double-slash"):
+            row = observation(name)
+            self.assertEqual(PROBE.grade(row)["status"], "pass")
+            row["attempts"][0]["reply_raw"] = row["attempts"][0]["reply_raw"].replace("native_create_destination_unsupported", "unrelated")
+            row["client_raw"] = row["client_raw"].replace("native_create_destination_unsupported", "unrelated")
+            self.assertEqual(PROBE.grade(row)["status"], "fail")
+
+    def test_collector_identity_workspace_refusals_require_specific_reasons(self):
+        for name in ("server-id-mismatch", "cwd-workspace-mismatch"):
+            row = observation(name)
+            self.assertEqual(PROBE.grade(row)["status"], "pass")
+            row["attempts"][0]["reply_raw"] = row["attempts"][0]["reply_raw"].replace("resource_server_identity_mismatch", "unrelated").replace("resource_workspace_mismatch", "unrelated")
+            row["client_raw"] = row["client_raw"].replace("resource_server_identity_mismatch", "unrelated").replace("resource_workspace_mismatch", "unrelated")
+            self.assertEqual(PROBE.grade(row)["status"], "fail")
 
     def test_scripted_metadata_retains_ids_and_uses_supported_integer_progress_token(self):
         request = PROBE.frame("original-call-id", "create_file", {"path": "new.txt", "content": "ok"})

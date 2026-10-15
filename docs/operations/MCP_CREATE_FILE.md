@@ -117,10 +117,12 @@ and native audit correlation, per-call latency and independent workspace/outside
 file type/mode/link/content hashes. Agent tokens and private homes are not
 retained. It must report successful owned-resource cleanup.
 
-The 22-case matrix includes relative/absolute UTF-8 creation, empty content, the
+The 26-case matrix includes relative/absolute UTF-8 creation, empty content, the
 byte limit, multibyte overflow, existing files/links/FIFOs/directories, unsupported
 nested/missing-parent/traversal/outside/unlisted destinations, native and
-classifier Ask/Deny, 70 consecutive existing-target failures followed by useful
+classifier Ask/Deny, mismatched operator server ID and an unset workspace variable
+with a collector cwd outside the approved root, ambiguous `./leaf` and absolute
+double-slash spellings, 70 consecutive existing-target failures followed by useful
 same-session read, and committed creation whose result is withheld. Each case
 requires a useful read in the **same** native session and a clean MCP EOF/closure.
 The independent discovery child creates its ledger before startup and records any
@@ -150,3 +152,46 @@ scripted client, local debug binary, classifier, native policy and filesystem.
 They are not a production throughput, durability, RTO or general host benchmark.
 Independent review and the accepted exact-source checks are required before
 closing SOU-54; a local fixture is not product release acceptance.
+
+## Actual native admission race and replay checks
+
+A second [actual stdio driver](../../scripts/verify-sou54-create-races.py) uses the
+same production collector, classifier, policy, daemon and constrained executor.
+Its owned loopback proxy forwards the collector's real authentication header
+without retaining it. It never manufactures an Allow receipt. For two deliberate
+substitution controls it changes only the native request's destination or content
+while preserving the original execution binding; the **real daemon** must Deny.
+Other cases hold an authentic upstream Allow before the collector receives it.
+
+```sh
+python3 scripts/verify-sou54-create-races.py --run \
+  --repo "$PWD" --agentfw "$PWD/target/debug/agentfw" \
+  --expected-commit "$(git rev-parse HEAD)" \
+  --output /tmp/sou54-create-races-results.json
+```
+
+The eight cases cover destination substitution, content substitution, replacing
+the root pathname after genuine admission, two admitted MCP sessions racing for
+one target, queued unsupported overlap, queued cancellation, a batch and a
+replayed host call ID. Root movement and replacement-canary setup are explicitly
+labelled **fixture mutations**. Original-root, replacement-root and outside-file
+snapshots are retained separately; the original root is restored only after the
+refusal and snapshots, before its same-session useful read.
+
+The concurrent case must publish exactly one complete file belonging to one
+submitted invocation and record the losing operation honestly. Both independently
+admitted sessions must remain useful. Queued overlap/cancellation is deliberately
+unsupported: the original native session must end before the held Allow reply is
+released, with no invocation or protected reply delivered. Batch and replay also
+close their transport explicitly. Recovery in those protocol-refusal cases uses
+a **fresh session**, not a false same-session continuation claim. An already
+committed first call in the replay case remains an effect; the replay must add no
+second effect.
+
+The report keeps raw synthetic native bodies/replies with their byte digests,
+real daemon decisions, client release bytes, independent child ledgers, execution
+records and file witnesses. Every proxy handler, MCP process, local daemon and
+private fixture must finish before a pass. This controls selected race orderings;
+it does not establish all scheduling interleavings. The Linux workflow runs both
+stdio drivers as required checks; the pure Python grader controls validate how
+incomplete, fabricated or contradictory observations are rejected.

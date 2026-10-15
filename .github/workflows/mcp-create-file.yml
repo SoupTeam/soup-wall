@@ -7,9 +7,9 @@ on:
       - 'crates/agent/**'
       - 'crates/adapter/**'
       - 'rule_baseline/**'
-      - 'scripts/verify-sou54-create-file.py'
+      - 'scripts/verify-sou54-create-*.py'
       - 'scripts/fixtures/mcp_create_file_probe_server.py'
-      - 'scripts/tests/test_sou54_create_file.py'
+      - 'scripts/tests/test_sou54_create*.py'
       - '.github/workflows/mcp-create-file.yml'
       - 'Cargo.lock'
   workflow_dispatch:
@@ -60,7 +60,7 @@ jobs:
               assert probe.native_test_passed({'exit_code': 0, 'stdout': text}), name + ': no verified passed native tests'
           PYCODE
       - name: Evidence grading controls
-        run: python3 -m unittest discover -s scripts/tests -p 'test_sou54_create_file.py' -v
+        run: python3 -m unittest discover -s scripts/tests -p 'test_sou54_create*.py' -v
       - name: Real enforcing daemon, stdio and independent file witnesses
         shell: bash
         run: |
@@ -68,6 +68,13 @@ jobs:
           python3 scripts/verify-sou54-create-file.py --run --repo "$PWD" \
             --agentfw "$PWD/target/debug/agentfw" --expected-commit "$(git rev-parse HEAD)" \
             --output "$RUNNER_TEMP/sou54-create-file-results.json" 2>&1 | tee "$RUNNER_TEMP/sou54-driver.log"
+      - name: Actual native authority substitution, concurrency and replay races
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 scripts/verify-sou54-create-races.py --run --repo "$PWD" \
+            --agentfw "$PWD/target/debug/agentfw" --expected-commit "$(git rev-parse HEAD)" \
+            --output "$RUNNER_TEMP/sou54-create-races-results.json" 2>&1 | tee "$RUNNER_TEMP/sou54-races.log"
       - name: Retain sanitized outcomes and source/build witnesses
         if: always()
         uses: actions/upload-artifact@v7

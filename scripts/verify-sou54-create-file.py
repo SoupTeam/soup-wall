@@ -41,7 +41,7 @@ CASES = ("utf8-relative", "utf8-absolute", "empty-content", "byte-limit", "utf8-
          "existing-file", "hard-link", "symlink-leaf", "symlink-parent", "fifo", "directory",
          "nested-path", "missing-parent", "traversal", "outside-workspace", "unlisted-file",
          "native-deny", "native-ask", "classifier-deny", "classifier-ask",
-         "repeated-failures", "result-withheld")
+         "repeated-failures", "relative-dot-path", "absolute-double-slash", "server-id-mismatch", "cwd-workspace-mismatch", "result-withheld")
 SUCCESS = {"utf8-relative", "utf8-absolute", "empty-content", "byte-limit", "result-withheld"}
 
 
@@ -235,6 +235,10 @@ def setup_case(root, name):
     path = target.name
     if name == "utf8-absolute":
         path = str(target)
+    elif name == "relative-dot-path":
+        path = "./created.txt"
+    elif name == "absolute-double-slash":
+        path = str(workspace) + "//created.txt"
     elif name == "empty-content":
         content = ""
     elif name == "byte-limit":
@@ -357,6 +361,11 @@ def grade(row):
                 require("ask" in attempt["reply_raw"] or "sou54-explicit-ask" in attempt["reply_raw"], "Ask identity missing")
             if name == "classifier-deny":
                 require("policy_denied" in attempt["reply_raw"], "classifier hard Deny identity missing")
+            if name in {"relative-dot-path", "absolute-double-slash"}:
+                require("native_create_destination_unsupported" in attempt["reply_raw"], "ambiguous raw spelling refusal reason missing")
+            if name in {"server-id-mismatch", "cwd-workspace-mismatch"}:
+                exact_reason = "resource_server_identity_mismatch" if name == "server-id-mismatch" else "resource_workspace_mismatch"
+                require(exact_reason in attempt["reply_raw"], "identity/workspace refusal reason missing")
             if name == "native-deny":
                 require("sou54-explicit-deny" in attempt["reply_raw"], "native Deny identity missing")
             if name == "result-withheld":
@@ -476,9 +485,14 @@ def run_case(repo, binary, name, tools, digest):
                     AGENTFW_CLASSIFIER_PYTHON=sys.executable, AGENTFW_WORKSPACE=str(workspace))
                 if name == "workspace-mismatch":
                     collector_env["AGENTFW_WORKSPACE"] = str(outside)
-                command = [str(binary), "mcp", "--native-admission", "--id", "sou54", "--",
+                collector_cwd = workspace
+                server_id = "other-server" if name == "server-id-mismatch" else "sou54"
+                if name == "cwd-workspace-mismatch":
+                    collector_env.pop("AGENTFW_WORKSPACE", None)
+                    collector_cwd = outside
+                command = [str(binary), "mcp", "--native-admission", "--id", server_id, "--",
                            sys.executable, "-I", "-u", str(FIXTURE), "--ledger", str(ledger)]
-                collector = Collector(command, collector_env, workspace, collector_stream)
+                collector = Collector(command, collector_env, collector_cwd, collector_stream)
                 init = {"jsonrpc": "2.0", "id": "init", "method": "initialize", "params": {
                     "protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "sou54-probe", "version": "1"}}}
                 require(collector.send(init), "MCP initialization missing")
