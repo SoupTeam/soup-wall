@@ -4,8 +4,10 @@ SOU-49, Phase 6 internal candidate. Runtime source:
 `82d41b0bf2ac90b20df42812b4c459981f32bded`, based on accepted main
 `4f428e4b983111e5b2480e40d658628e3d198fe7`. Both real-process runs started
 with a clean worktree and retained identical complete runtime-input and selected-binary
-hashes through cleanup. The later delivery adds evidence and a public-CLI regression;
-production runtime inputs are unchanged. Hosted CI and independent review remain gates.
+hashes through cleanup. The first evidence-only delivery `898847c` added a public-CLI regression without changing
+runtime inputs. A later [CI portability repair and repeated proof](CONSOLE_RECOVERY_2026-10-15.followup.md)
+is recorded separately; original outcomes below are unchanged. Hosted CI and independent
+review remain gates.
 
 [Operator commands and reproduction](../CONSOLE_RECOVERY.md),
 [SQLite outcome](CONSOLE_RECOVERY_2026-10-15.sqlite.json),
