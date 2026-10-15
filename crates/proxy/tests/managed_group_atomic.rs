@@ -462,7 +462,8 @@ async fn controls(f: Fixture) {
     // A deterministic expired ACK deadline closes the canary gate, then a rejected
     // rollback ACK produces Failed rather than waiting indefinitely or claiming success.
     let tenant = setup(&f.store).await;
-    f.store
+    let overdue_candidate = f
+        .store
         .start_managed_group_rollout_async(&tenant, "group", "candidate", &signing_issuer)
         .await
         .unwrap();
@@ -471,6 +472,17 @@ async fn controls(f: Fixture) {
         "UPDATE managed_agent_deployments SET issued_at_unix=0 WHERE status='issued';",
     )
     .await;
+    ack(&f.store, &tenant, "p1", &overdue_candidate).await;
+    let view = f
+        .store
+        .get_managed_group_rollout_async(&tenant, "group")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        view.agents["p1"].status, "overdue",
+        "a late ACK must not reopen an expired canary gate"
+    );
     let rb = f
         .store
         .advance_managed_group_rollout_async(&tenant, "group", Some(&signing_issuer))
@@ -519,6 +531,31 @@ async fn controls(f: Fixture) {
         .failure_reason
         .unwrap()
         .contains("rollback unresolved"));
+    // Late baseline ACKs are truthful Agent state, but cannot confirm a rollback
+    // after its deadline. They must leave the group explicitly Failed.
+    let tenant = setup(&f.store).await;
+    f.store
+        .start_managed_group_rollout_async(&tenant, "group", "candidate", &signing_issuer)
+        .await
+        .unwrap();
+    let rb = f
+        .store
+        .rollback_managed_group_rollout_async(&tenant, "group", &signing_issuer)
+        .await
+        .unwrap()
+        .unwrap();
+    f.sql("UPDATE managed_agent_deployments SET issued_at_unix=0 WHERE action='rollback' AND status='issued';", "UPDATE managed_agent_deployments SET issued_at_unix=0 WHERE action='rollback' AND status='issued';").await;
+    ack(&f.store, &tenant, "p1", &rb).await;
+    let late = f
+        .store
+        .get_managed_group_rollout_async(&tenant, "group")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(late.phase, RolloutPhase::Failed);
+    assert_eq!(late.agents["p1"].status, "overdue");
+    assert!(late.failure_reason.unwrap().contains("rollback unresolved"));
+
     // Upgrade a populated legacy group schema: preserve identities and rows;
     // an old in-flight plan lacking sequence snapshots must never auto-promote.
     let tenant = setup(&f.store).await;

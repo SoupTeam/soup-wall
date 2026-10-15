@@ -158,6 +158,20 @@ pub struct ManagedRolloutAgentStatus {
     pub last_matching_acknowledgement: Option<ManagedDeployment>,
 }
 
+pub(super) fn acknowledgement_overdue(
+    status: &str,
+    issued: i64,
+    applied: Option<i64>,
+    now: i64,
+) -> bool {
+    let observed = if status == "applied" {
+        applied.unwrap_or(now)
+    } else {
+        now
+    };
+    observed > issued.saturating_add(300)
+}
+
 pub(super) fn rollout_agent_status(
     plan: &ManagedGroupRollout,
     agent: &str,
@@ -207,12 +221,14 @@ pub(super) fn rollout_agent_status(
     } else if !same {
         "conflict"
     } else if let Some(d) = &expected {
-        if d.status == "applied" {
+        if acknowledgement_overdue(&d.status, d.issued_at_unix, d.applied_at_unix, now_unix())
+            && d.status != "rejected"
+        {
+            "overdue"
+        } else if d.status == "applied" {
             "applied"
         } else if d.status == "rejected" {
             "rejected"
-        } else if deadline.is_some_and(|t| now_unix() > t) {
-            "overdue"
         } else {
             "pending"
         }
@@ -473,6 +489,8 @@ fn group_schema(db: &rusqlite::Connection) -> Result<()> {
     }
     Ok(())
 }
+
+type SqliteWaveDeployment = (i64, String, String, String, i64, Option<i64>);
 
 type SqliteRolloutRow = (
     String,
@@ -1593,18 +1611,18 @@ impl TenantStore {
                         conflict = Some("rollback unresolved: no agents had an earlier applied baseline to restore".to_string());
                     }
                     for (agent, seq) in &active_deployments {
-                        let latest: Option<(i64, String, String, String, i64)> = db
+                        let latest: Option<SqliteWaveDeployment> = db
                             .query_row(
-                                "SELECT deployment_sequence, revision, policy_sha256, status, issued_at_unix
+                                "SELECT deployment_sequence, revision, policy_sha256, status, issued_at_unix, applied_at_unix
                                  FROM managed_agent_deployments
                                  WHERE tenant_id=?1 AND agent_id=?2
                                  ORDER BY deployment_sequence DESC LIMIT 1",
                                 params![tenant, agent],
-                                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+                                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
                             )
                             .optional()?;
                         match latest {
-                            Some((latest_seq, latest_rev, _sha, st, issued_at)) => {
+                            Some((latest_seq, latest_rev, _sha, st, issued_at, applied_at)) => {
                                 if latest_seq != *seq as i64 {
                                     conflict = Some(format!(
                                         "conflict: rollback deployment {} for agent '{}' was superseded by sequence {}",
@@ -1629,7 +1647,9 @@ impl TenantStore {
                                     ));
                                     break;
                                 }
-                                if st == "rejected" || (st != "applied" && now - issued_at > 300) {
+                                if st == "rejected"
+                                    || acknowledgement_overdue(&st, issued_at, applied_at, now)
+                                {
                                     conflict = Some(format!("rollback unresolved: agent '{}' rejected or timed out awaiting baseline acknowledgement",agent));
                                     break;
                                 }
@@ -1703,19 +1723,26 @@ impl TenantStore {
                                 continue;
                             }
                         };
-                        let latest: Option<(i64, String, String, String, i64)> = db
+                        let latest: Option<SqliteWaveDeployment> = db
                             .query_row(
-                                "SELECT deployment_sequence, revision, policy_sha256, status, issued_at_unix
+                                "SELECT deployment_sequence, revision, policy_sha256, status, issued_at_unix, applied_at_unix
                                  FROM managed_agent_deployments
                                  WHERE tenant_id=?1 AND agent_id=?2
                                  ORDER BY deployment_sequence DESC LIMIT 1",
                                 params![tenant, p],
-                                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+                                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
                             )
                             .optional()?;
 
                         match latest {
-                            Some((latest_seq, latest_rev, latest_sha, st, issued_at)) => {
+                            Some((
+                                latest_seq,
+                                latest_rev,
+                                latest_sha,
+                                st,
+                                issued_at,
+                                applied_at,
+                            )) => {
                                 if latest_seq != seq
                                     || latest_rev != revision
                                     || latest_sha != policy_sha256
@@ -1724,6 +1751,10 @@ impl TenantStore {
                                         "conflict: canary deployment {} for pilot agent '{}' was superseded by sequence {} (rev '{}')",
                                         seq, p, latest_seq, latest_rev
                                     ));
+                                    break;
+                                }
+                                if acknowledgement_overdue(&st, issued_at, applied_at, now) {
+                                    any_rejected=Some((p.clone(),format!("pilot agent '{}' timed out awaiting policy acknowledgement (>300s)",p)));
                                     break;
                                 }
                                 if st == "rejected" {
@@ -1859,19 +1890,26 @@ impl TenantStore {
                                 continue;
                             }
                         };
-                        let latest: Option<(i64, String, String, String, i64)> = db
+                        let latest: Option<SqliteWaveDeployment> = db
                             .query_row(
-                                "SELECT deployment_sequence, revision, policy_sha256, status, issued_at_unix
+                                "SELECT deployment_sequence, revision, policy_sha256, status, issued_at_unix, applied_at_unix
                                  FROM managed_agent_deployments
                                  WHERE tenant_id=?1 AND agent_id=?2
                                  ORDER BY deployment_sequence DESC LIMIT 1",
                                 params![tenant, w],
-                                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+                                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
                             )
                             .optional()?;
 
                         match latest {
-                            Some((latest_seq, latest_rev, latest_sha, st, issued_at)) => {
+                            Some((
+                                latest_seq,
+                                latest_rev,
+                                latest_sha,
+                                st,
+                                issued_at,
+                                applied_at,
+                            )) => {
                                 if latest_seq != seq
                                     || latest_rev != revision
                                     || latest_sha != policy_sha256
@@ -1880,6 +1918,10 @@ impl TenantStore {
                                         "conflict: standard deployment {} for agent '{}' was superseded by sequence {} (rev '{}')",
                                         seq, w, latest_seq, latest_rev
                                     ));
+                                    break;
+                                }
+                                if acknowledgement_overdue(&st, issued_at, applied_at, now) {
+                                    any_rejected=Some((w.clone(),format!("standard agent '{}' timed out awaiting policy acknowledgement (>300s)",w)));
                                     break;
                                 }
                                 if st == "rejected" {

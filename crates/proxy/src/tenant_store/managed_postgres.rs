@@ -4,7 +4,7 @@
 use super::PostgresTenantStore;
 use crate::tenant_store::{
     agent_enrollment::{credential_hash, valid_id},
-    managed_policy::{exact_id, hex, rollout_agent_status, MAX_YAML},
+    managed_policy::{acknowledgement_overdue, exact_id, hex, rollout_agent_status, MAX_YAML},
     now_unix, random_base64url, AppliedReport, EnrolledAgent, IssuedAgentCredential,
     ManagedAgentGroup, ManagedDeployment, ManagedGroupMember, ManagedGroupRevision,
     ManagedGroupRollout, ManagedIssuer, ManagedRevision, RolloutPhase, SignedManagedBundle,
@@ -1142,7 +1142,7 @@ impl PostgresTenantStore {
                     let s = *seq as i64;
                     let latest = self
                         .bounded(client.query_opt(
-                            "SELECT deployment_sequence, revision, policy_sha256, status, issued_at_unix
+                            "SELECT deployment_sequence, revision, policy_sha256, status, issued_at_unix, applied_at_unix
                          FROM managed_agent_deployments
                          WHERE tenant_id=$1 AND agent_id=$2
                          ORDER BY deployment_sequence DESC LIMIT 1",
@@ -1181,8 +1181,9 @@ impl PostgresTenantStore {
                                 break;
                             }
                             let issued_at: i64 = r.get(4);
+                            let applied_at: Option<i64> = r.get(5);
                             if status == "rejected"
-                                || (status != "applied" && now - issued_at > 300)
+                                || acknowledgement_overdue(&status, issued_at, applied_at, now)
                             {
                                 conflict = Some(format!("rollback unresolved: agent '{}' rejected or timed out awaiting baseline acknowledgement",agent));
                                 break;
@@ -1277,7 +1278,7 @@ impl PostgresTenantStore {
                         }
                     };
                     let latest = self.bounded(client.query_opt(
-                        "SELECT deployment_sequence, revision, policy_sha256, status, issued_at_unix
+                        "SELECT deployment_sequence, revision, policy_sha256, status, issued_at_unix, applied_at_unix
                          FROM managed_agent_deployments
                          WHERE tenant_id=$1 AND agent_id=$2
                          ORDER BY deployment_sequence DESC LIMIT 1",
@@ -1291,6 +1292,7 @@ impl PostgresTenantStore {
                             let latest_sha: String = r.get(2);
                             let status: String = r.get(3);
                             let issued_at: i64 = r.get(4);
+                            let applied_at: Option<i64> = r.get(5);
 
                             if latest_seq != seq
                                 || latest_rev != rollout.revision
@@ -1300,6 +1302,10 @@ impl PostgresTenantStore {
                                     "conflict: canary deployment {} for agent '{}' was superseded by sequence {} (rev '{}')",
                                     seq, p, latest_seq, latest_rev
                                 ));
+                                break;
+                            }
+                            if acknowledgement_overdue(&status, issued_at, applied_at, now) {
+                                any_rejected=Some((p.clone(),format!("pilot agent '{}' timed out awaiting policy acknowledgement (>300s)",p)));
                                 break;
                             }
                             if status == "rejected" {
@@ -1548,7 +1554,7 @@ impl PostgresTenantStore {
                         }
                     };
                     let latest = self.bounded(client.query_opt(
-                        "SELECT deployment_sequence, revision, policy_sha256, status, issued_at_unix
+                        "SELECT deployment_sequence, revision, policy_sha256, status, issued_at_unix, applied_at_unix
                          FROM managed_agent_deployments
                          WHERE tenant_id=$1 AND agent_id=$2
                          ORDER BY deployment_sequence DESC LIMIT 1",
@@ -1562,6 +1568,7 @@ impl PostgresTenantStore {
                             let latest_sha: String = r.get(2);
                             let status: String = r.get(3);
                             let issued_at: i64 = r.get(4);
+                            let applied_at: Option<i64> = r.get(5);
 
                             if latest_seq != seq
                                 || latest_rev != rollout.revision
@@ -1571,6 +1578,10 @@ impl PostgresTenantStore {
                                     "conflict: standard deployment {} for agent '{}' was superseded by sequence {} (rev '{}')",
                                     seq, w, latest_seq, latest_rev
                                 ));
+                                break;
+                            }
+                            if acknowledgement_overdue(&status, issued_at, applied_at, now) {
+                                any_rejected=Some((w.clone(),format!("standard agent '{}' timed out awaiting policy acknowledgement (>300s)",w)));
                                 break;
                             }
                             if status == "rejected" {

@@ -13,7 +13,7 @@ An Owner can deploy an approved policy to a frozen Agent inventory in two waves:
 | Active or `completed` | Owner rollback → `rolling_back` when restorable baselines exist |
 | `rolling_back` | All exact baseline ACKs → `rolled_back`; unresolved baselines, supersession, rejection or rollback deadline → `failed` |
 
-Acknowledgement deadlines are 300 seconds from deployment issuance. ACK processing and explicit Owner `advance` evaluate transitions; GET reports an overdue Agent without issuing deployments. An entirely offline fleet requires the operator to call `advance` to process its expired deadline. A stopped gate is never bypassed by elapsed time or restart. If no affected Agent has a restorable baseline, manual rollback refuses the request rather than claiming restoration.
+Acknowledgement deadlines are 300 seconds from deployment issuance. Gate evaluation uses the persisted ACK timestamp: a late ACK cannot reopen an expired gate, while a timely ACK remains valid if the operator evaluates it later. ACK processing and explicit Owner `advance` evaluate transitions; GET reports an overdue Agent without issuing deployments. An entirely offline fleet requires the operator to call `advance` to process its expired deadline. A stopped gate is never bypassed by elapsed time or restart. If no affected Agent has a restorable baseline, manual rollback refuses the request rather than claiming restoration.
 
 A group cannot be deleted during `pilot`, `standard`, `paused` or `rolling_back`. Live membership changes do not change the persisted rollout inventory or its ACK routing. Failed/rolled-back plans remain inspectable; terminal `advance` and retry behavior never allocate another deployment.
 
