@@ -101,7 +101,7 @@ def run(args):
                            check=True, capture_output=True, timeout=240)
             check("pinned-container-image-pulled-by-digest", True)
             ca, (cert, key), (sp_cert, sp_key) = vendor.certificate_files(directory)
-            gateway_port, vendor_port = vendor.free_port(), vendor.free_port()
+            gateway_port, vendor_port, vendor_http_port = vendor.free_port(), vendor.free_port(), vendor.free_port()
             # Different sites exercise the real cross-site POST cookie boundary;
             # different ports alone would still be same-site and share cookies.
             vendor_base = f"https://localhost:{vendor_port}"
@@ -180,7 +180,8 @@ def run(args):
                 "--mount", f"type=bind,src={cert},dst=/fixture-cert.pem,readonly",
                 "--mount", f"type=bind,src={key},dst=/fixture-key.pem,readonly",
                 KEYCLOAK_IMAGE, "start-dev", "--import-realm", "--http-enabled=false",
-                "--http-host=127.0.0.1", f"--https-port={vendor_port}", f"--hostname={vendor_base}",
+                "--http-host=127.0.0.1", f"--http-port={vendor_http_port}",
+                f"--https-port={vendor_port}", f"--hostname={vendor_base}",
                 "--https-certificate-file=/fixture-cert.pem", "--https-certificate-key-file=/fixture-key.pem",
                 "--log-level=warn"], check=True, capture_output=True, text=True, timeout=30)
             container_id = created.stdout.strip()
