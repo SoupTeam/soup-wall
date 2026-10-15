@@ -91,8 +91,9 @@ the lock while an operation is running.
 
 A private `.soup-wall-<digest>.json` file stores ownership, exact original and
 wrapped entries, native identities and transaction phase. It is written and
-synced before the config changes. Both files use same-directory atomic rename
-and directory sync. Original arguments may be sensitive; keep this record
+synced before the config changes. Ownership updates use atomic rename and
+directory sync; config publication retains the displaced file as described below.
+Original arguments may be sensitive; keep this record
 private. A pending transaction is never reported as configured.
 
 After interruption, repeat connect with the same pinned inputs to finish a
@@ -104,10 +105,38 @@ Failed writes retain recovery metadata when necessary.
 The lock coordinates these commands. Every successful operation checks the
 config inode, bytes, directory identity and ownership record. Repeated connect
 also checks these after preflight, even when no config replacement is needed.
-The writer rechecks the config immediately before replacement.
-Editors that ignore advisory locks must not write the selected file during
-the final replacement; ordinary filesystem rename has no compare-and-swap
-operation for arbitrary non-cooperating writers.
+
+Config publication uses Linux `renameat2(RENAME_EXCHANGE)`. Before the exchange,
+the command syncs a private `.soup-wall-version-<id>` directory containing the
+original snapshot, proposed bytes and a manifest. A separate private
+`.soup-wall-publication-<digest>.json` journal identifies the pending exchange.
+The exchange moves the actual displaced inode into `exchanged.json` in that
+directory. It never unlinks the displaced file, including after success.
+The filesystem must support exchange; failure retains the journal and versions.
+
+After exchange, the command compares the displaced inode and bytes with the
+original snapshot. An external write or replacement at publication produces a
+nonzero conflict instead of success. The live config may already contain the
+proposed version. The command does not overwrite it again to roll back: that
+would create another race. Both versions and the journal remain for recovery.
+Further connect/disconnect attempts refuse an unresolved conflict; inspect and
+preview refuse any unfinished publication.
+
+After a process crash, connect/disconnect can clear the publication journal
+only when the inode identities and complete bytes prove the exact pre-exchange
+or post-exchange state. The normal pending connection/disconnection then resumes.
+Any other state requires manual reconciliation. Stop writers, compare the live
+config with `snapshot.json`, `proposed.json` and `exchanged.json`, and preserve
+the unrelated settings in the chosen config. Keep the archive, remove only the
+matching publication journal after reconciliation, then repeat the operation.
+The selected entry must still match the owned original or wrapped entry.
+
+These commands do not isolate arbitrary editors. A writer with an already open
+descriptor can continue modifying the displaced inode after publication. Its
+writes remain in `exchanged.json`, even after the command returns. Retained
+versions can contain sensitive configuration; they use private permissions and
+are not automatically pruned. Remove them only after all writers have closed
+and the chosen live configuration has been checked.
 
 ## Reproduce acceptance
 
@@ -135,6 +164,12 @@ malformed inputs, original arguments, unrelated entries and offline disconnect.
 It pauses real CLI processes during preflight to exercise concurrent selected
 edits, disconnect and ownership changes, and checks both sides of the argument
 limit without invoking the boundary-test server.
+An owned `LD_PRELOAD` scheduling fixture also writes and replaces the destination
+at the actual exchange boundary, writes through a retained descriptor, and kills
+the command immediately before and after exchange. Both connect and disconnect
+must preserve the versions, refuse conflicts and recover exact interrupted states.
+The fixture is compiled with the container's C compiler and is never installed
+or loaded into the host client or daemon.
 
 Reports retain timings, per-operation identities, client outcomes, source
 hashes and cleanup. Native tokens remain in the temporary Linux profile.

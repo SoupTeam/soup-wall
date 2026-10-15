@@ -39,6 +39,7 @@ def source_snapshot():
     paths = [ROOT / "Cargo.lock", ROOT / "Cargo.toml", ROOT / "rust-toolchain.toml",
              *sorted((ROOT / "crates").rglob("*.rs")), *sorted((ROOT / "crates").rglob("Cargo.toml")),
              Path(__file__), ROOT / "scripts/fixtures/connection_server.py",
+             ROOT / "scripts/fixtures/connection_publication.c",
              ROOT / "scripts/mcp-admission-demo.py", ROOT / "scripts/windows-claude-host-acceptance.py",
              ROOT / "scripts/fixtures/mcp_admission_demo_server.py"]
     return {str(path.relative_to(ROOT)): sha(path) for path in paths}
@@ -149,6 +150,69 @@ def inside(options):
                     if process.poll() is None:
                         process.kill()
                     process.wait(timeout=10)
+
+            library = root / "publication.so"
+            subprocess.run(["cc", "-shared", "-fPIC", "-Wall", "-Wextra", "-Werror",
+                            str(ROOT / "scripts/fixtures/connection_publication.c"), "-ldl", "-o", str(library)],
+                           check=True, capture_output=True, timeout=30)
+
+            def publication_races():
+                for operation in ["connect", "disconnect"]:
+                    for mode in ["write-before", "replace-before", "held-write-after", "write-after",
+                                 "crash-before", "crash-after"]:
+                        case = root / (operation + "-" + mode)
+                        case.mkdir(mode=0o700)
+                        selected = case / "mcp.json"
+                        write(selected, initial)
+                        if operation == "disconnect":
+                            command("connect", path=selected)
+                        before = selected.read_bytes()
+                        external = json.loads(before)
+                        external["settings"]["theme"] = "external-" + mode
+                        external["mcpServers"]["other"]["args"].append("external-argument")
+                        payload = case / "external.json"
+                        write(payload, external)
+                        env = dict(stack.env, LD_PRELOAD=str(library), SW_PUBLICATION_MODE=mode,
+                                   SW_PUBLICATION_EDIT=str(payload))
+                        result = subprocess.run(arguments(operation, path=selected), env=env,
+                                                capture_output=True, text=True, timeout=30)
+                        label = operation + "_" + mode
+                        check(label + "_nonzero", result.returncode != 0)
+                        check(label + "_redacted", "unrelated-fixture-secret" not in result.stdout + result.stderr)
+                        journals = list(case.glob(".soup-wall-publication-*.json"))
+                        check(label + "_journal_retained", len(journals) == 1)
+                        record = json.loads(journals[0].read_text())
+                        archive = case / record["archive"]
+                        check(label + "_snapshot_retained", (archive / "snapshot.json").read_bytes() == before)
+                        proposed = (archive / "proposed.json").read_bytes()
+                        displaced = (archive / "exchanged.json").read_bytes()
+                        check(label + "_archive_private", archive.stat().st_mode & 0o077 == 0
+                              and all(p.stat().st_mode & 0o077 == 0 for p in archive.iterdir()))
+                        if mode.startswith("crash-"):
+                            check(label + "_exact_crash", result.returncode == (86 if mode == "crash-before" else 87))
+                            check(label + "_live_version", selected.read_bytes() == (before if mode == "crash-before" else proposed))
+                            command("inspect", expected=1, path=selected)
+                            command(operation, path=selected)
+                            check(label + "_recovered", not journals[0].exists() and selected.read_bytes() == proposed)
+                        else:
+                            check(label + "_external_version_retained", payload.read_bytes() in [displaced, selected.read_bytes()])
+                            check(label + "_conflict_reported", "publication conflict" in result.stderr)
+                            live = selected.read_bytes()
+                            command(operation, expected=1, path=selected)
+                            check(label + "_retry_preserves_all_versions", selected.read_bytes() == live
+                                  and (archive / "snapshot.json").read_bytes() == before
+                                  and (archive / "proposed.json").read_bytes() == proposed
+                                  and (archive / "exchanged.json").read_bytes() == displaced
+                                  and journals[0].exists())
+                            write(selected, external)
+                            journals[0].unlink()
+                            command(operation, path=selected)
+                            reconciled = json.loads(selected.read_text())
+                            check(label + "_reconciled_settings", reconciled["settings"] == external["settings"]
+                                  and reconciled["mcpServers"]["other"] == external["mcpServers"]["other"])
+                        check(label + "_versions_still_retained", archive.is_dir())
+
+            publication_races()
 
             before = config.read_bytes()
             command("preview")
@@ -419,7 +483,7 @@ def main():
     with (out / "driver.log").open("w", encoding="utf-8") as log:
         process = subprocess.Popen(command, stdout=log, stderr=log)
         try:
-            deadline = time.monotonic() + 100
+            deadline = time.monotonic() + 300
             while not (out / "ready.json").exists():
                 if process.poll() is not None or time.monotonic() > deadline:
                     raise RuntimeError("Linux preparation failed; see driver.log")

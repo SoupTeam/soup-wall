@@ -199,6 +199,20 @@ mod linux {
         value: Value,
     }
 
+    #[derive(Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Publication {
+        version: u8,
+        path: PathBuf,
+        archive: String,
+        before_sha256: String,
+        proposed_sha256: String,
+        before_dev: u64,
+        before_ino: u64,
+        proposed_dev: u64,
+        proposed_ino: u64,
+    }
+
     impl ConfigFile {
         fn read(path: &Path) -> Result<Self> {
             let dir = directory(path.parent().context("missing config parent")?)?;
@@ -287,10 +301,171 @@ mod linux {
         fn replace(&mut self, name: &str, entry: &Value) -> Result<()> {
             self.unchanged()?;
             let bytes = self.replacement(name, entry)?;
-            self.atomic(self.path.file_name().context("missing filename")?, &bytes)?;
+            self.publish(&bytes)?;
             let current = Self::read(&self.path)?;
             ensure!(current.bytes == bytes, "config changed after replacement");
             *self = current;
+            Ok(())
+        }
+
+        fn publication_name(&self) -> String {
+            format!(
+                ".soup-wall-publication-{}.json",
+                sha(self.path.as_os_str().as_bytes())
+            )
+        }
+
+        fn publication(&self) -> Result<Option<Publication>> {
+            let name = self.publication_name();
+            match std::fs::symlink_metadata(self.path.parent().unwrap().join(&name)) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+                Err(error) => Err(error.into()),
+                Ok(_) => {
+                    let value = parse(&read_at(&self.dir, name.as_ref())?.0)?;
+                    let record: Publication = serde_json::from_value(value)
+                        .context("invalid publication journal; retain it for recovery")?;
+                    ensure!(
+                        record.version == 1
+                            && record.path == self.path
+                            && record.archive.starts_with(".soup-wall-version-")
+                            && record.archive.len() <= 128
+                            && record
+                                .archive
+                                .bytes()
+                                .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b)),
+                        "invalid publication journal; retain it for recovery"
+                    );
+                    Ok(Some(record))
+                }
+            }
+        }
+
+        fn write_new(dir: &File, name: &str, bytes: &[u8]) -> Result<Metadata> {
+            let mut file = open_at(
+                dir,
+                name.as_ref(),
+                libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL,
+            )?;
+            file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+            file.write_all(bytes)?;
+            file.sync_all()?;
+            Ok(file.metadata()?)
+        }
+
+        fn finish_publication(&self, record: &Publication) -> Result<()> {
+            let archive = open_at(
+                &self.dir,
+                record.archive.as_ref(),
+                libc::O_RDONLY | libc::O_DIRECTORY,
+            )?;
+            let dm = archive.metadata()?;
+            ensure!(
+                dm.uid() == unsafe { libc::geteuid() } && dm.mode() & 0o077 == 0,
+                "publication archive must be owned and private"
+            );
+            let before = read_at(&archive, "snapshot.json".as_ref())?.0;
+            let proposed = read_at(&archive, "proposed.json".as_ref())?.0;
+            let (exchanged, meta) = read_at(&archive, "exchanged.json".as_ref())?;
+            self.unchanged()?;
+            ensure!(
+                sha(&before) == record.before_sha256 && sha(&proposed) == record.proposed_sha256,
+                "publication snapshots changed; retain the journal and archive"
+            );
+            let before_exchange = self.bytes == before
+                && self.meta.dev() == record.before_dev
+                && self.meta.ino() == record.before_ino
+                && exchanged == proposed
+                && meta.dev() == record.proposed_dev
+                && meta.ino() == record.proposed_ino;
+            let after_exchange = self.bytes == proposed
+                && self.meta.dev() == record.proposed_dev
+                && self.meta.ino() == record.proposed_ino
+                && exchanged == before
+                && meta.dev() == record.before_dev
+                && meta.ino() == record.before_ino;
+            ensure!(
+                before_exchange || after_exchange,
+                "publication conflict; retain the journal and all versions in {}",
+                record.archive
+            );
+            archive.sync_all()?;
+            self.dir.sync_all()?;
+            let name = CString::new(self.publication_name())?;
+            ensure!(
+                unsafe { libc::unlinkat(self.dir.as_raw_fd(), name.as_ptr(), 0) } == 0,
+                "cannot clear publication journal"
+            );
+            self.dir.sync_all()?;
+            Ok(())
+        }
+
+        fn publish(&self, bytes: &[u8]) -> Result<()> {
+            ensure!(
+                self.publication()?.is_none(),
+                "pending publication requires recovery"
+            );
+            let archive_name = format!(".soup-wall-version-{}", crate::token::generate());
+            let archive_c = CString::new(archive_name.as_bytes())?;
+            ensure!(
+                unsafe { libc::mkdirat(self.dir.as_raw_fd(), archive_c.as_ptr(), 0o700) } == 0,
+                "cannot create private publication archive"
+            );
+            let archive = open_at(
+                &self.dir,
+                archive_name.as_ref(),
+                libc::O_RDONLY | libc::O_DIRECTORY,
+            )?;
+            Self::write_new(&archive, "snapshot.json", &self.bytes)?;
+            Self::write_new(&archive, "proposed.json", bytes)?;
+            let proposed = Self::write_new(&archive, "exchanged.json", bytes)?;
+            let record = Publication {
+                version: 1,
+                path: self.path.clone(),
+                archive: archive_name,
+                before_sha256: sha(&self.bytes),
+                proposed_sha256: sha(bytes),
+                before_dev: self.meta.dev(),
+                before_ino: self.meta.ino(),
+                proposed_dev: proposed.dev(),
+                proposed_ino: proposed.ino(),
+            };
+            let journal = serde_json::to_vec_pretty(&record)?;
+            Self::write_new(&archive, "manifest.json", &journal)?;
+            archive.sync_all()?;
+            self.dir.sync_all()?;
+            Self::write_new(&self.dir, &self.publication_name(), &journal)?;
+            self.dir.sync_all()?;
+            self.unchanged()?;
+            let from = CString::new("exchanged.json")?;
+            let to = CString::new(
+                self.path
+                    .file_name()
+                    .context("missing filename")?
+                    .as_bytes(),
+            )?;
+            ensure!(
+                unsafe {
+                    libc::renameat2(
+                        archive.as_raw_fd(),
+                        from.as_ptr(),
+                        self.dir.as_raw_fd(),
+                        to.as_ptr(),
+                        libc::RENAME_EXCHANGE,
+                    )
+                } == 0,
+                "config exchange failed; publication journal retained: {}",
+                std::io::Error::last_os_error()
+            );
+            archive.sync_all()?;
+            self.dir.sync_all()?;
+            let current = Self::read(&self.path)?;
+            current.finish_publication(&record)?;
+            ensure!(
+                current.bytes == bytes
+                    && current.meta.ino() == proposed.ino()
+                    && current.meta.dev() == proposed.dev(),
+                "config changed at publication; versions retained"
+            );
             Ok(())
         }
 
@@ -307,6 +482,10 @@ mod linux {
         }
 
         fn atomic(&self, name: &std::ffi::OsStr, bytes: &[u8]) -> Result<()> {
+            ensure!(
+                Some(name) != self.path.file_name(),
+                "config updates require retained publication"
+            );
             let temporary = format!(".soup-wall-stage-{}", crate::token::generate());
             let mut file = open_at(
                 &self.dir,
@@ -319,9 +498,6 @@ mod linux {
                 file.sync_all()?;
                 let from = CString::new(temporary.as_bytes())?;
                 let to = CString::new(name.as_bytes())?;
-                if Some(name) == self.path.file_name() {
-                    self.unchanged()?;
-                }
                 ensure!(
                     unsafe {
                         libc::renameat(
@@ -622,6 +798,10 @@ mod linux {
         } else {
             None
         };
+        if let Some(record) = config.publication()? {
+            ensure!(_lock.is_some(), "unfinished publication; run connect or disconnect to recover, retaining all versions");
+            config.finish_publication(&record)?;
+        }
         let entry = config.entry(&o.server)?;
         let mut owner = config.state(&o.server)?;
         let id = format!(
@@ -1005,6 +1185,142 @@ mod linux {
             );
             assert_eq!(before["settings"], after.value["settings"]);
             assert_eq!(after.meta.mode() & 0o777, 0o600);
+        }
+
+        #[test]
+        fn a_writer_holding_the_old_inode_keeps_its_version_after_publication() {
+            let (dir, path) = fixture();
+            let mut config = ConfigFile::read(&path).unwrap();
+            let mut writer = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+            let before = config.bytes.clone();
+            config
+                .replace("local", &json!({"command":"/usr/bin/env","args":[]}))
+                .unwrap();
+            let proposed = std::fs::read(&path).unwrap();
+            writer.set_len(0).unwrap();
+            writer.write_all(b"external committed version").unwrap();
+            writer.sync_all().unwrap();
+            let archive = std::fs::read_dir(dir.path())
+                .unwrap()
+                .map(|e| e.unwrap().path())
+                .find(|p| {
+                    p.file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .starts_with(".soup-wall-version-")
+                })
+                .unwrap();
+            assert_eq!(
+                std::fs::read(archive.join("snapshot.json")).unwrap(),
+                before
+            );
+            assert_eq!(
+                std::fs::read(archive.join("proposed.json")).unwrap(),
+                proposed
+            );
+            assert_eq!(
+                std::fs::read(archive.join("exchanged.json")).unwrap(),
+                b"external committed version"
+            );
+            assert_eq!(std::fs::read(path).unwrap(), proposed);
+            assert!(config.publication().unwrap().is_none());
+        }
+
+        #[test]
+        fn publication_boundary_conflicts_and_crashes_retain_versions() {
+            if let Some(path) = std::env::var_os("SW_PUBLICATION_CHILD") {
+                let mut config = ConfigFile::read(Path::new(&path)).unwrap();
+                let error = config
+                    .replace("local", &json!({"command":"/usr/bin/env","args":[]}))
+                    .unwrap_err();
+                assert!(
+                    error.to_string().contains("publication conflict"),
+                    "{error:?}"
+                );
+                return;
+            }
+            let build = tempfile::tempdir().unwrap();
+            let library = build.path().join("publication.so");
+            let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../scripts/fixtures/connection_publication.c");
+            let output = std::process::Command::new("cc")
+                .args(["-shared", "-fPIC", "-Wall", "-Wextra", "-Werror"])
+                .arg(source)
+                .arg("-ldl")
+                .arg("-o")
+                .arg(&library)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            for mode in [
+                "write-before",
+                "replace-before",
+                "held-write-after",
+                "write-after",
+                "crash-before",
+                "crash-after",
+            ] {
+                let (dir, path) = fixture();
+                let before = std::fs::read(&path).unwrap();
+                let mut external: Value = serde_json::from_slice(&before).unwrap();
+                external["settings"]["theme"] = json!("external committed edit");
+                let payload = dir.path().join("external.json");
+                let bytes = serde_json::to_vec(&external).unwrap();
+                std::fs::write(&payload, &bytes).unwrap();
+                let output = std::process::Command::new(std::env::current_exe().unwrap())
+                    .args(["--exact", "mcp::connection::linux::tests::publication_boundary_conflicts_and_crashes_retain_versions", "--nocapture"])
+                    .env("LD_PRELOAD", &library).env("SW_PUBLICATION_MODE", mode)
+                    .env("SW_PUBLICATION_EDIT", &payload).env("SW_PUBLICATION_CHILD", &path)
+                    .output().unwrap();
+                assert_eq!(
+                    output.status.code(),
+                    Some(match mode {
+                        "crash-before" => 86,
+                        "crash-after" => 87,
+                        _ => 0,
+                    }),
+                    "{mode}: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                let config = ConfigFile::read(&path).unwrap();
+                let record = config.publication().unwrap().unwrap();
+                let archive = dir.path().join(&record.archive);
+                let proposed = std::fs::read(archive.join("proposed.json")).unwrap();
+                let displaced = std::fs::read(archive.join("exchanged.json")).unwrap();
+                assert_eq!(
+                    std::fs::read(archive.join("snapshot.json")).unwrap(),
+                    before,
+                    "{mode}"
+                );
+                if mode.starts_with("crash-") {
+                    config.finish_publication(&record).unwrap();
+                    assert!(config.publication().unwrap().is_none());
+                    assert_eq!(
+                        config.bytes,
+                        if mode == "crash-before" {
+                            before
+                        } else {
+                            proposed
+                        }
+                    );
+                } else {
+                    assert!(
+                        displaced == bytes || config.bytes == bytes,
+                        "{mode}: external version lost"
+                    );
+                    assert!(config.finish_publication(&record).is_err(), "{mode}");
+                    assert!(config.publication().unwrap().is_some(), "{mode}");
+                    assert_eq!(
+                        std::fs::read(archive.join("exchanged.json")).unwrap(),
+                        displaced
+                    );
+                    assert_eq!(std::fs::read(&path).unwrap(), config.bytes);
+                }
+            }
         }
 
         #[test]
