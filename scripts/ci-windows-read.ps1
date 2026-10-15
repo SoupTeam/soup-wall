@@ -25,7 +25,13 @@ $out = [IO.Path]::GetFullPath($OutputDirectory)
 if (Test-Path -LiteralPath $out) { throw 'Refusing to overwrite Windows read evidence' }
 [IO.Directory]::CreateDirectory($out) | Out-Null
 $name = 'swrd' + [guid]::NewGuid().ToString('N').Substring(0, 12)
-$stage = Join-Path ([IO.Path]::GetTempPath()) $name
+# Standard-user handle validation reads attributes on every ancestor. The
+# administrator's private profile is unsuitable even when its child grants the
+# fixture account full access. Keep only the unique stage private under the
+# ordinary shared system-data parent; no ancestor ACL or privilege is changed.
+$stageParent = [Environment]::GetFolderPath([System.Environment+SpecialFolder]::CommonApplicationData)
+if ([string]::IsNullOrWhiteSpace($stageParent)) { throw 'CommonApplicationData staging parent is unavailable' }
+$stage = Join-Path $stageParent $name
 $user = $null
 $process = $null
 $exitCode = 1

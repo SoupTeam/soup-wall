@@ -374,9 +374,9 @@ impl Policy {
                 "invalid operator Windows read policy"
             );
         }
-        // V4 validates and locks each component before any ordinary path API
-        // can follow an intermediate reparse point or a mapped remote drive.
-        // Retain the metadata handles through every canonicalization below.
+        // V4 validates and locks each component through the native executor.
+        // Ordinary DOS path APIs are not used afterward: directory handles do
+        // not prevent a drive-letter device mapping from being changed.
         #[cfg(windows)]
         let _windows_validation_pin = if self.is_windows_read() {
             let Resource::Path { canonical } = &self.allowed_resources[0] else {
@@ -394,15 +394,17 @@ impl Policy {
         } else {
             None
         };
-        anyhow::ensure!(
-            self.workspace.is_dir()
-                && self.cwd.is_dir()
-                && self
-                    .cwd
-                    .canonicalize()?
-                    .starts_with(self.workspace.canonicalize()?),
-            "invalid operator resource workspace"
-        );
+        if !self.is_windows_read() {
+            anyhow::ensure!(
+                self.workspace.is_dir()
+                    && self.cwd.is_dir()
+                    && self
+                        .cwd
+                        .canonicalize()?
+                        .starts_with(self.workspace.canonicalize()?),
+                "invalid operator resource workspace"
+            );
+        }
         if let Some(network) = &self.network {
             network.validate().map_err(anyhow::Error::msg)?;
             let selector = &self.profile.selectors[0];
@@ -568,6 +570,22 @@ pub(crate) fn windows_read_binding_with_identity(
             "file_id":identity.leaf_file_id,
         })),
     })
+}
+
+/// The fixed v4 selector is already resolved by the retained metadata handles.
+/// Reuse that exact authority without reopening a DOS path for extraction.
+#[cfg(windows)]
+pub(crate) fn windows_read_evidence(
+    policy: &Policy,
+    args: &Value,
+    identity: &crate::windows_read::ReadIdentity,
+) -> Result<Vec<ResourceEvidence>, &'static str> {
+    windows_read_binding_with_identity(policy, args, identity)?;
+    Ok(vec![ResourceEvidence {
+        pointer: "/path".into(),
+        source: crate::mcp::resources::EvidenceSource::Argument,
+        resource: policy.allowed_resources[0].clone(),
+    }])
 }
 
 /// No DNS lookup or request is performed here. The constrained executor checks
@@ -761,9 +779,8 @@ pub fn authorize(
             return Err("native_https_binding_mismatch");
         }
     }
-    // Keep the no-follow metadata pins alive through semantic extraction.
-    // A caller cannot race this daemon's generic path checks into following a
-    // newly substituted junction after the identity binding has been checked.
+    // Keep the no-follow metadata pins alive through fixed v4 evidence checks.
+    // V4 does not use generic extraction, which would resolve a DOS path again.
     #[cfg(windows)]
     let windows_read_pin = if admission.windows_read.is_some() {
         let (original, canonical) = windows_read_arguments(policy, args)?;
@@ -804,6 +821,20 @@ pub fn authorize(
         || admission.classifier_sha256 != policy.classifier_sha256
     {
         return Err("native_resource_revision_mismatch");
+    }
+    #[cfg(windows)]
+    if let Some(prepared) = windows_read_pin.as_ref() {
+        let resources = windows_read_evidence(policy, args, prepared.identity())?;
+        if resources != admission.resources {
+            return Err("native_resource_argument_mismatch");
+        }
+        if resources
+            .iter()
+            .any(|evidence| !policy.allowed_resources.contains(&evidence.resource))
+        {
+            return Err("native_resource_not_allowed");
+        }
+        return Ok(());
     }
     let input = Invocation {
         server_id: admission.server_id.clone(),

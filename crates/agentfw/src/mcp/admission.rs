@@ -1595,20 +1595,22 @@ where
                                         &withheld(request_id, "invocation", &json!(["resource_server_identity_mismatch"]))).await?;
                                     continue;
                                 }
-                                // Match run()'s actual operator-selected session root,
-                                // including its cwd fallback when no override exists.
-                                // Policy metadata cannot silently select another root.
-                                let actual_workspace = std::env::var_os("AGENTFW_WORKSPACE")
-                                    .map(std::path::PathBuf::from)
-                                    .or_else(|| std::env::current_dir().ok())
-                                    .and_then(|path| path.canonicalize().ok());
-                                let configured_workspace = policy.workspace.canonicalize().ok();
-                                if !matches!((&configured_workspace, &actual_workspace),
-                                    (Some(configured), Some(actual)) if configured == actual)
-                                {
-                                    write_resource_reply(client, host, true,
-                                        &withheld(request_id, "invocation", &json!(["resource_workspace_mismatch"]))).await?;
-                                    continue;
+                                if !policy.is_windows_read() {
+                                    // Match run()'s actual operator-selected session root,
+                                    // including its cwd fallback when no override exists.
+                                    // V4 already checked its exact spelling without DOS I/O.
+                                    let actual_workspace = std::env::var_os("AGENTFW_WORKSPACE")
+                                        .map(std::path::PathBuf::from)
+                                        .or_else(|| std::env::current_dir().ok())
+                                        .and_then(|path| path.canonicalize().ok());
+                                    let configured_workspace = policy.workspace.canonicalize().ok();
+                                    if !matches!((&configured_workspace, &actual_workspace),
+                                        (Some(configured), Some(actual)) if configured == actual)
+                                    {
+                                        write_resource_reply(client, host, true,
+                                            &withheld(request_id, "invocation", &json!(["resource_workspace_mismatch"]))).await?;
+                                        continue;
+                                    }
                                 }
                             } else if let Some(agentfw_ws) = std::env::var_os("AGENTFW_WORKSPACE") {
                                 let policy_ws_canon = policy.workspace.canonicalize().ok();
@@ -1685,8 +1687,34 @@ where
                                 cwd: &policy.cwd,
                                 fixed_destinations: true,
                             };
-                            let derived =
-                                super::resources::extract(&input, &policy.profile, &context);
+                            #[cfg(windows)]
+                            let derived = if policy.is_windows_read() {
+                                let prepared = prepared_windows_read.as_ref()
+                                    .context("Windows metadata not pinned before extraction")?;
+                                // The fixed v4 selector is proven by the retained
+                                // native handles. Do not reopen DOS paths through
+                                // generic extraction: device mappings are mutable
+                                // independently of the pinned filesystem objects.
+                                let resources = crate::native::resource::windows_read_evidence(
+                                    policy, &args, prepared.identity()).map_err(anyhow::Error::msg)?;
+                                super::resources::Extraction {
+                                    server_id: input.server_id.clone(),
+                                    tool_name: input.tool.clone(),
+                                    schema_sha256: input.schema_sha256.clone(),
+                                    args_sha256: crate::native::canonical_digest(&args),
+                                    profile_sha256: crate::native::canonical_digest(
+                                        &serde_json::to_value(&policy.profile).context("profile serializes")?),
+                                    snapshot_sha256: input.snapshot_sha256.clone(),
+                                    executor_sha256: policy.executor_sha256.clone(),
+                                    resources,
+                                    issues: vec![],
+                                    omitted_optional: vec![],
+                                }
+                            } else {
+                                super::resources::extract(&input, &policy.profile, &context)
+                            };
+                            #[cfg(not(windows))]
+                            let derived = super::resources::extract(&input, &policy.profile, &context);
                             if !derived.complete() {
                                 let reasons = if !derived.issues.is_empty() {
                                     json!(derived

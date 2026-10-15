@@ -50,7 +50,8 @@ NATIVE_TESTS = ("reads_exact_regular_utf8_and_binds_identity", "bounded_utf8_con
     "refuses_original_aliases_before_opening", "refuses_case_aliases_and_hard_links", "refuses_nonregular_and_outside_targets",
     "metadata_pin_prevents_root_ancestor_leaf_swap_and_writer", "standard_user_junction_is_refused_as_root_and_ancestor",
     "leaf_replaced_before_prepare_is_bound_to_new_identity", "canceled_worker_refuses_before_acquiring_data_access",
-    "refuses_existing_write_or_delete_handles", "oplock_does_not_stall_metadata_preparation_or_data_open")
+    "refuses_existing_write_or_delete_handles", "oplock_does_not_stall_metadata_preparation_or_data_open",
+    "volume_root_open_uses_validated_nt_mapping")
 
 
 def load(path, name):

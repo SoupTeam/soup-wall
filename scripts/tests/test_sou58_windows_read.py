@@ -278,11 +278,11 @@ class WindowsReadGradingControls(unittest.TestCase):
             self.assertFalse(D.H.native_test_passed({"exit_code": 0, "stdout": raw}))
 
     def test_exact_native_boundary_tests_must_all_execute_without_ignores(self):
-        output = ("running 11 tests\n" + "".join("test windows_read::tests::" + name + " ... ok\n" for name in D.NATIVE_TESTS)
-                  + "test result: ok. 11 passed; 0 failed; 0 ignored; 1 filtered out;\n")
+        output = ("running 12 tests\n" + "".join("test windows_read::tests::" + name + " ... ok\n" for name in D.NATIVE_TESTS)
+                  + "test result: ok. 12 passed; 0 failed; 0 ignored; 1 filtered out;\n")
         self.assertTrue(D.native_tests_passed({"exit_code": 0, "stdout": output}))
         for broken in (output.replace(D.NATIVE_TESTS[0], "unrelated_test"), output.replace("0 ignored", "1 ignored"),
-                       output.replace("11 passed", "10 passed"), output.replace(" ... ok", " ... ignored", 1)):
+                       output.replace("12 passed", "11 passed"), output.replace(" ... ok", " ... ignored", 1)):
             self.assertFalse(D.native_tests_passed({"exit_code": 0, "stdout": broken}))
 
     def test_metadata_refusals_precede_classifier_and_still_allow_useful_read(self):

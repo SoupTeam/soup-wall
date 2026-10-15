@@ -43,8 +43,11 @@ A syntactically valid digest cannot authorize another file or workspace.
 Only a local NTFS regular file below a local drive workspace is supported.
 The executor retains opened handles for the drive-to-workspace ancestors,
 target ancestors and metadata-only leaf before requesting native Allow. Each
-component is opened relative to its retained parent handle; reparse processing
-is refused. Volume/file identities and exact handle-resolved spelling are
+component below the volume is opened relative to its retained parent handle;
+the volume itself is opened by its validated local NT device name, without
+resolving the drive letter again. Reparse processing is refused. V4 resource
+evidence comes from these retained handles instead of generic DOS path checks.
+Volume/file identities and exact handle-resolved spelling are
 checked. Retained handles deny write/delete sharing throughout the operation.
 Content access is opened only after a matching actual Allow and must identify
 the pinned leaf.
@@ -98,8 +101,9 @@ The dedicated Windows workflow runs the actual built Agent and executor tests
 under a disposable nonadministrator identity. Reports retain source/binary
 identities, identity/membership checks, original stdio replies, native receipts,
 the server execution ledger, calibrated OS read-exclusion witnesses and
-deterministic native replacement-race results. All eleven mandatory executor
-tests must pass without ignored tests, including the real held-oplock regression.
+deterministic native replacement-race results. All twelve mandatory executor
+tests must pass without ignored tests, including the real held-oplock and
+validated NT volume-mapping regressions.
 The file-symlink test runs separately with its required Windows privilege.
 Cleanup is confined to its owned
 account, processes and fixture directories. A mocked Windows API, WSL run or

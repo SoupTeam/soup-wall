@@ -31,12 +31,11 @@ use windows_sys::Win32::Foundation::{
     ERROR_HANDLE_EOF, ERROR_IO_PENDING, HANDLE, INVALID_HANDLE_VALUE, WAIT_TIMEOUT,
 };
 use windows_sys::Win32::Storage::FileSystem::{
-    CreateFileW, FileAttributeTagInfo, FileIdInfo, FileStandardInfo, GetFileInformationByHandleEx,
-    GetFileType, GetFinalPathNameByHandleW, GetVolumeInformationByHandleW, QueryDosDeviceW,
-    ReadFile, FILE_ATTRIBUTE_DEVICE, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_OFFLINE,
-    FILE_ATTRIBUTE_REPARSE_POINT, FILE_ATTRIBUTE_TAG_INFO, FILE_FLAG_BACKUP_SEMANTICS,
-    FILE_FLAG_OPEN_REPARSE_POINT, FILE_ID_INFO, FILE_READ_ATTRIBUTES, FILE_READ_DATA,
-    FILE_SHARE_READ, FILE_STANDARD_INFO, FILE_TYPE_DISK, OPEN_EXISTING, SYNCHRONIZE,
+    FileAttributeTagInfo, FileIdInfo, FileStandardInfo, GetFileInformationByHandleEx, GetFileType,
+    GetFinalPathNameByHandleW, GetVolumeInformationByHandleW, QueryDosDeviceW, ReadFile,
+    FILE_ATTRIBUTE_DEVICE, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_OFFLINE,
+    FILE_ATTRIBUTE_REPARSE_POINT, FILE_ATTRIBUTE_TAG_INFO, FILE_ID_INFO, FILE_READ_ATTRIBUTES,
+    FILE_READ_DATA, FILE_SHARE_READ, FILE_STANDARD_INFO, FILE_TYPE_DISK, SYNCHRONIZE,
 };
 use windows_sys::Win32::System::Threading::CreateEventW;
 use windows_sys::Win32::System::IO::{
@@ -379,26 +378,11 @@ fn append_component(parent: &str, name: &str) -> String {
 
 fn open_drive(drive: &str) -> anyhow::Result<File> {
     let mapping = drive_mapping(drive)?;
-    let name: Vec<u16> = format!("\\\\?\\{drive}\0").encode_utf16().collect();
-    // Only the drive root is opened through Win32. Every filesystem component
-    // after it is opened individually relative to the retained parent handle.
-    let handle = unsafe {
-        CreateFileW(
-            name.as_ptr(),
-            FILE_READ_ATTRIBUTES,
-            FILE_SHARE_READ,
-            null(),
-            OPEN_EXISTING,
-            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
-            null_mut(),
-        )
-    };
-    ensure!(
-        handle != INVALID_HANDLE_VALUE,
-        "Windows read drive open failed"
-    );
-    // SAFETY: successful CreateFileW transfers one uniquely owned handle.
-    let file = unsafe { File::from_raw_handle(handle) };
+    let name = volume_root_name(&mapping)?;
+    // Open the already validated NT volume directly. Re-resolving the drive
+    // letter here could follow a newly shadowed remote DOS-device mapping
+    // before a subsequent identity check gets the opportunity to refuse it.
+    let file = open_native(None, &name, true, false)?;
     let mut actual = vec![0; MAX_PATH_UNITS + 8];
     // VOLUME_NAME_NT returns the physical object-manager volume name. Compare
     // the opened drive root itself with the pre-open DOS mapping, so a SUBST
@@ -411,7 +395,7 @@ fn open_drive(drive: &str) -> anyhow::Result<File> {
             2,
         )
     } as usize;
-    let expected: Vec<u16> = format!("{mapping}\\").encode_utf16().collect();
+    let expected: Vec<u16> = name.encode_utf16().collect();
     ensure!(
         length > 0 && length < actual.len() && actual[..length] == expected,
         "Windows read drive mapping alias refused"
@@ -434,6 +418,11 @@ fn drive_mapping(drive: &str) -> anyhow::Result<String> {
         .context("Windows read drive mapping invalid")?;
     let mapping =
         String::from_utf16(&target[..end]).context("Windows read drive mapping invalid")?;
+    volume_root_name(&mapping)?;
+    Ok(mapping)
+}
+
+fn volume_root_name(mapping: &str) -> anyhow::Result<String> {
     let number = mapping
         .strip_prefix("\\Device\\HarddiskVolume")
         .unwrap_or("");
@@ -441,10 +430,38 @@ fn drive_mapping(drive: &str) -> anyhow::Result<String> {
         !number.is_empty() && number.bytes().all(|c| c.is_ascii_digit()),
         "Windows read requires direct local volume mapping"
     );
-    Ok(mapping)
+    Ok(format!("{mapping}\\"))
 }
 
 fn open_child(parent: &File, name: &str, directory: bool, data: bool) -> anyhow::Result<File> {
+    open_native(Some(parent), name, directory, data)
+}
+
+fn open_native(
+    parent: Option<&File>,
+    name: &str,
+    directory: bool,
+    data: bool,
+) -> anyhow::Result<File> {
+    if parent.is_none() {
+        ensure!(
+            directory && !data,
+            "Windows read absolute open must be volume metadata"
+        );
+        let mapping = name
+            .strip_suffix('\\')
+            .context("Windows read volume root name invalid")?;
+        ensure!(
+            volume_root_name(mapping)? == name,
+            "Windows read volume root name invalid"
+        );
+    } else {
+        ensure!(
+            !name.contains(['\\', '/', ':']),
+            "Windows read child must be one component"
+        );
+        validate_components(name)?;
+    }
     let mut encoded: Vec<u16> = name.encode_utf16().collect();
     ensure!(
         !encoded.is_empty() && encoded.len() <= MAX_PATH_UNITS,
@@ -457,7 +474,7 @@ fn open_child(parent: &File, name: &str, directory: bool, data: bool) -> anyhow:
     };
     let attributes = ObjectAttributes {
         length: size_of::<ObjectAttributes>() as u32,
-        root_directory: parent.as_raw_handle(),
+        root_directory: parent.map_or(null_mut(), AsRawHandle::as_raw_handle),
         object_name: &mut unicode,
         attributes: OBJ_DONT_REPARSE,
         security_descriptor: null_mut(),
@@ -483,7 +500,9 @@ fn open_child(parent: &File, name: &str, directory: bool, data: bool) -> anyhow:
         } else {
             FILE_NON_DIRECTORY_FILE
         };
-    let class = if directory {
+    let class = if parent.is_none() {
+        "volume-metadata"
+    } else if directory {
         "directory-metadata"
     } else if data {
         "leaf-data"
@@ -758,6 +777,9 @@ mod tests {
     use super::*;
     use std::fs;
     use std::os::windows::fs::OpenOptionsExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
+    };
     use windows_sys::Win32::System::IO::DeviceIoControl;
 
     // A real pending FSCTL, never a production race hook. The fixture owns its
@@ -949,6 +971,35 @@ mod tests {
                 "accepted {path:?}"
             );
         }
+    }
+
+    #[test]
+    fn volume_root_open_uses_validated_nt_mapping() {
+        for mapping in [
+            "\\\\host\\share",
+            "\\??\\UNC\\host\\share",
+            "\\Device\\Mup\\host\\share",
+            "\\??\\C:",
+            "\\Device\\HarddiskVolume1\\Other",
+            "\\Device\\HarddiskVolume",
+            "\\Device\\HarddiskVolume1:stream",
+            "\\device\\HarddiskVolume1",
+        ] {
+            assert!(volume_root_name(mapping).is_err(), "accepted {mapping:?}");
+        }
+        let (_temp, root) = fixture();
+        let root = trusted_absolute(&root).unwrap();
+        let drive = &root[..3];
+        let mapping = drive_mapping(drive).unwrap();
+        let name = volume_root_name(&mapping).unwrap();
+        assert_eq!(name, format!("{mapping}\\"));
+        // The acquisition function takes this fixed NT name with no DOS root
+        // handle. It has no drive-letter name left to resolve during the open.
+        let direct = open_native(None, &name, true, false).unwrap();
+        assert_eq!(
+            check_directory(&direct).unwrap(),
+            check_directory(&open_drive(drive).unwrap()).unwrap()
+        );
     }
 
     #[test]
