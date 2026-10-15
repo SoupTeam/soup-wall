@@ -11230,6 +11230,8 @@ async fn send_webhook_request(
     }
 }
 
+#[cfg(all(test, unix))]
+mod recovery_outbox_fixture;
 #[cfg(test)]
 mod webhook_delivery_tests;
 #[cfg(test)]

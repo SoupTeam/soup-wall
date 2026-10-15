@@ -829,6 +829,13 @@ impl PinnedWorkspace {
         }
     }
 
+    /// Duplicate the already authorized root descriptor for a constrained executor.
+    /// This never resolves the root path again or authorizes another directory.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn duplicate_root_descriptor(&self) -> std::io::Result<fs::File> {
+        self.dir.try_clone()
+    }
+
     pub fn canonical(&self) -> &Path {
         &self.canonical
     }

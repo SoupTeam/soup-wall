@@ -1,0 +1,461 @@
+{
+  "schema_version": "sou54-accepted-local-evidence/1",
+  "runtime_source": "4931c21781413e84ab15ede8dc13cf232639aa4d",
+  "accepted_base": "c2c9355c1f754daedcd7f31860ede08a21169fe2",
+  "environment": {
+    "source": "4931c21781413e84ab15ede8dc13cf232639aa4d",
+    "uid": 65532,
+    "gid": 65532,
+    "kernel": "6.12.76-linuxkit",
+    "architecture": "aarch64",
+    "python": "3.11.2",
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+    "filesystem": "overlayfs",
+    "process_protection": [
+      "CapEff:\t0000000000000000",
+      "NoNewPrivs:\t1",
+      "Seccomp:\t2"
+    ],
+    "binary_sha256": {
+      "agentfw": "64b024760df207e649725f3709671791980d0a9bb8c69ffc20d3a08868934df7",
+      "lib-test": "9b1dd8e4f763698f900e529948f8d9d80e3cf7a706fcc33fb70c660ed4d2d927",
+      "native-test": "494b8632552043cf2776740e28f6be548259ecc7af476455246296f9d528f26e"
+    },
+    "runs": [
+      {
+        "name": "lib",
+        "command": [
+          "/bundle/lib-test",
+          "--nocapture"
+        ],
+        "exit_code": 0
+      },
+      {
+        "name": "native",
+        "command": [
+          "/bundle/native-test",
+          "--nocapture"
+        ],
+        "exit_code": 0
+      },
+      {
+        "name": "stdio",
+        "command": [
+          "/usr/bin/python3",
+          "scripts/verify-sou54-create-file.py",
+          "--run",
+          "--repo",
+          "/tmp/source",
+          "--agentfw",
+          "/bundle/agentfw",
+          "--expected-commit",
+          "4931c21781413e84ab15ede8dc13cf232639aa4d",
+          "--native-test-binary",
+          "/bundle/lib-test",
+          "--output",
+          "/tmp/sou54-create-file-final.json"
+        ],
+        "exit_code": 0
+      },
+      {
+        "name": "races",
+        "command": [
+          "/usr/bin/python3",
+          "scripts/verify-sou54-create-races.py",
+          "--run",
+          "--repo",
+          "/tmp/source",
+          "--agentfw",
+          "/bundle/agentfw",
+          "--expected-commit",
+          "4931c21781413e84ab15ede8dc13cf232639aa4d",
+          "--output",
+          "/tmp/sou54-create-races-final.json"
+        ],
+        "exit_code": 0
+      }
+    ]
+  },
+  "linux_image": "sha256:737c5120bdfe2ca1dd84dbf550df3bc7d21a128df37d8a2d351dbb83854dc6f6",
+  "runtime_input_sha256": "14ee687388084b64ba04ca07bc633e987b7d3b7c85ddb0313cf8fea3236be947",
+  "runtime_inputs": {
+    ".github/workflows/mcp-create-file.yml": "6f314f3726b028f0af29c9714d89e4033b498fb39ec5d4e21d5edc94a9f432ab",
+    "Cargo.lock": "2004973be1d942cf143a7429163d955850ec4c548c5c1c30346f4dea1dd5a450",
+    "Cargo.toml": "df5cf3632141f34e519b9693ce1455f53de74bec408697beb4f375b435514a5f",
+    "crates/adapter/src/lib.rs": "f43c41ff4c85c5ae77cb544c1e3c26fb5265f3fb68d8e470c4b9a2322c9d7afe",
+    "crates/adapter/src/runner.rs": "99ef70172faa380c5e9b0fa466c25a777edd80a54624a4e8541cd6df2f92cc5a",
+    "crates/adapter/src/tool_call.rs": "ffd672326b7ae4eaed94bfbe178c014eb188af9fedd95932927f2fe81b95db6d",
+    "crates/agent/src/action.rs": "7069161402b26daf8d9b345aca453ccea473ee0fad5e72da381aba4c184163b2",
+    "crates/agent/src/authority.rs": "20a5724530f0b7834aec1e37884e24d9087e43bb4974f967331de32fb978ca1a",
+    "crates/agent/src/egress.rs": "9dc5091592cd8fac69296f9317e200a1c5e368e681671d9027ab40b7a0334d05",
+    "crates/agent/src/engine.rs": "79a340f115b63e00b0a291c79f1446fb588a39cb9865bc18b13e7576632ef163",
+    "crates/agent/src/event.rs": "904081b15eec9a3401e6f609c1b0e392291c639339706e9511914d45883612a9",
+    "crates/agent/src/facet.rs": "2225d0e1aeb4ae78b64712e089fc696fcda4e75a4cc177b2bd18301ac8e28e78",
+    "crates/agent/src/fingerprint.rs": "b1d2c6452fa9d5b27196b98f0b99c8b300e292c55263e85da2ca593af71c983c",
+    "crates/agent/src/lib.rs": "9abb757d1a3fb741e11f23fdf936768adb23fd85aea409bd47e729d1457d6784",
+    "crates/agent/src/policy.rs": "791c84cc81dd7d3587d3c5c755b4fef981b12481e40ab95f65fa1473528767d5",
+    "crates/agent/src/resolution.rs": "3e58e96e3e45dac6e37b41ac76d5a789711bcef041da5c299eff041cc04e0a0a",
+    "crates/agent/src/taint.rs": "ad3d6a52d20bc4d72aff9725046d3c211b1fd7c776aad961ecd1b64f95d063af",
+    "crates/agentfw/src/audit.rs": "0f348a0e9ec9412d0898f1372b0b84a2c922832ceb4a63a258b2b03e3628a23b",
+    "crates/agentfw/src/config.rs": "4fb4ddb3859b6c30aff7ebb8e2178e7b947b37d5d6cab60fe9ac575689ef167a",
+    "crates/agentfw/src/decision.rs": "741b9a03d5fc09f0bdf522b6391c45f946722a77280a17b97e71ebed31f595db",
+    "crates/agentfw/src/grant.rs": "3d3267c60b2b32632c144f06a04283319c606bb52866098c70d23f82b8073a73",
+    "crates/agentfw/src/handlers.rs": "11aa76b82af67f1a42a882a15e02477841757c88a5719cfa64c3b01a8339b6e2",
+    "crates/agentfw/src/hook.rs": "ac67cd17a338cffffee347abe04a5c3203f5bf742f3a6bcbf534923b2e2ea402",
+    "crates/agentfw/src/install.rs": "c026246f4098b9fef9a46a60a6870b775bfcce1ce7b88e126e0e5bafa46eb7f6",
+    "crates/agentfw/src/judge.rs": "cd19617313163aafe3a9f37d3e81de2f339438813e162aefad1536fb8c59c449",
+    "crates/agentfw/src/lib.rs": "1cab8d4519e9b4e4655942b46689710948e9e4c4c4cc7452478bcfea6195e5d2",
+    "crates/agentfw/src/lifecycle.rs": "842b64d90424d7dff4b79409ac33f7ae49cf48bdfce23b3bee0f70792282d7fa",
+    "crates/agentfw/src/main.rs": "74654becadd0a611464ae916df0df916472fa4f51dd2d682e66eeefe3a28a449",
+    "crates/agentfw/src/managed_policy.rs": "29a4ae6b16e08fb9765f83f9fe3f2999cb8ee252ea12354caf1feec4461f830d",
+    "crates/agentfw/src/managed_sync.rs": "3432d54ab8f3a06eb1303d455aa97e151102539d917d9f7fe2b14a24c4772859",
+    "crates/agentfw/src/map.rs": "06765851b9c48eb66720af99459b23c6b19d9d206e4a0d53f3c6652106f85f4d",
+    "crates/agentfw/src/mcp/admission.rs": "1e7df9695fac68300ec5130b84d286f892d51765571daa1219792d8c54e5353a",
+    "crates/agentfw/src/mcp/create_file.rs": "5211792b08f252a6620aa4bd5f11497c7f342f9db1a0b9881d164df6bb294935",
+    "crates/agentfw/src/mcp/input.rs": "85f8c593877faba1925cba927a2db2387d540acd7d63eba89fd75a4c3249565d",
+    "crates/agentfw/src/mcp/jsonrpc.rs": "c77265bf4d7c851e3319c4f39bed8114980bde552b9a0cfc0836dd2c43dd147c",
+    "crates/agentfw/src/mcp/manifest.rs": "39673dd219863047f77dad5e73761ecf3f326dd38df196d886d718a4b9758803",
+    "crates/agentfw/src/mcp/mod.rs": "be610412ce47f60cb264a4b4eb56d84160a9ba34e2bcf43b73611d9537b8cdc0",
+    "crates/agentfw/src/mcp/proxy.rs": "7b414e7b9b47697195f466daa66addb6ead4b1af76886f41149a9cdbc77a3ad7",
+    "crates/agentfw/src/mcp/resources.rs": "ba23b844c959806b1a0b8388f0818d02cfe03293dc2cc763e465cb0b98576f48",
+    "crates/agentfw/src/mcp/stdio.rs": "f2976bc80ea39c336b5b885d493b6f5b4524bf1301109f4bc28fb46dd026ae5e",
+    "crates/agentfw/src/mcp/store.rs": "b39b680fb21af64d79f9a82ec12e2b5deda12d276c6371d1c111ea1892ddf25c",
+    "crates/agentfw/src/native.rs": "961e526bef80b37efd24e6a17c80b6a09710e793ffa623c33c31419211d73edf",
+    "crates/agentfw/src/native/resource.rs": "7bb485ea518e84b939c27b3eb2ddb5d82b18af366c7416483853d1f17af8568a",
+    "crates/agentfw/src/preflight.rs": "689f7ff7d2c4bd66d0505e2e75e2d9d78a8ed4e978aa3d5418f44747677bb8f6",
+    "crates/agentfw/src/private_file_windows.rs": "3731920a51c453e08b14ca16296c62b3952a82260569255cb2e8da76d9c889bb",
+    "crates/agentfw/src/provenance.rs": "4cd61e80219e0bed286cdf11c5f916e51baed204e24484f4a436d4bea62af677",
+    "crates/agentfw/src/replay.rs": "deda854b7ae10bc68eaf4251f44cc9524f0ae1e281e9efab976288906102a5c2",
+    "crates/agentfw/src/sandbox.rs": "af8ab10332e6c569fb05c0ad7cd7809fa3a23331e9319a313e40c0422eb200e0",
+    "crates/agentfw/src/spans.rs": "2dc37461c4fa689d70595d6c046a72702e47e5b7100271c3d3779b2992105c2f",
+    "crates/agentfw/src/token.rs": "edc3bfa80ace9ba4fc3e50501ed88849ef97fbcb3e334dc1ec406730ecb2e696",
+    "crates/core/src/context.rs": "686133cd213c5f4a418378d89154ad7b38113557948c7c4b1fb973cf645f4a77",
+    "crates/core/src/detector.rs": "66f4f063d5db534e6e805d8087ea9226e5ff214722775d9cbb11d678a08db4b5",
+    "crates/core/src/detectors/injection/heuristics.rs": "f06880f1886b38c6421d5ea8dcddc2bd10795368954fc47ea68825accf2b0e4c",
+    "crates/core/src/detectors/injection/ml.rs": "ef3db5295639a3b821d842e05d73dd60e26be4b463d32522be026f5f1972fa52",
+    "crates/core/src/detectors/injection/mod.rs": "30f509c20b93f339de83f3ff3f4515f5dabe427424887ac34dfc1074563f4433",
+    "crates/core/src/detectors/injection/signatures.rs": "e4b2a2d3d27e55bbc3336d2e34d427bd607dbc22ee2b6f369a834dfcd0c86397",
+    "crates/core/src/detectors/mod.rs": "e2954531ffd892f8db6f41c93c57aa9717342d0dc69fef35e4d0a47c80340f6e",
+    "crates/core/src/detectors/moderation.rs": "9b1feb4e5edc541fea0cf0f9a53ebef7294f922fa103a5c14a1ecf49e014d5b4",
+    "crates/core/src/detectors/output.rs": "e493ab6ba6f4489e46802ee12e61f5b05f52e687b17d17373b0fcdbfbb2bfea8",
+    "crates/core/src/detectors/pii.rs": "8af448adbeb4c8c4aa7cbe427bb32870d5ae2057f5f4e7006e5786d44d3e5e62",
+    "crates/core/src/detectors/secret.rs": "e26623583c6d936cb6a670c9c475d6c62efdfc355821ed964008da32e30a8892",
+    "crates/core/src/finding.rs": "bd0c5385dcaae9b44f6f78489cd3b04928a55f2443a949a70413ba8e9e9b72f1",
+    "crates/core/src/firewall.rs": "842ed4c1b83789514aca24e92f7c5faee9b9f6f4bcfd1043ea2c7bdbb2df6641",
+    "crates/core/src/lib.rs": "30893b4fbf80bf43175792347842e4fb48922596574bd10ee9a13dfb97d06a33",
+    "crates/core/src/masking.rs": "276e1afa622cac9920ea7c738225f9acd420444a2fa63fc1ed8b50b319daca5b",
+    "crates/core/src/normalize.rs": "ae28636882ba7360da2068f0ed866960f1115674fc23a5cbd72128c1ab1b337e",
+    "crates/core/src/policy.rs": "d05d4db813e1295d705f52b0740e739d04ef79675f2a3c9bcede324c0e54e496",
+    "crates/core/src/scoring.rs": "16db47c30b6b588af522e37e654457600111617c236c38be289c6c2eb218c968",
+    "crates/core/src/severity.rs": "1e6b0b2c58a95ead6f1b567c69ff2016e648bfa0f99dcb17f89f77d04b142179",
+    "crates/core/src/taxonomy.rs": "d6c944cae1160068dac3f3d3abbc163dbb5307cd54b63844a96aab474eef0d29",
+    "crates/core/src/util.rs": "ea8728493ac0c0a043fcec401533027432c92fd4cf00e2976d430754c54e8d8c",
+    "rule_baseline/EVALUATION_SOU14.md": "aec1fc58a66e78fe7990146df15e9de36f90e7587553bde7509b435b256c5b73",
+    "rule_baseline/EVALUATION_SOU14_e4e494a.md": "d3601c6ea36859092ac3f3f271403db2413cdaf497bf0f7d218efc90e2fdf77f",
+    "rule_baseline/README.md": "906c4cc6946c01edc3db0ba293625a1c52037b43fa97e6c12fc89a0a2d20dbc9",
+    "rule_baseline/evaluate_dev.py": "74de74ccc7f2c5f97fda5efba69eb9e70b22d7c1722e1505d3f7fff9fa0f9e05",
+    "rule_baseline/rev2/README.md": "c47940d103d5d907c53c180064df033654f466b5f6e4f40986edfafdd70b9538",
+    "rule_baseline/rev2/rule_baseline.py": "d0b4fc02720ee5ff38dec73d5992c6bdee9eda8595282e33015e60d07ce33ea5",
+    "rule_baseline/rule_baseline.py": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+    "rule_baseline/test_contract_edges.py": "d526f94359a16430e4e6d7bdcb202d9f32b57f08090cb55a628ca6b3556a03d8",
+    "rule_baseline/test_evaluate_dev.py": "50adf9eef7e0e31ccca302d79f86457e07d2805b8dec50a3df8d7c71d57b768a",
+    "rule_baseline/test_generalization.py": "284fa193eddf93537371b2155c5c062b0d5dae951033a34018fed135a8eb4e72",
+    "rule_baseline/test_interface.py": "fc40b88384e71eb569cbd22280bd62dd7fb48655e6202a4ea1a0a28fb156f933",
+    "rule_baseline/test_rev2.py": "9ad0cb4fb2fe147d112b2858e21044924e1f4cf3ff2df5a2c4966fbd1b6ad5bd",
+    "rule_baseline/test_review_fixes.py": "be922255aa6089272a643ce09ea901d1aab1b4551f39d7141dc280324c6832f7",
+    "rule_baseline/test_rule_baseline.py": "4c117cdd46fe5074e16e15937fd2a785ffb678de04e673c6a32126c1fda1e0e4",
+    "scripts/fixtures/mcp_create_file_probe_server.py": "21892a85c04285328bc1cf25ec74d93f7a52b26710b20210c370bba69b7d4ace",
+    "scripts/verify-sou54-create-file.py": "d771df7b37e2e268159630692eab158e4b12c35449f0602effed93b56a38a866",
+    "scripts/verify-sou54-create-races.py": "861746af8b3b36ed769ded675a63bb164f7d8617c43bb5da4bc7fde6ebcd4fe9"
+  },
+  "stdio": {
+    "cases_run": 26,
+    "cases_expected": 26,
+    "passed": 26,
+    "failed": 0,
+    "skips": 0,
+    "expected_useful_creates_run": 4,
+    "false_interruptions": 0,
+    "latency_ms": {
+      "samples": 95,
+      "p50": 0.594375,
+      "p95": 68.590792,
+      "max": 90.431083,
+      "scope": "scripted client send to correlated response; debug binary; classifier/native policy/local OS included"
+    }
+  },
+  "races": [
+    {
+      "case": "destination-substitution",
+      "status": "pass",
+      "seconds": 0.721671,
+      "sessions": 1,
+      "cleanup": true
+    },
+    {
+      "case": "content-substitution",
+      "status": "pass",
+      "seconds": 0.755625,
+      "sessions": 1,
+      "cleanup": true
+    },
+    {
+      "case": "root-replacement-after-allow",
+      "status": "pass",
+      "seconds": 0.764938,
+      "sessions": 1,
+      "cleanup": true
+    },
+    {
+      "case": "two-session-same-target",
+      "status": "pass",
+      "seconds": 0.808527,
+      "sessions": 2,
+      "cleanup": true
+    },
+    {
+      "case": "queued-overlap",
+      "status": "pass",
+      "seconds": 0.78892,
+      "sessions": 2,
+      "cleanup": true
+    },
+    {
+      "case": "queued-cancellation",
+      "status": "pass",
+      "seconds": 0.788621,
+      "sessions": 2,
+      "cleanup": true
+    },
+    {
+      "case": "batch-refused",
+      "status": "pass",
+      "seconds": 0.762905,
+      "sessions": 2,
+      "cleanup": true
+    },
+    {
+      "case": "replayed-id",
+      "status": "pass",
+      "seconds": 0.787392,
+      "sessions": 2,
+      "cleanup": true
+    }
+  ],
+  "regression_red": [
+    {
+      "file": "initial-metadata-red.json",
+      "runner_source": "c62fec1ccda5ead8c5ecd450db80b20e52d265aa",
+      "binary_build_source": "c62fec1ccda5ead8c5ecd450db80b20e52d265aa",
+      "status": "fail",
+      "summary": {
+        "cases_run": 22,
+        "cases_expected": 22,
+        "passed": 0,
+        "failed": 22,
+        "skips": 0,
+        "expected_useful_creates_run": 4,
+        "false_interruptions": 4,
+        "latency_ms": {
+          "samples": 22,
+          "p50": 1.588209,
+          "p95": 2.693791,
+          "max": 2.793958,
+          "scope": "scripted client send to correlated response; debug binary; classifier/native policy/local OS included"
+        }
+      },
+      "failed_cases": [
+        {
+          "case": "utf8-relative",
+          "reason": "incomplete observation"
+        },
+        {
+          "case": "utf8-absolute",
+          "reason": "incomplete observation"
+        },
+        {
+          "case": "empty-content",
+          "reason": "incomplete observation"
+        },
+        {
+          "case": "byte-limit",
+          "reason": "incomplete observation"
+        },
+        {
+          "case": "utf8-over-byte-limit",
+          "reason": "incomplete observation"
+        },
+        {
+          "case": "existing-file",
+          "reason": "incomplete observation"
+        },
+        {
+          "case": "hard-link",
+          "reason": "incomplete observation"
+        },
+        {
+          "case": "symlink-leaf",
+          "reason": "incomplete observation"
+        },
+        {
+          "case": "symlink-parent",
+          "reason": "incomplete observation"
+        },
+        {
+          "case": "fifo",
+          "reason": "incomplete observation"
+        },
+        {
+          "case": "directory",
+          "reason": "incomplete observation"
+        },
+        {
+          "case": "nested-path",
+          "reason": "incomplete observation"
+        },
+        {
+          "case": "missing-parent",
+          "reason": "incomplete observation"
+        },
+        {
+          "case": "traversal",
+          "reason": "incomplete observation"
+        },
+        {
+          "case": "outside-workspace",
+          "reason": "incomplete observation"
+        },
+        {
+          "case": "unlisted-file",
+          "reason": "incomplete observation"
+        },
+        {
+          "case": "native-deny",
+          "reason": "incomplete observation"
+        },
+        {
+          "case": "native-ask",
+          "reason": "incomplete observation"
+        },
+        {
+          "case": "classifier-deny",
+          "reason": "incomplete observation"
+        },
+        {
+          "case": "classifier-ask",
+          "reason": "incomplete observation"
+        },
+        {
+          "case": "repeated-failures",
+          "reason": "incomplete observation"
+        },
+        {
+          "case": "result-withheld",
+          "reason": "incomplete observation"
+        }
+      ]
+    },
+    {
+      "file": "initial-64k-profile-red.json",
+      "runner_source": "d2421379192814562343f5af886fca189c9235df",
+      "binary_build_source": "c62fec1ccda5ead8c5ecd450db80b20e52d265aa",
+      "status": "fail",
+      "summary": {
+        "cases_run": 22,
+        "cases_expected": 22,
+        "passed": 21,
+        "failed": 1,
+        "skips": 0,
+        "expected_useful_creates_run": 4,
+        "false_interruptions": 1,
+        "latency_ms": {
+          "samples": 91,
+          "p50": 0.592334,
+          "p95": 69.4445,
+          "max": 97.293667,
+          "scope": "scripted client send to correlated response; debug binary; classifier/native policy/local OS included"
+        }
+      },
+      "failed_cases": [
+        {
+          "case": "byte-limit",
+          "reason": "allowed create was interrupted"
+        }
+      ]
+    },
+    {
+      "file": "identity-alias-red.json",
+      "runner_source": "07e136311ddedb4fc38eff51fc7ecdefa73f0fed",
+      "binary_build_source": "2b4a77ab004a9a03d5626da785dd614db0e1302c",
+      "status": "fail",
+      "summary": {
+        "cases_run": 26,
+        "cases_expected": 26,
+        "passed": 22,
+        "failed": 4,
+        "skips": 0,
+        "expected_useful_creates_run": 4,
+        "false_interruptions": 0,
+        "latency_ms": {
+          "samples": 95,
+          "p50": 0.594292,
+          "p95": 78.715084,
+          "max": 87.529292,
+          "scope": "scripted client send to correlated response; debug binary; classifier/native policy/local OS included"
+        }
+      },
+      "failed_cases": [
+        {
+          "case": "relative-dot-path",
+          "reason": "refused/withheld create returned success"
+        },
+        {
+          "case": "absolute-double-slash",
+          "reason": "refused/withheld create returned success"
+        },
+        {
+          "case": "server-id-mismatch",
+          "reason": "refused/withheld create returned success"
+        },
+        {
+          "case": "cwd-workspace-mismatch",
+          "reason": "refused/withheld create returned success"
+        }
+      ]
+    }
+  ],
+  "local_tests": {
+    "linux_agent_lib": {
+      "passed": 241,
+      "failed": 0,
+      "ignored": 0
+    },
+    "linux_native_endpoint": {
+      "passed": 39,
+      "failed": 0,
+      "ignored": 0
+    },
+    "mac_agent_mcp_final": {
+      "passed": 337,
+      "failed": 0,
+      "ignored": 0
+    },
+    "python_grader_final": {
+      "passed": 24,
+      "failed": 0
+    },
+    "mac_workspace_initial_c62": {
+      "passed": 1059,
+      "failed": 0,
+      "ignored": 9
+    },
+    "python_scripts_initial": {
+      "run": 525,
+      "skipped": 26
+    },
+    "python_benchmarks_initial": {
+      "run": 44,
+      "skipped_records": 18
+    }
+  }
+}

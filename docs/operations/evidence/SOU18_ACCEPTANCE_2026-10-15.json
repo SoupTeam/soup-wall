@@ -1,0 +1,1343 @@
+{
+  "schema_version": "sou18-acceptance-evidence/1",
+  "scope": "Selected current-main setup/status/host paths and CodeQL rule",
+  "observations_status": "pass_with_declared_limits",
+  "review_status": "pending",
+  "issue_marked_done": false,
+  "candidate": {
+    "commit": "4f428e4b983111e5b2480e40d658628e3d198fe7",
+    "tree": "4a4f2624240060bb6e0e42f86d290ec2b8cf565d",
+    "clean": true
+  },
+  "probe_commit": "bce46fbbd3a8509c0febc674619811f211667662",
+  "probe_sha256": "b0e52607c1a686378a902e62ed30ad06fad9940bf90d3b65f8d8c79bad15510b",
+  "agentfw_sha256": "85de5abd45917110b0577a2737b3153edfb41fd72ea1e1e840d9c1c96e916253",
+  "build": {
+    "matched_inputs": 356,
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+    "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+    "image_id": "sha256:3ff17f47cf533732b512a3a6b182eeeec215a9a1b38f7ddd5835b70fde511d4a",
+    "cache": "existing cache reused"
+  },
+  "host": {
+    "identity": {
+      "packages": {
+        "node_modules/@anthropic-ai/claude-code": {
+          "version": "2.1.296",
+          "resolved": "https://registry.npmjs.org/@anthropic-ai/claude-code/-/claude-code-2.1.296.tgz",
+          "integrity": "sha512-OX/k/rpcthMqnFKOWcpNcbiLsMKtAjLOpQNJHlYiDCFUznWCIwdRTyl/p9SdHVrsrzZuPMCNqZjnpakIni6upw==",
+          "license": "SEE LICENSE IN README.md"
+        },
+        "node_modules/@anthropic-ai/claude-code-linux-x64": {
+          "version": "2.1.296",
+          "resolved": "https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-2.1.296.tgz",
+          "integrity": "sha512-+m01urgelnI+VJxPaKPEK0wixgq42uZ8PeCaUk5tX/8YoDBvSmC/REVQG2jQfJAr8dxunpjJ600FvLrcj1WWTw==",
+          "license": "SEE LICENSE IN LICENSE.md"
+        }
+      },
+      "install_flags": [
+        "--ignore-scripts",
+        "--no-audit",
+        "--no-fund",
+        "--save-exact"
+      ],
+      "version": "2.1.296",
+      "executable_sha256": "24972e3bc859fab2b46ed4c1e51f7d6130f06d3bd550811a114640de3370d0de",
+      "license": "Vendor software, SEE LICENSE IN LICENSE.md; executable not redistributed",
+      "provider": "local scripted Messages fixture, no paid model or account",
+      "node_version": "v24.22.0"
+    },
+    "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+    "policy_sha256": "c5a7c87cbae0a96b6e6be78e5815a0035f131ceb7d452518e955dfb79927be8d",
+    "classifier": {
+      "source": "rule-baseline/python",
+      "contract": "sw-classification/candidate-1",
+      "real_team1_classifier": true,
+      "script_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+    },
+    "scenarios": {
+      "samples": 9,
+      "classification_samples": 9,
+      "classification_errors": 0,
+      "allow_samples": 5,
+      "false_blocks": 0,
+      "enforcement_failures": 0,
+      "technical_failures": 0,
+      "unexpected_technical_failures": 0,
+      "policy_reached": 9,
+      "policy_not_reached": 0
+    },
+    "outage": {
+      "status": "pass",
+      "reason": "useful read followed by actual-host outage refusal and zero send effects"
+    },
+    "owned_profile_removed": true
+  },
+  "ci": {
+    "run_id": 38626806548,
+    "source_commit": "4f428e4b983111e5b2480e40d658628e3d198fe7",
+    "platforms": {
+      "linux": {
+        "environment": {
+          "os": "Linux",
+          "architecture": "x86_64",
+          "kernel": "6.17.0-1022-azure",
+          "python": "3.12.3",
+          "cpu_count": 4
+        },
+        "binary_sha256": "ce9f86e40693c35e96a3c84d964a69018f52c656ea2c2b6cd27528b7dd05be8e",
+        "stage_install_ms": 162.0751859999814,
+        "warm_preflight_cli_ms": {
+          "samples": 20,
+          "p50": 3.7785369999596696,
+          "p95": 4.006373999970947,
+          "values": [
+            3.8577760000180206,
+            3.9973070000201005,
+            4.17165300001443,
+            3.8889429999926506,
+            3.818062000050304,
+            3.8475659999903655,
+            3.7715939999998227,
+            3.7574179999637636,
+            3.7647409999976844,
+            3.7669660000005933,
+            3.7164610000104403,
+            3.725228000007519,
+            3.762698000002729,
+            3.8826319999998304,
+            3.884716000015942,
+            4.006373999970947,
+            3.746336999995492,
+            3.7533110000254055,
+            3.794707999986713,
+            3.7785369999596696
+          ]
+        }
+      },
+      "macos": {
+        "environment": {
+          "os": "Darwin",
+          "architecture": "arm64",
+          "kernel": "24.6.0",
+          "python": "3.14.7",
+          "cpu_count": 3
+        },
+        "binary_sha256": "d3e4e1dad6ece47bec64ca8c5fbf3542b3fa89e0dbd479baef1fa790ae2fd277",
+        "stage_install_ms": 117.65508300004512,
+        "warm_preflight_cli_ms": {
+          "samples": 20,
+          "p50": 7.202833999940594,
+          "p95": 12.774458000080813,
+          "values": [
+            6.179917000054047,
+            5.860166999923422,
+            5.705124999963118,
+            5.810124999925392,
+            7.344291999970665,
+            5.7712919999630685,
+            6.019165999987308,
+            5.530625000005784,
+            6.309874999942622,
+            11.879709000027106,
+            7.202833999940594,
+            12.774458000080813,
+            12.921000000005733,
+            8.561249999956999,
+            8.386083999994298,
+            9.594166999931986,
+            8.056541999962974,
+            9.537250000107633,
+            7.679624999923362,
+            6.47445799995694
+          ]
+        }
+      },
+      "windows": {
+        "environment": {
+          "os": "Windows",
+          "architecture": "AMD64",
+          "kernel": "2025Server",
+          "python": "3.12.10",
+          "cpu_count": 4
+        },
+        "binary_sha256": "988f75a91f885947c6196b7e9c9c819a0d4266e88e2c4f936caffe0e540fbd17",
+        "stage_install_ms": 124.38419999989492,
+        "warm_preflight_cli_ms": {
+          "samples": 20,
+          "p50": 14.975000000049477,
+          "p95": 15.963299999953051,
+          "values": [
+            13.91579999994974,
+            14.30819999995947,
+            14.025600000081795,
+            14.81340000009368,
+            14.975000000049477,
+            14.683899999909045,
+            15.963299999953051,
+            15.110400000025948,
+            14.601300000094852,
+            15.389199999958691,
+            15.514299999949799,
+            15.511199999991732,
+            14.981199999965611,
+            14.935599999944316,
+            15.179500000044754,
+            15.201599999954851,
+            14.845400000012887,
+            14.99490000003334,
+            14.862999999991189,
+            15.98290000003999
+          ]
+        }
+      }
+    },
+    "windows_lifecycle": {
+      "schema_version": "sou18-windows-lifecycle/1",
+      "status": "pass",
+      "source_commit": "4f428e4b983111e5b2480e40d658628e3d198fe7",
+      "observed_at": "2026-10-14T19:52:20.5361809Z",
+      "test_exit_code": 0,
+      "os_version": "Microsoft Windows NT 10.0.26100.0",
+      "architecture": "X64",
+      "powershell_version": "7.6.6",
+      "agent_sha256": "50c4ca4c8cf800237343c3f7466300f102f818459322a4c7a8bf8b9dc4d9f220",
+      "test_sha256": "ea8f11aa06937f2171c5687a814b6153bb4014b972318d09f14ae6a890278941",
+      "timeout_seconds": 600,
+      "timed_out": false,
+      "account_removed": true,
+      "staging_removed": true,
+      "error": null,
+      "cleanup_error": null,
+      "child": {
+        "status": "pass",
+        "user_sid": "S-1-5-21-1643835476-1616584234-1346609752-1003",
+        "is_administrator": false,
+        "profile_owner_sid": "S-1-5-21-1643835476-1616584234-1346609752-1003",
+        "agent_sha256": "50c4ca4c8cf800237343c3f7466300f102f818459322a4c7a8bf8b9dc4d9f220",
+        "test_sha256": "ea8f11aa06937f2171c5687a814b6153bb4014b972318d09f14ae6a890278941",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0,
+        "error": null
+      }
+    },
+    "docker": {
+      "amd64": 153,
+      "arm64": 153
+    }
+  },
+  "checks": {
+    "local_docker": 153,
+    "resources": 10,
+    "suite": [
+      "setup:6",
+      "status:7",
+      "generic:15",
+      "latency:30 pairs"
+    ],
+    "regrades": [
+      {
+        "environment": "local",
+        "stage": "setup",
+        "result": [
+          "pass",
+          "complete"
+        ]
+      },
+      {
+        "environment": "local",
+        "stage": "status",
+        "result": [
+          "pass",
+          "complete"
+        ]
+      },
+      {
+        "environment": "local",
+        "stage": "latency",
+        "result": [
+          "pass",
+          "complete"
+        ]
+      },
+      {
+        "environment": "local",
+        "stage": "generic",
+        "result": [
+          "pass",
+          "complete"
+        ]
+      },
+      {
+        "environment": "linux-ci",
+        "stage": "setup",
+        "result": [
+          "pass",
+          "complete"
+        ]
+      },
+      {
+        "environment": "linux-ci",
+        "stage": "status",
+        "result": [
+          "pass",
+          "complete"
+        ]
+      },
+      {
+        "environment": "linux-ci",
+        "stage": "latency",
+        "result": [
+          "pass",
+          "complete"
+        ]
+      },
+      {
+        "environment": "linux-ci",
+        "stage": "generic",
+        "result": [
+          "pass",
+          "complete"
+        ]
+      },
+      {
+        "environment": "macos-ci",
+        "stage": "setup",
+        "result": [
+          "pass",
+          "complete"
+        ]
+      },
+      {
+        "environment": "macos-ci",
+        "stage": "status",
+        "result": [
+          "pass",
+          "complete"
+        ]
+      },
+      {
+        "environment": "macos-ci",
+        "stage": "latency",
+        "result": [
+          "pass",
+          "complete"
+        ]
+      },
+      {
+        "environment": "macos-ci",
+        "stage": "generic",
+        "result": [
+          "pass",
+          "complete"
+        ]
+      },
+      {
+        "environment": "linux-ci",
+        "stage": "standalone-setup/status",
+        "status": "pass"
+      },
+      {
+        "environment": "macos-ci",
+        "stage": "standalone-setup/status",
+        "status": "pass"
+      },
+      {
+        "environment": "windows-ci",
+        "stage": "standalone-setup/status",
+        "status": "pass"
+      },
+      {
+        "environment": "local",
+        "stage": "resources",
+        "passed": 10
+      }
+    ],
+    "python": {
+      "tests": 482,
+      "skips": 25,
+      "status": "pass"
+    },
+    "benchmarks": {
+      "tests": 44,
+      "skips": 18,
+      "status": "pass"
+    },
+    "fmt": "pass"
+  },
+  "latencies_ms": {
+    "local": {
+      "requested_pairs": 30,
+      "fixture_false_interruptions": 0,
+      "execution_anomalies": 0,
+      "direct_request_ms": {
+        "p50": 0.350404,
+        "p95": 0.512155,
+        "p99": 0.559894
+      },
+      "protected_request_ms": {
+        "p50": 75.722034,
+        "p95": 90.430914,
+        "p99": 92.636225
+      },
+      "paired_overhead_ms": {
+        "mean": 77.8764725,
+        "p50": 75.456089,
+        "p95": 90.00922800000001,
+        "p99": 92.396689,
+        "raw": [
+          75.696708,
+          75.509518,
+          76.94245000000001,
+          77.70466,
+          75.456089,
+          73.595692,
+          74.194578,
+          74.638545,
+          74.14959300000001,
+          75.39142899999999,
+          86.419596,
+          79.466445,
+          74.36358299999999,
+          75.030986,
+          75.189161,
+          83.481028,
+          75.03259000000001,
+          92.396689,
+          74.935709,
+          90.00922800000001,
+          89.418937,
+          77.67183899999999,
+          76.082427,
+          75.652124,
+          78.672033,
+          73.847981,
+          75.084356,
+          74.57009699999999,
+          82.43377600000001,
+          73.256328
+        ]
+      }
+    },
+    "linux-ci": {
+      "requested_pairs": 30,
+      "fixture_false_interruptions": 0,
+      "execution_anomalies": 0,
+      "direct_request_ms": {
+        "p50": 0.237361,
+        "p95": 0.300996,
+        "p99": 0.301817
+      },
+      "protected_request_ms": {
+        "p50": 46.309007,
+        "p95": 48.332562,
+        "p99": 49.379269
+      },
+      "paired_overhead_ms": {
+        "mean": 46.2199441,
+        "p50": 46.064447,
+        "p95": 48.135005,
+        "p99": 49.181272,
+        "raw": [
+          46.716141,
+          46.095555000000004,
+          45.435005000000004,
+          45.454725,
+          45.196459,
+          45.422635,
+          45.518922,
+          45.651624,
+          46.423473,
+          46.176826999999996,
+          46.73646,
+          46.249122,
+          46.635842000000004,
+          49.181272,
+          46.396929,
+          46.694291,
+          46.294897,
+          46.281599,
+          46.019652,
+          46.057909,
+          46.064447,
+          45.909592,
+          46.220388,
+          45.943386000000004,
+          45.289137000000004,
+          45.664394,
+          45.479603,
+          48.135005,
+          45.981311000000005,
+          47.271721
+        ]
+      }
+    },
+    "macos-ci": {
+      "requested_pairs": 30,
+      "fixture_false_interruptions": 0,
+      "execution_anomalies": 0,
+      "direct_request_ms": {
+        "p50": 0.345041,
+        "p95": 0.589791,
+        "p99": 0.614292
+      },
+      "protected_request_ms": {
+        "p50": 57.426292,
+        "p95": 78.052458,
+        "p99": 83.978583
+      },
+      "paired_overhead_ms": {
+        "mean": 57.39124713333333,
+        "p50": 57.078292,
+        "p95": 77.462667,
+        "p99": 83.730958,
+        "raw": [
+          46.300791999999994,
+          54.218916,
+          77.462667,
+          66.22925,
+          57.682167,
+          67.244708,
+          66.399084,
+          47.966916999999995,
+          51.098209000000004,
+          60.279791,
+          66.895292,
+          83.730958,
+          61.448874,
+          57.317459,
+          60.862167,
+          53.905415999999995,
+          49.506584,
+          56.733375,
+          61.385083,
+          43.397,
+          43.134583000000006,
+          50.520958,
+          69.999083,
+          57.078292,
+          43.755500000000005,
+          46.095,
+          60.249208,
+          64.182541,
+          47.589708,
+          49.067832
+        ]
+      }
+    }
+  },
+  "codeql_live_cases": {
+    "schema_version": "sou18-codeql-live-gates/1",
+    "repository": "SoupTeam/soup-wall",
+    "pr": 117,
+    "observed_at": "2026-10-15T02:09:07.727903+00:00",
+    "ruleset_id": 24846282,
+    "thresholds": {
+      "code_scanning_tools": [
+        {
+          "tool": "CodeQL",
+          "security_alerts_threshold": "high_or_higher",
+          "alerts_threshold": "errors"
+        }
+      ]
+    },
+    "settings_changed": false,
+    "alerts_dismissed": false,
+    "merge_attempted": false,
+    "cases": {
+      "clean": {
+        "status": "pass",
+        "head": "74edf38576bc2b564313a241e6e0d106317f631c",
+        "ui": "gate-clean-ui.json",
+        "checks": [
+          {
+            "id": 116203193379,
+            "name": "CodeQL",
+            "head_sha": "74edf38576bc2b564313a241e6e0d106317f631c",
+            "status": "completed",
+            "conclusion": "success",
+            "details_url": "https://github.com/SoupTeam/soup-wall/runs/116203193379",
+            "started_at": "2026-10-15T01:48:50Z",
+            "completed_at": "2026-10-15T01:48:54Z",
+            "app": {
+              "id": 57789,
+              "client_id": "Iv1.4643383dd86f00de",
+              "slug": "github-advanced-security",
+              "node_id": "MDM6QXBwNTc3ODk=",
+              "owner": {
+                "login": "github",
+                "id": 9919,
+                "node_id": "MDEyOk9yZ2FuaXphdGlvbjk5MTk=",
+                "avatar_url": "https://avatars.githubusercontent.com/u/9919?v=4",
+                "gravatar_id": "",
+                "url": "https://api.github.com/users/github",
+                "html_url": "https://github.com/github",
+                "followers_url": "https://api.github.com/users/github/followers",
+                "following_url": "https://api.github.com/users/github/following{/other_user}",
+                "gists_url": "https://api.github.com/users/github/gists{/gist_id}",
+                "starred_url": "https://api.github.com/users/github/starred{/owner}{/repo}",
+                "subscriptions_url": "https://api.github.com/users/github/subscriptions",
+                "organizations_url": "https://api.github.com/users/github/orgs",
+                "repos_url": "https://api.github.com/users/github/repos",
+                "events_url": "https://api.github.com/users/github/events{/privacy}",
+                "received_events_url": "https://api.github.com/users/github/received_events",
+                "type": "Organization",
+                "user_view_type": "public",
+                "site_admin": false
+              },
+              "name": "GitHub Advanced Security",
+              "description": "",
+              "external_url": "https://github.com/features/security",
+              "html_url": "https://github.com/apps/github-advanced-security",
+              "created_at": "2020-03-17T21:25:09Z",
+              "updated_at": "2026-09-14T08:13:48Z",
+              "permissions": {
+                "actions": "read",
+                "checks": "write",
+                "contents": "read",
+                "copilot_requests": "write",
+                "metadata": "read",
+                "pull_requests": "read"
+              },
+              "events": []
+            }
+          },
+          {
+            "id": 116203038378,
+            "name": "Analyze (rust)",
+            "head_sha": "74edf38576bc2b564313a241e6e0d106317f631c",
+            "status": "completed",
+            "conclusion": "success",
+            "details_url": "https://github.com/SoupTeam/soup-wall/actions/runs/38667609845/job/116203038378",
+            "started_at": "2026-10-15T01:48:18Z",
+            "completed_at": "2026-10-15T01:54:50Z",
+            "app": {
+              "id": 15368,
+              "client_id": "Iv1.05c79e9ad1f6bdfa",
+              "slug": "github-actions",
+              "node_id": "MDM6QXBwMTUzNjg=",
+              "owner": {
+                "login": "github",
+                "id": 9919,
+                "node_id": "MDEyOk9yZ2FuaXphdGlvbjk5MTk=",
+                "avatar_url": "https://avatars.githubusercontent.com/u/9919?v=4",
+                "gravatar_id": "",
+                "url": "https://api.github.com/users/github",
+                "html_url": "https://github.com/github",
+                "followers_url": "https://api.github.com/users/github/followers",
+                "following_url": "https://api.github.com/users/github/following{/other_user}",
+                "gists_url": "https://api.github.com/users/github/gists{/gist_id}",
+                "starred_url": "https://api.github.com/users/github/starred{/owner}{/repo}",
+                "subscriptions_url": "https://api.github.com/users/github/subscriptions",
+                "organizations_url": "https://api.github.com/users/github/orgs",
+                "repos_url": "https://api.github.com/users/github/repos",
+                "events_url": "https://api.github.com/users/github/events{/privacy}",
+                "received_events_url": "https://api.github.com/users/github/received_events",
+                "type": "Organization",
+                "user_view_type": "public",
+                "site_admin": false
+              },
+              "name": "GitHub Actions",
+              "description": "Automate your workflow from idea to production",
+              "external_url": "https://help.github.com/en/actions",
+              "html_url": "https://github.com/apps/github-actions",
+              "created_at": "2018-07-30T09:30:17Z",
+              "updated_at": "2026-06-18T16:17:48Z",
+              "permissions": {
+                "actions": "write",
+                "administration": "read",
+                "artifact_metadata": "write",
+                "attestations": "write",
+                "checks": "write",
+                "code_quality": "write",
+                "contents": "write",
+                "copilot_requests": "write",
+                "deployments": "write",
+                "discussions": "write",
+                "drives": "write",
+                "issues": "write",
+                "merge_queues": "write",
+                "metadata": "read",
+                "models": "read",
+                "packages": "write",
+                "pages": "write",
+                "pull_requests": "write",
+                "repository_hooks": "write",
+                "repository_projects": "write",
+                "security_events": "write",
+                "statuses": "write",
+                "vulnerability_alerts": "read"
+              },
+              "events": [
+                "branch_protection_rule",
+                "check_run",
+                "check_suite",
+                "create",
+                "delete",
+                "deployment",
+                "deployment_status",
+                "discussion",
+                "discussion_comment",
+                "fork",
+                "gollum",
+                "issues",
+                "issue_comment",
+                "label",
+                "merge_group",
+                "milestone",
+                "page_build",
+                "public",
+                "pull_request",
+                "pull_request_review",
+                "pull_request_review_comment",
+                "push",
+                "registry_package",
+                "release",
+                "repository",
+                "repository_dispatch",
+                "status",
+                "watch",
+                "workflow_dispatch",
+                "workflow_run"
+              ]
+            }
+          },
+          {
+            "id": 116203038277,
+            "name": "Analyze (actions)",
+            "head_sha": "74edf38576bc2b564313a241e6e0d106317f631c",
+            "status": "completed",
+            "conclusion": "success",
+            "details_url": "https://github.com/SoupTeam/soup-wall/actions/runs/38667609845/job/116203038277",
+            "started_at": "2026-10-15T01:48:18Z",
+            "completed_at": "2026-10-15T01:49:01Z",
+            "app": {
+              "id": 15368,
+              "client_id": "Iv1.05c79e9ad1f6bdfa",
+              "slug": "github-actions",
+              "node_id": "MDM6QXBwMTUzNjg=",
+              "owner": {
+                "login": "github",
+                "id": 9919,
+                "node_id": "MDEyOk9yZ2FuaXphdGlvbjk5MTk=",
+                "avatar_url": "https://avatars.githubusercontent.com/u/9919?v=4",
+                "gravatar_id": "",
+                "url": "https://api.github.com/users/github",
+                "html_url": "https://github.com/github",
+                "followers_url": "https://api.github.com/users/github/followers",
+                "following_url": "https://api.github.com/users/github/following{/other_user}",
+                "gists_url": "https://api.github.com/users/github/gists{/gist_id}",
+                "starred_url": "https://api.github.com/users/github/starred{/owner}{/repo}",
+                "subscriptions_url": "https://api.github.com/users/github/subscriptions",
+                "organizations_url": "https://api.github.com/users/github/orgs",
+                "repos_url": "https://api.github.com/users/github/repos",
+                "events_url": "https://api.github.com/users/github/events{/privacy}",
+                "received_events_url": "https://api.github.com/users/github/received_events",
+                "type": "Organization",
+                "user_view_type": "public",
+                "site_admin": false
+              },
+              "name": "GitHub Actions",
+              "description": "Automate your workflow from idea to production",
+              "external_url": "https://help.github.com/en/actions",
+              "html_url": "https://github.com/apps/github-actions",
+              "created_at": "2018-07-30T09:30:17Z",
+              "updated_at": "2026-06-18T16:17:48Z",
+              "permissions": {
+                "actions": "write",
+                "administration": "read",
+                "artifact_metadata": "write",
+                "attestations": "write",
+                "checks": "write",
+                "code_quality": "write",
+                "contents": "write",
+                "copilot_requests": "write",
+                "deployments": "write",
+                "discussions": "write",
+                "drives": "write",
+                "issues": "write",
+                "merge_queues": "write",
+                "metadata": "read",
+                "models": "read",
+                "packages": "write",
+                "pages": "write",
+                "pull_requests": "write",
+                "repository_hooks": "write",
+                "repository_projects": "write",
+                "security_events": "write",
+                "statuses": "write",
+                "vulnerability_alerts": "read"
+              },
+              "events": [
+                "branch_protection_rule",
+                "check_run",
+                "check_suite",
+                "create",
+                "delete",
+                "deployment",
+                "deployment_status",
+                "discussion",
+                "discussion_comment",
+                "fork",
+                "gollum",
+                "issues",
+                "issue_comment",
+                "label",
+                "merge_group",
+                "milestone",
+                "page_build",
+                "public",
+                "pull_request",
+                "pull_request_review",
+                "pull_request_review_comment",
+                "push",
+                "registry_package",
+                "release",
+                "repository",
+                "repository_dispatch",
+                "status",
+                "watch",
+                "workflow_dispatch",
+                "workflow_run"
+              ]
+            }
+          },
+          {
+            "id": 116203038086,
+            "name": "Analyze (python)",
+            "head_sha": "74edf38576bc2b564313a241e6e0d106317f631c",
+            "status": "completed",
+            "conclusion": "success",
+            "details_url": "https://github.com/SoupTeam/soup-wall/actions/runs/38667609845/job/116203038086",
+            "started_at": "2026-10-15T01:48:18Z",
+            "completed_at": "2026-10-15T01:49:13Z",
+            "app": {
+              "id": 15368,
+              "client_id": "Iv1.05c79e9ad1f6bdfa",
+              "slug": "github-actions",
+              "node_id": "MDM6QXBwMTUzNjg=",
+              "owner": {
+                "login": "github",
+                "id": 9919,
+                "node_id": "MDEyOk9yZ2FuaXphdGlvbjk5MTk=",
+                "avatar_url": "https://avatars.githubusercontent.com/u/9919?v=4",
+                "gravatar_id": "",
+                "url": "https://api.github.com/users/github",
+                "html_url": "https://github.com/github",
+                "followers_url": "https://api.github.com/users/github/followers",
+                "following_url": "https://api.github.com/users/github/following{/other_user}",
+                "gists_url": "https://api.github.com/users/github/gists{/gist_id}",
+                "starred_url": "https://api.github.com/users/github/starred{/owner}{/repo}",
+                "subscriptions_url": "https://api.github.com/users/github/subscriptions",
+                "organizations_url": "https://api.github.com/users/github/orgs",
+                "repos_url": "https://api.github.com/users/github/repos",
+                "events_url": "https://api.github.com/users/github/events{/privacy}",
+                "received_events_url": "https://api.github.com/users/github/received_events",
+                "type": "Organization",
+                "user_view_type": "public",
+                "site_admin": false
+              },
+              "name": "GitHub Actions",
+              "description": "Automate your workflow from idea to production",
+              "external_url": "https://help.github.com/en/actions",
+              "html_url": "https://github.com/apps/github-actions",
+              "created_at": "2018-07-30T09:30:17Z",
+              "updated_at": "2026-06-18T16:17:48Z",
+              "permissions": {
+                "actions": "write",
+                "administration": "read",
+                "artifact_metadata": "write",
+                "attestations": "write",
+                "checks": "write",
+                "code_quality": "write",
+                "contents": "write",
+                "copilot_requests": "write",
+                "deployments": "write",
+                "discussions": "write",
+                "drives": "write",
+                "issues": "write",
+                "merge_queues": "write",
+                "metadata": "read",
+                "models": "read",
+                "packages": "write",
+                "pages": "write",
+                "pull_requests": "write",
+                "repository_hooks": "write",
+                "repository_projects": "write",
+                "security_events": "write",
+                "statuses": "write",
+                "vulnerability_alerts": "read"
+              },
+              "events": [
+                "branch_protection_rule",
+                "check_run",
+                "check_suite",
+                "create",
+                "delete",
+                "deployment",
+                "deployment_status",
+                "discussion",
+                "discussion_comment",
+                "fork",
+                "gollum",
+                "issues",
+                "issue_comment",
+                "label",
+                "merge_group",
+                "milestone",
+                "page_build",
+                "public",
+                "pull_request",
+                "pull_request_review",
+                "pull_request_review_comment",
+                "push",
+                "registry_package",
+                "release",
+                "repository",
+                "repository_dispatch",
+                "status",
+                "watch",
+                "workflow_dispatch",
+                "workflow_run"
+              ]
+            }
+          }
+        ],
+        "scope": "Scanning rule permits progression; independent review/CI requirements still apply."
+      },
+      "missing_or_pending": {
+        "status": "pass",
+        "head": "15f2110bb8f2599688bf1969da3afb68964186ea",
+        "ui": "gate-new-head-pending-ui.json",
+        "previous_head_success_reused": false
+      },
+      "qualifying_finding": {
+        "status": "pass",
+        "head": "15f2110bb8f2599688bf1969da3afb68964186ea",
+        "ui": "gate-finding-ui.json",
+        "checks": [
+          {
+            "id": 116205573646,
+            "name": "CodeQL",
+            "head_sha": "15f2110bb8f2599688bf1969da3afb68964186ea",
+            "status": "completed",
+            "conclusion": "failure",
+            "details_url": "https://github.com/SoupTeam/soup-wall/runs/116205573646",
+            "started_at": "2026-10-15T01:57:25Z",
+            "completed_at": "2026-10-15T01:57:28Z",
+            "app": {
+              "id": 57789,
+              "client_id": "Iv1.4643383dd86f00de",
+              "slug": "github-advanced-security",
+              "node_id": "MDM6QXBwNTc3ODk=",
+              "owner": {
+                "login": "github",
+                "id": 9919,
+                "node_id": "MDEyOk9yZ2FuaXphdGlvbjk5MTk=",
+                "avatar_url": "https://avatars.githubusercontent.com/u/9919?v=4",
+                "gravatar_id": "",
+                "url": "https://api.github.com/users/github",
+                "html_url": "https://github.com/github",
+                "followers_url": "https://api.github.com/users/github/followers",
+                "following_url": "https://api.github.com/users/github/following{/other_user}",
+                "gists_url": "https://api.github.com/users/github/gists{/gist_id}",
+                "starred_url": "https://api.github.com/users/github/starred{/owner}{/repo}",
+                "subscriptions_url": "https://api.github.com/users/github/subscriptions",
+                "organizations_url": "https://api.github.com/users/github/orgs",
+                "repos_url": "https://api.github.com/users/github/repos",
+                "events_url": "https://api.github.com/users/github/events{/privacy}",
+                "received_events_url": "https://api.github.com/users/github/received_events",
+                "type": "Organization",
+                "user_view_type": "public",
+                "site_admin": false
+              },
+              "name": "GitHub Advanced Security",
+              "description": "",
+              "external_url": "https://github.com/features/security",
+              "html_url": "https://github.com/apps/github-advanced-security",
+              "created_at": "2020-03-17T21:25:09Z",
+              "updated_at": "2026-09-14T08:13:48Z",
+              "permissions": {
+                "actions": "read",
+                "checks": "write",
+                "contents": "read",
+                "copilot_requests": "write",
+                "metadata": "read",
+                "pull_requests": "read"
+              },
+              "events": []
+            }
+          },
+          {
+            "id": 116205392347,
+            "name": "Analyze (python)",
+            "head_sha": "15f2110bb8f2599688bf1969da3afb68964186ea",
+            "status": "completed",
+            "conclusion": "success",
+            "details_url": "https://github.com/SoupTeam/soup-wall/actions/runs/38668363103/job/116205392347",
+            "started_at": "2026-10-15T01:56:48Z",
+            "completed_at": "2026-10-15T01:57:48Z",
+            "app": {
+              "id": 15368,
+              "client_id": "Iv1.05c79e9ad1f6bdfa",
+              "slug": "github-actions",
+              "node_id": "MDM6QXBwMTUzNjg=",
+              "owner": {
+                "login": "github",
+                "id": 9919,
+                "node_id": "MDEyOk9yZ2FuaXphdGlvbjk5MTk=",
+                "avatar_url": "https://avatars.githubusercontent.com/u/9919?v=4",
+                "gravatar_id": "",
+                "url": "https://api.github.com/users/github",
+                "html_url": "https://github.com/github",
+                "followers_url": "https://api.github.com/users/github/followers",
+                "following_url": "https://api.github.com/users/github/following{/other_user}",
+                "gists_url": "https://api.github.com/users/github/gists{/gist_id}",
+                "starred_url": "https://api.github.com/users/github/starred{/owner}{/repo}",
+                "subscriptions_url": "https://api.github.com/users/github/subscriptions",
+                "organizations_url": "https://api.github.com/users/github/orgs",
+                "repos_url": "https://api.github.com/users/github/repos",
+                "events_url": "https://api.github.com/users/github/events{/privacy}",
+                "received_events_url": "https://api.github.com/users/github/received_events",
+                "type": "Organization",
+                "user_view_type": "public",
+                "site_admin": false
+              },
+              "name": "GitHub Actions",
+              "description": "Automate your workflow from idea to production",
+              "external_url": "https://help.github.com/en/actions",
+              "html_url": "https://github.com/apps/github-actions",
+              "created_at": "2018-07-30T09:30:17Z",
+              "updated_at": "2026-06-18T16:17:48Z",
+              "permissions": {
+                "actions": "write",
+                "administration": "read",
+                "artifact_metadata": "write",
+                "attestations": "write",
+                "checks": "write",
+                "code_quality": "write",
+                "contents": "write",
+                "copilot_requests": "write",
+                "deployments": "write",
+                "discussions": "write",
+                "drives": "write",
+                "issues": "write",
+                "merge_queues": "write",
+                "metadata": "read",
+                "models": "read",
+                "packages": "write",
+                "pages": "write",
+                "pull_requests": "write",
+                "repository_hooks": "write",
+                "repository_projects": "write",
+                "security_events": "write",
+                "statuses": "write",
+                "vulnerability_alerts": "read"
+              },
+              "events": [
+                "branch_protection_rule",
+                "check_run",
+                "check_suite",
+                "create",
+                "delete",
+                "deployment",
+                "deployment_status",
+                "discussion",
+                "discussion_comment",
+                "fork",
+                "gollum",
+                "issues",
+                "issue_comment",
+                "label",
+                "merge_group",
+                "milestone",
+                "page_build",
+                "public",
+                "pull_request",
+                "pull_request_review",
+                "pull_request_review_comment",
+                "push",
+                "registry_package",
+                "release",
+                "repository",
+                "repository_dispatch",
+                "status",
+                "watch",
+                "workflow_dispatch",
+                "workflow_run"
+              ]
+            }
+          },
+          {
+            "id": 116205392299,
+            "name": "Analyze (rust)",
+            "head_sha": "15f2110bb8f2599688bf1969da3afb68964186ea",
+            "status": "completed",
+            "conclusion": "success",
+            "details_url": "https://github.com/SoupTeam/soup-wall/actions/runs/38668363103/job/116205392299",
+            "started_at": "2026-10-15T01:56:48Z",
+            "completed_at": "2026-10-15T02:06:31Z",
+            "app": {
+              "id": 15368,
+              "client_id": "Iv1.05c79e9ad1f6bdfa",
+              "slug": "github-actions",
+              "node_id": "MDM6QXBwMTUzNjg=",
+              "owner": {
+                "login": "github",
+                "id": 9919,
+                "node_id": "MDEyOk9yZ2FuaXphdGlvbjk5MTk=",
+                "avatar_url": "https://avatars.githubusercontent.com/u/9919?v=4",
+                "gravatar_id": "",
+                "url": "https://api.github.com/users/github",
+                "html_url": "https://github.com/github",
+                "followers_url": "https://api.github.com/users/github/followers",
+                "following_url": "https://api.github.com/users/github/following{/other_user}",
+                "gists_url": "https://api.github.com/users/github/gists{/gist_id}",
+                "starred_url": "https://api.github.com/users/github/starred{/owner}{/repo}",
+                "subscriptions_url": "https://api.github.com/users/github/subscriptions",
+                "organizations_url": "https://api.github.com/users/github/orgs",
+                "repos_url": "https://api.github.com/users/github/repos",
+                "events_url": "https://api.github.com/users/github/events{/privacy}",
+                "received_events_url": "https://api.github.com/users/github/received_events",
+                "type": "Organization",
+                "user_view_type": "public",
+                "site_admin": false
+              },
+              "name": "GitHub Actions",
+              "description": "Automate your workflow from idea to production",
+              "external_url": "https://help.github.com/en/actions",
+              "html_url": "https://github.com/apps/github-actions",
+              "created_at": "2018-07-30T09:30:17Z",
+              "updated_at": "2026-06-18T16:17:48Z",
+              "permissions": {
+                "actions": "write",
+                "administration": "read",
+                "artifact_metadata": "write",
+                "attestations": "write",
+                "checks": "write",
+                "code_quality": "write",
+                "contents": "write",
+                "copilot_requests": "write",
+                "deployments": "write",
+                "discussions": "write",
+                "drives": "write",
+                "issues": "write",
+                "merge_queues": "write",
+                "metadata": "read",
+                "models": "read",
+                "packages": "write",
+                "pages": "write",
+                "pull_requests": "write",
+                "repository_hooks": "write",
+                "repository_projects": "write",
+                "security_events": "write",
+                "statuses": "write",
+                "vulnerability_alerts": "read"
+              },
+              "events": [
+                "branch_protection_rule",
+                "check_run",
+                "check_suite",
+                "create",
+                "delete",
+                "deployment",
+                "deployment_status",
+                "discussion",
+                "discussion_comment",
+                "fork",
+                "gollum",
+                "issues",
+                "issue_comment",
+                "label",
+                "merge_group",
+                "milestone",
+                "page_build",
+                "public",
+                "pull_request",
+                "pull_request_review",
+                "pull_request_review_comment",
+                "push",
+                "registry_package",
+                "release",
+                "repository",
+                "repository_dispatch",
+                "status",
+                "watch",
+                "workflow_dispatch",
+                "workflow_run"
+              ]
+            }
+          },
+          {
+            "id": 116205392104,
+            "name": "Analyze (actions)",
+            "head_sha": "15f2110bb8f2599688bf1969da3afb68964186ea",
+            "status": "completed",
+            "conclusion": "success",
+            "details_url": "https://github.com/SoupTeam/soup-wall/actions/runs/38668363103/job/116205392104",
+            "started_at": "2026-10-15T01:56:48Z",
+            "completed_at": "2026-10-15T01:57:36Z",
+            "app": {
+              "id": 15368,
+              "client_id": "Iv1.05c79e9ad1f6bdfa",
+              "slug": "github-actions",
+              "node_id": "MDM6QXBwMTUzNjg=",
+              "owner": {
+                "login": "github",
+                "id": 9919,
+                "node_id": "MDEyOk9yZ2FuaXphdGlvbjk5MTk=",
+                "avatar_url": "https://avatars.githubusercontent.com/u/9919?v=4",
+                "gravatar_id": "",
+                "url": "https://api.github.com/users/github",
+                "html_url": "https://github.com/github",
+                "followers_url": "https://api.github.com/users/github/followers",
+                "following_url": "https://api.github.com/users/github/following{/other_user}",
+                "gists_url": "https://api.github.com/users/github/gists{/gist_id}",
+                "starred_url": "https://api.github.com/users/github/starred{/owner}{/repo}",
+                "subscriptions_url": "https://api.github.com/users/github/subscriptions",
+                "organizations_url": "https://api.github.com/users/github/orgs",
+                "repos_url": "https://api.github.com/users/github/repos",
+                "events_url": "https://api.github.com/users/github/events{/privacy}",
+                "received_events_url": "https://api.github.com/users/github/received_events",
+                "type": "Organization",
+                "user_view_type": "public",
+                "site_admin": false
+              },
+              "name": "GitHub Actions",
+              "description": "Automate your workflow from idea to production",
+              "external_url": "https://help.github.com/en/actions",
+              "html_url": "https://github.com/apps/github-actions",
+              "created_at": "2018-07-30T09:30:17Z",
+              "updated_at": "2026-06-18T16:17:48Z",
+              "permissions": {
+                "actions": "write",
+                "administration": "read",
+                "artifact_metadata": "write",
+                "attestations": "write",
+                "checks": "write",
+                "code_quality": "write",
+                "contents": "write",
+                "copilot_requests": "write",
+                "deployments": "write",
+                "discussions": "write",
+                "drives": "write",
+                "issues": "write",
+                "merge_queues": "write",
+                "metadata": "read",
+                "models": "read",
+                "packages": "write",
+                "pages": "write",
+                "pull_requests": "write",
+                "repository_hooks": "write",
+                "repository_projects": "write",
+                "security_events": "write",
+                "statuses": "write",
+                "vulnerability_alerts": "read"
+              },
+              "events": [
+                "branch_protection_rule",
+                "check_run",
+                "check_suite",
+                "create",
+                "delete",
+                "deployment",
+                "deployment_status",
+                "discussion",
+                "discussion_comment",
+                "fork",
+                "gollum",
+                "issues",
+                "issue_comment",
+                "label",
+                "merge_group",
+                "milestone",
+                "page_build",
+                "public",
+                "pull_request",
+                "pull_request_review",
+                "pull_request_review_comment",
+                "push",
+                "registry_package",
+                "release",
+                "repository",
+                "repository_dispatch",
+                "status",
+                "watch",
+                "workflow_dispatch",
+                "workflow_run"
+              ]
+            }
+          }
+        ],
+        "alert": {
+          "number": 94,
+          "rule": "py/code-injection",
+          "severity": "critical",
+          "location": "codeql-gate-fixture/canary.py:12"
+        },
+        "scope": "Rule-specific merge rejection observed, separately from review/conversation requirements."
+      }
+    },
+    "analysis_ids": [
+      {
+        "id": 1956419350,
+        "commit_sha": "15f2110bb8f2599688bf1969da3afb68964186ea",
+        "category": "/language:rust",
+        "results_count": 0
+      },
+      {
+        "id": 1956389687,
+        "commit_sha": "15f2110bb8f2599688bf1969da3afb68964186ea",
+        "category": "/language:python",
+        "results_count": 1
+      },
+      {
+        "id": 1956389012,
+        "commit_sha": "15f2110bb8f2599688bf1969da3afb68964186ea",
+        "category": "/language:actions",
+        "results_count": 0
+      },
+      {
+        "id": 1956379454,
+        "commit_sha": "74edf38576bc2b564313a241e6e0d106317f631c",
+        "category": "/language:rust",
+        "results_count": 0
+      },
+      {
+        "id": 1956360585,
+        "commit_sha": "74edf38576bc2b564313a241e6e0d106317f631c",
+        "category": "/language:python",
+        "results_count": 0
+      },
+      {
+        "id": 1956359937,
+        "commit_sha": "74edf38576bc2b564313a241e6e0d106317f631c",
+        "category": "/language:actions",
+        "results_count": 0
+      }
+    ],
+    "merge_protection_verified": true,
+    "limitation": "Observations for the configured rule and two exact heads on one disposable PR; no bypass or settings change tested."
+  },
+  "historical_child_flags_preserved": [
+    "pending_sou15",
+    "actual_host:not_run",
+    "acceptance_passed:false"
+  ],
+  "not_run": [
+    "Native Intel Mac",
+    "WSL2/Docker Desktop",
+    "Actual Claude on macOS/Windows for this candidate",
+    "Full Codex host acceptance",
+    "External model",
+    "Actual-host latency",
+    "Arbitrary MCP server containment"
+  ],
+  "archive": {
+    "file": "SOU18_ACCEPTANCE_2026-10-15.witnesses.json.gz",
+    "sha256": "c1b69ac5ce89d02b81bd6d43cc120f2db46392b2299e993341ad29aa592e4230",
+    "bytes": 1812408,
+    "file_count": 833
+  }
+}

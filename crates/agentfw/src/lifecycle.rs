@@ -42,9 +42,18 @@ pub struct ManagedHealth {
     pub config_digest: String,
 }
 
+impl ProcessRecord {
+    fn matches(&self, health: &ManagedHealth) -> bool {
+        self.pid == health.pid
+            && self.instance == health.instance
+            && self.binary_digest == health.binary_digest
+            && self.config_digest == health.config_digest
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Operation {
+pub(crate) struct Operation {
     from: Record,
     to: Record,
     was_running: bool,
@@ -52,22 +61,22 @@ struct Operation {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct PendingStage {
+pub(crate) struct PendingStage {
     stage: String,
     target: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
-struct State {
-    active: Option<Record>,
-    previous: Option<Record>,
+pub(crate) struct State {
+    pub(crate) active: Option<Record>,
+    pub(crate) previous: Option<Record>,
     #[serde(default)]
-    owned: Vec<Record>,
-    process: Option<ProcessRecord>,
-    operation: Option<Operation>,
+    pub(crate) owned: Vec<Record>,
+    pub(crate) process: Option<ProcessRecord>,
+    pub(crate) operation: Option<Operation>,
     #[serde(default)]
-    pending_stage: Option<PendingStage>,
+    pub(crate) pending_stage: Option<PendingStage>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,6 +108,8 @@ impl Manager {
         expected_sha256: &str,
     ) -> Result<Record> {
         let _lock = self.lock()?;
+        #[cfg(target_os = "linux")]
+        crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
         ensure!(
             state.active.is_none(),
@@ -126,6 +137,8 @@ impl Manager {
         expected_sha256: &str,
     ) -> Result<Record> {
         let _lock = self.lock()?;
+        #[cfg(target_os = "linux")]
+        crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
         ensure!(
             state.operation.is_none() && state.pending_stage.is_none(),
@@ -179,6 +192,8 @@ impl Manager {
 
     pub fn rollback(&self) -> Result<Record> {
         let _lock = self.lock()?;
+        #[cfg(target_os = "linux")]
+        crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
         ensure!(
             state.operation.is_none() && state.pending_stage.is_none(),
@@ -270,6 +285,8 @@ impl Manager {
 
     pub fn start(&self) -> Result<()> {
         let _lock = self.lock()?;
+        #[cfg(target_os = "linux")]
+        crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
         ensure!(
             state.operation.is_none() && state.pending_stage.is_none(),
@@ -280,6 +297,8 @@ impl Manager {
 
     pub fn stop(&self) -> Result<()> {
         let _lock = self.lock()?;
+        #[cfg(target_os = "linux")]
+        crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
         ensure!(
             state.operation.is_none() && state.pending_stage.is_none(),
@@ -290,6 +309,8 @@ impl Manager {
 
     pub fn restart(&self) -> Result<()> {
         let _lock = self.lock()?;
+        #[cfg(target_os = "linux")]
+        crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
         ensure!(
             state.operation.is_none() && state.pending_stage.is_none(),
@@ -301,6 +322,8 @@ impl Manager {
 
     pub fn recover(&self) -> Result<()> {
         let _lock = self.lock()?;
+        #[cfg(target_os = "linux")]
+        crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
         if let Some(pending) = state.pending_stage.clone() {
             ensure!(
@@ -364,6 +387,8 @@ impl Manager {
 
     pub fn remove(&self) -> Result<()> {
         let _lock = self.lock()?;
+        #[cfg(target_os = "linux")]
+        crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
         ensure!(
             state.operation.is_none() && state.pending_stage.is_none(),
@@ -415,7 +440,13 @@ impl Manager {
         Ok(())
     }
 
-    fn start_locked(&self, state: &mut State) -> Result<()> {
+    // Shared by detached lifecycle startup and the foreground service launcher.
+    // The caller owns the short state lock; waiting for readiness happens separately.
+    fn prepare_launch(
+        &self,
+        state: &mut State,
+        pid: u32,
+    ) -> Result<(PathBuf, ProcessRecord, File)> {
         ensure!(
             state.process.is_none(),
             "Agent already has a recorded process"
@@ -429,7 +460,7 @@ impl Manager {
         );
         let binary = self.path_for(active)?;
         let process = ProcessRecord {
-            pid: 0,
+            pid,
             instance: crate::token::generate(),
             binary_digest: active.digest.clone(),
             config_digest: self.config_digest()?,
@@ -447,6 +478,12 @@ impl Manager {
             let _ = fs::remove_file(&launch_log);
             return Err(error);
         }
+        Ok((binary, process, log))
+    }
+
+    fn start_locked(&self, state: &mut State) -> Result<()> {
+        let (binary, process, log) = self.prepare_launch(state, 0)?;
+        let launch_log = self.root.join(&process.launch_log);
         let mut child = match Command::new(binary)
             .args([
                 "lifecycle",
@@ -533,11 +570,7 @@ impl Manager {
         let Some(response) = self.request(process, false)? else {
             return Ok(None);
         };
-        if response.instance != process.instance
-            || response.pid != process.pid
-            || response.binary_digest != process.binary_digest
-            || response.config_digest != process.config_digest
-        {
+        if !process.matches(&response) {
             return Ok(None);
         }
         Ok(Some(response))
@@ -659,7 +692,7 @@ impl Manager {
         })
     }
 
-    fn verify(&self, record: &Record) -> Result<()> {
+    pub(crate) fn verify(&self, record: &Record) -> Result<()> {
         validate_digest(&record.digest)?;
         let path = self.path_for(record)?;
         ensure_regular(&path)?;
@@ -670,7 +703,7 @@ impl Manager {
         Ok(())
     }
 
-    fn path_for(&self, record: &Record) -> Result<PathBuf> {
+    pub(crate) fn path_for(&self, record: &Record) -> Result<PathBuf> {
         validate_version(&record.version)?;
         let expected = format!("agentfw-{}{}", record.version, std::env::consts::EXE_SUFFIX);
         ensure!(record.binary == expected, "managed binary name is invalid");
@@ -688,7 +721,7 @@ impl Manager {
         }
     }
 
-    fn config_digest(&self) -> Result<String> {
+    pub(crate) fn config_digest(&self) -> Result<String> {
         let path = self.home.join("config.yaml");
         match fs::read(path) {
             Ok(bytes) => Ok(sha256(&bytes)),
@@ -697,7 +730,98 @@ impl Manager {
         }
     }
 
-    fn lock(&self) -> Result<File> {
+    #[cfg(target_os = "linux")]
+    pub fn direct_serve_guard(&self) -> Result<File> {
+        let lock = self.lock()?;
+        crate::service::require_unregistered(&self.home)?;
+        Ok(lock)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn service_snapshot(&self) -> Result<(State, Option<ManagedHealth>)> {
+        // Atomic manifest replacement permits a read without blocking the launcher.
+        let state = self.load()?;
+        let health = self.running(&state)?;
+        Ok((state, health))
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn service_launch(&self) -> Result<(PathBuf, ProcessRecord)> {
+        let _lock = self.lock()?;
+        let mut state = self.load()?;
+        ensure!(
+            state.pending_stage.is_none() && state.operation.is_none(),
+            "recover lifecycle transaction before service startup"
+        );
+        // systemd has reaped the old main process before invoking a new launcher.
+        // A reused/live PID is never cleared solely because the endpoint is down.
+        self.clear_dead_record(&mut state)?;
+        let (binary, process, _log) = self.prepare_launch(&mut state, std::process::id())?;
+        Ok((binary, process))
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn service_clear_dead(&self) -> Result<()> {
+        let _lock = self.lock()?;
+        let mut state = self.load()?;
+        self.clear_dead_record(&mut state)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn clear_dead_record(&self, state: &mut State) -> Result<()> {
+        if let Some(process) = &state.process {
+            ensure!(
+                !pid_alive(process.pid)?,
+                "recorded PID is still live; refusing to clear its identity"
+            );
+            let log = self.root.join(&process.launch_log);
+            if log.exists() {
+                ensure_regular(&log)?;
+                fs::remove_file(log)?;
+            }
+            state.process = None;
+            self.save(state)?;
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn service_shutdown(&self, pid: u32) -> Result<()> {
+        let (state, health) = self.service_snapshot()?;
+        let Some(process) = state.process else {
+            ensure!(pid == 0, "unrecorded service process");
+            return Ok(());
+        };
+        if !pid_alive(process.pid)? {
+            return Ok(());
+        }
+        ensure!(
+            health.is_some() && process.pid == pid,
+            "service process identity cannot be verified; refusing shutdown"
+        );
+        self.request(&process, true)?
+            .context("authenticated shutdown was not accepted")?;
+        let deadline = Instant::now() + Duration::from_secs(25);
+        while Instant::now() < deadline {
+            if !pid_alive(process.pid)? {
+                return Ok(());
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        bail!("authenticated shutdown timed out; systemd will bound cleanup to this unit")
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn service_installable(&self) -> Result<()> {
+        let state = self.load()?;
+        ensure!(
+            state.process.is_none() && state.operation.is_none() && state.pending_stage.is_none(),
+            "stop and recover lifecycle before registering a service"
+        );
+        self.verify(state.active.as_ref().context("Agent is not installed")?)
+    }
+
+    pub(crate) fn lock(&self) -> Result<File> {
         if self.home.exists() {
             ensure_dir(&self.home)?;
         } else {
@@ -899,19 +1023,24 @@ fn port_occupied(config: &crate::Config) -> bool {
         })
 }
 
-fn pid_alive(pid: u32) -> Result<bool> {
+pub(crate) fn pid_alive(pid: u32) -> Result<bool> {
     if pid == 0 {
         return Ok(false);
     }
     #[cfg(unix)]
     {
-        Ok(Command::new("kill")
-            .arg("-0")
-            .arg(pid.to_string())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()?
-            .success())
+        ensure!(pid <= i32::MAX as u32, "recorded PID is out of range");
+        // Signal zero probes existence without sending a signal. EPERM means
+        // a live process owned by someone else, never evidence of a dead PID.
+        let result = unsafe { libc::kill(pid as libc::pid_t, 0) };
+        if result == 0 {
+            return Ok(true);
+        }
+        match std::io::Error::last_os_error().raw_os_error() {
+            Some(libc::ESRCH) => Ok(false),
+            Some(libc::EPERM) => Ok(true),
+            _ => Err(std::io::Error::last_os_error().into()),
+        }
     }
     #[cfg(windows)]
     {
@@ -922,5 +1051,82 @@ fn pid_alive(pid: u32) -> Result<bool> {
             .stderr(Stdio::null())
             .status()?
             .success())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn managed_identity_requires_every_field() {
+        let record = ProcessRecord {
+            pid: 42,
+            instance: "instance".into(),
+            binary_digest: "binary".into(),
+            config_digest: "config".into(),
+            port: 1,
+            bind: "127.0.0.1".into(),
+            launch_log: "log".into(),
+        };
+        let health = ManagedHealth {
+            pid: 42,
+            instance: "instance".into(),
+            binary_digest: "binary".into(),
+            config_digest: "config".into(),
+        };
+        assert!(record.matches(&health));
+        assert!(!record.matches(&ManagedHealth {
+            pid: 43,
+            ..health.clone()
+        }));
+        assert!(!record.matches(&ManagedHealth {
+            instance: "old".into(),
+            ..health.clone()
+        }));
+        assert!(!record.matches(&ManagedHealth {
+            binary_digest: "other".into(),
+            ..health.clone()
+        }));
+        assert!(!record.matches(&ManagedHealth {
+            config_digest: "other".into(),
+            ..health
+        }));
+    }
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn service_refuses_to_clear_or_stop_a_live_unverified_pid() {
+        let temp = tempfile::tempdir().unwrap();
+        let manager = Manager::new(temp.path());
+        let lock = manager.lock().unwrap();
+        let instance = crate::token::generate();
+        let state = State {
+            process: Some(ProcessRecord {
+                pid: std::process::id(),
+                instance: instance.clone(),
+                binary_digest: "0".repeat(64),
+                config_digest: "0".repeat(64),
+                port: 1,
+                bind: "127.0.0.1".into(),
+                launch_log: format!(".launch-{instance}.log"),
+            }),
+            ..State::default()
+        };
+        manager.save(&state).unwrap();
+        drop(lock);
+        assert!(manager.service_clear_dead().is_err());
+        assert!(manager.service_shutdown(std::process::id()).is_err());
+        assert!(pid_alive(std::process::id()).unwrap());
+        assert_eq!(
+            manager.load().unwrap().process.unwrap().pid,
+            std::process::id()
+        );
+    }
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn permission_denial_is_not_evidence_that_a_pid_is_dead() {
+        assert!(pid_alive(1).unwrap());
+        assert!(pid_alive(u32::MAX).is_err());
+        assert!(!pid_alive(0).unwrap());
     }
 }

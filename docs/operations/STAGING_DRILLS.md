@@ -38,6 +38,10 @@ phase JSON in the private release record. Each record includes
 of the drill. The acceptance record also includes `schema_version` so later
 changes to its evidence format can be distinguished.
 
+For current managed Agent state and strict fresh-target restoration, use the
+[encrypted Console recovery procedure](CONSOLE_RECOVERY.md). The historical procedures
+below retain their original bounded evidence; they are not current-state acceptance.
+
 ## Encrypted PostgreSQL restore
 
 Install PowerShell, `pg_dump`, `pg_restore`, `psql`, and `age` on an

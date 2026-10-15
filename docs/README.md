@@ -25,12 +25,14 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Upgrading](UPGRADING.md) | Existing deployment compatibility and migration guidance |
 | [Production runbook](operations/PRODUCTION_RUNBOOK.md) | Readiness, operations, alerts and recovery |
 | [TLS rotation and recovery](operations/TLS_ROTATION.md) | Disposable Caddy certificate rotation, verifying clients and recovery |
+| [Encrypted Console recovery](operations/CONSOLE_RECOVERY.md) | Complete current-state inventory, isolated encrypted restore and live managed Agent recovery |
 | [Staging drills](operations/STAGING_DRILLS.md) | Explicit dependency and restore acceptance procedures |
 | [Guarded execution](operations/SANDBOX.md) | Supported process, file and retrieval boundaries |
 | [Windows Agent acceptance](operations/WINDOWS_AGENT_ACCEPTANCE.md) | Native installation, ACLs, hook posture and loopback configuration |
 | [Claude HTTP-hook acceptance](operations/CLAUDE_HOST_ACCEPTANCE.md) | Actual host behavior with deterministic local model fixtures |
 | [Opt-in stdio MCP admission](operations/MCP_STDIO_ADMISSION.md) | Reviewed schemas, pre-execution calls and result release to the MCP host |
 | [Native resource admission](operations/NATIVE_RESOURCE_ADMISSION.md) | Resource permissions, receipt integrity and unsupported executor boundary |
+| [Constrained MCP file creation](operations/MCP_CREATE_FILE.md) | Linux create-only workspace files, bound authority, effect accounting and actual stdio verification |
 | [Identity interoperability](operations/IDENTITY_INTEROPERABILITY.md) | Local identity fixtures, external metadata probes and pilot gates |
 | [Keycloak SAML acceptance](operations/KEYCLOAK_SAML_ACCEPTANCE.md) | Pinned vendor-runtime setup and signed SAML checks |
 | [Keycloak OIDC Console acceptance](operations/KEYCLOAK_OIDC_ACCEPTANCE.md) | Real browser sign-in, local roles, sessions and Console logout |

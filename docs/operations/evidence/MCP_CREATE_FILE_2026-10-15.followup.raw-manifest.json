@@ -1,0 +1,86 @@
+{
+  "archive": "MCP_CREATE_FILE_2026-10-15.followup.raw.tar.gz",
+  "sha256": "25247cc42c527ff034120a838bbeee2561b5600ecbd3fbfa144ddca73525d14e",
+  "members": [
+    {
+      "path": "Dockerfile.sou54-local",
+      "bytes": 1639,
+      "sha256": "8327cb6f4b7371c94f285002a16fc33586aee2e524149640acf5ea89be4a69a4"
+    },
+    {
+      "path": "Dockerfile.sou54-local.dockerignore",
+      "bytes": 28,
+      "sha256": "824bbd1a176ab4902f74bebbc8e699041fb1bccf140a1b4a3d4d363cd8c4d1c8"
+    },
+    {
+      "path": "build-complete.log",
+      "bytes": 3546,
+      "sha256": "8eda07b4e5a9cffe942e8014aea42b3372c8158f3db2249db5eb07bed3d37563"
+    },
+    {
+      "path": "ci-linux-clippy-red.json",
+      "bytes": 749,
+      "sha256": "3ae3b76710e47b36ca74e6e2256cd4859a7571d56e46304682411312011623c4"
+    },
+    {
+      "path": "create-file-complete.json",
+      "bytes": 520115,
+      "sha256": "499afaec54f9a354eca20e444c7cb1e37aff9878b1f6b86782e4a5341a6cc057"
+    },
+    {
+      "path": "create-races-complete.json",
+      "bytes": 598408,
+      "sha256": "3c11930079feac2af4e887e84cb60603e9033acd39eae0e46796d990fe571f1e"
+    },
+    {
+      "path": "linux-clippy.log",
+      "bytes": 281,
+      "sha256": "3c7282b5bcefc22e081834b6a69a3aba7d03f9a4179b3440b22c3b0e7cf163a6"
+    },
+    {
+      "path": "linux-complete-environment.json",
+      "bytes": 1808,
+      "sha256": "eb191461d4874738c13ddc046fb4e2acba4a3d1adf2b57ddc476e1463c57c232"
+    },
+    {
+      "path": "linux-image.txt",
+      "bytes": 72,
+      "sha256": "6e1fc573bb28f17d13936d15796111284d22b78a263c61dc9f5f49c077668dbf"
+    },
+    {
+      "path": "linux-lib-complete.log",
+      "bytes": 19528,
+      "sha256": "21253d7df9ef68d16dbc5d2671a7031b80e7b29ff6343cedb8484f626bc8b320"
+    },
+    {
+      "path": "linux-native-complete.log",
+      "bytes": 3084,
+      "sha256": "a89995410d424a74be5c9a5d863fd4906ace9bdbae2dbe757b1814cfd58984b3"
+    },
+    {
+      "path": "linux-races-complete.log",
+      "bytes": 1064,
+      "sha256": "a605252ccdfe5841a88d5d3498f387d7b1139f6a6117328438e24f049e2021e6"
+    },
+    {
+      "path": "linux-run.py",
+      "bytes": 2044,
+      "sha256": "f6ad10193195a823748d9b32db7ad1817dbbe11fe638df9420e857f182ca4f40"
+    },
+    {
+      "path": "linux-stdio-complete.log",
+      "bytes": 2531,
+      "sha256": "d021195eba97f8b26214cb0b0367c93ef43ab1cd9c368ea39b2d54c23a266818"
+    },
+    {
+      "path": "python-complete.log",
+      "bytes": 94260,
+      "sha256": "63b28035e656b0fa6e2a83339713096fb4b86c48c0d097570693b8bfd7983941"
+    },
+    {
+      "path": "python-grader-complete.log",
+      "bytes": 4555,
+      "sha256": "9ceae5c6faf7ef2411157afb3c70ef23b27d2d0b60373ec77f0bb8c2bb5fd25c"
+    }
+  ]
+}

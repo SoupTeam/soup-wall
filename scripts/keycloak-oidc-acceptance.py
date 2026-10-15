@@ -72,9 +72,13 @@ class FixtureDatabase:
             "--mount", f"type=bind,src={cert},dst=/fixture-cert.pem,readonly",
             "--mount", f"type=bind,src={key},dst=/fixture-key.pem,readonly",
             POSTGRES_IMAGE, "bash", "-ec",
-            "cp /fixture-key.pem /tmp/oidc-server.key; chown postgres:postgres /tmp/oidc-server.key; "
-            "chmod 600 /tmp/oidc-server.key; exec docker-entrypoint.sh postgres "
-            "-c ssl=on -c ssl_cert_file=/fixture-cert.pem -c ssl_key_file=/tmp/oidc-server.key"], resources,
+            # Private host files may belong to a different UID on native Linux.
+            # Keep both read-only mounts private, then stage server-readable
+            # copies inside this disposable container before dropping privileges.
+            "cp /fixture-cert.pem /tmp/oidc-server.crt; cp /fixture-key.pem /tmp/oidc-server.key; "
+            "chown postgres:postgres /tmp/oidc-server.crt /tmp/oidc-server.key; "
+            "chmod 600 /tmp/oidc-server.crt /tmp/oidc-server.key; exec docker-entrypoint.sh postgres "
+            "-c ssl=on -c ssl_cert_file=/tmp/oidc-server.crt -c ssl_key_file=/tmp/oidc-server.key"], resources,
             environment=dict(os.environ, POSTGRES_PASSWORD=password))
         subprocess.run([self.docker, "start", self.container], check=True, capture_output=True, timeout=30)
         environment.update(SOUP_OIDC_FIXTURE_DATABASE_URL=
@@ -473,6 +477,9 @@ def run(args):
 
             def login(ctx, user, organization=None, workspace=None, success=True):
                 page = ctx.new_page()
+
+                page.set_default_timeout(90000)
+
                 report["phase"] = "console-entry-" + user["username"]
                 output.publish(report)
                 page.goto(gateway_base + "/customer")
