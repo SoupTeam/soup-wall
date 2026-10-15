@@ -195,3 +195,7 @@ private fixture must finish before a pass. This controls selected race orderings
 it does not establish all scheduling interleavings. The Linux workflow runs both
 stdio drivers as required checks; the pure Python grader controls validate how
 incomplete, fabricated or contradictory observations are rejected.
+
+The [2026-10-15 bounded Linux evidence](evidence/MCP_CREATE_FILE_2026-10-15.md)
+records the exact tested source and binary, original red witnesses, all 26 stdio
+and eight race outcomes, false interruptions, latency and explicit limits.
