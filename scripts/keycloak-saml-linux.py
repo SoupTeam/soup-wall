@@ -222,7 +222,7 @@ def run(args):
             gateway_environment = dict(environment, SOUP_FIXTURE_ADMIN_TOKEN=secrets.token_urlsafe(32),
                 LLM_FW_OIDC_STATE_KEY=secrets.token_urlsafe(32), LLM_FW_OIDC_CA_CERT_FILE=str(ca), LLM_FW_SAML_SP_ENTITY_ID=client_id, LLM_FW_SAML_ACS_URL=callback,
                 LLM_FW_SAML_SP_PRIVATE_KEY_PEM=sp_key.read_text(),
-                LLM_FW_SAML_SP_CERTIFICATE_PEM=sp_cert.read_text(), RUST_LOG="error")
+                LLM_FW_SAML_SP_CERTIFICATE_PEM=sp_cert.read_text(), RUST_LOG="warn")
             (directory / "policy.yaml").write_text("policies: []\ndefault: allow\n", encoding="utf-8")
             (directory / "firewall.yaml").write_text(
                 f'bind: "127.0.0.1:{gateway_port}"\ntenant_store:\n  enabled: true\n'
@@ -334,6 +334,12 @@ def run(args):
             def login(ctx, user, organization=None, workspace=None, success=True, capture=None):
                 page = ctx.new_page()
                 page.set_default_timeout(45000)
+                observation = {"subject": user["username"]}
+                def observe(response):
+                    if response.url == callback:
+                        observation["acs_status"] = response.status
+                        observation["browser_binding_sent"] = "__Host-llm-fw-saml-flow=" in response.request.all_headers().get("cookie", "")
+                page.on("response", observe)
                 if capture is not None:
                     def hold(route):
                         capture["fields"] = dict(urllib.parse.parse_qsl(route.request.post_data))
@@ -356,9 +362,22 @@ def run(args):
                     if "SAMLResponse" not in capture.get("fields", {}):
                         raise RuntimeError("genuine vendor callback absent")
                 elif success:
-                    page.wait_for_url(gateway_base + "/customer")
-                    page.locator("#identity").wait_for(state="visible")
-                    page.locator("#role").wait_for(state="visible")
+                    try:
+                        page.wait_for_url(gateway_base + "/customer")
+                        page.locator("#identity").wait_for(state="visible")
+                        page.locator("#role").wait_for(state="visible")
+                    except Exception:
+                        # Keep bounded diagnostics, never cookies, assertions,
+                        # raw error text or private runtime logs in evidence.
+                        observation["at_acs"] = page.url == callback
+                        observation["at_console"] = page.url == gateway_base + "/customer"
+                        log_text = (directory / "gateway.log").read_text(errors="replace").lower()
+                        last = log_text.rsplit("saml response validation failed", 1)
+                        observation["validation_error_categories"] = [word for word in
+                            ("expired", "signature", "audience", "issuer", "destination", "recipient", "request", "replay", "notbefore", "not yet valid")
+                            if len(last) == 2 and word in last[-1]]
+                        report["failed_login"] = observation
+                        raise
                 else:
                     page.wait_for_url(callback)
                     page.get_by_text("SAML login could not be completed", exact=False).wait_for()
