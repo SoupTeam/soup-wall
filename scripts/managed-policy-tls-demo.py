@@ -403,6 +403,18 @@ def main():
             raise AssertionError("revoked Agent credential was still accepted")
         except urllib.error.HTTPError as exc:
             assert exc.code == 401, exc.code
+        # Verify the same revoked enrollment token fails over the *verified
+        # remote HTTPS transport*, not only through the local Console endpoint.
+        revoked_request = urllib.request.Request(
+            origin + "/agent/v1/whoami",
+            headers={"Authorization": "Bearer " + agent_token},
+            method="GET",
+        )
+        try:
+            opener.open(revoked_request, timeout=3)
+            raise AssertionError("revoked token unexpectedly authenticated over HTTPS")
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 401, exc.code
         assert request("GET", agent + "/health")[1]["managed_policy"]["deployment_sequence"] == 3
 
         # A disconnected Console is not permission to erase or silently relax
@@ -453,6 +465,7 @@ def main():
                 "rollback_sequence_increased": True,
                 "policy_payload_restored": True,
                 "credential_revocation_enforced": True,
+                "verified_https_revoked_enrollment_refused": True,
                 "offline_last_accepted_policy_retained": True,
                 "remote_nonloopback_tls_verified": True,
                 "redirect_credential_exfiltration_refused": not Capture.captured,
