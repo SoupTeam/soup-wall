@@ -46,10 +46,13 @@ required; there is no test skip, weakened assertion or task-closure claim here.
 | Private files/processes/container cleanup | complete | complete |
 
 Both runs retain the original predeclared 120-second restore-to-hook/ack and separate
-180-second webhook bounds. They repeat complete row/sequence/DDL equality, source/target
-negative controls, retained/revoked credentials, two actual Agents, current higher-sequence
-deployment, restart, stale-backup rejection and return to online behavior. All owned
-private trees and processes/container resources were removed. No customer/default DB.
+180-second webhook bounds. Both repeat complete row/sequence/DDL equality, retained/
+revoked credentials, two actual Agents, current higher-sequence deployment, restart,
+stale-backup rejection and return to online behavior. The PostgreSQL driver additionally
+repeats source-alias, populated-target and archive/schema/inventory refusal controls;
+SQLite target/archive refusals are covered by the separate native SQLite/age Python
+regressions, not claimed as additional integrated-driver cases. All owned private trees
+and processes/container resources were removed. No customer/default DB.
 
 **Python repeat:** 506 run, 481 passed, 25 documented platform/optional skips; the new
 Linux UID regression was explicitly enabled and passed. Native Rust sources/binaries
