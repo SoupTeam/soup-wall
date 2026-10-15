@@ -46,6 +46,7 @@ import xml.etree.ElementTree as ET
 
 def tls_handshake(port, hostname, ca):
     context = ssl.create_default_context(cafile=str(ca))
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
     with socket.create_connection(("127.0.0.1", port), timeout=5) as raw:
         with context.wrap_socket(raw, server_hostname=hostname):
             return True
