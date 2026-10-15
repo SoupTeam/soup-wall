@@ -1150,6 +1150,8 @@ impl TenantStore {
                     let mut active_changed = false;
                     for pilot in &existing.pilot_agents {
                         if !active_deployments.contains_key(pilot) {
+                            let init_seq =
+                                existing.initial_sequences.get(pilot).copied().unwrap_or(0);
                             let existing_dep: Option<(i64, String, String, String)> = db
                                 .query_row(
                                     "SELECT deployment_sequence, revision, policy_sha256, status
@@ -1161,9 +1163,27 @@ impl TenantStore {
                                 )
                                 .optional()?;
                             let seq = if let Some((d_seq, d_rev, d_sha, d_st)) = existing_dep {
-                                if d_rev == revision && d_sha == policy_sha256 && d_st != "rejected"
-                                {
-                                    d_seq as u64
+                                let d_seq_u64 = d_seq as u64;
+                                if d_seq_u64 > init_seq {
+                                    if d_rev == revision
+                                        && d_sha == policy_sha256
+                                        && d_st != "rejected"
+                                    {
+                                        d_seq_u64
+                                    } else if d_st == "rejected" {
+                                        bail!(
+                                            "conflict: candidate deployment sequence {} for pilot agent '{}' was rejected",
+                                            d_seq_u64,
+                                            pilot
+                                        );
+                                    } else {
+                                        bail!(
+                                            "conflict: pilot agent '{}' deployment was superseded by sequence {} (rev '{}')",
+                                            pilot,
+                                            d_seq_u64,
+                                            d_rev
+                                        );
+                                    }
                                 } else {
                                     let dep = self.deploy_managed_revision_conn(
                                         db,
@@ -1803,10 +1823,69 @@ impl TenantStore {
                     }
                 }
                 RolloutPhase::Pilot => {
+                    for p in &pilot_agents {
+                        if !active_deployments.contains_key(p) {
+                            let init_seq =
+                                base_rollout.initial_sequences.get(p).copied().unwrap_or(0);
+                            let existing: Option<(i64, String, String, String)> = db
+                                .query_row(
+                                    "SELECT deployment_sequence, revision, policy_sha256, status
+                                     FROM managed_agent_deployments
+                                     WHERE tenant_id=?1 AND agent_id=?2
+                                     ORDER BY deployment_sequence DESC LIMIT 1",
+                                    params![tenant, p],
+                                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                                )
+                                .optional()?;
+                            if let Some((d_seq, d_rev, d_sha, d_st)) = existing {
+                                let d_seq_u64 = d_seq as u64;
+                                if d_seq_u64 > init_seq {
+                                    if d_rev != revision || d_sha != policy_sha256 {
+                                        let reason = format!(
+                                            "conflict: canary deployment for pilot agent '{}' was superseded by sequence {} (rev '{}')",
+                                            p, d_seq_u64, d_rev
+                                        );
+                                        db.execute(
+                                            "UPDATE managed_group_rollouts
+                                             SET phase='failed', failure_reason=?3, updated_at_unix=?4
+                                             WHERE tenant_id=?1 AND group_id=?2 AND rollout_id=?5",
+                                            params![tenant, group_id, reason, now, base_rollout.rollout_id],
+                                        )?;
+                                        return Ok(Some(ManagedGroupRollout {
+                                            phase: RolloutPhase::Failed,
+                                            failure_reason: Some(reason),
+                                            updated_at_unix: now,
+                                            ..base_rollout
+                                        }));
+                                    } else if d_st == "rejected" {
+                                        let reason = format!(
+                                            "conflict: candidate deployment sequence {} for pilot agent '{}' was rejected",
+                                            d_seq_u64, p
+                                        );
+                                        db.execute(
+                                            "UPDATE managed_group_rollouts
+                                             SET phase='failed', failure_reason=?3, updated_at_unix=?4
+                                             WHERE tenant_id=?1 AND group_id=?2 AND rollout_id=?5",
+                                            params![tenant, group_id, reason, now, base_rollout.rollout_id],
+                                        )?;
+                                        return Ok(Some(ManagedGroupRollout {
+                                            phase: RolloutPhase::Failed,
+                                            failure_reason: Some(reason),
+                                            updated_at_unix: now,
+                                            ..base_rollout
+                                        }));
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     let mut active_deployments = active_deployments;
                     let mut active_changed = false;
                     for p in &pilot_agents {
                         if !active_deployments.contains_key(p) {
+                            let init_seq =
+                                base_rollout.initial_sequences.get(p).copied().unwrap_or(0);
                             let existing: Option<(i64, String, String, String)> = db
                                 .query_row(
                                     "SELECT deployment_sequence, revision, policy_sha256, status
@@ -1818,16 +1897,22 @@ impl TenantStore {
                                 )
                                 .optional()?;
                             let seq = if let Some((d_seq, d_rev, d_sha, d_st)) = existing {
-                                if d_rev == revision && d_sha == policy_sha256 && d_st != "rejected"
+                                let d_seq_u64 = d_seq as u64;
+                                if d_seq_u64 > init_seq
+                                    && d_rev == revision
+                                    && d_sha == policy_sha256
+                                    && d_st != "rejected"
                                 {
-                                    d_seq as u64
+                                    d_seq_u64
                                 } else {
                                     let default_issuer = ManagedIssuer::from_environment_for_key(
                                         base_rollout.issuer_key_id.as_deref(),
                                     )
                                     .ok();
                                     let signing_issuer = default_issuer.as_ref().or(issuer);
-                                    let signing_issuer = signing_issuer.context("signing issuer unavailable to issue missing pilot deployment")?;
+                                    let signing_issuer = signing_issuer.context(
+                                        "signing issuer unavailable to issue missing pilot deployment",
+                                    )?;
                                     let dep = self.deploy_managed_revision_conn(
                                         db,
                                         tenant,

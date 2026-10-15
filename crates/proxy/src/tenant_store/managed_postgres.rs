@@ -730,6 +730,8 @@ impl PostgresTenantStore {
                     let mut active_changed = false;
                     for pilot in &existing.pilot_agents {
                         if !active_deployments.contains_key(pilot) {
+                            let init_seq =
+                                existing.initial_sequences.get(pilot).copied().unwrap_or(0);
                             let existing_dep = self
                                 .bounded(client.query_opt(
                                     "SELECT deployment_sequence, revision, policy_sha256, status
@@ -744,9 +746,27 @@ impl PostgresTenantStore {
                                 let d_rev: String = row.get(1);
                                 let d_sha: String = row.get(2);
                                 let d_st: String = row.get(3);
-                                if d_rev == revision && d_sha == policy_sha256 && d_st != "rejected"
-                                {
-                                    d_seq as u64
+                                let d_seq_u64 = d_seq as u64;
+                                if d_seq_u64 > init_seq {
+                                    if d_rev == revision
+                                        && d_sha == policy_sha256
+                                        && d_st != "rejected"
+                                    {
+                                        d_seq_u64
+                                    } else if d_st == "rejected" {
+                                        bail!(
+                                            "conflict: candidate deployment sequence {} for pilot agent '{}' was rejected",
+                                            d_seq_u64,
+                                            pilot
+                                        );
+                                    } else {
+                                        bail!(
+                                            "conflict: pilot agent '{}' deployment was superseded by sequence {} (rev '{}')",
+                                            pilot,
+                                            d_seq_u64,
+                                            d_rev
+                                        );
+                                    }
                                 } else {
                                     let dep = self
                                         .deploy_managed_revision_tx(
@@ -1362,15 +1382,73 @@ impl PostgresTenantStore {
                 Ok(Some(rollout))
             }
             RolloutPhase::Pilot => {
-                let mut active_changed = false;
                 for p in &rollout.pilot_agents {
                     if !rollout.active_deployments.contains_key(p) {
+                        let init_seq = rollout.initial_sequences.get(p).copied().unwrap_or(0);
                         let existing_dep = self
                             .bounded(client.query_opt(
                                 "SELECT deployment_sequence, revision, policy_sha256, status
-                                 FROM managed_agent_deployments
-                                 WHERE tenant_id=$1 AND agent_id=$2
-                                 ORDER BY deployment_sequence DESC LIMIT 1",
+                                  FROM managed_agent_deployments
+                                  WHERE tenant_id=$1 AND agent_id=$2
+                                  ORDER BY deployment_sequence DESC LIMIT 1",
+                                &[&tenant, p],
+                            ))
+                            .await?;
+                        if let Some(row) = existing_dep {
+                            let d_seq: i64 = row.get(0);
+                            let d_rev: String = row.get(1);
+                            let d_sha: String = row.get(2);
+                            let d_st: String = row.get(3);
+                            let d_seq_u64 = d_seq as u64;
+                            if d_seq_u64 > init_seq {
+                                if d_rev != rollout.revision || d_sha != rollout.policy_sha256 {
+                                    let reason = format!(
+                                        "conflict: canary deployment for pilot agent '{}' was superseded by sequence {} (rev '{}')",
+                                        p, d_seq_u64, d_rev
+                                    );
+                                    self.bounded(client.execute(
+                                        "UPDATE managed_group_rollouts
+                                         SET phase='failed', failure_reason=$3, updated_at_unix=$4
+                                         WHERE tenant_id=$1 AND group_id=$2 AND rollout_id=$5",
+                                        &[&tenant, &group_id, &reason, &now, &rollout.rollout_id],
+                                    ))
+                                    .await?;
+                                    rollout.phase = RolloutPhase::Failed;
+                                    rollout.failure_reason = Some(reason);
+                                    rollout.updated_at_unix = now;
+                                    return Ok(Some(rollout));
+                                } else if d_st == "rejected" {
+                                    let reason = format!(
+                                        "conflict: candidate deployment sequence {} for pilot agent '{}' was rejected",
+                                        d_seq_u64, p
+                                    );
+                                    self.bounded(client.execute(
+                                        "UPDATE managed_group_rollouts
+                                         SET phase='failed', failure_reason=$3, updated_at_unix=$4
+                                         WHERE tenant_id=$1 AND group_id=$2 AND rollout_id=$5",
+                                        &[&tenant, &group_id, &reason, &now, &rollout.rollout_id],
+                                    ))
+                                    .await?;
+                                    rollout.phase = RolloutPhase::Failed;
+                                    rollout.failure_reason = Some(reason);
+                                    rollout.updated_at_unix = now;
+                                    return Ok(Some(rollout));
+                                }
+                            }
+                        }
+                    }
+                }
+
+                let mut active_changed = false;
+                for p in &rollout.pilot_agents {
+                    if !rollout.active_deployments.contains_key(p) {
+                        let init_seq = rollout.initial_sequences.get(p).copied().unwrap_or(0);
+                        let existing_dep = self
+                            .bounded(client.query_opt(
+                                "SELECT deployment_sequence, revision, policy_sha256, status
+                                  FROM managed_agent_deployments
+                                  WHERE tenant_id=$1 AND agent_id=$2
+                                  ORDER BY deployment_sequence DESC LIMIT 1",
                                 &[&tenant, p],
                             ))
                             .await?;
@@ -1379,11 +1457,13 @@ impl PostgresTenantStore {
                             let d_rev: String = row.get(1);
                             let d_sha: String = row.get(2);
                             let d_st: String = row.get(3);
-                            if d_rev == rollout.revision
+                            let d_seq_u64 = d_seq as u64;
+                            if d_seq_u64 > init_seq
+                                && d_rev == rollout.revision
                                 && d_sha == rollout.policy_sha256
                                 && d_st != "rejected"
                             {
-                                d_seq as u64
+                                d_seq_u64
                             } else {
                                 let default_issuer = ManagedIssuer::from_environment_for_key(
                                     rollout.issuer_key_id.as_deref(),

@@ -2409,3 +2409,145 @@ async fn test_partially_persisted_pilot_rollout_resumes_via_start_and_advance() 
     );
     assert_eq!(adv2.active_deployments.len(), 2);
 }
+
+#[tokio::test]
+async fn test_pilot_recovery_refuses_superseded_slot_on_start_and_advance() {
+    let tmp = tempfile::tempdir().unwrap();
+    let db_path = tmp.path().join("store.db");
+    let store = TenantStore::open(&db_path).unwrap();
+    let tenant = store.create_tenant("Superseded Pilot Tenant").unwrap();
+
+    store
+        .create_managed_group(&tenant.id, "grp-sup", "Superseded Group")
+        .unwrap();
+    store.enroll_managed_agent(&tenant.id, "p-1").unwrap();
+    store.enroll_managed_agent(&tenant.id, "p-2").unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "grp-sup", "p-1", true)
+        .unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "grp-sup", "p-2", true)
+        .unwrap();
+
+    let yaml = "default: allow\n";
+    store
+        .create_managed_group_revision(&tenant.id, "grp-sup", "v1", yaml)
+        .unwrap();
+    store
+        .approve_managed_group_revision(&tenant.id, "grp-sup", "v1")
+        .unwrap();
+
+    let issuer = llm_firewall::tenant_store::ManagedIssuer::from_environment().unwrap();
+
+    store
+        .create_managed_revision(&tenant.id, "p-1", "v1", yaml)
+        .unwrap();
+    store
+        .approve_managed_revision(&tenant.id, "p-1", "v1")
+        .unwrap();
+    store
+        .create_managed_revision(&tenant.id, "p-2", "v1", yaml)
+        .unwrap();
+    store
+        .approve_managed_revision(&tenant.id, "p-2", "v1")
+        .unwrap();
+
+    let dep_p1 = store
+        .deploy_managed_revision(&tenant.id, "p-1", "v1", false, &issuer)
+        .unwrap();
+
+    let digest = store
+        .list_managed_group_revisions(&tenant.id, "grp-sup")
+        .unwrap()[0]
+        .policy_sha256
+        .clone();
+
+    // 1. Seed partial plan with p-1 issued (seq 1) and p-2 missing (initial sequence 0)
+    {
+        let db = rusqlite::Connection::open(&db_path).unwrap();
+        let mut active = std::collections::BTreeMap::new();
+        active.insert("p-1", dep_p1.deployment_sequence);
+        let mut inits = std::collections::BTreeMap::new();
+        inits.insert("p-1", 0);
+        inits.insert("p-2", 0);
+        let prevs: std::collections::BTreeMap<&str, Option<&str>> =
+            [("p-1", None), ("p-2", None)].into_iter().collect();
+
+        db.execute(
+            "INSERT INTO managed_group_rollouts
+             (tenant_id, group_id, rollout_id, revision, policy_sha256, issuer_key_id, phase,
+              pilot_agents_json, standard_agents_json, active_deployments_json, previous_revisions_json,
+              failure_reason, created_at_unix, updated_at_unix, initial_sequences_json)
+             VALUES (?1, ?2, 'ro_sup_witness', 'v1', ?3, ?4, 'pilot', ?5, '[]', ?6, ?7, NULL, 1000, 1000, ?8)",
+            rusqlite::params![
+                tenant.id,
+                "grp-sup",
+                digest,
+                issuer.key_id(),
+                serde_json::to_string(&vec!["p-1", "p-2"]).unwrap(),
+                serde_json::to_string(&active).unwrap(),
+                serde_json::to_string(&prevs).unwrap(),
+                serde_json::to_string(&inits).unwrap(),
+            ],
+        )
+        .unwrap();
+    }
+
+    // Reopen store from disk
+    drop(store);
+    let store = TenantStore::open(&db_path).unwrap();
+
+    // 2. Operator issues an explicit newer per-agent deployment for p-2 at sequence 1
+    store
+        .create_managed_revision(&tenant.id, "p-2", "operator-newer", "default: deny\n")
+        .unwrap();
+    store
+        .approve_managed_revision(&tenant.id, "p-2", "operator-newer")
+        .unwrap();
+    let dep_newer = store
+        .deploy_managed_revision(&tenant.id, "p-2", "operator-newer", false, &issuer)
+        .unwrap();
+    assert_eq!(dep_newer.deployment_sequence, 1);
+
+    // 3. Retrying group start MUST refuse to supersede operator-newer
+    let start_err = store
+        .start_managed_group_rollout(&tenant.id, "grp-sup", "v1", &issuer)
+        .unwrap_err();
+    let err_msg = start_err.to_string();
+    assert!(
+        err_msg.contains("superseded") || err_msg.contains("conflict"),
+        "expected supersession/conflict refusal, got: {}",
+        err_msg
+    );
+
+    // Verify invariant: p-2 still only has sequence 1 (operator-newer), rollout inventory unchanged
+    let p2_deps = store.list_managed_deployments(&tenant.id, "p-2").unwrap();
+    assert_eq!(p2_deps.len(), 1);
+    assert_eq!(p2_deps[0].revision, "operator-newer");
+    let plan = store
+        .get_managed_group_rollout(&tenant.id, "grp-sup")
+        .unwrap()
+        .unwrap();
+    assert_eq!(plan.phase, llm_firewall::tenant_store::RolloutPhase::Pilot);
+    assert_eq!(plan.active_deployments.len(), 1);
+    assert_eq!(plan.active_deployments.get("p-1").copied(), Some(1));
+    assert!(!plan.active_deployments.contains_key("p-2"));
+
+    // 4. Calling advance MUST record supersession and fail the rollout without allocating sequence 2
+    let adv = store
+        .advance_managed_group_rollout(&tenant.id, "grp-sup", Some(&issuer))
+        .unwrap()
+        .unwrap();
+    assert_eq!(adv.phase, llm_firewall::tenant_store::RolloutPhase::Failed);
+    let reason = adv.failure_reason.as_deref().unwrap_or("");
+    assert!(
+        reason.contains("superseded") || reason.contains("conflict"),
+        "expected supersession failure reason, got: {}",
+        reason
+    );
+
+    // Verify invariant: p-2 still only has sequence 1 (operator-newer); candidate v1 was not issued
+    let p2_deps_after = store.list_managed_deployments(&tenant.id, "p-2").unwrap();
+    assert_eq!(p2_deps_after.len(), 1);
+    assert_eq!(p2_deps_after[0].revision, "operator-newer");
+}
