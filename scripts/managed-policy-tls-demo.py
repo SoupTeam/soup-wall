@@ -420,6 +420,27 @@ def main():
         report = {
             "scope": "controlled-owned-bridge-nonloopback-HTTPS-real-agentfw-sqlite-console",
             "source_sha": command("git", "rev-parse", "HEAD", capture=True),
+            "source_and_runtime_sha256": {
+                "agentfw_binary": hashlib.sha256(agent_binary.read_bytes()).hexdigest(),
+                "sqlite_console_binary": hashlib.sha256(console_binary.read_bytes()).hexdigest(),
+                "https_test_edge_source": hashlib.sha256(
+                    (ROOT / "scripts/fixtures/managed_policy_tls_edge.py").read_bytes()
+                ).hexdigest(),
+                "test_driver_source": hashlib.sha256(
+                    (ROOT / "scripts/managed-policy-tls-demo.py").read_bytes()
+                ).hexdigest(),
+                "served_certificate_der": hashlib.sha256(
+                    ssl.PEM_cert_to_DER_cert((tls / "valid.pem").read_text())
+                ).hexdigest(),
+            },
+            "network_scope": {
+                "kind": "disposable-private-docker-bridge",
+                "transport": "verified HTTPS to nonloopback container IP",
+                "tls_termination_to_console": "owned bridge-local HTTP, not production E2E TLS",
+                "edge_image": EDGE_IMAGE,
+                "inherited_proxies_disabled": True,
+                "cross_origin_redirects_disabled": True,
+            },
             "remote_https_origin": origin,
             "remote_address": edge_ip,
             "operator_ca_pem_sha256": ca_fingerprint,
