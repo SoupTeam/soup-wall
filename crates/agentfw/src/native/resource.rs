@@ -353,6 +353,17 @@ pub fn create_file_binding(
     if destination.parent() != Some(root.as_path()) {
         return Err("native_create_destination_unsupported");
     }
+    let leaf = destination
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty() && name.len() <= 255)
+        .ok_or("native_create_destination_unsupported")?;
+    // Generic v1 extraction normalizes spelling. The v2 create profile only
+    // accepts the original direct leaf or its exact canonical absolute path;
+    // normalization must not hide aliases before the executor sees a target.
+    if path != leaf && path != canonical {
+        return Err("native_create_destination_unsupported");
+    }
     match std::fs::symlink_metadata(destination) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         _ => return Err("native_create_target_exists_or_unavailable"),
@@ -666,6 +677,45 @@ mod tests {
             create_file_binding(&policy, &args).err(),
             Some("native_create_destination_invalid")
         );
+    }
+
+    #[test]
+    fn create_authority_rejects_normalized_path_spellings_before_execution() {
+        let (_directory, _tool, policy) = fixture();
+        let canonical = policy.workspace.join("new.txt");
+        for path in ["new.txt".to_owned(), canonical.to_str().unwrap().to_owned()] {
+            assert!(
+                create_file_binding(&policy, &json!({"path":path,"content":"exact bytes"})).is_ok()
+            );
+        }
+        for path in [
+            "./new.txt".to_owned(),
+            "new.txt/".to_owned(),
+            format!("{}//new.txt", policy.workspace.display()),
+            format!("{}/./new.txt", policy.workspace.display()),
+        ] {
+            assert_eq!(
+                create_file_binding(&policy, &json!({"path":path,"content":"exact bytes"})).err(),
+                Some("native_create_destination_unsupported"),
+                "{path}"
+            );
+        }
+        let mut longest = policy.clone();
+        let leaf = "a".repeat(255);
+        longest.allowed_resources = vec![Resource::Path {
+            canonical: policy.workspace.join(&leaf).to_str().unwrap().to_owned(),
+        }];
+        assert!(
+            create_file_binding(&longest, &json!({"path":leaf,"content":"exact bytes"})).is_ok()
+        );
+        let leaf = "☃".repeat(86);
+        longest.allowed_resources = vec![Resource::Path {
+            canonical: policy.workspace.join(&leaf).to_str().unwrap().to_owned(),
+        }];
+        assert!(
+            create_file_binding(&longest, &json!({"path":leaf,"content":"exact bytes"})).is_err()
+        );
+        assert!(!canonical.exists());
     }
 
     #[test]

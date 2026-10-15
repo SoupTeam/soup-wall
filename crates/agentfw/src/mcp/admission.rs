@@ -1522,7 +1522,28 @@ where
                         ensure!(args.is_object(), "MCP call arguments must be an object");
                         schemas.get(name).context("MCP tool schema not installed")?.validate(&args)?;
                         let resource_admission = if let Some(policy) = &installed.resource_policy {
-                            if let Some(agentfw_ws) = std::env::var_os("AGENTFW_WORKSPACE") {
+                            if policy.is_create_file() {
+                                if collector.config.server_id != policy.profile.server_id {
+                                    write_resource_reply(client, host, true,
+                                        &withheld(request_id, "invocation", &json!(["resource_server_identity_mismatch"]))).await?;
+                                    continue;
+                                }
+                                // Match run()'s actual operator-selected session root,
+                                // including its cwd fallback when no override exists.
+                                // Policy metadata cannot silently select another root.
+                                let actual_workspace = std::env::var_os("AGENTFW_WORKSPACE")
+                                    .map(std::path::PathBuf::from)
+                                    .or_else(|| std::env::current_dir().ok())
+                                    .and_then(|path| path.canonicalize().ok());
+                                let configured_workspace = policy.workspace.canonicalize().ok();
+                                if !matches!((&configured_workspace, &actual_workspace),
+                                    (Some(configured), Some(actual)) if configured == actual)
+                                {
+                                    write_resource_reply(client, host, true,
+                                        &withheld(request_id, "invocation", &json!(["resource_workspace_mismatch"]))).await?;
+                                    continue;
+                                }
+                            } else if let Some(agentfw_ws) = std::env::var_os("AGENTFW_WORKSPACE") {
                                 let policy_ws_canon = policy.workspace.canonicalize().ok();
                                 let agentfw_ws_canon =
                                     std::path::PathBuf::from(agentfw_ws).canonicalize().ok();
@@ -1530,7 +1551,7 @@ where
                                     (Some(policy), Some(actual)) if policy == actual);
                                 let known_mismatch = policy_ws_canon.is_some()
                                     && agentfw_ws_canon.is_some() && !same_workspace;
-                                if known_mismatch || (policy.is_create_file() && !same_workspace) {
+                                if known_mismatch {
                                     let reasons = json!(["resource_workspace_mismatch"]);
                                     write_resource_reply(client, host, resource_reply,
                                         &withheld(request_id, "invocation", &reasons)).await?;
