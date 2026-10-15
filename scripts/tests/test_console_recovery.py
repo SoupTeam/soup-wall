@@ -127,6 +127,58 @@ class RecoveryTests(unittest.TestCase):
         self.assertNotIn(b'Tenant A', self.archive.read_bytes())
         self.assertNotIn('tenant_a', json.dumps(restored))
 
+    def test_public_cli_roundtrip_preserves_rows_sequences_and_revocation(self):
+        recipient = self.age_identity()
+        before = recovery.canonical(recovery.inspect_sqlite(self.source))
+        source_bytes = self.source.read_bytes()
+        common = ['--backend', 'sqlite', '--archive', str(self.archive),
+                  '--workdir', str(self.work), '--age', AGE]
+        commands = [
+            ['backup', *common, '--database', str(self.source), '--recipient', recipient],
+            ['restore', *common, '--database', str(self.target), '--identity', str(self.identity)],
+        ]
+        receipts = []
+        for arguments in commands:
+            result = subprocess.run([sys.executable, str(ROOT / 'scripts/console-recovery.py'),
+                *arguments], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, cwd=self.directory,
+                env=recovery.child_environment({}, self.work), timeout=30)
+            # Never include captured diagnostics or private rows in failures.
+            self.assertEqual(result.returncode, 0, 'Public recovery CLI failed.')
+            self.assertEqual(result.stderr, b'', 'Public recovery CLI emitted diagnostics.')
+            value = recovery.strict_json(result.stdout)
+            self.assertEqual(set(value), {'format_version', 'status', 'phase', 'backend',
+                'duration_seconds', 'inventory_sha256', 'operator_signing_and_trust_restored',
+                'plaintext_temporary_cleaned', 'private_state_sha256', 'tables_verified',
+                'sequences_verified', 'encrypted_archive_sha256'})
+            self.assertEqual(value['format_version'], 1)
+            self.assertEqual(value['status'], 'passed')
+            self.assertEqual(value['phase'], arguments[0])
+            self.assertEqual(value['backend'], 'sqlite')
+            self.assertEqual(value['tables_verified'], 43)
+            self.assertTrue(value['plaintext_temporary_cleaned'])
+            self.assertFalse(value['operator_signing_and_trust_restored'])
+            self.assertGreaterEqual(value['duration_seconds'], 0)
+            self.assertNotIn('tenant_a', result.stdout.decode())
+            self.assertNotIn('Tenant A', result.stdout.decode())
+            receipts.append(value)
+        self.assertEqual(receipts[0]['private_state_sha256'], receipts[1]['private_state_sha256'])
+        self.assertEqual(receipts[0]['encrypted_archive_sha256'], receipts[1]['encrypted_archive_sha256'])
+        self.assertEqual(before, recovery.canonical(recovery.inspect_sqlite(self.target)))
+        self.assertEqual(source_bytes, self.source.read_bytes())
+        self.assertEqual(list(self.work.iterdir()), [])
+        with local_database(self.target) as connection:
+            self.assertEqual(connection.execute(
+                'SELECT id,active,revoked_at_unix FROM tenant_tokens ORDER BY id').fetchall(),
+                [('retained', 1, None), ('revoked', 0, 2)])
+            self.assertEqual(connection.execute(
+                "SELECT seq FROM sqlite_sequence WHERE name='tenant_audit'").fetchone(), (999,))
+            connection.execute("INSERT INTO tenant_audit(tenant_id,created_at_unix,path,outcome,status_code,latency_ms) "
+                               "VALUES ('tenant_a',1,'/after-cli','allowed',200,1)")
+            self.assertEqual(connection.execute('SELECT id FROM tenant_audit').fetchone(), (1000,))
+        for path in (self.archive, self.target, self.identity):
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
     def test_online_backup_includes_committed_wal(self):
         with local_database(self.source) as connection:
             connection.execute('PRAGMA journal_mode=WAL')

@@ -173,3 +173,6 @@ seam. It **does not verify production external HTTPS delivery** and does not cla
 transaction spanning Console and receiver or exactly-once network delivery. The report
 keeps that limitation machine-readable. It is not acceptance of SAML/OIDC interoperability,
 remote Agent HTTPS, fleet reconciliation or release publication.
+
+The [2026-10-15 current-state evidence](evidence/CONSOLE_RECOVERY_2026-10-15.md)
+records both clean local runs, negative controls, limitations and exact source hashes.
