@@ -188,9 +188,18 @@ def https_edge(stack, root, upstream_port):
     context = ssl.create_default_context(cafile=str(ca))
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}),
                                          urllib.request.HTTPSHandler(context=context))
-    wait_for("remote HTTPS edge readiness",
-             lambda: True if opener.open(origin + "/healthz", timeout=3).status == 200 else None,
-             timeout=35)
+    try:
+        wait_for("remote HTTPS edge readiness",
+                 lambda: True if opener.open(origin + "/healthz", timeout=3).status == 200 else None,
+                 timeout=35)
+    except Exception:
+        # The edge logs only verb/path, never Bearer headers or private material.
+        print("TLS EDGE DIAGNOSTIC:", command("docker", "logs", container, capture=True)[-3500:],
+              flush=True)
+        print("TLS EDGE STATE:",
+              command("docker", "inspect", "--format", "{{.State.Status}}:{{.State.ExitCode}}", container, capture=True),
+              flush=True)
+        raise
     return origin, ca, tls, opener, ca_fp, address
 
 
@@ -450,5 +459,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as error:
-        print(f"SOU-30 DEMO FAIL: {error}", file=sys.stderr)
+        print(f"SOU-43 TLS DEMO FAIL: {error}", file=sys.stderr)
         raise
