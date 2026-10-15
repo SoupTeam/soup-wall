@@ -15,7 +15,10 @@ use crate::mcp::resources::{
 pub const CONTRACT: &str = "sw-native/resources/1";
 pub const CREATE_CONTRACT: &str = "sw-native/resources/2";
 pub const NETWORK_CONTRACT: &str = "sw-native/resources/3";
+pub const WINDOWS_READ_CONTRACT: &str = "sw-native/resources/4";
 pub const CREATE_FILE_EXECUTOR_PROFILE: &str = "sw-native/create-file/linux-root-child/1";
+pub const WINDOWS_READ_EXECUTOR_PROFILE: &str = "sw-native/read-document/windows-handles/1";
+pub const WINDOWS_READ_MAX_CONTENT: usize = super::MAX_CONTENT;
 // Keep the complete original content within the selected rule classifier's
 // reviewed leaf bound; a truncated/unknown prediction must remain blocked.
 pub const CREATE_FILE_MAX_CONTENT: usize = 4_096;
@@ -23,6 +26,63 @@ pub const CREATE_FILE_MAX_CONTENT: usize = 4_096;
 /// A semantic executor revision, not attestation of a running binary.
 pub fn create_file_executor_sha256() -> String {
     super::hash(CREATE_FILE_EXECUTOR_PROFILE.as_bytes())
+}
+
+/// A separate semantic revision preserves the existing Unix read contract.
+pub fn windows_read_executor_sha256() -> String {
+    super::hash(WINDOWS_READ_EXECUTOR_PROFILE.as_bytes())
+}
+
+/// The only read operation installed by the Windows handle-bound profile.
+pub fn windows_read_schema() -> Value {
+    json!({"type":"object", "properties":{
+        "path":{"type":"string", "minLength":1, "maxLength":4096}
+    }, "required":["path"], "additionalProperties":false})
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct WindowsReadPolicy {
+    pub executor_profile: String,
+    pub max_content_bytes: usize,
+}
+
+impl WindowsReadPolicy {
+    fn supported(&self) -> bool {
+        self.executor_profile == WINDOWS_READ_EXECUTOR_PROFILE
+            && self.max_content_bytes == WINDOWS_READ_MAX_CONTENT
+    }
+}
+
+/// Exact arguments, workspace and leaf file identity, additive to the native
+/// session and single-use result binding. Retained handles carry attributes,
+/// synchronize and execute/traverse rights for sharing locks, never FILE_READ_DATA.
+/// The collector neither executes nor maps them and requests ReadFile access
+/// only after Allow.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct WindowsReadBinding {
+    pub executor_profile: String,
+    pub max_content_bytes: usize,
+    pub policy_sha256: String,
+    pub args_sha256: String,
+    pub workspace_sha256: String,
+    pub target_sha256: String,
+}
+
+impl WindowsReadBinding {
+    fn valid(&self) -> bool {
+        self.executor_profile == WINDOWS_READ_EXECUTOR_PROFILE
+            && self.max_content_bytes == WINDOWS_READ_MAX_CONTENT
+            && [
+                &self.policy_sha256,
+                &self.args_sha256,
+                &self.workspace_sha256,
+                &self.target_sha256,
+            ]
+            .iter()
+            .all(|digest| super::is_digest(digest))
+    }
 }
 
 /// The one reviewed create operation. Byte limits are also checked on arguments;
@@ -145,6 +205,8 @@ pub struct Policy {
     pub execution: Option<ExecutionPolicy>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub network: Option<crate::mcp::https_get::HttpsGetAuthority>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub windows_read: Option<WindowsReadPolicy>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -163,11 +225,15 @@ pub struct Admission {
     pub execution: Option<ExecutionBinding>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub network: Option<NetworkBinding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub windows_read: Option<WindowsReadBinding>,
 }
 
 impl Admission {
     pub fn contract(&self) -> &'static str {
-        if self.network.is_some() {
+        if self.windows_read.is_some() {
+            WINDOWS_READ_CONTRACT
+        } else if self.network.is_some() {
             NETWORK_CONTRACT
         } else if self.execution.is_some() {
             CREATE_CONTRACT
@@ -186,7 +252,16 @@ impl Admission {
                 }))
             || self.resources.is_empty()
             || self.resources.len() > 256
-            || (self.network.is_some() && self.execution.is_some())
+            || [
+                self.network.is_some(),
+                self.execution.is_some(),
+                self.windows_read.is_some(),
+            ]
+            .into_iter()
+            .filter(|present| *present)
+            .count()
+                > 1
+            || self.windows_read.as_ref().is_some_and(|read| !read.valid())
             || self
                 .network
                 .as_ref()
@@ -224,7 +299,9 @@ impl Admission {
 
 impl Policy {
     pub fn contract(&self) -> &'static str {
-        if self.network.is_some() {
+        if self.windows_read.is_some() {
+            WINDOWS_READ_CONTRACT
+        } else if self.network.is_some() {
             NETWORK_CONTRACT
         } else if self.execution.is_some() {
             CREATE_CONTRACT
@@ -241,6 +318,10 @@ impl Policy {
         self.network.is_some()
     }
 
+    pub fn is_windows_read(&self) -> bool {
+        self.windows_read.is_some()
+    }
+
     pub fn validate(&self, tool: &super::Tool) -> anyhow::Result<()> {
         anyhow::ensure!(
             super::identifier(&self.profile.server_id)
@@ -250,12 +331,6 @@ impl Policy {
                 && self.profile.selectors.len() <= 32
                 && self.workspace.is_absolute()
                 && self.cwd.is_absolute()
-                && self.workspace.is_dir()
-                && self.cwd.is_dir()
-                && self
-                    .cwd
-                    .canonicalize()?
-                    .starts_with(self.workspace.canonicalize()?)
                 && super::is_digest(&self.executor_sha256)
                 && super::is_digest(&self.classifier_sha256)
                 && !self.allowed_resources.is_empty()
@@ -263,9 +338,75 @@ impl Policy {
             "invalid operator resource policy"
         );
         anyhow::ensure!(
-            self.execution.is_none() || self.network.is_none(),
+            [
+                self.execution.is_some(),
+                self.network.is_some(),
+                self.windows_read.is_some()
+            ]
+            .into_iter()
+            .filter(|present| *present)
+            .count()
+                <= 1,
             "conflicting operator execution policies"
         );
+        if let Some(read) = &self.windows_read {
+            anyhow::ensure!(
+                cfg!(windows),
+                "Windows read authority is unsupported on this platform"
+            );
+            let selector = &self.profile.selectors[0];
+            anyhow::ensure!(
+                read.supported()
+                    && tool.name == "read_document"
+                    && tool.action_class == soup_wall_agent::ActionClass::ReadOnly
+                    && matches!(tool.result_provenance, super::ResultProvenance::Untrusted)
+                    && tool.egress.is_empty()
+                    && tool.schema_sha256 == super::canonical_digest(&windows_read_schema())
+                    && self.executor_sha256 == windows_read_executor_sha256()
+                    && self.workspace == self.cwd
+                    && self.profile.selectors.len() == 1
+                    && selector.pointer == "/path"
+                    && selector.kind == crate::mcp::resources::ResourceKind::Path
+                    && selector.aliases.is_empty()
+                    && !selector.optional
+                    && selector.default.is_none()
+                    && !selector.allow_missing_leaf
+                    && self.allowed_resources.len() == 1
+                    && matches!(&self.allowed_resources[0], Resource::Path { .. }),
+                "invalid operator Windows read policy"
+            );
+        }
+        // V4 validates and locks each component through the native executor.
+        // Ordinary DOS path APIs are not used afterward: directory handles do
+        // not prevent a drive-letter device mapping from being changed.
+        #[cfg(windows)]
+        let _windows_validation_pin = if self.is_windows_read() {
+            let Resource::Path { canonical } = &self.allowed_resources[0] else {
+                unreachable!("path authority validated above")
+            };
+            // This spelling is generated from trusted operator authority,
+            // not accepted as an alias in original invocation arguments.
+            let original = canonical.strip_prefix("\\\\?\\").unwrap_or(canonical);
+            Some(crate::windows_read::PreparedRead::prepare(
+                &self.workspace,
+                &self.cwd,
+                original,
+                canonical,
+            )?)
+        } else {
+            None
+        };
+        if !self.is_windows_read() {
+            anyhow::ensure!(
+                self.workspace.is_dir()
+                    && self.cwd.is_dir()
+                    && self
+                        .cwd
+                        .canonicalize()?
+                        .starts_with(self.workspace.canonicalize()?),
+                "invalid operator resource workspace"
+            );
+        }
         if let Some(network) = &self.network {
             network.validate().map_err(anyhow::Error::msg)?;
             let selector = &self.profile.selectors[0];
@@ -346,6 +487,109 @@ impl Policy {
     }
 }
 
+fn windows_read_arguments<'a>(
+    policy: &'a Policy,
+    args: &'a Value,
+) -> Result<(&'a str, &'a str), &'static str> {
+    let read = policy
+        .windows_read
+        .as_ref()
+        .ok_or("native_windows_read_authority_missing")?;
+    if !read.supported()
+        || policy.execution.is_some()
+        || policy.network.is_some()
+        || policy.executor_sha256 != windows_read_executor_sha256()
+        || policy.workspace != policy.cwd
+    {
+        return Err("native_windows_read_executor_revision_mismatch");
+    }
+    let object = args
+        .as_object()
+        .ok_or("native_windows_read_arguments_invalid")?;
+    let original = args["path"]
+        .as_str()
+        .ok_or("native_windows_read_arguments_invalid")?;
+    if object.len() != 1
+        || original.is_empty()
+        || original.len() > 4096
+        || original.chars().any(char::is_control)
+    {
+        return Err("native_windows_read_arguments_invalid");
+    }
+    let [Resource::Path { canonical }] = policy.allowed_resources.as_slice() else {
+        return Err("native_windows_read_authority_invalid");
+    };
+    Ok((original, canonical))
+}
+
+/// Recompute v4 evidence without FILE_READ_DATA. The collector requests that
+/// right and uses ReadFile only after both admission decisions allow it.
+pub fn windows_read_binding(
+    policy: &Policy,
+    args: &Value,
+) -> Result<WindowsReadBinding, &'static str> {
+    let (original, canonical) = windows_read_arguments(policy, args)?;
+    #[cfg(windows)]
+    {
+        let prepared = crate::windows_read::PreparedRead::prepare(
+            &policy.workspace,
+            &policy.cwd,
+            original,
+            canonical,
+        )
+        .map_err(|_| "native_windows_read_target_invalid")?;
+        windows_read_binding_with_identity(policy, args, prepared.identity())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (original, canonical);
+        Err("native_windows_read_platform_unsupported")
+    }
+}
+
+/// Build the same binding from the non-data-read handles retained by the
+/// collector. Original argument spelling is included in `args_sha256`.
+#[cfg(windows)]
+pub(crate) fn windows_read_binding_with_identity(
+    policy: &Policy,
+    args: &Value,
+    identity: &crate::windows_read::ReadIdentity,
+) -> Result<WindowsReadBinding, &'static str> {
+    let (_, canonical) = windows_read_arguments(policy, args)?;
+    Ok(WindowsReadBinding {
+        executor_profile: WINDOWS_READ_EXECUTOR_PROFILE.into(),
+        max_content_bytes: WINDOWS_READ_MAX_CONTENT,
+        policy_sha256: super::canonical_digest(
+            &serde_json::to_value(policy).expect("policy serializes"),
+        ),
+        args_sha256: super::canonical_digest(args),
+        workspace_sha256: super::canonical_digest(&json!({
+            "workspace":policy.workspace,"cwd":policy.cwd,
+            "volume_serial":identity.root_volume_serial,"file_id":identity.root_file_id,
+        })),
+        target_sha256: super::canonical_digest(&json!({
+            "canonical":canonical,"volume_serial":identity.leaf_volume_serial,
+            "file_id":identity.leaf_file_id,
+        })),
+    })
+}
+
+/// The fixed v4 selector is already resolved by the retained metadata handles.
+/// Reuse that exact authority without reopening a DOS path for extraction.
+#[cfg(windows)]
+pub(crate) fn windows_read_evidence(
+    policy: &Policy,
+    args: &Value,
+    identity: &crate::windows_read::ReadIdentity,
+) -> Result<Vec<ResourceEvidence>, &'static str> {
+    windows_read_binding_with_identity(policy, args, identity)?;
+    Ok(vec![ResourceEvidence {
+        pointer: "/path".into(),
+        source: crate::mcp::resources::EvidenceSource::Argument,
+        resource: policy.allowed_resources[0].clone(),
+    }])
+}
+
 /// No DNS lookup or request is performed here. The constrained executor checks
 /// and pins the current resolved addresses against this immutable authority.
 pub fn https_get_binding(policy: &Policy, args: &Value) -> Result<NetworkBinding, &'static str> {
@@ -357,6 +601,7 @@ pub fn https_get_binding(policy: &Policy, args: &Value) -> Result<NetworkBinding
         .validate()
         .map_err(|_| "native_https_authority_invalid")?;
     if policy.execution.is_some()
+        || policy.windows_read.is_some()
         || policy.executor_sha256 != crate::mcp::https_get::executor_profile_sha256()
     {
         return Err("native_https_executor_revision_mismatch");
@@ -536,6 +781,39 @@ pub fn authorize(
             return Err("native_https_binding_mismatch");
         }
     }
+    // Keep the no-follow metadata pins alive through fixed v4 evidence checks.
+    // V4 does not use generic extraction, which would resolve a DOS path again.
+    #[cfg(windows)]
+    let windows_read_pin = if admission.windows_read.is_some() {
+        let (original, canonical) = windows_read_arguments(policy, args)?;
+        Some(
+            crate::windows_read::PreparedRead::prepare(
+                &policy.workspace,
+                &policy.cwd,
+                original,
+                canonical,
+            )
+            .map_err(|_| "native_windows_read_target_invalid")?,
+        )
+    } else {
+        None
+    };
+    if let Some(bound) = &admission.windows_read {
+        #[cfg(windows)]
+        let derived_binding = windows_read_binding_with_identity(
+            policy,
+            args,
+            windows_read_pin
+                .as_ref()
+                .expect("Windows read metadata pinned")
+                .identity(),
+        )?;
+        #[cfg(not(windows))]
+        let derived_binding = windows_read_binding(policy, args)?;
+        if &derived_binding != bound {
+            return Err("native_windows_read_binding_mismatch");
+        }
+    }
     let profile_sha256 = super::canonical_digest(
         &serde_json::to_value(&policy.profile).expect("profile serializes"),
     );
@@ -545,6 +823,20 @@ pub fn authorize(
         || admission.classifier_sha256 != policy.classifier_sha256
     {
         return Err("native_resource_revision_mismatch");
+    }
+    #[cfg(windows)]
+    if let Some(prepared) = windows_read_pin.as_ref() {
+        let resources = windows_read_evidence(policy, args, prepared.identity())?;
+        if resources != admission.resources {
+            return Err("native_resource_argument_mismatch");
+        }
+        if resources
+            .iter()
+            .any(|evidence| !policy.allowed_resources.contains(&evidence.resource))
+        {
+            return Err("native_resource_not_allowed");
+        }
+        return Ok(());
     }
     let input = Invocation {
         server_id: admission.server_id.clone(),
@@ -583,6 +875,151 @@ pub fn authorize(
         return Err("native_resource_not_allowed");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod windows_read_contract_tests {
+    use super::*;
+
+    fn fixture() -> (tempfile::TempDir, super::super::Tool, Policy) {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().canonicalize().unwrap();
+        let target = root.join("approved.txt");
+        std::fs::write(&target, "approved bytes").unwrap();
+        let schema = super::super::canonical_digest(&windows_read_schema());
+        let tool = serde_json::from_value(json!({
+            "name":"read_document", "schema_sha256":schema,
+            "action_class":"read_only", "result_provenance":"untrusted", "egress":[]
+        }))
+        .unwrap();
+        let policy = serde_json::from_value(json!({
+            "profile":{"server_id":"windows-read-fixture","tool_name":"read_document",
+                "schema_sha256":schema,"selectors":[{"pointer":"/path","kind":"path"}]},
+            "workspace":root,"cwd":root,"executor_sha256":windows_read_executor_sha256(),
+            "classifier_sha256":"c".repeat(64),
+            "allowed_resources":[{"kind":"path","canonical":target}],
+            "windows_read":{"executor_profile":WINDOWS_READ_EXECUTOR_PROFILE,
+                "max_content_bytes":WINDOWS_READ_MAX_CONTENT}
+        }))
+        .unwrap();
+        (directory, tool, policy)
+    }
+
+    #[test]
+    fn windows_read_v4_binding_shape_preserves_distinct_contracts() {
+        let read = WindowsReadBinding {
+            executor_profile: WINDOWS_READ_EXECUTOR_PROFILE.into(),
+            max_content_bytes: WINDOWS_READ_MAX_CONTENT,
+            policy_sha256: "a".repeat(64),
+            args_sha256: "b".repeat(64),
+            workspace_sha256: "c".repeat(64),
+            target_sha256: "d".repeat(64),
+        };
+        let mut admission: Admission = serde_json::from_value(json!({
+            "server_id":"windows-read-fixture","host_call_id":1,
+            "profile_sha256":"a".repeat(64),"executor_sha256":"b".repeat(64),
+            "classifier_sha256":"c".repeat(64),"snapshot_sha256":"d".repeat(64),
+            "definition_sha256":"e".repeat(64),"input_sha256":"f".repeat(64),
+            "resources":[{"pointer":"/path","source":"argument",
+                "resource":{"kind":"path","canonical":"approved.txt"}}],
+            "windows_read":read
+        }))
+        .unwrap();
+        assert_eq!(admission.contract(), WINDOWS_READ_CONTRACT);
+        assert_eq!(admission.validate_shape(), Ok(()));
+        for field in [
+            "executor_profile",
+            "max_content_bytes",
+            "policy_sha256",
+            "args_sha256",
+            "workspace_sha256",
+            "target_sha256",
+        ] {
+            let mut changed = serde_json::to_value(&admission).unwrap();
+            changed["windows_read"][field] = if field == "max_content_bytes" {
+                json!(WINDOWS_READ_MAX_CONTENT + 1)
+            } else {
+                json!("unsupported")
+            };
+            assert_eq!(
+                serde_json::from_value::<Admission>(changed)
+                    .unwrap()
+                    .validate_shape(),
+                Err("native_resource_invalid"),
+                "{field}"
+            );
+        }
+        admission.execution = Some(ExecutionBinding {
+            operation: ExecutionOperation::CreateFile,
+            action: ExecutionAction::Write,
+            max_content_bytes: CREATE_FILE_MAX_CONTENT,
+            executor_profile: CREATE_FILE_EXECUTOR_PROFILE.into(),
+            policy_sha256: "a".repeat(64),
+            args_sha256: "b".repeat(64),
+            content_sha256: "c".repeat(64),
+            workspace_sha256: "d".repeat(64),
+        });
+        assert_eq!(admission.validate_shape(), Err("native_resource_invalid"));
+        admission.execution = None;
+        admission.windows_read = None;
+        assert_eq!(admission.contract(), CONTRACT);
+    }
+
+    #[test]
+    fn windows_read_authority_requires_explicit_reviewed_semantics() {
+        let (_directory, tool, policy) = fixture();
+        assert_eq!(policy.contract(), WINDOWS_READ_CONTRACT);
+        assert_eq!(policy.validate(&tool).is_ok(), cfg!(windows));
+        for (field, value) in [
+            ("name", json!("other_read")),
+            ("schema_sha256", json!("a".repeat(64))),
+            ("action_class", json!("side_effecting")),
+            ("result_provenance", json!("local_system")),
+        ] {
+            let mut value_tool = json!({"name":"read_document",
+                "schema_sha256":tool.schema_sha256,"action_class":"read_only",
+                "result_provenance":"untrusted","egress":[]});
+            value_tool[field] = value;
+            let changed = serde_json::from_value(value_tool).unwrap();
+            assert!(policy.validate(&changed).is_err(), "{field}");
+        }
+        for field in ["max_content_bytes", "executor_profile"] {
+            let mut changed = serde_json::to_value(&policy).unwrap();
+            changed["windows_read"][field] = if field == "max_content_bytes" {
+                json!(WINDOWS_READ_MAX_CONTENT + 1)
+            } else {
+                json!("unsupported")
+            };
+            let changed: Policy = serde_json::from_value(changed).unwrap();
+            assert!(changed.validate(&tool).is_err());
+        }
+        let mut changed = policy.clone();
+        changed.profile.selectors[0]
+            .aliases
+            .push("/alternate".into());
+        assert!(changed.validate(&tool).is_err());
+        changed = policy.clone();
+        changed
+            .allowed_resources
+            .push(changed.allowed_resources[0].clone());
+        assert!(changed.validate(&tool).is_err());
+        for args in [
+            json!({}),
+            json!({"path":null}),
+            json!({"path":"approved.txt","extra":true}),
+            json!({"path":"a".repeat(4097)}),
+        ] {
+            assert_eq!(
+                windows_read_binding(&policy, &args),
+                Err("native_windows_read_arguments_invalid")
+            );
+        }
+        #[cfg(not(windows))]
+        assert_eq!(
+            windows_read_binding(&policy, &json!({"path":"approved.txt"})),
+            Err("native_windows_read_platform_unsupported")
+        );
+    }
 }
 
 #[cfg(all(test, unix))]
@@ -658,6 +1095,7 @@ mod tests {
             resources,
             execution: Some(create_file_binding(policy, args).unwrap()),
             network: None,
+            windows_read: None,
         }
     }
 

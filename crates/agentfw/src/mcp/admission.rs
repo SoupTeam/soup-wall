@@ -813,7 +813,7 @@ where
             #[cfg(not(unix))]
             {
                 // Preserve the existing non-Unix transport; the bounded
-                // resource executor is explicitly unavailable there.
+                // Windows uses the existing non-Unix stdout drain.
                 let written = host.write(&[]).await?;
                 ensure!(written == 0, "empty stdout drain wrote unexpected bytes");
             }
@@ -1074,6 +1074,7 @@ impl<'a> Collector<'a> {
                     | crate::native::resource::CONTRACT
                     | crate::native::resource::CREATE_CONTRACT
                     | crate::native::resource::NETWORK_CONTRACT
+                    | crate::native::resource::WINDOWS_READ_CONTRACT
             ),
             "unsupported native receipt contract"
         );
@@ -1554,27 +1555,62 @@ where
                         let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
                         ensure!(args.is_object(), "MCP call arguments must be an object");
                         schemas.get(name).context("MCP tool schema not installed")?.validate(&args)?;
+                        #[cfg(windows)]
+                        let mut prepared_windows_read = None;
                         let resource_admission = if let Some(policy) = &installed.resource_policy {
-                            if policy.is_create_file() || policy.is_https_get() {
+                            #[cfg(windows)]
+                            if policy.is_windows_read() {
+                                // Refuse different roots and raw path aliases before
+                                // generic extraction can follow an untrusted junction
+                                // or mapped drive even for filesystem metadata.
+                                let actual = std::env::var_os("AGENTFW_WORKSPACE")
+                                    .map(std::path::PathBuf::from)
+                                    .or_else(|| std::env::current_dir().ok());
+                                let normal = |path: &std::path::Path| path.to_str()
+                                    .map(|text| text.strip_prefix("\\\\?\\").unwrap_or(text).to_owned());
+                                if actual.as_deref().and_then(normal).is_none()
+                                    || actual.as_deref().and_then(normal) != normal(&policy.workspace) {
+                                    write_resource_reply(client, host, true,
+                                        &withheld(request_id, "invocation", &json!(["resource_workspace_mismatch"]))).await?;
+                                    continue;
+                                }
+                                let [super::resources::Resource::Path { canonical }] = policy.allowed_resources.as_slice() else {
+                                    bail!("validated Windows read authority missing");
+                                };
+                                let original = args["path"].as_str().context("validated Windows path missing")?;
+                                let prepared = match crate::windows_read::PreparedRead::prepare(
+                                    &policy.workspace, &policy.cwd, original, canonical) {
+                                    Ok(prepared) => prepared,
+                                    Err(_) => {
+                                        write_resource_reply(client, host, true,
+                                            &withheld(request_id, "invocation", &json!(["resource_windows_read_prepare_failed"]))).await?;
+                                        continue;
+                                    }
+                                };
+                                prepared_windows_read = Some(prepared);
+                            }
+                            if policy.is_create_file() || policy.is_https_get() || policy.is_windows_read() {
                                 if collector.config.server_id != policy.profile.server_id {
                                     write_resource_reply(client, host, true,
                                         &withheld(request_id, "invocation", &json!(["resource_server_identity_mismatch"]))).await?;
                                     continue;
                                 }
-                                // Match run()'s actual operator-selected session root,
-                                // including its cwd fallback when no override exists.
-                                // Policy metadata cannot silently select another root.
-                                let actual_workspace = std::env::var_os("AGENTFW_WORKSPACE")
-                                    .map(std::path::PathBuf::from)
-                                    .or_else(|| std::env::current_dir().ok())
-                                    .and_then(|path| path.canonicalize().ok());
-                                let configured_workspace = policy.workspace.canonicalize().ok();
-                                if !matches!((&configured_workspace, &actual_workspace),
-                                    (Some(configured), Some(actual)) if configured == actual)
-                                {
-                                    write_resource_reply(client, host, true,
-                                        &withheld(request_id, "invocation", &json!(["resource_workspace_mismatch"]))).await?;
-                                    continue;
+                                if !policy.is_windows_read() {
+                                    // Match run()'s actual operator-selected session root,
+                                    // including its cwd fallback when no override exists.
+                                    // V4 already checked its exact spelling without DOS I/O.
+                                    let actual_workspace = std::env::var_os("AGENTFW_WORKSPACE")
+                                        .map(std::path::PathBuf::from)
+                                        .or_else(|| std::env::current_dir().ok())
+                                        .and_then(|path| path.canonicalize().ok());
+                                    let configured_workspace = policy.workspace.canonicalize().ok();
+                                    if !matches!((&configured_workspace, &actual_workspace),
+                                        (Some(configured), Some(actual)) if configured == actual)
+                                    {
+                                        write_resource_reply(client, host, true,
+                                            &withheld(request_id, "invocation", &json!(["resource_workspace_mismatch"]))).await?;
+                                        continue;
+                                    }
                                 }
                             } else if let Some(agentfw_ws) = std::env::var_os("AGENTFW_WORKSPACE") {
                                 let policy_ws_canon = policy.workspace.canonicalize().ok();
@@ -1591,7 +1627,7 @@ where
                                     continue;
                                 }
                             }
-                            if (policy.is_create_file() || policy.is_https_get())
+                            if (policy.is_create_file() || policy.is_https_get() || policy.is_windows_read())
                                 && collector.config.classifier.as_ref()
                                     .and_then(|classifier| classifier.revision())
                                     != Some(policy.classifier_sha256.as_str())
@@ -1651,8 +1687,34 @@ where
                                 cwd: &policy.cwd,
                                 fixed_destinations: true,
                             };
-                            let derived =
-                                super::resources::extract(&input, &policy.profile, &context);
+                            #[cfg(windows)]
+                            let derived = if policy.is_windows_read() {
+                                let prepared = prepared_windows_read.as_ref()
+                                    .context("Windows metadata not pinned before extraction")?;
+                                // The fixed v4 selector is proven by the retained
+                                // native handles. Do not reopen DOS paths through
+                                // generic extraction: device mappings are mutable
+                                // independently of the pinned filesystem objects.
+                                let resources = crate::native::resource::windows_read_evidence(
+                                    policy, &args, prepared.identity()).map_err(anyhow::Error::msg)?;
+                                super::resources::Extraction {
+                                    server_id: input.server_id.clone(),
+                                    tool_name: input.tool.clone(),
+                                    schema_sha256: input.schema_sha256.clone(),
+                                    args_sha256: crate::native::canonical_digest(&args),
+                                    profile_sha256: crate::native::canonical_digest(
+                                        &serde_json::to_value(&policy.profile).context("profile serializes")?),
+                                    snapshot_sha256: input.snapshot_sha256.clone(),
+                                    executor_sha256: policy.executor_sha256.clone(),
+                                    resources,
+                                    issues: vec![],
+                                    omitted_optional: vec![],
+                                }
+                            } else {
+                                super::resources::extract(&input, &policy.profile, &context)
+                            };
+                            #[cfg(not(windows))]
+                            let derived = super::resources::extract(&input, &policy.profile, &context);
                             if !derived.complete() {
                                 let reasons = if !derived.issues.is_empty() {
                                     json!(derived
@@ -1693,6 +1755,7 @@ where
                                 input_sha256,
                                 resources: derived.resources.clone(),
                                 execution,
+                                windows_read: None,
                                 network: if policy.is_https_get() {
                                     match crate::native::resource::https_get_binding(policy, &args) {
                                         Ok(binding) => Some(binding),
@@ -1765,6 +1828,8 @@ where
                                 }
                             }
                         }
+                        #[cfg(windows)]
+                        let mut resource_admission = resource_admission;
                         #[cfg(target_os = "linux")]
                         let mut prepared_create = None;
                         let https_get = installed.resource_policy.as_ref().is_some_and(|policy| policy.is_https_get());
@@ -1778,7 +1843,7 @@ where
                             crate::sandbox::PinnedWorkspace,
                             std::path::PathBuf,
                         )> = None;
-                        #[cfg(not(unix))]
+                        #[cfg(not(any(unix, windows)))]
                         if resource_admission.is_some() {
                             let reasons = json!(["resource_executor_unsupported"]);
                             write_resource_reply(client, host, resource_reply, &withheld(request_id, "invocation", &reasons)).await?;
@@ -1788,6 +1853,11 @@ where
                         if let Some((_, ref derived)) = resource_admission.as_ref()
                             .filter(|_| !https_get) {
                             let policy = installed.resource_policy.as_ref().unwrap();
+                            if policy.is_windows_read() {
+                                write_resource_reply(client, host, resource_reply,
+                                    &withheld(request_id, "invocation", &json!(["resource_windows_read_platform_unsupported"]))).await?;
+                                continue;
+                            }
                             let creating = policy.is_create_file();
                             if creating && !cfg!(target_os = "linux") {
                                 let reasons = json!(["resource_create_platform_unsupported"]);
@@ -1846,6 +1916,26 @@ where
                                     pinned_resource_ws = Some((pinned, target_path.to_path_buf()));
                                 }
                             }
+                        #[cfg(windows)]
+                        if let Some((ref mut admission, ref derived)) = resource_admission.as_mut() {
+                            let policy = installed.resource_policy.as_ref().expect("resource policy installed");
+                            if !policy.is_windows_read() {
+                                write_resource_reply(client, host, true,
+                                    &withheld(request_id, "invocation", &json!(["resource_executor_unsupported"]))).await?;
+                                continue;
+                            }
+                            let Some(super::resources::Resource::Path { .. }) = derived.resources.first().map(|r| &r.resource) else {
+                                write_resource_reply(client, host, true,
+                                    &withheld(request_id, "invocation", &json!(["resource_destination_invalid"]))).await?;
+                                continue;
+                            };
+                            // Sharing locks pin every ancestor and the leaf without
+                            // FILE_READ_DATA. No execution or mapping is performed;
+                            // ReadFile access is requested only after native Allow.
+                            let prepared = prepared_windows_read.as_ref().context("Windows metadata not pinned before extraction")?;
+                            admission.windows_read = Some(crate::native::resource::windows_read_binding_with_identity(
+                                policy, &args, prepared.identity()).map_err(anyhow::Error::msg)?);
+                        }
                         // A composed refusal must not reserve native capacity.
                         // Native trusted restrictions still gate every permitted call.
                         let mut call_fields = json!({
@@ -2000,14 +2090,29 @@ where
                             continue;
                         }
                         if resource_admission.is_some() {
-                            #[cfg(unix)]
+                            #[cfg(any(unix, windows))]
                             {
+                                #[cfg(unix)]
                                 let (pinned, target_path) = pinned_resource_ws
                                     .expect("pinned workspace initialized on unix");
+                                #[cfg(unix)]
                                 let read = without_resource_overlap(client, true, async {
                                     Ok(pinned.read_file(&target_path))
                                 })
                                 .await?;
+                                #[cfg(windows)]
+                                let read = {
+                                    let prepared = prepared_windows_read.take().expect("Windows read prepared before admission");
+                                    let policy = installed.resource_policy.as_ref().expect("Windows read policy installed");
+                                    let bound = resource_admission.as_ref().and_then(|(admission, _)| admission.windows_read.as_ref())
+                                        .context("Windows read authority missing")?;
+                                    let same = crate::native::resource::windows_read_binding_with_identity(policy, &args, prepared.identity())
+                                        .map_err(anyhow::Error::msg)? == *bound;
+                                    without_resource_overlap(client, true, async {
+                                        if !same { return Ok(Err(anyhow::anyhow!("Windows read authority changed"))); }
+                                        Ok(prepared.read_bounded(crate::native::resource::WINDOWS_READ_MAX_CONTENT).await)
+                                    }).await?
+                                };
                                 let content = match read {
                                     Ok(c) => c,
                                     Err(err) => {
@@ -2093,9 +2198,9 @@ where
                                 write_resource_reply(client, host, resource_reply, &raw_response).await?;
                                 continue;
                             }
-                            #[cfg(not(unix))]
+                            #[cfg(not(any(unix, windows)))]
                             {
-                                unreachable!("non-unix platforms are refused before reserving call");
+                                unreachable!("unsupported platforms are refused before reserving call");
                             }
                         }
                         Pending::Call {
@@ -2172,6 +2277,42 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
         let workspace = std::env::var_os("AGENTFW_WORKSPACE")
             .map(std::path::PathBuf::from)
             .unwrap_or(cwd);
+        #[cfg(windows)]
+        let windows_spawn_pins = {
+            let normal = |path: &std::path::Path| {
+                path.to_str()
+                    .map(|text| text.strip_prefix("\\\\?\\").unwrap_or(text).to_owned())
+            };
+            let mut pins = Vec::new();
+            for policy in config.native.registry.tools.iter().filter_map(|tool| {
+                tool.resource_policy
+                    .as_ref()
+                    .filter(|policy| policy.is_windows_read())
+            }) {
+                // Compare names before any ordinary path API can resolve a
+                // distinct environment-selected junction or mapped drive.
+                ensure!(
+                    normal(&workspace).is_some() && normal(&workspace) == normal(&policy.workspace),
+                    "MCP Windows read startup workspace mismatch"
+                );
+                let [super::resources::Resource::Path { canonical }] =
+                    policy.allowed_resources.as_slice()
+                else {
+                    bail!("MCP Windows read startup authority invalid");
+                };
+                let original = canonical.strip_prefix("\\\\?\\").unwrap_or(canonical);
+                pins.push(
+                    crate::windows_read::PreparedRead::prepare(
+                        &policy.workspace,
+                        &policy.cwd,
+                        original,
+                        canonical,
+                    )
+                    .map_err(|_| anyhow::anyhow!("MCP Windows read startup metadata refused"))?,
+                );
+            }
+            pins
+        };
         #[cfg(unix)]
         let mut client =
             BufReader::new(super::stdio::Pipe::stdin().context("unsupported MCP stdin")?);
@@ -2194,6 +2335,10 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
             .stderr(Stdio::inherit())
             .kill_on_drop(true)
             .spawn()?;
+        // The startup pins protect current_dir resolution only. Per-call
+        // metadata pins are acquired independently before resource extraction.
+        #[cfg(windows)]
+        drop(windows_spawn_pins);
         let mut child = process
             .stdin
             .take()
@@ -2210,10 +2355,16 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
                 .as_ref()
                 .is_some_and(|policy| policy.is_create_file() || policy.is_https_get())
         });
-        // Discovery-only create servers receive EOF on a completed session.
-        // Do not label a forced child kill as clean completion of this profile.
+        let windows_read_profile = config.native.registry.tools.iter().any(|tool| {
+            tool.resource_policy
+                .as_ref()
+                .is_some_and(|policy| policy.is_windows_read())
+        });
+        // Discovery-only servers receive EOF. Windows read fixtures must also
+        // finalize their independent no-execution ledger after a refused session.
+        // The bounded wait cannot turn a protocol failure into success.
         drop(child);
-        if create_profile && outcome.is_ok() {
+        if (create_profile && outcome.is_ok()) || windows_read_profile {
             match tokio::time::timeout(Duration::from_secs(2), process.wait()).await {
                 Ok(Ok(status)) if status.success() => {}
                 _ => {

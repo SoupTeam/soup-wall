@@ -1,0 +1,185 @@
+{
+  "binary_sha256": "0bbbdd251f6a83a2598b25c3014cc42845214348d02a1291c82fea1f0cb2768b",
+  "checks": {
+    "format": {
+      "evidence": "successful retained Dockerfile RUN and build log",
+      "status": "pass"
+    },
+    "python_scripts": {
+      "errors": 0,
+      "failures": 0,
+      "log": "python-scripts-60fd15a.log",
+      "log_sha256": "419a3955f353c908bbe159c889418ca9c4727445f06b17c84e403cc13d40c3ab",
+      "passed": 573,
+      "run": 599,
+      "skipped": 26,
+      "status": "pass"
+    },
+    "workspace_clippy": {
+      "log": "linux-clippy-60fd15a.log",
+      "status": "pass",
+      "warnings_denied": true
+    },
+    "workspace_tests": {
+      "failed": 0,
+      "ignored": 9,
+      "log": "linux-workspace-60fd15a.log",
+      "log_sha256": "355701a7c5c9daade8d3f5900d73395239983630816a7ef818206626c27fdae9",
+      "passed": 1137,
+      "suites": 54
+    }
+  },
+  "commands_record": "linux-command-records.json",
+  "earlier_observations": {
+    "benchmarks": {
+      "benchmark_tree_unchanged_through_final_source": true,
+      "errors": 0,
+      "failures": 0,
+      "log": "earlier/python-benchmarks-full.log",
+      "log_sha256": "586048e3c0111101304bcefaa54914e7758b8466ec931d4f428d1b30e51c6a0b",
+      "passed": 26,
+      "rerun_for_final_source": false,
+      "run": 44,
+      "skipped": 18,
+      "source_context": "4ac7b7bf4472c4bcf52abce31b08daf063d735ed",
+      "status": "pass"
+    },
+    "original_restricted_python_benchmarks": {
+      "errors": 10,
+      "failures": 2,
+      "log": "earlier/python-benchmarks.log",
+      "log_sha256": "5f2c3994baa04b2a6eff441991310a2d787558dc163dc0320acda78a6ea46f92",
+      "passed": 14,
+      "run": 44,
+      "skipped": 18,
+      "status": "fail"
+    },
+    "original_restricted_python_scripts": {
+      "errors": 29,
+      "failures": 1,
+      "log": "earlier/python-scripts.log",
+      "log_sha256": "aa6f3029f1b01c1606b3b408c6290e1c121f13a69b87c37627bc9f2ec2ca7d03",
+      "passed": 509,
+      "run": 565,
+      "skipped": 26,
+      "status": "fail"
+    },
+    "red_result_classification": "Original logs retained unchanged; execution-permission denials are present. Successful observations are separate."
+  },
+  "environment": {
+    "architecture": "aarch64",
+    "binary_build_source": "60fd15a722672819acb5ec61ad3d955ed59fbd10",
+    "binary_sha256": "0bbbdd251f6a83a2598b25c3014cc42845214348d02a1291c82fea1f0cb2768b",
+    "filesystem": "overlayfs",
+    "gid": 65532,
+    "kernel": "6.12.76-linuxkit",
+    "process_protection": [
+      "CapEff:\t0000000000000000",
+      "NoNewPrivs:\t1",
+      "Seccomp:\t2"
+    ],
+    "python": "3.11.2",
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+    "source": "60fd15a722672819acb5ec61ad3d955ed59fbd10",
+    "source_manifest_sha256": "ce33f2211ce49e9d4dfa6e606e7585d46fe9b0c90e531c65df9b3bc248d1dad8",
+    "uid": 65532
+  },
+  "exact_build_runtime_source": "60fd15a722672819acb5ec61ad3d955ed59fbd10",
+  "image_id": "sha256:3e5775a5d4ce4c786fd1d7cf20d5bfcbf2fdb95c60b2a1a74f49f19a0d32bb71",
+  "issue": "SOU-58",
+  "limitations": [
+    "No Windows acceptance claim is made by this Linux artifact.",
+    "Owned local fixtures and scripted MCP clients; no external provider or interactive host acceptance claim.",
+    "The nine ignored Rust tests and explicit Python skips are not counted as executed passes.",
+    "The earlier benchmark result was not rerun; its tested benchmark tree is unchanged from the recorded source.",
+    "Credential pattern scanning supplements the drivers' credential-retention guards; no raw Windows acceptance material is published here."
+  ],
+  "raw_archive": {
+    "all_members_reopened_and_sha256_verified": true,
+    "bytes": 237967,
+    "file": "MCP_WINDOWS_READ_2026-10-15.linux-raw.tar.gz",
+    "manifest": "MCP_WINDOWS_READ_2026-10-15.linux-raw-manifest.json",
+    "manifest_sha256": "efdf12572a93013b32765ab2c458ae761487d343e29880d4735e4b41806d70e7",
+    "members": 20,
+    "sha256": "8c2bd3739048ccaa8ecdf7fbf5607e0f18507ea9724399d0ff794e9df514e24b"
+  },
+  "runtime_regressions": {
+    "create": {
+      "driver": {
+        "path": "scripts/verify-sou54-create-file.py",
+        "sha256": "d76a6cda0066ed70db53f7ba56fb0f9cb42b1d18ea194bf8b40b5e09237dc2ad"
+      },
+      "fixture": {
+        "path": "scripts/fixtures/mcp_create_file_probe_server.py",
+        "sha256": "21892a85c04285328bc1cf25ec74d93f7a52b26710b20210c370bba69b7d4ace"
+      },
+      "report": "create-60fd15a.json",
+      "sha256": "f61b58c363091d8c78adbe736d4aa2d6735ace934df9be401fba073aa5ca8c2a",
+      "source_clean_and_binary_stable": true,
+      "summary": {
+        "cases_expected": 26,
+        "cases_run": 26,
+        "expected_useful_creates_run": 4,
+        "failed": 0,
+        "false_interruptions": 0,
+        "latency_ms": {
+          "max": 103.9225,
+          "p50": 0.644042,
+          "p95": 76.623167,
+          "samples": 95,
+          "scope": "scripted client send to correlated response; debug binary; classifier/native policy/local OS included"
+        },
+        "passed": 26,
+        "skips": 0
+      }
+    },
+    "https": {
+      "driver": {
+        "path": "scripts/verify-sou56-https-get.py",
+        "sha256": "fa25eba6a14f3446950694cfeb47a97fea78c955749c9f8f69c73d4768be47aa"
+      },
+      "fixture": {
+        "path": "scripts/fixtures/mcp_https_get_probe_server.py",
+        "sha256": "a56589cd862e24ba9442448e97091078c7810cd8e59a01c9591b736749d20e60"
+      },
+      "report": "https-60fd15a.json",
+      "sha256": "12e3af22fb03c6cf137bc36a6a273252c88e45906a3128b9ef26b85b1f552377",
+      "source_clean_and_binary_stable": true,
+      "summary": {
+        "cases_expected": 48,
+        "cases_run": 48,
+        "failed": 0,
+        "passed": 48,
+        "skips": 0
+      }
+    }
+  },
+  "sanitization": {
+    "excluded": [
+      "binaries",
+      "token files",
+      "TLS private keys",
+      "raw Windows acceptance and process transcripts"
+    ],
+    "matches": [],
+    "patterns": [
+      "private_key",
+      "authorization_credential",
+      "github_token",
+      "openai_key",
+      "aws_access_key",
+      "credential_assignment"
+    ],
+    "raw_observation_bytes_preserved": true
+  },
+  "schema_version": "sou58-linux-regression-evidence/2",
+  "scope": "Linux compatibility regression evidence only",
+  "source_verification": {
+    "git_blob_hashes_all_match": true,
+    "image_source_hashes_all_match": true,
+    "raw_record": "linux-exact-source-verification.json",
+    "tracked_files": 817
+  },
+  "status": "exact_source_linux_regressions_passed",
+  "windows_acceptance_claimed_by_this_artifact": false
+}
