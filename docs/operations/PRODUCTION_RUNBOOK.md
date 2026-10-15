@@ -156,6 +156,12 @@ data; keep the `/metrics` listener on the internal monitoring network.
 
 ## PostgreSQL backup and restore drill
 
+For current-state Console recovery, follow [encrypted Console recovery](CONSOLE_RECOVERY.md),
+which binds schema/inventory, refuses populated targets, and verifies managed Agent
+behavior after restoration. The original dump-only drill below is historical and
+does not establish current-state recovery acceptance. Do not use `--clean` against
+a populated or unverified target, and do not use startup as a schema migration.
+
 Run at least monthly and before schema or billing changes. Use an encrypted
 provider snapshot or an encrypted `pg_dump` stored under the approved retention
 policy:

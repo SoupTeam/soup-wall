@@ -25,6 +25,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Upgrading](UPGRADING.md) | Existing deployment compatibility and migration guidance |
 | [Production runbook](operations/PRODUCTION_RUNBOOK.md) | Readiness, operations, alerts and recovery |
 | [TLS rotation and recovery](operations/TLS_ROTATION.md) | Disposable Caddy certificate rotation, verifying clients and recovery |
+| [Encrypted Console recovery](operations/CONSOLE_RECOVERY.md) | Complete current-state inventory, isolated encrypted restore and live managed Agent recovery |
 | [Staging drills](operations/STAGING_DRILLS.md) | Explicit dependency and restore acceptance procedures |
 | [Guarded execution](operations/SANDBOX.md) | Supported process, file and retrieval boundaries |
 | [Windows Agent acceptance](operations/WINDOWS_AGENT_ACCEPTANCE.md) | Native installation, ACLs, hook posture and loopback configuration |

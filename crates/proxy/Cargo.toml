@@ -71,3 +71,7 @@ test = true
 [[example]]
 name = "postgres-restore-fixture"
 test = true
+
+[[example]]
+name = "console-recovery-fixture"
+test = true
