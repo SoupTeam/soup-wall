@@ -11,6 +11,9 @@ Use absolute paths to an existing Agent executable, its reviewed `.agentfw`
 directory and a JSON file containing an `mcpServers` object. The Agent must be
 running in enforcing mode with its pinned native registry. The selected server
 must name an absolute executable and an array of string arguments.
+The installed entry may contain at most 256 arguments. The collector adds 11,
+so an original entry may contain at most 245. The complete proposed config
+and recovery record must each fit within 1 MiB before any transaction is saved.
 
 The config must be a regular, single-link file owned by the operator, with mode
 `0600`. Its directory must be owned by the operator and not writable by other
@@ -66,6 +69,9 @@ Only the digest of its admitted result is printed.
 Unknown and unavailable return nonzero. A successful status query alone never
 proves execution protection. Verification describes that invocation only;
 future calls still pass through native admission.
+Inspect checks the config and ownership snapshot after preflight and again
+after a probe. A changed snapshot returns `unknown`, without a probe digest;
+printed config digests describe the inspected snapshot, not a later file.
 
 ## Disconnect and recovery
 
@@ -95,8 +101,10 @@ binary, registry, native config or selected entry causes refusal. Resolve that
 change explicitly; do not copy an old whole-file backup over the current file.
 Failed writes retain recovery metadata when necessary.
 
-The lock coordinates these commands. The writer also rechecks the config inode,
-bytes and directory identity before replacement to detect outside edits.
+The lock coordinates these commands. Every successful operation checks the
+config inode, bytes, directory identity and ownership record. Repeated connect
+also checks these after preflight, even when no config replacement is needed.
+The writer rechecks the config immediately before replacement.
 Editors that ignore advisory locks must not write the selected file during
 the final replacement; ordinary filesystem rename has no compare-and-swap
 operation for arbitrary non-cooperating writers.
@@ -124,6 +132,9 @@ the absence of a forbidden send and the refusal after daemon loss. The final
 ledger is reconciled after both client sessions. The runner also checks
 preview, repeated operations, conflict preservation, pending recovery,
 malformed inputs, original arguments, unrelated entries and offline disconnect.
+It pauses real CLI processes during preflight to exercise concurrent selected
+edits, disconnect and ownership changes, and checks both sides of the argument
+limit without invoking the boundary-test server.
 
 Reports retain timings, per-operation identities, client outcomes, source
 hashes and cleanup. Native tokens remain in the temporary Linux profile.

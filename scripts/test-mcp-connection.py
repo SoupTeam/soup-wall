@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -93,12 +94,14 @@ def inside(options):
             stack.responses.write_text("")
             env_ledger.write_text("")
 
-            def command(operation, extra=(), expected=0):
-                arguments = [str(binary), "mcp-connection", operation, "--path", str(config),
+            def arguments(operation, extra=(), path=config):
+                return [str(binary), "mcp-connection", operation, "--path", str(path),
                              "--server", "demo", "--agent", str(binary), "--home", str(home), *extra]
+
+            def command(operation, extra=(), expected=0, path=config):
                 env = dict(stack.env, ANTHROPIC_API_KEY="must-not-reach-child", GITHUB_TOKEN="must-not-reach-child")
                 started = time.monotonic()
-                result = subprocess.run(arguments, capture_output=True, text=True, env=env, timeout=20)
+                result = subprocess.run(arguments(operation, extra, path), capture_output=True, text=True, env=env, timeout=20)
                 check(f"{operation}_exit_{len(checks)}", (result.returncode == 0) == (expected == 0))
                 check(f"{operation}_redacted_{len(checks)}",
                       all(s not in result.stdout + result.stderr for s in ["unrelated-fixture-secret", "must-not-reach-child"]))
@@ -106,6 +109,46 @@ def inside(options):
                 operations.append({"operation": operation, "exit_code": result.returncode,
                                    "elapsed_ms": round((time.monotonic() - started) * 1000, 2), "report": response})
                 return response
+
+            def race(operation, change):
+                snapshot = sha(config)
+                started = time.monotonic()
+                process = subprocess.Popen(arguments(operation), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                           text=True, env=stack.env)
+                paused = False
+                try:
+                    deadline = time.monotonic() + 8
+                    while process.poll() is None and time.monotonic() < deadline:
+                        for fd in Path(f"/proc/{process.pid}/fd").glob("*"):
+                            try:
+                                if os.readlink(fd) == str(binary):
+                                    os.kill(process.pid, signal.SIGSTOP)
+                                    paused = True
+                                    break
+                            except FileNotFoundError:
+                                pass
+                        if paused:
+                            break
+                        time.sleep(0.001)
+                    check(f"{operation}_preflight_paused_{len(checks)}", paused)
+                    change()
+                    os.kill(process.pid, signal.SIGCONT)
+                    paused = False
+                    stdout, stderr = process.communicate(timeout=25)
+                    check(f"{operation}_concurrent_change_refused_{len(checks)}", process.returncode != 0)
+                    response = json.loads(stdout) if stdout.strip().startswith("{") else {}
+                    check(f"{operation}_no_stale_success_{len(checks)}", response.get("status") not in {"configured", "verified_for_this_probe"})
+                    if operation == "inspect":
+                        check(f"inspect_snapshot_digest_{len(checks)}", response.get("status") == "unknown" and response.get("config_sha256") == snapshot and response.get("probe_result_sha256") is None)
+                    check(f"{operation}_race_redacted_{len(checks)}", "unrelated-fixture-secret" not in stdout + stderr)
+                    operations.append({"operation": operation, "scenario": "concurrent_change", "exit_code": process.returncode,
+                                       "elapsed_ms": round((time.monotonic() - started) * 1000, 2), "report": response})
+                finally:
+                    if paused:
+                        os.kill(process.pid, signal.SIGCONT)
+                    if process.poll() is None:
+                        process.kill()
+                    process.wait(timeout=10)
 
             before = config.read_bytes()
             command("preview")
@@ -119,6 +162,35 @@ def inside(options):
             check("original_server_argv_preserved", connected["mcpServers"]["demo"]["args"][10:] == [original["command"], *original["args"]])
             inspected = command("inspect")
             check("configured_is_not_verified", inspected["status"] == "configured")
+            state_path = next(config.parent.glob(".soup-wall-*.json"))
+            state_before = state_path.read_bytes()
+            race("connect", lambda: write(config, initial))
+            check("repeated_connect_preserves_concurrent_edit", json.loads(config.read_text()) == initial)
+            check("repeated_connect_preserves_ownership", state_path.read_bytes() == state_before)
+            write(config, connected)
+            race("inspect", lambda: command("disconnect"))
+            check("inspect_disconnect_not_mixed", json.loads(config.read_text()) == initial)
+            command("connect")
+            state = json.loads(state_path.read_text())
+            race("inspect", lambda: write(state_path, dict(state, phase="pending_disconnect")))
+            write(state_path, state)
+            limit_config = config.parent / "argument limit.json"
+            limited = {"mcpServers": {"demo": {"command": str(Path("/usr/bin/env").resolve()), "args": ["x"] * 246}}}
+            write(limit_config, limited)
+            limit_before = limit_config.read_bytes()
+            states_before = sorted(config.parent.glob(".soup-wall-*.json"))
+            command("preview", expected=1, path=limit_config)
+            command("connect", expected=1, path=limit_config)
+            check("argument_overflow_no_mutation", limit_config.read_bytes() == limit_before and sorted(config.parent.glob(".soup-wall-*.json")) == states_before)
+            limited["mcpServers"]["demo"]["args"].pop()
+            write(limit_config, limited)
+            command("preview", path=limit_config)
+            command("connect", path=limit_config)
+            check("wrapped_argument_boundary_accepted", len(json.loads(limit_config.read_text())["mcpServers"]["demo"]["args"]) == 256)
+            command("inspect", path=limit_config)
+            command("disconnect", path=limit_config)
+            check("argument_boundary_restored", json.loads(limit_config.read_text()) == limited)
+            limit_config.unlink()
             result = command("inspect", ["--probe-tool", "read_document", "--probe-args", '{"name":"inventory"}'])
             check("controlled_probe_verified", result["status"] == "verified_for_this_probe" and len(result["probe_result_sha256"]) == 64)
             check("probe_effect_once", len(DEMO.lines(stack.ledger)) == 1)
@@ -133,7 +205,6 @@ def inside(options):
             command("disconnect", expected=1)
             check("user_conflict_preserved", json.loads(config.read_text()) == edited)
             write(config, connected)
-            state_path = next(config.parent.glob(".soup-wall-*.json"))
             state = json.loads(state_path.read_text())
             state["phase"] = "pending_connect"
             write(state_path, state)

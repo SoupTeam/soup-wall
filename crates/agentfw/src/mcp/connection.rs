@@ -234,39 +234,26 @@ mod linux {
                 .context("mcpServers must be an object")?;
             ensure!(servers.len() <= 256, "too many MCP servers");
             let entry = servers.get(name).context("selected server not found")?;
-            let map = entry.as_object().context("server must be an object")?;
-            ensure!(
-                map.keys()
-                    .all(|k| ["command", "args", "type", "env"].contains(&k.as_str())),
-                "unsupported selected server field"
-            );
-            ensure!(
-                map.get("type").is_none_or(|v| v == "stdio"),
-                "only stdio is supported"
-            );
-            ensure!(map.get("env").is_none_or(|v| v.as_object().is_some_and(|m| m.is_empty())), "selected server environment must be empty; credentials cannot enter child environments");
-            let command = map
-                .get("command")
-                .and_then(Value::as_str)
-                .context("command must be a string")?;
-            ensure!(
-                !command.is_empty()
-                    && command.len() <= 4096
-                    && !command.contains('\0')
-                    && Path::new(command).is_absolute(),
-                "command must be a bounded absolute executable path"
-            );
-            if let Some(args) = map.get("args") {
-                let args = args.as_array().context("args must be an array")?;
-                ensure!(
-                    args.len() <= 256
-                        && args.iter().all(|a| a
-                            .as_str()
-                            .is_some_and(|s| s.len() <= 16384 && !s.contains('\0'))),
-                    "invalid or excessive arguments"
-                );
-            }
+            validate_entry(entry)?;
             Ok(entry.clone())
+        }
+
+        fn replacement(&self, name: &str, entry: &Value) -> Result<Vec<u8>> {
+            validate_entry(entry)?;
+            let mut next = self.value.clone();
+            next["mcpServers"][name] = entry.clone();
+            let bytes = serde_json::to_vec_pretty(&next)?;
+            ensure!(bytes.len() <= LIMIT, "updated config exceeds 1 MiB");
+            Ok(bytes)
+        }
+
+        fn snapshot_unchanged(&self, name: &str, owner: &Option<Owner>) -> Result<()> {
+            self.unchanged()?;
+            ensure!(
+                self.state(name)? == *owner,
+                "ownership changed during operation"
+            );
+            Ok(())
         }
 
         fn state_name(&self, name: &str) -> String {
@@ -299,11 +286,23 @@ mod linux {
 
         fn replace(&mut self, name: &str, entry: &Value) -> Result<()> {
             self.unchanged()?;
-            let mut next = self.value.clone();
-            next["mcpServers"][name] = entry.clone();
-            let bytes = serde_json::to_vec_pretty(&next)?;
-            ensure!(bytes.len() <= LIMIT, "updated config exceeds 1 MiB");
+            let bytes = self.replacement(name, entry)?;
             self.atomic(self.path.file_name().context("missing filename")?, &bytes)?;
+            let current = Self::read(&self.path)?;
+            ensure!(current.bytes == bytes, "config changed after replacement");
+            *self = current;
+            Ok(())
+        }
+
+        fn validate_transaction(&self, owner: &Owner) -> Result<()> {
+            self.replacement(&owner.server, &owner.original)?;
+            self.replacement(&owner.server, &owner.wrapped)?;
+            let mut longest = owner.clone();
+            longest.phase = "pending_disconnect".into();
+            ensure!(
+                serde_json::to_vec_pretty(&longest)?.len() <= LIMIT,
+                "ownership metadata exceeds 1 MiB"
+            );
             Ok(())
         }
 
@@ -379,6 +378,7 @@ mod linux {
         }
 
         fn save(&self, owner: &Owner) -> Result<()> {
+            self.unchanged()?;
             let bytes = serde_json::to_vec_pretty(owner)?;
             ensure!(bytes.len() <= LIMIT, "ownership metadata exceeds 1 MiB");
             self.atomic(self.state_name(&owner.server).as_ref(), &bytes)
@@ -399,7 +399,43 @@ mod linux {
         }
     }
 
-    #[derive(Serialize, Deserialize)]
+    fn validate_entry(entry: &Value) -> Result<()> {
+        let map = entry.as_object().context("server must be an object")?;
+        ensure!(
+            map.keys()
+                .all(|k| ["command", "args", "type", "env"].contains(&k.as_str())),
+            "unsupported selected server field"
+        );
+        ensure!(
+            map.get("type").is_none_or(|v| v == "stdio"),
+            "only stdio is supported"
+        );
+        ensure!(map.get("env").is_none_or(|v| v.as_object().is_some_and(|m| m.is_empty())), "selected server environment must be empty; credentials cannot enter child environments");
+        let command = map
+            .get("command")
+            .and_then(Value::as_str)
+            .context("command must be a string")?;
+        ensure!(
+            !command.is_empty()
+                && command.len() <= 4096
+                && !command.contains('\0')
+                && Path::new(command).is_absolute(),
+            "command must be a bounded absolute executable path"
+        );
+        if let Some(args) = map.get("args") {
+            let args = args.as_array().context("args must be an array")?;
+            ensure!(
+                args.len() <= 256
+                    && args.iter().all(|a| a
+                        .as_str()
+                        .is_some_and(|s| s.len() <= 16384 && !s.contains('\0'))),
+                "invalid or excessive arguments"
+            );
+        }
+        Ok(())
+    }
+
+    #[derive(Clone, PartialEq, Serialize, Deserialize)]
     #[serde(deny_unknown_fields)]
     struct Owner {
         version: u8,
@@ -516,6 +552,7 @@ mod linux {
         ];
         args.extend(entry["args"].as_array().into_iter().flatten().cloned());
         result["args"] = Value::Array(args);
+        validate_entry(&result)?;
         Ok(result)
     }
 
@@ -604,7 +641,7 @@ mod linux {
             detail: "connection identity is unknown",
         };
         if operation == "disconnect" {
-            let Some(mut state) = owner else {
+            let Some(mut state) = owner.clone() else {
                 ensure!(
                     !entry["args"]
                         .as_array()
@@ -613,8 +650,12 @@ mod linux {
                 );
                 report.status = "disconnected";
                 report.detail = "no owned change to restore";
+                config.snapshot_unchanged(&o.server, &owner)?;
+                report.elapsed_ms = start.elapsed().as_millis();
                 return Ok(report);
             };
+            config.snapshot_unchanged(&o.server, &owner)?;
+            config.validate_transaction(&state)?;
             if hash(&entry) != state.original_sha256 {
                 ensure!(
                     hash(&entry) == state.wrapped_sha256,
@@ -626,6 +667,7 @@ mod linux {
             }
             state.phase = "disconnected".into();
             config.save(&state)?;
+            owner = Some(state);
             report.status = "disconnected";
             report.detail = "original entry restored; unrelated settings preserved";
         } else if operation == "preview" {
@@ -634,13 +676,22 @@ mod linux {
                     hash(&entry) == state.wrapped_sha256 || hash(&entry) == state.original_sha256,
                     "selected entry changed; conflict preserved"
                 );
+                config.validate_transaction(state)?;
             } else {
-                wrapped(&entry, o, &id)?;
+                let next = wrapped(&entry, o, &id)?;
+                config.replacement(&o.server, &next)?;
             }
             report.status = "preview";
             report.detail = "selected stdio command will use the native collector; original arguments retained; child environment cleared";
         } else {
             let native = preflight(o).await;
+            let snapshot = config.snapshot_unchanged(&o.server, &owner);
+            if operation == "inspect" && snapshot.is_err() {
+                report.detail = "configuration or ownership changed during inspection";
+                report.elapsed_ms = start.elapsed().as_millis();
+                return Ok(report);
+            }
+            snapshot?;
             if operation == "inspect" && native.is_err() {
                 report.status = "unavailable";
                 report.detail = "Agent preflight unavailable or identity mismatch";
@@ -665,6 +716,7 @@ mod linux {
                         );
                     } else {
                         let next = wrapped(&entry, o, &id)?;
+                        config.snapshot_unchanged(&o.server, &owner)?;
                         owner = Some(Owner {
                             version: 1,
                             path: o.path.clone(),
@@ -682,6 +734,7 @@ mod linux {
                         });
                     }
                     let state = owner.as_mut().unwrap();
+                    config.validate_transaction(state)?;
                     state.phase = "pending_connect".into();
                     config.save(state)?;
                     if hash(&entry) != state.wrapped_sha256 {
@@ -721,9 +774,16 @@ mod linux {
                 }
             }
         }
-        let current = ConfigFile::read(&o.path)?;
-        report.config_sha256 = sha(&current.bytes);
-        report.selected_sha256 = hash(&current.entry(&o.server)?);
+        let snapshot = config.snapshot_unchanged(&o.server, &owner);
+        if operation == "inspect" && snapshot.is_err() {
+            report.status = "unknown";
+            report.probe_result_sha256 = None;
+            report.detail = "configuration or ownership changed during inspection";
+        } else {
+            snapshot?;
+        }
+        report.config_sha256 = sha(&config.bytes);
+        report.selected_sha256 = hash(&config.entry(&o.server)?);
         report.elapsed_ms = start.elapsed().as_millis();
         Ok(report)
     }
@@ -739,6 +799,100 @@ mod linux {
             std::fs::write(&path, br#"{"mcpServers":{"local":{"command":"/usr/bin/python3.11","args":["-u","space argument"]},"other":{"command":"untouched","env":{"TOKEN":"unrelated-secret"}}},"settings":{"theme":"light"}}"#).unwrap();
             std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
             (dir, path)
+        }
+
+        fn ownership(config: &ConfigFile) -> Owner {
+            let entry = config.entry("local").unwrap();
+            Owner {
+                version: 1,
+                path: config.path.clone(),
+                server: "local".into(),
+                phase: "connected".into(),
+                original_sha256: hash(&entry),
+                wrapped_sha256: hash(&entry),
+                original: entry.clone(),
+                wrapped: entry,
+                agent: PathBuf::from("/usr/bin/env"),
+                home: PathBuf::from("/tmp/.agentfw"),
+                agent_sha256: "a".repeat(64),
+                registry_sha256: "b".repeat(64),
+                native_config_sha256: "c".repeat(64),
+            }
+        }
+
+        #[test]
+        fn wrapped_argument_limit_is_checked_before_writing() {
+            let (_dir, path) = fixture();
+            let config = ConfigFile::read(&path).unwrap();
+            let executable = std::fs::canonicalize("/usr/bin/env").unwrap();
+            let options = Options {
+                path: path.clone(),
+                server: "local".into(),
+                home: PathBuf::from("/tmp/.agentfw"),
+                agent: executable.clone(),
+                probe_tool: None,
+                probe_args: None,
+            };
+            let entry = json!({"command": executable, "args": vec!["x"; 245]});
+            let next = wrapped(&entry, &options, "test").unwrap();
+            assert_eq!(next["args"].as_array().unwrap().len(), 256);
+            assert!(config.replacement("local", &next).is_ok());
+            let entry = json!({"command": executable, "args": vec!["x"; 246]});
+            assert!(validate_entry(&entry).is_ok());
+            assert!(wrapped(&entry, &options, "test").is_err());
+            assert_eq!(std::fs::read(&path).unwrap(), config.bytes);
+            assert!(config.state("local").unwrap().is_none());
+        }
+
+        #[test]
+        fn oversized_transaction_does_not_create_ownership() {
+            let (_dir, path) = fixture();
+            let config = ConfigFile::read(&path).unwrap();
+            let mut owner = ownership(&config);
+            owner.wrapped["args"] = json!(vec!["x".repeat(16000); 64]);
+            owner.original = owner.wrapped.clone();
+            assert!(config.replacement("local", &owner.wrapped).is_ok());
+            assert!(config.validate_transaction(&owner).is_err());
+            assert!(config.state("local").unwrap().is_none());
+            assert_eq!(std::fs::read(&path).unwrap(), config.bytes);
+        }
+
+        #[test]
+        fn oversized_proposed_config_is_rejected_before_writing() {
+            let (_dir, path) = fixture();
+            let mut config = ConfigFile::read(&path).unwrap();
+            config.value["padding"] = json!("x".repeat(LIMIT - 1024));
+            let entry = json!({"command":"/usr/bin/env", "args":["x".repeat(2048)]});
+            assert!(config.replacement("local", &entry).is_err());
+            assert!(config.state("local").unwrap().is_none());
+            assert_eq!(std::fs::read(&path).unwrap(), config.bytes);
+        }
+
+        #[test]
+        fn read_only_snapshot_detects_config_and_ownership_changes() {
+            let (_dir, path) = fixture();
+            let config = ConfigFile::read(&path).unwrap();
+            let mut owner = ownership(&config);
+            config.save(&owner).unwrap();
+            let expected = Some(owner.clone());
+            config.snapshot_unchanged("local", &expected).unwrap();
+            owner.phase = "pending_disconnect".into();
+            config.save(&owner).unwrap();
+            assert!(config.snapshot_unchanged("local", &expected).is_err());
+            config.snapshot_unchanged("local", &Some(owner)).unwrap();
+            std::fs::write(&path, b"{}").unwrap();
+            assert!(config.snapshot_unchanged("local", &expected).is_err());
+            assert!(config.save(expected.as_ref().unwrap()).is_err());
+        }
+
+        #[test]
+        fn replacement_refreshes_snapshot_for_following_state_write() {
+            let (_dir, path) = fixture();
+            let mut config = ConfigFile::read(&path).unwrap();
+            let owner = ownership(&config);
+            config.replace("local", &owner.wrapped).unwrap();
+            config.save(&owner).unwrap();
+            config.snapshot_unchanged("local", &Some(owner)).unwrap();
         }
 
         #[test]
