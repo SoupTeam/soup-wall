@@ -167,6 +167,7 @@ def https_edge(stack, root, upstream_port):
     }))
     container = network + "-edge"
     command("docker", "run", "-d", "--name", container, "--network", network,
+            "--user", f"{os.getuid()}:{os.getgid()}",
             "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
             "--mount", f"type=bind,source={tls.resolve()},target=/tls,readonly",
             "--mount", f"type=bind,source={(ROOT / 'scripts/fixtures/managed_policy_tls_edge.py').resolve()},target=/edge.py,readonly",
