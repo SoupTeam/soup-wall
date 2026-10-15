@@ -218,3 +218,8 @@ subject to the collector's 2,048-byte limit. The bounded drain must reach EOF an
 join before acceptance. No production fault hook or global file-descriptor count
 is involved. The discovery child's ledger remains empty and its bounded discovery
 records remain below the file-size limit.
+
+The [complete follow-up proof](evidence/MCP_CREATE_FILE_2026-10-15.followup.md)
+records all 26 stdio and nine actual race/OS-failure cases, including the real
+2,048-byte partial stage, unchanged file witnesses and useful continuation.
+It also retains the initial Linux CI failure and the repeated exact-source repair.
