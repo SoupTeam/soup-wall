@@ -1,0 +1,85 @@
+name: Managed Agent group rollout
+
+on:
+  pull_request:
+    paths:
+      - 'crates/proxy/**'
+      - 'crates/agent/**'
+      - 'crates/agentfw/**'
+      - 'scripts/managed-group-rollout-demo.py'
+      - 'scripts/console_recovery.py'
+      - 'scripts/fixtures/console_recovery_inventory_v1.json'
+      - '.github/workflows/managed-group-rollout.yml'
+      - 'Cargo.lock'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: managed-groups-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  group-rollout:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres@sha256:ec9f656f17c8b4dfebf49e58cf5c46d493d4846d4ea6d8b85d0637f68ee33bfc
+        env:
+          POSTGRES_PASSWORD: disposable-admin
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: ${{ job.services.postgres.ports[5432] }}
+      PGUSER: postgres
+      PGPASSWORD: disposable-admin
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install native recovery tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y age postgresql-client-16
+          echo /usr/lib/postgresql/16/bin >> "$GITHUB_PATH"
+      - name: Create only owned disposable databases
+        run: |
+          psql -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE rollout_owner LOGIN PASSWORD 'disposable-owner' NOSUPERUSER;
+          GRANT pg_monitor TO rollout_owner;
+          CREATE DATABASE group_controls OWNER rollout_owner;
+          CREATE DATABASE group_source OWNER rollout_owner;
+          CREATE DATABASE group_restored OWNER rollout_owner;
+          SQL
+      - name: Build and run SQLite regressions
+        run: |
+          cargo build --locked -p llm-firewall -p agentfw
+          cargo test --locked -p llm-firewall --test managed_group_rollout --test managed_group_atomic
+      - name: Run the same fault and concurrency controls on PostgreSQL
+        env:
+          SOUP_GROUP_TEST_POSTGRES_URL: postgresql://rollout_owner:disposable-owner@127.0.0.1:${{ job.services.postgres.ports[5432] }}/group_controls?sslmode=disable
+        run: cargo test --locked -p llm-firewall --test managed_group_atomic postgres_atomic_restart_and_concurrency -- --ignored
+      - name: Four real Agents with encrypted SQLite recovery
+        run: python3 scripts/managed-group-rollout-demo.py --no-build --output target/group-sqlite.json
+      - name: Four real Agents with encrypted PostgreSQL recovery
+        env:
+          SOUP_GROUP_DEMO_DATABASE_URL: postgresql://rollout_owner:disposable-owner@127.0.0.1:${{ job.services.postgres.ports[5432] }}/group_source?sslmode=disable
+          SOUP_GROUP_DEMO_RESTORED_URL: postgresql://rollout_owner:disposable-owner@127.0.0.1:${{ job.services.postgres.ports[5432] }}/group_restored?sslmode=disable
+        run: python3 scripts/managed-group-rollout-demo.py --no-build --backend postgres --output target/group-postgres.json
+      - name: Retain sanitized outcomes
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: managed-group-rollout
+          path: target/group-*.json
+          if-no-files-found: warn
+          retention-days: 30

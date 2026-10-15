@@ -244,7 +244,7 @@ class RecoveryTests(unittest.TestCase):
         mutations = {
             'missing': lambda members: members.pop('state.json'),
             'dump-integrity': lambda members: members.__setitem__('database.dump', b'bad dump'),
-            'schema': lambda members: change_manifest(members, 'schema_version', 27),
+            'schema': lambda members: change_manifest(members, 'schema_version', recovery.inventory()['postgres_schema_version'] + 1),
             'inventory': lambda members: members.__setitem__('inventory.json', b'{}'),
             'path': lambda members: members.__setitem__('../outside', b'not extracted'),
         }
@@ -310,6 +310,16 @@ class RecoveryTests(unittest.TestCase):
         with self.assertRaises(recovery.RecoveryError):
             recovery.inspect_sqlite(self.source)
 
+    def test_group_snapshot_column_upgrade_preserves_recovery_inventory(self):
+        legacy = native_group_schema().replace("initial_sequences_json TEXT NOT NULL DEFAULT '{}',", '')
+        with local_database(self.source) as connection:
+            connection.executescript(legacy)
+            connection.execute("INSERT INTO managed_agent_groups VALUES ('tenant_a','legacy','Legacy',100)")
+            connection.execute("ALTER TABLE managed_group_rollouts ADD COLUMN initial_sequences_json TEXT NOT NULL DEFAULT '{}'")
+        state = recovery.inspect_sqlite(self.source)
+        self.assertEqual(len(state['tables']), 47)
+        self.assertEqual(state['tables']['managed_agent_groups']['rows'][0][1], ['text', 'legacy'])
+
     def test_populated_group_recovery_control(self):
         with local_database(self.source) as connection:
             connection.executescript(native_group_schema())
@@ -317,7 +327,7 @@ class RecoveryTests(unittest.TestCase):
             connection.execute("INSERT INTO managed_agent_groups VALUES ('tenant_a','grp_1','Group 1',100)")
             connection.execute("INSERT INTO managed_agent_group_members VALUES ('tenant_a','grp_1','agent_1',1,100)")
             connection.execute("INSERT INTO managed_group_revisions VALUES ('tenant_a','grp_1','v1','default: allow\\n','sha_v1',100)")
-            connection.execute("INSERT INTO managed_group_rollouts VALUES ('tenant_a','grp_1','r_1','v1','sha_v1',NULL,'completed','[]','[]','{}','{}',NULL,100,100)")
+            connection.execute("INSERT INTO managed_group_rollouts (tenant_id,group_id,rollout_id,revision,policy_sha256,issuer_key_id,phase,pilot_agents_json,standard_agents_json,active_deployments_json,previous_revisions_json,failure_reason,created_at_unix,updated_at_unix) VALUES ('tenant_a','grp_1','r_1','v1','sha_v1',NULL,'completed','[]','[]','{}','{}',NULL,100,100)")
         state = recovery.inspect_sqlite(self.source)
         self.assertEqual(len(state['tables']), 47)
         self.assertEqual(state['tables']['managed_agent_groups']['rows'],
@@ -330,7 +340,7 @@ class RecoveryTests(unittest.TestCase):
     def test_postgres_alias_and_populated_guards_precede_restore_executor(self):
         # Genuine age archive decoding plus the actual production guard ordering.
         recipient = self.age_identity()
-        state = {'backend': 'postgres', 'schema_version':26,
+        state = {'backend': 'postgres', 'schema_version':27,
                  'schema':recovery.inventory().get('postgres_schema'),
                  'tables': {name: [] for name in recovery.inventory()['postgres_tables']},
                  'sequences': {name: {'last_value':1,'is_called':False}

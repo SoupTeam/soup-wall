@@ -27,7 +27,8 @@ mod managed_async;
 mod managed_policy;
 pub use managed_policy::{
     AppliedReport, ManagedAgentGroup, ManagedDeployment, ManagedGroupMember, ManagedGroupRevision,
-    ManagedGroupRollout, ManagedIssuer, ManagedRevision, RolloutPhase, SignedManagedBundle,
+    ManagedGroupRollout, ManagedIssuer, ManagedRevision, ManagedRolloutAgentStatus, RolloutPhase,
+    SignedManagedBundle,
 };
 mod postgres;
 pub use agent_enrollment::{EnrolledAgent, IssuedAgentCredential};
@@ -1941,6 +1942,7 @@ impl TenantStore {
             )
             .context("failed to backfill SQLite tenant workspaces")?;
 
+        managed_policy::migrate_existing_groups(&connection)?;
         Ok(Self {
             connection: Some(Arc::new(Mutex::new(connection))),
             postgres: None,

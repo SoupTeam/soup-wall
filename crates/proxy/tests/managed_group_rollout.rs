@@ -19,6 +19,298 @@ const OWNER_HEADER: &str = "Bearer admin-test-token";
 const TEST_KEY_ID: &str = "group-rollout-key";
 const TEST_SEED_HEX: &str = "0707070707070707070707070707070707070707070707070707070707070707";
 
+#[tokio::test]
+async fn test_group_mutations_require_owner_and_agent_credentials_cannot_authorize_them() {
+    use llm_firewall::tenant_store::AdminRole;
+    let state = test_state();
+    let store = state.tenant_store.as_ref().unwrap();
+    let tenant = store.create_tenant("Group authorization").unwrap();
+    store
+        .create_managed_group(&tenant.id, "fleet", "Fleet")
+        .unwrap();
+    let root = format!("/admin/v1/tenants/{}/groups", tenant.id);
+    for role in [AdminRole::Viewer, AdminRole::Operator] {
+        let issued = store
+            .create_admin(&format!("Group {role:?}"), role)
+            .unwrap();
+        let credential = format!("Bearer {}", issued.token);
+        for (method, suffix) in [
+            ("POST", ""),
+            ("DELETE", "/fleet"),
+            ("POST", "/fleet/members"),
+            ("DELETE", "/fleet/members/pilot"),
+            ("POST", "/fleet/revisions"),
+            ("POST", "/fleet/revisions/candidate/approve"),
+            ("POST", "/fleet/rollout"),
+            ("POST", "/fleet/rollout/advance"),
+            ("POST", "/fleet/rollout/rollback"),
+            ("POST", "/fleet/rollout/pause"),
+            ("POST", "/fleet/rollout/resume"),
+        ] {
+            let response = app(state.clone())
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri(format!("{root}{suffix}"))
+                        .header("content-type", "application/json")
+                        .header("x-llm-firewall-admin-token", &credential)
+                        .body(axum::body::Body::from("{}"))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                response.status(),
+                StatusCode::FORBIDDEN,
+                "{method} {suffix} for {role:?}"
+            );
+        }
+        let response = app(state.clone())
+            .oneshot(
+                Request::get(format!("{root}/fleet"))
+                    .header("x-llm-firewall-admin-token", &credential)
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+    let agent = store.enroll_managed_agent(&tenant.id, "pilot").unwrap();
+    let response = app(state)
+        .oneshot(
+            Request::post(root)
+                .header("content-type", "application/json")
+                .header(
+                    "x-llm-firewall-admin-token",
+                    format!("Bearer {}", agent.token),
+                )
+                .body(axum::body::Body::from(
+                    r#"{"group_id":"forbidden","name":"Forbidden"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_group_deletion_preserves_paused_and_pending_rollback_plans() {
+    use llm_firewall::tenant_store::{AppliedReport, ManagedIssuer, RolloutPhase};
+
+    let state = test_state();
+    let store = state.tenant_store.as_ref().unwrap();
+    let tenant = store.create_tenant("Deletion guard").unwrap();
+    let issuer = ManagedIssuer::from_environment().unwrap();
+    store.enroll_managed_agent(&tenant.id, "pilot").unwrap();
+    store
+        .create_managed_group(&tenant.id, "group", "Group")
+        .unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "group", "pilot", true)
+        .unwrap();
+    store
+        .create_managed_revision(&tenant.id, "pilot", "baseline", "default: allow\n")
+        .unwrap();
+    store
+        .approve_managed_revision(&tenant.id, "pilot", "baseline")
+        .unwrap();
+    let baseline = store
+        .deploy_managed_revision(&tenant.id, "pilot", "baseline", false, &issuer)
+        .unwrap();
+    store
+        .acknowledge_managed_bundle(
+            &tenant.id,
+            "pilot",
+            &AppliedReport {
+                deployment_sequence: baseline.deployment_sequence,
+                revision: baseline.revision,
+                policy_sha256: baseline.policy_sha256,
+                status: "applied".into(),
+            },
+        )
+        .unwrap();
+    store
+        .create_managed_group_revision(&tenant.id, "group", "candidate", "default: deny\n")
+        .unwrap();
+    store
+        .approve_managed_group_revision(&tenant.id, "group", "candidate")
+        .unwrap();
+    let plan = store
+        .start_managed_group_rollout(&tenant.id, "group", "candidate", &issuer)
+        .unwrap();
+    store
+        .pause_managed_group_rollout(&tenant.id, "group")
+        .unwrap();
+    assert!(store.delete_managed_group(&tenant.id, "group").is_err());
+    let paused = store
+        .get_managed_group_rollout(&tenant.id, "group")
+        .unwrap()
+        .unwrap();
+    assert_eq!(paused.rollout_id, plan.rollout_id);
+    assert_eq!(paused.phase, RolloutPhase::Paused);
+    let rollback = store
+        .rollback_managed_group_rollout(&tenant.id, "group", &issuer)
+        .unwrap()
+        .unwrap();
+    assert_eq!(rollback.phase, RolloutPhase::RollingBack);
+    assert!(store.delete_managed_group(&tenant.id, "group").is_err());
+    assert_eq!(
+        store
+            .get_managed_group_rollout(&tenant.id, "group")
+            .unwrap()
+            .unwrap()
+            .rollout_id,
+        plan.rollout_id
+    );
+}
+
+#[tokio::test]
+async fn test_frozen_rollout_ack_survives_live_membership_removal() {
+    use llm_firewall::tenant_store::{AppliedReport, ManagedIssuer, RolloutPhase};
+
+    let state = test_state();
+    let store = state.tenant_store.as_ref().unwrap();
+    let tenant = store.create_tenant("Frozen membership").unwrap();
+    let issuer = ManagedIssuer::from_environment().unwrap();
+    store.enroll_managed_agent(&tenant.id, "pilot").unwrap();
+    store
+        .create_managed_group(&tenant.id, "group", "Group")
+        .unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "group", "pilot", true)
+        .unwrap();
+    store
+        .create_managed_group_revision(&tenant.id, "group", "candidate", "default: allow\n")
+        .unwrap();
+    store
+        .approve_managed_group_revision(&tenant.id, "group", "candidate")
+        .unwrap();
+    let plan = store
+        .start_managed_group_rollout(&tenant.id, "group", "candidate", &issuer)
+        .unwrap();
+    store
+        .remove_managed_group_member(&tenant.id, "group", "pilot")
+        .unwrap();
+    store
+        .acknowledge_managed_bundle(
+            &tenant.id,
+            "pilot",
+            &AppliedReport {
+                deployment_sequence: plan.active_deployments["pilot"],
+                revision: plan.revision,
+                policy_sha256: plan.policy_sha256,
+                status: "applied".into(),
+            },
+        )
+        .unwrap();
+    let completed = store
+        .get_managed_group_rollout(&tenant.id, "group")
+        .unwrap()
+        .unwrap();
+    assert_eq!(completed.phase, RolloutPhase::Completed);
+}
+
+#[tokio::test]
+async fn test_completed_rollout_can_be_rolled_back_and_retry_is_idempotent() {
+    use llm_firewall::tenant_store::{AppliedReport, ManagedIssuer, RolloutPhase};
+
+    let state = test_state();
+    let store = state.tenant_store.as_ref().unwrap();
+    let tenant = store.create_tenant("Completed rollback").unwrap();
+    let issuer = ManagedIssuer::from_environment().unwrap();
+    store.enroll_managed_agent(&tenant.id, "pilot").unwrap();
+    store
+        .create_managed_group(&tenant.id, "group", "Group")
+        .unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "group", "pilot", true)
+        .unwrap();
+    store
+        .create_managed_revision(&tenant.id, "pilot", "baseline", "default: allow\n")
+        .unwrap();
+    store
+        .approve_managed_revision(&tenant.id, "pilot", "baseline")
+        .unwrap();
+    let baseline = store
+        .deploy_managed_revision(&tenant.id, "pilot", "baseline", false, &issuer)
+        .unwrap();
+    store
+        .acknowledge_managed_bundle(
+            &tenant.id,
+            "pilot",
+            &AppliedReport {
+                deployment_sequence: baseline.deployment_sequence,
+                revision: baseline.revision,
+                policy_sha256: baseline.policy_sha256,
+                status: "applied".into(),
+            },
+        )
+        .unwrap();
+    store
+        .create_managed_group_revision(&tenant.id, "group", "candidate", "default: deny\n")
+        .unwrap();
+    store
+        .approve_managed_group_revision(&tenant.id, "group", "candidate")
+        .unwrap();
+    let plan = store
+        .start_managed_group_rollout(&tenant.id, "group", "candidate", &issuer)
+        .unwrap();
+    store
+        .acknowledge_managed_bundle(
+            &tenant.id,
+            "pilot",
+            &AppliedReport {
+                deployment_sequence: plan.active_deployments["pilot"],
+                revision: plan.revision,
+                policy_sha256: plan.policy_sha256,
+                status: "applied".into(),
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        store
+            .get_managed_group_rollout(&tenant.id, "group")
+            .unwrap()
+            .unwrap()
+            .phase,
+        RolloutPhase::Completed
+    );
+    let rollback = store
+        .rollback_managed_group_rollout(&tenant.id, "group", &issuer)
+        .unwrap()
+        .expect("completed plans remain rollback-capable");
+    assert_eq!(rollback.phase, RolloutPhase::RollingBack);
+    let deployment = &store.list_managed_deployments(&tenant.id, "pilot").unwrap()[0];
+    assert!(deployment.deployment_sequence > plan.active_deployments["pilot"]);
+    assert_eq!(deployment.revision, "baseline");
+    store
+        .acknowledge_managed_bundle(
+            &tenant.id,
+            "pilot",
+            &AppliedReport {
+                deployment_sequence: deployment.deployment_sequence,
+                revision: deployment.revision.clone(),
+                policy_sha256: deployment.policy_sha256.clone(),
+                status: "applied".into(),
+            },
+        )
+        .unwrap();
+    let retry = store
+        .rollback_managed_group_rollout(&tenant.id, "group", &issuer)
+        .unwrap()
+        .expect("a rollback retry returns the confirmed plan");
+    assert_eq!(retry.phase, RolloutPhase::RolledBack);
+    assert_eq!(
+        store
+            .list_managed_deployments(&tenant.id, "pilot")
+            .unwrap()
+            .len(),
+        3
+    );
+}
+
 fn test_state() -> Arc<AppState> {
     std::env::set_var("SOUP_AGENT_POLICY_KEY_ID", TEST_KEY_ID);
     std::env::set_var("SOUP_AGENT_POLICY_SEED_HEX", TEST_SEED_HEX);
@@ -284,7 +576,7 @@ async fn test_staged_group_rollout_full_canary_success() {
     let rollout = json_body(start_resp).await;
     assert_eq!(rollout["phase"], "pilot");
 
-    // Attempting to start another rollout while one is active returns 409 Conflict
+    // Retrying the same start returns the original plan without issuing a second wave.
     let conflict_resp = app(state.clone())
         .oneshot(
             Request::post(format!(
@@ -298,7 +590,11 @@ async fn test_staged_group_rollout_full_canary_success() {
         )
         .await
         .unwrap();
-    assert_eq!(conflict_resp.status(), StatusCode::CONFLICT);
+    assert_eq!(conflict_resp.status(), StatusCode::CREATED);
+    assert_eq!(
+        json_body(conflict_resp).await["rollout_id"],
+        rollout["rollout_id"]
+    );
 
     // Standard workers fetch policy -> 204 No Content (not deployed yet!)
     let w1_fetch = app(state.clone())
