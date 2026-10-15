@@ -35,6 +35,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Native resource admission](operations/NATIVE_RESOURCE_ADMISSION.md) | Resource permissions, receipt integrity and unsupported executor boundary |
 | [Constrained MCP file creation](operations/MCP_CREATE_FILE.md) | Linux create-only workspace files, bound authority, effect accounting and actual stdio verification |
 | [Constrained MCP HTTPS GET](operations/MCP_HTTPS_GET.md) | Exact URL/address authority, verified TLS, bounded responses and independent receiver witnesses |
+| [Constrained Windows MCP reads](operations/MCP_WINDOWS_READ.md) | Handle-bound local document reads, explicit v4 authority and native standard-user verification |
 | [Identity interoperability](operations/IDENTITY_INTEROPERABILITY.md) | Local identity fixtures, external metadata probes and pilot gates |
 | [Keycloak SAML acceptance](operations/KEYCLOAK_SAML_ACCEPTANCE.md) | Pinned vendor-runtime setup and signed SAML checks |
 | [Linux SAML lifecycle](operations/KEYCLOAK_SAML_LINUX.md) | Genuine browser login, PostgreSQL sessions and explicit signing-key rotation |

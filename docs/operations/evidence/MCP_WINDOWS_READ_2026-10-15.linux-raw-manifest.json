@@ -1,0 +1,132 @@
+{
+  "all_members_reopened_and_sha256_verified": true,
+  "archive": "MCP_WINDOWS_READ_2026-10-15.linux-raw.tar.gz",
+  "archive_metadata": {
+    "gid": 0,
+    "mtime": 0,
+    "relative_regular_files_only": true,
+    "uid": 0
+  },
+  "bytes": 237967,
+  "credential_scan": {
+    "excluded": [
+      "binaries",
+      "token files",
+      "TLS private keys",
+      "raw Windows acceptance and process transcripts"
+    ],
+    "matches": [],
+    "patterns": [
+      "private_key",
+      "authorization_credential",
+      "github_token",
+      "openai_key",
+      "aws_access_key",
+      "credential_assignment"
+    ],
+    "raw_observation_bytes_preserved": true
+  },
+  "members": [
+    {
+      "bytes": 518257,
+      "path": "create-60fd15a.json",
+      "sha256": "f61b58c363091d8c78adbe736d4aa2d6735ace934df9be401fba073aa5ca8c2a"
+    },
+    {
+      "bytes": 2522,
+      "path": "create-60fd15a.log",
+      "sha256": "8fec58f5f79224466de9177cb6f9ccd66fe4c84f2b1578a9630beccb0d8069e4"
+    },
+    {
+      "bytes": 8526,
+      "path": "earlier/python-benchmarks-full.log",
+      "sha256": "586048e3c0111101304bcefaa54914e7758b8466ec931d4f428d1b30e51c6a0b"
+    },
+    {
+      "bytes": 26766,
+      "path": "earlier/python-benchmarks.log",
+      "sha256": "5f2c3994baa04b2a6eff441991310a2d787558dc163dc0320acda78a6ea46f92"
+    },
+    {
+      "bytes": 149546,
+      "path": "earlier/python-scripts.log",
+      "sha256": "aa6f3029f1b01c1606b3b408c6290e1c121f13a69b87c37627bc9f2ec2ca7d03"
+    },
+    {
+      "bytes": 1341850,
+      "path": "https-60fd15a.json",
+      "sha256": "12e3af22fb03c6cf137bc36a6a273252c88e45906a3128b9ef26b85b1f552377"
+    },
+    {
+      "bytes": 5067,
+      "path": "https-60fd15a.log",
+      "sha256": "e23e5a9a371cdb2842bfca896c1d9cfc09a5055ae1b0ba40c3993a5c57d34799"
+    },
+    {
+      "bytes": 559,
+      "path": "inputs/Dockerfile.sou58-delivery",
+      "sha256": "ac0500c9b54311b58812a9e95b9fb8be97a566223d7974c33af72417d4abeadf"
+    },
+    {
+      "bytes": 5,
+      "path": "inputs/Dockerfile.sou58-delivery.dockerignore",
+      "sha256": "fd03f16fc5ad8be70d6e0491fa2e029bc4a31f5b0de6d4adf8e7dd709d23840f"
+    },
+    {
+      "bytes": 2154,
+      "path": "linux-build-60fd15a.log",
+      "sha256": "40e51f2f672caeda1d454fb6bf22f559cf0e03d9e2bf14e082e879d2a881bd7e"
+    },
+    {
+      "bytes": 111,
+      "path": "linux-clippy-60fd15a.log",
+      "sha256": "5f7caedcd07ad3db2b12c5a52ab85c9320c03d46e9ce14eb5a149e6c719e8d54"
+    },
+    {
+      "bytes": 2114,
+      "path": "linux-command-records.json",
+      "sha256": "928c33829147864061666e77e1f21c49d79892410fd0a5f68ecc48c3f96b70ea"
+    },
+    {
+      "bytes": 1318,
+      "path": "linux-drivers-60fd15a.log",
+      "sha256": "18bb8bd25c242a0b47593c04723484887c1e03eba382664d2c0e173b4fd81541"
+    },
+    {
+      "bytes": 1512,
+      "path": "linux-environment-60fd15a.json",
+      "sha256": "bb896ad22f31c6c72e86bcbb6f973e7b465435a225e30a74672938991ade0983"
+    },
+    {
+      "bytes": 1521,
+      "path": "linux-exact-source-verification.json",
+      "sha256": "9f1b7b765f9df869d6e8858c192c1aea977dc13f957ac23b59da14abd4990d2e"
+    },
+    {
+      "bytes": 74,
+      "path": "linux-image-60fd15a.json",
+      "sha256": "20c7aadc117385c283a78f3c6e04a852d05e87205296dae1ce391b7fc42988ef"
+    },
+    {
+      "bytes": 97895,
+      "path": "linux-workspace-60fd15a.log",
+      "sha256": "355701a7c5c9daade8d3f5900d73395239983630816a7ef818206626c27fdae9"
+    },
+    {
+      "bytes": 105468,
+      "path": "python-scripts-60fd15a.log",
+      "sha256": "419a3955f353c908bbe159c889418ca9c4727445f06b17c84e403cc13d40c3ab"
+    },
+    {
+      "bytes": 2163,
+      "path": "run-linux-60fd15a.py",
+      "sha256": "5962119e7e676c492d48a1172c8fa7acf7e0ae214e536823727bb9d7b85bcc1f"
+    },
+    {
+      "bytes": 125460,
+      "path": "source-manifest-60fd15a.json",
+      "sha256": "ce33f2211ce49e9d4dfa6e606e7585d46fe9b0c90e531c65df9b3bc248d1dad8"
+    }
+  ],
+  "sha256": "8c2bd3739048ccaa8ecdf7fbf5607e0f18507ea9724399d0ff794e9df514e24b"
+}

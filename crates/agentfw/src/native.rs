@@ -338,7 +338,10 @@ fn parse(body: &str) -> Result<Request, &'static str> {
             keys.extend(["tool", "args", "schema_sha256"]);
             if matches!(
                 request.contract_version.as_str(),
-                resource::CONTRACT | resource::CREATE_CONTRACT | resource::NETWORK_CONTRACT
+                resource::CONTRACT
+                    | resource::CREATE_CONTRACT
+                    | resource::NETWORK_CONTRACT
+                    | resource::WINDOWS_READ_CONTRACT
             ) {
                 keys.insert("resource_admission");
             }
@@ -360,17 +363,27 @@ fn parse(body: &str) -> Result<Request, &'static str> {
     if !identifier(&request.session_id)
         || !matches!(
             request.contract_version.as_str(),
-            CONTRACT | resource::CONTRACT | resource::CREATE_CONTRACT | resource::NETWORK_CONTRACT
+            CONTRACT
+                | resource::CONTRACT
+                | resource::CREATE_CONTRACT
+                | resource::NETWORK_CONTRACT
+                | resource::WINDOWS_READ_CONTRACT
         )
         || (matches!(event, "session_start" | "session_end")
             && request.contract_version != CONTRACT)
     {
         return Err("native_invalid_identity");
     }
+    if request.contract_version == resource::WINDOWS_READ_CONTRACT && !cfg!(windows) {
+        return Err("native_windows_read_platform_unsupported");
+    }
     if event == "call"
         && matches!(
             request.contract_version.as_str(),
-            resource::CONTRACT | resource::CREATE_CONTRACT | resource::NETWORK_CONTRACT
+            resource::CONTRACT
+                | resource::CREATE_CONTRACT
+                | resource::NETWORK_CONTRACT
+                | resource::WINDOWS_READ_CONTRACT
         )
     {
         let admission = request
@@ -662,6 +675,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             resource::CONTRACT => resource::CONTRACT,
             resource::CREATE_CONTRACT => resource::CREATE_CONTRACT,
             resource::NETWORK_CONTRACT => resource::NETWORK_CONTRACT,
+            resource::WINDOWS_READ_CONTRACT => resource::WINDOWS_READ_CONTRACT,
             _ => CONTRACT,
         },
         registry_sha256: native.registry_sha256.clone(),
