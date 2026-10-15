@@ -360,7 +360,10 @@ impl PostgresTenantStore {
         group_id: &str,
         name: &str,
     ) -> Result<ManagedAgentGroup> {
-        ensure!(exact_id(tenant) && exact_id(group_id), "invalid group identifier");
+        ensure!(
+            exact_id(tenant) && exact_id(group_id),
+            "invalid group identifier"
+        );
         ensure!(!name.is_empty() && name.len() <= 256, "invalid group name");
         let mut client = self.checkout().await?;
         let tx = self.bounded(client.transaction()).await?;
@@ -389,12 +392,15 @@ impl PostgresTenantStore {
             "SELECT group_id, name, created_at_unix FROM managed_agent_groups WHERE tenant_id=$1 ORDER BY created_at_unix ASC",
             &[&tenant],
         )).await?;
-        Ok(rows.into_iter().map(|r| ManagedAgentGroup {
-            tenant_id: tenant.into(),
-            group_id: r.get(0),
-            name: r.get(1),
-            created_at_unix: r.get(2),
-        }).collect())
+        Ok(rows
+            .into_iter()
+            .map(|r| ManagedAgentGroup {
+                tenant_id: tenant.into(),
+                group_id: r.get(0),
+                name: r.get(1),
+                created_at_unix: r.get(2),
+            })
+            .collect())
     }
 
     pub(in crate::tenant_store) async fn get_managed_group(
@@ -428,11 +434,16 @@ impl PostgresTenantStore {
             "SELECT 1 FROM managed_group_rollouts WHERE tenant_id=$1 AND group_id=$2 AND phase IN ('pilot','standard')",
             &[&tenant, &group_id],
         )).await?;
-        ensure!(active.is_none(), "cannot delete group with active rollout in progress");
-        let count = self.bounded(tx.execute(
-            "DELETE FROM managed_agent_groups WHERE tenant_id=$1 AND group_id=$2",
-            &[&tenant, &group_id],
-        )).await?;
+        ensure!(
+            active.is_none(),
+            "cannot delete group with active rollout in progress"
+        );
+        let count = self
+            .bounded(tx.execute(
+                "DELETE FROM managed_agent_groups WHERE tenant_id=$1 AND group_id=$2",
+                &[&tenant, &group_id],
+            ))
+            .await?;
         self.bounded(tx.commit()).await?;
         Ok(count > 0)
     }
@@ -444,7 +455,10 @@ impl PostgresTenantStore {
         agent_id: &str,
         is_pilot: bool,
     ) -> Result<ManagedGroupMember> {
-        ensure!(exact_id(tenant) && exact_id(group_id) && exact_id(agent_id), "invalid identifier");
+        ensure!(
+            exact_id(tenant) && exact_id(group_id) && exact_id(agent_id),
+            "invalid identifier"
+        );
         let mut client = self.checkout().await?;
         let tx = self.bounded(client.transaction()).await?;
         self.lock_managed_agent(&tx, tenant, agent_id).await?;
@@ -471,7 +485,10 @@ impl PostgresTenantStore {
         group_id: &str,
         agent_id: &str,
     ) -> Result<bool> {
-        ensure!(exact_id(tenant) && exact_id(group_id) && exact_id(agent_id), "invalid identifier");
+        ensure!(
+            exact_id(tenant) && exact_id(group_id) && exact_id(agent_id),
+            "invalid identifier"
+        );
         let client = self.checkout().await?;
         let count = self.bounded(client.execute(
             "DELETE FROM managed_agent_group_members WHERE tenant_id=$1 AND group_id=$2 AND agent_id=$3",
@@ -487,18 +504,23 @@ impl PostgresTenantStore {
     ) -> Result<Vec<ManagedGroupMember>> {
         ensure!(exact_id(tenant) && exact_id(group_id), "invalid identifier");
         let client = self.checkout().await?;
-        let rows = self.bounded(client.query(
-            "SELECT agent_id, is_pilot, joined_at_unix FROM managed_agent_group_members
+        let rows = self
+            .bounded(client.query(
+                "SELECT agent_id, is_pilot, joined_at_unix FROM managed_agent_group_members
              WHERE tenant_id=$1 AND group_id=$2 ORDER BY is_pilot DESC, joined_at_unix ASC",
-            &[&tenant, &group_id],
-        )).await?;
-        Ok(rows.into_iter().map(|r| ManagedGroupMember {
-            tenant_id: tenant.into(),
-            group_id: group_id.into(),
-            agent_id: r.get(0),
-            is_pilot: r.get(1),
-            joined_at_unix: r.get(2),
-        }).collect())
+                &[&tenant, &group_id],
+            ))
+            .await?;
+        Ok(rows
+            .into_iter()
+            .map(|r| ManagedGroupMember {
+                tenant_id: tenant.into(),
+                group_id: group_id.into(),
+                agent_id: r.get(0),
+                is_pilot: r.get(1),
+                joined_at_unix: r.get(2),
+            })
+            .collect())
     }
 
     pub(in crate::tenant_store) async fn create_managed_group_revision(
@@ -509,7 +531,10 @@ impl PostgresTenantStore {
         yaml: &str,
     ) -> Result<ManagedGroupRevision> {
         ensure!(exact_id(revision), "invalid immutable revision");
-        ensure!(!yaml.is_empty() && yaml.len() <= MAX_YAML, "Agent policy size out of bounds");
+        ensure!(
+            !yaml.is_empty() && yaml.len() <= MAX_YAML,
+            "Agent policy size out of bounds"
+        );
         AgentPolicySet::from_yaml(yaml).context("invalid AgentPolicySet YAML")?;
         let digest = hex(&Sha256::digest(yaml.as_bytes()));
         let mut client = self.checkout().await?;
@@ -537,11 +562,13 @@ impl PostgresTenantStore {
         revision: &str,
     ) -> Result<bool> {
         let client = self.checkout().await?;
-        let count = self.bounded(client.execute(
-            "UPDATE managed_group_revisions SET approved_at_unix=$4
+        let count = self
+            .bounded(client.execute(
+                "UPDATE managed_group_revisions SET approved_at_unix=$4
              WHERE tenant_id=$1 AND group_id=$2 AND revision=$3 AND approved_at_unix IS NULL",
-            &[&tenant, &group_id, &revision, &now_unix()],
-        )).await?;
+                &[&tenant, &group_id, &revision, &now_unix()],
+            ))
+            .await?;
         Ok(count == 1)
     }
 
@@ -552,21 +579,26 @@ impl PostgresTenantStore {
     ) -> Result<Vec<ManagedGroupRevision>> {
         ensure!(exact_id(tenant) && exact_id(group_id), "invalid identifier");
         let client = self.checkout().await?;
-        let rows = self.bounded(client.query(
-            "SELECT revision, policy_sha256, approved_at_unix FROM managed_group_revisions
+        let rows = self
+            .bounded(client.query(
+                "SELECT revision, policy_sha256, approved_at_unix FROM managed_group_revisions
              WHERE tenant_id=$1 AND group_id=$2 ORDER BY revision ASC",
-            &[&tenant, &group_id],
-        )).await?;
-        Ok(rows.into_iter().map(|r| {
-            let approved: Option<i64> = r.get(2);
-            ManagedGroupRevision {
-                tenant_id: tenant.into(),
-                group_id: group_id.into(),
-                revision: r.get(0),
-                policy_sha256: r.get(1),
-                approved: approved.is_some(),
-            }
-        }).collect())
+                &[&tenant, &group_id],
+            ))
+            .await?;
+        Ok(rows
+            .into_iter()
+            .map(|r| {
+                let approved: Option<i64> = r.get(2);
+                ManagedGroupRevision {
+                    tenant_id: tenant.into(),
+                    group_id: group_id.into(),
+                    revision: r.get(0),
+                    policy_sha256: r.get(1),
+                    approved: approved.is_some(),
+                }
+            })
+            .collect())
     }
 
     pub(in crate::tenant_store) async fn start_managed_group_rollout(
@@ -582,7 +614,11 @@ impl PostgresTenantStore {
                 "SELECT rollout_id FROM managed_group_rollouts WHERE tenant_id=$1 AND group_id=$2 AND phase IN ('pilot','standard')",
                 &[&tenant, &group_id],
             )).await?;
-            ensure!(active.is_none(), "active rollout already in progress for group '{}'", group_id);
+            ensure!(
+                active.is_none(),
+                "active rollout already in progress for group '{}'",
+                group_id
+            );
 
             let rev_row = self.bounded(client.query_opt(
                 "SELECT policy_yaml, policy_sha256 FROM managed_group_revisions WHERE tenant_id=$1 AND group_id=$2 AND revision=$3 AND approved_at_unix IS NOT NULL",
@@ -604,7 +640,10 @@ impl PostgresTenantStore {
                     standards.push(m.agent_id);
                 }
             }
-            ensure!(!pilots.is_empty(), "group has no pilot agents for staged rollout");
+            ensure!(
+                !pilots.is_empty(),
+                "group has no pilot agents for staged rollout"
+            );
 
             let mut prevs = std::collections::BTreeMap::new();
             for pilot in &pilots {
@@ -640,7 +679,9 @@ impl PostgresTenantStore {
 
         let mut active_deployments = std::collections::BTreeMap::new();
         for pilot in &pilots {
-            let dep = self.deploy_managed_revision(tenant, pilot, revision, false, issuer).await?;
+            let dep = self
+                .deploy_managed_revision(tenant, pilot, revision, false, issuer)
+                .await?;
             active_deployments.insert(pilot.clone(), dep.deployment_sequence);
         }
 
@@ -734,7 +775,9 @@ impl PostgresTenantStore {
         issuer: &ManagedIssuer,
     ) -> Result<Option<ManagedGroupRollout>> {
         let current = self.get_managed_group_rollout(tenant, group_id).await?;
-        let Some(mut rollout) = current else { return Ok(None) };
+        let Some(mut rollout) = current else {
+            return Ok(None);
+        };
         if rollout.phase != RolloutPhase::Pilot && rollout.phase != RolloutPhase::Standard {
             return Ok(None);
         }
@@ -772,10 +815,15 @@ impl PostgresTenantStore {
                 }
 
                 if let Some(rejected_agent) = any_rejected {
-                    let reason = format!("pilot agent '{}' rejected candidate policy revision '{}'", rejected_agent, rollout.revision);
-                    for (agent, _) in &rollout.active_deployments {
+                    let reason = format!(
+                        "pilot agent '{}' rejected candidate policy revision '{}'",
+                        rejected_agent, rollout.revision
+                    );
+                    for agent in rollout.active_deployments.keys() {
                         if let Some(Some(prev)) = rollout.previous_revisions.get(agent) {
-                            let _ = self.deploy_managed_revision(tenant, agent, prev, true, issuer).await;
+                            let _ = self
+                                .deploy_managed_revision(tenant, agent, prev, true, issuer)
+                                .await;
                         }
                     }
                     self.bounded(client.execute(
@@ -817,8 +865,12 @@ impl PostgresTenantStore {
                                 &[&tenant, w, &rollout.revision, &yaml, &rollout.policy_sha256, &now],
                             )).await?;
                         }
-                        let dep = self.deploy_managed_revision(tenant, w, &rollout.revision, false, issuer).await?;
-                        rollout.active_deployments.insert(w.clone(), dep.deployment_sequence);
+                        let dep = self
+                            .deploy_managed_revision(tenant, w, &rollout.revision, false, issuer)
+                            .await?;
+                        rollout
+                            .active_deployments
+                            .insert(w.clone(), dep.deployment_sequence);
                     }
 
                     self.bounded(client.execute(
@@ -861,10 +913,15 @@ impl PostgresTenantStore {
                 }
 
                 if let Some(rejected_agent) = any_rejected {
-                    let reason = format!("standard agent '{}' rejected candidate policy revision '{}'", rejected_agent, rollout.revision);
-                    for (agent, _) in &rollout.active_deployments {
+                    let reason = format!(
+                        "standard agent '{}' rejected candidate policy revision '{}'",
+                        rejected_agent, rollout.revision
+                    );
+                    for agent in rollout.active_deployments.keys() {
                         if let Some(Some(prev)) = rollout.previous_revisions.get(agent) {
-                            let _ = self.deploy_managed_revision(tenant, agent, prev, true, issuer).await;
+                            let _ = self
+                                .deploy_managed_revision(tenant, agent, prev, true, issuer)
+                                .await;
                         }
                     }
                     self.bounded(client.execute(
@@ -900,14 +957,18 @@ impl PostgresTenantStore {
         issuer: &ManagedIssuer,
     ) -> Result<Option<ManagedGroupRollout>> {
         let current = self.get_managed_group_rollout(tenant, group_id).await?;
-        let Some(mut rollout) = current else { return Ok(None) };
+        let Some(mut rollout) = current else {
+            return Ok(None);
+        };
         if rollout.phase != RolloutPhase::Pilot && rollout.phase != RolloutPhase::Standard {
             return Ok(None);
         }
 
-        for (agent, _) in &rollout.active_deployments {
+        for agent in rollout.active_deployments.keys() {
             if let Some(Some(prev)) = rollout.previous_revisions.get(agent) {
-                let _ = self.deploy_managed_revision(tenant, agent, prev, true, issuer).await;
+                let _ = self
+                    .deploy_managed_revision(tenant, agent, prev, true, issuer)
+                    .await;
             }
         }
 
@@ -925,4 +986,3 @@ impl PostgresTenantStore {
         Ok(Some(rollout))
     }
 }
-

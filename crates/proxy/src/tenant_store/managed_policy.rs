@@ -346,8 +346,26 @@ fn schema(db: &rusqlite::Connection) -> Result<()> {
     .context("cannot prepare managed policy tables")
 }
 
+type SqliteRolloutRow = (
+    String,
+    String,
+    String,
+    Option<String>,
+    String,
+    String,
+    String,
+    String,
+    String,
+    Option<String>,
+    i64,
+    i64,
+);
+
 fn eligible_group(db: &rusqlite::Connection, tenant: &str, group: &str) -> Result<()> {
-    ensure!(exact_id(tenant) && exact_id(group), "invalid group identity");
+    ensure!(
+        exact_id(tenant) && exact_id(group),
+        "invalid group identity"
+    );
     let exists: Option<i64> = db
         .query_row(
             "SELECT 1 FROM managed_agent_groups g JOIN tenants t ON t.id=g.tenant_id
@@ -650,7 +668,10 @@ impl TenantStore {
         group_id: &str,
         name: &str,
     ) -> Result<ManagedAgentGroup> {
-        ensure!(exact_id(tenant) && exact_id(group_id), "invalid group identifier");
+        ensure!(
+            exact_id(tenant) && exact_id(group_id),
+            "invalid group identifier"
+        );
         ensure!(!name.is_empty() && name.len() <= 256, "invalid group name");
         let db = self.connection()?;
         schema(&db)?;
@@ -696,7 +717,11 @@ impl TenantStore {
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
-    pub fn get_managed_group(&self, tenant: &str, group_id: &str) -> Result<Option<ManagedAgentGroup>> {
+    pub fn get_managed_group(
+        &self,
+        tenant: &str,
+        group_id: &str,
+    ) -> Result<Option<ManagedAgentGroup>> {
         ensure!(exact_id(tenant) && exact_id(group_id), "invalid identifier");
         let db = self.connection()?;
         schema(&db)?;
@@ -728,7 +753,10 @@ impl TenantStore {
                 |r| r.get(0),
             )
             .optional()?;
-        ensure!(active.is_none(), "cannot delete group with active rollout in progress");
+        ensure!(
+            active.is_none(),
+            "cannot delete group with active rollout in progress"
+        );
         let count = db.execute(
             "DELETE FROM managed_agent_groups WHERE tenant_id=?1 AND group_id=?2",
             params![tenant, group_id],
@@ -763,8 +791,16 @@ impl TenantStore {
         })
     }
 
-    pub fn remove_managed_group_member(&self, tenant: &str, group_id: &str, agent_id: &str) -> Result<bool> {
-        ensure!(exact_id(tenant) && exact_id(group_id) && exact_id(agent_id), "invalid identifier");
+    pub fn remove_managed_group_member(
+        &self,
+        tenant: &str,
+        group_id: &str,
+        agent_id: &str,
+    ) -> Result<bool> {
+        ensure!(
+            exact_id(tenant) && exact_id(group_id) && exact_id(agent_id),
+            "invalid identifier"
+        );
         let db = self.connection()?;
         schema(&db)?;
         let count = db.execute(
@@ -774,7 +810,11 @@ impl TenantStore {
         Ok(count > 0)
     }
 
-    pub fn list_managed_group_members(&self, tenant: &str, group_id: &str) -> Result<Vec<ManagedGroupMember>> {
+    pub fn list_managed_group_members(
+        &self,
+        tenant: &str,
+        group_id: &str,
+    ) -> Result<Vec<ManagedGroupMember>> {
         ensure!(exact_id(tenant) && exact_id(group_id), "invalid identifier");
         let db = self.connection()?;
         schema(&db)?;
@@ -828,7 +868,12 @@ impl TenantStore {
         })
     }
 
-    pub fn approve_managed_group_revision(&self, tenant: &str, group_id: &str, revision: &str) -> Result<bool> {
+    pub fn approve_managed_group_revision(
+        &self,
+        tenant: &str,
+        group_id: &str,
+        revision: &str,
+    ) -> Result<bool> {
         let db = self.connection()?;
         schema(&db)?;
         eligible_group(&db, tenant, group_id)?;
@@ -840,7 +885,11 @@ impl TenantStore {
         Ok(changed == 1)
     }
 
-    pub fn list_managed_group_revisions(&self, tenant: &str, group_id: &str) -> Result<Vec<ManagedGroupRevision>> {
+    pub fn list_managed_group_revisions(
+        &self,
+        tenant: &str,
+        group_id: &str,
+    ) -> Result<Vec<ManagedGroupRevision>> {
         ensure!(exact_id(tenant) && exact_id(group_id), "invalid identifier");
         let db = self.connection()?;
         schema(&db)?;
@@ -910,7 +959,10 @@ impl TenantStore {
                     Ok((agent_id, is_pilot == 1))
                 })?
                 .collect::<rusqlite::Result<Vec<_>>>()?;
-            ensure!(!member_rows.is_empty(), "cannot start rollout on empty group");
+            ensure!(
+                !member_rows.is_empty(),
+                "cannot start rollout on empty group"
+            );
 
             let mut pilots = Vec::new();
             let mut standards = Vec::new();
@@ -1048,27 +1100,14 @@ impl TenantStore {
         let action = {
             let db = self.connection()?;
             schema(&db)?;
-            let row: Option<(
-                String,
-                String,
-                String,
-                Option<String>,
-                String,
-                String,
-                String,
-                String,
-                String,
-                Option<String>,
-                i64,
-                i64,
-            )> = db
+            let row: Option<SqliteRolloutRow> = db
                 .query_row(
                     "SELECT rollout_id, revision, policy_sha256, issuer_key_id, phase,
                         pilot_agents_json, standard_agents_json, active_deployments_json,
                         previous_revisions_json, failure_reason, created_at_unix, updated_at_unix
                  FROM managed_group_rollouts
                  WHERE tenant_id=?1 AND group_id=?2 AND phase IN ('pilot','standard')
-                 ORDER BY created_at_unix DESC LIMIT 1",
+                 ORDER BY rowid DESC LIMIT 1",
                     params![tenant, group_id],
                     |r| {
                         Ok((
@@ -1176,7 +1215,7 @@ impl TenantStore {
                             rejected_agent, revision
                         );
                         let mut to_rollback = Vec::new();
-                        for (agent, _) in &active_deployments {
+                        for agent in active_deployments.keys() {
                             if let Some(Some(prev)) = previous_revisions.get(agent) {
                                 to_rollback.push((agent.clone(), prev.clone()));
                             }
@@ -1253,7 +1292,7 @@ impl TenantStore {
                             rejected_agent, revision
                         );
                         let mut to_rollback = Vec::new();
-                        for (agent, _) in &active_deployments {
+                        for agent in active_deployments.keys() {
                             if let Some(Some(prev)) = previous_revisions.get(agent) {
                                 to_rollback.push((agent.clone(), prev.clone()));
                             }
@@ -1304,7 +1343,9 @@ impl TenantStore {
             } => {
                 for w in standards {
                     let dep = self.deploy_managed_revision(tenant, &w, &revision, false, issuer)?;
-                    rollout.active_deployments.insert(w, dep.deployment_sequence);
+                    rollout
+                        .active_deployments
+                        .insert(w, dep.deployment_sequence);
                 }
                 let db = self.connection()?;
                 db.execute(
@@ -1346,27 +1387,14 @@ impl TenantStore {
         ensure!(exact_id(tenant) && exact_id(group_id), "invalid identifier");
         let db = self.connection()?;
         schema(&db)?;
-        let row: Option<(
-            String,
-            String,
-            String,
-            Option<String>,
-            String,
-            String,
-            String,
-            String,
-            String,
-            Option<String>,
-            i64,
-            i64,
-        )> = db
+        let row: Option<SqliteRolloutRow> = db
             .query_row(
                 "SELECT rollout_id, revision, policy_sha256, issuer_key_id, phase,
                     pilot_agents_json, standard_agents_json, active_deployments_json,
                     previous_revisions_json, failure_reason, created_at_unix, updated_at_unix
              FROM managed_group_rollouts
              WHERE tenant_id=?1 AND group_id=?2
-             ORDER BY created_at_unix DESC LIMIT 1",
+             ORDER BY rowid DESC LIMIT 1",
                 params![tenant, group_id],
                 |r| {
                     Ok((
@@ -1432,27 +1460,14 @@ impl TenantStore {
         let (mut rollout, to_rollback) = {
             let db = self.connection()?;
             schema(&db)?;
-            let row: Option<(
-                String,
-                String,
-                String,
-                Option<String>,
-                String,
-                String,
-                String,
-                String,
-                String,
-                Option<String>,
-                i64,
-                i64,
-            )> = db
+            let row: Option<SqliteRolloutRow> = db
                 .query_row(
                     "SELECT rollout_id, revision, policy_sha256, issuer_key_id, phase,
                         pilot_agents_json, standard_agents_json, active_deployments_json,
                         previous_revisions_json, failure_reason, created_at_unix, updated_at_unix
                  FROM managed_group_rollouts
                  WHERE tenant_id=?1 AND group_id=?2 AND phase IN ('pilot','standard')
-                 ORDER BY created_at_unix DESC LIMIT 1",
+                 ORDER BY rowid DESC LIMIT 1",
                     params![tenant, group_id],
                     |r| {
                         Ok((
@@ -1499,7 +1514,7 @@ impl TenantStore {
                 serde_json::from_str(&prev_json)?;
 
             let mut to_rollback = Vec::new();
-            for (agent, _) in &active_deployments {
+            for agent in active_deployments.keys() {
                 if let Some(Some(prev)) = previous_revisions.get(agent) {
                     to_rollback.push((agent.clone(), prev.clone()));
                 }
@@ -1568,7 +1583,7 @@ impl TenantStore {
                 db.query_row(
                     "SELECT issuer_key_id FROM managed_group_rollouts
                  WHERE tenant_id=?1 AND group_id=?2 AND phase IN ('pilot','standard')
-                 ORDER BY created_at_unix DESC LIMIT 1",
+                 ORDER BY rowid DESC LIMIT 1",
                     params![tenant, gid],
                     |r| r.get(0),
                 )
@@ -1576,9 +1591,7 @@ impl TenantStore {
                 .flatten()
             };
 
-            if let Ok(issuer) =
-                ManagedIssuer::from_environment_for_key(issuer_key_id.as_deref())
-            {
+            if let Ok(issuer) = ManagedIssuer::from_environment_for_key(issuer_key_id.as_deref()) {
                 let _ = self.advance_managed_group_rollout(tenant, &gid, &issuer);
             }
         }
@@ -1824,12 +1837,7 @@ mod tests {
 
         // 3. Group revisions
         let rev = store
-            .create_managed_group_revision(
-                &tenant.id,
-                "prod-agents",
-                "v1",
-                "default: deny\n",
-            )
+            .create_managed_group_revision(&tenant.id, "prod-agents", "v1", "default: deny\n")
             .unwrap();
         assert_eq!(rev.revision, "v1");
         assert!(!rev.approved);
@@ -1863,12 +1871,7 @@ mod tests {
 
         // Baseline revision v1 deployed to both
         store
-            .create_managed_group_revision(
-                &tenant.id,
-                "cluster-a",
-                "v1",
-                "default: deny\n",
-            )
+            .create_managed_group_revision(&tenant.id, "cluster-a", "v1", "default: deny\n")
             .unwrap();
         store
             .approve_managed_group_revision(&tenant.id, "cluster-a", "v1")
@@ -1876,12 +1879,7 @@ mod tests {
 
         // Target candidate revision v2
         store
-            .create_managed_group_revision(
-                &tenant.id,
-                "cluster-a",
-                "v2",
-                "default: allow\n",
-            )
+            .create_managed_group_revision(&tenant.id, "cluster-a", "v2", "default: allow\n")
             .unwrap();
         store
             .approve_managed_group_revision(&tenant.id, "cluster-a", "v2")
@@ -1988,9 +1986,7 @@ mod tests {
         let p_v1 = store
             .deploy_managed_revision(&tenant.id, "pilot-1", "v1", false, &signer)
             .unwrap();
-        store
-            .deliver_managed_bundle(&tenant.id, "pilot-1")
-            .unwrap();
+        store.deliver_managed_bundle(&tenant.id, "pilot-1").unwrap();
         store
             .acknowledge_managed_bundle(
                 &tenant.id,
@@ -2006,12 +2002,7 @@ mod tests {
 
         // Candidate revision v2 on group
         store
-            .create_managed_group_revision(
-                &tenant.id,
-                "cluster-b",
-                "v2",
-                "default: deny\n",
-            )
+            .create_managed_group_revision(&tenant.id, "cluster-b", "v2", "default: deny\n")
             .unwrap();
         store
             .approve_managed_group_revision(&tenant.id, "cluster-b", "v2")
@@ -2065,4 +2056,3 @@ mod tests {
         assert!(worker_deployments.is_empty());
     }
 }
-
