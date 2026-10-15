@@ -689,7 +689,7 @@ async fn real_daemon_reports_loaded_identity_and_survives_disk_drift() {
     let binary =
         agentfw::lifecycle::sha256_file(std::path::Path::new(env!("CARGO_BIN_EXE_agentfw")))
             .unwrap();
-    assert_eq!(first.runtime.binary_sha256, Some(binary));
+    assert_eq!(first.runtime.binary_sha256, Some(binary.clone()));
     let changed = Config {
         enforce: false,
         ..cfg.clone()
@@ -714,4 +714,11 @@ async fn real_daemon_reports_loaded_identity_and_survives_disk_drift() {
         .paths
         .iter()
         .all(|p| p.execution_coverage == Evidence::Unknown));
+    if let Some(path) = std::env::var_os("AGENTFW_STATUS_EVIDENCE") {
+        let evidence = json!({
+            "before": first, "after_disk_edit": second,
+            "expected_pid": daemon.0.id(), "expected_binary_sha256": binary,
+        });
+        std::fs::write(path, serde_json::to_vec_pretty(&evidence).unwrap()).unwrap();
+    }
 }

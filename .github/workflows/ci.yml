@@ -67,6 +67,8 @@ jobs:
           path: target/policy-composition/
           if-no-files-found: warn
       - name: Runtime protection diagnostics regressions
+        env:
+          AGENTFW_STATUS_EVIDENCE: ${{ github.workspace }}/target/runtime-protection-status/runtime.json
         run: |
           set -o pipefail
           mkdir -p target/runtime-protection-status

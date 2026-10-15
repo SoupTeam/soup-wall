@@ -332,7 +332,8 @@ Reproduce the focused runtime, loopback-client and real-binary CLI tests:
 cargo test --locked -p agentfw --test protection_status
 ```
 
-CI retains source SHA, source-file hashes and results in `runtime-protection-status`.
+CI retains source SHA, source-file hashes, results and the real test daemon's
+`runtime.json` snapshot in `runtime-protection-status`.
 Fixtures cover authentication, live policy replacement and concurrency, disk drift,
 missing registry, legacy fail-open contact, native contact, shadow/unavailable,
 nonce/instance/digest mismatch, stale/overclaimed replies, bounded errors, and a real
