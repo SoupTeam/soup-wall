@@ -9,8 +9,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{ensure, Context, Result};
-use serde_json::json;
 use rustls_pki_types::{pem::PemObject, CertificateDer};
+use serde_json::json;
 
 use crate::handlers::Shared;
 use crate::managed_policy::{
@@ -97,14 +97,7 @@ fn parse_console_origin(raw: &str) -> Result<reqwest::Url> {
     );
     match url.scheme() {
         "https" => Ok(url),
-        "http"
-            if matches!(
-                url.host_str(),
-                Some("127.0.0.1" | "localhost" | "[::1]")
-            ) =>
-        {
-            Ok(url)
-        }
+        "http" if matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]")) => Ok(url),
         _ => anyhow::bail!("remote managed Console requires verified HTTPS"),
     }
 }
@@ -116,7 +109,10 @@ fn private_ca_from_environment(is_https: bool) -> Result<Option<Vec<u8>>> {
     let Some(raw) = std::env::var_os("SOUP_MANAGED_AGENT_TLS_CA_FILE") else {
         return Ok(None);
     };
-    ensure!(is_https, "private CA is only supported for HTTPS Console origins");
+    ensure!(
+        is_https,
+        "private CA is only supported for HTTPS Console origins"
+    );
     let path = PathBuf::from(raw);
     ensure!(
         path.is_absolute(),
@@ -493,12 +489,13 @@ impl ManagedSync {
                 .context("invalid configured operator private CA")?;
             builder = builder.add_root_certificate(certificate);
         }
-        builder.build().context("unable to configure managed Console transport")
+        builder
+            .build()
+            .context("unable to configure managed Console transport")
     }
 
     pub async fn run(self, state: Shared) {
-        let client = match self.build_client()
-        {
+        let client = match self.build_client() {
             Ok(c) => c,
             Err(e) => {
                 tracing::error!(error=%e, "managed Agent polling disabled");
@@ -535,7 +532,6 @@ impl ManagedSync {
         }
     }
 }
-
 
 #[cfg(test)]
 mod https_transport_tests {
