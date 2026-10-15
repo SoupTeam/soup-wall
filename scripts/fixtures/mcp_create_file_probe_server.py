@@ -8,7 +8,7 @@ from pathlib import Path
 import sys
 
 CREATE_SCHEMA = {"type": "object", "properties": {"path": {"type": "string", "minLength": 1, "maxLength": 4096},
-                 "content": {"type": "string", "maxLength": 65536}},
+                 "content": {"type": "string", "maxLength": 4096}},
                  "required": ["path", "content"], "additionalProperties": False}
 READ_SCHEMA = {"type": "object", "properties": {"path": {"type": "string"}},
                "required": ["path"], "additionalProperties": False}

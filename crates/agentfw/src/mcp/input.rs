@@ -274,18 +274,19 @@ mod tests {
     }
 
     #[test]
-    fn explicit_create_string_bound_accepts_64_kib_and_authority_checks_bytes() {
+    fn explicit_create_string_bound_accepts_4_kib_and_authority_checks_bytes() {
         let schema = InputSchema::read(&crate::native::resource::create_file_schema()).unwrap();
+        let bound = crate::native::resource::CREATE_FILE_MAX_CONTENT;
         assert!(schema
-            .validate(&json!({"path":"new.txt","content":"a".repeat(65_536)}))
+            .validate(&json!({"path":"new.txt","content":"a".repeat(bound)}))
             .is_ok());
         assert!(schema
-            .validate(&json!({"path":"new.txt","content":"a".repeat(65_537)}))
+            .validate(&json!({"path":"new.txt","content":"a".repeat(bound + 1)}))
             .is_err());
         // Character-valid non-ASCII input still needs the separate create-file
-        // authority's 64 KiB UTF-8 byte check before admission or any effect.
+        // authority's 4 KiB UTF-8 byte check before admission or any effect.
         assert!(schema
-            .validate(&json!({"path":"new.txt","content":"☃".repeat(30_000)}))
+            .validate(&json!({"path":"new.txt","content":"☃".repeat(3_000)}))
             .is_ok());
         assert!(schema.validate(&json!({"path":"","content":""})).is_err());
         assert!(schema
@@ -303,6 +304,13 @@ mod tests {
         let empty = InputSchema::read(&string_schema(json!({"maxLength":0}))).unwrap();
         assert!(empty.validate(&json!({"text":""})).is_ok());
         assert!(empty.validate(&json!({"text":"a"})).is_err());
+        let bounded = InputSchema::read(&string_schema(json!({"maxLength":65_536}))).unwrap();
+        assert!(bounded
+            .validate(&json!({"text":"a".repeat(65_536)}))
+            .is_ok());
+        assert!(bounded
+            .validate(&json!({"text":"a".repeat(65_537)}))
+            .is_err());
         let legacy = InputSchema::read(&string_schema(json!({}))).unwrap();
         assert!(legacy
             .validate(&json!({"text":"a".repeat(16*1024)}))

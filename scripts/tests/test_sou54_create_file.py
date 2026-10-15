@@ -218,7 +218,7 @@ class EvidenceTests(unittest.TestCase):
         value = PROBE.registry(PROBE.load_tools(), Path("/fixture/workspace"), Path("/fixture/workspace/new.txt"), "e" * 64, "c" * 64)
         create, read = value["tools"]
         self.assertEqual(create["action_class"], "side_effecting")
-        self.assertEqual(create["resource_policy"]["execution"], {"operation": "create_file", "action": "write", "max_content_bytes": 65536,
+        self.assertEqual(create["resource_policy"]["execution"], {"operation": "create_file", "action": "write", "max_content_bytes": 4096,
                                                                   "executor_profile": PROBE.PROFILE})
         self.assertEqual(create["resource_policy"]["allowed_resources"], [{"kind": "path", "canonical": "/fixture/workspace/new.txt"}])
         self.assertNotIn("execution", read["resource_policy"])

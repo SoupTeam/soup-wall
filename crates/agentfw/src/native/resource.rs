@@ -15,7 +15,9 @@ use crate::mcp::resources::{
 pub const CONTRACT: &str = "sw-native/resources/1";
 pub const CREATE_CONTRACT: &str = "sw-native/resources/2";
 pub const CREATE_FILE_EXECUTOR_PROFILE: &str = "sw-native/create-file/linux-root-child/1";
-pub const CREATE_FILE_MAX_CONTENT: usize = 65_536;
+// Keep the complete original content within the selected rule classifier's
+// reviewed leaf bound; a truncated/unknown prediction must remain blocked.
+pub const CREATE_FILE_MAX_CONTENT: usize = 4_096;
 
 /// A semantic executor revision, not attestation of a running binary.
 pub fn create_file_executor_sha256() -> String {

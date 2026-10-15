@@ -26,7 +26,7 @@ The resource policy's closed execution declaration is:
 {
   "operation": "create_file",
   "action": "write",
-  "max_content_bytes": 65536,
+  "max_content_bytes": 4096,
   "executor_profile": "sw-native/create-file/linux-root-child/1"
 }
 ```
@@ -35,9 +35,9 @@ The resource policy's closed execution declaration is:
 the reviewed implementation profile; it is **not** a binary attestation. Record
 the built binary SHA separately. `classifier_sha256` is the exact installed
 classifier script SHA. The path schema requires a string with `minLength: 1` and
-`maxLength: 4096`; content is a string with `maxLength: 65536`; both are required
-and additional properties are forbidden. The executor additionally limits the
-**UTF-8 byte count** to 65,536, regardless of JSON character count. The leaf name
+`maxLength: 4096`; content is a string with `maxLength: 4096`; both are required
+and additional properties are forbidden. The bound deliberately remains within the real rule baseline's inspected text limit; an unknown classifier result is not bypassed for a larger body. The executor additionally limits the
+**UTF-8 byte count** to 4,096, regardless of JSON character count. The leaf name
 is at most 255 UTF-8 bytes. Existing canonical hashing rules apply.
 
 The collector uses `sw-native/resources/2` for creation and binds operation,
@@ -128,8 +128,7 @@ unexpected forwarded tool call. An empty child ledger alone cannot pass: exact
 file effects and released bytes must also agree.
 
 Controlled destination/root replacement races, authority substitution and
-injected partial-write, before-publication, post-commit directory-sync and missing
-`/proc` failures are exercised by the native Rust suites. These are explicitly
+injected partial-write, before-publication, post-commit directory-sync failures are exercised by the native Rust suites. These are explicitly
 separate evidence from black-box stdio observations. To include an already-built
 native test executable, supply `--native-test-binary PATH`; it must contain actual
 `create_file` tests, including at least one passed test, and records its raw test outcomes rather than silently passing an
