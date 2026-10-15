@@ -142,4 +142,3 @@ The existing [legacy HTTP hook fails open](MCP_STDIO_ADMISSION.md); connecting
 one selected MCP server neither changes that behavior nor protects every host
 tool. The server still runs as the operator: this is no arbitrary-server OS
 confinement claim.
-

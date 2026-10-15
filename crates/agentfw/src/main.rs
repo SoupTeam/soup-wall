@@ -1058,4 +1058,3 @@ mod cli_tests {
         }
     }
 }
-

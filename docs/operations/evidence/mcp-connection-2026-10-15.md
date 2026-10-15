@@ -100,4 +100,3 @@ local Messages API. No model download, client update, paid provider call or real
 user-profile edit was required. Native Windows/macOS transactions, arbitrary
 server confinement and legacy HTTP-hook enforcement remain outside this result.
 The legacy HTTP hook retains its documented fail-open behavior.
-
