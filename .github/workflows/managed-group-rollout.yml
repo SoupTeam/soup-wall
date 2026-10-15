@@ -38,7 +38,6 @@ jobs:
           --health-retries 20
     env:
       PGHOST: 127.0.0.1
-      PGPORT: ${{ job.services.postgres.ports[5432] }}
       PGUSER: postgres
       PGPASSWORD: disposable-admin
     steps:
@@ -51,6 +50,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y age postgresql-client-16
           echo /usr/lib/postgresql/16/bin >> "$GITHUB_PATH"
+      - name: Select the isolated service port
+        run: echo "PGPORT=${{ job.services.postgres.ports['5432'] }}" >> "$GITHUB_ENV"
       - name: Create only owned disposable databases
         run: |
           psql -d postgres -v ON_ERROR_STOP=1 <<'SQL'
@@ -66,14 +67,14 @@ jobs:
           cargo test --locked -p llm-firewall --test managed_group_rollout --test managed_group_atomic
       - name: Run the same fault and concurrency controls on PostgreSQL
         env:
-          SOUP_GROUP_TEST_POSTGRES_URL: postgresql://rollout_owner:disposable-owner@127.0.0.1:${{ job.services.postgres.ports[5432] }}/group_controls?sslmode=disable
+          SOUP_GROUP_TEST_POSTGRES_URL: postgresql://rollout_owner:disposable-owner@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/group_controls?sslmode=disable
         run: cargo test --locked -p llm-firewall --test managed_group_atomic postgres_atomic_restart_and_concurrency -- --ignored
       - name: Four real Agents with encrypted SQLite recovery
         run: python3 scripts/managed-group-rollout-demo.py --no-build --output target/group-sqlite.json
       - name: Four real Agents with encrypted PostgreSQL recovery
         env:
-          SOUP_GROUP_DEMO_DATABASE_URL: postgresql://rollout_owner:disposable-owner@127.0.0.1:${{ job.services.postgres.ports[5432] }}/group_source?sslmode=disable
-          SOUP_GROUP_DEMO_RESTORED_URL: postgresql://rollout_owner:disposable-owner@127.0.0.1:${{ job.services.postgres.ports[5432] }}/group_restored?sslmode=disable
+          SOUP_GROUP_DEMO_DATABASE_URL: postgresql://rollout_owner:disposable-owner@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/group_source?sslmode=disable
+          SOUP_GROUP_DEMO_RESTORED_URL: postgresql://rollout_owner:disposable-owner@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/group_restored?sslmode=disable
         run: python3 scripts/managed-group-rollout-demo.py --no-build --backend postgres --output target/group-postgres.json
       - name: Retain sanitized outcomes
         if: always()
