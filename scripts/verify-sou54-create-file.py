@@ -199,7 +199,7 @@ def healthy(port, daemon):
 def frame(call_id, tool, arguments):
     return {"jsonrpc": "2.0", "id": call_id, "method": "tools/call",
             "params": {"name": tool, "arguments": arguments,
-                       "_meta": {"claudecode/toolUseId": "toolu_" + call_id, "progressToken": call_id}}}
+                       "_meta": {"claudecode/toolUseId": "toolu_" + call_id, "progressToken": 0}}}
 
 
 def policy_for(name):
@@ -328,6 +328,10 @@ def grade(row):
         require([r.get("id") for r in clients] == ["init", "list"] + [a["request"]["id"] for a in attempts] + ["useful-followup"],
                 "original call identifiers lost/reordered")
         for attempt, response in zip(attempts, clients[2:-1]):
+            meta = attempt["request"]["params"].get("_meta")
+            require(isinstance(meta, dict) and type(meta.get("progressToken")) is int and meta["progressToken"] >= 0
+                    and meta.get("claudecode/toolUseId") == "toolu_" + attempt["request"]["id"],
+                    "unsupported or changed client correlation metadata")
             require(strict_json(attempt["reply_raw"]) == response, "released-byte witness mismatch")
             require(response.get("id") == attempt["request"]["id"] and response.get("jsonrpc") == "2.0",
                     "response correlation mismatch")
@@ -617,6 +621,7 @@ def run(args):
         "false_interruptions": false_interruptions, "latency_ms": {"samples": len(timings), "p50": percentile(50),
         "p95": percentile(95), "max": max(timings) if timings else None,
         "scope": "scripted client send to correlated response; debug binary; classifier/native policy/local OS included"}}
+    report["acceptance_passed"] = report["status"] == "pass"
     # Final output creation is exclusive as well as the initial preflight;
     # never follow/overwrite a concurrently introduced destination or symlink.
     descriptor = os.open(output, os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0), 0o600)

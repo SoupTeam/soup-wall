@@ -12,6 +12,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("sou54_probe", SCRIPTS / "verify-sou54-create-file.py")
@@ -80,6 +81,29 @@ def observation(name="utf8-relative"):
 
 
 class EvidenceTests(unittest.TestCase):
+    def test_final_report_flag_matches_complete_failed_and_unsupported_outcomes(self):
+        # Exercise only the report aggregator. Mocked observations are not a
+        # competing runtime pipeline and never establish production acceptance.
+        for requested in ("pass", "fail", "incomplete"):
+            with self.subTest(status=requested), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                binary = root / "synthetic-binary-identity"
+                binary.write_bytes(b"not executed: aggregate-report control")
+                output = root / "report.json"
+                args = SimpleNamespace(repo=SCRIPTS.parent, agentfw=binary, output=output,
+                                       expected_commit="a" * 40, native_test_binary=None)
+                def observed(_repo, _binary, name, _tools, _digest):
+                    return {"case": name, "attempts": [], "owned_fixture_removed": True,
+                            "grade": {"status": "fail" if requested == "fail" and name == PROBE.CASES[0] else "pass", "reason": "report aggregation control"}}
+                with patch.object(PROBE, "source_snapshot", return_value={"commit": "a" * 40, "tracked_dirty": False}), \
+                     patch.object(PROBE.platform, "system", return_value="Darwin" if requested == "incomplete" else "Linux"), \
+                     patch.object(PROBE, "run_case", side_effect=observed), patch("builtins.print"):
+                    exit_code = PROBE.run(args)
+                report = json.loads(output.read_text())
+                self.assertEqual(report["status"], requested)
+                self.assertIs(report["acceptance_passed"], requested == "pass")
+                self.assertEqual(exit_code, {"pass": 0, "fail": 1, "incomplete": 2}[requested])
+
     def test_zero_selected_tests_cannot_be_a_successful_native_boundary_check(self):
         self.assertFalse(PROBE.native_test_passed({"exit_code": 0, "stdout": "running 0 tests\n\ntest result: ok. 0 passed; 0 failed; 10 filtered out\n"}))
         self.assertFalse(PROBE.native_test_passed({"exit_code": 0, "stdout": "running 3 tests\n\ntest result: ok. 0 passed; 0 failed; 3 ignored\n"}))
@@ -96,6 +120,14 @@ class EvidenceTests(unittest.TestCase):
     def test_usable_create_and_result_withhold_have_honest_effect_witnesses(self):
         for name in ("utf8-relative", "result-withheld", "native-deny", "native-ask", "classifier-ask", "classifier-deny", "repeated-failures"):
             self.assertEqual(PROBE.grade(observation(name))["status"], "pass", name)
+
+    def test_scripted_metadata_retains_ids_and_uses_supported_integer_progress_token(self):
+        request = PROBE.frame("original-call-id", "create_file", {"path": "new.txt", "content": "ok"})
+        self.assertEqual(request["id"], "original-call-id")
+        self.assertEqual(request["params"]["_meta"], {"claudecode/toolUseId": "toolu_original-call-id", "progressToken": 0})
+        row = observation()
+        row["attempts"][0]["request"]["params"]["_meta"]["progressToken"] = "wrong-string-token"
+        self.assertEqual(PROBE.grade(row)["status"], "fail")
 
     def test_zero_child_calls_is_not_proof_of_successful_create(self):
         for change in (lambda r: r.update(created_witness=None), lambda r: r.update(workspace_after=r["workspace_before"]),
