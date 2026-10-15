@@ -633,7 +633,14 @@ impl Drop for Daemon {
 async fn real_daemon_reports_loaded_identity_and_survives_disk_drift() {
     let dir = tempfile::tempdir().unwrap();
     let home = dir.path().join(".agentfw");
-    std::fs::create_dir(&home).unwrap();
+    let install = std::process::Command::new(env!("CARGO_BIN_EXE_agentfw"))
+        .arg("install")
+        .env("HOME", dir.path())
+        .env("USERPROFILE", dir.path())
+        .output()
+        .unwrap();
+    assert!(install.status.success(), "fixture profile setup failed");
+    let token = std::fs::read_to_string(home.join("token")).unwrap();
     let port = {
         let s = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         s.local_addr().unwrap().port()
@@ -648,7 +655,6 @@ async fn real_daemon_reports_loaded_identity_and_survives_disk_drift() {
         serde_yaml::to_string(&cfg).unwrap(),
     )
     .unwrap();
-    std::fs::write(home.join("token"), TOKEN).unwrap();
     let stderr_path = dir.path().join("daemon-stderr.txt");
     let stderr = std::fs::File::create(&stderr_path).unwrap();
     let mut daemon = Daemon(
@@ -664,7 +670,8 @@ async fn real_daemon_reports_loaded_identity_and_survives_disk_drift() {
             .unwrap(),
     );
     let mut observed = None;
-    for _ in 0..100 {
+    let deadline = std::time::Instant::now() + Duration::from_secs(60);
+    while std::time::Instant::now() < deadline {
         assert!(
             daemon.0.try_wait().unwrap().is_none(),
             "fixture daemon exited: {}",
@@ -672,7 +679,7 @@ async fn real_daemon_reports_loaded_identity_and_survives_disk_drift() {
         );
         if let Ok(s) = status::query(
             &cfg,
-            TOKEN,
+            token.trim(),
             &Expectations::default(),
             Duration::from_millis(200),
         )
@@ -704,7 +711,7 @@ async fn real_daemon_reports_loaded_identity_and_survives_disk_drift() {
     .unwrap();
     let second = status::query(
         &cfg,
-        TOKEN,
+        token.trim(),
         &Expectations::default(),
         Duration::from_secs(1),
     )
