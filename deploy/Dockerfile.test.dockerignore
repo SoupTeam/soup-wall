@@ -42,3 +42,9 @@
 **/*.pem
 **/__pycache__
 **/.git
+
+# Public test certificate required by the native HTTPS authority binding test.
+!crates/proxy/tests/
+!crates/proxy/tests/fixtures/
+!crates/proxy/tests/fixtures/saml/
+!crates/proxy/tests/fixtures/saml/local-idp-cert.pem
