@@ -128,6 +128,21 @@ exit $code
             if (Test-Path -LiteralPath $path) { Copy-Item -LiteralPath $path -Destination (Join-Path $out $file) }
         }
         if (Test-Path -LiteralPath (Join-Path $out 'driver.log')) { Get-Content -LiteralPath (Join-Path $out 'driver.log') }
+        $acceptancePath = Join-Path $out 'acceptance.json'
+        if ($report.status -ne 'pass' -and (Test-Path -LiteralPath $acceptancePath)) {
+            $failure = Get-Content -LiteralPath $acceptancePath -Raw | ConvertFrom-Json
+            Write-Output "Native Windows acceptance failure: $($failure.status); $($failure.error)"
+            foreach ($stream in @('stdout', 'stderr')) {
+                $text = [string]$failure.native_tests.$stream
+                if ($text) {
+                    Write-Output "Owned native tests $stream (maximum 32768 characters):"
+                    if ($text.Length -gt 32768) {
+                        Write-Output $text.Substring(0, 32768)
+                        Write-Output '[TRUNCATED: native test diagnostics exceeded 32768 characters; complete bytes retained in acceptance.json]'
+                    } else { Write-Output $text }
+                }
+            }
+        }
     } catch {
         $report.error = "Could not retain read acceptance evidence: $($_.Exception.Message)"
         $report.status = 'incomplete'

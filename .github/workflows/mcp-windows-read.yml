@@ -9,6 +9,7 @@ on:
       - 'rule_baseline/**'
       - 'scripts/verify-sou58-windows-read.py'
       - 'scripts/ci-windows-read.ps1'
+      - 'scripts/print-sou58-ci-diagnostics.py'
       - 'scripts/verify-sou54-create-file.py'
       - 'scripts/fixtures/mcp_windows_read_probe_server.py'
       - 'scripts/tests/test_sou58_windows_read.py'
@@ -37,6 +38,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build and identify the exact native Windows candidate
+        id: build
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -63,6 +65,7 @@ jobs:
               Tee-Object -FilePath "$env:RUNNER_TEMP/sou58-router.log"
           if ($LASTEXITCODE -ne 0) { throw 'Native endpoint regressions failed' }
       - name: Privileged file symlink native API regression
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: pwsh
         run: |
           & $env:SOU58_TEST_BINARY windows_read::tests::refuses_symlink_when_creation_is_available --ignored --nocapture 2>&1 |
@@ -73,12 +76,19 @@ jobs:
               throw 'One executed privileged symlink API test is required'
           }
       - name: Actual stdio, enforcing daemon and handle tests as a standard user
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: pwsh
         run: |
           ./scripts/ci-windows-read.ps1 -AgentBinary ./target/debug/agentfw.exe `
               -TestBinary $env:SOU58_TEST_BINARY -PythonBinary (Get-Command python).Source `
               -Commit ((& git rev-parse HEAD).Trim()) -OutputDirectory "$env:RUNNER_TEMP/sou58-standard-user"
           if ($LASTEXITCODE -ne 0) { throw 'Standard-user native Windows acceptance failed' }
+      - name: Publish bounded native Windows failure diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          python -B scripts/print-sou58-ci-diagnostics.py --root "$env:RUNNER_TEMP" --summary "$env:GITHUB_STEP_SUMMARY"
+          if ($LASTEXITCODE -ne 0) { throw 'Could not publish native Windows diagnostics' }
       - name: Retain sanitized outcomes and exact source/build witnesses
         if: always()
         uses: actions/upload-artifact@v7

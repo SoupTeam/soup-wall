@@ -16,6 +16,7 @@ SCRIPT = Path(__file__).resolve().parents[1] / "verify-sou58-windows-read.py"
 spec = importlib.util.spec_from_file_location("sou58_windows_acceptance_under_test", SCRIPT)
 D = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(D)
+DIAGNOSTICS = D.load(SCRIPT.with_name("print-sou58-ci-diagnostics.py"), "sou58_ci_diagnostics_under_test")
 
 
 def line(value):
@@ -315,6 +316,35 @@ class WindowsReadGradingControls(unittest.TestCase):
         self.assertEqual(D.grade(row)["status"], "pass")
         row["sessions"][0]["child_process"]["exit_observed"] = False
         self.assertFails(row)
+
+    def test_ci_diagnostics_keep_failures_visible_without_altering_raw_report(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "sou58-router.log").write_text("router FAILED\n", encoding="utf-8")
+            output = root / "sou58-standard-user"
+            output.mkdir()
+            report = {"status": "incomplete", "error": "native tests failed", "native_tests": {
+                "stdout": "test failing ... FAILED", "stderr": "owned panic"},
+                "cases": [{"case": "allow-relative", "error": "bad", "grade": {"status": "fail"}}]}
+            raw = json.dumps(report)
+            (output / "acceptance.json").write_text(raw, encoding="utf-8")
+            (output / "launcher.json").write_text(json.dumps({"status": "incomplete", "error": "child failed"}), encoding="utf-8")
+            text = DIAGNOSTICS.diagnostics(root)
+            for expected in ("router FAILED", "failing ... FAILED", "owned panic", "allow-relative", "child failed"):
+                self.assertIn(expected, text)
+            self.assertEqual((output / "acceptance.json").read_text(encoding="utf-8"), raw)
+            self.assertIn("~~~text", text)
+
+    def test_ci_diagnostics_redact_authentication_and_cap_unicode_bytes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "sou58-router.log").write_text('Bearer fixture-secret\n{"password":"private"}\n~~~\n' + "🥣" * 100000, encoding="utf-8")
+            text = DIAGNOSTICS.diagnostics(root)
+            self.assertNotIn("fixture-secret", text)
+            self.assertNotIn('"private"', text)
+            self.assertIn("[REDACTED]", text)
+            self.assertIn("[TRUNCATED:", text)
+            self.assertLess(len(text.encode()), 150000)
 
 
 if __name__ == "__main__":
