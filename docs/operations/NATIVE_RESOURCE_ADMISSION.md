@@ -2,6 +2,11 @@
 
 The opt-in `sw-native/resources/1` contract at `/native/v1` checks permissions and one-shot correlation for an authenticated trusted collector. It does not attest an executor sandbox. The shipped generic stdio relay refuses resource-profiled calls except the reviewed operation executors below. [Constrained Linux file creation](MCP_CREATE_FILE.md) adds an explicitly installed `sw-native/resources/2` create-only profile; it does not enable arbitrary writes or server containment. See [MCP admission](MCP_STDIO_ADMISSION.md).
 
+[Constrained Linux HTTPS GET](MCP_HTTPS_GET.md) adds `sw-native/resources/3`
+with a separate, mutually exclusive `network` authority and binding. The earlier
+read and create contracts remain compatible. The registry and session
+start/end contract remain `sw-native/1`; earlier daemons refuse v3.
+
 ## Operator configuration
 
 The registry remains `sw-native/1`. Each tool can optionally carry a closed `resource_policy` object with:
@@ -10,6 +15,8 @@ The registry remains `sw-native/1`. Each tool can optionally carry a closed `res
 - `workspace` and `cwd`: existing absolute directories, with canonical cwd inside workspace.
 - `executor_sha256` and `classifier_sha256`: operator-reviewed revision digests.
 - `allowed_resources`: 1–256 complete normalized Resource values.
+- `execution` for the explicit v2 create profile, or `network` for the explicit
+  v3 HTTPS GET profile; both are absent from legacy reads and cannot coexist.
 
 Digests must be 64 lowercase hexadecimal characters. The profile must match the installed tool and schema. This policy is loaded from trusted operator configuration, never from a call or MCP annotations. Existing native policy and declared egress checks still apply after resource checks.
 
@@ -49,7 +56,8 @@ The confined file-read executor is supported on Unix. Non-Unix platforms refuse 
   6. On successful read, delivers the verified result through native result admission with bound host ID and release confirmation.
   7. Directly returns the result to the host, ensuring the unconfined server child process is **never invoked** for the operation.
 - The separately configured [Linux `create_file` executor](MCP_CREATE_FILE.md) supports one new direct workspace child under `sw-native/resources/2`. Its explicit operation/action/content/workspace authority cannot be downgraded to the read contract.
-- Any other unsupported operation, arbitrary tool, or network egress under resource policy is rejected immediately with `resource_executor_unsupported`, preventing unconfined server execution.
+- The separately configured [Linux `https_get` executor](MCP_HTTPS_GET.md) supports one exact HTTPS URL and reviewed socket address under `sw-native/resources/3`, with verified TLS and bounded reads. It requires actual native Allow and inspects the original response text before release.
+- All other unsupported resource-policy operations remain refused with `resource_executor_unsupported`, preventing unconfined server execution.
 
 ## Verification and remaining work
 

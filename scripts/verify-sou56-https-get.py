@@ -46,10 +46,10 @@ CASES = ("allow-json", "allow-text", "cookie-state", "native-deny", "native-ask"
          "redirect", "proxy-poisoning", "tls-hostname", "tls-untrusted", "tls-expired", "tls-invalid",
          "timeout", "oversize", "invalid-utf8", "invalid-json", "unsupported-compression", "unsupported-content",
          "unsupported-charset", "http-error", "result-withheld", "repeated-failures", "cross-session", "replayed-id",
-         "queued-cancellation", "queued-overlap", "unsupported-chunked", "massive-header", "informational-response",
+         "queued-cancellation", "queued-overlap", "inflight-cancellation", "unsupported-chunked", "massive-header", "informational-response",
          "truncated-body", "duplicate-content-length")
 SCHEMA_REFUSALS = {"caller-headers", "caller-method", "caller-body"}
-PROTOCOL = {"replayed-id", "queued-cancellation", "queued-overlap"} | SCHEMA_REFUSALS
+PROTOCOL = {"replayed-id", "queued-cancellation", "queued-overlap", "inflight-cancellation"} | SCHEMA_REFUSALS
 HELD = {"queued-cancellation", "queued-overlap"}
 PROXIED = HELD | {"native-url-substitution", "native-authority-substitution", "cross-session"}
 SUCCESS = {"allow-json", "allow-text", "cookie-state", "proxy-poisoning", "cross-session", "replayed-id"}
@@ -92,7 +92,7 @@ def successful_fetch(name, label):
 
 def expected_attempts(name, label):
     """Only replies already observed are attempts; held/aborted calls have none."""
-    if label != "primary" or name in HELD | SCHEMA_REFUSALS:
+    if label != "primary" or name in HELD | SCHEMA_REFUSALS | {"inflight-cancellation"}:
         return 0
     return REPEATED if name == "repeated-failures" else 2 if name == "cookie-state" else 1
 
@@ -341,7 +341,10 @@ def grade(row):
                       and row["sessions"] == [] and row["owned_fixture_removed"] is True,
                       "unsafe operator configuration was not explicitly refused at startup")
             return {"status": "pass", "reason": "invalid loopback authority refused at startup; independent receivers saw zero transport"}
-        native = H.json_lines(row["native_audit_raw"].encode())
+        # The shared audit file also contains ordinary manifest/hook records.
+        # Only native contract entries carry the native registry identity.
+        native = [value for value in H.json_lines(row["native_audit_raw"].encode())
+                  if value.get("event", "").startswith("native_")]
         H.require(all(value.get("registry_sha256") == configuration["registry_sha256"] for value in native),
                   "native gates used another installed registry")
         starts = [value for value in native if value.get("event") == "native_session_start"]
@@ -448,7 +451,7 @@ def grade(row):
                     H.require(sum(prediction.get("host_call_id") == attempt["request"]["id"] for prediction in predictions) == 1,
                               "supported fetch did not exercise exactly one classifier boundary")
         executions = [value for session in sessions for value in H.classify_rows(session["collector_raw"].encode(), "mcp_https_get_execution")]
-        execution_count = 0 if name in ZERO - {"dns-address-substitution"} else REPEATED if name == "repeated-failures" else 2 if name == "cookie-state" else 1
+        execution_count = 0 if name in (ZERO - {"dns-address-substitution"}) | {"inflight-cancellation"} else REPEATED if name == "repeated-failures" else 2 if name == "cookie-state" else 1
         H.require(len(executions) == execution_count, "actual broker execution boundary count missing or inconsistent")
         for execution in executions:
             attempt = next((value for session in sessions for value in session.get("attempts", [])
@@ -495,14 +498,44 @@ def grade(row):
                           "the requested native Deny/Ask boundary was not exercised")
             else:
                 H.require(not fetch_calls, "classifier Deny/Ask reached native execution admission")
+        if name == "inflight-cancellation":
+            H.require(len(fetch_calls) == 1 and not fetch_results
+                      and fetch_calls[0].get("released") is True and fetch_calls[0].get("verdict") == "allow"
+                      and fetch_calls[0].get("shadow") is False,
+                      "active cancellation did not discard a genuinely admitted outstanding request")
+            H.require(requests[0]["at_monotonic"] <= row["inflight_request_seen_at"] <= row["cancellation_queued_at"]
+                      and row["cancellation_queued_at"] - row["inflight_request_seen_at"] < 3
+                      and row["cancellation_frame"].get("method") == "notifications/cancelled"
+                      and row["cancellation_frame"]["params"]["requestId"] == row["inflight_original_frame"]["id"]
+                      and row["inflight_original_frame"]["params"]["name"] == "https_get",
+                      "active cancellation was not sent after the independent request witness")
         if name in PROXIED:
             H.require(row["proxy_closed_cleanly"] is True and row["proxy_exchanges"], "authenticated native proxy incomplete")
             for exchange in row["proxy_exchanges"]:
-                H.require(exchange.get("error") is None and exchange.get("authorization_header_retained") is False,
-                          "proxy transport error or unsafe credential retention")
+                H.require(exchange.get("authorization_header_retained") is False, "unsafe proxy credential retention")
                 for field in ("original", "forwarded", "reply"):
                     H.strict_json(exchange[field + "_raw"])
                     H.require(H.sha(exchange[field + "_raw"].encode()) == exchange[field + "_sha256"], "proxy raw digest mismatch")
+                if exchange.get("error") is not None:
+                    original, reply = (H.strict_json(exchange[key + "_raw"]) for key in ("original", "reply"))
+                    # Cancellation closes the collector's HTTP future before
+                    # we release its saved genuine Allow. A downstream broken
+                    # pipe is therefore an expected witness of discarded bytes,
+                    # only after the independently recorded session cleanup.
+                    H.require(name in HELD and exchange.get("held") is True
+                              and exchange["error"].startswith(("BrokenPipeError:", "ConnectionResetError:"))
+                              and exchange.get("downstream_delivered") is not True
+                              and exchange["original_raw"] == exchange["forwarded_raw"]
+                              and exchange["upstream_status"] == 200
+                              and original.get("event") == "call" and original.get("tool") == "https_get"
+                              and reply.get("release") is True and reply.get("verdict") == "allow"
+                              and reply.get("enforced") is True and reply.get("event") == "call"
+                              and reply.get("registry_sha256") == original.get("registry_sha256")
+                              and reply.get("session_id") == original.get("session_id")
+                              and reply.get("contract_version") == "sw-native/resources/3"
+                              and row.get("session_end_before_release") is True
+                              and exchange["upstream_completed_at"] <= row["queued_at"] < row["release_at"] <= exchange["released_at"],
+                              "proxy transport failed outside an authenticated cancelled downstream delivery")
             changed = [value for value in row["proxy_exchanges"] if value["original_raw"] != value["forwarded_raw"]]
             if name in {"native-url-substitution", "native-authority-substitution", "cross-session"}:
                 H.require(len(changed) == 1 and H.strict_json(changed[0]["reply_raw"]).get("release") is False,
@@ -569,7 +602,7 @@ def run_case(repo, binary, name, binary_digest, certificate_dir, certificate_wit
             poisoned_port = receiver("proxy_receiver", plain=True)
             mode = {"allow-text": "text", "redirect": "redirect", "oversize": "oversize", "invalid-utf8": "invalid-utf8",
                     "invalid-json": "invalid-json", "unsupported-compression": "compressed", "unsupported-content": "binary",
-                    "unsupported-charset": "charset", "result-withheld": "injection", "timeout": "timeout",
+                    "unsupported-charset": "charset", "result-withheld": "injection", "timeout": "timeout", "inflight-cancellation": "timeout",
                     "http-error": "status", "repeated-failures": "invalid-utf8", "unsupported-chunked": "chunked",
                     "massive-header": "massive-header", "informational-response": "informational", "truncated-body": "truncated",
                     "duplicate-content-length": "duplicate-length", "tls-invalid": "invalid-tls"}.get(name, "document")
@@ -654,7 +687,28 @@ def run_case(repo, binary, name, binary_digest, certificate_dir, certificate_wit
             arguments = arguments_for(name, url, secondary_port)
             if name == "dns-address-substitution":
                 arguments["url"] = url.replace("127.0.0.1", "localhost")
-            if name in HELD:
+            if name == "inflight-cancellation":
+                original = H.frame("fetch-1", "https_get", arguments)
+                primary["collector"].send(original, reply=False)
+                receiver_ledger = next(item["ledger"] for item in receivers if item["label"] == "receiver")
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    try:
+                        observed = H.json_lines(read(receiver_ledger).encode())
+                    except ValueError:
+                        observed = []  # A concurrent append may not yet be complete.
+                    if any(value.get("event") == "request" for value in observed):
+                        break
+                    H.require(primary["collector"].process.poll() is None, "collector exited before active cancellation")
+                    time.sleep(.01)
+                H.require(any(value.get("event") == "request" for value in observed), "active owned GET witness missing")
+                row["inflight_request_seen_at"] = time.monotonic()
+                row["inflight_original_frame"] = original
+                row["cancellation_frame"] = {"jsonrpc": "2.0", "method": "notifications/cancelled", "params": {
+                    "requestId": original["id"], "reason": "SOU56 owned cancellation after receiver observed GET"}}
+                primary["collector"].send(row["cancellation_frame"], reply=False)
+                row["cancellation_queued_at"] = time.monotonic()
+            elif name in HELD:
                 original = H.frame("fetch-1", "https_get", arguments)
                 primary["collector"].send(original, reply=False)
                 H.require(proxy.ready.wait(timeout=10), "genuine native Allow hold missing")
@@ -765,6 +819,7 @@ def run(args):
             "Result withholding cannot undo an already issued GET; the receiver witness is retained.",
             "Unsupported overlap/cancellation/replay ends the original session; useful recovery then uses a fresh session.",
             "The cross-session transport control substitutes an ended session ID, retains the real daemon 409, and proves useful recovery in a third session.",
+            "Active cancellation is queued only after the independent receiver records the GET; the already issued request is retained while result release is refused.",
             "Binary digests identify artifacts; matching build logs establish build provenance."]}
     try:
         if platform.system() != "Linux":

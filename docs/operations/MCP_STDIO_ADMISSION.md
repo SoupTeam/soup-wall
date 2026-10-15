@@ -100,7 +100,7 @@ constrained execution executes verified workspace file reads (`read_document`)
 directly through the broker under native resource admission (`sw-native/resources/1`)
 without executing the unconfined child process. Any non-reviewed operation or
 arbitrary tool under resource policy is refused fail-closed with
-`resource_executor_unsupported`. The explicitly installed [Linux create-only profile](MCP_CREATE_FILE.md) additionally supports `create_file` under `sw-native/resources/2`; unsupported writes remain refused. See [Native resource admission](NATIVE_RESOURCE_ADMISSION.md).
+`resource_executor_unsupported`. The explicitly installed [Linux create-only profile](MCP_CREATE_FILE.md) additionally supports `create_file` under `sw-native/resources/2`; unsupported writes remain refused. The separate [Linux HTTPS GET profile](MCP_HTTPS_GET.md) adds one exact URL/address-bound fetch under `sw-native/resources/3`, with verified TLS and complete bounded text/JSON result inspection. Legacy read/create protocols remain compatible; there is no network fallback to the MCP child. See [Native resource admission](NATIVE_RESOURCE_ADMISSION.md).
 
 
 ## Unix host transport

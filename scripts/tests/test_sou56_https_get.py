@@ -97,6 +97,61 @@ def observation(name="allow-json"):
             "attempts": [{"request": request, "reply_raw": raw(reply), "success": success, "latency_ms": 1}]}]}
 
 
+def held_observation(name="queued-cancellation"):
+    """Synthetic downstream disconnect after a complete authentic Allow shape."""
+    row = observation()
+    row["case"] = name
+    row["receiver_raw"] = raw({"event": "receiver_started"}) + raw({"event": "receiver_closed"})
+    primary = row["sessions"][0]
+    client_frames = primary["client_raw"].splitlines(keepends=True)
+    fresh = copy.deepcopy(primary)
+    primary.update(attempts=[], client_raw="".join(client_frames[:2]),
+                   collector_raw="concurrent MCP requests are not supported\n")
+    primary.pop("useful")
+    primary["closure"]["exit_code"] = 1
+    useful_request = P.H.frame("useful-fresh-after-refusal", "read_document", {"path": "/owned/inventory.txt"})
+    useful_reply = {"jsonrpc": "2.0", "id": useful_request["id"], "result": {
+        "content": [{"type": "text", "text": P.READ_TEXT}]}}
+    fresh.update(label="fresh-after-refusal", native_session_id="fresh-session", attempts=[],
+                 useful={"request": useful_request, "reply_raw": raw(useful_reply)},
+                 client_raw="".join(client_frames[:2]) + raw(useful_reply),
+                 collector_raw=raw({"event": "mcp_classification", "host_call_id": useful_request["id"],
+                                    "classifier_sha256": "c" * 64}))
+    row["sessions"].append(fresh)
+    digest = row["configuration"]["registry_sha256"]
+    native = [{"event": "native_session_start", "session": "owned-session"},
+              {"event": "native_call", "tool": "https_get", "session": "owned-session", "released": True,
+               "verdict": "allow", "shadow": False, "call_id": "held-native", "binding_sha256": "b" * 64},
+              {"event": "native_session_end", "session": "owned-session"},
+              {"event": "native_session_start", "session": "fresh-session"}]
+    for event in ("native_call", "native_result"):
+        native.append({"event": event, "tool": "read_document", "session": "fresh-session", "released": True,
+                       "verdict": "allow", "shadow": False, "call_id": "fresh-native", "binding_sha256": "c" * 64,
+                       "delivery": "mcp_host", "content_sha256": P.H.sha(raw(useful_reply).encode())})
+    native.append({"event": "native_session_end", "session": "fresh-session"})
+    row["native_audit_raw"] = "".join(raw(value | {"registry_sha256": digest}) for value in native)
+    original = {"contract_version": "sw-native/resources/3", "registry_sha256": digest,
+                "session_id": "mcp-source", "event": "call", "tool": "https_get"}
+    reply = {"contract_version": "sw-native/resources/3", "registry_sha256": digest,
+             "session_id": "mcp-source", "event": "call", "release": True, "verdict": "allow", "enforced": True}
+    exchange = {"original_raw": raw(original), "forwarded_raw": raw(original), "reply_raw": raw(reply),
+                "upstream_status": 200, "upstream_completed_at": 1, "held": True, "released_at": 4,
+                "authorization_header_retained": False, "error": "BrokenPipeError: [Errno 32] Broken pipe"}
+    for field in ("original", "forwarded", "reply"):
+        exchange[field + "_sha256"] = P.H.sha(exchange[field + "_raw"].encode())
+    row.update(proxy_closed_cleanly=True, proxy_exchanges=[exchange], session_end_before_release=True,
+               queued_at=2, release_at=3)
+    if name == "inflight-cancellation":
+        row["receiver_raw"] = "".join(raw(value) for value in [
+            {"event": "receiver_started"}, {"event": "connection"},
+            {"event": "request", "method": "GET", "target": "/document?item=7", "host": "127.0.0.1:1234",
+             "headers": {}, "at_monotonic": 1}, {"event": "receiver_closed"}])
+        row.update(inflight_request_seen_at=2, cancellation_queued_at=3,
+                   inflight_original_frame=P.H.frame("fetch-1", "https_get", {"url": "https://127.0.0.1:1234/document?item=7"}),
+                   cancellation_frame={"jsonrpc": "2.0", "method": "notifications/cancelled", "params": {"requestId": "fetch-1"}})
+    return row
+
+
 class EvidenceControls(unittest.TestCase):
     def test_default_never_starts_processes(self):
         result = subprocess.run([sys.executable, str(SCRIPTS / "verify-sou56-https-get.py")], capture_output=True, text=True, check=True)
@@ -203,6 +258,55 @@ class EvidenceControls(unittest.TestCase):
                            "host_call_id": "useful-primary", "classifier_sha256": "c" * 64}))):
             row = observation()
             mutate(row)
+            self.assertEqual(P.grade(row)["status"], "fail")
+
+    def test_unrelated_audit_entries_coexist_but_native_registry_is_exact(self):
+        row = observation()
+        row["native_audit_raw"] = raw({"event": "manifest", "server": "sou56"}) + row["native_audit_raw"]
+        self.assertEqual(P.grade(row)["status"], "pass")
+        values = P.H.json_lines(row["native_audit_raw"].encode())
+        next(value for value in values if value.get("event") == "native_call")["registry_sha256"] = "f" * 64
+        row["native_audit_raw"] = "".join(raw(value) for value in values)
+        self.assertEqual(P.grade(row)["status"], "fail")
+
+    def test_cancelled_downstream_disconnect_requires_real_allow_and_cleanup_order(self):
+        for name in P.HELD:
+            row = held_observation(name)
+            self.assertEqual(P.grade(row)["status"], "pass", name)
+        for mutate in (lambda row: row.update(session_end_before_release=False),
+                       lambda row: row["proxy_exchanges"][0].update(error="TimeoutError: upstream timeout"),
+                       lambda row: row["proxy_exchanges"][0].update(upstream_status=503),
+                       lambda row: row["proxy_exchanges"][0].update(released_at=2),
+                       lambda row: row["proxy_exchanges"][0].update(downstream_delivered=True)):
+            row = held_observation()
+            mutate(row)
+            self.assertEqual(P.grade(row)["status"], "fail")
+        row = held_observation()
+        exchange = row["proxy_exchanges"][0]
+        reply = P.H.strict_json(exchange["reply_raw"])
+        reply.update(release=False, verdict="deny")
+        exchange.update(reply_raw=raw(reply), reply_sha256=P.H.sha(raw(reply).encode()))
+        self.assertEqual(P.grade(row)["status"], "fail")
+
+    def test_active_cancellation_needs_a_real_get_before_cancellation_and_no_result_release(self):
+        row = held_observation("inflight-cancellation")
+        self.assertEqual(P.grade(row)["status"], "pass")
+        for mutate in (lambda row: row.update(cancellation_queued_at=0),
+                       lambda row: row["cancellation_frame"]["params"].update(requestId="different-call"),
+                       lambda row: row.update(receiver_raw=raw({"event": "receiver_started"}) + raw({"event": "receiver_closed"})),
+                       lambda row: row["sessions"][0].update(collector_raw="unrelated error")):
+            row = held_observation("inflight-cancellation")
+            mutate(row)
+            self.assertEqual(P.grade(row)["status"], "fail")
+        for event in ("native_call", "native_result"):
+            row = held_observation("inflight-cancellation")
+            values = P.H.json_lines(row["native_audit_raw"].encode())
+            call = next(value for value in values if value.get("event") == "native_call" and value.get("tool") == "https_get")
+            if event == "native_call":
+                call.update(released=False, verdict="ask")
+            else:
+                values.append(call | {"event": "native_result"})
+            row["native_audit_raw"] = "".join(raw(value) for value in values)
             self.assertEqual(P.grade(row)["status"], "fail")
 
     def test_result_withholding_retains_already_issued_get(self):
