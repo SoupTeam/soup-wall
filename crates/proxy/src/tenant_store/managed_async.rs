@@ -161,7 +161,10 @@ impl TenantStore {
         is_pilot: bool,
     ) -> anyhow::Result<ManagedGroupMember> {
         match &self.postgres {
-            Some(pg) => pg.add_managed_group_member(tenant, group_id, agent_id, is_pilot).await,
+            Some(pg) => {
+                pg.add_managed_group_member(tenant, group_id, agent_id, is_pilot)
+                    .await
+            }
             None => self.add_managed_group_member(tenant, group_id, agent_id, is_pilot),
         }
     }
@@ -172,7 +175,10 @@ impl TenantStore {
         agent_id: &str,
     ) -> anyhow::Result<bool> {
         match &self.postgres {
-            Some(pg) => pg.remove_managed_group_member(tenant, group_id, agent_id).await,
+            Some(pg) => {
+                pg.remove_managed_group_member(tenant, group_id, agent_id)
+                    .await
+            }
             None => self.remove_managed_group_member(tenant, group_id, agent_id),
         }
     }
@@ -194,7 +200,10 @@ impl TenantStore {
         yaml: &str,
     ) -> anyhow::Result<ManagedGroupRevision> {
         match &self.postgres {
-            Some(pg) => pg.create_managed_group_revision(tenant, group_id, revision, yaml).await,
+            Some(pg) => {
+                pg.create_managed_group_revision(tenant, group_id, revision, yaml)
+                    .await
+            }
             None => self.create_managed_group_revision(tenant, group_id, revision, yaml),
         }
     }
@@ -205,7 +214,10 @@ impl TenantStore {
         revision: &str,
     ) -> anyhow::Result<bool> {
         match &self.postgres {
-            Some(pg) => pg.approve_managed_group_revision(tenant, group_id, revision).await,
+            Some(pg) => {
+                pg.approve_managed_group_revision(tenant, group_id, revision)
+                    .await
+            }
             None => self.approve_managed_group_revision(tenant, group_id, revision),
         }
     }
@@ -227,7 +239,10 @@ impl TenantStore {
         issuer: &ManagedIssuer,
     ) -> anyhow::Result<ManagedGroupRollout> {
         match &self.postgres {
-            Some(pg) => pg.start_managed_group_rollout(tenant, group_id, revision, issuer).await,
+            Some(pg) => {
+                pg.start_managed_group_rollout(tenant, group_id, revision, issuer)
+                    .await
+            }
             None => self.start_managed_group_rollout(tenant, group_id, revision, issuer),
         }
     }
@@ -248,7 +263,10 @@ impl TenantStore {
         issuer: &ManagedIssuer,
     ) -> anyhow::Result<Option<ManagedGroupRollout>> {
         match &self.postgres {
-            Some(pg) => pg.advance_managed_group_rollout(tenant, group_id, issuer).await,
+            Some(pg) => {
+                pg.advance_managed_group_rollout(tenant, group_id, issuer)
+                    .await
+            }
             None => self.advance_managed_group_rollout(tenant, group_id, issuer),
         }
     }
@@ -259,7 +277,10 @@ impl TenantStore {
         issuer: &ManagedIssuer,
     ) -> anyhow::Result<Option<ManagedGroupRollout>> {
         match &self.postgres {
-            Some(pg) => pg.rollback_managed_group_rollout(tenant, group_id, issuer).await,
+            Some(pg) => {
+                pg.rollback_managed_group_rollout(tenant, group_id, issuer)
+                    .await
+            }
             None => self.rollback_managed_group_rollout(tenant, group_id, issuer),
         }
     }

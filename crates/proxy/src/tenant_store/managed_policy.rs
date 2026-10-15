@@ -1321,8 +1321,11 @@ impl TenantStore {
                 to_rollback,
                 reason,
             } => {
+                let default_issuer = ManagedIssuer::from_environment().ok();
+                let signing_issuer = default_issuer.as_ref().unwrap_or(issuer);
                 for (agent, prev) in to_rollback {
-                    let _ = self.deploy_managed_revision(tenant, &agent, &prev, true, issuer);
+                    let _ =
+                        self.deploy_managed_revision(tenant, &agent, &prev, true, signing_issuer);
                 }
                 let db = self.connection()?;
                 db.execute(
@@ -1539,8 +1542,10 @@ impl TenantStore {
             (r, to_rollback)
         };
 
+        let default_issuer = ManagedIssuer::from_environment().ok();
+        let signing_issuer = default_issuer.as_ref().unwrap_or(issuer);
         for (agent, prev) in to_rollback {
-            let _ = self.deploy_managed_revision(tenant, &agent, &prev, true, issuer);
+            let _ = self.deploy_managed_revision(tenant, &agent, &prev, true, signing_issuer);
         }
 
         let now = now_unix();

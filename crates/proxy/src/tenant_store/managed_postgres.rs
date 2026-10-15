@@ -819,10 +819,12 @@ impl PostgresTenantStore {
                         "pilot agent '{}' rejected candidate policy revision '{}'",
                         rejected_agent, rollout.revision
                     );
+                    let default_issuer = ManagedIssuer::from_environment().ok();
+                    let signing_issuer = default_issuer.as_ref().unwrap_or(issuer);
                     for agent in rollout.active_deployments.keys() {
                         if let Some(Some(prev)) = rollout.previous_revisions.get(agent) {
                             let _ = self
-                                .deploy_managed_revision(tenant, agent, prev, true, issuer)
+                                .deploy_managed_revision(tenant, agent, prev, true, signing_issuer)
                                 .await;
                         }
                     }
@@ -917,10 +919,12 @@ impl PostgresTenantStore {
                         "standard agent '{}' rejected candidate policy revision '{}'",
                         rejected_agent, rollout.revision
                     );
+                    let default_issuer = ManagedIssuer::from_environment().ok();
+                    let signing_issuer = default_issuer.as_ref().unwrap_or(issuer);
                     for agent in rollout.active_deployments.keys() {
                         if let Some(Some(prev)) = rollout.previous_revisions.get(agent) {
                             let _ = self
-                                .deploy_managed_revision(tenant, agent, prev, true, issuer)
+                                .deploy_managed_revision(tenant, agent, prev, true, signing_issuer)
                                 .await;
                         }
                     }
@@ -964,10 +968,12 @@ impl PostgresTenantStore {
             return Ok(None);
         }
 
+        let default_issuer = ManagedIssuer::from_environment().ok();
+        let signing_issuer = default_issuer.as_ref().unwrap_or(issuer);
         for agent in rollout.active_deployments.keys() {
             if let Some(Some(prev)) = rollout.previous_revisions.get(agent) {
                 let _ = self
-                    .deploy_managed_revision(tenant, agent, prev, true, issuer)
+                    .deploy_managed_revision(tenant, agent, prev, true, signing_issuer)
                     .await;
             }
         }
