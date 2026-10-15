@@ -6,6 +6,9 @@ Chromium, the production Gateway and SQLite or PostgreSQL. It complements the
 that driver or its recorded evidence. A runnable procedure is not itself a
 passing result: inspect the exact commit's JSON report and CI run before acceptance.
 
+The [2026-10-15 checkpoint](evidence/SAML_LINUX_2026-10-15.md) retains successful
+SQLite/PostgreSQL results, exact source/binary hashes and earlier failed attempts.
+
 ## Reproduce
 
 Use an isolated Linux x86_64 host with Docker, Rust, Python 3, `libnss3-tools`

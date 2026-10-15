@@ -1,0 +1,339 @@
+{
+  "schema_version": 1,
+  "scope": "Disposable Keycloak SAML and Console browser acceptance",
+  "started_at_utc": "2026-10-15T13:44:04.921317+00:00",
+  "artifact_label": "e182e7b5e7427e054d155d5680acfedcded329a8",
+  "backend": "sqlite",
+  "checks": [
+    {
+      "name": "pinned-container-image-pulled-by-digest",
+      "passed": true
+    },
+    {
+      "name": "real-keycloak-https-discovery",
+      "passed": true
+    },
+    {
+      "name": "local-membership-bootstrap",
+      "passed": true
+    },
+    {
+      "name": "bootstrap-refuses-populated-store",
+      "passed": true
+    },
+    {
+      "name": "gateway-ready",
+      "passed": true
+    },
+    {
+      "name": "owned-https-certificate-and-hostname-accepted",
+      "passed": true
+    },
+    {
+      "name": "https-wrong-hostname-refused",
+      "passed": true
+    },
+    {
+      "name": "https-untrusted-ca-refused",
+      "passed": true
+    },
+    {
+      "name": "operator-imports-genuine-signed-metadata-and-explicit-pin",
+      "passed": true
+    },
+    {
+      "name": "genuine-vendor-assertion-contains-untrusted-owner-role",
+      "passed": true
+    },
+    {
+      "name": "genuine-assertion-without-browser-binding-rejected",
+      "passed": true
+    },
+    {
+      "name": "missing-binding-does-not-create-session",
+      "passed": true
+    },
+    {
+      "name": "same-genuine-assertion-with-originating-browser-accepted",
+      "passed": true
+    },
+    {
+      "name": "callback-replay-rejected",
+      "passed": true
+    },
+    {
+      "name": "altered-identity-to-another-provisioned-member-rejected",
+      "passed": true
+    },
+    {
+      "name": "altered-assertion-does-not-create-session",
+      "passed": true
+    },
+    {
+      "name": "genuine-assertion-wrong-request-correlation-rejected",
+      "passed": true
+    },
+    {
+      "name": "original-request-remains-usable",
+      "passed": true
+    },
+    {
+      "name": "console-login-through-real-keycloak",
+      "passed": true
+    },
+    {
+      "name": "secure-opaque-host-session-cookie",
+      "passed": true
+    },
+    {
+      "name": "owner-can-read-owner-only-api",
+      "passed": true
+    },
+    {
+      "name": "refresh-needs-csrf",
+      "passed": true
+    },
+    {
+      "name": "csrf-protected-session-rotation",
+      "passed": true
+    },
+    {
+      "name": "rotated-cookie-invalidates-previous-session",
+      "passed": true
+    },
+    {
+      "name": "gateway-ready",
+      "passed": true
+    },
+    {
+      "name": "pending-saml-login-survives-gateway-and-database-restart",
+      "passed": true
+    },
+    {
+      "name": "pending-saml-login-remains-single-use-after-restart",
+      "passed": true
+    },
+    {
+      "name": "session-persists-across-gateway-restart",
+      "passed": true
+    },
+    {
+      "name": "console-logout-clears-workspace-ui",
+      "passed": true
+    },
+    {
+      "name": "logout-revokes-server-session",
+      "passed": true
+    },
+    {
+      "name": "logout-cookie-removed",
+      "passed": true
+    },
+    {
+      "name": "idp-owner-role-does-not-override-local-analyst",
+      "passed": true
+    },
+    {
+      "name": "analyst-denied-owner-only-api",
+      "passed": true
+    },
+    {
+      "name": "owner-revokes-analyst-membership",
+      "passed": true
+    },
+    {
+      "name": "revoked-membership-invalidates-existing-session",
+      "passed": true
+    },
+    {
+      "name": "gateway-ready",
+      "passed": true
+    },
+    {
+      "name": "membership-revocation-survives-restart",
+      "passed": true
+    },
+    {
+      "name": "logout-revocation-survives-restart",
+      "passed": true
+    },
+    {
+      "name": "owner-session-survives-second-restart",
+      "passed": true
+    },
+    {
+      "name": "revoked-member-cannot-create-new-session",
+      "passed": true
+    },
+    {
+      "name": "owner-restores-analyst-membership",
+      "passed": true
+    },
+    {
+      "name": "owner-issues-workspace-token",
+      "passed": true
+    },
+    {
+      "name": "issued-token-authenticates-production-store",
+      "passed": true
+    },
+    {
+      "name": "owner-revokes-workspace-token",
+      "passed": true
+    },
+    {
+      "name": "revoked-token-refused-production-store",
+      "passed": true
+    },
+    {
+      "name": "gateway-ready",
+      "passed": true
+    },
+    {
+      "name": "token-revocation-survives-restart",
+      "passed": true
+    },
+    {
+      "name": "restored-member-can-login",
+      "passed": true
+    },
+    {
+      "name": "unprovisioned-idp-user-denied",
+      "passed": true
+    },
+    {
+      "name": "selected-workspace-without-membership-denied",
+      "passed": true
+    },
+    {
+      "name": "owned-realm-operator-authenticated",
+      "passed": true
+    },
+    {
+      "name": "keycloak-generates-new-signing-key",
+      "passed": true
+    },
+    {
+      "name": "vendor-retires-previous-rsa-key",
+      "passed": true
+    },
+    {
+      "name": "genuine-vendor-certificate-changed",
+      "passed": true
+    },
+    {
+      "name": "incoming-new-key-not-automatically-trusted",
+      "passed": true
+    },
+    {
+      "name": "untrusted-key-cannot-create-session",
+      "passed": true
+    },
+    {
+      "name": "operator-replaces-metadata-and-pin",
+      "passed": true
+    },
+    {
+      "name": "retired-key-valid-unconsumed-assertion-rejected",
+      "passed": true
+    },
+    {
+      "name": "new-key-login-after-explicit-pin-update",
+      "passed": true
+    },
+    {
+      "name": "owned-realm-operator-authenticated",
+      "passed": true
+    },
+    {
+      "name": "vendor-short-lived-assertion-configured",
+      "passed": true
+    },
+    {
+      "name": "vendor-expiry-bounded-for-real-time-control",
+      "passed": true
+    },
+    {
+      "name": "genuine-expired-assertion-refused",
+      "passed": true
+    },
+    {
+      "name": "expiry-refusal-does-not-create-session",
+      "passed": true
+    },
+    {
+      "name": "vendor-normal-lifetime-restored",
+      "passed": true
+    },
+    {
+      "name": "fresh-normal-lifetime-login-succeeds",
+      "passed": true
+    },
+    {
+      "name": "expired-session-denied-server-side",
+      "passed": true
+    },
+    {
+      "name": "expired-session-returns-to-sign-in",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "cleanup_passed": true,
+  "platform": "posix",
+  "runtimes": {
+    "keycloak_image": "quay.io/keycloak/keycloak@sha256:ad1b0f0fa4bb5eff10f7a78eaafbb6d65b25431c1f824b0710836d74373a7dfb",
+    "keycloak_version": "26.8.0",
+    "keycloak_license": "Apache-2.0",
+    "platform": "linux/amd64"
+  },
+  "limitations": [
+    "Local synthetic realm; no customer deployment, MFA or external federation",
+    "Console logout revokes its local session; Keycloak SSO remains active",
+    "Browser trusts the ephemeral CA in its isolated HOME/NSS database",
+    "Gateway and HTTP driver verify TLS with an explicit ephemeral CA",
+    "Session expiry is advanced only in this run's disposable database fixture"
+  ],
+  "gateway_sha256": "b38dbd1f4f846d87d7d3b95e1efd9a84ba422b29ca8c974fba87c0684838fd00",
+  "bootstrap_helper_sha256": "8366058b1ede80fd17a10668549861642f4f3a6fc1a245c12fdb117b46bbf919",
+  "source_sha256": {
+    "scripts/keycloak-saml-linux.py": "0fcc246436ba26fb479eb064268e412df43c6c4c73977c28625702ef90fc2f7d",
+    "scripts/keycloak-saml-acceptance.py": "9e68691adcf58bdbbc1a0b8cbdbc3742dfbfa28a0eea8c0588d78c9c60ac3008",
+    "scripts/keycloak-oidc-acceptance.py": "d811ca649b0d3c7403c3cc820f8ee1f52eb3cd0160d1e7606c53d8e90dee8af7",
+    "Cargo.lock": "a439d1faf610a01d6b230993002d638debd41cc84f54dd65301fa70f069c3dd0",
+    "crates/proxy/examples/keycloak-saml-bootstrap.rs": "867c690b598cb99297878b707bf05725e78c698eec4ddbf80c11c1fefe65810f",
+    "crates/proxy/src/saml_auth.rs": "584588790d750bc0b3e7390330e3de0aca3db7b03aaa3160d12ee4c2184488e0",
+    "crates/proxy/src/oidc_auth.rs": "1c62a1d826d5718077349b4dda703678e443c49c94873c9350c09e76530e6b61",
+    "crates/proxy/src/customer_dashboard.html": "3463b890da9a08598c84260586a9463c99a6448e4a1e7f0e42f9c744a1ac1ef5",
+    "crates/proxy/src/tenant_store.rs": "2b072ac77bb0373eb1b68d3c63e5d30a0edff40a3459f772b230df62b445b0c6",
+    "crates/proxy/src/tenant_store/postgres.rs": "9e2d45f95d8030a94c46bd69923941344cda37926a45708a062b691dc479dd01",
+    "scripts/keycloak-saml-linux.sh": "474ef7c3cf7478a2463fcb956a9fcafa513d24d7526c6c23b17ea2e2ba0473eb",
+    ".github/workflows/keycloak-saml.yml": "9653817378cd31e251d0dc63f3ab3d95f73ad5256413d09ea75c98eb0b274d58"
+  },
+  "phase": "complete",
+  "configuration": {
+    "bind": "loopback only",
+    "store": "new disposable sqlite",
+    "database_tls_verified": false,
+    "saml_client": "signed SP requests",
+    "flow": "signed assertion",
+    "https": true,
+    "gateway_certificate_verification": true,
+    "os_trust_modified": false,
+    "identity_source": "generated synthetic users",
+    "firewall_yaml_sha256": "6b23c1882d72a2a2407a1886af90d8e6b5eabdbd16a15ccf311adbc19e5c5e94",
+    "realm_configuration_sha256": "1663506458d7b9821e919dd24277aa6b2b80bf081bf473be9bf87682a91f5fc5"
+  },
+  "vendor_certificates": [
+    {
+      "metadata_sha256": "683d332f7b679fc4d4f062940c4d33048eecdc4bf71ec4582ce2af8a05a63913",
+      "certificate_sha256": "074b5808f38b08188e71c580eab2351cdcbbfa1f548e5772c64ffce6b0ca3c6e"
+    },
+    {
+      "metadata_sha256": "2aa9ffeee473c08a34431cf67b86357a7a9e5dc09765c68d58c3799105933f88",
+      "certificate_sha256": "a26aa9e326987fa1dc9444cc073fb3eb4553bf37bf9b0dd4aefd3c1672fba946"
+    }
+  ],
+  "browser_version": "153.0.8010.12",
+  "crypto_provider": "saml-rs 0.5.3 crypto-aws-lc, non-FIPS; Keycloak RSA_SHA256"
+}
