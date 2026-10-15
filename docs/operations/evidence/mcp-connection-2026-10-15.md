@@ -10,7 +10,7 @@ for one selected Claude Code stdio MCP server. The implementation runs on Linux.
 The installed Windows Claude Code client reaches the generated Linux entry
 through an explicit Docker stdio bridge.
 
-The tested source is `a44662f3dd21094233d08654dd5f13401074be71`, based on
+The tested source is `5de37450ec12fe0d0303d3728604114ef669e832`, based on
 accepted main `f7b10d684a18305048ac8ab2d74e8206c2fcf3d9`. The tracked source
 was clean, and the recorded source files and selected binary stayed unchanged
 throughout the retained run.
@@ -50,13 +50,13 @@ Rust 1.99.0 and Claude Code 2.1.251. The Linux image is pinned to
 `rust:1.99-bookworm@sha256:114c7a4425406451c2866b6aafe69fe29b1b298832db1277d411ac73c82d04d6`.
 The fixture container had no external network and no published ports.
 
-Successful connect operations took 2.57-2.69 seconds. Successful disconnects
-took 7.93-27.06 ms. The two installed-client sessions took 1,078 ms and
-1,109 ms. These are observed debug-build process durations, including setup
+Successful connect operations took 2.26-2.37 seconds. Successful disconnects
+took 7.22-23.25 ms. The two installed-client sessions took 1,953 ms and
+1,094 ms. These are observed debug-build process durations, including setup
 and binary hashing, rather than general latency guarantees.
 
 Agent SHA-256:
-`29dcf312fe56b1aa5df89e7a5072410c5538e18ef039ba63e4cd5abb2d3d56c0`.
+`b6208d0a170255b0fc53dc85121e793abab4292adcb72ecb49375e6c25a90567`.
 Registry SHA-256:
 `a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d`.
 Client SHA-256:
@@ -64,11 +64,18 @@ Client SHA-256:
 
 ## Verification Boundaries
 
-Fourteen new transaction tests passed, covering duplicate JSON fields, size
+Fifteen new transaction tests passed, covering duplicate JSON fields, size
 limits, unsafe paths, symlinks, hardlinks, FIFOs, permissions, concurrent
-operations, outside edits, failed rename and invalid ownership records.
+operations, outside edits, failed rename, invalid ownership records and
+redaction of invalid native configuration values.
 The existing 59 MCP admission, seven input and one proxy tests also passed.
 Formatting and Agent Clippy with warnings denied passed.
+
+The broader Agent suite on `a44662f` passed 475 tests with one ignored
+live-model evaluation. The final error-redaction change then passed all 15
+focused tests and the retained current-source acceptance run. An earlier
+parallel broad attempt reported one resource-test daemon-startup failure;
+the complete serial retry passed, without weakening that test.
 
 The retained acceptance run used the real installed client with a deterministic
 local Messages API. No model download, client update, paid provider call or real

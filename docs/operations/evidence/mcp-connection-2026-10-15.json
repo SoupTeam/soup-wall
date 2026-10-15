@@ -1,5 +1,5 @@
 {
-  "recorded_at": "2026-10-15T10:37:09.673308+00:00",
+  "recorded_at": "2026-10-15T10:43:28.095928+00:00",
   "checks": [
     {
       "check": "unwrapped_read_control",
@@ -279,257 +279,257 @@
     {
       "operation": "preview",
       "exit_code": 0,
-      "elapsed_ms": 95.48,
+      "elapsed_ms": 93.94,
       "report": {
         "status": "preview",
         "operation": "preview",
-        "config_sha256": "d2bd5c07962918041d2a2f8a36e0c82aceeac1a42a7a1729bfa6ff45f1046adb",
-        "selected_sha256": "efbfb934fdb643fa45de2ea2886226e51268f37834f2e4536235f603fe9eed0d",
-        "server_id": "claude-71a92d5d2fd95b2a1adbe6f7",
+        "config_sha256": "6ce8a500a2ee09c27493d99444f0a4128350e30bafa77be391c570a7b894187b",
+        "selected_sha256": "474e4d7f3332cc8c746df7ee11def348872290db6d2f5a7c5b203ededdda8b8b",
+        "server_id": "claude-c45167a9f6f0f66d45ccff4f",
         "agent_sha256": null,
         "registry_sha256": null,
         "probe_result_sha256": null,
-        "elapsed_ms": 92,
+        "elapsed_ms": 91,
         "detail": "selected stdio command will use the native collector; original arguments retained; child environment cleared"
       }
     },
     {
       "operation": "connect",
       "exit_code": 0,
-      "elapsed_ms": 2690.6,
+      "elapsed_ms": 2367.2,
       "report": {
         "status": "configured",
         "operation": "connect",
-        "config_sha256": "b86edd1bd6100384138bbf9bc7e46c6abb51d94ed474c4be3c5be67b44d78064",
-        "selected_sha256": "a725552fbf8f192e2bd4d44e2f2f3429d7b426ba22f738af90e3555b52d21338",
-        "server_id": "claude-71a92d5d2fd95b2a1adbe6f7",
-        "agent_sha256": "29dcf312fe56b1aa5df89e7a5072410c5538e18ef039ba63e4cd5abb2d3d56c0",
+        "config_sha256": "97e3080fa6edb048ce0b028f0a87c8d446194a4c14ae39e46962782e9f0d1880",
+        "selected_sha256": "322e051b1c93170a2d5840a2216415095bdbbe0620edc7c75270d8881bbfd63a",
+        "server_id": "claude-c45167a9f6f0f66d45ccff4f",
+        "agent_sha256": "b6208d0a170255b0fc53dc85121e793abab4292adcb72ecb49375e6c25a90567",
         "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
         "probe_result_sha256": null,
-        "elapsed_ms": 2687,
+        "elapsed_ms": 2364,
         "detail": "native wrapper configured; execution is not inferred"
       }
     },
     {
       "operation": "connect",
       "exit_code": 0,
-      "elapsed_ms": 2625.89,
+      "elapsed_ms": 2275.63,
       "report": {
         "status": "configured",
         "operation": "connect",
-        "config_sha256": "b86edd1bd6100384138bbf9bc7e46c6abb51d94ed474c4be3c5be67b44d78064",
-        "selected_sha256": "a725552fbf8f192e2bd4d44e2f2f3429d7b426ba22f738af90e3555b52d21338",
-        "server_id": "claude-71a92d5d2fd95b2a1adbe6f7",
-        "agent_sha256": "29dcf312fe56b1aa5df89e7a5072410c5538e18ef039ba63e4cd5abb2d3d56c0",
+        "config_sha256": "97e3080fa6edb048ce0b028f0a87c8d446194a4c14ae39e46962782e9f0d1880",
+        "selected_sha256": "322e051b1c93170a2d5840a2216415095bdbbe0620edc7c75270d8881bbfd63a",
+        "server_id": "claude-c45167a9f6f0f66d45ccff4f",
+        "agent_sha256": "b6208d0a170255b0fc53dc85121e793abab4292adcb72ecb49375e6c25a90567",
         "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
         "probe_result_sha256": null,
-        "elapsed_ms": 2623,
+        "elapsed_ms": 2273,
         "detail": "native wrapper configured; execution is not inferred"
       }
     },
     {
       "operation": "inspect",
       "exit_code": 0,
-      "elapsed_ms": 2561.12,
+      "elapsed_ms": 2256.11,
       "report": {
         "status": "configured",
         "operation": "inspect",
-        "config_sha256": "b86edd1bd6100384138bbf9bc7e46c6abb51d94ed474c4be3c5be67b44d78064",
-        "selected_sha256": "a725552fbf8f192e2bd4d44e2f2f3429d7b426ba22f738af90e3555b52d21338",
-        "server_id": "claude-71a92d5d2fd95b2a1adbe6f7",
-        "agent_sha256": "29dcf312fe56b1aa5df89e7a5072410c5538e18ef039ba63e4cd5abb2d3d56c0",
+        "config_sha256": "97e3080fa6edb048ce0b028f0a87c8d446194a4c14ae39e46962782e9f0d1880",
+        "selected_sha256": "322e051b1c93170a2d5840a2216415095bdbbe0620edc7c75270d8881bbfd63a",
+        "server_id": "claude-c45167a9f6f0f66d45ccff4f",
+        "agent_sha256": "b6208d0a170255b0fc53dc85121e793abab4292adcb72ecb49375e6c25a90567",
         "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
         "probe_result_sha256": null,
-        "elapsed_ms": 2558,
+        "elapsed_ms": 2253,
         "detail": "owned configuration and Agent identities match"
       }
     },
     {
       "operation": "inspect",
       "exit_code": 0,
-      "elapsed_ms": 2771.53,
+      "elapsed_ms": 2362.04,
       "report": {
         "status": "verified_for_this_probe",
         "operation": "inspect",
-        "config_sha256": "b86edd1bd6100384138bbf9bc7e46c6abb51d94ed474c4be3c5be67b44d78064",
-        "selected_sha256": "a725552fbf8f192e2bd4d44e2f2f3429d7b426ba22f738af90e3555b52d21338",
-        "server_id": "claude-71a92d5d2fd95b2a1adbe6f7",
-        "agent_sha256": "29dcf312fe56b1aa5df89e7a5072410c5538e18ef039ba63e4cd5abb2d3d56c0",
+        "config_sha256": "97e3080fa6edb048ce0b028f0a87c8d446194a4c14ae39e46962782e9f0d1880",
+        "selected_sha256": "322e051b1c93170a2d5840a2216415095bdbbe0620edc7c75270d8881bbfd63a",
+        "server_id": "claude-c45167a9f6f0f66d45ccff4f",
+        "agent_sha256": "b6208d0a170255b0fc53dc85121e793abab4292adcb72ecb49375e6c25a90567",
         "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
         "probe_result_sha256": "ee119923813b005477313360d3b66a432d3a22916b06c69935012f61c3fe959c",
-        "elapsed_ms": 2768,
+        "elapsed_ms": 2359,
         "detail": "controlled request returned a permitted result"
       }
     },
     {
       "operation": "disconnect",
       "exit_code": 0,
-      "elapsed_ms": 18.19,
+      "elapsed_ms": 20.3,
       "report": {
         "status": "disconnected",
         "operation": "disconnect",
-        "config_sha256": "433c02350d2e7379af99206d7bb9a32bc5e6551b27edcf7e7d9d4d1c10f9a329",
-        "selected_sha256": "efbfb934fdb643fa45de2ea2886226e51268f37834f2e4536235f603fe9eed0d",
-        "server_id": "claude-71a92d5d2fd95b2a1adbe6f7",
+        "config_sha256": "9804c7df525e7204a7fcc628b53f5180e35cbc74a6afa4ef6fbea6255c41bcb9",
+        "selected_sha256": "474e4d7f3332cc8c746df7ee11def348872290db6d2f5a7c5b203ededdda8b8b",
+        "server_id": "claude-c45167a9f6f0f66d45ccff4f",
         "agent_sha256": null,
         "registry_sha256": null,
         "probe_result_sha256": null,
-        "elapsed_ms": 15,
+        "elapsed_ms": 17,
         "detail": "original entry restored; unrelated settings preserved"
       }
     },
     {
       "operation": "disconnect",
       "exit_code": 0,
-      "elapsed_ms": 9.96,
+      "elapsed_ms": 7.22,
       "report": {
         "status": "disconnected",
         "operation": "disconnect",
-        "config_sha256": "433c02350d2e7379af99206d7bb9a32bc5e6551b27edcf7e7d9d4d1c10f9a329",
-        "selected_sha256": "efbfb934fdb643fa45de2ea2886226e51268f37834f2e4536235f603fe9eed0d",
-        "server_id": "claude-71a92d5d2fd95b2a1adbe6f7",
+        "config_sha256": "9804c7df525e7204a7fcc628b53f5180e35cbc74a6afa4ef6fbea6255c41bcb9",
+        "selected_sha256": "474e4d7f3332cc8c746df7ee11def348872290db6d2f5a7c5b203ededdda8b8b",
+        "server_id": "claude-c45167a9f6f0f66d45ccff4f",
         "agent_sha256": null,
         "registry_sha256": null,
         "probe_result_sha256": null,
-        "elapsed_ms": 7,
+        "elapsed_ms": 5,
         "detail": "original entry restored; unrelated settings preserved"
       }
     },
     {
       "operation": "connect",
       "exit_code": 0,
-      "elapsed_ms": 2626.73,
+      "elapsed_ms": 2261.08,
       "report": {
         "status": "configured",
         "operation": "connect",
-        "config_sha256": "b86edd1bd6100384138bbf9bc7e46c6abb51d94ed474c4be3c5be67b44d78064",
-        "selected_sha256": "a725552fbf8f192e2bd4d44e2f2f3429d7b426ba22f738af90e3555b52d21338",
-        "server_id": "claude-71a92d5d2fd95b2a1adbe6f7",
-        "agent_sha256": "29dcf312fe56b1aa5df89e7a5072410c5538e18ef039ba63e4cd5abb2d3d56c0",
+        "config_sha256": "97e3080fa6edb048ce0b028f0a87c8d446194a4c14ae39e46962782e9f0d1880",
+        "selected_sha256": "322e051b1c93170a2d5840a2216415095bdbbe0620edc7c75270d8881bbfd63a",
+        "server_id": "claude-c45167a9f6f0f66d45ccff4f",
+        "agent_sha256": "b6208d0a170255b0fc53dc85121e793abab4292adcb72ecb49375e6c25a90567",
         "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
         "probe_result_sha256": null,
-        "elapsed_ms": 2624,
+        "elapsed_ms": 2258,
         "detail": "native wrapper configured; execution is not inferred"
       }
     },
     {
       "operation": "disconnect",
       "exit_code": 1,
-      "elapsed_ms": 2.65,
+      "elapsed_ms": 2.55,
       "report": {}
     },
     {
       "operation": "inspect",
       "exit_code": 1,
-      "elapsed_ms": 2829.46,
+      "elapsed_ms": 2288.94,
       "report": {
         "status": "unknown",
         "operation": "inspect",
-        "config_sha256": "0ed2768dc1800962403de34357ec22ef8d30a905d0623b3554514173f0c3e435",
-        "selected_sha256": "a725552fbf8f192e2bd4d44e2f2f3429d7b426ba22f738af90e3555b52d21338",
-        "server_id": "claude-71a92d5d2fd95b2a1adbe6f7",
-        "agent_sha256": "29dcf312fe56b1aa5df89e7a5072410c5538e18ef039ba63e4cd5abb2d3d56c0",
+        "config_sha256": "083a0e82e20ccfa2ca030670dc31a7d4a599c695ab44b03fb320ba839c3bda63",
+        "selected_sha256": "322e051b1c93170a2d5840a2216415095bdbbe0620edc7c75270d8881bbfd63a",
+        "server_id": "claude-c45167a9f6f0f66d45ccff4f",
+        "agent_sha256": "b6208d0a170255b0fc53dc85121e793abab4292adcb72ecb49375e6c25a90567",
         "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
         "probe_result_sha256": null,
-        "elapsed_ms": 2826,
+        "elapsed_ms": 2286,
         "detail": "connection identity is unknown"
       }
     },
     {
       "operation": "connect",
       "exit_code": 0,
-      "elapsed_ms": 2631.75,
+      "elapsed_ms": 2282.74,
       "report": {
         "status": "configured",
         "operation": "connect",
-        "config_sha256": "0ed2768dc1800962403de34357ec22ef8d30a905d0623b3554514173f0c3e435",
-        "selected_sha256": "a725552fbf8f192e2bd4d44e2f2f3429d7b426ba22f738af90e3555b52d21338",
-        "server_id": "claude-71a92d5d2fd95b2a1adbe6f7",
-        "agent_sha256": "29dcf312fe56b1aa5df89e7a5072410c5538e18ef039ba63e4cd5abb2d3d56c0",
+        "config_sha256": "083a0e82e20ccfa2ca030670dc31a7d4a599c695ab44b03fb320ba839c3bda63",
+        "selected_sha256": "322e051b1c93170a2d5840a2216415095bdbbe0620edc7c75270d8881bbfd63a",
+        "server_id": "claude-c45167a9f6f0f66d45ccff4f",
+        "agent_sha256": "b6208d0a170255b0fc53dc85121e793abab4292adcb72ecb49375e6c25a90567",
         "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
         "probe_result_sha256": null,
-        "elapsed_ms": 2629,
+        "elapsed_ms": 2279,
         "detail": "native wrapper configured; execution is not inferred"
       }
     },
     {
       "operation": "inspect",
       "exit_code": 1,
-      "elapsed_ms": 2642.57,
+      "elapsed_ms": 2230.32,
       "report": {
         "status": "unknown",
         "operation": "inspect",
-        "config_sha256": "0ed2768dc1800962403de34357ec22ef8d30a905d0623b3554514173f0c3e435",
-        "selected_sha256": "a725552fbf8f192e2bd4d44e2f2f3429d7b426ba22f738af90e3555b52d21338",
-        "server_id": "claude-71a92d5d2fd95b2a1adbe6f7",
-        "agent_sha256": "29dcf312fe56b1aa5df89e7a5072410c5538e18ef039ba63e4cd5abb2d3d56c0",
+        "config_sha256": "083a0e82e20ccfa2ca030670dc31a7d4a599c695ab44b03fb320ba839c3bda63",
+        "selected_sha256": "322e051b1c93170a2d5840a2216415095bdbbe0620edc7c75270d8881bbfd63a",
+        "server_id": "claude-c45167a9f6f0f66d45ccff4f",
+        "agent_sha256": "b6208d0a170255b0fc53dc85121e793abab4292adcb72ecb49375e6c25a90567",
         "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
         "probe_result_sha256": null,
-        "elapsed_ms": 2639,
+        "elapsed_ms": 2227,
         "detail": "connection identity is unknown"
       }
     },
     {
       "operation": "disconnect",
       "exit_code": 0,
-      "elapsed_ms": 18.23,
+      "elapsed_ms": 18.97,
       "report": {
         "status": "disconnected",
         "operation": "disconnect",
-        "config_sha256": "433c02350d2e7379af99206d7bb9a32bc5e6551b27edcf7e7d9d4d1c10f9a329",
-        "selected_sha256": "efbfb934fdb643fa45de2ea2886226e51268f37834f2e4536235f603fe9eed0d",
-        "server_id": "claude-71a92d5d2fd95b2a1adbe6f7",
+        "config_sha256": "9804c7df525e7204a7fcc628b53f5180e35cbc74a6afa4ef6fbea6255c41bcb9",
+        "selected_sha256": "474e4d7f3332cc8c746df7ee11def348872290db6d2f5a7c5b203ededdda8b8b",
+        "server_id": "claude-c45167a9f6f0f66d45ccff4f",
         "agent_sha256": null,
         "registry_sha256": null,
         "probe_result_sha256": null,
-        "elapsed_ms": 15,
+        "elapsed_ms": 16,
         "detail": "original entry restored; unrelated settings preserved"
       }
     },
     {
       "operation": "connect",
       "exit_code": 0,
-      "elapsed_ms": 2598.56,
+      "elapsed_ms": 2300.62,
       "report": {
         "status": "configured",
         "operation": "connect",
-        "config_sha256": "b86edd1bd6100384138bbf9bc7e46c6abb51d94ed474c4be3c5be67b44d78064",
-        "selected_sha256": "a725552fbf8f192e2bd4d44e2f2f3429d7b426ba22f738af90e3555b52d21338",
-        "server_id": "claude-71a92d5d2fd95b2a1adbe6f7",
-        "agent_sha256": "29dcf312fe56b1aa5df89e7a5072410c5538e18ef039ba63e4cd5abb2d3d56c0",
+        "config_sha256": "97e3080fa6edb048ce0b028f0a87c8d446194a4c14ae39e46962782e9f0d1880",
+        "selected_sha256": "322e051b1c93170a2d5840a2216415095bdbbe0620edc7c75270d8881bbfd63a",
+        "server_id": "claude-c45167a9f6f0f66d45ccff4f",
+        "agent_sha256": "b6208d0a170255b0fc53dc85121e793abab4292adcb72ecb49375e6c25a90567",
         "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
         "probe_result_sha256": null,
-        "elapsed_ms": 2596,
+        "elapsed_ms": 2298,
         "detail": "native wrapper configured; execution is not inferred"
       }
     },
     {
       "operation": "connect",
       "exit_code": 0,
-      "elapsed_ms": 2574.19,
+      "elapsed_ms": 2264.95,
       "report": {
         "status": "configured",
         "operation": "connect",
-        "config_sha256": "c15636ba904a249793cdea9c7fa15f7f48e45a5b4cd926c0d72c4608f12655a1",
-        "selected_sha256": "a725552fbf8f192e2bd4d44e2f2f3429d7b426ba22f738af90e3555b52d21338",
-        "server_id": "claude-71a92d5d2fd95b2a1adbe6f7",
-        "agent_sha256": "29dcf312fe56b1aa5df89e7a5072410c5538e18ef039ba63e4cd5abb2d3d56c0",
+        "config_sha256": "b86adb5327e494fc7ee7bcebde71cddaf7b4fb126ea39ee03cde0070435f1b5d",
+        "selected_sha256": "322e051b1c93170a2d5840a2216415095bdbbe0620edc7c75270d8881bbfd63a",
+        "server_id": "claude-c45167a9f6f0f66d45ccff4f",
+        "agent_sha256": "b6208d0a170255b0fc53dc85121e793abab4292adcb72ecb49375e6c25a90567",
         "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
         "probe_result_sha256": null,
-        "elapsed_ms": 2571,
+        "elapsed_ms": 2262,
         "detail": "native wrapper configured; execution is not inferred"
       }
     },
     {
       "operation": "disconnect",
       "exit_code": 0,
-      "elapsed_ms": 19.64,
+      "elapsed_ms": 19.59,
       "report": {
         "status": "disconnected",
         "operation": "disconnect",
-        "config_sha256": "e3cec0616a862636988acafe3d676f01886dc0f390666912a1768dc24dbe7856",
-        "selected_sha256": "efbfb934fdb643fa45de2ea2886226e51268f37834f2e4536235f603fe9eed0d",
-        "server_id": "claude-71a92d5d2fd95b2a1adbe6f7",
+        "config_sha256": "007b2fc9c89ceeeabd99dcb7018510e568a66e54afd27e0a5d2ccdc0f48a89e9",
+        "selected_sha256": "474e4d7f3332cc8c746df7ee11def348872290db6d2f5a7c5b203ededdda8b8b",
+        "server_id": "claude-c45167a9f6f0f66d45ccff4f",
         "agent_sha256": null,
         "registry_sha256": null,
         "probe_result_sha256": null,
@@ -540,80 +540,80 @@
     {
       "operation": "connect",
       "exit_code": 0,
-      "elapsed_ms": 2615.08,
+      "elapsed_ms": 2294.03,
       "report": {
         "status": "configured",
         "operation": "connect",
-        "config_sha256": "c15636ba904a249793cdea9c7fa15f7f48e45a5b4cd926c0d72c4608f12655a1",
-        "selected_sha256": "a725552fbf8f192e2bd4d44e2f2f3429d7b426ba22f738af90e3555b52d21338",
-        "server_id": "claude-71a92d5d2fd95b2a1adbe6f7",
-        "agent_sha256": "29dcf312fe56b1aa5df89e7a5072410c5538e18ef039ba63e4cd5abb2d3d56c0",
+        "config_sha256": "b86adb5327e494fc7ee7bcebde71cddaf7b4fb126ea39ee03cde0070435f1b5d",
+        "selected_sha256": "322e051b1c93170a2d5840a2216415095bdbbe0620edc7c75270d8881bbfd63a",
+        "server_id": "claude-c45167a9f6f0f66d45ccff4f",
+        "agent_sha256": "b6208d0a170255b0fc53dc85121e793abab4292adcb72ecb49375e6c25a90567",
         "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
         "probe_result_sha256": null,
-        "elapsed_ms": 2612,
+        "elapsed_ms": 2291,
         "detail": "native wrapper configured; execution is not inferred"
       }
     },
     {
       "operation": "preview",
       "exit_code": 1,
-      "elapsed_ms": 2.44,
+      "elapsed_ms": 2.57,
       "report": {}
     },
     {
       "operation": "preview",
       "exit_code": 1,
-      "elapsed_ms": 2.04,
+      "elapsed_ms": 2.03,
       "report": {}
     },
     {
       "operation": "inspect",
       "exit_code": 1,
-      "elapsed_ms": 2670.69,
+      "elapsed_ms": 2206.07,
       "report": {
         "status": "unavailable",
         "operation": "inspect",
-        "config_sha256": "0ed2768dc1800962403de34357ec22ef8d30a905d0623b3554514173f0c3e435",
-        "selected_sha256": "a725552fbf8f192e2bd4d44e2f2f3429d7b426ba22f738af90e3555b52d21338",
-        "server_id": "claude-71a92d5d2fd95b2a1adbe6f7",
+        "config_sha256": "083a0e82e20ccfa2ca030670dc31a7d4a599c695ab44b03fb320ba839c3bda63",
+        "selected_sha256": "322e051b1c93170a2d5840a2216415095bdbbe0620edc7c75270d8881bbfd63a",
+        "server_id": "claude-c45167a9f6f0f66d45ccff4f",
         "agent_sha256": null,
         "registry_sha256": null,
         "probe_result_sha256": null,
-        "elapsed_ms": 2668,
+        "elapsed_ms": 2203,
         "detail": "Agent preflight unavailable or identity mismatch"
       }
     },
     {
       "operation": "disconnect",
       "exit_code": 0,
-      "elapsed_ms": 27.06,
+      "elapsed_ms": 23.25,
       "report": {
         "status": "disconnected",
         "operation": "disconnect",
-        "config_sha256": "433c02350d2e7379af99206d7bb9a32bc5e6551b27edcf7e7d9d4d1c10f9a329",
-        "selected_sha256": "efbfb934fdb643fa45de2ea2886226e51268f37834f2e4536235f603fe9eed0d",
-        "server_id": "claude-71a92d5d2fd95b2a1adbe6f7",
+        "config_sha256": "9804c7df525e7204a7fcc628b53f5180e35cbc74a6afa4ef6fbea6255c41bcb9",
+        "selected_sha256": "474e4d7f3332cc8c746df7ee11def348872290db6d2f5a7c5b203ededdda8b8b",
+        "server_id": "claude-c45167a9f6f0f66d45ccff4f",
         "agent_sha256": null,
         "registry_sha256": null,
         "probe_result_sha256": null,
-        "elapsed_ms": 24,
+        "elapsed_ms": 20,
         "detail": "original entry restored; unrelated settings preserved"
       }
     },
     {
       "operation": "disconnect",
       "exit_code": 0,
-      "elapsed_ms": 7.93,
+      "elapsed_ms": 7.32,
       "report": {
         "status": "disconnected",
         "operation": "disconnect",
-        "config_sha256": "433c02350d2e7379af99206d7bb9a32bc5e6551b27edcf7e7d9d4d1c10f9a329",
-        "selected_sha256": "efbfb934fdb643fa45de2ea2886226e51268f37834f2e4536235f603fe9eed0d",
-        "server_id": "claude-71a92d5d2fd95b2a1adbe6f7",
+        "config_sha256": "9804c7df525e7204a7fcc628b53f5180e35cbc74a6afa4ef6fbea6255c41bcb9",
+        "selected_sha256": "474e4d7f3332cc8c746df7ee11def348872290db6d2f5a7c5b203ededdda8b8b",
+        "server_id": "claude-c45167a9f6f0f66d45ccff4f",
         "agent_sha256": null,
         "registry_sha256": null,
         "probe_result_sha256": null,
-        "elapsed_ms": 5,
+        "elapsed_ms": 4,
         "detail": "original entry restored; unrelated settings preserved"
       }
     }
@@ -624,7 +624,7 @@
     "machine": "x86_64",
     "python": "3.11.2"
   },
-  "binary_sha256": "29dcf312fe56b1aa5df89e7a5072410c5538e18ef039ba63e4cd5abb2d3d56c0",
+  "binary_sha256": "b6208d0a170255b0fc53dc85121e793abab4292adcb72ecb49375e6c25a90567",
   "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
   "actual_client": {
     "passed": true,
@@ -636,7 +636,7 @@
       {
         "scenario": "useful_and_forbidden",
         "exit_code": 0,
-        "elapsed_ms": 1078.0,
+        "elapsed_ms": 1953.0,
         "completed": true,
         "tool_results": {
           "toolu_demo_0": {
@@ -648,13 +648,13 @@
             "text": "Soup Wall withheld MCP invocation (demo-secret-egress)\n\n<system-reminder>\n<total_tokens>14999890 tokens left</total_tokens>\n</system-reminder>"
           }
         },
-        "output_sha256": "7941080a5b227c10eb53c2744c56080cd76ea3634763a6b2f43469eb19a9e207",
+        "output_sha256": "36887cbaffb7ffaf6ab81a79ad2de1a6c4a688e2c4c8753b7cd34a77b3b7ba7d",
         "stderr_sha256": "c9356ee4228a9d1a03b4c3f6f2f2c7593bb2ce80681d9e36c55313ce9848af1f"
       },
       {
         "scenario": "daemon_loss",
         "exit_code": 0,
-        "elapsed_ms": 1109.0,
+        "elapsed_ms": 1094.0,
         "completed": true,
         "tool_results": {
           "toolu_demo_0": {
@@ -666,7 +666,7 @@
             "text": "MCP error -32000: Connection closed\n\n<system-reminder>\n<total_tokens>14999890 tokens left</total_tokens>\n</system-reminder>"
           }
         },
-        "output_sha256": "6f9758528b5bca85ff93e38f165782e482fd872656588f38c7fda652178f0915",
+        "output_sha256": "e70bd62a7a31f31afc956376400831ab0c02fae78f3a3105a921306c6c9aaba1",
         "stderr_sha256": "c9356ee4228a9d1a03b4c3f6f2f2c7593bb2ce80681d9e36c55313ce9848af1f"
       }
     ],
@@ -733,7 +733,7 @@
   ],
   "daemon_stopped": true,
   "private_profile_removed": true,
-  "source_commit": "a44662f3dd21094233d08654dd5f13401074be71",
+  "source_commit": "5de37450ec12fe0d0303d3728604114ef669e832",
   "source_files": {
     "Cargo.lock": "fd3d11a0ae40dd647b93c8352cff16c6ce34f8e0412097bb10fd98dbadb632a0",
     "Cargo.toml": "df5cf3632141f34e519b9693ce1455f53de74bec408697beb4f375b435514a5f",
@@ -776,7 +776,7 @@
     "crates\\agentfw\\src\\managed_sync.rs": "d0349b0052e35c5c9b87adc01cdc011cae59e002f6c4744101357eb8376fedb8",
     "crates\\agentfw\\src\\map.rs": "06765851b9c48eb66720af99459b23c6b19d9d206e4a0d53f3c6652106f85f4d",
     "crates\\agentfw\\src\\mcp\\admission.rs": "d9acea23acdfc87f3d828561f4408ed1abf30b501adf723ae90c02f7de60c47e",
-    "crates\\agentfw\\src\\mcp\\connection.rs": "6ed0ff3f8f8bb2cba38a2e89deaf74a28d6b8dc4ab9f8531cd6a8bd02120b70b",
+    "crates\\agentfw\\src\\mcp\\connection.rs": "29f43b886a80f46ef2503405a0d310722442fec173a645dfdf1505423e1e6588",
     "crates\\agentfw\\src\\mcp\\create_file.rs": "1d2cea3355d0adbba173aa291f932f5b1b4b32d06a05bda63813acf9abcdb976",
     "crates\\agentfw\\src\\mcp\\https_get.rs": "c155459cfe7cb91d1d33a200d59f882dedea44b731c8d4e405e4c689dfde3ad0",
     "crates\\agentfw\\src\\mcp\\input.rs": "85f8c593877faba1925cba927a2db2387d540acd7d63eba89fd75a4c3249565d",
