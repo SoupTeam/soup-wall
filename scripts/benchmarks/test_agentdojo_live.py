@@ -588,6 +588,11 @@ def run_fixture_checks(checkout, binary, temporary_parent):
     for name in ["test_real_agent_deny_and_ask_prevent_execution_and_cleanup", "test_shadow_preflight_rejection_cleans_own_process_and_profile",
                  "test_production_live_orchestration_with_original_pipeline_and_neutral_local_provider"]:
         suite.addTest(DisposableDaemonContract(name))
+    # Matched-protocol regressions (SOU-36): plan, gate and aggregation checks plus production run_live controls.
+    import test_agentdojo_protocol as protocol_tests
+    for case in [protocol_tests.PlanContract, protocol_tests.AggregationContract, protocol_tests.CommittedEvidence,
+                 protocol_tests.ReportCommand, protocol_tests.ProtocolRuntimeContract]:
+        suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(case))
     check_names = [test.id().removeprefix("test_agentdojo_live.") for group in suite
                    for test in (group if isinstance(group, unittest.TestSuite) else [group])]
     result = unittest.TextTestRunner(verbosity=2).run(suite)
@@ -596,7 +601,8 @@ def run_fixture_checks(checkout, binary, temporary_parent):
     repo = Path(__file__).resolve().parents[2]
     sources = ["scripts/agentdojo-live.py", "scripts/benchmarks/agentdojo_live.py",
                "scripts/benchmarks/test_agentdojo_live.py", "scripts/benchmarks/agentdojo-live.requirements.txt",
-               "crates/agent/policies/agent-default.yaml"]
+               "crates/agent/policies/agent-default.yaml", "scripts/benchmarks/agentdojo_protocol.py",
+               "scripts/benchmarks/test_agentdojo_protocol.py", "scripts/benchmarks/agentdojo-sou36-workspace.plan.json"]
     dependencies = ["openai", "pydantic", "docstring-parser", "typing-extensions", "PyYAML", "tenacity",
                     "google-genai", "rich", "deepdiff", "anthropic", "cohere", "requests"]
     source_revision = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"],
@@ -614,6 +620,7 @@ def run_fixture_checks(checkout, binary, temporary_parent):
             "tests_passed": result.testsRun, "model_calls": 0, "paid_provider_calls": 0,
             "local_provider_fixture_only": True, "original_runtime_classes_exercised": True,
             "isolated_agent_profiles_cleaned": True,
+            "protocol_controlled_evidence": protocol_tests.CONTROLLED or None,
             "limitations": ["Neutral contract fixtures and disposable custom policies",
                             "No independent live model benchmark or native semantic coverage claim"]}
 

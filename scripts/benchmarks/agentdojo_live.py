@@ -410,6 +410,11 @@ class BudgetProvider:
         self.timeout = timeout_seconds
         self.calls = self.request_bytes = 0
         self.reserved_usd = 0.0
+        # Provider-reported usage is recorded, never trusted as a budget bound.
+        self.completion_tokens = 0
+        self.responses_without_usage = 0
+        self.exhausted = False
+        self.transport_failures = 0
         self.chat = SimpleNamespace(completions=SimpleNamespace(create=self.create))
 
     def create(self, **kwargs):
@@ -423,6 +428,7 @@ class BudgetProvider:
         reserve = (len(raw) * self.input_rate + self.output_limit * self.output_rate) / 1_000_000
         if (self.calls >= self.max_calls or self.request_bytes + len(raw) > self.max_bytes
                 or self.reserved_usd + reserve > self.max_usd):
+            self.exhausted = True
             raise AdapterError("Operator-selected provider budget exhausted before the request")
         # Failed attempts consume their reservation too; upstream retries cannot evade these bounds.
         self.calls += 1
@@ -437,8 +443,13 @@ class BudgetProvider:
             completion = ChatCompletion.model_validate_json(content)
             if completion.usage and completion.usage.completion_tokens > self.output_limit:
                 raise AdapterError("Provider exceeded the requested output limit")
+            if completion.usage:
+                self.completion_tokens += completion.usage.completion_tokens
+            else:
+                self.responses_without_usage += 1
             return completion
         except (OSError, ValueError, HTTPException, HTTPError, URLError):
+            self.transport_failures += 1
             raise AdapterError("Selected provider transport or response failed") from None
 
 

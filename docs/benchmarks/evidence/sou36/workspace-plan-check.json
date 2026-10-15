@@ -1,0 +1,42 @@
+{
+  "plan_sha256": "42513a67175813db00307a99e24f2eb823263a2a8d3d6b3bf1ae1adee33ad24a",
+  "plan_id": "sou36-workspace-matched",
+  "errors": [],
+  "reproduced": true,
+  "upstream": {
+    "revision": "089ed468cf3ed0322acc66b0211f26d9d90dbf60",
+    "source_inventory_sha256": "f030c2fce6daf25a5206270f9bcfff789decf4f0421143199003c703f42349a4",
+    "source_files": 112,
+    "license_sha256": "4285a071f2d382338e52b4fb0a186d952984a34d43a33d8872e1a1d8cb43401e"
+  },
+  "cases": {
+    "development": 16,
+    "fresh_evaluation": 64
+  },
+  "live_gate_blockers": {
+    "development": [
+      "model access is not selected",
+      "budget is not approved",
+      "sets.development.budget: max_reserved_usd is not selected",
+      "sets.development.budget: input_usd_per_million is not selected",
+      "sets.development.budget: output_usd_per_million is not selected",
+      "candidate agent binary identity is not frozen",
+      "model identity provider is not selected",
+      "model identity model_id is not selected",
+      "model identity provider_url_sha256 is not selected"
+    ],
+    "fresh_evaluation": [
+      "model access is not selected",
+      "budget is not approved",
+      "sets.fresh_evaluation.budget: max_reserved_usd is not selected",
+      "sets.fresh_evaluation.budget: input_usd_per_million is not selected",
+      "sets.fresh_evaluation.budget: output_usd_per_million is not selected",
+      "candidate agent binary identity is not frozen",
+      "model identity provider is not selected",
+      "model identity model_id is not selected",
+      "model identity provider_url_sha256 is not selected",
+      "fresh evaluation needs approved limits recorded before measurement"
+    ]
+  },
+  "model_calls": 0
+}

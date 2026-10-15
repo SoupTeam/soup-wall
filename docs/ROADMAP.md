@@ -217,6 +217,11 @@ policy and proposed variants as distinct frozen experiments.
 - Reviewed results meet the acceptance limits recorded before the runs. Missing
   access, budget or evaluator fidelity leaves this phase open.
 
+Status: the [matched evaluation protocol](benchmarks/agentdojo-matched-protocol.md)
+(SOU-36) adds a frozen workspace plan, a live gate, pair validation and an
+independent report. Its limits are proposed, not approved, and no model access,
+budget or live evidence exists, so this phase stays open.
+
 ### Phase 5 — Make setup and status verifiable
 
 **Depends on:** the accepted integration and policy from Phases 1–3; Phase 4
