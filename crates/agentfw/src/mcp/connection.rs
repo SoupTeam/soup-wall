@@ -353,8 +353,8 @@ mod linux {
                 Ok(_) => {
                     let bytes = read_at(&self.dir, filename.as_ref())?.0;
                     let value = parse(&bytes)?;
-                    let owner: Owner =
-                        serde_json::from_value(value).context("invalid ownership metadata")?;
+                    let owner: Owner = serde_json::from_value(value)
+                        .map_err(|_| anyhow::anyhow!("invalid ownership metadata"))?;
                     ensure!(
                         owner.version == 1
                             && owner.path == self.path
@@ -444,9 +444,9 @@ mod linux {
             "home must be the explicit .agentfw directory"
         );
         let bytes = read_private(&o.home.join("config.yaml"))?;
-        let cfg = crate::Config::from_yaml(
-            std::str::from_utf8(&bytes).context("invalid native config")?,
-        )?;
+        let cfg =
+            crate::Config::from_yaml(std::str::from_utf8(&bytes).context("invalid native config")?)
+                .map_err(|_| anyhow::anyhow!("invalid native configuration"))?;
         ensure!(
             cfg.enforce && !cfg.judge.enabled,
             "enforcing native configuration required"
@@ -459,7 +459,8 @@ mod linux {
         let token = read_private(&o.home.join("token"))?;
         let native_token = std::str::from_utf8(&native_token)?.trim().to_owned();
         ensure!(!native_token.is_empty(), "native token is empty");
-        crate::native::NativeState::load(installed, native_token)?;
+        crate::native::NativeState::load(installed, native_token)
+            .map_err(|_| anyhow::anyhow!("native registry unavailable or invalid"))?;
         let expected = crate::protection_status::Expectations {
             config_sha256: Some(crate::protection_status::config_digest(&cfg)),
             binary_sha256: Some(binary.clone()),
@@ -885,6 +886,26 @@ mod linux {
             std::fs::write(&state, b"{}").unwrap();
             std::fs::set_permissions(state, std::fs::Permissions::from_mode(0o600)).unwrap();
             assert!(config.state("local").is_err());
+        }
+
+        #[tokio::test]
+        async fn invalid_native_config_does_not_print_values() {
+            let dir = tempfile::tempdir().unwrap();
+            let home = dir.path().join(".agentfw");
+            std::fs::create_dir(&home).unwrap();
+            let path = home.join("config.yaml");
+            std::fs::write(&path, "port: private-value-must-not-appear\n").unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+            let options = Options {
+                path: dir.path().join("unused.json"),
+                server: "demo".into(),
+                home,
+                agent: PathBuf::from("/usr/bin/env"),
+                probe_tool: None,
+                probe_args: None,
+            };
+            let error = preflight(&options).await.err().unwrap();
+            assert!(!format!("{error:?}").contains("private-value"));
         }
     }
 }
