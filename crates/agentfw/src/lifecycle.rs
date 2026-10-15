@@ -42,6 +42,15 @@ pub struct ManagedHealth {
     pub config_digest: String,
 }
 
+impl ProcessRecord {
+    fn matches(&self, health: &ManagedHealth) -> bool {
+        self.pid == health.pid
+            && self.instance == health.instance
+            && self.binary_digest == health.binary_digest
+            && self.config_digest == health.config_digest
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Operation {
@@ -415,7 +424,13 @@ impl Manager {
         Ok(())
     }
 
-    fn start_locked(&self, state: &mut State) -> Result<()> {
+    // Shared by detached lifecycle startup and the foreground service launcher.
+    // The caller owns the short state lock; waiting for readiness happens separately.
+    fn prepare_launch(
+        &self,
+        state: &mut State,
+        pid: u32,
+    ) -> Result<(PathBuf, ProcessRecord, File)> {
         ensure!(
             state.process.is_none(),
             "Agent already has a recorded process"
@@ -429,7 +444,7 @@ impl Manager {
         );
         let binary = self.path_for(active)?;
         let process = ProcessRecord {
-            pid: 0,
+            pid,
             instance: crate::token::generate(),
             binary_digest: active.digest.clone(),
             config_digest: self.config_digest()?,
@@ -447,6 +462,12 @@ impl Manager {
             let _ = fs::remove_file(&launch_log);
             return Err(error);
         }
+        Ok((binary, process, log))
+    }
+
+    fn start_locked(&self, state: &mut State) -> Result<()> {
+        let (binary, process, log) = self.prepare_launch(state, 0)?;
+        let launch_log = self.root.join(&process.launch_log);
         let mut child = match Command::new(binary)
             .args([
                 "lifecycle",
@@ -533,11 +554,7 @@ impl Manager {
         let Some(response) = self.request(process, false)? else {
             return Ok(None);
         };
-        if response.instance != process.instance
-            || response.pid != process.pid
-            || response.binary_digest != process.binary_digest
-            || response.config_digest != process.config_digest
-        {
+        if !process.matches(&response) {
             return Ok(None);
         }
         Ok(Some(response))
@@ -922,5 +939,46 @@ fn pid_alive(pid: u32) -> Result<bool> {
             .stderr(Stdio::null())
             .status()?
             .success())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn managed_identity_requires_every_field() {
+        let record = ProcessRecord {
+            pid: 42,
+            instance: "instance".into(),
+            binary_digest: "binary".into(),
+            config_digest: "config".into(),
+            port: 1,
+            bind: "127.0.0.1".into(),
+            launch_log: "log".into(),
+        };
+        let health = ManagedHealth {
+            pid: 42,
+            instance: "instance".into(),
+            binary_digest: "binary".into(),
+            config_digest: "config".into(),
+        };
+        assert!(record.matches(&health));
+        assert!(!record.matches(&ManagedHealth {
+            pid: 43,
+            ..health.clone()
+        }));
+        assert!(!record.matches(&ManagedHealth {
+            instance: "old".into(),
+            ..health.clone()
+        }));
+        assert!(!record.matches(&ManagedHealth {
+            binary_digest: "other".into(),
+            ..health.clone()
+        }));
+        assert!(!record.matches(&ManagedHealth {
+            config_digest: "other".into(),
+            ..health
+        }));
     }
 }
