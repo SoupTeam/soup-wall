@@ -1,0 +1,116 @@
+{
+  "archive": "MCP_CREATE_FILE_2026-10-15.raw.tar.gz",
+  "sha256": "9c1b6c129b802655b80cf21e30485725a67c72c0cb2be2ba199216943bcba19d",
+  "members": [
+    {
+      "path": "Dockerfile.sou54-local",
+      "bytes": 1442,
+      "sha256": "66f2474f26459cbff8446c1102ca443a6afb3897011592b771eb51932984b455"
+    },
+    {
+      "path": "Dockerfile.sou54-local.dockerignore",
+      "bytes": 28,
+      "sha256": "824bbd1a176ab4902f74bebbc8e699041fb1bccf140a1b4a3d4d363cd8c4d1c8"
+    },
+    {
+      "path": "build-final.log",
+      "bytes": 3337,
+      "sha256": "0a3de1f3f55df2cc4beb477c49915b8884a50a5562146a3ff408edaf2bd5912b"
+    },
+    {
+      "path": "create-file-final.json",
+      "bytes": 520108,
+      "sha256": "cb58e03fd3e2e17c9ccd1fe5b558f096bf2c19103646fa68270d27fbf3de7a26"
+    },
+    {
+      "path": "create-races-final.json",
+      "bytes": 506231,
+      "sha256": "7cd6f63d2a66e9b2fb6f637ddee3e3ca9dd3b65ed4eb1cd65a5944a32eccbb10"
+    },
+    {
+      "path": "docs-final.log",
+      "bytes": 58,
+      "sha256": "b9ceb383dd3afd0acedb1462381216275fce03117988d93e11b30ada16432cf2"
+    },
+    {
+      "path": "identity-alias-red.json",
+      "bytes": 539171,
+      "sha256": "d1f189136aed4972ee49c8d5597def0cecf8932d8a3c09eec6754c4ac942b22c"
+    },
+    {
+      "path": "initial-64k-profile-red.json",
+      "bytes": 579460,
+      "sha256": "976323465eac47f3b0f7041f43038f05c0bb6504a8a0cca4da8a34d2a3d1b6b7"
+    },
+    {
+      "path": "initial-metadata-red.json",
+      "bytes": 364237,
+      "sha256": "159334ba6c19f6ef43bfacef22d1a3a968fdf5a5b173645bbe8a4ad0f6c03e33"
+    },
+    {
+      "path": "linux-final-environment.json",
+      "bytes": 1808,
+      "sha256": "98fe37578d6fbaa958457e6ec71da49527b0ef661d4066c09fa4b732872db8d6"
+    },
+    {
+      "path": "linux-image.txt",
+      "bytes": 72,
+      "sha256": "2afc32cc8420743f94dd38eadd3cc942eb450a40bab81031b45a037572d17944"
+    },
+    {
+      "path": "linux-lib-final.log",
+      "bytes": 19528,
+      "sha256": "883b35d84d3347647c4dba1896d8fc5a5da8261cb8df7d6b62aa177ad21c8dd9"
+    },
+    {
+      "path": "linux-native-final.log",
+      "bytes": 3084,
+      "sha256": "a7166a6621448899fc8a41f35a824c156a8ee528838050d4966679769b0127ae"
+    },
+    {
+      "path": "linux-races-final.log",
+      "bytes": 950,
+      "sha256": "ed64d36ddf4375a830b8333c823657cdef09719508b6dff7fe5404d2c44c6f4a"
+    },
+    {
+      "path": "linux-run.py",
+      "bytes": 2044,
+      "sha256": "0d7fd84c4556ad0dab6836f9e0b98acf7aa71756eeeac6a7f0615444ba11d56b"
+    },
+    {
+      "path": "linux-stdio-final.log",
+      "bytes": 2531,
+      "sha256": "d021195eba97f8b26214cb0b0367c93ef43ab1cd9c368ea39b2d54c23a266818"
+    },
+    {
+      "path": "mac-mcp-test-final.log",
+      "bytes": 27135,
+      "sha256": "4fa9350271c8a18a8fb3e9975161e296eee4667305b564870c905eacf79a7c04"
+    },
+    {
+      "path": "mac-workspace-clippy-final.log",
+      "bytes": 168,
+      "sha256": "57b89c540a8bfe1ecfab025b50caf1ce1ca507d8a8a87b14921a23c9ad603494"
+    },
+    {
+      "path": "mac-workspace-test-initial.log",
+      "bytes": 93687,
+      "sha256": "3933dd04e69014297842f84aed0e3ffaafa32a59ddad442dea79737a581d5c70"
+    },
+    {
+      "path": "python-benchmarks-initial.log",
+      "bytes": 8526,
+      "sha256": "3f47a12d4ab73311aca11a88e5fb3520a4a4b254fc5c9fc20fdff5c4212d100d"
+    },
+    {
+      "path": "python-create-grader-final.log",
+      "bytes": 4164,
+      "sha256": "ee0589bf6be5acbecae5f3d96986926e73b6bfb4e5c0858685af076060f7c885"
+    },
+    {
+      "path": "python-tests-initial.log",
+      "bytes": 91940,
+      "sha256": "ca7349e9476491607b4040dc36f110771b981ae4bf01a72d10feea36009e7b46"
+    }
+  ]
+}
