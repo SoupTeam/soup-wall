@@ -134,3 +134,12 @@ The script executes three realistic scenarios:
 
 Captured demonstration evidence is stored at:
 `docs/operations/evidence/managed-policy-group-rollout-2026-10-15.json`
+
+---
+
+## 4. Console Recovery Compatibility Boundary & Inventory Scope
+
+- **Fail-Closed Schema 26 Recovery:** PR #120 established native Encrypted Console recovery (`scripts/console_recovery.py`), strictly bounded to schema version 26 and exactly 44 PostgreSQL tables as defined in `scripts/fixtures/console_recovery_inventory_v1.json`.
+- **Preserved Native Migrations:** To preserve this fail-closed recovery boundary and prevent breaking certified backup/restore procedures, SOU-47 does **not** introduce a core schema migration 27 or register new tables into `llm_firewall_schema_migrations`.
+- **On-Demand Group Provisioning:** Managed agent group tables (`managed_agent_groups`, `managed_agent_group_members`, `managed_group_revisions`, `managed_group_rollouts`) are provisioned on demand via `CREATE TABLE IF NOT EXISTS` across SQLite and PostgreSQL only when group endpoints are exercised. Normal non-group agent operations never create or mutate these tables.
+- **Recovery Compatibility Gap:** Because group rollout tables are omitted from the certified schema 26 recovery inventory, recovering a disaster snapshot restores all core tenants, accounts, tokens, and per-agent deployments, but active group rollout progress is not preserved across a full encrypted restore. Group rollouts must be re-declared post-restore until a subsequent reviewed recovery inventory update certifies group tables into the recovery inventory.
