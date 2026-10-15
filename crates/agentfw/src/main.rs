@@ -918,15 +918,14 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
         tokio::spawn(managed.run(state.clone()));
     }
 
-    let diagnostics = agentfw::protection_status::Runtime::new(&cfg).with_binary(
-        if managed.is_none() {
+    let diagnostics =
+        agentfw::protection_status::Runtime::new(&cfg).with_binary(if managed.is_none() {
             std::env::current_exe()
                 .ok()
                 .and_then(|p| agentfw::lifecycle::sha256_file(&p).ok())
         } else {
             None
-        },
-    );
+        });
     let addr = cfg.socket_address();
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     tracing::info!(
