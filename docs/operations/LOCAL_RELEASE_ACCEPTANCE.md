@@ -76,3 +76,53 @@ records the observed transitions and exact binary hash. It used loopback HTTP,
 not a managed TLS edge. Repeat the full
 [staging and restore procedure](STAGING_DRILLS.md) against the chosen managed
 environment and observe its alert routing before closing the external gate.
+
+
+## Candidate preparation and promotion gate (SOU-26)
+
+Preparation builds the four platform archives, six SBOMs and OCI archive for
+one already authorized existing tag. It does not publish them. Its completed
+release workflow run must have successful verification, platform builds,
+SBOM, container and Prepare & Freeze Candidate jobs. Retain the run ID,
+attempt, source SHA and immutable candidate-package artifact ID/digest.
+Do not create a tag or dispatch publication merely to test this gate.
+
+Before promotion, an operator must independently review the product,
+operator and license evidence for that exact candidate. The JSON
+acceptance_record contains:
+
+- decision: approved only after that review;
+- run_id, run_attempt, artifact_id: the accepted preparation identity;
+- artifact_digest: the GitHub artifact archive SHA-256, without its
+  sha256: prefix;
+- source_sha: the reviewed source commit;
+- checksums: the exact eleven checksum records from the frozen manifest;
+- evidence_ref: the actual reviewed evidence reference;
+- gates.product, gates.operator, gates.license: passed only for
+  gates that have actually been accepted.
+
+This is an operator approval/checksum record, not a cryptographic signature.
+Synthetic fixture approvals do not establish product or license acceptance.
+
+For an authorized no-publication rehearsal, use the existing tag,
+promote_run_id equal to the accepted preparation run and dry_run=true.
+Promotion checks the API workflow/repository/event/source/attempt and successful
+preparation job before downloading the exact artifact. It checks the archive
+digest, the manifest attempt and exact eleven-file inventory, then hashes
+the files using the approved manifest. OCI inspection runs; registry push,
+tag/latest changes and GitHub Release writes must be skipped in the dry run.
+Missing, failed, skipped, stale or mismatched required inputs must stop the gate.
+
+Retain the preparation and promotion run links, the approved artifact identity,
+checksum output and both publication-skipped messages. The October 14 rehearsal
+of source 1dbc0112d9cbe7c2d94cbea23942d5028921a47f used preparation
+[38618098605](https://github.com/SoupTeam/soup-wall/actions/runs/38618098605)
+and dry-run promotion
+[38625274585](https://github.com/SoupTeam/soup-wall/actions/runs/38625274585).
+Its fixture record points to PR #999; it is workflow evidence only, not real
+product/operator/license approval. Later validator changes require affected
+positive/negative checks again; these historical runs do not execute a later
+validator revision.
+
+Actual publication remains a separate explicit release decision after all
+required roadmap, security, license and runtime gates are accepted.

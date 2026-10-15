@@ -9,17 +9,29 @@ name: release
 on:
   push:
     tags: ["v*"]
-  # Re-runnable against a tag that is already pushed, so a single stuck runner
-  # does not cost a re-tag.
   workflow_dispatch:
     inputs:
       tag:
         description: "Existing tag to build and publish (e.g. v0.3.0)"
         required: true
         type: string
+      dry_run:
+        description: "Run without publishing (Dry Run)"
+        required: false
+        type: boolean
+        default: true
+      promote_run_id:
+        description: "Run ID to promote (skips build, downloads immutable artifacts)"
+        required: false
+        type: string
+      acceptance_record:
+        description: "External JSON acceptance record (required if promote_run_id is set)"
+        required: false
+        type: string
 
 env:
   TAG: ${{ inputs.tag || github.ref_name }}
+  DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
 
 permissions:
   contents: read
@@ -27,6 +39,7 @@ permissions:
 jobs:
   verify:
     name: Verify release tag
+    if: inputs.promote_run_id == ''
     runs-on: ubuntu-latest
     timeout-minutes: 45
     outputs:
@@ -62,12 +75,11 @@ jobs:
       - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - run: cargo test --workspace --locked
       - run: cargo test --workspace --all-features --locked
-      # All SAML release targets use AWS-LC; the complete lock excludes rsa.
-      # No vulnerability is excepted. XML decryption remains disabled and tested.
       - run: cargo audit
 
   build:
     name: ${{ matrix.target }}
+    if: inputs.promote_run_id == ''
     needs: verify
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
@@ -77,8 +89,6 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-          # Pin the standard macOS 15 pools so release scheduling and toolchain
-          # behavior do not change when GitHub advances the `latest` image.
           - os: macos-15
             target: aarch64-apple-darwin
           - os: macos-15-intel
@@ -98,16 +108,10 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
-
       - name: Verify SAML on the archive's target
         run: cargo test --locked -p llm-firewall --lib --target ${{ matrix.target }} saml_auth::tests
-
-      # The default feature set on purpose: the `ml` classifier needs model
-      # assets the user fetches themselves, and shipping a binary that expects
-      # them would break the single-command install the README promises.
       - name: Build
         run: cargo build --release --locked --target ${{ matrix.target }} -p agentfw -p soup-wall-bench -p llm-firewall
-
       - name: Stage (unix)
         if: runner.os != 'Windows'
         shell: bash
@@ -126,7 +130,6 @@ jobs:
           mkdir -p "$d/third-party/kryptering"
           cp vendor/kryptering/LICENSE "$d/third-party/kryptering/"
           tar -czf "staging/$d.tar.gz" "$d"
-
       - name: Stage (windows)
         if: runner.os == 'Windows'
         shell: bash
@@ -145,7 +148,6 @@ jobs:
           mkdir -p "$d/third-party/kryptering"
           cp vendor/kryptering/LICENSE "$d/third-party/kryptering/"
           7z a -tzip "staging/$d.zip" "$d" > /dev/null
-
       - uses: actions/upload-artifact@v7
         with:
           name: dist-${{ matrix.target }}
@@ -154,6 +156,7 @@ jobs:
 
   sbom:
     name: SBOM
+    if: inputs.promote_run_id == ''
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -186,7 +189,6 @@ jobs:
           set -euo pipefail
           mkdir -p staging
           find . -name '*.cdx.json' -exec cp {} staging/ \;
-          ls -la staging
       - uses: actions/upload-artifact@v7
         with:
           name: dist-sbom
@@ -194,13 +196,13 @@ jobs:
           if-no-files-found: error
 
   container:
-    name: Publish GHCR image
+    name: Build GHCR image (No Push)
+    if: inputs.promote_run_id == ''
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
       contents: read
-      packages: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -210,12 +212,6 @@ jobs:
           EXPECTED_SHA: ${{ needs.verify.outputs.sha }}
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
       - uses: docker/setup-buildx-action@v4
-      - name: Log in to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Image name
         id: image
         shell: bash
@@ -232,61 +228,219 @@ jobs:
         with:
           context: .
           file: deploy/Dockerfile
-          push: true
+          push: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           sbom: true
           provenance: mode=max
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          outputs: type=oci,dest=/tmp/soup-wall-image.tar
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-container
+          path: /tmp/soup-wall-image.tar
+          if-no-files-found: error
 
-  publish:
-    name: Publish
+  prepare_candidate:
+    name: Prepare & Freeze Candidate
+    if: inputs.promote_run_id == ''
     needs: [verify, build, sbom, container]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: write
     steps:
+      - name: Strict Validation Gate
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}" == "true" ]]; then
+            echo "CRITICAL: Build steps failed, preparation aborted!" >&2
+            exit 1
+          fi
       - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG }}
-      - name: Verify frozen release commit
-        env:
-          EXPECTED_SHA: ${{ needs.verify.outputs.sha }}
-        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
       - uses: actions/download-artifact@v8
         with:
           pattern: dist-*
           path: dist
           merge-multiple: true
-
-      # One checksum file over everything published, generated where the files
-      # are, so a reader can verify the whole release with a single command.
-      - name: Checksums
+      - name: Generate Checksums & Manifest
         shell: bash
         run: |
           set -euo pipefail
           cd dist
-          # Redirect first, glob second: `sha256sum * > SHA256SUMS` would list
-          # the (already created, still empty) checksum file among its inputs.
-          sha256sum -- * > ../SHA256SUMS
-          mv ../SHA256SUMS .
-          cat SHA256SUMS
+          sha256sum -- * > SHA256SUMS
+          cat <<EOF > candidate-manifest.json
+          {
+            "tag": "${TAG}",
+            "source_sha": "${{ needs.verify.outputs.sha }}",
+            "run_attempt": "${{ github.run_attempt }}",
+            "checksums": $(jq -Rs 'split("\n") | map(select(length > 0))' < SHA256SUMS)
+          }
+          EOF
+          cat candidate-manifest.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: candidate-package
+          path: dist/*
+      - name: Log Promotion Instructions
+        run: |
+          echo "Candidate successfully prepared and frozen!"
+          echo "To promote and publish, dispatch this workflow using promote_run_id=${{ github.run_id }} and provide the acceptance_record."
 
-      # Upload into the release if one already exists for this tag -- the notes
-      # for a security tool are written by a person, not generated from a commit
-      # list -- and only fall back to creating one if the tag was pushed without
-      # it. `--clobber` makes a re-run of this job idempotent.
-      - name: Publish release
+  promote:
+    name: Promote & Publish
+    if: inputs.promote_run_id != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0
+      - name: Verify Promotion Target Commit
+        id: ref
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show-ref --verify --quiet "refs/tags/${TAG}"
+          sha="$(git rev-parse HEAD)"
+          test "$sha" = "$(git rev-parse "refs/tags/${TAG}^{commit}")"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Bind Identity and Fetch Exact Artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACCEPTANCE_RECORD: ${{ inputs.acceptance_record }}
+        run: |
+          set -euo pipefail
+          
+          if [ -z "$ACCEPTANCE_RECORD" ]; then
+             echo "CRITICAL: No acceptance record provided."
+             exit 1
+          fi
+          
+          echo "$ACCEPTANCE_RECORD" > external-acceptance.json
+          
+          EXPECTED_RUN_ID=$(jq -r '.run_id // empty' external-acceptance.json)
+          EXPECTED_ARTIFACT_ID=$(jq -r '.artifact_id // empty' external-acceptance.json)
+          EXPECTED_ARTIFACT_DIGEST=$(jq -r '.artifact_digest // empty' external-acceptance.json)
+          
+          if [ -z "$EXPECTED_RUN_ID" ]; then
+             echo "CRITICAL: Acceptance record must contain 'run_id'."
+             exit 1
+          fi
+          if [ -z "$EXPECTED_ARTIFACT_ID" ]; then
+             echo "CRITICAL: Acceptance record must contain 'artifact_id'."
+             exit 1
+          fi
+          if [ -z "$EXPECTED_ARTIFACT_DIGEST" ]; then
+             echo "CRITICAL: Acceptance record must contain 'artifact_digest'."
+             exit 1
+          fi
+          if [ "$EXPECTED_RUN_ID" != "${{ inputs.promote_run_id }}" ]; then
+             echo "CRITICAL: Target promote_run_id does not match approved run_id."
+             exit 1
+          fi
+
+          RUN_JSON=$(gh api repos/${{ github.repository }}/actions/runs/${EXPECTED_RUN_ID})
+          ACTUAL_ATTEMPT=$(echo "$RUN_JSON" | jq -r '.run_attempt')
+          WORKFLOW_PATH=$(echo "$RUN_JSON" | jq -r '.path')
+          EVENT=$(echo "$RUN_JSON" | jq -r '.event')
+          REPO=$(echo "$RUN_JSON" | jq -r '.repository.full_name')
+          STATUS=$(echo "$RUN_JSON" | jq -r '.status')
+          CONCLUSION=$(echo "$RUN_JSON" | jq -r '.conclusion')
+          HEAD_SHA=$(echo "$RUN_JSON" | jq -r '.head_sha')
+          HEAD_BRANCH=$(echo "$RUN_JSON" | jq -r '.head_branch')
+
+          # --paginate to ensure we get all jobs in the attempt
+          JOBS_JSON=$(gh api --paginate repos/${{ github.repository }}/actions/runs/${EXPECTED_RUN_ID}/attempts/${ACTUAL_ATTEMPT}/jobs)
+          PREPARE_JOB_STATUS=$(echo "$JOBS_JSON" | jq -r '.jobs[] | select(.name == "Prepare & Freeze Candidate") | .conclusion // "missing"')
+
+          ARTIFACTS_JSON=$(gh api repos/${{ github.repository }}/actions/runs/${EXPECTED_RUN_ID}/artifacts)
+          ACTUAL_ARTIFACT_ID=$(echo "$ARTIFACTS_JSON" | jq -r '.artifacts[] | select(.name == "candidate-package") | .id // "missing"')
+          
+          # Pass structured context to validator script
+          jq -n \
+            --arg run_id "$EXPECTED_RUN_ID" \
+            --arg attempt "$ACTUAL_ATTEMPT" \
+            --arg path "$WORKFLOW_PATH" \
+            --arg event "$EVENT" \
+            --arg repo "$REPO" \
+            --arg job "$PREPARE_JOB_STATUS" \
+            --arg art "$ACTUAL_ARTIFACT_ID" \
+            --arg status "$STATUS" \
+            --arg conclusion "$CONCLUSION" \
+            --arg sha "$HEAD_SHA" \
+            --arg branch "$HEAD_BRANCH" \
+            '{run_id: $run_id, run_attempt: $attempt, workflow_path:$path, event: $event, repository:$repo, prepare_job_status: $job, artifact_id:$art, status: $status, conclusion:$conclusion, head_sha: $sha, head_branch:$branch}' > api-context.json
+            
+          echo "Validating API Identity BEFORE Artifact Download..."
+          scripts/validate_candidate.sh external-acceptance.json /dev/null "${TAG}" "${{ steps.ref.outputs.sha }}" api-context.json api-only
+          
+          echo "Identity strictly bound. Downloading physical artifact ID $EXPECTED_ARTIFACT_ID..."
+          gh api repos/${{ github.repository }}/actions/artifacts/$EXPECTED_ARTIFACT_ID/zip > package.zip
+          
+          echo "Verifying downloaded archive digest..."
+          echo "$EXPECTED_ARTIFACT_DIGEST  package.zip" > archive.sha256
+          sha256sum --strict -c archive.sha256
+          
+          mkdir dist
+          unzip package.zip -d dist/
+
+      - name: SOU-26 Product Evidence Gate
+        shell: bash
+        run: |
+          cd dist
+          ../scripts/validate_candidate.sh ../external-acceptance.json candidate-manifest.json "${TAG}" "${{ steps.ref.outputs.sha }}" ../api-context.json full
+
+      - name: Enforce Artifact Bytes Binding (P1)
+        id: files
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          echo "Materializing checksum verification exclusively from the validated manifest..."
+          jq -r '.checksums[]' candidate-manifest.json > APPROVED_SUMS
+          sha256sum --strict -c APPROVED_SUMS
+          
+          FILES=$(awk '{print $2}' APPROVED_SUMS | tr '\n' ' ')
+          echo "validated_files=$FILES" >> "$GITHUB_OUTPUT"
+          echo "SUCCESS: Actual file bytes perfectly match the approved manifest."
+      
+      - name: Load and Push Container
+        run: |
+          IMAGE_NAME="ghcr.io/${GITHUB_REPOSITORY,,}"
+          
+          echo "Verifying OCI archive integrity via skopeo (dry-run evidence)..."
+          skopeo inspect oci-archive:dist/soup-wall-image.tar
+          
+          if [ "${{ env.DRY_RUN }}" != "true" ]; then
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            skopeo copy --all oci-archive:dist/soup-wall-image.tar docker://$IMAGE_NAME:${TAG}
+            if [[ "${TAG}" != *-* ]]; then
+              skopeo copy --all oci-archive:dist/soup-wall-image.tar docker://$IMAGE_NAME:latest
+            fi
+          else
+            echo "DRY_RUN is true. Successfully evaluated container, skipping registry push."
+          fi
+
+      - name: Publish GitHub Release (P1 Strict Upload)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          set -euo pipefail
-          if gh release view "${TAG}" >/dev/null 2>&1; then
-            gh release upload "${TAG}" dist/* --clobber
+          cd dist
+          VALIDATED="${{ steps.files.outputs.validated_files }}"
+          echo "Approved artifacts to publish: $VALIDATED"
+          
+          if [ "${{ env.DRY_RUN }}" != "true" ]; then
+            if gh release view "${TAG}" >/dev/null 2>&1; then
+              gh release upload "${TAG}" $VALIDATED --clobber
+            else
+              gh release create "${TAG}" $VALIDATED --title "${TAG}" --generate-notes --verify-tag
+            fi
           else
-            gh release create "${TAG}" dist/* \
-              --title "${TAG}" --generate-notes --verify-tag
+            echo "DRY_RUN is true. Successfully evaluated artifacts, skipping GitHub Release creation."
           fi
