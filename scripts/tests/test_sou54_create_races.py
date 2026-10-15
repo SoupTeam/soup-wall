@@ -74,13 +74,57 @@ def observation(root_race=False):
     return row
 
 
+def partial_observation():
+    row = observation(True)
+    row["case"] = "partial-write-os-limit"
+    request = row["submitted_creates"][0]
+    request["params"]["arguments"]["content"] = "x" * 4096
+    original = row["proxy_exchanges"][0]["original"]
+    original["args"] = copy.deepcopy(request["params"]["arguments"])
+    create = exchange(original, reply={"verdict": "allow", "release": True, "call_id": "native-create"})
+    payload = {"success": False, "created": False, "committed": False, "error": "stage_write_failed",
+               "staged_bytes": 2048, "committed_bytes": 0}
+    response = {"jsonrpc": "2.0", "id": request["id"], "result": {"isError": True,
+                "content": [{"type": "text", "text": H.canonical(payload).decode()}]}}
+    session = row["sessions"][0]
+    frames = H.json_lines(session["client_raw"].encode())
+    frames[2] = response
+    session["client_raw"] = "".join(raw(item) for item in frames)
+    session["create_reply_raw"] = raw(response)
+    session["collector_raw"] = raw({"event": "sou54_os_file_size_limit", "rlimit_fsize": [2048, 2048], "sigxfsz_ignored": True}) + raw({
+        "event": "mcp_create_file_execution", "host_call_id": request["id"], "committed": False,
+        "staged_bytes": 2048, "committed_bytes": 0, "result_kind": "error", "error": "stage_write_failed"})
+    session["closure"]["stderr_capture"] = {"eof": True, "error": False, "bytes": 4096, "parent_owned_log": True}
+    completion = exchange({"event": "result", "tool": "create_file", "call_id": "native-create",
+                           "session_id": "session-primary", "result_kind": "error", "content": raw(response)})
+    row["proxy_exchanges"] = [create, completion, *row["proxy_exchanges"][1:]]
+    row["configuration"] = {"os_file_size_limit": {"soft_bytes": 2048, "hard_bytes": 2048,
+                                                  "wrapper_sha256": H.sha(P.LIMIT_WRAPPER.read_bytes())}}
+    return row
+
+
 class RaceEvidenceTests(unittest.TestCase):
     def test_default_starts_no_process(self):
         result = subprocess.run([sys.executable, str(SCRIPTS / "verify-sou54-create-races.py")], capture_output=True, text=True, check=True)
         value = json.loads(result.stdout)
         self.assertEqual(value["processes_started"], 0)
         self.assertFalse(value["acceptance_passed"])
-        self.assertEqual(len(value["cases"]), 8)
+        self.assertEqual(len(value["cases"]), 9)
+
+    def test_actual_os_limit_evidence_requires_partial_bytes_zero_commit_and_inspected_error(self):
+        self.assertEqual(P.grade(partial_observation())["status"], "pass")
+        for change in (
+            lambda r: r["configuration"]["os_file_size_limit"].update(hard_bytes=4096),
+            lambda r: r["configuration"]["os_file_size_limit"].update(wrapper_sha256="a"*64),
+            lambda r: r["sessions"][0]["closure"]["stderr_capture"].update(error=True),
+            lambda r: r["sessions"][0].update(collector_raw=r["sessions"][0]["collector_raw"].replace('"staged_bytes":2048', '"staged_bytes":1024')),
+            lambda r: r["sessions"][0].update(collector_raw=r["sessions"][0]["collector_raw"].replace('"sigxfsz_ignored":true', '"sigxfsz_ignored":false')),
+            lambda r: r["proxy_exchanges"].pop(1),
+            lambda r: r["workspace_after"].update(named_stage={}),
+        ):
+            row = partial_observation()
+            change(row)
+            self.assertEqual(P.grade(row)["status"], "fail")
 
     def test_reference_substitution_and_root_race_evidence_pass(self):
         for root_race in (False, True):

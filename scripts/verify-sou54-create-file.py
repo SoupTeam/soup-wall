@@ -131,12 +131,36 @@ def stop_owned(process):
 
 
 class Collector:
-    def __init__(self, command, env, cwd, log):
+    def __init__(self, command, env, cwd, log, *, capture_stderr=False):
         self.process = subprocess.Popen(command, env=env, cwd=cwd, stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE, stderr=log, start_new_session=True)
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE if capture_stderr else log, start_new_session=True)
+        self.stderr_thread = None
+        self.stderr_eof, self.stderr_error, self.stderr_bytes = False, False, 0
+        self.stderr_log = log
         self.queue, self.received, self.eof = queue.Queue(), [], False
         self.thread = threading.Thread(target=self.read, daemon=True)
         self.thread.start()
+        if capture_stderr:
+            self.stderr_thread = threading.Thread(target=self.read_stderr, daemon=True)
+            self.stderr_thread.start()
+
+    def read_stderr(self):
+        # The parent owns this regular log descriptor and its file-size limit.
+        # A constrained child's stderr is a pipe, never a regular output file.
+        try:
+            while True:
+                chunk = self.process.stderr.read(16384)
+                if not chunk:
+                    self.stderr_eof = True
+                    break
+                self.stderr_bytes += len(chunk)
+                if self.stderr_bytes > 1024 * 1024:
+                    self.stderr_error = True
+                    continue  # Drain to EOF without retaining unbounded output.
+                self.stderr_log.write(chunk)
+                self.stderr_log.flush()
+        except (OSError, ValueError):
+            self.stderr_error = True
 
     def read(self):
         try:
@@ -173,13 +197,22 @@ class Collector:
             stop_owned(self.process)
             code = self.process.returncode
         self.thread.join(timeout=3)
+        if self.stderr_thread:
+            self.stderr_thread.join(timeout=3)
         while not self.queue.empty():
             raw = self.queue.get_nowait()
             if raw is not None:
                 self.received.append(raw)
         self.process.stdout.close()
-        return {"exit_code": code, "stdout_eof": self.eof,
-                "reader_joined": not self.thread.is_alive(), "forced_cleanup": forced}
+        stderr_joined = self.stderr_thread is None or (not self.stderr_thread.is_alive() and not self.stderr_error and self.stderr_eof)
+        result = {"exit_code": code, "stdout_eof": self.eof,
+                  "reader_joined": not self.thread.is_alive() and stderr_joined, "forced_cleanup": forced}
+        if self.stderr_thread:
+            if not self.stderr_thread.is_alive():
+                self.process.stderr.close()
+            result["stderr_capture"] = {"eof": self.stderr_eof, "error": self.stderr_error,
+                                        "bytes": self.stderr_bytes, "parent_owned_log": True}
+        return result
 
 
 def healthy(port, daemon):

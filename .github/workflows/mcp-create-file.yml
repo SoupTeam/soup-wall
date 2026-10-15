@@ -9,6 +9,7 @@ on:
       - 'rule_baseline/**'
       - 'scripts/verify-sou54-create-*.py'
       - 'scripts/fixtures/mcp_create_file_probe_server.py'
+      - 'scripts/fixtures/limited_create_file_agent.py'
       - 'scripts/tests/test_sou54_create*.py'
       - '.github/workflows/mcp-create-file.yml'
       - 'Cargo.lock'

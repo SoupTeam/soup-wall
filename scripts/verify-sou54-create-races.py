@@ -27,10 +27,11 @@ import time
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("sou54_create_helpers", ROOT / "scripts/verify-sou54-create-file.py")
+LIMIT_WRAPPER = ROOT / "scripts/fixtures/limited_create_file_agent.py"
 H = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(H)
 CASES = ("destination-substitution", "content-substitution", "root-replacement-after-allow",
-         "two-session-same-target", "queued-overlap", "queued-cancellation", "batch-refused", "replayed-id")
+         "two-session-same-target", "queued-overlap", "queued-cancellation", "batch-refused", "replayed-id", "partial-write-os-limit")
 PROTOCOL = {"queued-overlap", "queued-cancellation", "batch-refused", "replayed-id"}
 
 
@@ -305,6 +306,38 @@ def grade(row):
             H.require(expected == row["workspace_after"], "unexpected extra file, mutation or staging leak")
         else:
             H.require(row["workspace_before"] == row["workspace_after"], "refused operation changed workspace")
+        if name == "partial-write-os-limit":
+            limits = row["configuration"]["os_file_size_limit"]
+            H.require(limits.get("soft_bytes") == limits.get("hard_bytes") == 2048
+                      and limits.get("wrapper_sha256") == H.sha(LIMIT_WRAPPER.read_bytes()),
+                      "exact owned OS-limit wrapper/configuration witness missing")
+            records = H.classify_rows(sessions[0]["collector_raw"].encode(), "sou54_os_file_size_limit")
+            H.require(len(records) == 1 and records[0].get("rlimit_fsize") == [2048, 2048]
+                      and records[0].get("sigxfsz_ignored") is True, "actual RLIMIT/SIGXFSZ launch witness missing")
+            capture = sessions[0]["closure"].get("stderr_capture", {})
+            H.require(capture.get("eof") is True and capture.get("error") is False
+                      and capture.get("parent_owned_log") is True and type(capture.get("bytes")) is int and capture["bytes"] > 0,
+                      "bounded parent stderr drain did not finish independently of child file-size limit")
+            H.require(len(executions) == 1 and executions[0].get("committed") is False
+                      and executions[0].get("error") == "stage_write_failed" and executions[0].get("staged_bytes") == 2048
+                      and executions[0].get("committed_bytes") == 0 and executions[0].get("result_kind") == "error",
+                      "real OS-limited partial stage was not recorded as 2048 bytes/zero commit")
+            receipt_raw = sessions[0]["create_reply_raw"]
+            receipt = H.strict_json(H.strict_json(receipt_raw)["result"]["content"][0]["text"])
+            H.require(receipt.get("success") is False and receipt.get("created") is False and receipt.get("committed") is False
+                      and receipt.get("error") == "stage_write_failed" and receipt.get("staged_bytes") == 2048
+                      and receipt.get("committed_bytes") == 0,
+                      "partial-write receipt hides staged bytes or invents a committed effect")
+            completion = [item for item in exchanges if item["original"].get("event") == "result"
+                          and item["original"].get("call_id") == create[0]["reply"].get("call_id")]
+            H.require(len(completion) == 1 and completion[0]["original"].get("result_kind") == "error"
+                      and completion[0]["original"].get("content") == receipt_raw
+                      and completion[0]["reply"].get("verdict") == "allow" and completion[0]["reply"].get("release") is True
+                      and completion[0].get("upstream_status") == 200,
+                      "real native error-result inspection/release was bypassed or missing")
+            H.require(read_calls[0]["original"]["session_id"] == create[0]["original"]["session_id"]
+                      and len(row["submitted_creates"][0]["params"]["arguments"]["content"].encode()) == 4096,
+                      "partial write did not preserve useful same-session continuation after the bounded 4096-byte attempt")
         if name == "batch-refused":
             H.require(isinstance(row["submitted_batch"], list) and len(row["submitted_batch"]) == 2,
                       "batch refusal lacks original batch input witness")
@@ -377,14 +410,19 @@ def run_case(repo, binary, name, digest):
                 logs.append(log)
                 command = [str(binary), "mcp", "--native-admission", "--id", "sou54", "--", sys.executable,
                            "-I", "-u", str(H.FIXTURE), "--ledger", str(ledger)]
-                collector = H.Collector(command, collector_env, workspace, log)
+                capture_stderr = name == "partial-write-os-limit" and label == "primary"
+                if capture_stderr:
+                    row["configuration"]["os_file_size_limit"] = {"soft_bytes": 2048, "hard_bytes": 2048,
+                        "wrapper_sha256": H.sha(LIMIT_WRAPPER.read_bytes()), "stderr_transport": "pipe drained to parent-owned regular log"}
+                    command = [sys.executable, "-I", "-u", str(LIMIT_WRAPPER), "--agentfw", str(binary), "--", *command[1:]]
+                collector = H.Collector(command, collector_env, workspace, log, capture_stderr=capture_stderr)
                 item = {"label": label, "collector": collector, "ledger": ledger, "log_path": log_path}
                 collectors.append(item)
                 handshake(collector)
                 return item
 
             primary = start("primary")
-            content = H.UTF8 + "concurrent writer A\n"
+            content = "x" * 4096 if name == "partial-write-os-limit" else H.UTF8 + "concurrent writer A\n"
             first = H.frame("create-primary", "create_file", {"path": "created.txt", "content": content})
             if name == "batch-refused":
                 row["submitted_batch"] = [first, H.frame("batch-second", "create_file", {"path": "created.txt", "content": "batch"})]

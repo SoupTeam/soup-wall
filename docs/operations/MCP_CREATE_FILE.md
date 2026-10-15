@@ -170,10 +170,10 @@ python3 scripts/verify-sou54-create-races.py --run \
   --output /tmp/sou54-create-races-results.json
 ```
 
-The eight cases cover destination substitution, content substitution, replacing
+The nine cases cover destination substitution, content substitution, replacing
 the root pathname after genuine admission, two admitted MCP sessions racing for
-one target, queued unsupported overlap, queued cancellation, a batch and a
-replayed host call ID. Root movement and replacement-canary setup are explicitly
+one target, queued unsupported overlap, queued cancellation, a batch, a
+replayed host call ID and a real OS-limited partial write. Root movement and replacement-canary setup are explicitly
 labelled **fixture mutations**. Original-root, replacement-root and outside-file
 snapshots are retained separately; the original root is restored only after the
 refusal and snapshots, before its same-session useful read.
@@ -199,3 +199,22 @@ incomplete, fabricated or contradictory observations are rejected.
 The [2026-10-15 bounded Linux evidence](evidence/MCP_CREATE_FILE_2026-10-15.md)
 records the exact tested source and binary, original red witnesses, all 26 stdio
 and eight race outcomes, false interruptions, latency and explicit limits.
+
+The `partial-write-os-limit` case launches only its owned collector through a
+[small Linux fixture wrapper](../../scripts/fixtures/limited_create_file_agent.py).
+Before executing the unchanged Agent binary, the wrapper sets both
+`RLIMIT_FSIZE` limits to 2,048 bytes and ignores `SIGXFSZ`; its actual launch
+settings and source SHA are retained. A 4,096-byte ASCII invocation passes the
+real classifier and authentic native Allow, then the real filesystem write must
+fail after 2,048 anonymous staged bytes. The receipt and broker record must agree
+on `stage_write_failed`, zero committed bytes and `committed: false`. The error
+completion must pass real native result inspection before delivery. Independent
+workspace/outside snapshots require no destination, named staging leak or other
+change, followed by a useful read in the same session and clean EOF.
+
+Only this fixture collector gets the OS limit. Its stderr uses a pipe drained by
+the parent into a parent-owned regular log, so diagnostic logging is not itself
+subject to the collector's 2,048-byte limit. The bounded drain must reach EOF and
+join before acceptance. No production fault hook or global file-descriptor count
+is involved. The discovery child's ledger remains empty and its bounded discovery
+records remain below the file-size limit.

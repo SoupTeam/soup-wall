@@ -112,6 +112,26 @@ class EvidenceTests(unittest.TestCase):
         self.assertFalse(PROBE.native_test_passed({"exit_code": 1, "stdout": "running 2 tests\n\ntest result: ok. 2 passed; 0 failed;\n"}))
         self.assertTrue(PROBE.native_test_passed({"exit_code": 0, "stdout": "running 2 tests\n\ntest result: ok. 2 passed; 0 failed; 0 ignored;\n"}))
 
+    def test_optional_stderr_pipe_is_drained_by_the_parent_and_joined(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            log_path = root / "parent-owned.log"
+            program = ("import sys; sys.stderr.buffer.write(b'x'*8192); sys.stderr.buffer.flush(); "
+                       "raw=sys.stdin.buffer.readline(); sys.stdout.buffer.write(raw); sys.stdout.buffer.flush(); "
+                       "sys.stdin.buffer.read()")
+            with log_path.open("wb") as log:
+                collector = PROBE.Collector([sys.executable, "-I", "-u", "-c", program],
+                                            PROBE.private_environment(root), root, log, capture_stderr=True)
+                try:
+                    reply = collector.send({"jsonrpc": "2.0", "id": "pipe-witness"})
+                    self.assertEqual(json.loads(reply)["id"], "pipe-witness")
+                finally:
+                    closed = collector.close()
+            self.assertEqual(log_path.read_bytes(), b"x" * 8192)
+            self.assertEqual(closed["exit_code"], 0)
+            self.assertTrue(closed["reader_joined"])
+            self.assertEqual(closed["stderr_capture"], {"eof": True, "error": False, "bytes": 8192, "parent_owned_log": True})
+
     def test_default_does_not_start_a_process(self):
         result = subprocess.run([sys.executable, str(SCRIPTS / "verify-sou54-create-file.py")],
                                 capture_output=True, check=True, text=True)
