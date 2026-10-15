@@ -753,6 +753,9 @@ impl Manager {
             state.pending_stage.is_none() && state.operation.is_none(),
             "recover lifecycle transaction before service startup"
         );
+        // systemd has reaped the old main process before invoking a new launcher.
+        // A reused/live PID is never cleared solely because the endpoint is down.
+        self.clear_dead_record(&mut state)?;
         let (binary, process, _log) = self.prepare_launch(&mut state, std::process::id())?;
         Ok((binary, process))
     }
@@ -761,6 +764,11 @@ impl Manager {
     pub(crate) fn service_clear_dead(&self) -> Result<()> {
         let _lock = self.lock()?;
         let mut state = self.load()?;
+        self.clear_dead_record(&mut state)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn clear_dead_record(&self, state: &mut State) -> Result<()> {
         if let Some(process) = &state.process {
             ensure!(
                 !pid_alive(process.pid)?,
@@ -772,7 +780,7 @@ impl Manager {
                 fs::remove_file(log)?;
             }
             state.process = None;
-            self.save(&state)?;
+            self.save(state)?;
         }
         Ok(())
     }
@@ -1021,13 +1029,18 @@ pub(crate) fn pid_alive(pid: u32) -> Result<bool> {
     }
     #[cfg(unix)]
     {
-        Ok(Command::new("kill")
-            .arg("-0")
-            .arg(pid.to_string())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()?
-            .success())
+        ensure!(pid <= i32::MAX as u32, "recorded PID is out of range");
+        // Signal zero probes existence without sending a signal. EPERM means
+        // a live process owned by someone else, never evidence of a dead PID.
+        let result = unsafe { libc::kill(pid as libc::pid_t, 0) };
+        if result == 0 {
+            return Ok(true);
+        }
+        match std::io::Error::last_os_error().raw_os_error() {
+            Some(libc::ESRCH) => Ok(false),
+            Some(libc::EPERM) => Ok(true),
+            _ => Err(std::io::Error::last_os_error().into()),
+        }
     }
     #[cfg(windows)]
     {
@@ -1108,5 +1121,12 @@ mod tests {
             manager.load().unwrap().process.unwrap().pid,
             std::process::id()
         );
+    }
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn permission_denial_is_not_evidence_that_a_pid_is_dead() {
+        assert!(pid_alive(1).unwrap());
+        assert!(pid_alive(u32::MAX).is_err());
+        assert!(!pid_alive(0).unwrap());
     }
 }

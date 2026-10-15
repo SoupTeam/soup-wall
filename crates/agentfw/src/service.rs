@@ -214,10 +214,25 @@ impl Service {
                 "stop the service before uninstalling it"
             );
         }
+        // Stop may wait for the Agent. Revalidate ownership after that wait,
+        // then again immediately before unlinking each recorded artifact.
+        self.verify_remaining(&record)?;
         record.phase = Phase::Removing;
         self.save(&record)?;
-        for path in [&record.unit, &record.launcher] {
+        for (path, hash, expected) in [
+            (
+                &record.unit,
+                &record.unit_digest,
+                record.unit_identity.as_ref(),
+            ),
+            (
+                &record.launcher,
+                &record.launcher_digest,
+                record.launcher_identity.as_ref(),
+            ),
+        ] {
             if exists(path)? {
+                verify_file(path, hash, expected)?;
                 fs::remove_file(path)?;
             }
         }
@@ -237,10 +252,18 @@ impl Service {
         let shown = self.verify_loaded()?;
         let (state, health) = self.manager().service_snapshot()?;
         if let Some(process) = &state.process {
-            ensure!(
-                health.is_some() && process.pid.to_string() == property(&shown, "MainPID"),
-                "existing process identity is not verified; inspect before starting"
-            );
+            if crate::lifecycle::pid_alive(process.pid)? {
+                ensure!(
+                    health.is_some() && process.pid.to_string() == property(&shown, "MainPID"),
+                    "existing process identity is not verified; inspect before starting"
+                );
+            } else {
+                ensure!(
+                    property(&shown, "MainPID") == "0",
+                    "systemd is changing the main process; inspect before retrying"
+                );
+                self.manager().service_clear_dead()?;
+            }
         }
         control(&["start", &self.name])?;
         ensure!(
@@ -618,9 +641,15 @@ fn check_parents(path: &Path) -> Result<()> {
         if parent.as_os_str().is_empty() {
             continue;
         }
+        let metadata = fs::symlink_metadata(parent)?;
         ensure!(
-            fs::symlink_metadata(parent)?.is_dir(),
+            metadata.is_dir(),
             "service path has a symlink or non-directory parent"
+        );
+        ensure!(
+            metadata.mode() & 0o022 == 0
+                || (metadata.uid() == 0 && metadata.mode() & libc::S_ISVTX != 0),
+            "service path has a parent writable by another user"
         );
     }
     Ok(())
@@ -763,6 +792,13 @@ mod tests {
         assert!(!a.root.exists());
         assert!(!preview.unit.contains("[Install]"));
         assert!(preview.unit.contains("Type=exec"));
+        assert!(preview.unit.contains("Restart=always\nRestartSec=2s"));
+        assert!(preview
+            .unit
+            .contains("StartLimitIntervalSec=60s\nStartLimitBurst=3"));
+        assert!(preview.unit.contains("ExecStartPost="));
+        assert!(preview.unit.contains("TimeoutStartSec=35s"));
+        assert!(preview.unit.contains("KillMode=control-group"));
         assert!(!preview.unit.contains("lifecycle start"));
         let other = tempfile::tempdir().unwrap();
         assert_ne!(
