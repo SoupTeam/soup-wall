@@ -102,7 +102,9 @@ def run(args):
             check("pinned-container-image-pulled-by-digest", True)
             ca, (cert, key), (sp_cert, sp_key) = vendor.certificate_files(directory)
             gateway_port, vendor_port = vendor.free_port(), vendor.free_port()
-            vendor_base = f"https://127.0.0.1:{vendor_port}"
+            # Different sites exercise the real cross-site POST cookie boundary;
+            # different ports alone would still be same-site and share cookies.
+            vendor_base = f"https://localhost:{vendor_port}"
             realm = "saml-" + uuid.uuid4().hex
             issuer = vendor_base + "/realms/" + realm
 
@@ -559,7 +561,9 @@ def run(args):
             count = database.sql("SELECT count(*) FROM oidc_browser_sessions")
             check("genuine-expired-assertion-refused", submit(expired).status_code == 400)
             check("expiry-refusal-does-not-create-session", database.sql("SELECT count(*) FROM oidc_browser_sessions") == count)
-            client_record["attributes"].pop("saml.assertion.lifespan")
+            # Keycloak updates may retain omitted attributes; explicitly reset
+            # the lifetime instead of relying on deletion by omission.
+            client_record["attributes"]["saml.assertion.lifespan"] = "300"
             check("vendor-normal-lifetime-restored", request("PUT", client_url, headers=vendor_admin,
                   json=client_record).status_code == 204)
             check("fresh-normal-lifetime-login-succeeds", login(context(), users[0]).locator("#role").inner_text() == "owner")

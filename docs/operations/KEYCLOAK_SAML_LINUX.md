@@ -63,6 +63,8 @@ assertion and elapsed time, without changing signed bytes or the host clock.
 
 Both HTTPS services are loopback-only. Chromium trusts the ephemeral CA in an
 isolated HOME/NSS profile; the Python client verifies an explicit CA file.
+Keycloak uses `localhost` and the Gateway uses `127.0.0.1`, so the browser
+actually crosses sites on the SAML POST rather than merely changing ports.
 Hostname/CA failures must reject. Browser routes and HTTP calls are restricted
 to the two owned origins, with automatic HTTP redirects disabled. No OS trust
 modification or TLS-verification bypass is used.
