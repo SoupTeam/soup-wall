@@ -1,6 +1,6 @@
 {
   "scenario": "SOU-47 Multi-Agent Staged Group Rollout & Automated Rollback",
-  "timestamp_unix": 1792059753,
+  "timestamp_unix": 1792079728,
   "topology": {
     "console": "llm-firewall (SQLite tenant store)",
     "pilot_agent": "pilot-node (is_pilot=True)",

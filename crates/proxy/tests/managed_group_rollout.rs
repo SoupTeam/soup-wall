@@ -1442,3 +1442,369 @@ async fn test_manual_rollback_with_missing_baseline_fails_closed() {
         .to_string()
         .contains("cannot rollback group rollout: no enrolled agents have a prior restorable applied baseline"));
 }
+
+#[tokio::test]
+async fn test_pilot_start_unapproved_preflight_blocks_without_partial_issuance_and_resumes() {
+    let state = test_state();
+    let store = state.tenant_store.as_ref().unwrap();
+    let tenant = store.create_tenant("Pilot Preflight Tenant").unwrap();
+
+    store
+        .create_managed_group(&tenant.id, "pp-grp", "Pilot Preflight Group")
+        .unwrap();
+    store.enroll_managed_agent(&tenant.id, "pilot-1").unwrap();
+    store.enroll_managed_agent(&tenant.id, "pilot-2").unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "pp-grp", "pilot-1", true)
+        .unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "pp-grp", "pilot-2", true)
+        .unwrap();
+
+    let yaml = "default: allow\n";
+    store
+        .create_managed_group_revision(&tenant.id, "pp-grp", "rev-c", yaml)
+        .unwrap();
+    store
+        .approve_managed_group_revision(&tenant.id, "pp-grp", "rev-c")
+        .unwrap();
+
+    // Pre-create pilot-2 candidate revision with SAME digest, but leave it UNAPPROVED
+    store
+        .create_managed_revision(&tenant.id, "pilot-2", "rev-c", yaml)
+        .unwrap();
+
+    let issuer = llm_firewall::tenant_store::ManagedIssuer::from_environment().unwrap();
+    let start_err = store
+        .start_managed_group_rollout(&tenant.id, "pp-grp", "rev-c", &issuer)
+        .unwrap_err();
+    assert!(
+        start_err.to_string().contains("is not approved"),
+        "expected unapproved error: {}",
+        start_err
+    );
+
+    // Verify pilot-1 received NO deployment (zero partial side effects)
+    let p1_deps = store
+        .list_managed_deployments(&tenant.id, "pilot-1")
+        .unwrap();
+    assert!(
+        p1_deps.is_empty(),
+        "pilot-1 must not receive orphan deployments on start failure"
+    );
+
+    // Now approve pilot-2's revision and retry start
+    store
+        .approve_managed_revision(&tenant.id, "pilot-2", "rev-c")
+        .unwrap();
+
+    let ro = store
+        .start_managed_group_rollout(&tenant.id, "pp-grp", "rev-c", &issuer)
+        .unwrap();
+    assert_eq!(ro.phase, llm_firewall::tenant_store::RolloutPhase::Pilot);
+    assert_eq!(ro.active_deployments.len(), 2);
+    assert!(ro.active_deployments.contains_key("pilot-1"));
+    assert!(ro.active_deployments.contains_key("pilot-2"));
+}
+
+#[tokio::test]
+async fn test_pilot_rollback_with_unresolved_pilot_fails_instead_of_false_rolled_back() {
+    let state = test_state();
+    let store = state.tenant_store.as_ref().unwrap();
+    let tenant = store.create_tenant("Pilot Unresolved Tenant").unwrap();
+
+    store
+        .create_managed_group(&tenant.id, "pu-grp", "Pilot Unresolved Group")
+        .unwrap();
+    store
+        .enroll_managed_agent(&tenant.id, "pilot-nobase")
+        .unwrap();
+    store
+        .enroll_managed_agent(&tenant.id, "pilot-hasbase")
+        .unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "pu-grp", "pilot-nobase", true)
+        .unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "pu-grp", "pilot-hasbase", true)
+        .unwrap();
+
+    let issuer = llm_firewall::tenant_store::ManagedIssuer::from_environment().unwrap();
+
+    // pilot-hasbase has applied baseline
+    store
+        .create_managed_revision(&tenant.id, "pilot-hasbase", "rev-base", "default: allow\n")
+        .unwrap();
+    store
+        .approve_managed_revision(&tenant.id, "pilot-hasbase", "rev-base")
+        .unwrap();
+    let base_dep = store
+        .deploy_managed_revision(&tenant.id, "pilot-hasbase", "rev-base", false, &issuer)
+        .unwrap();
+    store
+        .acknowledge_managed_bundle(
+            &tenant.id,
+            "pilot-hasbase",
+            &llm_firewall::tenant_store::AppliedReport {
+                deployment_sequence: base_dep.deployment_sequence,
+                revision: "rev-base".into(),
+                policy_sha256: base_dep.policy_sha256.clone(),
+                status: "applied".into(),
+            },
+        )
+        .unwrap();
+
+    // Start group candidate
+    store
+        .create_managed_group_revision(&tenant.id, "pu-grp", "rev-cand", "default: deny\n")
+        .unwrap();
+    store
+        .approve_managed_group_revision(&tenant.id, "pu-grp", "rev-cand")
+        .unwrap();
+
+    let ro = store
+        .start_managed_group_rollout(&tenant.id, "pu-grp", "rev-cand", &issuer)
+        .unwrap();
+
+    let dep_nobase = store
+        .list_managed_deployments(&tenant.id, "pilot-nobase")
+        .unwrap();
+    let dep_hasbase = store
+        .list_managed_deployments(&tenant.id, "pilot-hasbase")
+        .unwrap();
+
+    // pilot-nobase applies candidate
+    store
+        .acknowledge_managed_bundle(
+            &tenant.id,
+            "pilot-nobase",
+            &llm_firewall::tenant_store::AppliedReport {
+                deployment_sequence: dep_nobase[0].deployment_sequence,
+                revision: "rev-cand".into(),
+                policy_sha256: ro.policy_sha256.clone(),
+                status: "applied".into(),
+            },
+        )
+        .unwrap();
+
+    // pilot-hasbase rejects candidate, triggering rollback
+    store
+        .acknowledge_managed_bundle(
+            &tenant.id,
+            "pilot-hasbase",
+            &llm_firewall::tenant_store::AppliedReport {
+                deployment_sequence: dep_hasbase[0].deployment_sequence,
+                revision: "rev-cand".into(),
+                policy_sha256: ro.policy_sha256.clone(),
+                status: "rejected".into(),
+            },
+        )
+        .unwrap();
+
+    // pilot-hasbase receives rollback deployment and applies it
+    let rb_hasbase = store
+        .list_managed_deployments(&tenant.id, "pilot-hasbase")
+        .unwrap();
+    assert_eq!(rb_hasbase[0].revision, "rev-base");
+    store
+        .acknowledge_managed_bundle(
+            &tenant.id,
+            "pilot-hasbase",
+            &llm_firewall::tenant_store::AppliedReport {
+                deployment_sequence: rb_hasbase[0].deployment_sequence,
+                revision: "rev-base".into(),
+                policy_sha256: rb_hasbase[0].policy_sha256.clone(),
+                status: "applied".into(),
+            },
+        )
+        .unwrap();
+
+    // Rollout MUST fail with unresolved reason, NEVER declare RolledBack
+    let final_ro = store
+        .get_managed_group_rollout(&tenant.id, "pu-grp")
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        final_ro.phase,
+        llm_firewall::tenant_store::RolloutPhase::Failed
+    );
+    assert!(final_ro
+        .failure_reason
+        .as_deref()
+        .unwrap()
+        .contains("rollback unresolved: agent 'pilot-nobase' has no restorable baseline and remains on candidate revision 'rev-cand'"));
+}
+
+#[tokio::test]
+async fn test_manual_rollback_in_standard_wave_with_unresolved_worker_fails() {
+    let state = test_state();
+    let store = state.tenant_store.as_ref().unwrap();
+    let tenant = store
+        .create_tenant("Manual Rollback Standard Tenant")
+        .unwrap();
+
+    store
+        .create_managed_group(&tenant.id, "mrs-grp", "Manual Rollback Standard Group")
+        .unwrap();
+    store.enroll_managed_agent(&tenant.id, "pilot-1").unwrap();
+    store
+        .enroll_managed_agent(&tenant.id, "worker-nobase")
+        .unwrap();
+    store
+        .enroll_managed_agent(&tenant.id, "worker-hasbase")
+        .unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "mrs-grp", "pilot-1", true)
+        .unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "mrs-grp", "worker-nobase", false)
+        .unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "mrs-grp", "worker-hasbase", false)
+        .unwrap();
+
+    let issuer = llm_firewall::tenant_store::ManagedIssuer::from_environment().unwrap();
+
+    // pilot-1 and worker-hasbase have applied baselines
+    for (agent, rev) in [("pilot-1", "rev-pbase"), ("worker-hasbase", "rev-wbase")] {
+        store
+            .create_managed_revision(&tenant.id, agent, rev, "default: allow\n")
+            .unwrap();
+        store
+            .approve_managed_revision(&tenant.id, agent, rev)
+            .unwrap();
+        let dep = store
+            .deploy_managed_revision(&tenant.id, agent, rev, false, &issuer)
+            .unwrap();
+        store
+            .acknowledge_managed_bundle(
+                &tenant.id,
+                agent,
+                &llm_firewall::tenant_store::AppliedReport {
+                    deployment_sequence: dep.deployment_sequence,
+                    revision: rev.into(),
+                    policy_sha256: dep.policy_sha256.clone(),
+                    status: "applied".into(),
+                },
+            )
+            .unwrap();
+    }
+
+    // Start group candidate
+    store
+        .create_managed_group_revision(&tenant.id, "mrs-grp", "rev-cand", "default: deny\n")
+        .unwrap();
+    store
+        .approve_managed_group_revision(&tenant.id, "mrs-grp", "rev-cand")
+        .unwrap();
+
+    let ro = store
+        .start_managed_group_rollout(&tenant.id, "mrs-grp", "rev-cand", &issuer)
+        .unwrap();
+
+    // pilot applies candidate, promoting standard wave
+    let p_dep = store
+        .list_managed_deployments(&tenant.id, "pilot-1")
+        .unwrap();
+    store
+        .acknowledge_managed_bundle(
+            &tenant.id,
+            "pilot-1",
+            &llm_firewall::tenant_store::AppliedReport {
+                deployment_sequence: p_dep[0].deployment_sequence,
+                revision: "rev-cand".into(),
+                policy_sha256: ro.policy_sha256.clone(),
+                status: "applied".into(),
+            },
+        )
+        .unwrap();
+
+    // Advance rollout: enters standard wave
+    let ro_std = store
+        .advance_managed_group_rollout(&tenant.id, "mrs-grp", Some(&issuer))
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        ro_std.phase,
+        llm_firewall::tenant_store::RolloutPhase::Standard
+    );
+
+    // worker-nobase applies candidate while worker-hasbase is pending
+    let w_nobase_dep = store
+        .list_managed_deployments(&tenant.id, "worker-nobase")
+        .unwrap();
+    store
+        .acknowledge_managed_bundle(
+            &tenant.id,
+            "worker-nobase",
+            &llm_firewall::tenant_store::AppliedReport {
+                deployment_sequence: w_nobase_dep[0].deployment_sequence,
+                revision: "rev-cand".into(),
+                policy_sha256: ro.policy_sha256.clone(),
+                status: "applied".into(),
+            },
+        )
+        .unwrap();
+
+    // Operator requests manual rollback
+    let ro_rb = store
+        .rollback_managed_group_rollout(&tenant.id, "mrs-grp", &issuer)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        ro_rb.phase,
+        llm_firewall::tenant_store::RolloutPhase::RollingBack
+    );
+
+    // pilot-1 and worker-hasbase receive rollback deployments
+    let p_rb = store
+        .list_managed_deployments(&tenant.id, "pilot-1")
+        .unwrap();
+    let w_rb = store
+        .list_managed_deployments(&tenant.id, "worker-hasbase")
+        .unwrap();
+    assert_eq!(p_rb[0].revision, "rev-pbase");
+    assert_eq!(w_rb[0].revision, "rev-wbase");
+
+    // Both acknowledge rollback with applied
+    store
+        .acknowledge_managed_bundle(
+            &tenant.id,
+            "pilot-1",
+            &llm_firewall::tenant_store::AppliedReport {
+                deployment_sequence: p_rb[0].deployment_sequence,
+                revision: "rev-pbase".into(),
+                policy_sha256: p_rb[0].policy_sha256.clone(),
+                status: "applied".into(),
+            },
+        )
+        .unwrap();
+
+    store
+        .acknowledge_managed_bundle(
+            &tenant.id,
+            "worker-hasbase",
+            &llm_firewall::tenant_store::AppliedReport {
+                deployment_sequence: w_rb[0].deployment_sequence,
+                revision: "rev-wbase".into(),
+                policy_sha256: w_rb[0].policy_sha256.clone(),
+                status: "applied".into(),
+            },
+        )
+        .unwrap();
+
+    // Advance rollout: MUST transition to Failed because worker-nobase has no baseline!
+    let final_ro = store
+        .get_managed_group_rollout(&tenant.id, "mrs-grp")
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        final_ro.phase,
+        llm_firewall::tenant_store::RolloutPhase::Failed
+    );
+    assert!(final_ro
+        .failure_reason
+        .as_deref()
+        .unwrap()
+        .contains("rollback unresolved: agent 'worker-nobase' has no restorable baseline and remains on candidate revision 'rev-cand'"));
+}

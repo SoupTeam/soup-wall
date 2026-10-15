@@ -717,36 +717,49 @@ impl PostgresTenantStore {
                 prevs.insert(std.clone(), prev);
             }
 
+            // Pre-flight check ALL pilots before ANY side effects or deployments:
             for pilot in &pilots {
-                let existing_sha = self.bounded(client.query_opt(
-                    "SELECT policy_sha256 FROM managed_agent_revisions WHERE tenant_id=$1 AND agent_id=$2 AND revision=$3",
-                    &[&tenant, pilot, &revision],
-                )).await?;
-                if let Some(r) = existing_sha {
+                let existing_meta = self
+                    .bounded(client.query_opt(
+                        "SELECT policy_sha256, approved_at_unix FROM managed_agent_revisions WHERE tenant_id=$1 AND agent_id=$2 AND revision=$3",
+                        &[&tenant, pilot, &revision],
+                    ))
+                    .await?;
+                if let Some(r) = existing_meta {
                     let sha: String = r.get(0);
+                    let approved_at: Option<i64> = r.get(1);
                     ensure!(
                         sha == policy_sha256,
                         "revision collision on pilot agent '{}': existing revision '{}' has different digest",
                         pilot, revision
                     );
-                } else {
+                    ensure!(
+                        approved_at.is_some(),
+                        "revision '{}' for pilot agent '{}' is not approved",
+                        revision,
+                        pilot
+                    );
+                }
+            }
+
+            for pilot in &pilots {
+                let existing_sha = self
+                    .bounded(client.query_opt(
+                        "SELECT policy_sha256 FROM managed_agent_revisions WHERE tenant_id=$1 AND agent_id=$2 AND revision=$3",
+                        &[&tenant, pilot, &revision],
+                    ))
+                    .await?;
+                if existing_sha.is_none() {
                     self.bounded(client.execute(
                         "INSERT INTO managed_agent_revisions (tenant_id, agent_id, revision, policy_yaml, policy_sha256, approved_at_unix)
                          VALUES ($1,$2,$3,$4,$5,$6)",
                         &[&tenant, pilot, &revision, &policy_yaml, &policy_sha256, &now_unix()],
-                    )).await?;
+                    ))
+                    .await?;
                 }
             }
             (policy_yaml, policy_sha256, pilots, standards, prevs)
         };
-
-        let mut active_deployments = std::collections::BTreeMap::new();
-        for pilot in &pilots {
-            let dep = self
-                .deploy_managed_revision(tenant, pilot, revision, false, issuer)
-                .await?;
-            active_deployments.insert(pilot.clone(), dep.deployment_sequence);
-        }
 
         let rollout_id = format!("ro_{}", random_base64url(12));
         let now = now_unix();
@@ -769,11 +782,60 @@ impl PostgresTenantStore {
                 &phase.as_str(),
                 &serde_json::to_string(&pilots)?,
                 &serde_json::to_string(&standards)?,
-                &serde_json::to_string(&active_deployments)?,
+                &serde_json::to_string(&std::collections::BTreeMap::<String, u64>::new())?,
                 &serde_json::to_string(&prevs)?,
                 &now,
             ],
         )).await?;
+
+        let mut active_deployments = std::collections::BTreeMap::new();
+        for pilot in &pilots {
+            let latest_dep = self
+                .bounded(client.query_opt(
+                    "SELECT deployment_sequence, revision, policy_sha256, status
+                     FROM managed_agent_deployments
+                     WHERE tenant_id=$1 AND agent_id=$2
+                     ORDER BY deployment_sequence DESC LIMIT 1",
+                    &[&tenant, pilot],
+                ))
+                .await?;
+            let seq = if let Some(r) = latest_dep {
+                let d_seq: i64 = r.get(0);
+                let d_rev: String = r.get(1);
+                let d_sha: String = r.get(2);
+                let d_status: String = r.get(3);
+                if d_rev == revision
+                    && d_sha == policy_sha256
+                    && (d_status == "issued" || d_status == "delivered" || d_status == "applied")
+                {
+                    d_seq as u64
+                } else {
+                    let dep = self
+                        .deploy_managed_revision(tenant, pilot, revision, false, issuer)
+                        .await?;
+                    dep.deployment_sequence
+                }
+            } else {
+                let dep = self
+                    .deploy_managed_revision(tenant, pilot, revision, false, issuer)
+                    .await?;
+                dep.deployment_sequence
+            };
+            active_deployments.insert(pilot.clone(), seq);
+            self.bounded(client.execute(
+                "UPDATE managed_group_rollouts
+                 SET active_deployments_json=$3, updated_at_unix=$4
+                 WHERE tenant_id=$1 AND group_id=$2 AND rollout_id=$5",
+                &[
+                    &tenant,
+                    &group_id,
+                    &serde_json::to_string(&active_deployments)?,
+                    &now_unix(),
+                    &rollout_id,
+                ],
+            ))
+            .await?;
+        }
 
         Ok(ManagedGroupRollout {
             tenant_id: tenant.into(),
@@ -939,29 +1001,33 @@ impl PostgresTenantStore {
                     }
                 }
 
+                let mut deployed_agents = Vec::new();
+                for member in rollout
+                    .pilot_agents
+                    .iter()
+                    .chain(rollout.standard_agents.iter())
+                {
+                    let has_dep = self
+                        .bounded(client.query_opt(
+                            "SELECT 1 FROM managed_agent_deployments WHERE tenant_id=$1 AND agent_id=$2 AND revision=$3 AND policy_sha256=$4 LIMIT 1",
+                            &[&tenant, member, &rollout.revision, &rollout.policy_sha256],
+                        ))
+                        .await?
+                        .is_some();
+                    if has_dep {
+                        deployed_agents.push(member.clone());
+                    }
+                }
+
                 let mut unresolved_agents = Vec::new();
-                for p in &rollout.pilot_agents {
+                for agent in &deployed_agents {
                     if rollout
                         .previous_revisions
-                        .get(p)
+                        .get(agent)
                         .and_then(|x| x.as_ref())
                         .is_none()
                     {
-                        unresolved_agents.push(p.clone());
-                    }
-                }
-                if let Some(r_reason) = rollout.failure_reason.as_ref() {
-                    if r_reason.contains("standard") {
-                        for s in &rollout.standard_agents {
-                            if rollout
-                                .previous_revisions
-                                .get(s)
-                                .and_then(|x| x.as_ref())
-                                .is_none()
-                            {
-                                unresolved_agents.push(s.clone());
-                            }
-                        }
+                        unresolved_agents.push(agent.clone());
                     }
                 }
 
@@ -1082,24 +1148,30 @@ impl PostgresTenantStore {
                 if let Some((_rejected_agent, reason)) = any_rejected {
                     let mut to_rollback = Vec::new();
                     let mut unresolved = Vec::new();
-                    for (agent, seq) in &rollout.active_deployments {
+                    for p in &rollout.pilot_agents {
                         let prev = rollout
                             .previous_revisions
-                            .get(agent)
-                            .and_then(|p| p.as_ref())
+                            .get(p)
+                            .and_then(|x| x.as_ref())
                             .cloned();
                         let prev = match prev {
                             Some(p) => Some(p),
                             None => self
-                                .find_last_applied_revision_before(tenant, agent, Some(*seq))
+                                .find_last_applied_revision_before(
+                                    tenant,
+                                    p,
+                                    rollout.active_deployments.get(p).copied(),
+                                )
                                 .await
                                 .ok()
                                 .flatten(),
                         };
-                        if let Some(p) = prev {
-                            to_rollback.push((agent.clone(), p));
-                        } else {
-                            unresolved.push(agent.clone());
+                        if let Some(p_rev) = prev {
+                            if !to_rollback.iter().any(|(a, _)| a == p) {
+                                to_rollback.push((p.clone(), p_rev));
+                            }
+                        } else if !unresolved.contains(p) {
+                            unresolved.push(p.clone());
                         }
                     }
 
@@ -1407,21 +1479,24 @@ impl PostgresTenantStore {
                 if let Some((_rejected_agent, reason)) = any_rejected {
                     let mut to_rollback = Vec::new();
                     let mut unresolved = Vec::new();
-                    for p in &rollout.pilot_agents {
-                        let prev = rollout
-                            .previous_revisions
-                            .get(p)
-                            .and_then(|x| x.as_ref())
-                            .cloned();
-                        if let Some(p_rev) = prev {
-                            if !to_rollback.iter().any(|(a, _)| a == p) {
-                                to_rollback.push((p.clone(), p_rev));
-                            }
-                        } else if !unresolved.contains(p) {
-                            unresolved.push(p.clone());
+                    let mut deployed_agents = Vec::new();
+                    for member in rollout
+                        .pilot_agents
+                        .iter()
+                        .chain(rollout.standard_agents.iter())
+                    {
+                        let has_dep = self
+                            .bounded(client.query_opt(
+                                "SELECT 1 FROM managed_agent_deployments WHERE tenant_id=$1 AND agent_id=$2 AND revision=$3 AND policy_sha256=$4 LIMIT 1",
+                                &[&tenant, member, &rollout.revision, &rollout.policy_sha256],
+                            ))
+                            .await?
+                            .is_some();
+                        if has_dep {
+                            deployed_agents.push(member.clone());
                         }
                     }
-                    for (agent, seq) in &rollout.active_deployments {
+                    for agent in &deployed_agents {
                         let prev = rollout
                             .previous_revisions
                             .get(agent)
@@ -1430,7 +1505,11 @@ impl PostgresTenantStore {
                         let prev = match prev {
                             Some(p) => Some(p),
                             None => self
-                                .find_last_applied_revision_before(tenant, agent, Some(*seq))
+                                .find_last_applied_revision_before(
+                                    tenant,
+                                    agent,
+                                    rollout.active_deployments.get(agent).copied(),
+                                )
                                 .await
                                 .ok()
                                 .flatten(),
@@ -1568,9 +1647,32 @@ impl PostgresTenantStore {
         };
 
         let client = self.checkout().await?;
+        let mut deployed_agents = Vec::new();
+        for member in rollout
+            .pilot_agents
+            .iter()
+            .chain(rollout.standard_agents.iter())
+        {
+            let has_dep = self
+                .bounded(client.query_opt(
+                    "SELECT 1 FROM managed_agent_deployments WHERE tenant_id=$1 AND agent_id=$2 AND revision=$3 AND policy_sha256=$4 LIMIT 1",
+                    &[&tenant, member, &rollout.revision, &rollout.policy_sha256],
+                ))
+                .await?
+                .is_some();
+            if has_dep {
+                deployed_agents.push(member.clone());
+            }
+        }
+        if deployed_agents.is_empty() {
+            for p in &rollout.pilot_agents {
+                deployed_agents.push(p.clone());
+            }
+        }
+
         let mut to_rollback = Vec::new();
         let mut unresolved = Vec::new();
-        for (agent, seq) in &rollout.active_deployments {
+        for agent in &deployed_agents {
             let prev = rollout
                 .previous_revisions
                 .get(agent)
@@ -1579,14 +1681,20 @@ impl PostgresTenantStore {
             let prev = match prev {
                 Some(p) => Some(p),
                 None => self
-                    .find_last_applied_revision_before(tenant, agent, Some(*seq))
+                    .find_last_applied_revision_before(
+                        tenant,
+                        agent,
+                        rollout.active_deployments.get(agent).copied(),
+                    )
                     .await
                     .ok()
                     .flatten(),
             };
             if let Some(p) = prev {
-                to_rollback.push((agent.clone(), p));
-            } else {
+                if !to_rollback.iter().any(|(a, _)| a == agent) {
+                    to_rollback.push((agent.clone(), p));
+                }
+            } else if !unresolved.contains(agent) {
                 unresolved.push(agent.clone());
             }
         }

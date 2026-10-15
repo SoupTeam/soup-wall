@@ -1078,6 +1078,31 @@ impl TenantStore {
                 prevs.insert(std.clone(), prev);
             }
 
+            // Pre-flight check ALL pilots before ANY side effects or deployments:
+            for pilot in &pilots {
+                eligible(&db, tenant, pilot)?;
+                let existing_meta: Option<(String, Option<i64>)> = db
+                    .query_row(
+                        "SELECT policy_sha256, approved_at_unix FROM managed_agent_revisions WHERE tenant_id=?1 AND agent_id=?2 AND revision=?3",
+                        params![tenant, pilot, revision],
+                        |r| Ok((r.get(0)?, r.get(1)?)),
+                    )
+                    .optional()?;
+                if let Some((sha, approved)) = existing_meta {
+                    ensure!(
+                        sha == policy_sha256,
+                        "revision collision on pilot agent '{}': existing revision '{}' has different digest",
+                        pilot, revision
+                    );
+                    ensure!(
+                        approved.is_some(),
+                        "revision '{}' for pilot agent '{}' is not approved",
+                        revision,
+                        pilot
+                    );
+                }
+            }
+
             for pilot in &pilots {
                 let existing_sha: Option<String> = db
                     .query_row(
@@ -1086,13 +1111,7 @@ impl TenantStore {
                         |r| r.get(0),
                     )
                     .optional()?;
-                if let Some(sha) = existing_sha {
-                    ensure!(
-                        sha == policy_sha256,
-                        "revision collision on pilot agent '{}': existing revision '{}' has different digest",
-                        pilot, revision
-                    );
-                } else {
+                if existing_sha.is_none() {
                     db.execute(
                         "INSERT INTO managed_agent_revisions (tenant_id, agent_id, revision, policy_yaml, policy_sha256, approved_at_unix)
                          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -1104,16 +1123,11 @@ impl TenantStore {
             (policy_yaml, policy_sha256, pilots, standards, prevs)
         };
 
-        let mut active_deployments = std::collections::BTreeMap::new();
-        for pilot in &pilot_agents {
-            let dep = self.deploy_managed_revision(tenant, pilot, revision, false, issuer)?;
-            active_deployments.insert(pilot.clone(), dep.deployment_sequence);
-        }
-
         let rollout_id = format!("ro_{}", super::random_base64url(12));
         let now = now_unix();
         let phase = RolloutPhase::Pilot;
 
+        // Persist the rollout record FIRST before issuing deployments so plan ownership is durable
         {
             let db = self.connection()?;
             db.execute(
@@ -1132,11 +1146,58 @@ impl TenantStore {
                     phase.as_str(),
                     serde_json::to_string(&pilot_agents)?,
                     serde_json::to_string(&standard_agents)?,
-                    serde_json::to_string(&active_deployments)?,
+                    serde_json::to_string(&std::collections::BTreeMap::<String, u64>::new())?,
                     serde_json::to_string(&previous_revisions)?,
                     now,
                 ],
             )?;
+        }
+
+        let mut active_deployments = std::collections::BTreeMap::new();
+        for pilot in &pilot_agents {
+            let latest_dep: Option<(i64, String, String, String)> = {
+                let db = self.connection()?;
+                db.query_row(
+                    "SELECT deployment_sequence, revision, policy_sha256, status
+                     FROM managed_agent_deployments
+                     WHERE tenant_id=?1 AND agent_id=?2
+                     ORDER BY deployment_sequence DESC LIMIT 1",
+                    params![tenant, pilot],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                )
+                .optional()?
+            };
+            let seq = if let Some((d_seq, d_rev, d_sha, d_status)) = latest_dep {
+                if d_rev == revision
+                    && d_sha == policy_sha256
+                    && (d_status == "issued" || d_status == "delivered" || d_status == "applied")
+                {
+                    d_seq as u64
+                } else {
+                    let dep =
+                        self.deploy_managed_revision(tenant, pilot, revision, false, issuer)?;
+                    dep.deployment_sequence
+                }
+            } else {
+                let dep = self.deploy_managed_revision(tenant, pilot, revision, false, issuer)?;
+                dep.deployment_sequence
+            };
+            active_deployments.insert(pilot.clone(), seq);
+            {
+                let db = self.connection()?;
+                db.execute(
+                    "UPDATE managed_group_rollouts
+                     SET active_deployments_json=?3, updated_at_unix=?4
+                     WHERE tenant_id=?1 AND group_id=?2 AND rollout_id=?5",
+                    params![
+                        tenant,
+                        group_id,
+                        serde_json::to_string(&active_deployments)?,
+                        now_unix(),
+                        rollout_id
+                    ],
+                )?;
+            }
         }
 
         Ok(ManagedGroupRollout {
@@ -1362,19 +1423,29 @@ impl TenantStore {
                         }
                     }
 
-                    let mut unresolved_agents = Vec::new();
-                    for p in &pilot_agents {
-                        if previous_revisions.get(p).and_then(|x| x.as_ref()).is_none() {
-                            unresolved_agents.push(p.clone());
+                    let mut deployed_agents = Vec::new();
+                    for member in pilot_agents.iter().chain(standard_agents.iter()) {
+                        let has_dep: bool = db
+                            .query_row(
+                                "SELECT 1 FROM managed_agent_deployments WHERE tenant_id=?1 AND agent_id=?2 AND revision=?3 AND policy_sha256=?4 LIMIT 1",
+                                params![tenant, member, revision, policy_sha256],
+                                |_| Ok(()),
+                            )
+                            .optional()?
+                            .is_some();
+                        if has_dep {
+                            deployed_agents.push(member.clone());
                         }
                     }
-                    if let Some(r_reason) = failure_reason.as_ref() {
-                        if r_reason.contains("standard") {
-                            for s in &standard_agents {
-                                if previous_revisions.get(s).and_then(|x| x.as_ref()).is_none() {
-                                    unresolved_agents.push(s.clone());
-                                }
-                            }
+
+                    let mut unresolved_agents = Vec::new();
+                    for agent in &deployed_agents {
+                        if previous_revisions
+                            .get(agent)
+                            .and_then(|x| x.as_ref())
+                            .is_none()
+                        {
+                            unresolved_agents.push(agent.clone());
                         }
                     }
 
@@ -1471,25 +1542,27 @@ impl TenantStore {
                     } else if let Some((_rejected_agent, reason)) = any_rejected {
                         let mut to_rollback = Vec::new();
                         let mut unresolved = Vec::new();
-                        for (agent, seq) in &active_deployments {
+                        for p in &pilot_agents {
                             let prev = previous_revisions
-                                .get(agent)
-                                .and_then(|p| p.as_ref())
+                                .get(p)
+                                .and_then(|x| x.as_ref())
                                 .cloned()
                                 .or_else(|| {
                                     Self::find_last_applied_revision_before_conn(
                                         &db,
                                         tenant,
-                                        agent,
-                                        Some(*seq),
+                                        p,
+                                        active_deployments.get(p).copied(),
                                     )
                                     .ok()
                                     .flatten()
                                 });
-                            if let Some(p) = prev {
-                                to_rollback.push((agent.clone(), p));
-                            } else {
-                                unresolved.push(agent.clone());
+                            if let Some(p_rev) = prev {
+                                if !to_rollback.iter().any(|(a, _)| a == p) {
+                                    to_rollback.push((p.clone(), p_rev));
+                                }
+                            } else if !unresolved.contains(p) {
+                                unresolved.push(p.clone());
                             }
                         }
                         NextAction::Rollback {
@@ -1619,17 +1692,21 @@ impl TenantStore {
                     } else if let Some((_rejected_agent, reason)) = any_rejected {
                         let mut to_rollback = Vec::new();
                         let mut unresolved = Vec::new();
-                        for p in &pilot_agents {
-                            let prev = previous_revisions.get(p).and_then(|x| x.as_ref()).cloned();
-                            if let Some(p_rev) = prev {
-                                if !to_rollback.iter().any(|(a, _)| a == p) {
-                                    to_rollback.push((p.clone(), p_rev));
-                                }
-                            } else if !unresolved.contains(p) {
-                                unresolved.push(p.clone());
+                        let mut deployed_agents = Vec::new();
+                        for member in pilot_agents.iter().chain(standard_agents.iter()) {
+                            let has_dep: bool = db
+                                .query_row(
+                                    "SELECT 1 FROM managed_agent_deployments WHERE tenant_id=?1 AND agent_id=?2 AND revision=?3 AND policy_sha256=?4 LIMIT 1",
+                                    params![tenant, member, revision, policy_sha256],
+                                    |_| Ok(()),
+                                )
+                                .optional()?
+                                .is_some();
+                            if has_dep {
+                                deployed_agents.push(member.clone());
                             }
                         }
-                        for (agent, seq) in &active_deployments {
+                        for agent in &deployed_agents {
                             let prev = previous_revisions
                                 .get(agent)
                                 .and_then(|p| p.as_ref())
@@ -1639,7 +1716,7 @@ impl TenantStore {
                                         &db,
                                         tenant,
                                         agent,
-                                        Some(*seq),
+                                        active_deployments.get(agent).copied(),
                                     )
                                     .ok()
                                     .flatten()
@@ -2062,21 +2139,48 @@ impl TenantStore {
                 return Ok(Some(r));
             }
 
+            let mut deployed_agents = Vec::new();
+            for member in pilot_agents.iter().chain(standard_agents.iter()) {
+                let has_dep: bool = db
+                    .query_row(
+                        "SELECT 1 FROM managed_agent_deployments WHERE tenant_id=?1 AND agent_id=?2 AND revision=?3 AND policy_sha256=?4 LIMIT 1",
+                        params![tenant, member, &revision, &policy_sha256],
+                        |_| Ok(()),
+                    )
+                    .optional()?
+                    .is_some();
+                if has_dep {
+                    deployed_agents.push(member.clone());
+                }
+            }
+            if deployed_agents.is_empty() {
+                for p in &pilot_agents {
+                    deployed_agents.push(p.clone());
+                }
+            }
+
             let mut to_rollback = Vec::new();
             let mut unresolved = Vec::new();
-            for (agent, seq) in &active_deployments {
+            for agent in &deployed_agents {
                 let prev = previous_revisions
                     .get(agent)
                     .and_then(|p| p.as_ref())
                     .cloned()
                     .or_else(|| {
-                        Self::find_last_applied_revision_before_conn(&db, tenant, agent, Some(*seq))
-                            .ok()
-                            .flatten()
+                        Self::find_last_applied_revision_before_conn(
+                            &db,
+                            tenant,
+                            agent,
+                            active_deployments.get(agent).copied(),
+                        )
+                        .ok()
+                        .flatten()
                     });
                 if let Some(p) = prev {
-                    to_rollback.push((agent.clone(), p));
-                } else {
+                    if !to_rollback.iter().any(|(a, _)| a == agent) {
+                        to_rollback.push((agent.clone(), p));
+                    }
+                } else if !unresolved.contains(agent) {
                     unresolved.push(agent.clone());
                 }
             }
