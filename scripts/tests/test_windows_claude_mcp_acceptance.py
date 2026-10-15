@@ -229,8 +229,14 @@ class ClaudeMcpSafety(unittest.TestCase):
             (repo / "target").mkdir()
             binary = Path(sys.executable)
             arguments = SimpleNamespace(agent_binary=binary, claude_binary=binary, git_bash=binary)
-            with patch.object(harness, "REPO", repo):
+            # Isolate missing-source handling from native ACL startup timing.
+            # Actual directory ACLs remain part of the opt-in Windows acceptance.
+            with patch.object(harness, "REPO", repo), patch.object(
+                harness.subprocess, "run", return_value=SimpleNamespace(returncode=0)
+            ) as acl:
                 report = harness.acceptance(arguments)
+            self.assertEqual(acl.call_count, 1)
+            self.assertEqual(acl.call_args.args[0][0], "powershell.exe")
             self.assertEqual(report["status"], "incomplete")
             self.assertEqual(report.get("failure_gate"), "source_snapshot_unavailable")
             self.assertTrue(report["cleanup"]["private_artifacts_retained"])
