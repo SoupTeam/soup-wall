@@ -33,6 +33,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Opt-in stdio MCP admission](operations/MCP_STDIO_ADMISSION.md) | Reviewed schemas, pre-execution calls and result release to the MCP host |
 | [Native resource admission](operations/NATIVE_RESOURCE_ADMISSION.md) | Resource permissions, receipt integrity and unsupported executor boundary |
 | [Constrained MCP file creation](operations/MCP_CREATE_FILE.md) | Linux create-only workspace files, bound authority, effect accounting and actual stdio verification |
+| [Constrained MCP HTTPS GET](operations/MCP_HTTPS_GET.md) | Exact URL/address authority, verified TLS, bounded responses and independent receiver witnesses |
 | [Identity interoperability](operations/IDENTITY_INTEROPERABILITY.md) | Local identity fixtures, external metadata probes and pilot gates |
 | [Keycloak SAML acceptance](operations/KEYCLOAK_SAML_ACCEPTANCE.md) | Pinned vendor-runtime setup and signed SAML checks |
 | [Keycloak OIDC Console acceptance](operations/KEYCLOAK_OIDC_ACCEPTANCE.md) | Real browser sign-in, local roles, sessions and Console logout |
