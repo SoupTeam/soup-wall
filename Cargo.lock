@@ -47,6 +47,7 @@ dependencies = [
 name = "agentfw"
 version = "0.3.0"
 dependencies = [
+ "rustls-pki-types",
  "anyhow",
  "aws-lc-rs",
  "axum",
