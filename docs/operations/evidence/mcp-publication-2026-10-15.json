@@ -1,0 +1,2309 @@
+{
+  "recorded_at": "2026-10-15T14:19:46.102253+00:00",
+  "checks": [
+    {
+      "check": "unwrapped_read_control",
+      "passed": true
+    },
+    {
+      "check": "receiver_positive_control",
+      "passed": true
+    },
+    {
+      "check": "connect_write-before_nonzero",
+      "passed": true
+    },
+    {
+      "check": "connect_write-before_redacted",
+      "passed": true
+    },
+    {
+      "check": "connect_write-before_journal_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_write-before_snapshot_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_write-before_archive_private",
+      "passed": true
+    },
+    {
+      "check": "connect_write-before_external_version_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_write-before_conflict_reported",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_9",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_10",
+      "passed": true
+    },
+    {
+      "check": "connect_write-before_retry_preserves_all_versions",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_12",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_13",
+      "passed": true
+    },
+    {
+      "check": "connect_write-before_reconciled_settings",
+      "passed": true
+    },
+    {
+      "check": "connect_write-before_versions_still_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_replace-before_nonzero",
+      "passed": true
+    },
+    {
+      "check": "connect_replace-before_redacted",
+      "passed": true
+    },
+    {
+      "check": "connect_replace-before_journal_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_replace-before_snapshot_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_replace-before_archive_private",
+      "passed": true
+    },
+    {
+      "check": "connect_replace-before_external_version_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_replace-before_conflict_reported",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_23",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_24",
+      "passed": true
+    },
+    {
+      "check": "connect_replace-before_retry_preserves_all_versions",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_26",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_27",
+      "passed": true
+    },
+    {
+      "check": "connect_replace-before_reconciled_settings",
+      "passed": true
+    },
+    {
+      "check": "connect_replace-before_versions_still_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_held-write-after_nonzero",
+      "passed": true
+    },
+    {
+      "check": "connect_held-write-after_redacted",
+      "passed": true
+    },
+    {
+      "check": "connect_held-write-after_journal_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_held-write-after_snapshot_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_held-write-after_archive_private",
+      "passed": true
+    },
+    {
+      "check": "connect_held-write-after_external_version_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_held-write-after_conflict_reported",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_37",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_38",
+      "passed": true
+    },
+    {
+      "check": "connect_held-write-after_retry_preserves_all_versions",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_40",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_41",
+      "passed": true
+    },
+    {
+      "check": "connect_held-write-after_reconciled_settings",
+      "passed": true
+    },
+    {
+      "check": "connect_held-write-after_versions_still_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_write-after_nonzero",
+      "passed": true
+    },
+    {
+      "check": "connect_write-after_redacted",
+      "passed": true
+    },
+    {
+      "check": "connect_write-after_journal_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_write-after_snapshot_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_write-after_archive_private",
+      "passed": true
+    },
+    {
+      "check": "connect_write-after_external_version_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_write-after_conflict_reported",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_51",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_52",
+      "passed": true
+    },
+    {
+      "check": "connect_write-after_retry_preserves_all_versions",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_54",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_55",
+      "passed": true
+    },
+    {
+      "check": "connect_write-after_reconciled_settings",
+      "passed": true
+    },
+    {
+      "check": "connect_write-after_versions_still_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_crash-before_nonzero",
+      "passed": true
+    },
+    {
+      "check": "connect_crash-before_redacted",
+      "passed": true
+    },
+    {
+      "check": "connect_crash-before_journal_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_crash-before_snapshot_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_crash-before_archive_private",
+      "passed": true
+    },
+    {
+      "check": "connect_crash-before_exact_crash",
+      "passed": true
+    },
+    {
+      "check": "connect_crash-before_live_version",
+      "passed": true
+    },
+    {
+      "check": "inspect_exit_65",
+      "passed": true
+    },
+    {
+      "check": "inspect_redacted_66",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_67",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_68",
+      "passed": true
+    },
+    {
+      "check": "connect_crash-before_recovered",
+      "passed": true
+    },
+    {
+      "check": "connect_crash-before_versions_still_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_crash-after_nonzero",
+      "passed": true
+    },
+    {
+      "check": "connect_crash-after_redacted",
+      "passed": true
+    },
+    {
+      "check": "connect_crash-after_journal_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_crash-after_snapshot_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_crash-after_archive_private",
+      "passed": true
+    },
+    {
+      "check": "connect_crash-after_exact_crash",
+      "passed": true
+    },
+    {
+      "check": "connect_crash-after_live_version",
+      "passed": true
+    },
+    {
+      "check": "inspect_exit_78",
+      "passed": true
+    },
+    {
+      "check": "inspect_redacted_79",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_80",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_81",
+      "passed": true
+    },
+    {
+      "check": "connect_crash-after_recovered",
+      "passed": true
+    },
+    {
+      "check": "connect_crash-after_versions_still_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_84",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_85",
+      "passed": true
+    },
+    {
+      "check": "disconnect_write-before_nonzero",
+      "passed": true
+    },
+    {
+      "check": "disconnect_write-before_redacted",
+      "passed": true
+    },
+    {
+      "check": "disconnect_write-before_journal_retained",
+      "passed": true
+    },
+    {
+      "check": "disconnect_write-before_snapshot_retained",
+      "passed": true
+    },
+    {
+      "check": "disconnect_write-before_archive_private",
+      "passed": true
+    },
+    {
+      "check": "disconnect_write-before_external_version_retained",
+      "passed": true
+    },
+    {
+      "check": "disconnect_write-before_conflict_reported",
+      "passed": true
+    },
+    {
+      "check": "disconnect_exit_93",
+      "passed": true
+    },
+    {
+      "check": "disconnect_redacted_94",
+      "passed": true
+    },
+    {
+      "check": "disconnect_write-before_retry_preserves_all_versions",
+      "passed": true
+    },
+    {
+      "check": "disconnect_exit_96",
+      "passed": true
+    },
+    {
+      "check": "disconnect_redacted_97",
+      "passed": true
+    },
+    {
+      "check": "disconnect_write-before_reconciled_settings",
+      "passed": true
+    },
+    {
+      "check": "disconnect_write-before_versions_still_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_100",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_101",
+      "passed": true
+    },
+    {
+      "check": "disconnect_replace-before_nonzero",
+      "passed": true
+    },
+    {
+      "check": "disconnect_replace-before_redacted",
+      "passed": true
+    },
+    {
+      "check": "disconnect_replace-before_journal_retained",
+      "passed": true
+    },
+    {
+      "check": "disconnect_replace-before_snapshot_retained",
+      "passed": true
+    },
+    {
+      "check": "disconnect_replace-before_archive_private",
+      "passed": true
+    },
+    {
+      "check": "disconnect_replace-before_external_version_retained",
+      "passed": true
+    },
+    {
+      "check": "disconnect_replace-before_conflict_reported",
+      "passed": true
+    },
+    {
+      "check": "disconnect_exit_109",
+      "passed": true
+    },
+    {
+      "check": "disconnect_redacted_110",
+      "passed": true
+    },
+    {
+      "check": "disconnect_replace-before_retry_preserves_all_versions",
+      "passed": true
+    },
+    {
+      "check": "disconnect_exit_112",
+      "passed": true
+    },
+    {
+      "check": "disconnect_redacted_113",
+      "passed": true
+    },
+    {
+      "check": "disconnect_replace-before_reconciled_settings",
+      "passed": true
+    },
+    {
+      "check": "disconnect_replace-before_versions_still_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_116",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_117",
+      "passed": true
+    },
+    {
+      "check": "disconnect_held-write-after_nonzero",
+      "passed": true
+    },
+    {
+      "check": "disconnect_held-write-after_redacted",
+      "passed": true
+    },
+    {
+      "check": "disconnect_held-write-after_journal_retained",
+      "passed": true
+    },
+    {
+      "check": "disconnect_held-write-after_snapshot_retained",
+      "passed": true
+    },
+    {
+      "check": "disconnect_held-write-after_archive_private",
+      "passed": true
+    },
+    {
+      "check": "disconnect_held-write-after_external_version_retained",
+      "passed": true
+    },
+    {
+      "check": "disconnect_held-write-after_conflict_reported",
+      "passed": true
+    },
+    {
+      "check": "disconnect_exit_125",
+      "passed": true
+    },
+    {
+      "check": "disconnect_redacted_126",
+      "passed": true
+    },
+    {
+      "check": "disconnect_held-write-after_retry_preserves_all_versions",
+      "passed": true
+    },
+    {
+      "check": "disconnect_exit_128",
+      "passed": true
+    },
+    {
+      "check": "disconnect_redacted_129",
+      "passed": true
+    },
+    {
+      "check": "disconnect_held-write-after_reconciled_settings",
+      "passed": true
+    },
+    {
+      "check": "disconnect_held-write-after_versions_still_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_132",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_133",
+      "passed": true
+    },
+    {
+      "check": "disconnect_write-after_nonzero",
+      "passed": true
+    },
+    {
+      "check": "disconnect_write-after_redacted",
+      "passed": true
+    },
+    {
+      "check": "disconnect_write-after_journal_retained",
+      "passed": true
+    },
+    {
+      "check": "disconnect_write-after_snapshot_retained",
+      "passed": true
+    },
+    {
+      "check": "disconnect_write-after_archive_private",
+      "passed": true
+    },
+    {
+      "check": "disconnect_write-after_external_version_retained",
+      "passed": true
+    },
+    {
+      "check": "disconnect_write-after_conflict_reported",
+      "passed": true
+    },
+    {
+      "check": "disconnect_exit_141",
+      "passed": true
+    },
+    {
+      "check": "disconnect_redacted_142",
+      "passed": true
+    },
+    {
+      "check": "disconnect_write-after_retry_preserves_all_versions",
+      "passed": true
+    },
+    {
+      "check": "disconnect_exit_144",
+      "passed": true
+    },
+    {
+      "check": "disconnect_redacted_145",
+      "passed": true
+    },
+    {
+      "check": "disconnect_write-after_reconciled_settings",
+      "passed": true
+    },
+    {
+      "check": "disconnect_write-after_versions_still_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_148",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_149",
+      "passed": true
+    },
+    {
+      "check": "disconnect_crash-before_nonzero",
+      "passed": true
+    },
+    {
+      "check": "disconnect_crash-before_redacted",
+      "passed": true
+    },
+    {
+      "check": "disconnect_crash-before_journal_retained",
+      "passed": true
+    },
+    {
+      "check": "disconnect_crash-before_snapshot_retained",
+      "passed": true
+    },
+    {
+      "check": "disconnect_crash-before_archive_private",
+      "passed": true
+    },
+    {
+      "check": "disconnect_crash-before_exact_crash",
+      "passed": true
+    },
+    {
+      "check": "disconnect_crash-before_live_version",
+      "passed": true
+    },
+    {
+      "check": "inspect_exit_157",
+      "passed": true
+    },
+    {
+      "check": "inspect_redacted_158",
+      "passed": true
+    },
+    {
+      "check": "disconnect_exit_159",
+      "passed": true
+    },
+    {
+      "check": "disconnect_redacted_160",
+      "passed": true
+    },
+    {
+      "check": "disconnect_crash-before_recovered",
+      "passed": true
+    },
+    {
+      "check": "disconnect_crash-before_versions_still_retained",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_163",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_164",
+      "passed": true
+    },
+    {
+      "check": "disconnect_crash-after_nonzero",
+      "passed": true
+    },
+    {
+      "check": "disconnect_crash-after_redacted",
+      "passed": true
+    },
+    {
+      "check": "disconnect_crash-after_journal_retained",
+      "passed": true
+    },
+    {
+      "check": "disconnect_crash-after_snapshot_retained",
+      "passed": true
+    },
+    {
+      "check": "disconnect_crash-after_archive_private",
+      "passed": true
+    },
+    {
+      "check": "disconnect_crash-after_exact_crash",
+      "passed": true
+    },
+    {
+      "check": "disconnect_crash-after_live_version",
+      "passed": true
+    },
+    {
+      "check": "inspect_exit_172",
+      "passed": true
+    },
+    {
+      "check": "inspect_redacted_173",
+      "passed": true
+    },
+    {
+      "check": "disconnect_exit_174",
+      "passed": true
+    },
+    {
+      "check": "disconnect_redacted_175",
+      "passed": true
+    },
+    {
+      "check": "disconnect_crash-after_recovered",
+      "passed": true
+    },
+    {
+      "check": "disconnect_crash-after_versions_still_retained",
+      "passed": true
+    },
+    {
+      "check": "preview_exit_178",
+      "passed": true
+    },
+    {
+      "check": "preview_redacted_179",
+      "passed": true
+    },
+    {
+      "check": "preview_no_change",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_181",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_182",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_183",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_184",
+      "passed": true
+    },
+    {
+      "check": "connect_idempotent",
+      "passed": true
+    },
+    {
+      "check": "unrelated_preserved",
+      "passed": true
+    },
+    {
+      "check": "native_wrapper",
+      "passed": true
+    },
+    {
+      "check": "original_server_argv_preserved",
+      "passed": true
+    },
+    {
+      "check": "inspect_exit_189",
+      "passed": true
+    },
+    {
+      "check": "inspect_redacted_190",
+      "passed": true
+    },
+    {
+      "check": "configured_is_not_verified",
+      "passed": true
+    },
+    {
+      "check": "connect_preflight_paused_192",
+      "passed": true
+    },
+    {
+      "check": "connect_concurrent_change_refused_193",
+      "passed": true
+    },
+    {
+      "check": "connect_no_stale_success_194",
+      "passed": true
+    },
+    {
+      "check": "connect_race_redacted_195",
+      "passed": true
+    },
+    {
+      "check": "repeated_connect_preserves_concurrent_edit",
+      "passed": true
+    },
+    {
+      "check": "repeated_connect_preserves_ownership",
+      "passed": true
+    },
+    {
+      "check": "inspect_preflight_paused_198",
+      "passed": true
+    },
+    {
+      "check": "disconnect_exit_199",
+      "passed": true
+    },
+    {
+      "check": "disconnect_redacted_200",
+      "passed": true
+    },
+    {
+      "check": "inspect_concurrent_change_refused_201",
+      "passed": true
+    },
+    {
+      "check": "inspect_no_stale_success_202",
+      "passed": true
+    },
+    {
+      "check": "inspect_snapshot_digest_203",
+      "passed": true
+    },
+    {
+      "check": "inspect_race_redacted_204",
+      "passed": true
+    },
+    {
+      "check": "inspect_disconnect_not_mixed",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_206",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_207",
+      "passed": true
+    },
+    {
+      "check": "inspect_preflight_paused_208",
+      "passed": true
+    },
+    {
+      "check": "inspect_concurrent_change_refused_209",
+      "passed": true
+    },
+    {
+      "check": "inspect_no_stale_success_210",
+      "passed": true
+    },
+    {
+      "check": "inspect_snapshot_digest_211",
+      "passed": true
+    },
+    {
+      "check": "inspect_race_redacted_212",
+      "passed": true
+    },
+    {
+      "check": "preview_exit_213",
+      "passed": true
+    },
+    {
+      "check": "preview_redacted_214",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_215",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_216",
+      "passed": true
+    },
+    {
+      "check": "argument_overflow_no_mutation",
+      "passed": true
+    },
+    {
+      "check": "preview_exit_218",
+      "passed": true
+    },
+    {
+      "check": "preview_redacted_219",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_220",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_221",
+      "passed": true
+    },
+    {
+      "check": "wrapped_argument_boundary_accepted",
+      "passed": true
+    },
+    {
+      "check": "inspect_exit_223",
+      "passed": true
+    },
+    {
+      "check": "inspect_redacted_224",
+      "passed": true
+    },
+    {
+      "check": "disconnect_exit_225",
+      "passed": true
+    },
+    {
+      "check": "disconnect_redacted_226",
+      "passed": true
+    },
+    {
+      "check": "argument_boundary_restored",
+      "passed": true
+    },
+    {
+      "check": "inspect_exit_228",
+      "passed": true
+    },
+    {
+      "check": "inspect_redacted_229",
+      "passed": true
+    },
+    {
+      "check": "controlled_probe_verified",
+      "passed": true
+    },
+    {
+      "check": "probe_effect_once",
+      "passed": true
+    },
+    {
+      "check": "probe_result_useful",
+      "passed": true
+    },
+    {
+      "check": "disconnect_exit_233",
+      "passed": true
+    },
+    {
+      "check": "disconnect_redacted_234",
+      "passed": true
+    },
+    {
+      "check": "disconnect_exit_235",
+      "passed": true
+    },
+    {
+      "check": "disconnect_redacted_236",
+      "passed": true
+    },
+    {
+      "check": "disconnect_exact_entry",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_238",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_239",
+      "passed": true
+    },
+    {
+      "check": "disconnect_exit_240",
+      "passed": true
+    },
+    {
+      "check": "disconnect_redacted_241",
+      "passed": true
+    },
+    {
+      "check": "user_conflict_preserved",
+      "passed": true
+    },
+    {
+      "check": "inspect_exit_243",
+      "passed": true
+    },
+    {
+      "check": "inspect_redacted_244",
+      "passed": true
+    },
+    {
+      "check": "partial_connect_unknown",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_246",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_247",
+      "passed": true
+    },
+    {
+      "check": "partial_connect_recovered",
+      "passed": true
+    },
+    {
+      "check": "inspect_exit_249",
+      "passed": true
+    },
+    {
+      "check": "inspect_redacted_250",
+      "passed": true
+    },
+    {
+      "check": "partial_disconnect_unknown",
+      "passed": true
+    },
+    {
+      "check": "disconnect_exit_252",
+      "passed": true
+    },
+    {
+      "check": "disconnect_redacted_253",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_254",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_255",
+      "passed": true
+    },
+    {
+      "check": "partial_disconnect_recovered",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_257",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_258",
+      "passed": true
+    },
+    {
+      "check": "disconnect_exit_259",
+      "passed": true
+    },
+    {
+      "check": "disconnect_redacted_260",
+      "passed": true
+    },
+    {
+      "check": "later_unrelated_edit_preserved",
+      "passed": true
+    },
+    {
+      "check": "connect_exit_262",
+      "passed": true
+    },
+    {
+      "check": "connect_redacted_263",
+      "passed": true
+    },
+    {
+      "check": "preview_exit_264",
+      "passed": true
+    },
+    {
+      "check": "preview_redacted_265",
+      "passed": true
+    },
+    {
+      "check": "preview_exit_266",
+      "passed": true
+    },
+    {
+      "check": "preview_redacted_267",
+      "passed": true
+    },
+    {
+      "check": "actual_client_passed",
+      "passed": true
+    },
+    {
+      "check": "only_expected_reads_executed",
+      "passed": true
+    },
+    {
+      "check": "no_receiver_effect",
+      "passed": true
+    },
+    {
+      "check": "child_environment_cleared",
+      "passed": true
+    },
+    {
+      "check": "inspect_exit_272",
+      "passed": true
+    },
+    {
+      "check": "inspect_redacted_273",
+      "passed": true
+    },
+    {
+      "check": "unavailable_after_daemon_loss",
+      "passed": true
+    },
+    {
+      "check": "disconnect_exit_275",
+      "passed": true
+    },
+    {
+      "check": "disconnect_redacted_276",
+      "passed": true
+    },
+    {
+      "check": "disconnect_exit_277",
+      "passed": true
+    },
+    {
+      "check": "disconnect_redacted_278",
+      "passed": true
+    },
+    {
+      "check": "disconnect_works_offline",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "operations": [
+    {
+      "operation": "connect",
+      "exit_code": 1,
+      "elapsed_ms": 2.88,
+      "report": {}
+    },
+    {
+      "operation": "connect",
+      "exit_code": 0,
+      "elapsed_ms": 2355.15,
+      "report": {
+        "status": "configured",
+        "operation": "connect",
+        "config_sha256": "b688aaba9095497d4837b159749e62431dd3055b89ad5ed0a20ce7b1622d3263",
+        "selected_sha256": "d72cf2b3b1ebdf27fb24bfc122a88bb89c82433210cd15976ab9aa736b7abdd6",
+        "server_id": "claude-e6c1555ce092c9d52e512515",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": null,
+        "elapsed_ms": 2352,
+        "detail": "native wrapper configured; execution is not inferred"
+      }
+    },
+    {
+      "operation": "connect",
+      "exit_code": 1,
+      "elapsed_ms": 2.43,
+      "report": {}
+    },
+    {
+      "operation": "connect",
+      "exit_code": 0,
+      "elapsed_ms": 2485.69,
+      "report": {
+        "status": "configured",
+        "operation": "connect",
+        "config_sha256": "71cc69634efe45234f9e43a03f74ddb651debd46e1f627a3292da1beacf90e1d",
+        "selected_sha256": "b3f1b3ce2d27873dbbc004afa3dbb2dec80dc694015d556dbb4e08b9d1ea49d8",
+        "server_id": "claude-c03cbd8021807fae50db5218",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": null,
+        "elapsed_ms": 2482,
+        "detail": "native wrapper configured; execution is not inferred"
+      }
+    },
+    {
+      "operation": "connect",
+      "exit_code": 1,
+      "elapsed_ms": 2.35,
+      "report": {}
+    },
+    {
+      "operation": "connect",
+      "exit_code": 0,
+      "elapsed_ms": 2298.66,
+      "report": {
+        "status": "configured",
+        "operation": "connect",
+        "config_sha256": "e65a8688b0ed66d0896a9f44dfda00b5c9cbdf9503c4fca6dae512b0dd03b6aa",
+        "selected_sha256": "c4b0be10d1f1294299f0af541335d25f3f9477a5ec289747747faac7e9dcc831",
+        "server_id": "claude-fcae1e77e45460c5d99aa31b",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": null,
+        "elapsed_ms": 2296,
+        "detail": "native wrapper configured; execution is not inferred"
+      }
+    },
+    {
+      "operation": "connect",
+      "exit_code": 1,
+      "elapsed_ms": 2.51,
+      "report": {}
+    },
+    {
+      "operation": "connect",
+      "exit_code": 0,
+      "elapsed_ms": 2297.22,
+      "report": {
+        "status": "configured",
+        "operation": "connect",
+        "config_sha256": "7cf5b41cfca91a356d7756f427bb2860d38c3f6b44f81d741d13de2d35d746a0",
+        "selected_sha256": "aacf80d4b65208dd323c904b824c3f874eb4713f3b35a65c4c8938b65ac4e765",
+        "server_id": "claude-2a66622e82e8c92ed25101de",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": null,
+        "elapsed_ms": 2294,
+        "detail": "native wrapper configured; execution is not inferred"
+      }
+    },
+    {
+      "operation": "inspect",
+      "exit_code": 1,
+      "elapsed_ms": 2.36,
+      "report": {}
+    },
+    {
+      "operation": "connect",
+      "exit_code": 0,
+      "elapsed_ms": 2299.47,
+      "report": {
+        "status": "configured",
+        "operation": "connect",
+        "config_sha256": "0cc445a029948f98bfe1b747267fb4f1e4e80db219b11180a59fadee04fe5d4f",
+        "selected_sha256": "835e4d155ddfcb8f5e1e35eda14901afd8e75862f3088929597ad9aba38c848b",
+        "server_id": "claude-a2cbcc9ebcb2216cbda12f8f",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": null,
+        "elapsed_ms": 2297,
+        "detail": "native wrapper configured; execution is not inferred"
+      }
+    },
+    {
+      "operation": "inspect",
+      "exit_code": 1,
+      "elapsed_ms": 2.59,
+      "report": {}
+    },
+    {
+      "operation": "connect",
+      "exit_code": 0,
+      "elapsed_ms": 2244.69,
+      "report": {
+        "status": "configured",
+        "operation": "connect",
+        "config_sha256": "e6d6639655056af1d1f6164dc9f46c3cec4dd02d03a21e6ffd5657cd8ded687f",
+        "selected_sha256": "8819fe9d44eed04e44cc9ddf4fd316850f96a128a4c2b957f10886cc5dd97046",
+        "server_id": "claude-eecf31699934d495dfab69a9",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": null,
+        "elapsed_ms": 2242,
+        "detail": "native wrapper configured; execution is not inferred"
+      }
+    },
+    {
+      "operation": "connect",
+      "exit_code": 0,
+      "elapsed_ms": 2403.42,
+      "report": {
+        "status": "configured",
+        "operation": "connect",
+        "config_sha256": "78248cea2d8ce7b4b6f10af66ab7826de1b6caa1877ddf5c8e6949339248276d",
+        "selected_sha256": "e62d95fb27f03247235fb524b943224689718434f422570209afca4a0efe7fa6",
+        "server_id": "claude-b59615085c5735c4817b4812",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": null,
+        "elapsed_ms": 2401,
+        "detail": "native wrapper configured; execution is not inferred"
+      }
+    },
+    {
+      "operation": "disconnect",
+      "exit_code": 1,
+      "elapsed_ms": 2.48,
+      "report": {}
+    },
+    {
+      "operation": "disconnect",
+      "exit_code": 0,
+      "elapsed_ms": 38.47,
+      "report": {
+        "status": "disconnected",
+        "operation": "disconnect",
+        "config_sha256": "a2c1c18c90f4e17cc365f8c28e19557fd87e8bee3efd4210451571cedfb71e12",
+        "selected_sha256": "b4e8f6aa04e7ae9d53ea1a2066d3c026dcd4f502d842f5fc56f2b56e416d62be",
+        "server_id": "claude-b59615085c5735c4817b4812",
+        "agent_sha256": null,
+        "registry_sha256": null,
+        "probe_result_sha256": null,
+        "elapsed_ms": 36,
+        "detail": "original entry restored; unrelated settings preserved"
+      }
+    },
+    {
+      "operation": "connect",
+      "exit_code": 0,
+      "elapsed_ms": 2429.73,
+      "report": {
+        "status": "configured",
+        "operation": "connect",
+        "config_sha256": "44f0d052c5c0d439873f5c13d305020111d364afacd44bc1a36570f4eb6a1b8e",
+        "selected_sha256": "f05dffd0dd820b7ead4c880c4467d5166b989faa0d58cd23e54c79f6faac33a1",
+        "server_id": "claude-97fb5e0caf0cd2b22c5da34d",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": null,
+        "elapsed_ms": 2427,
+        "detail": "native wrapper configured; execution is not inferred"
+      }
+    },
+    {
+      "operation": "disconnect",
+      "exit_code": 1,
+      "elapsed_ms": 2.33,
+      "report": {}
+    },
+    {
+      "operation": "disconnect",
+      "exit_code": 0,
+      "elapsed_ms": 31.28,
+      "report": {
+        "status": "disconnected",
+        "operation": "disconnect",
+        "config_sha256": "8877d931fc736fa203dc673fce0c45952b49c83e046cc4b60f490eeb2ae1b5c0",
+        "selected_sha256": "b4e8f6aa04e7ae9d53ea1a2066d3c026dcd4f502d842f5fc56f2b56e416d62be",
+        "server_id": "claude-97fb5e0caf0cd2b22c5da34d",
+        "agent_sha256": null,
+        "registry_sha256": null,
+        "probe_result_sha256": null,
+        "elapsed_ms": 29,
+        "detail": "original entry restored; unrelated settings preserved"
+      }
+    },
+    {
+      "operation": "connect",
+      "exit_code": 0,
+      "elapsed_ms": 2378.25,
+      "report": {
+        "status": "configured",
+        "operation": "connect",
+        "config_sha256": "ca3d32f21a56ccdb58ea59f08c348437b04b38c92dad2f23d0d30289a98d1616",
+        "selected_sha256": "1e84f8ae85a1d2fef3fe0f35d696761a1ec5c9745ae803f1a0a66580a71e5b3f",
+        "server_id": "claude-c61affe1164b3056c44680cc",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": null,
+        "elapsed_ms": 2375,
+        "detail": "native wrapper configured; execution is not inferred"
+      }
+    },
+    {
+      "operation": "disconnect",
+      "exit_code": 1,
+      "elapsed_ms": 2.37,
+      "report": {}
+    },
+    {
+      "operation": "disconnect",
+      "exit_code": 0,
+      "elapsed_ms": 33.07,
+      "report": {
+        "status": "disconnected",
+        "operation": "disconnect",
+        "config_sha256": "94f1a3340657f514fcc096259ecf8876e896830018e7cafca73d8e72eba460ce",
+        "selected_sha256": "b4e8f6aa04e7ae9d53ea1a2066d3c026dcd4f502d842f5fc56f2b56e416d62be",
+        "server_id": "claude-c61affe1164b3056c44680cc",
+        "agent_sha256": null,
+        "registry_sha256": null,
+        "probe_result_sha256": null,
+        "elapsed_ms": 30,
+        "detail": "original entry restored; unrelated settings preserved"
+      }
+    },
+    {
+      "operation": "connect",
+      "exit_code": 0,
+      "elapsed_ms": 2365.55,
+      "report": {
+        "status": "configured",
+        "operation": "connect",
+        "config_sha256": "f4a04ec67da2debfb80cc76a632a5c3df2f57ff7905e1919519932fc7fb553a6",
+        "selected_sha256": "fc123ca390581af2e211db64f7d093024ed4b4e5040868743fd6cc324388f1eb",
+        "server_id": "claude-f3d2020612ec2ccaab8f7b60",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": null,
+        "elapsed_ms": 2363,
+        "detail": "native wrapper configured; execution is not inferred"
+      }
+    },
+    {
+      "operation": "disconnect",
+      "exit_code": 1,
+      "elapsed_ms": 2.4,
+      "report": {}
+    },
+    {
+      "operation": "disconnect",
+      "exit_code": 0,
+      "elapsed_ms": 33.91,
+      "report": {
+        "status": "disconnected",
+        "operation": "disconnect",
+        "config_sha256": "6fe8131a1f3d83b277a95852ed36293d9f8ba7538e2b635c75bf399517e5796e",
+        "selected_sha256": "b4e8f6aa04e7ae9d53ea1a2066d3c026dcd4f502d842f5fc56f2b56e416d62be",
+        "server_id": "claude-f3d2020612ec2ccaab8f7b60",
+        "agent_sha256": null,
+        "registry_sha256": null,
+        "probe_result_sha256": null,
+        "elapsed_ms": 31,
+        "detail": "original entry restored; unrelated settings preserved"
+      }
+    },
+    {
+      "operation": "connect",
+      "exit_code": 0,
+      "elapsed_ms": 2335.16,
+      "report": {
+        "status": "configured",
+        "operation": "connect",
+        "config_sha256": "3cf0a8787a313188324a077a702a313676a81c5c311e57f0def6aae7bd5b9412",
+        "selected_sha256": "57d50fbcfdd5288b39a2337cf1ec71f9b54a2124474ed25729a2704d58952d25",
+        "server_id": "claude-b83669e9661b4e1589d24713",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": null,
+        "elapsed_ms": 2332,
+        "detail": "native wrapper configured; execution is not inferred"
+      }
+    },
+    {
+      "operation": "inspect",
+      "exit_code": 1,
+      "elapsed_ms": 1.98,
+      "report": {}
+    },
+    {
+      "operation": "disconnect",
+      "exit_code": 0,
+      "elapsed_ms": 36.92,
+      "report": {
+        "status": "disconnected",
+        "operation": "disconnect",
+        "config_sha256": "acf21668f4fbc7c6778a3f15a8038ab25434f4c6e6bd3ca56a8693993f4644dd",
+        "selected_sha256": "b4e8f6aa04e7ae9d53ea1a2066d3c026dcd4f502d842f5fc56f2b56e416d62be",
+        "server_id": "claude-b83669e9661b4e1589d24713",
+        "agent_sha256": null,
+        "registry_sha256": null,
+        "probe_result_sha256": null,
+        "elapsed_ms": 35,
+        "detail": "original entry restored; unrelated settings preserved"
+      }
+    },
+    {
+      "operation": "connect",
+      "exit_code": 0,
+      "elapsed_ms": 2381.09,
+      "report": {
+        "status": "configured",
+        "operation": "connect",
+        "config_sha256": "87c65aff43a974185a0ad8d79744977ceaa6e7d6378651fd047b1ca91bc6610d",
+        "selected_sha256": "c27cf82f8915be60e0567aa9d7b91d4dd421054ba49a15268d49322ac1a93610",
+        "server_id": "claude-17ae843e7a1681c608c7fc19",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": null,
+        "elapsed_ms": 2378,
+        "detail": "native wrapper configured; execution is not inferred"
+      }
+    },
+    {
+      "operation": "inspect",
+      "exit_code": 1,
+      "elapsed_ms": 2.23,
+      "report": {}
+    },
+    {
+      "operation": "disconnect",
+      "exit_code": 0,
+      "elapsed_ms": 11.5,
+      "report": {
+        "status": "disconnected",
+        "operation": "disconnect",
+        "config_sha256": "acf21668f4fbc7c6778a3f15a8038ab25434f4c6e6bd3ca56a8693993f4644dd",
+        "selected_sha256": "b4e8f6aa04e7ae9d53ea1a2066d3c026dcd4f502d842f5fc56f2b56e416d62be",
+        "server_id": "claude-17ae843e7a1681c608c7fc19",
+        "agent_sha256": null,
+        "registry_sha256": null,
+        "probe_result_sha256": null,
+        "elapsed_ms": 9,
+        "detail": "original entry restored; unrelated settings preserved"
+      }
+    },
+    {
+      "operation": "preview",
+      "exit_code": 0,
+      "elapsed_ms": 91.12,
+      "report": {
+        "status": "preview",
+        "operation": "preview",
+        "config_sha256": "7f6916455f951dc992764dcd2fb5704b556683486b2e4a96b26de1f6901e68a5",
+        "selected_sha256": "b4e8f6aa04e7ae9d53ea1a2066d3c026dcd4f502d842f5fc56f2b56e416d62be",
+        "server_id": "claude-8dce2fecadf3cd4d4f03986f",
+        "agent_sha256": null,
+        "registry_sha256": null,
+        "probe_result_sha256": null,
+        "elapsed_ms": 89,
+        "detail": "selected stdio command will use the native collector; original arguments retained; child environment cleared"
+      }
+    },
+    {
+      "operation": "connect",
+      "exit_code": 0,
+      "elapsed_ms": 2395.82,
+      "report": {
+        "status": "configured",
+        "operation": "connect",
+        "config_sha256": "aa8a44eb48a49284f80d7c4cbcf2387bb991d89a0abb55764bd40a623866be18",
+        "selected_sha256": "524855ab0e417ecc2f6b4dc79bdfd6bbf141d48d49d6f68b19a42af18ad07206",
+        "server_id": "claude-8dce2fecadf3cd4d4f03986f",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": null,
+        "elapsed_ms": 2393,
+        "detail": "native wrapper configured; execution is not inferred"
+      }
+    },
+    {
+      "operation": "connect",
+      "exit_code": 0,
+      "elapsed_ms": 2227.01,
+      "report": {
+        "status": "configured",
+        "operation": "connect",
+        "config_sha256": "aa8a44eb48a49284f80d7c4cbcf2387bb991d89a0abb55764bd40a623866be18",
+        "selected_sha256": "524855ab0e417ecc2f6b4dc79bdfd6bbf141d48d49d6f68b19a42af18ad07206",
+        "server_id": "claude-8dce2fecadf3cd4d4f03986f",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": null,
+        "elapsed_ms": 2224,
+        "detail": "native wrapper configured; execution is not inferred"
+      }
+    },
+    {
+      "operation": "inspect",
+      "exit_code": 0,
+      "elapsed_ms": 2210.95,
+      "report": {
+        "status": "configured",
+        "operation": "inspect",
+        "config_sha256": "aa8a44eb48a49284f80d7c4cbcf2387bb991d89a0abb55764bd40a623866be18",
+        "selected_sha256": "524855ab0e417ecc2f6b4dc79bdfd6bbf141d48d49d6f68b19a42af18ad07206",
+        "server_id": "claude-8dce2fecadf3cd4d4f03986f",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": null,
+        "elapsed_ms": 2208,
+        "detail": "owned configuration and Agent identities match"
+      }
+    },
+    {
+      "operation": "connect",
+      "scenario": "concurrent_change",
+      "exit_code": 1,
+      "elapsed_ms": 2256.16,
+      "report": {}
+    },
+    {
+      "operation": "disconnect",
+      "exit_code": 0,
+      "elapsed_ms": 40.4,
+      "report": {
+        "status": "disconnected",
+        "operation": "disconnect",
+        "config_sha256": "acf21668f4fbc7c6778a3f15a8038ab25434f4c6e6bd3ca56a8693993f4644dd",
+        "selected_sha256": "b4e8f6aa04e7ae9d53ea1a2066d3c026dcd4f502d842f5fc56f2b56e416d62be",
+        "server_id": "claude-8dce2fecadf3cd4d4f03986f",
+        "agent_sha256": null,
+        "registry_sha256": null,
+        "probe_result_sha256": null,
+        "elapsed_ms": 38,
+        "detail": "original entry restored; unrelated settings preserved"
+      }
+    },
+    {
+      "operation": "inspect",
+      "scenario": "concurrent_change",
+      "exit_code": 1,
+      "elapsed_ms": 2290.45,
+      "report": {
+        "status": "unknown",
+        "operation": "inspect",
+        "config_sha256": "62026858419732a984d4a64cd56ff22e698d19eb82cd0fad797208065146e3b3",
+        "selected_sha256": "524855ab0e417ecc2f6b4dc79bdfd6bbf141d48d49d6f68b19a42af18ad07206",
+        "server_id": "claude-8dce2fecadf3cd4d4f03986f",
+        "agent_sha256": null,
+        "registry_sha256": null,
+        "probe_result_sha256": null,
+        "elapsed_ms": 2288,
+        "detail": "configuration or ownership changed during inspection"
+      }
+    },
+    {
+      "operation": "connect",
+      "exit_code": 0,
+      "elapsed_ms": 2241.5,
+      "report": {
+        "status": "configured",
+        "operation": "connect",
+        "config_sha256": "aa8a44eb48a49284f80d7c4cbcf2387bb991d89a0abb55764bd40a623866be18",
+        "selected_sha256": "524855ab0e417ecc2f6b4dc79bdfd6bbf141d48d49d6f68b19a42af18ad07206",
+        "server_id": "claude-8dce2fecadf3cd4d4f03986f",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": null,
+        "elapsed_ms": 2239,
+        "detail": "native wrapper configured; execution is not inferred"
+      }
+    },
+    {
+      "operation": "inspect",
+      "scenario": "concurrent_change",
+      "exit_code": 1,
+      "elapsed_ms": 2223.49,
+      "report": {
+        "status": "unknown",
+        "operation": "inspect",
+        "config_sha256": "aa8a44eb48a49284f80d7c4cbcf2387bb991d89a0abb55764bd40a623866be18",
+        "selected_sha256": "524855ab0e417ecc2f6b4dc79bdfd6bbf141d48d49d6f68b19a42af18ad07206",
+        "server_id": "claude-8dce2fecadf3cd4d4f03986f",
+        "agent_sha256": null,
+        "registry_sha256": null,
+        "probe_result_sha256": null,
+        "elapsed_ms": 2221,
+        "detail": "configuration or ownership changed during inspection"
+      }
+    },
+    {
+      "operation": "preview",
+      "exit_code": 1,
+      "elapsed_ms": 3.12,
+      "report": {}
+    },
+    {
+      "operation": "connect",
+      "exit_code": 1,
+      "elapsed_ms": 2246.98,
+      "report": {}
+    },
+    {
+      "operation": "preview",
+      "exit_code": 0,
+      "elapsed_ms": 3.28,
+      "report": {
+        "status": "preview",
+        "operation": "preview",
+        "config_sha256": "2481342ad4cd2534ad344959c8d577ab8edc9ecce34e80d5c2700552e970dfc6",
+        "selected_sha256": "1cf33de65d487b846131499f238165a403cc582cbbcf4d5b17fe79b3a2665214",
+        "server_id": "claude-7d52330173aa7a66e1d2d2fc",
+        "agent_sha256": null,
+        "registry_sha256": null,
+        "probe_result_sha256": null,
+        "elapsed_ms": 1,
+        "detail": "selected stdio command will use the native collector; original arguments retained; child environment cleared"
+      }
+    },
+    {
+      "operation": "connect",
+      "exit_code": 0,
+      "elapsed_ms": 2267.49,
+      "report": {
+        "status": "configured",
+        "operation": "connect",
+        "config_sha256": "40522e78d1dc3a56657a957c7f3450b5e379c014469d3eb7d92ff4ce5d5e44bc",
+        "selected_sha256": "53407ff552b9725d6038a63d1c8065812e15fc778470b2186761dee5b92865a6",
+        "server_id": "claude-7d52330173aa7a66e1d2d2fc",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": null,
+        "elapsed_ms": 2265,
+        "detail": "native wrapper configured; execution is not inferred"
+      }
+    },
+    {
+      "operation": "inspect",
+      "exit_code": 0,
+      "elapsed_ms": 2254.33,
+      "report": {
+        "status": "configured",
+        "operation": "inspect",
+        "config_sha256": "40522e78d1dc3a56657a957c7f3450b5e379c014469d3eb7d92ff4ce5d5e44bc",
+        "selected_sha256": "53407ff552b9725d6038a63d1c8065812e15fc778470b2186761dee5b92865a6",
+        "server_id": "claude-7d52330173aa7a66e1d2d2fc",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": null,
+        "elapsed_ms": 2251,
+        "detail": "owned configuration and Agent identities match"
+      }
+    },
+    {
+      "operation": "disconnect",
+      "exit_code": 0,
+      "elapsed_ms": 34.61,
+      "report": {
+        "status": "disconnected",
+        "operation": "disconnect",
+        "config_sha256": "b089d0671e2a3fb0b6dcc7852bb014d93a33d99298c42f16a7dcb9c19a5254e0",
+        "selected_sha256": "1cf33de65d487b846131499f238165a403cc582cbbcf4d5b17fe79b3a2665214",
+        "server_id": "claude-7d52330173aa7a66e1d2d2fc",
+        "agent_sha256": null,
+        "registry_sha256": null,
+        "probe_result_sha256": null,
+        "elapsed_ms": 32,
+        "detail": "original entry restored; unrelated settings preserved"
+      }
+    },
+    {
+      "operation": "inspect",
+      "exit_code": 0,
+      "elapsed_ms": 2431.13,
+      "report": {
+        "status": "verified_for_this_probe",
+        "operation": "inspect",
+        "config_sha256": "aa8a44eb48a49284f80d7c4cbcf2387bb991d89a0abb55764bd40a623866be18",
+        "selected_sha256": "524855ab0e417ecc2f6b4dc79bdfd6bbf141d48d49d6f68b19a42af18ad07206",
+        "server_id": "claude-8dce2fecadf3cd4d4f03986f",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": "ee119923813b005477313360d3b66a432d3a22916b06c69935012f61c3fe959c",
+        "elapsed_ms": 2428,
+        "detail": "controlled request returned a permitted result"
+      }
+    },
+    {
+      "operation": "disconnect",
+      "exit_code": 0,
+      "elapsed_ms": 50.61,
+      "report": {
+        "status": "disconnected",
+        "operation": "disconnect",
+        "config_sha256": "acf21668f4fbc7c6778a3f15a8038ab25434f4c6e6bd3ca56a8693993f4644dd",
+        "selected_sha256": "b4e8f6aa04e7ae9d53ea1a2066d3c026dcd4f502d842f5fc56f2b56e416d62be",
+        "server_id": "claude-8dce2fecadf3cd4d4f03986f",
+        "agent_sha256": null,
+        "registry_sha256": null,
+        "probe_result_sha256": null,
+        "elapsed_ms": 48,
+        "detail": "original entry restored; unrelated settings preserved"
+      }
+    },
+    {
+      "operation": "disconnect",
+      "exit_code": 0,
+      "elapsed_ms": 7.95,
+      "report": {
+        "status": "disconnected",
+        "operation": "disconnect",
+        "config_sha256": "acf21668f4fbc7c6778a3f15a8038ab25434f4c6e6bd3ca56a8693993f4644dd",
+        "selected_sha256": "b4e8f6aa04e7ae9d53ea1a2066d3c026dcd4f502d842f5fc56f2b56e416d62be",
+        "server_id": "claude-8dce2fecadf3cd4d4f03986f",
+        "agent_sha256": null,
+        "registry_sha256": null,
+        "probe_result_sha256": null,
+        "elapsed_ms": 5,
+        "detail": "original entry restored; unrelated settings preserved"
+      }
+    },
+    {
+      "operation": "connect",
+      "exit_code": 0,
+      "elapsed_ms": 2237.94,
+      "report": {
+        "status": "configured",
+        "operation": "connect",
+        "config_sha256": "aa8a44eb48a49284f80d7c4cbcf2387bb991d89a0abb55764bd40a623866be18",
+        "selected_sha256": "524855ab0e417ecc2f6b4dc79bdfd6bbf141d48d49d6f68b19a42af18ad07206",
+        "server_id": "claude-8dce2fecadf3cd4d4f03986f",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": null,
+        "elapsed_ms": 2235,
+        "detail": "native wrapper configured; execution is not inferred"
+      }
+    },
+    {
+      "operation": "disconnect",
+      "exit_code": 1,
+      "elapsed_ms": 2.65,
+      "report": {}
+    },
+    {
+      "operation": "inspect",
+      "exit_code": 1,
+      "elapsed_ms": 2218.66,
+      "report": {
+        "status": "unknown",
+        "operation": "inspect",
+        "config_sha256": "62026858419732a984d4a64cd56ff22e698d19eb82cd0fad797208065146e3b3",
+        "selected_sha256": "524855ab0e417ecc2f6b4dc79bdfd6bbf141d48d49d6f68b19a42af18ad07206",
+        "server_id": "claude-8dce2fecadf3cd4d4f03986f",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": null,
+        "elapsed_ms": 2216,
+        "detail": "connection identity is unknown"
+      }
+    },
+    {
+      "operation": "connect",
+      "exit_code": 0,
+      "elapsed_ms": 2215.53,
+      "report": {
+        "status": "configured",
+        "operation": "connect",
+        "config_sha256": "62026858419732a984d4a64cd56ff22e698d19eb82cd0fad797208065146e3b3",
+        "selected_sha256": "524855ab0e417ecc2f6b4dc79bdfd6bbf141d48d49d6f68b19a42af18ad07206",
+        "server_id": "claude-8dce2fecadf3cd4d4f03986f",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": null,
+        "elapsed_ms": 2213,
+        "detail": "native wrapper configured; execution is not inferred"
+      }
+    },
+    {
+      "operation": "inspect",
+      "exit_code": 1,
+      "elapsed_ms": 2261.44,
+      "report": {
+        "status": "unknown",
+        "operation": "inspect",
+        "config_sha256": "62026858419732a984d4a64cd56ff22e698d19eb82cd0fad797208065146e3b3",
+        "selected_sha256": "524855ab0e417ecc2f6b4dc79bdfd6bbf141d48d49d6f68b19a42af18ad07206",
+        "server_id": "claude-8dce2fecadf3cd4d4f03986f",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": null,
+        "elapsed_ms": 2259,
+        "detail": "connection identity is unknown"
+      }
+    },
+    {
+      "operation": "disconnect",
+      "exit_code": 0,
+      "elapsed_ms": 34.96,
+      "report": {
+        "status": "disconnected",
+        "operation": "disconnect",
+        "config_sha256": "acf21668f4fbc7c6778a3f15a8038ab25434f4c6e6bd3ca56a8693993f4644dd",
+        "selected_sha256": "b4e8f6aa04e7ae9d53ea1a2066d3c026dcd4f502d842f5fc56f2b56e416d62be",
+        "server_id": "claude-8dce2fecadf3cd4d4f03986f",
+        "agent_sha256": null,
+        "registry_sha256": null,
+        "probe_result_sha256": null,
+        "elapsed_ms": 32,
+        "detail": "original entry restored; unrelated settings preserved"
+      }
+    },
+    {
+      "operation": "connect",
+      "exit_code": 0,
+      "elapsed_ms": 2216.42,
+      "report": {
+        "status": "configured",
+        "operation": "connect",
+        "config_sha256": "aa8a44eb48a49284f80d7c4cbcf2387bb991d89a0abb55764bd40a623866be18",
+        "selected_sha256": "524855ab0e417ecc2f6b4dc79bdfd6bbf141d48d49d6f68b19a42af18ad07206",
+        "server_id": "claude-8dce2fecadf3cd4d4f03986f",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": null,
+        "elapsed_ms": 2213,
+        "detail": "native wrapper configured; execution is not inferred"
+      }
+    },
+    {
+      "operation": "connect",
+      "exit_code": 0,
+      "elapsed_ms": 2221.93,
+      "report": {
+        "status": "configured",
+        "operation": "connect",
+        "config_sha256": "50ac1d2d5ba7310c49597744f191dc5931603976dec5b4cd3183b5deb600a8ae",
+        "selected_sha256": "524855ab0e417ecc2f6b4dc79bdfd6bbf141d48d49d6f68b19a42af18ad07206",
+        "server_id": "claude-8dce2fecadf3cd4d4f03986f",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": null,
+        "elapsed_ms": 2219,
+        "detail": "native wrapper configured; execution is not inferred"
+      }
+    },
+    {
+      "operation": "disconnect",
+      "exit_code": 0,
+      "elapsed_ms": 31.42,
+      "report": {
+        "status": "disconnected",
+        "operation": "disconnect",
+        "config_sha256": "20f04ea43628c8fe580a31ff415508d989f7434c887dbceb4b20b3c7c1bf75d2",
+        "selected_sha256": "b4e8f6aa04e7ae9d53ea1a2066d3c026dcd4f502d842f5fc56f2b56e416d62be",
+        "server_id": "claude-8dce2fecadf3cd4d4f03986f",
+        "agent_sha256": null,
+        "registry_sha256": null,
+        "probe_result_sha256": null,
+        "elapsed_ms": 29,
+        "detail": "original entry restored; unrelated settings preserved"
+      }
+    },
+    {
+      "operation": "connect",
+      "exit_code": 0,
+      "elapsed_ms": 2229.03,
+      "report": {
+        "status": "configured",
+        "operation": "connect",
+        "config_sha256": "50ac1d2d5ba7310c49597744f191dc5931603976dec5b4cd3183b5deb600a8ae",
+        "selected_sha256": "524855ab0e417ecc2f6b4dc79bdfd6bbf141d48d49d6f68b19a42af18ad07206",
+        "server_id": "claude-8dce2fecadf3cd4d4f03986f",
+        "agent_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+        "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+        "probe_result_sha256": null,
+        "elapsed_ms": 2226,
+        "detail": "native wrapper configured; execution is not inferred"
+      }
+    },
+    {
+      "operation": "preview",
+      "exit_code": 1,
+      "elapsed_ms": 2.24,
+      "report": {}
+    },
+    {
+      "operation": "preview",
+      "exit_code": 1,
+      "elapsed_ms": 1.94,
+      "report": {}
+    },
+    {
+      "operation": "inspect",
+      "exit_code": 1,
+      "elapsed_ms": 2236.0,
+      "report": {
+        "status": "unavailable",
+        "operation": "inspect",
+        "config_sha256": "62026858419732a984d4a64cd56ff22e698d19eb82cd0fad797208065146e3b3",
+        "selected_sha256": "524855ab0e417ecc2f6b4dc79bdfd6bbf141d48d49d6f68b19a42af18ad07206",
+        "server_id": "claude-8dce2fecadf3cd4d4f03986f",
+        "agent_sha256": null,
+        "registry_sha256": null,
+        "probe_result_sha256": null,
+        "elapsed_ms": 2233,
+        "detail": "Agent preflight unavailable or identity mismatch"
+      }
+    },
+    {
+      "operation": "disconnect",
+      "exit_code": 0,
+      "elapsed_ms": 47.34,
+      "report": {
+        "status": "disconnected",
+        "operation": "disconnect",
+        "config_sha256": "acf21668f4fbc7c6778a3f15a8038ab25434f4c6e6bd3ca56a8693993f4644dd",
+        "selected_sha256": "b4e8f6aa04e7ae9d53ea1a2066d3c026dcd4f502d842f5fc56f2b56e416d62be",
+        "server_id": "claude-8dce2fecadf3cd4d4f03986f",
+        "agent_sha256": null,
+        "registry_sha256": null,
+        "probe_result_sha256": null,
+        "elapsed_ms": 44,
+        "detail": "original entry restored; unrelated settings preserved"
+      }
+    },
+    {
+      "operation": "disconnect",
+      "exit_code": 0,
+      "elapsed_ms": 9.56,
+      "report": {
+        "status": "disconnected",
+        "operation": "disconnect",
+        "config_sha256": "acf21668f4fbc7c6778a3f15a8038ab25434f4c6e6bd3ca56a8693993f4644dd",
+        "selected_sha256": "b4e8f6aa04e7ae9d53ea1a2066d3c026dcd4f502d842f5fc56f2b56e416d62be",
+        "server_id": "claude-8dce2fecadf3cd4d4f03986f",
+        "agent_sha256": null,
+        "registry_sha256": null,
+        "probe_result_sha256": null,
+        "elapsed_ms": 7,
+        "detail": "original entry restored; unrelated settings preserved"
+      }
+    }
+  ],
+  "runtime": {
+    "system": "Linux",
+    "release": "6.18.33.2-microsoft-standard-WSL2",
+    "machine": "x86_64",
+    "python": "3.11.2"
+  },
+  "binary_sha256": "4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18",
+  "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+  "actual_client": {
+    "passed": true,
+    "host": "C:\\Users\\sayo\\AppData\\Roaming\\npm\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe",
+    "host_sha256": "8d1229a281281b98fd2dee72b3253a704be4fce4d45207200cd32a9bb5a6c909",
+    "version": "2.1.251 (Claude Code)",
+    "transport": "installed host to owned Linux collector through Docker stdio bridge",
+    "records": [
+      {
+        "scenario": "useful_and_forbidden",
+        "exit_code": 0,
+        "elapsed_ms": 2219.0,
+        "completed": true,
+        "tool_results": {
+          "toolu_demo_0": {
+            "is_error": false,
+            "text": "Inventory: 7 red widgets."
+          },
+          "toolu_demo_1": {
+            "is_error": true,
+            "text": "Soup Wall withheld MCP invocation (demo-secret-egress)\n\n<system-reminder>\n<total_tokens>14999890 tokens left</total_tokens>\n</system-reminder>"
+          }
+        },
+        "output_sha256": "db9757b53e75b05978779457fee88bb526fa72071f094b9f1d40cf1eebcc2c70",
+        "stderr_sha256": "c9356ee4228a9d1a03b4c3f6f2f2c7593bb2ce80681d9e36c55313ce9848af1f"
+      },
+      {
+        "scenario": "daemon_loss",
+        "exit_code": 0,
+        "elapsed_ms": 1375.0,
+        "completed": true,
+        "tool_results": {
+          "toolu_demo_0": {
+            "is_error": false,
+            "text": "Inventory: 7 red widgets."
+          },
+          "toolu_demo_1": {
+            "is_error": true,
+            "text": "MCP error -32000: Connection closed\n\n<system-reminder>\n<total_tokens>14999890 tokens left</total_tokens>\n</system-reminder>"
+          }
+        },
+        "output_sha256": "45df19d9cdc4b7314256f7af657103443c8e5ca4f5835ad0cfd7a08474c98e25",
+        "stderr_sha256": "c9356ee4228a9d1a03b4c3f6f2f2c7593bb2ce80681d9e36c55313ce9848af1f"
+      }
+    ],
+    "private_host_profile_removed": true
+  },
+  "executions": [
+    {
+      "method": "tools/call",
+      "params": {
+        "name": "read_document",
+        "arguments": {
+          "name": "inventory"
+        },
+        "_meta": {
+          "claudecode/toolUseId": "toolu_demo_0",
+          "progressToken": 2
+        }
+      },
+      "jsonrpc": "2.0",
+      "id": 2
+    },
+    {
+      "method": "tools/call",
+      "params": {
+        "name": "read_document",
+        "arguments": {
+          "name": "inventory"
+        },
+        "_meta": {
+          "claudecode/toolUseId": "toolu_demo_0",
+          "progressToken": 2
+        }
+      },
+      "jsonrpc": "2.0",
+      "id": 2
+    }
+  ],
+  "receiver_count": 0,
+  "child_environments": [
+    {
+      "environment_keys": [
+        "HOME",
+        "LC_CTYPE",
+        "PATH",
+        "USERPROFILE"
+      ]
+    },
+    {
+      "environment_keys": [
+        "HOME",
+        "LC_CTYPE",
+        "PATH",
+        "USERPROFILE"
+      ]
+    },
+    {
+      "environment_keys": [
+        "HOME",
+        "LC_CTYPE",
+        "PATH",
+        "USERPROFILE"
+      ]
+    }
+  ],
+  "daemon_stopped": true,
+  "private_profile_removed": true,
+  "source_commit": "de050de3fbc217e4be25652b82615f067599882c",
+  "source_files": {
+    "Cargo.lock": "fd3d11a0ae40dd647b93c8352cff16c6ce34f8e0412097bb10fd98dbadb632a0",
+    "Cargo.toml": "df5cf3632141f34e519b9693ce1455f53de74bec408697beb4f375b435514a5f",
+    "rust-toolchain.toml": "a6a0bbd29ffaa8182dc22d1d9149709f1091e47df40ed96eb8a78a711c66a4ce",
+    "crates\\adapter\\src\\lib.rs": "f43c41ff4c85c5ae77cb544c1e3c26fb5265f3fb68d8e470c4b9a2322c9d7afe",
+    "crates\\adapter\\src\\runner.rs": "99ef70172faa380c5e9b0fa466c25a777edd80a54624a4e8541cd6df2f92cc5a",
+    "crates\\adapter\\src\\tool_call.rs": "ffd672326b7ae4eaed94bfbe178c014eb188af9fedd95932927f2fe81b95db6d",
+    "crates\\adapter\\tests\\attack_scenarios.rs": "ddab6227f7e29b43f05ec46245b566b4bdc96f6c0915640867b11e71a5dfc720",
+    "crates\\adapter\\tests\\enforcement_pipeline.rs": "0eaac691c58a3c0ce209bdca6583303527909eb1bb2560b6075231afe73b81bf",
+    "crates\\adapter\\tests\\latency_bench.rs": "266569020d176f32cbf4ab5a67bc44cb30ebf612e57e321f00e30ce0ef4df057",
+    "crates\\adapter\\tests\\resilience_tests.rs": "9664ea07735d4b1e2d3dafa436cb80c9fa8f9306e688a33078bdfaaf34bcf278",
+    "crates\\adapter\\tests\\schema_validation.rs": "82a2ad1b8e81e282adb205671ac47320945b7ec6fc14613a3e0134d96c46234e",
+    "crates\\agent\\src\\action.rs": "7069161402b26daf8d9b345aca453ccea473ee0fad5e72da381aba4c184163b2",
+    "crates\\agent\\src\\authority.rs": "20a5724530f0b7834aec1e37884e24d9087e43bb4974f967331de32fb978ca1a",
+    "crates\\agent\\src\\egress.rs": "9dc5091592cd8fac69296f9317e200a1c5e368e681671d9027ab40b7a0334d05",
+    "crates\\agent\\src\\engine.rs": "275031542a0af2b6c3b95d44b7ab3632be92a06d2bcc7bc76daf3fde27842b8f",
+    "crates\\agent\\src\\event.rs": "904081b15eec9a3401e6f609c1b0e392291c639339706e9511914d45883612a9",
+    "crates\\agent\\src\\facet.rs": "2225d0e1aeb4ae78b64712e089fc696fcda4e75a4cc177b2bd18301ac8e28e78",
+    "crates\\agent\\src\\fingerprint.rs": "b1d2c6452fa9d5b27196b98f0b99c8b300e292c55263e85da2ca593af71c983c",
+    "crates\\agent\\src\\lib.rs": "9abb757d1a3fb741e11f23fdf936768adb23fd85aea409bd47e729d1457d6784",
+    "crates\\agent\\src\\policy.rs": "68e66ea9703af85b41abf46ae3eb2f29b5056ea1f554f718e8e160d9b91c4b03",
+    "crates\\agent\\src\\resolution.rs": "3e58e96e3e45dac6e37b41ac76d5a789711bcef041da5c299eff041cc04e0a0a",
+    "crates\\agent\\src\\taint.rs": "ad3d6a52d20bc4d72aff9725046d3c211b1fd7c776aad961ecd1b64f95d063af",
+    "crates\\agent\\tests\\provenance_overflow.rs": "f69fcc301c3a3436615363b2bb14aae57c0a8ca51c48303b7a750c04a697acb7",
+    "crates\\agent\\tests\\scenarios.rs": "41a57badc326a2ea55cf44bd50f9f0ebdcf52a9b67236374bf7da1392dab400f",
+    "crates\\agent\\tests\\spawn_resolution.rs": "6b79808ee3e12dad2e5aeef7646dfced0ce363986de29b5fa6ac6cb5eb55d017",
+    "crates\\agentfw\\examples\\policy_matrix.rs": "6a5c62003dff259f9973e469db218ef1fd2f1b8a1ce3250e73b7150bbbf37f27",
+    "crates\\agentfw\\src\\audit.rs": "0f348a0e9ec9412d0898f1372b0b84a2c922832ceb4a63a258b2b03e3628a23b",
+    "crates\\agentfw\\src\\config.rs": "82161d2b15aaae4ada69f932d4dd6a3d9837865f5130ebfbce0edd5ecac55d4c",
+    "crates\\agentfw\\src\\decision.rs": "741b9a03d5fc09f0bdf522b6391c45f946722a77280a17b97e71ebed31f595db",
+    "crates\\agentfw\\src\\grant.rs": "3d3267c60b2b32632c144f06a04283319c606bb52866098c70d23f82b8073a73",
+    "crates\\agentfw\\src\\handlers.rs": "11aa76b82af67f1a42a882a15e02477841757c88a5719cfa64c3b01a8339b6e2",
+    "crates\\agentfw\\src\\hook.rs": "ac67cd17a338cffffee347abe04a5c3203f5bf742f3a6bcbf534923b2e2ea402",
+    "crates\\agentfw\\src\\install.rs": "c026246f4098b9fef9a46a60a6870b775bfcce1ce7b88e126e0e5bafa46eb7f6",
+    "crates\\agentfw\\src\\judge.rs": "cd19617313163aafe3a9f37d3e81de2f339438813e162aefad1536fb8c59c449",
+    "crates\\agentfw\\src\\lib.rs": "fae72a6e7a71144ec4859738cbae5584c0cab66ba4dbfb457e3f3a3487a8d4aa",
+    "crates\\agentfw\\src\\lifecycle.rs": "7355d468e303b6d1ac9dfd7a270d31beda046624ee5c071d1681085e64c2857c",
+    "crates\\agentfw\\src\\main.rs": "86d20b84da9514f91cb2ce2dc9f74ddf85a3096f95fb73b0f8e5f68f4e25bd3b",
+    "crates\\agentfw\\src\\managed_policy.rs": "29a4ae6b16e08fb9765f83f9fe3f2999cb8ee252ea12354caf1feec4461f830d",
+    "crates\\agentfw\\src\\managed_sync.rs": "d0349b0052e35c5c9b87adc01cdc011cae59e002f6c4744101357eb8376fedb8",
+    "crates\\agentfw\\src\\map.rs": "06765851b9c48eb66720af99459b23c6b19d9d206e4a0d53f3c6652106f85f4d",
+    "crates\\agentfw\\src\\mcp\\admission.rs": "cd0a364bde60f12e8439f201f0517633b9980bab348e049341c017301d5c2899",
+    "crates\\agentfw\\src\\mcp\\connection.rs": "a9a9562231e60814817bfd50bedc3d27e52be2c2f51a1698b0c66c9647fe63e0",
+    "crates\\agentfw\\src\\mcp\\create_file.rs": "1d2cea3355d0adbba173aa291f932f5b1b4b32d06a05bda63813acf9abcdb976",
+    "crates\\agentfw\\src\\mcp\\https_get.rs": "c155459cfe7cb91d1d33a200d59f882dedea44b731c8d4e405e4c689dfde3ad0",
+    "crates\\agentfw\\src\\mcp\\input.rs": "85f8c593877faba1925cba927a2db2387d540acd7d63eba89fd75a4c3249565d",
+    "crates\\agentfw\\src\\mcp\\jsonrpc.rs": "c77265bf4d7c851e3319c4f39bed8114980bde552b9a0cfc0836dd2c43dd147c",
+    "crates\\agentfw\\src\\mcp\\manifest.rs": "39673dd219863047f77dad5e73761ecf3f326dd38df196d886d718a4b9758803",
+    "crates\\agentfw\\src\\mcp\\mod.rs": "b447ff4f9055e81b25860e594032cfd0f7c555f6c16ef62912bada292ba9a8ea",
+    "crates\\agentfw\\src\\mcp\\proxy.rs": "7b414e7b9b47697195f466daa66addb6ead4b1af76886f41149a9cdbc77a3ad7",
+    "crates\\agentfw\\src\\mcp\\resources.rs": "ba23b844c959806b1a0b8388f0818d02cfe03293dc2cc763e465cb0b98576f48",
+    "crates\\agentfw\\src\\mcp\\stdio.rs": "f2976bc80ea39c336b5b885d493b6f5b4524bf1301109f4bc28fb46dd026ae5e",
+    "crates\\agentfw\\src\\mcp\\store.rs": "b39b680fb21af64d79f9a82ec12e2b5deda12d276c6371d1c111ea1892ddf25c",
+    "crates\\agentfw\\src\\native\\resource.rs": "a800aead9811bb08166f2a93e4c9e729951bdecb38465d20ee693cd0e5977983",
+    "crates\\agentfw\\src\\native.rs": "7e74032be6f3cd0b826b267a0f0ad0cfacff4dcf98a8ad92e8aa20b081405741",
+    "crates\\agentfw\\src\\preflight.rs": "689f7ff7d2c4bd66d0505e2e75e2d9d78a8ed4e978aa3d5418f44747677bb8f6",
+    "crates\\agentfw\\src\\private_file_windows.rs": "3731920a51c453e08b14ca16296c62b3952a82260569255cb2e8da76d9c889bb",
+    "crates\\agentfw\\src\\protection_status.rs": "470c2bab8dc2f723b1b9cc25593dc28c54a09239ad9a6afca57ae2fe162b1d5f",
+    "crates\\agentfw\\src\\provenance.rs": "4cd61e80219e0bed286cdf11c5f916e51baed204e24484f4a436d4bea62af677",
+    "crates\\agentfw\\src\\replay.rs": "deda854b7ae10bc68eaf4251f44cc9524f0ae1e281e9efab976288906102a5c2",
+    "crates\\agentfw\\src\\sandbox.rs": "af8ab10332e6c569fb05c0ad7cd7809fa3a23331e9319a313e40c0422eb200e0",
+    "crates\\agentfw\\src\\service.rs": "71680d597cecc98f29688a2898f474f390be18879512e89d3ab5ad7cea2ea9d5",
+    "crates\\agentfw\\src\\spans.rs": "2dc37461c4fa689d70595d6c046a72702e47e5b7100271c3d3779b2992105c2f",
+    "crates\\agentfw\\src\\token.rs": "edc3bfa80ace9ba4fc3e50501ed88849ef97fbcb3e334dc1ec406730ecb2e696",
+    "crates\\agentfw\\src\\windows_read.rs": "1a89291d0524f5b273084fa76fc3d35bb8ebc62702c717451657d7d6acb52976",
+    "crates\\agentfw\\tests\\hook_endpoint.rs": "1a1601a3c7d25ffae7a30427c2ec946e56d09faa7d4fc2d2b5ebbe499ffee462",
+    "crates\\agentfw\\tests\\judge_corpus.rs": "6fc6561f9929e23e2df9f8878991eafab79d9299e4e270088539bb55e1f4aa15",
+    "crates\\agentfw\\tests\\judge_endpoint.rs": "a6bd65aa1da805bf7e3c05eabc1f5daa2e6a651e1c30616f731a72a78abfedbb",
+    "crates\\agentfw\\tests\\lifecycle.rs": "f2d33938d9ee9693cad3aef459c4d07779d4fec26d3c5fbced182392ed4f99c8",
+    "crates\\agentfw\\tests\\mcp_admission.rs": "f8d51c9066e284658996eae0d96bae0d4a4d5fe7e04ef45eb23b913f67ee9376",
+    "crates\\agentfw\\tests\\mcp_concurrency.rs": "329f60e121e13ec9fc73ef30a860a8e2456e0398a26dbeb8e0e2c9d70de69aa5",
+    "crates\\agentfw\\tests\\mcp_endpoint.rs": "4dca71ea54db7f9cb810e249c0cf0b81c9279704e58a10860499ba8c63a96b9c",
+    "crates\\agentfw\\tests\\mcp_inputs.rs": "f42729e70559de906537936ea68f40430e304a8778e96849039ec37559cf5d50",
+    "crates\\agentfw\\tests\\mcp_proxy.rs": "f0a02826debe4bc0598b6b88033abddd6a1c21704413a434252d22a6a09aec37",
+    "crates\\agentfw\\tests\\mcp_resources.rs": "d8a7c3f7552e08b898b82ebeeb9747ae0782f18ae577da11e77a725abec538fb",
+    "crates\\agentfw\\tests\\native_endpoint.rs": "0dfd6463e158bcd337a58f5eb29ab7493b5cf721a9ee9a873a96418600ff905d",
+    "crates\\agentfw\\tests\\protection_status.rs": "f571449a0f72862f4d253f4f1ce4cdf85d4310591b74a1f72bb184b8cd7c4ae8",
+    "crates\\agentfw\\tests\\workspace_root_pinning.rs": "db64a299a2eb7be891131f2100edbcd816b4ffa83913b85179bdd60b47e5b1a3",
+    "crates\\bench\\src\\agent_dataset.rs": "3cebe4adcd42f7f951f4c3bae54ca179db9a127437e0af8a4da09cc164043c96",
+    "crates\\bench\\src\\agent_eval.rs": "c74151bc2234bc24334949fbf40c02f8d8c739578a03cd27f2d052939594fa08",
+    "crates\\bench\\src\\agent_guard.rs": "223872ba654ce82341262c7b244f73bb0599d5767d2da49bf412770d30e1ed83",
+    "crates\\bench\\src\\agent_report.rs": "28ef96796264c1f1ef87837254932329d1e29834b99c3235b25721221e9f590c",
+    "crates\\bench\\src\\dataset.rs": "f4238a5f32028240de7a7cc1564e964ff71119a61c529cc548e0f5d361949c68",
+    "crates\\bench\\src\\evaluate.rs": "a07872323d3dfb4218e4582fe0fce6843c5d985950870240262a847722ae6eb5",
+    "crates\\bench\\src\\main.rs": "6e69b1e41cc0c42ef587d39ab764e93da3dfc4a5ab702c26c0cde17f7c88da4b",
+    "crates\\bench\\src\\metrics.rs": "e6e13d18fcde9824c78df7630f234dd9523ef3d17ff3ca514dbe03b40e4145f9",
+    "crates\\bench\\src\\report.rs": "a76c60e35b86494be9fe2a337412a74dbc01f0bb7e55cbd37e57eb93ecb01aac",
+    "crates\\bench\\src\\rivals.rs": "b888844f84d58b188146c6de29653fb3dbacde2ae0dd9b4eb860eb668a30fc13",
+    "crates\\bench\\src\\scorecard.rs": "46fd564d59a370f5cad066a4be01953438447e2cc75a53d20afaaab67764474c",
+    "crates\\core\\examples\\ml_probe.rs": "1e7a0f46257e60053abc85c32b0ea153b8b60a7628f0335899167a458316c797",
+    "crates\\core\\examples\\moderation_probe.rs": "8b6a61ed938a9f4ca8434110474dcc797d2e56ee48fae4e07af8214554fa5a27",
+    "crates\\core\\src\\context.rs": "686133cd213c5f4a418378d89154ad7b38113557948c7c4b1fb973cf645f4a77",
+    "crates\\core\\src\\detector.rs": "66f4f063d5db534e6e805d8087ea9226e5ff214722775d9cbb11d678a08db4b5",
+    "crates\\core\\src\\detectors\\injection\\heuristics.rs": "f06880f1886b38c6421d5ea8dcddc2bd10795368954fc47ea68825accf2b0e4c",
+    "crates\\core\\src\\detectors\\injection\\ml.rs": "ef3db5295639a3b821d842e05d73dd60e26be4b463d32522be026f5f1972fa52",
+    "crates\\core\\src\\detectors\\injection\\mod.rs": "30f509c20b93f339de83f3ff3f4515f5dabe427424887ac34dfc1074563f4433",
+    "crates\\core\\src\\detectors\\injection\\signatures.rs": "e4b2a2d3d27e55bbc3336d2e34d427bd607dbc22ee2b6f369a834dfcd0c86397",
+    "crates\\core\\src\\detectors\\mod.rs": "e2954531ffd892f8db6f41c93c57aa9717342d0dc69fef35e4d0a47c80340f6e",
+    "crates\\core\\src\\detectors\\moderation.rs": "9b1feb4e5edc541fea0cf0f9a53ebef7294f922fa103a5c14a1ecf49e014d5b4",
+    "crates\\core\\src\\detectors\\output.rs": "e493ab6ba6f4489e46802ee12e61f5b05f52e687b17d17373b0fcdbfbb2bfea8",
+    "crates\\core\\src\\detectors\\pii.rs": "8af448adbeb4c8c4aa7cbe427bb32870d5ae2057f5f4e7006e5786d44d3e5e62",
+    "crates\\core\\src\\detectors\\secret.rs": "e26623583c6d936cb6a670c9c475d6c62efdfc355821ed964008da32e30a8892",
+    "crates\\core\\src\\finding.rs": "bd0c5385dcaae9b44f6f78489cd3b04928a55f2443a949a70413ba8e9e9b72f1",
+    "crates\\core\\src\\firewall.rs": "842ed4c1b83789514aca24e92f7c5faee9b9f6f4bcfd1043ea2c7bdbb2df6641",
+    "crates\\core\\src\\lib.rs": "30893b4fbf80bf43175792347842e4fb48922596574bd10ee9a13dfb97d06a33",
+    "crates\\core\\src\\masking.rs": "276e1afa622cac9920ea7c738225f9acd420444a2fa63fc1ed8b50b319daca5b",
+    "crates\\core\\src\\normalize.rs": "ae28636882ba7360da2068f0ed866960f1115674fc23a5cbd72128c1ab1b337e",
+    "crates\\core\\src\\policy.rs": "d05d4db813e1295d705f52b0740e739d04ef79675f2a3c9bcede324c0e54e496",
+    "crates\\core\\src\\scoring.rs": "16db47c30b6b588af522e37e654457600111617c236c38be289c6c2eb218c968",
+    "crates\\core\\src\\severity.rs": "1e6b0b2c58a95ead6f1b567c69ff2016e648bfa0f99dcb17f89f77d04b142179",
+    "crates\\core\\src\\taxonomy.rs": "d6c944cae1160068dac3f3d3abbc163dbb5307cd54b63844a96aab474eef0d29",
+    "crates\\core\\src\\util.rs": "ea8728493ac0c0a043fcec401533027432c92fd4cf00e2976d430754c54e8d8c",
+    "crates\\core\\tests\\detect_and_score.rs": "39b6cd43ba5cba0b6e4eebf78d6d869c4b65384373647e13cdce70a1a41b014b",
+    "crates\\core\\tests\\shipped_policy.rs": "20ce16fd81a4f515361f2bcef8ec7ef9335bcc02d7d23c041ca4b6bdf549e021",
+    "crates\\proxy\\examples\\console-recovery-fixture.rs": "e72542f134425e5b541c04ed085e8261a75d7720330657ab3d8a492138176470",
+    "crates\\proxy\\examples\\keycloak-oidc-bootstrap.rs": "fd1493f14d5ee283c57cc6902e7f4852f2ea92b4364f105dbca69e07c9d3b171",
+    "crates\\proxy\\examples\\keycloak-saml-bootstrap.rs": "867c690b598cb99297878b707bf05725e78c698eec4ddbf80c11c1fefe65810f",
+    "crates\\proxy\\examples\\postgres-restore-fixture.rs": "8c220e1f7b894abf6c8ab49105aeb265d17d74c9c7bc0ff06994b2b4e553d9ce",
+    "crates\\proxy\\src\\admin.rs": "1c3105a5d187d3578fd190a8c0b8a566aa23ec72ea295d8bbde2fab2cddf7c41",
+    "crates\\proxy\\src\\admin_ui.rs": "a320672edab0b0fe1ab93a790584848b038ebd46e72d172cc40c75c7cc0a10f6",
+    "crates\\proxy\\src\\agent_scan.rs": "a788938a13fc381c33b2b2988ccd73f0e8e5cc8bec2ea84c56fe9ff6383e22dd",
+    "crates\\proxy\\src\\anthropic.rs": "8cb3afb35b98a9fc60ba25e5b5d287f64f783d2c6022de8396e7a250ab262b5c",
+    "crates\\proxy\\src\\audit.rs": "34f32c966218e965b8903bcef6ec614f7d5a95ceb94bb9983f89d209305da464",
+    "crates\\proxy\\src\\auth.rs": "b1a54020595737c1238cc3df20dec95a5dadc7908f0b028de83cda2926f53c7e",
+    "crates\\proxy\\src\\capability.rs": "e24388052d1bf78e18abf88a24fb860a1729835da8f023ec435a04cd8dcc1b1d",
+    "crates\\proxy\\src\\config.rs": "cc39d924c437602d509b7de07fecf2037729909337505a8a746e617b23d3cabc",
+    "crates\\proxy\\src\\control_plane.rs": "3cd02a69266303c16a05875e6cfef9937aac0755f0a8ce628a62ab82c6a69c4a",
+    "crates\\proxy\\src\\customer_ui.rs": "356f06c0dba7bf965d6d6bd9ddd9570a6c43f856a14c0415ad845318886b0bac",
+    "crates\\proxy\\src\\events.rs": "327dbd980704aa2a9a35d28056f3595bbd955c8aab9cbca724b3a3a5f0656fb7",
+    "crates\\proxy\\src\\handlers.rs": "52e36e3eb45c311bd4777ffc48ba46767650e76a62a88cb79cded9a41e71f09b",
+    "crates\\proxy\\src\\invitation_ui.rs": "845193abd430dbb89058dee6ada6e1fc87ecfba6f224a702457b6c8566b004bb",
+    "crates\\proxy\\src\\lib.rs": "d5e8a80b6868f114fb970a70209409eafb282e40c20b9749b35a471edc458774",
+    "crates\\proxy\\src\\main.rs": "36f9986f5b31d18e6291e4cbccfedddab2e3e0247ba232758548c83c68421370",
+    "crates\\proxy\\src\\managed_agent_api.rs": "09b9444102457ae065c978afaa3cac81504703c518978d920209ff520415403d",
+    "crates\\proxy\\src\\moderation.rs": "317fcbb279ee6f7d21ae997d9294775d218b76d601601ef6ed3f56ff9dda36e3",
+    "crates\\proxy\\src\\oidc.rs": "e0cb21fa426fdb8bc13cbb01795adce5ac06cf5f61e7389f9dc37d63f4e1a53e",
+    "crates\\proxy\\src\\oidc_auth.rs": "1c62a1d826d5718077349b4dda703678e443c49c94873c9350c09e76530e6b61",
+    "crates\\proxy\\src\\oidc_token.rs": "03faf92d77325568625f32461e169f26e86c65ebcb4d310ce1da8c7d258f7ec1",
+    "crates\\proxy\\src\\openai.rs": "51eda1b8dcf267547d3c156f4980a3d81e516069abd8c98b4af321a0492812a1",
+    "crates\\proxy\\src\\pipeline.rs": "fdeff5bfe16cbe6dced7cd32473ad7f6dd27e5a3558d5611d7da5f6b75361ec2",
+    "crates\\proxy\\src\\rate_limit.rs": "f28dba75525add54302b532c99a990c1bb4d5e8e1367f7685103ab18b5c1d638",
+    "crates\\proxy\\src\\redis_limits.rs": "8e40a2073d11da28fe08b7ca94a4371da501c2618c4f70be101c26ff8a492740",
+    "crates\\proxy\\src\\responses.rs": "2ebe73ec671ead6977500336c750684d270fcd22b664eab85d6502145ba30133",
+    "crates\\proxy\\src\\saml_auth.rs": "584588790d750bc0b3e7390330e3de0aca3db7b03aaa3160d12ee4c2184488e0",
+    "crates\\proxy\\src\\scim.rs": "f6fcfd85084326df11235bc5f75b660d99a94b06185ed2042a4b48fcb87c3809",
+    "crates\\proxy\\src\\spend_limit.rs": "b567a43e574697c7833e8a6242ee238094d6672b7b35cf113729017b9b25cea0",
+    "crates\\proxy\\src\\tenant_store\\agent_enrollment.rs": "157dec7f698c62f368030ff1a20a5abb1ee42734f347702f2f02b79e7f05629f",
+    "crates\\proxy\\src\\tenant_store\\managed_async.rs": "38b171a240c670ccbc3434c36717684081825caa37793401c6082621fb3eb155",
+    "crates\\proxy\\src\\tenant_store\\managed_policy.rs": "de9b6d37ce25fa70faf352d7e985e959f2bd30ef25a465a1739b2ce77da430c7",
+    "crates\\proxy\\src\\tenant_store\\managed_postgres.rs": "c1e299f0ba04a3878740849d70d5a91859bac0677aead5af90d06719ad7b5095",
+    "crates\\proxy\\src\\tenant_store\\postgres.rs": "9e2d45f95d8030a94c46bd69923941344cda37926a45708a062b691dc479dd01",
+    "crates\\proxy\\src\\tenant_store\\recovery_outbox_fixture.rs": "4c6c656c98dc80c34716607de047ca7a1cfbf0bcbffb5c9708fcd8b9ae62cb2e",
+    "crates\\proxy\\src\\tenant_store\\webhook_delivery_tests.rs": "343d68ed41462df8ead56632307e677bbe20a9a32a6c1efaf14e614a42f1bdc7",
+    "crates\\proxy\\src\\tenant_store\\webhook_recovery_tests.rs": "df4f43c6441b9693cf11b85a7ce65d770e768d5408ee024067f32bb9a182c3f2",
+    "crates\\proxy\\src\\tenant_store\\webhook_transport_tests.rs": "7bc6809aacb1bf11f3820797a2b24ef28068d33ad3c6f1031ab387b05c316e2d",
+    "crates\\proxy\\src\\tenant_store.rs": "2b072ac77bb0373eb1b68d3c63e5d30a0edff40a3459f772b230df62b445b0c6",
+    "crates\\proxy\\src\\usage.rs": "5d663ab2df48fd3b3c68d16563b458b8acec723480bf4be03dd9144ff1d0d7e8",
+    "crates\\proxy\\tests\\agent_inspection.rs": "2d5b0dcb0d1744dc16d536a161f0a7640404493454b0e2c4d1b5ca18b0646ded",
+    "crates\\proxy\\tests\\agent_streaming.rs": "a7673a5f54bc14fc9d64f0ab44618d21ff6fe0d915262a1cfa9e27ffc4584fbd",
+    "crates\\proxy\\tests\\agent_streaming_shadow.rs": "2218dabf12904078e791ec225ac1adcab72b4869badd2596064af765a32cc3a5",
+    "crates\\proxy\\tests\\deployment_assets.rs": "edb481ad2f90ceb4f85627e915d0c2fef8beffe639ca868e19d21a606f33b5b8",
+    "crates\\proxy\\tests\\external_identity.rs": "dd837eec34b3322112f3304f5fced893dcc064ff0f4c715bf5ae3f7d979db47a",
+    "crates\\proxy\\tests\\output_moderation.rs": "5a36980a388ff5da88dcd1e707c38233208b5fab1a4ee7433f8c2be21789ba3b",
+    "crates\\proxy\\tests\\proxy_anthropic.rs": "949583de9df2a4699494365836e8a0d2b5ed45dde99b2ebfe431e35eb0990c8b",
+    "crates\\proxy\\tests\\proxy_capabilities.rs": "602e7589704be0002955c6d8f4ce0cd3688de14a13c8833941bfd62250795d17",
+    "crates\\proxy\\tests\\proxy_forwarding.rs": "603cf3f93121860e28306f0daacaf3326d56fcf6065ffe4db082141bc3b14802",
+    "crates\\proxy\\tests\\proxy_limits.rs": "b7986b3c5e371df42c87438b8981526a190359d066e636604386643a542cb4f4",
+    "crates\\proxy\\tests\\proxy_responses.rs": "09e142f06c4584e97f1cdc3ad4e0ad2118a472b0e1728bfaf78a474782723da8",
+    "crates\\proxy\\tests\\proxy_streaming.rs": "272034c824b602519e8037f8478b4fde32ff5463c334bc5ce0c2040327bd0f3b",
+    "crates\\proxy\\tests\\proxy_tenants.rs": "af5bc326fb60ea317d67d2801108d4020dc824c7793edc4a10028e2898e9657a",
+    "crates\\proxy\\tests\\scim_network.rs": "c9aba24831a316553f61774c5b9144087647198ce87257f6d44bcee042f3475c",
+    "crates\\adapter\\Cargo.toml": "c3c4d960a8e9c10f9c975e2324335e9d15216a719fae60499ee16e5c7f33c21a",
+    "crates\\agent\\Cargo.toml": "ef8416e70e30003b78dd9f5e73ad6b09221e8b1a4ce13040e33166d7fab5a87a",
+    "crates\\agentfw\\Cargo.toml": "16a45ea90760f06a8ace072036d9ddb4b294d6270261bc4aca3f651b658b22d8",
+    "crates\\bench\\Cargo.toml": "a2251627f1b1c8c645321abb62045f0c0e22a11043234f1a7d027671a6e7eb16",
+    "crates\\core\\Cargo.toml": "195932b7d4fdc6cb5cbbd7082acb39874a6ab54c2a2fe80ca32f1ac679cfeca2",
+    "crates\\proxy\\Cargo.toml": "7581ca9398d3b1d1c6293d99254a57e57387821d2e98f4c1978c88094dd63ba2",
+    "scripts\\test-mcp-connection.py": "c390fb1659a0716fd267e46815ba600dc93700e96a39fa931b73a7f40bdcf29f",
+    "scripts\\fixtures\\connection_server.py": "e070c1f6f58227146f1492b6b35dfe757a4fc2975eb7aba0ab1c09011d147ddd",
+    "scripts\\fixtures\\connection_publication.c": "880d5952aa1c8ede879f5e083e1096321fa2931c35728c5e4df6fce74d8ef4b8",
+    "scripts\\mcp-admission-demo.py": "2891a2d412f444265655ec501bba46dab0218d04d6d76a8f2541a460573c9f69",
+    "scripts\\windows-claude-host-acceptance.py": "d1770dc2ffc1f0be4e680d069df61e9bb2cbd6abeb50115c0c627dd95151a3a1",
+    "scripts\\fixtures\\mcp_admission_demo_server.py": "81fc37feaf8109832106246e317801c7e9c49154286fd6133549751a0b328206"
+  },
+  "source_unchanged": true,
+  "selected_binary_unchanged": true,
+  "source_dirty": false,
+  "runtime_image": "rust:1.99-bookworm@sha256:114c7a4425406451c2866b6aafe69fe29b1b298832db1277d411ac73c82d04d6",
+  "container_removed": true
+}
