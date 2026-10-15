@@ -1,0 +1,35 @@
+{
+  "accepted_source": "4f428e4b983111e5b2480e40d658628e3d198fe7",
+  "all_source_writers_stopped": true,
+  "catalog_sha256": "c84ff68304a368ec210743686ad4273c43871accf2ed0ea1b7191e1341103ada",
+  "image": "postgres@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416",
+  "logical_schema_counts": {
+    "columns": 312,
+    "constraints": 190,
+    "extensions": 1,
+    "functions": 3,
+    "indexes": 100,
+    "policies": 0,
+    "sequences": 7,
+    "tables": 44,
+    "triggers": 4,
+    "types": 88,
+    "views": 0
+  },
+  "native_binary_sha256": "f149a8f187a670d9b32132e8a99c66dca2d20098358fe408054f71ae53e8329b",
+  "negative_controls": {
+    "all_negative_controls_rejected": true,
+    "dropped_native_constraint_rejected": true,
+    "dropped_native_immutability_trigger_rejected": true,
+    "dropped_native_index_rejected": true,
+    "extra_public_function_rejected": true,
+    "extra_public_view_rejected": true,
+    "genuine_empty_target_accepted": true,
+    "native_current_26_schema_accepted": true,
+    "pgx_extra_namespace_rejected": true,
+    "target_pgx_existing_objects_rejected": true
+  },
+  "postgres_version": "16.13",
+  "role_nosuperuser_pg_monitor": true,
+  "schema_version": 26
+}

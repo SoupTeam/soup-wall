@@ -1,0 +1,79 @@
+{
+  "archive_sha256": "c384980c75994a317eee61c5bab70536f9a243f6705ad046f93b3b9ec1c1b4b4",
+  "context": {
+    "actionlint": {
+      "version": "1.7.12",
+      "workflow_exit_code": 0
+    },
+    "hosted_ci_at_publication": "pending; independent review required; not task closure",
+    "native_permission_negative": {
+      "description": "Actual original helper command loaded in memory without source edits; original private certificate unreadable for the actual postgres UID. One expected failing assertion, zero errors/skips. Fixed command passes six controls, including explicit unreadability of both source files before container-owned staging.",
+      "negative_expected_failure_count": 1,
+      "passed_fix_controls": 6
+    },
+    "original_diagnostics": [
+      {
+        "commit": "898847c726c2eafb1bdd3ae27b404b86a75d47cd",
+        "outcome": "workflow validation rejected job.env runner.temp before job execution; repaired github.workspace target",
+        "url": "https://github.com/SoupTeam/soup-wall/actions/runs/38683422926"
+      },
+      {
+        "commit": "898847c726c2eafb1bdd3ae27b404b86a75d47cd",
+        "outcome": "OIDC PostgreSQL startup/TLS/migration/session checks passed, later idp-password-callback-analyst TimeoutError; no IdP/browser protocol change in this repair",
+        "url": "https://github.com/SoupTeam/soup-wall/actions/runs/38683493629/job/116253029227?pr=120"
+      }
+    ],
+    "private_fixture_resources_retained": false,
+    "python": {
+      "new_linux_permission_control_explicitly_enabled": true,
+      "passed": 481,
+      "run": 506,
+      "skipped": 25
+    },
+    "runtime_commit": "423dfab0889728199765285567c55884350f4ad2",
+    "runtime_inputs_sha256": "33bb7d4d63b809c259c79b959120b6cab56ff89b60fbe83345061011837c25cf"
+  },
+  "files": [
+    {
+      "bytes": 1608,
+      "path": "context.json",
+      "sha256": "e083431d8833a1e742e4eb0639d777d40a9c9bbac1f06d623ca054bdc4c16bba"
+    },
+    {
+      "bytes": 32287,
+      "path": "followup-postgres.json",
+      "sha256": "b8aeeab0c57ba8c6d345eae279fdcd14d5da521b3e650972c53eb66a7c5c1fce"
+    },
+    {
+      "bytes": 4931,
+      "path": "followup-postgres.log",
+      "sha256": "c67ff26f7b2aee01f95497be3a05240c4451fc681680f3a8a879a81889f532a6"
+    },
+    {
+      "bytes": 30764,
+      "path": "followup-sqlite.json",
+      "sha256": "09bee2424ff27672b48cbba5ff07c3861a7de345964749f3c1703524b4ade64d"
+    },
+    {
+      "bytes": 4141,
+      "path": "followup-sqlite.log",
+      "sha256": "a13b05212d68da6be6cc15c9dbbc864ad03d9f2ec887e9b1e6d2722570f1ed0b"
+    },
+    {
+      "bytes": 1362,
+      "path": "linux-cert-fixed.log",
+      "sha256": "fca1d2e7d508480fca71011d020540573a132173b4aff303cf5a1beb0f435aa7"
+    },
+    {
+      "bytes": 1360,
+      "path": "linux-cert-original-red.log",
+      "sha256": "5517945ec8c3f9b2beb084b5f11c66980ef71e4315f8d3934ece3d9ab3b98da2"
+    },
+    {
+      "bytes": 88878,
+      "path": "python-followup.log",
+      "sha256": "6ef60048c47cd94981e3b02544b111a327d70fef046ee603616604e45dacbd0f"
+    }
+  ],
+  "schema_version": 1
+}

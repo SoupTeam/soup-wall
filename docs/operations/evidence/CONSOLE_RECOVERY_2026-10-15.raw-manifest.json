@@ -1,0 +1,98 @@
+{
+  "context": {
+    "accepted_base": "4f428e4b983111e5b2480e40d658628e3d198fe7",
+    "age": "v1.3.2",
+    "cargo": "cargo 1.99.0 (5f94df478 2026-08-27)",
+    "diagnostic_private_fixtures_removed_after_capture": true,
+    "final_private_fixtures_removed": true,
+    "pg_dump": "pg_dump (PostgreSQL) 16.15 (Homebrew)",
+    "pg_restore": "pg_restore (PostgreSQL) 16.15 (Homebrew)",
+    "platform": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
+    "python": "3.14.3",
+    "python_dependencies": {
+      "cryptography": "50.0.2",
+      "requests": "2.34.2",
+      "urllib3": "2.8.0"
+    },
+    "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)",
+    "schema_version": 1,
+    "source_commit": "82d41b0bf2ac90b20df42812b4c459981f32bded"
+  },
+  "files": [
+    {
+      "bytes": 1171,
+      "path": "checks/clippy.log",
+      "sha256": "d02a3c07aa16541f152b253b0416182e7c59b897d343373486b7092c62335f50"
+    },
+    {
+      "bytes": 296775,
+      "path": "checks/lib-build.jsonl",
+      "sha256": "eea1d9bc07b5ef6a0933a453865afc2b79eb8f50186e90d2ea0f38edc35be35a"
+    },
+    {
+      "bytes": 8526,
+      "path": "checks/python-benchmarks.log",
+      "sha256": "1c2165b56f7b639e0132c8b4ed14aec706175401d707fd122d30522aa36fd74e"
+    },
+    {
+      "bytes": 88736,
+      "path": "checks/python-initial-missing-urllib3.log",
+      "sha256": "d808efbd56cc18021b64fdb54fec296a3fbd30543994f2129ded2485ac67e636"
+    },
+    {
+      "bytes": 88593,
+      "path": "checks/python.log",
+      "sha256": "7e3c38a9090f6cc2a8feceade98517b2bb1b744b64563c669e63bcd072a8ddd9"
+    },
+    {
+      "bytes": 91703,
+      "path": "checks/workspace.log",
+      "sha256": "8f2de72b5718cfb88e235340d49fef6c8d8af676a237c25c31c0ccb202fa19d1"
+    },
+    {
+      "bytes": 674,
+      "path": "context.json",
+      "sha256": "568c21ab96d6007a7e0649efd3a185395dcb7631c246500d01f0fa7133d0a569"
+    },
+    {
+      "bytes": 29902,
+      "path": "diagnostic/postgres-explicit-retention-incomplete.json",
+      "sha256": "b33df92bb5dd3cafff20f1f0a752e238dcb5924250ceb09e9fd7d90cdd8488fa"
+    },
+    {
+      "bytes": 13397,
+      "path": "diagnostic/sqlite-explicit-retention-incomplete.json",
+      "sha256": "df9a056ac2a65fbf3326b5a8de3249d853e8dada18c648506fb56afcef60b001"
+    },
+    {
+      "bytes": 32287,
+      "path": "postgres/results.json",
+      "sha256": "5a47100fe763daa55f27bf5a1f544592a0e6aec4db20426fdace1735a705bbab"
+    },
+    {
+      "bytes": 4928,
+      "path": "postgres/stdout.log",
+      "sha256": "708b9bb22b902ad179e73ab700059ac380b89d28a16f06c0c00542877d322372"
+    },
+    {
+      "bytes": 1212,
+      "path": "schema/provenance.json",
+      "sha256": "322be3ae618c2673af25135df1f1cb21efb6ea20b2a5aec0c67af4cce37467e3"
+    },
+    {
+      "bytes": 30766,
+      "path": "sqlite/results.json",
+      "sha256": "eb869d2f52494f118a1acd9f3089b290e43f734a254be430b7134069e650616c"
+    },
+    {
+      "bytes": 4138,
+      "path": "sqlite/stdout.log",
+      "sha256": "eb9b697560207637ac61f789fedc52fa694bb83f486b3b5474c541ac4bf54e55"
+    }
+  ],
+  "raw_archive": "CONSOLE_RECOVERY_2026-10-15.raw.tar.gz",
+  "raw_archive_bytes": 102998,
+  "raw_archive_sha256": "5d71d31ccdd1ca804befd3225cbab1414fe38c1ada676f9af96bbad8706f14a4",
+  "runtime_source": "82d41b0bf2ac90b20df42812b4c459981f32bded",
+  "schema_version": 1
+}

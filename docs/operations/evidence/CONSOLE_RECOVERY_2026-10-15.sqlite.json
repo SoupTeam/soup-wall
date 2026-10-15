@@ -1,0 +1,656 @@
+{
+  "backend": "sqlite",
+  "binaries": {
+    "agent_binary": "eb67b70f59054dab328f073994e07492152272171ac62d3822ae1a003f57e241",
+    "console_binary": "f149a8f187a670d9b32132e8a99c66dca2d20098358fe408054f71ae53e8329b",
+    "fixture_helper": "22f96ef98c7a74d8ba2c90c80eb3abfd7e7bf5b6c8f1c728a001f383e1409b20",
+    "outbox_test_binary": "398aceed296e87e447a0a909d55fd004528ae20c829648ac14e8739dd8f5c897"
+  },
+  "checks": [
+    {
+      "name": "native-fixture-seed-source",
+      "passed": true
+    },
+    {
+      "name": "fixture-manifest-owner-only",
+      "passed": true
+    },
+    {
+      "name": "source-webhook-dispatcher-disabled",
+      "passed": true
+    },
+    {
+      "name": "operator-pinned-issuer-shape",
+      "passed": true
+    },
+    {
+      "name": "signed-deployment-sequence-1-agent-0",
+      "passed": true
+    },
+    {
+      "name": "signed-deployment-sequence-1-agent-1",
+      "passed": true
+    },
+    {
+      "name": "live-hook-sequence-1-deny-agent-0",
+      "passed": true
+    },
+    {
+      "name": "live-hook-sequence-1-deny-agent-1",
+      "passed": true
+    },
+    {
+      "name": "two-real-agent-processes-distinct-tenants",
+      "passed": true
+    },
+    {
+      "name": "owned-console-process-stopped",
+      "passed": true
+    },
+    {
+      "name": "source-stopped-before-backup-stale-backup",
+      "passed": true
+    },
+    {
+      "name": "signed-deployment-sequence-2-agent-0",
+      "passed": true
+    },
+    {
+      "name": "live-hook-sequence-2-defer-agent-0",
+      "passed": true
+    },
+    {
+      "name": "signed-deployment-sequence-2-agent-1",
+      "passed": true
+    },
+    {
+      "name": "live-hook-sequence-2-defer-agent-1",
+      "passed": true
+    },
+    {
+      "name": "owned-console-process-stopped",
+      "passed": true
+    },
+    {
+      "name": "source-stopped-before-backup-current-backup",
+      "passed": true
+    },
+    {
+      "name": "private-row-and-sequence-verification-recovered",
+      "passed": true
+    },
+    {
+      "name": "native-fixture-probe-recovered",
+      "passed": true
+    },
+    {
+      "name": "restored-managed-identity-0",
+      "passed": true
+    },
+    {
+      "name": "restored-managed-identity-1",
+      "passed": true
+    },
+    {
+      "name": "revoked-managed-credential-remains-revoked",
+      "passed": true
+    },
+    {
+      "name": "restored-retained-service-credential-active_account_token",
+      "passed": true
+    },
+    {
+      "name": "restored-retained-service-credential-control_active_account_token",
+      "passed": true
+    },
+    {
+      "name": "revoked-service-credential-remains-revoked",
+      "passed": true
+    },
+    {
+      "name": "live-hook-sequence-2-defer-agent-0",
+      "passed": true
+    },
+    {
+      "name": "live-hook-sequence-2-defer-agent-1",
+      "passed": true
+    },
+    {
+      "name": "live-agent-processes-preserved-during-console-recovery",
+      "passed": true
+    },
+    {
+      "name": "signed-deployment-sequence-3-agent-0",
+      "passed": true
+    },
+    {
+      "name": "live-hook-sequence-3-deny-agent-0",
+      "passed": true
+    },
+    {
+      "name": "signed-deployment-sequence-3-agent-1",
+      "passed": true
+    },
+    {
+      "name": "live-hook-sequence-3-deny-agent-1",
+      "passed": true
+    },
+    {
+      "name": "predeclared-recovery-objective-met",
+      "passed": true
+    },
+    {
+      "name": "owned-console-process-stopped",
+      "passed": true
+    },
+    {
+      "name": "sqlite-reopen-is-database-restart-boundary",
+      "passed": true
+    },
+    {
+      "name": "restored-managed-identity-0",
+      "passed": true
+    },
+    {
+      "name": "restored-managed-identity-1",
+      "passed": true
+    },
+    {
+      "name": "revoked-managed-credential-remains-revoked",
+      "passed": true
+    },
+    {
+      "name": "restored-retained-service-credential-active_account_token",
+      "passed": true
+    },
+    {
+      "name": "restored-retained-service-credential-control_active_account_token",
+      "passed": true
+    },
+    {
+      "name": "revoked-service-credential-remains-revoked",
+      "passed": true
+    },
+    {
+      "name": "live-hook-sequence-3-deny-agent-0",
+      "passed": true
+    },
+    {
+      "name": "live-hook-sequence-3-deny-agent-1",
+      "passed": true
+    },
+    {
+      "name": "database-and-console-restart-preserve-live-policy",
+      "passed": true
+    },
+    {
+      "name": "live-hook-sequence-3-deny-agent-0",
+      "passed": true
+    },
+    {
+      "name": "agent-restart-restores-durable-signed-policy",
+      "passed": true
+    },
+    {
+      "name": "owned-console-process-stopped",
+      "passed": true
+    },
+    {
+      "name": "private-row-and-sequence-verification-stale",
+      "passed": true
+    },
+    {
+      "name": "signed-deployment-sequence-2-agent-0",
+      "passed": true
+    },
+    {
+      "name": "stale-backup-never-rewinds-agent-0",
+      "passed": true
+    },
+    {
+      "name": "signed-deployment-sequence-2-agent-1",
+      "passed": true
+    },
+    {
+      "name": "stale-backup-never-rewinds-agent-1",
+      "passed": true
+    },
+    {
+      "name": "owned-console-process-stopped",
+      "passed": true
+    },
+    {
+      "name": "live-hook-sequence-3-deny-agent-0",
+      "passed": true
+    },
+    {
+      "name": "after-stale-console-recovery-transport-online-agent-0",
+      "passed": true
+    },
+    {
+      "name": "live-hook-sequence-3-deny-agent-1",
+      "passed": true
+    },
+    {
+      "name": "after-stale-console-recovery-transport-online-agent-1",
+      "passed": true
+    },
+    {
+      "name": "owned-console-process-stopped",
+      "passed": true
+    },
+    {
+      "name": "restored-owned-receiver-adapter",
+      "passed": true
+    },
+    {
+      "name": "after-webhook-console-restart-transport-online-agent-0",
+      "passed": true
+    },
+    {
+      "name": "live-hook-sequence-3-deny-agent-0",
+      "passed": true
+    },
+    {
+      "name": "after-webhook-console-restart-transport-online-agent-1",
+      "passed": true
+    },
+    {
+      "name": "live-hook-sequence-3-deny-agent-1",
+      "passed": true
+    },
+    {
+      "name": "original-source-never-restarted-for-recovered-delivery",
+      "passed": true
+    },
+    {
+      "name": "native-fixture-probe-source",
+      "passed": true
+    },
+    {
+      "name": "complete-original-source-rows-and-sequences-unchanged",
+      "passed": true
+    },
+    {
+      "name": "operator-signing-settings-bytes-and-environment-unchanged",
+      "passed": true
+    },
+    {
+      "name": "recovered-console-issuer-key-id-and-public-key-unchanged",
+      "passed": true
+    },
+    {
+      "name": "operator-pinned-trust-file-unchanged-agent-0",
+      "passed": true
+    },
+    {
+      "name": "actual-agent-configuration-unchanged-agent-0",
+      "passed": true
+    },
+    {
+      "name": "operator-pinned-trust-file-unchanged-agent-1",
+      "passed": true
+    },
+    {
+      "name": "actual-agent-configuration-unchanged-agent-1",
+      "passed": true
+    },
+    {
+      "name": "runtime-source-inputs-and-commit-unchanged-through-run",
+      "passed": true
+    },
+    {
+      "name": "all-selected-runtime-binaries-unchanged-through-run",
+      "passed": true
+    }
+  ],
+  "cleanup": {
+    "complete": true,
+    "owned_container_removed": null,
+    "owned_processes_stopped": true,
+    "private_fixture_retained": false,
+    "private_tree_removed": true
+  },
+  "configuration_sha256": "03e7d477e48890b497d5911025d48f84ae8e289c61d8ca56f8ebd4f0afd98ba8",
+  "duration_seconds": 77.497722,
+  "durations_seconds": {
+    "current_backup_seconds": 0.030838,
+    "current_recovery_to_signed_ack_seconds": 3.870411,
+    "current_restore_seconds": 0.073585,
+    "stale_backup_seconds": 0.041536,
+    "stale_restore_seconds": 0.038728
+  },
+  "failures": [],
+  "new_signed_deployments": [
+    {
+      "deployment_sequence": 3,
+      "hook_decision": "deny",
+      "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+      "revision": "deny",
+      "status": "applied"
+    },
+    {
+      "deployment_sequence": 3,
+      "hook_decision": "deny",
+      "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+      "revision": "deny",
+      "status": "applied"
+    }
+  ],
+  "operator_trust_and_configuration": {
+    "agents": [
+      {
+        "agent": 0,
+        "configuration_sha256": "781d1250fc8cada930657bcb987755404c2b042b4b37d6407dfa9e6934ef13c0",
+        "pinned_trust_sha256": "d6f83ec596b9fc5bb7d1b4f6e02a61f5da64d80a5beb970805ddbc6a60ad9486",
+        "trust_mode": "explicit native keyring file"
+      },
+      {
+        "agent": 1,
+        "configuration_sha256": "2ea1f29ba9870990e56a554b29e3a39dae90f4b029442dc5f29725a75b21f55d",
+        "pinned_trust_sha256": "d6f83ec596b9fc5bb7d1b4f6e02a61f5da64d80a5beb970805ddbc6a60ad9486",
+        "trust_mode": "explicit native keyring file"
+      }
+    ],
+    "issuer_key_id": "sou49-owned-issuer",
+    "issuer_public_key_sha256": "008dabd3bafdc7a15d16d0596e10695e6c554f2fb20259e8e14ef6a96a3b2220",
+    "operator_settings_sha256": "fe46877c951040a9ae1a36f66bc333fd2f181272a55b51e009a35f4df74d9610",
+    "unchanged": true
+  },
+  "post_restore_transport_recovery": [
+    {
+      "agent": 0,
+      "deployment_sequence": 3,
+      "state": "online"
+    },
+    {
+      "agent": 1,
+      "deployment_sequence": 3,
+      "state": "online"
+    },
+    {
+      "agent": 0,
+      "deployment_sequence": 3,
+      "state": "online"
+    },
+    {
+      "agent": 1,
+      "deployment_sequence": 3,
+      "state": "online"
+    }
+  ],
+  "predeclared_objective": {
+    "deployment_limits": "owned Unix, literal-loopback Console/Agents, one issuer, schema 26",
+    "excluded": [
+      "remote HTTPS",
+      "fleet reconciliation",
+      "new signing epoch",
+      "exactly-once delivery"
+    ],
+    "recovery_point": "complete quiesced snapshot; zero accepted Console writes after snapshot",
+    "recovery_time_objective_end": "both restored Agents acknowledge a higher signed sequence and live hooks match",
+    "recovery_time_objective_seconds": 120,
+    "recovery_time_objective_start": "valid current archive restore begins after isolated negative controls"
+  },
+  "preserved_agent_runtime": [
+    {
+      "deployment_sequence": 2,
+      "hook_decision": "defer",
+      "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+      "revision": "allow",
+      "status": "applied"
+    },
+    {
+      "deployment_sequence": 2,
+      "hook_decision": "defer",
+      "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+      "revision": "allow",
+      "status": "applied"
+    }
+  ],
+  "private_fixture_permissions_verified": true,
+  "schema_version": 1,
+  "source": {
+    "commit": "82d41b0bf2ac90b20df42812b4c459981f32bded",
+    "configuration": "owned loopback, webhook source dispatcher disabled",
+    "observed_end_commit": "82d41b0bf2ac90b20df42812b4c459981f32bded",
+    "observed_end_runtime_inputs_sha256": "438f16412f9c60313780dc144b5d27e65bc9b02ed35058f171e84e0019aa48dc",
+    "runtime_input_sha256": {
+      "Cargo.lock": "408062e53fc9330027e9d118499633755e8ba7e4c8bd0bd386266667f5f940ad",
+      "Cargo.toml": "df5cf3632141f34e519b9693ce1455f53de74bec408697beb4f375b435514a5f",
+      "crates/adapter/Cargo.toml": "c3c4d960a8e9c10f9c975e2324335e9d15216a719fae60499ee16e5c7f33c21a",
+      "crates/adapter/src/lib.rs": "f43c41ff4c85c5ae77cb544c1e3c26fb5265f3fb68d8e470c4b9a2322c9d7afe",
+      "crates/adapter/src/runner.rs": "99ef70172faa380c5e9b0fa466c25a777edd80a54624a4e8541cd6df2f92cc5a",
+      "crates/adapter/src/tool_call.rs": "ffd672326b7ae4eaed94bfbe178c014eb188af9fedd95932927f2fe81b95db6d",
+      "crates/agent/Cargo.toml": "ef8416e70e30003b78dd9f5e73ad6b09221e8b1a4ce13040e33166d7fab5a87a",
+      "crates/agent/src/action.rs": "7069161402b26daf8d9b345aca453ccea473ee0fad5e72da381aba4c184163b2",
+      "crates/agent/src/authority.rs": "20a5724530f0b7834aec1e37884e24d9087e43bb4974f967331de32fb978ca1a",
+      "crates/agent/src/egress.rs": "9dc5091592cd8fac69296f9317e200a1c5e368e681671d9027ab40b7a0334d05",
+      "crates/agent/src/engine.rs": "79a340f115b63e00b0a291c79f1446fb588a39cb9865bc18b13e7576632ef163",
+      "crates/agent/src/event.rs": "904081b15eec9a3401e6f609c1b0e392291c639339706e9511914d45883612a9",
+      "crates/agent/src/facet.rs": "2225d0e1aeb4ae78b64712e089fc696fcda4e75a4cc177b2bd18301ac8e28e78",
+      "crates/agent/src/fingerprint.rs": "b1d2c6452fa9d5b27196b98f0b99c8b300e292c55263e85da2ca593af71c983c",
+      "crates/agent/src/lib.rs": "9abb757d1a3fb741e11f23fdf936768adb23fd85aea409bd47e729d1457d6784",
+      "crates/agent/src/policy.rs": "791c84cc81dd7d3587d3c5c755b4fef981b12481e40ab95f65fa1473528767d5",
+      "crates/agent/src/resolution.rs": "3e58e96e3e45dac6e37b41ac76d5a789711bcef041da5c299eff041cc04e0a0a",
+      "crates/agent/src/taint.rs": "ad3d6a52d20bc4d72aff9725046d3c211b1fd7c776aad961ecd1b64f95d063af",
+      "crates/agentfw/Cargo.toml": "4ed791ac4f63a1e13e4dc7b95f4c366f72d54f5d2e22f79feb8a16f4f35ea438",
+      "crates/agentfw/src/audit.rs": "0f348a0e9ec9412d0898f1372b0b84a2c922832ceb4a63a258b2b03e3628a23b",
+      "crates/agentfw/src/config.rs": "4fb4ddb3859b6c30aff7ebb8e2178e7b947b37d5d6cab60fe9ac575689ef167a",
+      "crates/agentfw/src/decision.rs": "741b9a03d5fc09f0bdf522b6391c45f946722a77280a17b97e71ebed31f595db",
+      "crates/agentfw/src/grant.rs": "3d3267c60b2b32632c144f06a04283319c606bb52866098c70d23f82b8073a73",
+      "crates/agentfw/src/handlers.rs": "11aa76b82af67f1a42a882a15e02477841757c88a5719cfa64c3b01a8339b6e2",
+      "crates/agentfw/src/hook.rs": "ac67cd17a338cffffee347abe04a5c3203f5bf742f3a6bcbf534923b2e2ea402",
+      "crates/agentfw/src/install.rs": "c026246f4098b9fef9a46a60a6870b775bfcce1ce7b88e126e0e5bafa46eb7f6",
+      "crates/agentfw/src/judge.rs": "cd19617313163aafe3a9f37d3e81de2f339438813e162aefad1536fb8c59c449",
+      "crates/agentfw/src/lib.rs": "1cab8d4519e9b4e4655942b46689710948e9e4c4c4cc7452478bcfea6195e5d2",
+      "crates/agentfw/src/lifecycle.rs": "842b64d90424d7dff4b79409ac33f7ae49cf48bdfce23b3bee0f70792282d7fa",
+      "crates/agentfw/src/main.rs": "74654becadd0a611464ae916df0df916472fa4f51dd2d682e66eeefe3a28a449",
+      "crates/agentfw/src/managed_policy.rs": "29a4ae6b16e08fb9765f83f9fe3f2999cb8ee252ea12354caf1feec4461f830d",
+      "crates/agentfw/src/managed_sync.rs": "3432d54ab8f3a06eb1303d455aa97e151102539d917d9f7fe2b14a24c4772859",
+      "crates/agentfw/src/map.rs": "06765851b9c48eb66720af99459b23c6b19d9d206e4a0d53f3c6652106f85f4d",
+      "crates/agentfw/src/mcp/admission.rs": "9ebef38eecaa4e544d3704e012e04473b8d6eb3d99cb8dc9ddccbadcc98e052b",
+      "crates/agentfw/src/mcp/input.rs": "a21ac8ff86bb06706da1039e354fbd720a8955fdc3b8a3af836e20f69f2214de",
+      "crates/agentfw/src/mcp/jsonrpc.rs": "c77265bf4d7c851e3319c4f39bed8114980bde552b9a0cfc0836dd2c43dd147c",
+      "crates/agentfw/src/mcp/manifest.rs": "39673dd219863047f77dad5e73761ecf3f326dd38df196d886d718a4b9758803",
+      "crates/agentfw/src/mcp/mod.rs": "047f5b51c0fa7288f2e03bf33f2ba2e8991c43c687588ae3a5144b061f51e63f",
+      "crates/agentfw/src/mcp/proxy.rs": "7b414e7b9b47697195f466daa66addb6ead4b1af76886f41149a9cdbc77a3ad7",
+      "crates/agentfw/src/mcp/resources.rs": "ba23b844c959806b1a0b8388f0818d02cfe03293dc2cc763e465cb0b98576f48",
+      "crates/agentfw/src/mcp/stdio.rs": "f2976bc80ea39c336b5b885d493b6f5b4524bf1301109f4bc28fb46dd026ae5e",
+      "crates/agentfw/src/mcp/store.rs": "b39b680fb21af64d79f9a82ec12e2b5deda12d276c6371d1c111ea1892ddf25c",
+      "crates/agentfw/src/native.rs": "4d7a24631ef009328a2b96da0d11c595a704a56a8fc39ff4cf57fae5cf7e0a96",
+      "crates/agentfw/src/native/resource.rs": "87f246b42bcb6dbc4ef85e9f04988c9823b8bb751d3db8d86622c00ebba4e666",
+      "crates/agentfw/src/preflight.rs": "689f7ff7d2c4bd66d0505e2e75e2d9d78a8ed4e978aa3d5418f44747677bb8f6",
+      "crates/agentfw/src/private_file_windows.rs": "3731920a51c453e08b14ca16296c62b3952a82260569255cb2e8da76d9c889bb",
+      "crates/agentfw/src/provenance.rs": "4cd61e80219e0bed286cdf11c5f916e51baed204e24484f4a436d4bea62af677",
+      "crates/agentfw/src/replay.rs": "deda854b7ae10bc68eaf4251f44cc9524f0ae1e281e9efab976288906102a5c2",
+      "crates/agentfw/src/sandbox.rs": "995959930bd2f3693f22ab1ae2e1e3455f2b57a92de3e7a870ffe25e0876ff1b",
+      "crates/agentfw/src/spans.rs": "2dc37461c4fa689d70595d6c046a72702e47e5b7100271c3d3779b2992105c2f",
+      "crates/agentfw/src/token.rs": "edc3bfa80ace9ba4fc3e50501ed88849ef97fbcb3e334dc1ec406730ecb2e696",
+      "crates/core/Cargo.toml": "195932b7d4fdc6cb5cbbd7082acb39874a6ab54c2a2fe80ca32f1ac679cfeca2",
+      "crates/core/src/context.rs": "686133cd213c5f4a418378d89154ad7b38113557948c7c4b1fb973cf645f4a77",
+      "crates/core/src/detector.rs": "66f4f063d5db534e6e805d8087ea9226e5ff214722775d9cbb11d678a08db4b5",
+      "crates/core/src/detectors/injection/heuristics.rs": "f06880f1886b38c6421d5ea8dcddc2bd10795368954fc47ea68825accf2b0e4c",
+      "crates/core/src/detectors/injection/ml.rs": "ef3db5295639a3b821d842e05d73dd60e26be4b463d32522be026f5f1972fa52",
+      "crates/core/src/detectors/injection/mod.rs": "30f509c20b93f339de83f3ff3f4515f5dabe427424887ac34dfc1074563f4433",
+      "crates/core/src/detectors/injection/signatures.rs": "e4b2a2d3d27e55bbc3336d2e34d427bd607dbc22ee2b6f369a834dfcd0c86397",
+      "crates/core/src/detectors/mod.rs": "e2954531ffd892f8db6f41c93c57aa9717342d0dc69fef35e4d0a47c80340f6e",
+      "crates/core/src/detectors/moderation.rs": "9b1feb4e5edc541fea0cf0f9a53ebef7294f922fa103a5c14a1ecf49e014d5b4",
+      "crates/core/src/detectors/output.rs": "e493ab6ba6f4489e46802ee12e61f5b05f52e687b17d17373b0fcdbfbb2bfea8",
+      "crates/core/src/detectors/pii.rs": "8af448adbeb4c8c4aa7cbe427bb32870d5ae2057f5f4e7006e5786d44d3e5e62",
+      "crates/core/src/detectors/secret.rs": "e26623583c6d936cb6a670c9c475d6c62efdfc355821ed964008da32e30a8892",
+      "crates/core/src/finding.rs": "bd0c5385dcaae9b44f6f78489cd3b04928a55f2443a949a70413ba8e9e9b72f1",
+      "crates/core/src/firewall.rs": "842ed4c1b83789514aca24e92f7c5faee9b9f6f4bcfd1043ea2c7bdbb2df6641",
+      "crates/core/src/lib.rs": "30893b4fbf80bf43175792347842e4fb48922596574bd10ee9a13dfb97d06a33",
+      "crates/core/src/masking.rs": "276e1afa622cac9920ea7c738225f9acd420444a2fa63fc1ed8b50b319daca5b",
+      "crates/core/src/normalize.rs": "ae28636882ba7360da2068f0ed866960f1115674fc23a5cbd72128c1ab1b337e",
+      "crates/core/src/policy.rs": "d05d4db813e1295d705f52b0740e739d04ef79675f2a3c9bcede324c0e54e496",
+      "crates/core/src/scoring.rs": "16db47c30b6b588af522e37e654457600111617c236c38be289c6c2eb218c968",
+      "crates/core/src/severity.rs": "1e6b0b2c58a95ead6f1b567c69ff2016e648bfa0f99dcb17f89f77d04b142179",
+      "crates/core/src/taxonomy.rs": "d6c944cae1160068dac3f3d3abbc163dbb5307cd54b63844a96aab474eef0d29",
+      "crates/core/src/util.rs": "ea8728493ac0c0a043fcec401533027432c92fd4cf00e2976d430754c54e8d8c",
+      "crates/proxy/Cargo.toml": "7581ca9398d3b1d1c6293d99254a57e57387821d2e98f4c1978c88094dd63ba2",
+      "crates/proxy/examples/console-recovery-fixture.rs": "e72542f134425e5b541c04ed085e8261a75d7720330657ab3d8a492138176470",
+      "crates/proxy/src/admin.rs": "1c3105a5d187d3578fd190a8c0b8a566aa23ec72ea295d8bbde2fab2cddf7c41",
+      "crates/proxy/src/admin_dashboard.html": "716ae6c2f0fe2b8b9babfff40765e781464c75c89fe4cb08ff53d4bab322a7bd",
+      "crates/proxy/src/admin_ui.rs": "a320672edab0b0fe1ab93a790584848b038ebd46e72d172cc40c75c7cc0a10f6",
+      "crates/proxy/src/agent_scan.rs": "a788938a13fc381c33b2b2988ccd73f0e8e5cc8bec2ea84c56fe9ff6383e22dd",
+      "crates/proxy/src/anthropic.rs": "8cb3afb35b98a9fc60ba25e5b5d287f64f783d2c6022de8396e7a250ab262b5c",
+      "crates/proxy/src/audit.rs": "34f32c966218e965b8903bcef6ec614f7d5a95ceb94bb9983f89d209305da464",
+      "crates/proxy/src/auth.rs": "b1a54020595737c1238cc3df20dec95a5dadc7908f0b028de83cda2926f53c7e",
+      "crates/proxy/src/capability.rs": "e24388052d1bf78e18abf88a24fb860a1729835da8f023ec435a04cd8dcc1b1d",
+      "crates/proxy/src/config.rs": "cc39d924c437602d509b7de07fecf2037729909337505a8a746e617b23d3cabc",
+      "crates/proxy/src/control_plane.rs": "3cd02a69266303c16a05875e6cfef9937aac0755f0a8ce628a62ab82c6a69c4a",
+      "crates/proxy/src/customer_dashboard.html": "3463b890da9a08598c84260586a9463c99a6448e4a1e7f0e42f9c744a1ac1ef5",
+      "crates/proxy/src/customer_ui.rs": "356f06c0dba7bf965d6d6bd9ddd9570a6c43f856a14c0415ad845318886b0bac",
+      "crates/proxy/src/events.rs": "327dbd980704aa2a9a35d28056f3595bbd955c8aab9cbca724b3a3a5f0656fb7",
+      "crates/proxy/src/handlers.rs": "52e36e3eb45c311bd4777ffc48ba46767650e76a62a88cb79cded9a41e71f09b",
+      "crates/proxy/src/invitation_ui.rs": "845193abd430dbb89058dee6ada6e1fc87ecfba6f224a702457b6c8566b004bb",
+      "crates/proxy/src/lib.rs": "d5e8a80b6868f114fb970a70209409eafb282e40c20b9749b35a471edc458774",
+      "crates/proxy/src/main.rs": "36f9986f5b31d18e6291e4cbccfedddab2e3e0247ba232758548c83c68421370",
+      "crates/proxy/src/managed_agent_api.rs": "09b9444102457ae065c978afaa3cac81504703c518978d920209ff520415403d",
+      "crates/proxy/src/moderation.rs": "317fcbb279ee6f7d21ae997d9294775d218b76d601601ef6ed3f56ff9dda36e3",
+      "crates/proxy/src/oidc.rs": "e0cb21fa426fdb8bc13cbb01795adce5ac06cf5f61e7389f9dc37d63f4e1a53e",
+      "crates/proxy/src/oidc_auth.rs": "1c62a1d826d5718077349b4dda703678e443c49c94873c9350c09e76530e6b61",
+      "crates/proxy/src/oidc_token.rs": "03faf92d77325568625f32461e169f26e86c65ebcb4d310ce1da8c7d258f7ec1",
+      "crates/proxy/src/openai.rs": "51eda1b8dcf267547d3c156f4980a3d81e516069abd8c98b4af321a0492812a1",
+      "crates/proxy/src/pipeline.rs": "fdeff5bfe16cbe6dced7cd32473ad7f6dd27e5a3558d5611d7da5f6b75361ec2",
+      "crates/proxy/src/rate_limit.rs": "f28dba75525add54302b532c99a990c1bb4d5e8e1367f7685103ab18b5c1d638",
+      "crates/proxy/src/redis_limits.rs": "8e40a2073d11da28fe08b7ca94a4371da501c2618c4f70be101c26ff8a492740",
+      "crates/proxy/src/responses.rs": "2ebe73ec671ead6977500336c750684d270fcd22b664eab85d6502145ba30133",
+      "crates/proxy/src/saml_auth.rs": "b370d25b7462726dd8a118689061b26daf4c9c9e1dd0dbfb43b6964a846418fe",
+      "crates/proxy/src/scim.rs": "f6fcfd85084326df11235bc5f75b660d99a94b06185ed2042a4b48fcb87c3809",
+      "crates/proxy/src/spend_limit.rs": "b567a43e574697c7833e8a6242ee238094d6672b7b35cf113729017b9b25cea0",
+      "crates/proxy/src/tenant_store.rs": "2b072ac77bb0373eb1b68d3c63e5d30a0edff40a3459f772b230df62b445b0c6",
+      "crates/proxy/src/tenant_store/agent_enrollment.rs": "157dec7f698c62f368030ff1a20a5abb1ee42734f347702f2f02b79e7f05629f",
+      "crates/proxy/src/tenant_store/managed_async.rs": "38b171a240c670ccbc3434c36717684081825caa37793401c6082621fb3eb155",
+      "crates/proxy/src/tenant_store/managed_policy.rs": "de9b6d37ce25fa70faf352d7e985e959f2bd30ef25a465a1739b2ce77da430c7",
+      "crates/proxy/src/tenant_store/managed_postgres.rs": "c1e299f0ba04a3878740849d70d5a91859bac0677aead5af90d06719ad7b5095",
+      "crates/proxy/src/tenant_store/postgres.rs": "9e2d45f95d8030a94c46bd69923941344cda37926a45708a062b691dc479dd01",
+      "crates/proxy/src/tenant_store/recovery_outbox_fixture.rs": "4c6c656c98dc80c34716607de047ca7a1cfbf0bcbffb5c9708fcd8b9ae62cb2e",
+      "crates/proxy/src/tenant_store/webhook_delivery_tests.rs": "343d68ed41462df8ead56632307e677bbe20a9a32a6c1efaf14e614a42f1bdc7",
+      "crates/proxy/src/tenant_store/webhook_recovery_tests.rs": "df4f43c6441b9693cf11b85a7ce65d770e768d5408ee024067f32bb9a182c3f2",
+      "crates/proxy/src/tenant_store/webhook_transport_tests.rs": "7bc6809aacb1bf11f3820797a2b24ef28068d33ad3c6f1031ab387b05c316e2d",
+      "crates/proxy/src/usage.rs": "5d663ab2df48fd3b3c68d16563b458b8acec723480bf4be03dd9144ff1d0d7e8",
+      "crates/proxy/src/workspace_invitation.html": "42fc4cfccaabe88d0e77d3d29951171c565ab18ff9a94077d1477393cb4fce61",
+      "scripts/alert_receiver.py": "40f158804dff1b8a66f24d4ece6af7805dbc63f077a9f0295039fa37063f05c9",
+      "scripts/console-recovery-acceptance.py": "5db01f41a8a4b274738f7e518f939441cdd1589451a2c0813b1c5597c937a386",
+      "scripts/console-recovery.py": "e82c50d557a97870e16d85b85fb96c9fc81d595052758ed59abc9d21a26c016d",
+      "scripts/console_recovery.py": "bc545ae8f5c6a37d0b2f117d85494c9878fa6e2f84c9b1b2495f7aebdd00af52",
+      "scripts/fixtures/console_recovery_inventory_v1.json": "f16678b3891896bbef127aa5efbf9cbfe96505dafa5c76e8950e5f130199d201",
+      "scripts/keycloak-oidc-acceptance.py": "f3d8c30663aa6086134768beaf8071ebf7b0572c39f822a67c0073f8d708d938",
+      "scripts/keycloak-saml-acceptance.py": "9e68691adcf58bdbbc1a0b8cbdbc3742dfbfa28a0eea8c0588d78c9c60ac3008",
+      "selected_webhook_adapter": "79bff20114394f18aae72fa1f1c8a0874b9dfd4fafb604a30a7f64ecd64e8ca7",
+      "vendor/kryptering/Cargo.toml": "9abefb63895f56186dba2fe78a2fff88557567e1ca57ad4ea74c89001397551a",
+      "vendor/kryptering/src/algorithm.rs": "b036ed96c0dc3d91021f94cfdd32292a9aee0c45a9f89dbc2bc54ac779f55491",
+      "vendor/kryptering/src/alternate/digest.rs": "e3db2d33d68b5754220a99b996811c048e218c7d0d4524b86d1548d5b512d422",
+      "vendor/kryptering/src/alternate/hazmat.rs": "c1139b43e873f7420d1758f6781c45c12c4f9fe34261ca969df7d54cf00d9345",
+      "vendor/kryptering/src/alternate/kdf.rs": "c2659826723baf0f37ec4b96b846706d3998170691d8d825067896d61f0de0a0",
+      "vendor/kryptering/src/alternate/key.rs": "9889ac236121efce2e247fd77174833dd6c348fdd35a2d08279fde15a2129d68",
+      "vendor/kryptering/src/alternate/software.rs": "591b3823070896308cd4bd412ff122162dd6cdbce7dccfd923f5a1198efedaab",
+      "vendor/kryptering/src/backend.rs": "14af2fcbedeca8db3263d821ae0a6b48bbec4d552a5f53ed579282608928fcff",
+      "vendor/kryptering/src/digest.rs": "739f9bdf736619ac522b1d1126c5f8f132ea60ee88d99fd60a500b84606c360b",
+      "vendor/kryptering/src/ecdsa_encoding.rs": "5819f7af01847a3caebe17c020b88a1badefa6e21d8abd27174e2c78769f521c",
+      "vendor/kryptering/src/error.rs": "3132fdf5a4d3b16dc4d57a2ddfd23d49db7a3f853c19a8100bd605208ecf783f",
+      "vendor/kryptering/src/hazmat/aes_cbc.rs": "9386413bfd58216b1329655ca97260b2c0b31422d8290de53319255dd5a56922",
+      "vendor/kryptering/src/hazmat/dh.rs": "1a1a3f25565997f7eb34950e340bb922e4b64cf4fce83a90a6d60ac7b05440cb",
+      "vendor/kryptering/src/hazmat/mod.rs": "711ed6c3fca41f5c3fd5190466bc362423d438bab10b5cf8bbcf621009ca7a3b",
+      "vendor/kryptering/src/kdf.rs": "d49ce5da2218eb65080e280a108a6d0624293ed9e0ea10fafacdf0c21c81d2c9",
+      "vendor/kryptering/src/key.rs": "5dd71188a4aca8d031746401592e60a0828fcc9e54961bfe080c24436d8665bd",
+      "vendor/kryptering/src/lib.rs": "69b13b71a58c1af611f64c45a26da8aab652a62b4164cbb040610d72b329acae",
+      "vendor/kryptering/src/parameters.rs": "a7be2c242fbf0fbc2c6153d5a9baf5aa9d3023200c4ac32e82a6b5d867fd7dfd",
+      "vendor/kryptering/src/pkcs11/mod.rs": "afa013005fb6188c1bbb807e97551a7eb39758808ca650acd70c5277b331e4a8",
+      "vendor/kryptering/src/pkcs12.rs": "7485e6b0deaebde8ac4f52a552fbc91ba4aea9cbd2b46abfbdf2277905ea2fbc",
+      "vendor/kryptering/src/software/cipher.rs": "2d4bf82a09e3f2f04a980031b8bc0bcf565de66725b754151cb55fc94efc9cf7",
+      "vendor/kryptering/src/software/composite.rs": "2e184ad1bf295eb25f2fb60447210e7fd3ce1e498099e7d7988160304948b8bb",
+      "vendor/kryptering/src/software/kem.rs": "98df73990a3de786bcc9055a8f290aec108c7075b4f25a9aed9954f01ccbe9cc",
+      "vendor/kryptering/src/software/keyagreement.rs": "393cdaa75872e8123af4df19cc3fc702cc525a4628a2d19f834a76da8250e0d4",
+      "vendor/kryptering/src/software/keytransport.rs": "ec9446e5c01e86e496bb42c2ea4cddce914e292f238bc26a9469c234708af487",
+      "vendor/kryptering/src/software/keywrap.rs": "248f481c76d3d8481d5b3c95e6a7fb8a81b6627628267ca2f5c3baada56baf65",
+      "vendor/kryptering/src/software/mod.rs": "8e18376aa3a0bf96199ee8fc8a17d96a974368437999cd8dc7804d460100a7f5",
+      "vendor/kryptering/src/software/sign.rs": "b2c5a951e8beffd2cf4745d3c14eb3a55f21aa1789eb07143171d033788d73fd",
+      "vendor/kryptering/src/traits.rs": "da786f7f8e5e291f34179b4a6e403a158cfcbef2df93826cea58ae6cf79b62b2"
+    },
+    "runtime_inputs_sha256": "438f16412f9c60313780dc144b5d27e65bc9b02ed35058f171e84e0019aa48dc",
+    "schema_version": 26,
+    "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "worktree_dirty": false
+  },
+  "stale_backup_negative": {
+    "detected": true,
+    "observations": [
+      {
+        "agent": 0,
+        "agent_sequence": 3,
+        "hook_decision": "deny",
+        "recovery_complete": false,
+        "restored_sequence": 2,
+        "status": "rejected",
+        "transport": "stale"
+      },
+      {
+        "agent": 1,
+        "agent_sequence": 3,
+        "hook_decision": "deny",
+        "recovery_complete": false,
+        "restored_sequence": 2,
+        "status": "rejected",
+        "transport": "stale"
+      }
+    ],
+    "operator_guidance": "Stop recovered Console; recover a current Console snapshot. Do not reset Agent sequence or signing trust. Reconciliation or a new epoch requires a separate reviewed procedure.",
+    "recovery_complete": false
+  },
+  "status": "passed",
+  "task": "SOU-49",
+  "webhook_delivery": {
+    "attempts": [
+      {
+        "attempt_count": 2,
+        "completion_owned": true,
+        "delivered": false,
+        "http_status": 503,
+        "next_attempt_at_unix": 1792039237,
+        "schema_version": 1,
+        "status": "passed"
+      },
+      {
+        "attempt_count": 3,
+        "completion_owned": true,
+        "delivered": false,
+        "http_status": 503,
+        "next_attempt_at_unix": 1792039277,
+        "schema_version": 1,
+        "status": "passed"
+      },
+      {
+        "attempt_count": 4,
+        "completion_owned": true,
+        "delivered": true,
+        "http_status": 200,
+        "next_attempt_at_unix": 1792039277,
+        "schema_version": 1,
+        "status": "passed"
+      }
+    ],
+    "checks": {
+      "adapter-requires-native-hmac": true,
+      "ambiguous-ack-retains-one-durable-receipt-and-pending-outbox": true,
+      "bounded-webhook-recovery-objective-met": true,
+      "native-outbox-delivered-after-four-total-attempts": true,
+      "one-receiver-effect-and-one-deduplicated-retry": true,
+      "receiver-outage-keeps-pending-and-native-backoff": true,
+      "receiver-requires-bearer": true,
+      "receiver-restart-preserves-durable-receipt": true,
+      "same-event-and-body-across-three-native-attempts": true
+    },
+    "elapsed_seconds": 60.312468,
+    "exactly_once_network_delivery_claimed": false,
+    "predeclared_objective_seconds": 180,
+    "production_external_https_delivery_verified": false,
+    "schema_version": 1,
+    "status": "passed",
+    "synthetic_due_time_control": true,
+    "transport": "cfg(test) native sender -> HMAC adapter -> existing authenticated Alertmanager receiver"
+  }
+}
