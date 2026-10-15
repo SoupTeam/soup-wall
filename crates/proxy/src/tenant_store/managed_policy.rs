@@ -246,6 +246,13 @@ pub(super) fn rollout_agent_status(
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum DeploymentMode {
+    Activate,
+    Rollback,
+    RestoreBaseline,
+}
+
 pub struct ManagedIssuer {
     pub(super) key_id: String,
     pair: Ed25519KeyPair,
@@ -604,8 +611,18 @@ impl TenantStore {
         let mut db = self.connection()?;
         schema(&db)?;
         let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-        let result =
-            self.deploy_managed_revision_conn(&tx, tenant, agent, revision, rollback, issuer)?;
+        let result = self.deploy_managed_revision_conn(
+            &tx,
+            tenant,
+            agent,
+            revision,
+            if rollback {
+                DeploymentMode::Rollback
+            } else {
+                DeploymentMode::Activate
+            },
+            issuer,
+        )?;
         tx.commit()?;
         Ok(result)
     }
@@ -616,9 +633,10 @@ impl TenantStore {
         tenant: &str,
         agent: &str,
         revision: &str,
-        rollback: bool,
+        mode: DeploymentMode,
         issuer: &ManagedIssuer,
     ) -> Result<ManagedDeployment> {
+        let rollback = mode != DeploymentMode::Activate;
         eligible(db, tenant, agent)?;
         let payload: Option<(String, String)> = db
             .query_row(
@@ -637,7 +655,7 @@ impl TenantStore {
                 |r| Ok((r.get(0)?, r.get(1)?)),
             )
             .optional()?;
-        if rollback {
+        if mode == DeploymentMode::Rollback {
             let (_, previous) = last
                 .as_ref()
                 .context("cannot rollback with no prior deployment")?;
@@ -1356,8 +1374,14 @@ impl TenantStore {
 
         let mut active_deployments = std::collections::BTreeMap::new();
         for pilot in &pilot_agents {
-            let dep =
-                self.deploy_managed_revision_conn(db, tenant, pilot, revision, false, issuer)?;
+            let dep = self.deploy_managed_revision_conn(
+                db,
+                tenant,
+                pilot,
+                revision,
+                DeploymentMode::Activate,
+                issuer,
+            )?;
             let seq = dep.deployment_sequence;
             active_deployments.insert(pilot.clone(), seq);
             {
@@ -2073,7 +2097,7 @@ impl TenantStore {
                         tenant,
                         &agent,
                         &prev,
-                        true,
+                        DeploymentMode::RestoreBaseline,
                         signing_issuer,
                     )?;
                     let seq = dep.deployment_sequence;
@@ -2122,7 +2146,7 @@ impl TenantStore {
                         tenant,
                         &w,
                         &revision,
-                        false,
+                        DeploymentMode::Activate,
                         signing_issuer,
                     )?;
                     let seq = dep.deployment_sequence;
@@ -2463,8 +2487,14 @@ impl TenantStore {
         };
         rollout.active_deployments.clear();
         for (agent, prev) in to_rollback {
-            let dep =
-                self.deploy_managed_revision_conn(db, tenant, &agent, &prev, true, signing_issuer)?;
+            let dep = self.deploy_managed_revision_conn(
+                db,
+                tenant,
+                &agent,
+                &prev,
+                DeploymentMode::RestoreBaseline,
+                signing_issuer,
+            )?;
             let seq = dep.deployment_sequence;
             rollout.active_deployments.insert(agent, seq);
         }

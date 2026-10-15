@@ -4,7 +4,9 @@
 use super::PostgresTenantStore;
 use crate::tenant_store::{
     agent_enrollment::{credential_hash, valid_id},
-    managed_policy::{acknowledgement_overdue, exact_id, hex, rollout_agent_status, MAX_YAML},
+    managed_policy::{
+        acknowledgement_overdue, exact_id, hex, rollout_agent_status, DeploymentMode, MAX_YAML,
+    },
     now_unix, random_base64url, AppliedReport, EnrolledAgent, IssuedAgentCredential,
     ManagedAgentGroup, ManagedDeployment, ManagedGroupMember, ManagedGroupRevision,
     ManagedGroupRollout, ManagedIssuer, ManagedRevision, RolloutPhase, SignedManagedBundle,
@@ -272,7 +274,18 @@ impl PostgresTenantStore {
         let mut client = self.checkout().await?;
         let tx = self.bounded(client.transaction()).await?;
         let result = self
-            .deploy_managed_revision_tx(&tx, tenant, agent, revision, rollback, issuer)
+            .deploy_managed_revision_tx(
+                &tx,
+                tenant,
+                agent,
+                revision,
+                if rollback {
+                    DeploymentMode::Rollback
+                } else {
+                    DeploymentMode::Activate
+                },
+                issuer,
+            )
             .await?;
         self.bounded(tx.commit()).await?;
         Ok(result)
@@ -284,13 +297,14 @@ impl PostgresTenantStore {
         tenant: &str,
         agent: &str,
         revision: &str,
-        rollback: bool,
+        mode: DeploymentMode,
         issuer: &ManagedIssuer,
     ) -> Result<ManagedDeployment> {
+        let rollback = mode != DeploymentMode::Activate;
         self.lock_managed_agent(tx, tenant, agent).await?;
         let payload = self.bounded(tx.query_opt("SELECT policy_yaml,policy_sha256 FROM managed_agent_revisions WHERE tenant_id=$1 AND agent_id=$2 AND revision=$3 AND approved_at_unix IS NOT NULL", &[&tenant,&agent,&revision])).await?.context("revision not approved or not found")?;
         let last = self.bounded(tx.query_opt("SELECT deployment_sequence,revision FROM managed_agent_deployments WHERE tenant_id=$1 AND agent_id=$2 ORDER BY deployment_sequence DESC LIMIT 1", &[&tenant,&agent])).await?;
-        if rollback {
+        if mode == DeploymentMode::Rollback {
             let previous = last
                 .as_ref()
                 .context("cannot rollback with no prior deployment")?;
@@ -903,7 +917,14 @@ impl PostgresTenantStore {
         let mut active_deployments = std::collections::BTreeMap::new();
         for pilot in &pilots {
             let dep = self
-                .deploy_managed_revision_tx(client, tenant, pilot, revision, false, issuer)
+                .deploy_managed_revision_tx(
+                    client,
+                    tenant,
+                    pilot,
+                    revision,
+                    DeploymentMode::Activate,
+                    issuer,
+                )
                 .await?;
             let seq = dep.deployment_sequence;
             active_deployments.insert(pilot.clone(), seq);
@@ -1398,7 +1419,7 @@ impl PostgresTenantStore {
                                 tenant,
                                 &agent,
                                 &prev,
-                                true,
+                                DeploymentMode::RestoreBaseline,
                                 signing_issuer,
                             )
                             .await?;
@@ -1509,7 +1530,7 @@ impl PostgresTenantStore {
                                 tenant,
                                 w,
                                 &rollout.revision,
-                                false,
+                                DeploymentMode::Activate,
                                 signing_issuer,
                             )
                             .await?;
@@ -1691,7 +1712,7 @@ impl PostgresTenantStore {
                                 tenant,
                                 &agent,
                                 &prev,
-                                true,
+                                DeploymentMode::RestoreBaseline,
                                 signing_issuer,
                             )
                             .await?;
@@ -1828,7 +1849,14 @@ impl PostgresTenantStore {
         rollout.active_deployments.clear();
         for (agent, prev) in to_rollback {
             let dep = self
-                .deploy_managed_revision_tx(client, tenant, &agent, &prev, true, signing_issuer)
+                .deploy_managed_revision_tx(
+                    client,
+                    tenant,
+                    &agent,
+                    &prev,
+                    DeploymentMode::RestoreBaseline,
+                    signing_issuer,
+                )
                 .await?;
             let seq = dep.deployment_sequence;
             rollout.active_deployments.insert(agent, seq);

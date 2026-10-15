@@ -27,7 +27,7 @@ PostgreSQL uses one transaction and an exclusive tenant-row lease per orchestrat
 
 Repeating start for the same active candidate and issuer returns the same rollout and deployment identities. A paused start or a different active candidate is a conflict. Repeating pause, resume or pending/confirmed rollback preserves the existing state and sequences. A failed start transaction can be retried because it left no plan or orphan deployments. A repeated standard-wave transition cannot allocate an extra sequence. A retry after rollback considers only the current deployment's acknowledgement state; an older superseded unacknowledged candidate does not block a new plan.
 
-Rollback creates new, higher-sequence signed deployments of the frozen approved baselines. The cohort includes only Agents that received candidate deployments after this plan's initial sequences. Baseline-free Agents remain explicitly unresolved; successful restoration of other Agents cannot turn that into `rolled_back`. Rollback never silently adopts a newer baseline from later deployment history.
+Rollback creates new, higher-sequence signed deployments of the frozen approved baselines, including when an Agent already ran the candidate before this plan and its baseline is that same immutable revision. The cohort includes only Agents that received candidate deployments after this plan's initial sequences. Baseline-free Agents remain explicitly unresolved; successful restoration of other Agents cannot turn that into `rolled_back`. Rollback never silently adopts a newer baseline from later deployment history.
 
 ## Operator API and status
 

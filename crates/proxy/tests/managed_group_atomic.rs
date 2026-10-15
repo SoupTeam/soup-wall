@@ -556,6 +556,61 @@ async fn controls(f: Fixture) {
     assert_eq!(late.agents["p1"].status, "overdue");
     assert!(late.failure_reason.unwrap().contains("rollback unresolved"));
 
+    // One pilot may already run the candidate before joining this plan.
+    // Its frozen baseline is that same immutable revision; restoration still
+    // needs a new signed sequence and must not abort the rest of the rollback.
+    let tenant = setup(&f.store).await;
+    f.store
+        .create_managed_revision_async(&tenant, "p1", "candidate", "default: deny\n")
+        .await
+        .unwrap();
+    f.store
+        .approve_managed_revision_async(&tenant, "p1", "candidate")
+        .await
+        .unwrap();
+    let preexisting = f
+        .store
+        .deploy_managed_revision_async(&tenant, "p1", "candidate", false, &signing_issuer)
+        .await
+        .unwrap();
+    f.store
+        .acknowledge_managed_bundle_async(
+            &tenant,
+            "p1",
+            &AppliedReport {
+                deployment_sequence: preexisting.deployment_sequence,
+                revision: preexisting.revision,
+                policy_sha256: preexisting.policy_sha256,
+                status: "applied".into(),
+            },
+        )
+        .await
+        .unwrap();
+    let plan = f
+        .store
+        .start_managed_group_rollout_async(&tenant, "group", "candidate", &signing_issuer)
+        .await
+        .unwrap();
+    let restored = f
+        .store
+        .rollback_managed_group_rollout_async(&tenant, "group", &signing_issuer)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(restored.active_deployments["p1"] > plan.active_deployments["p1"]);
+    for agent in ["p1", "p2"] {
+        ack(&f.store, &tenant, agent, &restored).await;
+    }
+    assert_eq!(
+        f.store
+            .get_managed_group_rollout_async(&tenant, "group")
+            .await
+            .unwrap()
+            .unwrap()
+            .phase,
+        RolloutPhase::RolledBack
+    );
+
     // Upgrade a populated legacy group schema: preserve identities and rows;
     // an old in-flight plan lacking sequence snapshots must never auto-promote.
     let tenant = setup(&f.store).await;
