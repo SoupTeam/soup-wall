@@ -50,6 +50,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def _serve(self):
         config = json.loads(self.server.configuration.read_text())
+        if self.path == "/healthz":
+            self.send_response(200)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         if config.get("mode") == "redirect" and self.path.startswith("/agent/v1/"):
             self.send_response(302)
             self.send_header("Location", config["redirect"])
