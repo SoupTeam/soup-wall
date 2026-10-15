@@ -1,310 +1,890 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright (C) 2026 Arthur Lin (carbon-evolution)
 
-use std::fs;
-use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use anyhow::{bail, Context};
-use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
-use sha2::{Digest, Sha256};
-
-const MAX_CONFIG_BYTES: usize = 1024 * 1024;
-const MAX_SERVERS: usize = 256;
-
-#[derive(Debug, Serialize)]
-pub struct Preview {
-    pub config: String,
+#[derive(clap::Args)]
+pub struct Options {
+    #[arg(long)]
+    pub path: PathBuf,
+    #[arg(long)]
     pub server: String,
-    pub command: String,
-    pub args_count: usize,
-    pub supported: bool,
-    pub already_connected: bool,
-    pub original_digest: String,
+    #[arg(long)]
+    pub home: PathBuf,
+    #[arg(long)]
+    pub agent: PathBuf,
+    #[arg(long)]
+    pub probe_tool: Option<String>,
+    #[arg(long, requires = "probe_tool")]
+    pub probe_args: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct Ownership {
-    version: u8,
-    config: PathBuf,
-    server: String,
-    original_digest: String,
-    original_entry: Value,
-    wrapped_digest: String,
+#[derive(clap::Subcommand)]
+pub enum Command {
+    Preview(Options),
+    Connect(Options),
+    Inspect(Options),
+    Disconnect(Options),
 }
 
-fn digest(value: &Value) -> String {
-    let bytes = serde_json::to_vec(value).expect("JSON values serialize");
-    format!("{:x}", Sha256::digest(bytes))
-}
-
-fn read_config(path: &Path) -> anyhow::Result<Value> {
-    let metadata =
-        fs::symlink_metadata(path).with_context(|| format!("read config {}", path.display()))?;
-    if !metadata.file_type().is_file() || metadata.len() as usize > MAX_CONFIG_BYTES {
-        bail!("config must be a regular file no larger than 1 MiB")
+pub fn run(command: Command) -> anyhow::Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        let (operation, options) = match command {
+            Command::Preview(o) => ("preview", o),
+            Command::Connect(o) => ("connect", o),
+            Command::Inspect(o) => ("inspect", o),
+            Command::Disconnect(o) => ("disconnect", o),
+        };
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+        let report = runtime.block_on(linux::run(operation, &options))?;
+        println!("{}", serde_json::to_string_pretty(&report)?);
+        anyhow::ensure!(
+            report.status != "unavailable" && report.status != "unknown",
+            "connection could not be verified"
+        );
+        Ok(())
     }
-    let bytes = fs::read(path)?;
-    serde_json::from_slice(&bytes)
-        .map_err(|_| anyhow::anyhow!("invalid MCP host configuration JSON"))
-}
-
-fn servers(value: &mut Value) -> anyhow::Result<&mut Map<String, Value>> {
-    let root = value
-        .as_object_mut()
-        .context("MCP config must be a JSON object")?;
-    let servers = root
-        .entry("mcpServers")
-        .or_insert_with(|| Value::Object(Map::new()))
-        .as_object_mut()
-        .context("mcpServers must be a JSON object")?;
-    if servers.len() > MAX_SERVERS {
-        bail!("too many configured MCP servers")
-    }
-    Ok(servers)
-}
-
-fn selected(value: &Value, name: &str) -> anyhow::Result<Value> {
-    let root = value
-        .as_object()
-        .context("MCP config must be a JSON object")?;
-    let servers = root
-        .get("mcpServers")
-        .and_then(Value::as_object)
-        .context("mcpServers must be a JSON object")?;
-    let entry = servers
-        .get(name)
-        .context("selected MCP server was not found")?;
-    let map = entry
-        .as_object()
-        .context("selected MCP server must be an object")?;
-    map.get("command")
-        .and_then(Value::as_str)
-        .filter(|s| !s.is_empty())
-        .context("selected server needs a command")?;
-    let args = match map.get("args") {
-        Some(value) => value
-            .as_array()
-            .map(Vec::as_slice)
-            .context("server args must be an array")?,
-        None => &[],
-    };
-    if args.iter().any(|v| !v.is_string()) {
-        bail!("server args must contain strings")
-    }
-    if map.get("url").is_some() || map.get("type").is_some_and(|v| v != "stdio") {
-        bail!("only stdio MCP servers are supported")
-    }
-    Ok(entry.clone())
-}
-
-fn ownership_path(config: &Path) -> PathBuf {
-    let mut path = config.as_os_str().to_os_string();
-    path.push(".soup-wall-mcp.json");
-    PathBuf::from(path)
-}
-
-struct OperationLock(PathBuf);
-
-impl OperationLock {
-    fn acquire(config: &Path) -> anyhow::Result<Self> {
-        let mut path = config.as_os_str().to_os_string();
-        path.push(".soup-wall-mcp.lock");
-        let path = PathBuf::from(path);
-        fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-            .with_context(|| format!("another MCP configuration operation is active: {}", path.display()))?;
-        Ok(Self(path))
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = command;
+        anyhow::bail!(
+            "MCP connection transactions require Linux; use an explicit WSL2 Linux profile"
+        );
     }
 }
 
-impl Drop for OperationLock {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.0);
+#[cfg(target_os = "linux")]
+mod linux {
+    use super::Options;
+    use anyhow::{ensure, Context, Result};
+    use serde::{Deserialize, Serialize};
+    use serde_json::{json, Value};
+    use sha2::{Digest, Sha256};
+    use std::ffi::CString;
+    use std::fs::{File, Metadata};
+    use std::io::{Read, Write};
+    use std::os::fd::{AsRawFd, FromRawFd};
+    use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    use std::path::{Component, Path, PathBuf};
+    use std::process::Stdio;
+    use std::time::{Duration, Instant};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
+
+    const LIMIT: usize = 1024 * 1024;
+
+    fn sha(bytes: &[u8]) -> String {
+        format!("{:x}", Sha256::digest(bytes))
     }
-}
 
-fn write_atomic(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
-    let tmp = path.with_extension(format!("tmp-{}", std::process::id()));
-    let mut file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&tmp)?;
-    file.write_all(bytes)?;
-    file.sync_all()?;
-    drop(file);
-    fs::rename(tmp, path)?;
-    Ok(())
-}
+    fn hash(value: &Value) -> String {
+        sha(&serde_json::to_vec(value).expect("JSON value serializes"))
+    }
 
-fn save_config(path: &Path, value: &Value) -> anyhow::Result<()> {
-    write_atomic(path, serde_json::to_vec_pretty(value)?.as_slice())
-}
+    fn parse(bytes: &[u8]) -> Result<Value> {
+        ensure!(bytes.len() <= LIMIT, "configuration exceeds 1 MiB");
+        let super::super::admission::Strict(value) = serde_json::from_slice(bytes)
+            .map_err(|_| anyhow::anyhow!("invalid or duplicate JSON fields"))?;
+        Ok(value)
+    }
 
-pub fn preview(path: &Path, name: &str) -> anyhow::Result<Preview> {
-    let value = read_config(path)?;
-    let entry = selected(&value, name)?;
-    let command = entry["command"].as_str().unwrap_or_default().to_owned();
-    let args_count = entry["args"].as_array().map_or(0, Vec::len);
-    let original_digest = digest(&entry);
-    let already_connected = fs::read(ownership_path(path))
-        .ok()
-        .and_then(|b| serde_json::from_slice::<Ownership>(&b).ok())
-        .is_some_and(|o| {
-            o.config == path && o.server == name && o.original_digest == original_digest
-        });
-    Ok(Preview {
-        config: path.display().to_string(),
-        server: name.to_owned(),
-        command,
-        args_count,
-        supported: true,
-        already_connected,
-        original_digest,
-    })
-}
+    fn open_at(dir: &File, name: &std::ffi::OsStr, flags: i32) -> Result<File> {
+        let name = CString::new(name.as_bytes()).context("invalid path")?;
+        let fd = unsafe {
+            libc::openat(
+                dir.as_raw_fd(),
+                name.as_ptr(),
+                flags | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK,
+                0o600,
+            )
+        };
+        ensure!(
+            fd >= 0,
+            "cannot open selected file safely: {}",
+            std::io::Error::last_os_error()
+        );
+        Ok(unsafe { File::from_raw_fd(fd) })
+    }
 
-pub fn connect(path: &Path, name: &str, wrapper: &Path) -> anyhow::Result<Preview> {
-    let _lock = OperationLock::acquire(path)?;
-    let mut value = read_config(path)?;
-    let entry = selected(&value, name)?;
-    let original_digest = digest(&entry);
-    let state = ownership_path(path);
-    if let Ok(bytes) = fs::read(&state) {
-        let owner: Ownership =
-            serde_json::from_slice(&bytes).context("invalid MCP ownership record")?;
-        if owner.config == path && owner.server == name {
-            if digest(&entry) == owner.wrapped_digest {
-                return Ok(Preview {
-                    config: path.display().to_string(),
-                    server: name.to_owned(),
-                    command: entry["command"].as_str().unwrap_or_default().to_owned(),
-                    args_count: entry["args"].as_array().map_or(0, Vec::len),
-                    supported: true,
-                    already_connected: true,
-                    original_digest: owner.original_digest,
-                });
-            }
-            if owner.original_digest == original_digest {
-                return preview(path, name);
+    fn directory(path: &Path) -> Result<File> {
+        ensure!(path.is_absolute(), "an absolute path is required");
+        let mut dir = File::open("/")?;
+        for component in path.components() {
+            match component {
+                Component::RootDir => (),
+                Component::Normal(name) => {
+                    dir = open_at(&dir, name, libc::O_RDONLY | libc::O_DIRECTORY)?
+                }
+                _ => anyhow::bail!("path aliases are unsupported"),
             }
         }
-        bail!("existing MCP ownership record does not match this config")
-    }
-    let command = entry["command"].as_str().unwrap_or_default().to_owned();
-    let args = entry["args"].as_array().cloned().unwrap_or_default();
-    let args_count = args.len();
-    let server_id = format!("claude-{}", &original_digest[..16]);
-    let mut wrapped = entry
-        .as_object()
-        .cloned()
-        .context("selected MCP server must be an object")?;
-    wrapped.insert(
-        "command".into(),
-        Value::String(wrapper.display().to_string()),
-    );
-    wrapped.insert(
-        "args".into(),
-        serde_json::json!([
-            "mcp",
-            "--id",
-            server_id,
-            "--native-admission",
-            "--",
-            command
-        ]),
-    );
-    if let Some(items) = wrapped.get_mut("args").and_then(Value::as_array_mut) {
-        items.extend(args);
-    }
-    let wrapped = Value::Object(wrapped);
-    let wrapped_digest = digest(&wrapped);
-    servers(&mut value)?.insert(name.to_owned(), wrapped);
-    save_config(path, &value)?;
-    write_atomic(
-        &state,
-        serde_json::to_vec_pretty(&Ownership {
-            version: 1,
-            config: path.to_path_buf(),
-            server: name.to_owned(),
-            original_digest: original_digest.clone(),
-            original_entry: entry,
-            wrapped_digest,
-        })?
-        .as_slice(),
-    )?;
-    Ok(Preview {
-        config: path.display().to_string(),
-        server: name.to_owned(),
-        command,
-        args_count,
-        supported: true,
-        already_connected: false,
-        original_digest,
-    })
-}
-
-pub fn disconnect(path: &Path, name: &str) -> anyhow::Result<()> {
-    let _lock = OperationLock::acquire(path)?;
-    let state = ownership_path(path);
-    let owner: Ownership = serde_json::from_slice(
-        &fs::read(&state).context("MCP connection is not managed by Soup Wall")?,
-    )?;
-    if owner.config != path || owner.server != name {
-        bail!("MCP ownership record does not match the selected config")
-    }
-    let mut value = read_config(path)?;
-    let current = selected(&value, name)?;
-    if digest(&current) != owner.wrapped_digest {
-        bail!("selected MCP entry changed after connect; refusing to overwrite it")
-    }
-    servers(&mut value)?.insert(name.to_owned(), owner.original_entry);
-    save_config(path, &value)?;
-    fs::remove_file(state)?;
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn config(dir: &Path) -> PathBuf {
-        let path = dir.join("claude.json");
-        fs::write(&path, br#"{"mcpServers":{"local":{"command":"server","args":["--safe"],"type":"stdio"},"other":{"command":"other"}}}"#).unwrap();
-        path
+        Ok(dir)
     }
 
-    #[test]
-    fn connect_is_idempotent_and_disconnect_restores_only_selected_entry() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = config(dir.path());
-        let before = read_config(&path).unwrap();
-        let preview = connect(&path, "local", Path::new("/bin/agentfw")).unwrap();
-        assert!(!preview.already_connected);
-        let repeated = connect(&path, "local", Path::new("/bin/agentfw")).unwrap();
-        assert!(repeated.already_connected);
-        assert_eq!(preview.original_digest, repeated.original_digest);
-        disconnect(&path, "local").unwrap();
-        let after = read_config(&path).unwrap();
-        assert_eq!(after["mcpServers"]["local"], before["mcpServers"]["local"]);
-        assert_eq!(after["mcpServers"]["other"], before["mcpServers"]["other"]);
-    }
-
-    #[test]
-    fn disconnect_refuses_user_edits() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = config(dir.path());
-        connect(&path, "local", Path::new("/bin/agentfw")).unwrap();
-        let mut value = read_config(&path).unwrap();
-        value["mcpServers"]["local"]["args"] = serde_json::json!(["user-edit"]);
-        save_config(&path, &value).unwrap();
-        assert!(disconnect(&path, "local").is_err());
-        assert_eq!(
-            read_config(&path).unwrap()["mcpServers"]["local"]["args"],
-            serde_json::json!(["user-edit"])
+    fn private(meta: &Metadata) -> Result<()> {
+        ensure!(
+            meta.is_file()
+                && meta.nlink() == 1
+                && meta.uid() == unsafe { libc::geteuid() }
+                && meta.mode() & 0o077 == 0,
+            "file must be owned, private, regular and single-link"
         );
+        ensure!(meta.len() <= LIMIT as u64, "file exceeds 1 MiB");
+        Ok(())
+    }
+
+    fn read_at(dir: &File, name: &std::ffi::OsStr) -> Result<(Vec<u8>, Metadata)> {
+        let file = open_at(dir, name, libc::O_RDONLY)?;
+        let meta = file.metadata()?;
+        private(&meta)?;
+        let mut bytes = Vec::new();
+        file.take(LIMIT as u64 + 1).read_to_end(&mut bytes)?;
+        ensure!(bytes.len() <= LIMIT, "file exceeds 1 MiB");
+        Ok((bytes, meta))
+    }
+
+    fn read_private(path: &Path) -> Result<Vec<u8>> {
+        let dir = directory(path.parent().context("missing parent")?)?;
+        Ok(read_at(&dir, path.file_name().context("missing filename")?)?.0)
+    }
+
+    fn executable(path: &Path) -> Result<String> {
+        let dir = directory(path.parent().context("missing executable parent")?)?;
+        let mut file = open_at(
+            &dir,
+            path.file_name().context("missing executable name")?,
+            libc::O_RDONLY,
+        )?;
+        let meta = file.metadata()?;
+        ensure!(
+            meta.is_file()
+                && meta.nlink() == 1
+                && meta.mode() & 0o022 == 0
+                && meta.mode() & 0o111 != 0
+                && (meta.uid() == 0 || meta.uid() == unsafe { libc::geteuid() })
+                && meta.len() <= 512 * 1024 * 1024,
+            "unsafe or unavailable executable"
+        );
+        let mut hasher = Sha256::new();
+        let mut buffer = [0; 65536];
+        let mut total = 0;
+        loop {
+            let count = file.read(&mut buffer)?;
+            if count == 0 {
+                break;
+            }
+            total += count;
+            ensure!(total <= 512 * 1024 * 1024, "executable grew beyond limit");
+            hasher.update(&buffer[..count]);
+        }
+        let after = file.metadata()?;
+        ensure!(
+            meta.len() == after.len()
+                && meta.mtime_nsec() == after.mtime_nsec()
+                && meta.ctime_nsec() == after.ctime_nsec()
+                && meta.mtime() == after.mtime()
+                && meta.ctime() == after.ctime(),
+            "executable changed while hashing"
+        );
+        Ok(format!("{:x}", hasher.finalize()))
+    }
+
+    struct ConfigFile {
+        dir: File,
+        path: PathBuf,
+        bytes: Vec<u8>,
+        meta: Metadata,
+        value: Value,
+    }
+
+    impl ConfigFile {
+        fn read(path: &Path) -> Result<Self> {
+            let dir = directory(path.parent().context("missing config parent")?)?;
+            let dm = dir.metadata()?;
+            ensure!(
+                dm.uid() == unsafe { libc::geteuid() } && dm.mode() & 0o022 == 0,
+                "config directory must be owned and not writable by other users"
+            );
+            let (bytes, meta) = read_at(&dir, path.file_name().context("missing filename")?)?;
+            let value = parse(&bytes)?;
+            Ok(Self {
+                dir,
+                path: path.to_owned(),
+                bytes,
+                meta,
+                value,
+            })
+        }
+
+        fn entry(&self, name: &str) -> Result<Value> {
+            ensure!(
+                !name.is_empty()
+                    && name.len() <= 128
+                    && name
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b"_-.".contains(&b)),
+                "invalid server name"
+            );
+            let servers = self
+                .value
+                .get("mcpServers")
+                .and_then(Value::as_object)
+                .context("mcpServers must be an object")?;
+            ensure!(servers.len() <= 256, "too many MCP servers");
+            let entry = servers.get(name).context("selected server not found")?;
+            let map = entry.as_object().context("server must be an object")?;
+            ensure!(
+                map.keys()
+                    .all(|k| ["command", "args", "type", "env"].contains(&k.as_str())),
+                "unsupported selected server field"
+            );
+            ensure!(
+                map.get("type").is_none_or(|v| v == "stdio"),
+                "only stdio is supported"
+            );
+            ensure!(map.get("env").is_none_or(|v| v.as_object().is_some_and(|m| m.is_empty())), "selected server environment must be empty; credentials cannot enter child environments");
+            let command = map
+                .get("command")
+                .and_then(Value::as_str)
+                .context("command must be a string")?;
+            ensure!(
+                !command.is_empty()
+                    && command.len() <= 4096
+                    && !command.contains('\0')
+                    && Path::new(command).is_absolute(),
+                "command must be a bounded absolute executable path"
+            );
+            if let Some(args) = map.get("args") {
+                let args = args.as_array().context("args must be an array")?;
+                ensure!(
+                    args.len() <= 256
+                        && args.iter().all(|a| a
+                            .as_str()
+                            .is_some_and(|s| s.len() <= 16384 && !s.contains('\0'))),
+                    "invalid or excessive arguments"
+                );
+            }
+            Ok(entry.clone())
+        }
+
+        fn state_name(&self, name: &str) -> String {
+            format!(
+                ".soup-wall-{}.json",
+                sha(format!("{}\0{name}", self.path.display()).as_bytes())
+            )
+        }
+
+        fn unchanged(&self) -> Result<()> {
+            let current_parent = directory(self.path.parent().context("missing parent")?)?;
+            let dm = self.dir.metadata()?;
+            let cm = current_parent.metadata()?;
+            ensure!(
+                dm.dev() == cm.dev() && dm.ino() == cm.ino(),
+                "config directory changed"
+            );
+            let (bytes, meta) = read_at(
+                &self.dir,
+                self.path.file_name().context("missing filename")?,
+            )?;
+            ensure!(
+                meta.ino() == self.meta.ino()
+                    && meta.dev() == self.meta.dev()
+                    && bytes == self.bytes,
+                "config changed during operation"
+            );
+            Ok(())
+        }
+
+        fn replace(&mut self, name: &str, entry: &Value) -> Result<()> {
+            self.unchanged()?;
+            let mut next = self.value.clone();
+            next["mcpServers"][name] = entry.clone();
+            let bytes = serde_json::to_vec_pretty(&next)?;
+            ensure!(bytes.len() <= LIMIT, "updated config exceeds 1 MiB");
+            self.atomic(self.path.file_name().context("missing filename")?, &bytes)?;
+            Ok(())
+        }
+
+        fn atomic(&self, name: &std::ffi::OsStr, bytes: &[u8]) -> Result<()> {
+            let temporary = format!(".soup-wall-stage-{}", crate::token::generate());
+            let mut file = open_at(
+                &self.dir,
+                temporary.as_ref(),
+                libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL,
+            )?;
+            let outcome = (|| -> Result<()> {
+                file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+                file.write_all(bytes)?;
+                file.sync_all()?;
+                let from = CString::new(temporary.as_bytes())?;
+                let to = CString::new(name.as_bytes())?;
+                if Some(name) == self.path.file_name() {
+                    self.unchanged()?;
+                }
+                ensure!(
+                    unsafe {
+                        libc::renameat(
+                            self.dir.as_raw_fd(),
+                            from.as_ptr(),
+                            self.dir.as_raw_fd(),
+                            to.as_ptr(),
+                        )
+                    } == 0,
+                    "atomic rename failed"
+                );
+                self.dir.sync_all()?;
+                Ok(())
+            })();
+            let temporary = CString::new(temporary)?;
+            unsafe {
+                libc::unlinkat(self.dir.as_raw_fd(), temporary.as_ptr(), 0);
+            }
+            outcome
+        }
+
+        fn state(&self, name: &str) -> Result<Option<Owner>> {
+            let filename = self.state_name(name);
+            let path = self.path.parent().unwrap().join(&filename);
+            match std::fs::symlink_metadata(path) {
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+                Err(_) => anyhow::bail!("ownership metadata unavailable"),
+                Ok(_) => {
+                    let bytes = read_at(&self.dir, filename.as_ref())?.0;
+                    let value = parse(&bytes)?;
+                    let owner: Owner =
+                        serde_json::from_value(value).context("invalid ownership metadata")?;
+                    ensure!(
+                        owner.version == 1
+                            && owner.path == self.path
+                            && owner.server == name
+                            && owner.original_sha256 == hash(&owner.original)
+                            && owner.wrapped_sha256 == hash(&owner.wrapped),
+                        "ownership metadata does not match"
+                    );
+                    ensure!(
+                        [
+                            "pending_connect",
+                            "connected",
+                            "pending_disconnect",
+                            "disconnected"
+                        ]
+                        .contains(&owner.phase.as_str()),
+                        "unknown transaction phase"
+                    );
+                    Ok(Some(owner))
+                }
+            }
+        }
+
+        fn save(&self, owner: &Owner) -> Result<()> {
+            let bytes = serde_json::to_vec_pretty(owner)?;
+            ensure!(bytes.len() <= LIMIT, "ownership metadata exceeds 1 MiB");
+            self.atomic(self.state_name(&owner.server).as_ref(), &bytes)
+        }
+
+        fn lock(&self) -> Result<File> {
+            let file = open_at(
+                &self.dir,
+                ".soup-wall-mcp.lock".as_ref(),
+                libc::O_RDWR | libc::O_CREAT,
+            )?;
+            private(&file.metadata()?)?;
+            ensure!(
+                unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0,
+                "another connection operation is active"
+            );
+            Ok(file)
+        }
+    }
+
+    #[derive(Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Owner {
+        version: u8,
+        path: PathBuf,
+        server: String,
+        phase: String,
+        original: Value,
+        wrapped: Value,
+        original_sha256: String,
+        wrapped_sha256: String,
+        agent: PathBuf,
+        home: PathBuf,
+        agent_sha256: String,
+        registry_sha256: String,
+        native_config_sha256: String,
+    }
+
+    #[derive(Serialize)]
+    pub(super) struct Report {
+        pub status: &'static str,
+        operation: String,
+        config_sha256: String,
+        selected_sha256: String,
+        server_id: String,
+        agent_sha256: Option<String>,
+        registry_sha256: Option<String>,
+        probe_result_sha256: Option<String>,
+        elapsed_ms: u128,
+        detail: &'static str,
+    }
+
+    struct Native {
+        binary: String,
+        registry: String,
+        config: String,
+    }
+
+    async fn preflight(o: &Options) -> Result<Native> {
+        let binary = executable(&o.agent)?;
+        ensure!(
+            o.home.file_name().is_some_and(|v| v == ".agentfw"),
+            "home must be the explicit .agentfw directory"
+        );
+        let bytes = read_private(&o.home.join("config.yaml"))?;
+        let cfg = crate::Config::from_yaml(
+            std::str::from_utf8(&bytes).context("invalid native config")?,
+        )?;
+        ensure!(
+            cfg.enforce && !cfg.judge.enabled,
+            "enforcing native configuration required"
+        );
+        let installed = cfg
+            .native
+            .as_ref()
+            .context("pinned native registry required")?;
+        let native_token = read_private(&o.home.join("native-token"))?;
+        let token = read_private(&o.home.join("token"))?;
+        let native_token = std::str::from_utf8(&native_token)?.trim().to_owned();
+        ensure!(!native_token.is_empty(), "native token is empty");
+        crate::native::NativeState::load(installed, native_token)?;
+        let expected = crate::protection_status::Expectations {
+            config_sha256: Some(crate::protection_status::config_digest(&cfg)),
+            binary_sha256: Some(binary.clone()),
+            registry_sha256: Some(installed.registry_sha256.clone()),
+            ..Default::default()
+        };
+        let snapshot = crate::protection_status::query(
+            &cfg,
+            std::str::from_utf8(&token)?.trim(),
+            &expected,
+            Duration::from_secs(2),
+        )
+        .await
+        .map_err(|_| {
+            anyhow::anyhow!("enforcing Agent preflight unavailable or identity mismatch")
+        })?;
+        ensure!(
+            snapshot.mode == crate::protection_status::Mode::Enforcing,
+            "Agent is not enforcing"
+        );
+        Ok(Native {
+            binary,
+            registry: installed.registry_sha256.clone(),
+            config: sha(&bytes),
+        })
+    }
+
+    fn wrapped(entry: &Value, o: &Options, id: &str) -> Result<Value> {
+        executable(Path::new(
+            entry["command"].as_str().context("missing command")?,
+        ))?;
+        ensure!(
+            !entry["args"]
+                .as_array()
+                .is_some_and(|a| a.iter().any(|v| v == "--native-admission")),
+            "entry is already wrapped without matching ownership"
+        );
+        let mut result = entry.clone();
+        result["command"] = json!("/usr/bin/env");
+        let profile = o.home.parent().context("missing profile parent")?;
+        let mut args = vec![
+            json!("-i"),
+            json!("PATH=/usr/bin:/bin"),
+            json!(format!("HOME={}", profile.display())),
+            json!(format!("USERPROFILE={}", profile.display())),
+            json!(o.agent),
+            json!("mcp"),
+            json!("--id"),
+            json!(id),
+            json!("--native-admission"),
+            json!("--"),
+            entry["command"].clone(),
+        ];
+        args.extend(entry["args"].as_array().into_iter().flatten().cloned());
+        result["args"] = Value::Array(args);
+        Ok(result)
+    }
+
+    async fn probe(entry: &Value, tool: &str, args: &str) -> Result<String> {
+        ensure!(tool.len() <= 128 && !tool.is_empty(), "invalid probe tool");
+        let arguments = parse(args.as_bytes())?;
+        ensure!(arguments.is_object(), "probe arguments must be an object");
+        let mut child =
+            tokio::process::Command::new(entry["command"].as_str().context("missing command")?)
+                .args(
+                    entry["args"]
+                        .as_array()
+                        .context("missing arguments")?
+                        .iter()
+                        .map(|v| v.as_str().unwrap_or_default()),
+                )
+                .env_clear()
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .kill_on_drop(true)
+                .spawn()?;
+        let outcome = tokio::time::timeout(Duration::from_secs(8), async {
+            let mut input = child.stdin.take().context("missing stdin")?;
+            let mut output = BufReader::new(child.stdout.take().context("missing stdout")?);
+            let init = json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"soup-wall-connection","version":"1"}}});
+            let frames = [
+                init,
+                json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
+                json!({"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}),
+                json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":tool,"arguments":arguments}}),
+            ];
+            let mut last = Value::Null;
+            for frame in frames {
+                input.write_all(format!("{}\n", frame).as_bytes()).await?;
+                input.flush().await?;
+                if frame.get("id").is_some() {
+                    let mut bytes = Vec::new();
+                    loop {
+                        ensure!(bytes.len() < LIMIT, "probe response exceeds limit");
+                        let byte = output.read_u8().await?;
+                        if byte == b'\n' { break; }
+                        bytes.push(byte);
+                    }
+                    let reply = parse(&bytes)?;
+                    ensure!(reply["id"] == frame["id"] && reply.get("error").is_none() && reply.get("result").is_some(), "probe refused or invalid response");
+                    last = reply;
+                }
+            }
+            ensure!(last["result"]["isError"] != true, "probe call was refused");
+            Ok::<_, anyhow::Error>(hash(&last["result"]))
+        }).await;
+        let _ = child.kill().await;
+        let _ = child.wait().await;
+        outcome.context("probe timed out")?
+    }
+
+    pub(super) async fn run(operation: &str, o: &Options) -> Result<Report> {
+        let start = Instant::now();
+        ensure!(
+            o.probe_tool.is_none() || operation == "inspect",
+            "controlled requests are only supported by inspect"
+        );
+        let mut config = ConfigFile::read(&o.path)?;
+        let _lock = if ["connect", "disconnect"].contains(&operation) {
+            Some(config.lock()?)
+        } else {
+            None
+        };
+        let entry = config.entry(&o.server)?;
+        let mut owner = config.state(&o.server)?;
+        let id = format!(
+            "claude-{}",
+            &sha(format!("{}\0{}", o.path.display(), o.server).as_bytes())[..24]
+        );
+        let mut report = Report {
+            status: "unknown",
+            operation: operation.to_owned(),
+            config_sha256: sha(&config.bytes),
+            selected_sha256: hash(&entry),
+            server_id: id.clone(),
+            agent_sha256: None,
+            registry_sha256: None,
+            probe_result_sha256: None,
+            elapsed_ms: 0,
+            detail: "connection identity is unknown",
+        };
+        if operation == "disconnect" {
+            let Some(mut state) = owner else {
+                ensure!(
+                    !entry["args"]
+                        .as_array()
+                        .is_some_and(|args| args.iter().any(|v| v == "--native-admission")),
+                    "wrapped entry has no matching ownership; state is unknown"
+                );
+                report.status = "disconnected";
+                report.detail = "no owned change to restore";
+                return Ok(report);
+            };
+            if hash(&entry) != state.original_sha256 {
+                ensure!(
+                    hash(&entry) == state.wrapped_sha256,
+                    "selected entry changed; conflict preserved"
+                );
+                state.phase = "pending_disconnect".into();
+                config.save(&state)?;
+                config.replace(&o.server, &state.original)?;
+            }
+            state.phase = "disconnected".into();
+            config.save(&state)?;
+            report.status = "disconnected";
+            report.detail = "original entry restored; unrelated settings preserved";
+        } else if operation == "preview" {
+            if let Some(state) = &owner {
+                ensure!(
+                    hash(&entry) == state.wrapped_sha256 || hash(&entry) == state.original_sha256,
+                    "selected entry changed; conflict preserved"
+                );
+            } else {
+                wrapped(&entry, o, &id)?;
+            }
+            report.status = "preview";
+            report.detail = "selected stdio command will use the native collector; original arguments retained; child environment cleared";
+        } else {
+            let native = preflight(o).await;
+            if operation == "inspect" && native.is_err() {
+                report.status = "unavailable";
+                report.detail = "Agent preflight unavailable or identity mismatch";
+            } else {
+                let native = native?;
+                report.agent_sha256 = Some(native.binary.clone());
+                report.registry_sha256 = Some(native.registry.clone());
+                if operation == "connect" {
+                    if let Some(state) = &owner {
+                        ensure!(
+                            state.agent == o.agent
+                                && state.home == o.home
+                                && state.agent_sha256 == native.binary
+                                && state.registry_sha256 == native.registry
+                                && state.native_config_sha256 == native.config,
+                            "selected Agent or native configuration changed"
+                        );
+                        ensure!(
+                            hash(&entry) == state.wrapped_sha256
+                                || hash(&entry) == state.original_sha256,
+                            "selected entry changed; conflict preserved"
+                        );
+                    } else {
+                        let next = wrapped(&entry, o, &id)?;
+                        owner = Some(Owner {
+                            version: 1,
+                            path: o.path.clone(),
+                            server: o.server.clone(),
+                            phase: "pending_connect".into(),
+                            original_sha256: hash(&entry),
+                            wrapped_sha256: hash(&next),
+                            original: entry.clone(),
+                            wrapped: next,
+                            agent: o.agent.clone(),
+                            home: o.home.clone(),
+                            agent_sha256: native.binary,
+                            registry_sha256: native.registry,
+                            native_config_sha256: native.config,
+                        });
+                    }
+                    let state = owner.as_mut().unwrap();
+                    state.phase = "pending_connect".into();
+                    config.save(state)?;
+                    if hash(&entry) != state.wrapped_sha256 {
+                        config.replace(&o.server, &state.wrapped)?;
+                    }
+                    state.phase = "connected".into();
+                    config.save(state)?;
+                    report.status = "configured";
+                    report.detail = "native wrapper configured; execution is not inferred";
+                } else if let Some(state) = &owner {
+                    if state.phase == "connected"
+                        && hash(&entry) == state.wrapped_sha256
+                        && state.agent == o.agent
+                        && state.home == o.home
+                        && state.agent_sha256 == native.binary
+                        && state.registry_sha256 == native.registry
+                        && state.native_config_sha256 == native.config
+                    {
+                        report.status = "configured";
+                        report.detail = "owned configuration and Agent identities match";
+                        if let Some(tool) = &o.probe_tool {
+                            match probe(&entry, tool, o.probe_args.as_deref().unwrap_or("{}")).await
+                            {
+                                Ok(hash) => {
+                                    report.status = "verified_for_this_probe";
+                                    report.probe_result_sha256 = Some(hash);
+                                    report.detail =
+                                        "controlled request returned a permitted result";
+                                }
+                                Err(_) => {
+                                    report.status = "unavailable";
+                                    report.detail = "controlled request failed or was refused";
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let current = ConfigFile::read(&o.path)?;
+        report.config_sha256 = sha(&current.bytes);
+        report.selected_sha256 = hash(&current.entry(&o.server)?);
+        report.elapsed_ms = start.elapsed().as_millis();
+        Ok(report)
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use std::os::unix::fs::{symlink, PermissionsExt};
+
+        fn fixture() -> (tempfile::TempDir, PathBuf) {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("profile with spaces.json");
+            std::fs::write(&path, br#"{"mcpServers":{"local":{"command":"/usr/bin/python3.11","args":["-u","space argument"]},"other":{"command":"untouched","env":{"TOKEN":"unrelated-secret"}}},"settings":{"theme":"light"}}"#).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+            (dir, path)
+        }
+
+        #[test]
+        fn strict_json_rejects_duplicates_at_every_depth() {
+            for bytes in [
+                br#"{"a":1,"a":2}"#.as_slice(),
+                br#"{"a":{"x":1,"x":2}}"#,
+                b"[] trailing",
+                b"",
+            ] {
+                assert!(parse(bytes).is_err());
+            }
+        }
+
+        #[test]
+        fn excessive_json_is_rejected() {
+            assert!(parse(&vec![b' '; LIMIT + 1]).is_err());
+        }
+
+        #[test]
+        fn selected_transport_and_arguments_are_strict() {
+            let (_dir, path) = fixture();
+            let config = ConfigFile::read(&path).unwrap();
+            assert_eq!(config.entry("local").unwrap()["args"][1], "space argument");
+            for bad in [
+                json!({"command":"relative"}),
+                json!({"command":"/usr/bin/env","type":"http"}),
+                json!({"command":"/usr/bin/env","args":[1]}),
+                json!({"command":"/usr/bin/env","env":{"API_KEY":"secret"}}),
+                json!({"command":"/usr/bin/env","url":"http://localhost"}),
+            ] {
+                let mut altered = ConfigFile::read(&path).unwrap();
+                altered.value["mcpServers"]["local"] = bad;
+                assert!(altered.entry("local").is_err());
+            }
+        }
+
+        #[test]
+        fn symlink_file_is_refused() {
+            let (dir, path) = fixture();
+            let linked = dir.path().join("link.json");
+            symlink(path, &linked).unwrap();
+            assert!(ConfigFile::read(&linked).is_err());
+        }
+
+        #[test]
+        fn symlink_parent_is_refused() {
+            let (dir, _path) = fixture();
+            let linked = dir.path().join("alias");
+            symlink(dir.path(), &linked).unwrap();
+            assert!(directory(&linked).is_err());
+        }
+
+        #[test]
+        fn hardlink_file_is_refused() {
+            let (dir, path) = fixture();
+            std::fs::hard_link(&path, dir.path().join("hard")).unwrap();
+            assert!(ConfigFile::read(&path).is_err());
+        }
+
+        #[test]
+        fn public_config_is_refused() {
+            let (_dir, path) = fixture();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+            assert!(ConfigFile::read(&path).is_err());
+        }
+
+        #[test]
+        fn fifo_does_not_block_reader() {
+            let (dir, _) = fixture();
+            let path = dir.path().join("pipe");
+            let c = CString::new(path.as_os_str().as_bytes()).unwrap();
+            assert_eq!(unsafe { libc::mkfifo(c.as_ptr(), 0o600) }, 0);
+            assert!(ConfigFile::read(&path).is_err());
+        }
+
+        #[test]
+        fn concurrent_lock_is_refused() {
+            let (_dir, path) = fixture();
+            let config = ConfigFile::read(&path).unwrap();
+            let first = config.lock().unwrap();
+            assert!(config.lock().is_err());
+            drop(first);
+            assert!(config.lock().is_ok());
+        }
+
+        #[test]
+        fn external_edit_is_preserved() {
+            let (_dir, path) = fixture();
+            let mut config = ConfigFile::read(&path).unwrap();
+            let mut changed = config.value.clone();
+            changed["settings"]["theme"] = json!("dark");
+            std::fs::write(&path, serde_json::to_vec(&changed).unwrap()).unwrap();
+            assert!(config.replace("local", &json!({})).is_err());
+            assert_eq!(ConfigFile::read(&path).unwrap().value, changed);
+        }
+
+        #[test]
+        fn selected_change_preserves_unrelated_settings() {
+            let (_dir, path) = fixture();
+            let mut config = ConfigFile::read(&path).unwrap();
+            let before = config.value.clone();
+            config
+                .replace("local", &json!({"command":"/usr/bin/env","args":[]}))
+                .unwrap();
+            let after = ConfigFile::read(&path).unwrap();
+            assert_eq!(
+                before["mcpServers"]["other"],
+                after.value["mcpServers"]["other"]
+            );
+            assert_eq!(before["settings"], after.value["settings"]);
+            assert_eq!(after.meta.mode() & 0o777, 0o600);
+        }
+
+        #[test]
+        fn failed_rename_preserves_destination() {
+            let (dir, path) = fixture();
+            let config = ConfigFile::read(&path).unwrap();
+            let target = dir.path().join("directory");
+            std::fs::create_dir(&target).unwrap();
+            assert!(config.atomic("directory".as_ref(), b"new").is_err());
+            assert!(target.is_dir());
+            assert!(!std::fs::read_dir(dir.path()).unwrap().any(|e| e
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".soup-wall-stage")));
+        }
+
+        #[test]
+        fn unsupported_paths_and_server_names_are_refused() {
+            assert!(directory(Path::new("relative")).is_err());
+            let (_dir, path) = fixture();
+            let config = ConfigFile::read(&path).unwrap();
+            for name in ["", "../local", "local\n", "missing"] {
+                assert!(config.entry(name).is_err());
+            }
+        }
+
+        #[test]
+        fn malformed_ownership_is_not_ignored() {
+            let (dir, path) = fixture();
+            let config = ConfigFile::read(&path).unwrap();
+            let state = dir.path().join(config.state_name("local"));
+            std::fs::write(&state, b"{}").unwrap();
+            std::fs::set_permissions(state, std::fs::Permissions::from_mode(0o600)).unwrap();
+            assert!(config.state("local").is_err());
+        }
     }
 }

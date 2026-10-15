@@ -106,7 +106,7 @@ enum Cmd {
     /// Manage one explicitly selected Claude Code stdio MCP entry.
     McpConnection {
         #[command(subcommand)]
-        command: McpConnectionCommand,
+        command: agentfw::mcp::connection::Command,
     },
     /// Run one high-risk command inside the Linux bubblewrap sandbox.
     Sandbox {
@@ -265,36 +265,6 @@ enum ServiceCommand {
     Ready,
     #[command(hide = true)]
     Shutdown,
-}
-
-#[derive(Subcommand)]
-enum McpConnectionCommand {
-    Preview {
-        #[arg(long)]
-        path: PathBuf,
-        #[arg(long)]
-        server: String,
-    },
-    Connect {
-        #[arg(long)]
-        path: PathBuf,
-        #[arg(long)]
-        server: String,
-        #[arg(long)]
-        wrapper: Option<PathBuf>,
-    },
-    Inspect {
-        #[arg(long)]
-        path: PathBuf,
-        #[arg(long)]
-        server: String,
-    },
-    Disconnect {
-        #[arg(long)]
-        path: PathBuf,
-        #[arg(long)]
-        server: String,
-    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -511,38 +481,7 @@ fn main() -> anyhow::Result<()> {
             println!("{}", serde_json::to_string_pretty(&inventory)?);
             Ok(())
         }
-        Cmd::McpConnection { command } => {
-            use agentfw::mcp::connection;
-            match command {
-                McpConnectionCommand::Preview { path, server }
-                | McpConnectionCommand::Inspect { path, server } => {
-                    println!(
-                        "{}",
-                        serde_json::to_string_pretty(&connection::preview(&path, &server)?)?
-                    );
-                    Ok(())
-                }
-                McpConnectionCommand::Connect {
-                    path,
-                    server,
-                    wrapper,
-                } => {
-                    let wrapper = wrapper.unwrap_or(std::env::current_exe()?);
-                    println!(
-                        "{}",
-                        serde_json::to_string_pretty(&connection::connect(
-                            &path, &server, &wrapper
-                        )?)?
-                    );
-                    Ok(())
-                }
-                McpConnectionCommand::Disconnect { path, server } => {
-                    connection::disconnect(&path, &server)?;
-                    println!("disconnected {server}");
-                    Ok(())
-                }
-            }
-        }
+        Cmd::McpConnection { command } => agentfw::mcp::connection::run(command),
         Cmd::Mcp {
             id,
             native_admission,
