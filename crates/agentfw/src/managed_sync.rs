@@ -10,6 +10,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{ensure, Context, Result};
 use serde_json::json;
+use rustls_pki_types::{pem::PemObject, CertificateDer};
 
 use crate::handlers::Shared;
 use crate::managed_policy::{
@@ -119,6 +120,30 @@ fn private_ca_from_environment(is_https: bool) -> Result<Option<Vec<u8>>> {
     ensure!(
         !data.is_empty() && data.len() <= MAX_PRIVATE_CA_BYTES,
         "operator private CA PEM is missing or exceeds 64 KiB"
+    );
+    // reqwest's PEM wrapper may accept empty/non-certificate input before
+    // connecting. Parse the certificate bytes eagerly to fail closed on
+    // malformed operator configuration, never after credentialed requests.
+    let pem_text = std::str::from_utf8(&data).context("private CA must be UTF-8 PEM")?;
+    let trimmed = pem_text.trim();
+    ensure!(
+        trimmed.starts_with("-----BEGIN CERTIFICATE-----")
+            && trimmed.ends_with("-----END CERTIFICATE-----"),
+        "private CA must contain a PEM certificate"
+    );
+    let mut parsed = CertificateDer::pem_slice_iter(data.as_slice());
+    let cert = parsed
+        .next()
+        .transpose()
+        .context("invalid operator private CA PEM")?
+        .context("missing operator private CA certificate")?;
+    ensure!(
+        cert.as_ref().len() > 16 && cert.as_ref()[0] == 0x30,
+        "operator CA is not a DER X.509 certificate"
+    );
+    ensure!(
+        parsed.next().is_none(),
+        "supply exactly one operator private CA PEM certificate"
     );
     reqwest::Certificate::from_pem(&data).context("invalid operator private CA PEM")?;
     Ok(Some(data))
@@ -547,6 +572,11 @@ mod https_transport_tests {
             .read_to_end(&mut bytes)
             .unwrap();
         assert_eq!(bytes.len(), MAX_PRIVATE_CA_BYTES + 1);
-        assert!(reqwest::Certificate::from_pem(b"not a certificate").is_err());
+        assert!(
+            CertificateDer::pem_slice_iter(b"not a certificate")
+                .next()
+                .is_none(),
+            "non-PEM input must not contain a trusted certificate"
+        );
     }
 }
