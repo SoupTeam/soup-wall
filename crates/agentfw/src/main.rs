@@ -103,6 +103,11 @@ enum Cmd {
         #[arg(long)]
         path: PathBuf,
     },
+    /// Manage one explicitly selected Claude Code stdio MCP entry.
+    McpConnection {
+        #[command(subcommand)]
+        command: agentfw::mcp::connection::Command,
+    },
     /// Run one high-risk command inside the Linux bubblewrap sandbox.
     Sandbox {
         /// Writable directory exposed as `/workspace`.
@@ -476,6 +481,7 @@ fn main() -> anyhow::Result<()> {
             println!("{}", serde_json::to_string_pretty(&inventory)?);
             Ok(())
         }
+        Cmd::McpConnection { command } => agentfw::mcp::connection::run(command),
         Cmd::Mcp {
             id,
             native_admission,
@@ -1052,3 +1058,4 @@ mod cli_tests {
         }
     }
 }
+

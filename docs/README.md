@@ -31,6 +31,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Windows Agent acceptance](operations/WINDOWS_AGENT_ACCEPTANCE.md) | Native installation, ACLs, hook posture and loopback configuration |
 | [Claude HTTP-hook acceptance](operations/CLAUDE_HOST_ACCEPTANCE.md) | Actual host behavior with deterministic local model fixtures |
 | [Opt-in stdio MCP admission](operations/MCP_STDIO_ADMISSION.md) | Reviewed schemas, pre-execution calls and result release to the MCP host |
+| [Claude Code MCP connection](operations/CLAUDE_MCP_CONNECTION.md) | Selected-server preview, transactional setup, controlled verification and safe disconnect |
 | [Native resource admission](operations/NATIVE_RESOURCE_ADMISSION.md) | Resource permissions, receipt integrity and unsupported executor boundary |
 | [Constrained MCP file creation](operations/MCP_CREATE_FILE.md) | Linux create-only workspace files, bound authority, effect accounting and actual stdio verification |
 | [Constrained MCP HTTPS GET](operations/MCP_HTTPS_GET.md) | Exact URL/address authority, verified TLS, bounded responses and independent receiver witnesses |
@@ -82,3 +83,4 @@ Reviewed aggregates and explanatory records are retained under
 [populated restore checkpoint](operations/evidence/POPULATED_RESTORE_2026-10-05.md).
 Keep these records separate from onboarding instructions so their versions,
 failures and limitations remain reviewable.
+
