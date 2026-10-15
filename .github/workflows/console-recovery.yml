@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
-      CARGO_TARGET_DIR: ${{ runner.temp }}/recovery-build
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/recovery-build
     steps:
       - uses: actions/checkout@v7
         with:
@@ -40,6 +40,10 @@ jobs:
           sudo apt-get install -y age postgresql-client-16
           python3 -m venv "$RUNNER_TEMP/recovery-python"
           "$RUNNER_TEMP/recovery-python/bin/python" -m pip install cryptography==50.0.2
+      - name: Private PostgreSQL fixture certificate ownership
+        run: |
+          docker pull --platform linux/amd64 postgres@sha256:ec9f656f17c8b4dfebf49e58cf5c46d493d4846d4ea6d8b85d0637f68ee33bfc
+          SOUP_TEST_PRIVATE_POSTGRES_TLS=1 python3 -m unittest discover -s scripts/tests -p 'test_keycloak_oidc_acceptance.py' -v
       - name: Build Console, Agent and explicit fixtures
         id: binaries
         run: |

@@ -4,6 +4,10 @@ import base64
 import hashlib
 import importlib.util
 import json
+import os
+import shlex
+import shutil
+import stat
 from pathlib import Path
 import unittest
 from contextlib import ExitStack
@@ -51,6 +55,60 @@ class OwnedDatabaseTests(unittest.TestCase):
                 for call in run.call_args_list:
                     self.assertNotIn(secret, " ".join(call.args[0]))
                 self.assertEqual(list(root.iterdir()), [])
+
+    @unittest.skipUnless(os.environ.get("SOUP_TEST_PRIVATE_POSTGRES_TLS") == "1",
+                         "explicit opt-in requires the cached pinned PostgreSQL Docker image")
+    def test_private_host_tls_material_is_readable_only_after_owned_container_staging(self):
+        """Exercise actual Linux UID/mode semantics, including on Docker Desktop.
+
+        Merely checking command strings misses the native bind-mount ownership
+        boundary. An unrelated source UID makes the old direct certificate path
+        unreadable to postgres; no host permission or production TLS change is
+        needed. The real recovery run separately parses TLS and starts PostgreSQL.
+        """
+        docker = shutil.which("docker")
+        self.assertIsNotNone(docker, "explicit fixture requires Docker")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            cert, key = root / "cert.pem", root / "key.pem"
+            for path, value in ((cert, b"synthetic certificate"), (key, b"synthetic private key")):
+                path.write_bytes(value)
+                path.chmod(0o600)
+            originals = {path: (path.read_bytes(), path.stat().st_mode, path.stat().st_uid)
+                         for path in (cert, key)}
+            with ExitStack() as resources, \
+                    patch.object(DRIVER.shutil, "which", return_value=docker), \
+                    patch.object(DRIVER.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "a" * 64)) as run, \
+                    patch.object(DRIVER.FixtureDatabase, "sql", return_value="1"), \
+                    patch.object(DRIVER.socket, "create_connection"):
+                DRIVER.FixtureDatabase(root, {}, resources, postgres=True, cert=cert, key=key)
+                creation = next(call.args[0] for call in run.call_args_list if call.args[0][1] == "create")
+                script = creation[-1]
+            staging, separator, postgres_args = script.partition("exec docker-entrypoint.sh postgres ")
+            self.assertTrue(separator, "native PostgreSQL entrypoint must remain in use")
+            settings = [value for value in shlex.split(postgres_args) if value.startswith("ssl_")]
+            options = dict(value.split("=", 1) for value in settings)
+            cert_path, key_path = options["ssl_cert_file"], options["ssl_key_file"]
+            probe = ("set -e; "
+                "cp /host-cert.pem /fixture-cert.pem; cp /host-key.pem /fixture-key.pem; "
+                "chown 12345:12345 /fixture-cert.pem /fixture-key.pem; "
+                "chmod 600 /fixture-cert.pem /fixture-key.pem; "
+                "test \"$(id -u postgres)\" != 12345; "
+                "if gosu postgres test -r /fixture-cert.pem; then exit 65; fi; "
+                "if gosu postgres test -r /fixture-key.pem; then exit 66; fi; " + staging +
+                "gosu postgres sh -ec 'test -r \"$1\"; test -r \"$2\"; "
+                "test \"$(stat -c %a \"$1\")\" = 600; test \"$(stat -c %a \"$2\")\" = 600' "
+                "sh " + shlex.quote(cert_path) + " " + shlex.quote(key_path))
+            result = subprocess.run([docker, "run", "--rm", "--pull=never", "--network=none",
+                "--security-opt=no-new-privileges", "--cap-drop=ALL", "--cap-add=CHOWN",
+                "--cap-add=DAC_OVERRIDE", "--cap-add=FOWNER", "--cap-add=SETGID", "--cap-add=SETUID",
+                "--mount", f"type=bind,src={cert},dst=/host-cert.pem,readonly",
+                "--mount", f"type=bind,src={key},dst=/host-key.pem,readonly",
+                DRIVER.POSTGRES_IMAGE, "bash", "-ec", probe], capture_output=True, timeout=30)
+            self.assertEqual(result.returncode, 0, "private TLS staging must work for the actual postgres UID")
+            for path in (cert, key):
+                self.assertEqual((path.read_bytes(), path.stat().st_mode, path.stat().st_uid), originals[path])
+                self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
 
     def test_sqlite_mode_uses_new_fixture_without_docker_or_environment_changes(self):
         with tempfile.TemporaryDirectory() as directory, ExitStack() as resources:
