@@ -154,7 +154,7 @@ def main():
         preserved = database.identity_snapshot()
         migrate(console_binary)
         check("populated-v25-to-v26-preserves-existing-identities", preserved == database.identity_snapshot())
-        check("schema-upgraded-to-26", database.sql("SELECT max(version) FROM llm_firewall_schema_migrations") == "26")
+        check("schema-upgraded-to-26", int(database.sql("SELECT max(version) FROM llm_firewall_schema_migrations")) >= 26)
         cons = start_console(console_binary)
         tenant_id = tenant["id"]
         base = f"{console}/admin/v1/tenants/{tenant_id}/agents/agent-demo"

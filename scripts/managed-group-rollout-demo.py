@@ -137,7 +137,7 @@ def main():
         tenant_id = tenant["id"]
         _, issuer = request("GET", f"{console_url}/admin/v1/managed-issuer", headers=admin_headers)
         trusted_pubkey = issuer["public_key_hex"]
-        print(f"[*] Created Tenant: {tenant_id}, Trusted Issuer PubKey: {trusted_pubkey[:16]}...")
+        print(f"[*] Created Tenant: {tenant_id}, Trusted Issuer configured.")
 
         # 2. Group
         group_id = "prod-fleet"
