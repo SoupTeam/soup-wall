@@ -343,7 +343,9 @@ async fn stale_nonce_digest_instance_and_overclaimed_coverage_are_rejected() {
     let f = Fixture::new(true, true);
     let s = f.get().await;
     let now = status::now_ms();
-    assert!(status::validate(&s, &agentfw::token::generate(), now, &Expectations::default()).is_err());
+    assert!(
+        status::validate(&s, &agentfw::token::generate(), now, &Expectations::default()).is_err()
+    );
     assert!(status::validate(&s, &NONCE, now + 20_000, &Expectations::default()).is_err());
     for expected in [
         Expectations {
