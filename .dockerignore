@@ -14,6 +14,7 @@ data
 datasets
 models
 results*.json
+results
 
 # Production images do not compile or ship test fixtures (including the
 # intentionally test-only SAML private key), documentation, research notes, or

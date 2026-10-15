@@ -67,7 +67,7 @@ def observation(case="absolute-read"):
     response = copy.deepcopy(produced)
     if expected in {"allow", "result_withheld", "resource_executor_unsupported", "native_resource_not_allowed"}:
         row["classifications"] = [classifier]
-        row["native_decisions"] = [call]
+        row["native_decisions"] = [] if expected == "resource_executor_unsupported" else [call]
     if expected in {"allow", "result_withheld"}:
         row["native_decisions"].append(completion)
     if expected != "allow":
@@ -79,6 +79,12 @@ def observation(case="absolute-read"):
             call.update(released=False, verdict="deny")
         response["result"] = {"isError": True, "content": [{"type": "text", "text": text}]}
     row["client_output_raw"] = row["server_output_raw"] + raw(response)
+    audit = row["native_decisions"]
+    if expected == "resource_executor_unsupported":
+        audit = [dict(call, event="native_session_start", call_id=None, binding_sha256=None, seq=1),
+                 {"event": "mcp_handshake", "verdict": "allow", "shadow": False},
+                 dict(call, event="native_session_end", call_id=None, binding_sha256=None, seq=2)]
+    row["native_audit_raw"] = "".join(map(raw, audit))
     if expected == "startup_refused":
         row.update(call_submitted=False, ledger_present=False, server_started="", collector_exit=1,
                    client_output_raw="", server_input_raw="", server_output_raw="",
@@ -142,13 +148,43 @@ class ResourceEvidenceTests(unittest.TestCase):
             self.assertEqual(PROBE.grade(row)["status"], "fail")
 
     def test_policy_refusal_and_unsupported_execution_have_different_native_evidence(self):
-        for case in ("unlisted-file", "unsupported-tool"):
-            row = observation(case)
-            row["native_decisions"][0]["released"] = not row["native_decisions"][0]["released"]
+        row = observation("unlisted-file")
+        row["native_decisions"][0]["released"] = True
+        self.assertEqual(PROBE.grade(row)["status"], "fail")
+        for released in (True, False):
+            row = observation("unsupported-tool")
+            row["native_decisions"] = [dict(observation()["native_decisions"][0], released=released)]
             self.assertEqual(PROBE.grade(row)["status"], "fail")
+        row = observation("unsupported-tool")
+        row["classifications"] = []
+        self.assertEqual(PROBE.grade(row)["status"], "fail")
         row = observation("traversal")
         row["classifications"] = observation()["classifications"]
         self.assertEqual(PROBE.grade(row)["status"], "fail")
+
+    def test_unsupported_executor_requires_bound_classification_and_pre_reservation_refusal(self):
+        baseline = observation("unsupported-tool")
+        self.assertEqual(PROBE.grade(baseline)["status"], "pass")
+        for mutate in (
+            lambda r: r.pop("native_audit_raw"),
+            lambda r: r.update(native_audit_raw="not JSON\n"),
+            lambda r: r.update(native_audit_raw=""),
+            lambda r: r.update(native_audit_raw="\n".join(r["native_audit_raw"].splitlines()[:-1]) + "\n"),
+            lambda r: r.update(native_audit_raw=r["native_audit_raw"].replace('"seq":2', '"seq":3')),
+            lambda r: r.update(native_audit_raw=raw({"event": "native_call", "released": True})),
+            lambda r: r.update(native_audit_raw=raw({"event": "native_result", "released": False})),
+            lambda r: r.update(native_decisions=observation()["native_decisions"]),
+            lambda r: r.update(classifications=[]),
+            lambda r: r["classifications"][0].update(classifier_sha256="f" * 64),
+            lambda r: r.update(child_ledger_raw=raw({"id": "unsupported-tool", "method": "tools/call"})),
+            lambda r: r.update(receiver_count=1),
+            lambda r: r.update(files_unchanged=False),
+            lambda r: r.update(client_output_raw=r["client_output_raw"].replace("resource_executor_unsupported", "policy_denied")),
+            lambda r: r.update(client_output_raw=r["client_output_raw"].replace('"id":"unsupported-tool"', '"id":"other"')),
+        ):
+            row = copy.deepcopy(baseline)
+            mutate(row)
+            self.assertEqual(PROBE.grade(row)["status"], "fail", row)
 
     def test_startup_failure_is_not_a_policy_refusal_or_missing_evidence_pass(self):
         for key, value in (("collector_raw", "unrelated error"), ("collector_exit", 0),
