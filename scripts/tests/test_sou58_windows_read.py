@@ -6,6 +6,7 @@ import copy
 import importlib.util
 import json
 from pathlib import Path
+import struct
 import subprocess
 import sys
 import tempfile
@@ -40,7 +41,19 @@ def relay_row(request, response=None, forwarded=None, **extra):
     return row
 
 
-def passing_row(name="post-allow-share-denial"):
+def owned_security_descriptor(sid, deny_mask=None, *, protected=False, deny_flags=0):
+    fields = [int(value) for value in sid.split("-")[1:]]
+    raw_sid = bytes([fields[0], len(fields) - 2]) + fields[1].to_bytes(6, "big") + b"".join(
+        struct.pack("<I", value) for value in fields[2:])
+    allow = struct.pack("<BBHI", 0, 0, 8 + len(raw_sid), 0x1f01ff) + raw_sid
+    deny = b"" if deny_mask is None else struct.pack("<BBHI", 1, deny_flags, 8 + len(raw_sid), deny_mask) + raw_sid
+    acl = struct.pack("<BBHHH", 2, 0, 8 + len(allow) + len(deny), 1 + bool(deny), 0) + deny + allow
+    descriptor = struct.pack("<BBHIIII", 1, 0, 0x8004 | (0x1000 if protected else 0), 20, 0, 0, 20 + len(raw_sid)) + raw_sid + acl
+    return {"security_descriptor_hex": descriptor.hex(), "security_descriptor_sha256": D.sha(descriptor),
+            "dacl_hex": acl.hex(), "dacl_sha256": D.sha(acl)}
+
+
+def passing_row(name="post-allow-acl-denial"):
     """Hand-built evidence oracle: no runner or grader manufactures these facts."""
     classifier = "c" * 64
     config = {"registry": {"tools": [{"resource_policy": {"classifier_sha256": classifier}}]},
@@ -56,7 +69,7 @@ def passing_row(name="post-allow-share-denial"):
     attack_request = D.H.frame("probe", "read_document", {"path": "C:\\assigned\\document.txt"})
     row = {"case": name, "owned_fixture_removed": True, "configuration": config, "sessions": [],
            "attack": {"request": attack_request, "reply_raw": attack, "latency_ms": 2.0}, "followup_raw": follow, "relay": [],
-           "classifier_sha256": classifier}
+           "classifier_sha256": classifier, "standard_user_sid": "S-1-5-21-1-2-3-1001"}
     def prediction(identity, arguments, verdict="allow"):
         return {"event": "mcp_classification", "host_call_id": identity, "source": "rule-baseline/python",
                 "classifier_sha256": classifier, "args_sha256": D.sha(D.canonical(arguments)),
@@ -103,7 +116,7 @@ def passing_row(name="post-allow-share-denial"):
         receipt = dict(grant, event="result", release=allowed, content_sha256=D.sha(content.encode()))
         row["relay"].append(relay_row(result, receipt))
         audit("native_result", grant["call_id"], request["session_id"], content, allowed)
-    executed = D.SUCCESS | {"post-allow-share-denial", "invalid-utf8", "oversize", "result-withheld"}
+    executed = D.SUCCESS | {"post-allow-acl-denial", "invalid-utf8", "oversize", "result-withheld"}
     if name in executed | {"native-deny", "native-ask", "native-args-mismatch"} | D.ABNORMAL:
         request, grant = call("probe", "session-1", attack_request["params"]["arguments"], "attack", name not in {"native-deny", "native-ask", "native-args-mismatch"})
         forwarded = copy.deepcopy(request)
@@ -131,8 +144,19 @@ def passing_row(name="post-allow-share-denial"):
         row["read_exclusions"] = []
         for label in labels:
             data = D.TEXT if label == "authorized-object" else D.OUTSIDE
-            row["read_exclusions"].append({"object": label, "held": True, "file_read_data_denied": True,
-                "calibration_error": 32, "share_mode": 6, "guard_access": 128, "released_before_useful_followup": True,
+            original = owned_security_descriptor(row["standard_user_sid"])
+            guarded = owned_security_descriptor(row["standard_user_sid"], 1, protected=True)
+            file_identity = {"volume_serial": "a" * 16, "file_id": "12" * 16}
+            row["read_exclusions"].append({"object": label, "held": True, "method": "owned-file-dacl-deny-read-data/1",
+                "timing": "after-authentic-native-allow" if name in D.POST_ALLOW_GUARD else "before-agent-processes",
+                "principal_sid": row["standard_user_sid"], "deny_mask": 1,
+                "original": original, "guarded": guarded, "guarded_after_attempt": copy.deepcopy(guarded),
+                "guard_identity_before": copy.deepcopy(file_identity), "path_identity_before": copy.deepcopy(file_identity),
+                "guard_identity_after": copy.deepcopy(file_identity), "path_identity_after": copy.deepcopy(file_identity),
+                "restored": copy.deepcopy(original), "share_mode": 7, "guard_access": 0x60080,
+                "data_probes": [{"access": 1, "denied": True, "error": 5}, {"access": 0x80000000, "denied": True, "error": 5}],
+                "metadata_access": 0x1000a0, "metadata_open": True, "metadata_readfile_denied": True,
+                "metadata_readfile_error": 5, "metadata_bytes_read": 0, "restored_before_useful_followup": True,
                 "released_bytes": len(data.encode()), "released_sha256": D.sha(data.encode())})
     if name == "replayed-id":
         row.update(replayed_reply_raw="", replay_terminated=True)
@@ -154,12 +178,61 @@ class WindowsReadGradingControls(unittest.TestCase):
         self.assertFails(row)
 
     def test_missing_calibration_or_released_guard_is_not_zero_read(self):
-        for field, value in (("file_read_data_denied", False), ("calibration_error", 0),
-                             ("released_before_useful_followup", False), ("released_sha256", "0" * 64)):
+        for field, value in (("deny_mask", 0), ("metadata_open", False), ("metadata_readfile_denied", False),
+                             ("metadata_readfile_error", 32), ("metadata_bytes_read", 1),
+                             ("restored_before_useful_followup", False), ("released_sha256", "0" * 64)):
             with self.subTest(field=field):
                 row = passing_row()
                 row["read_exclusions"][0][field] = value
                 self.assertFails(row)
+
+    def test_dacl_guard_cannot_reuse_old_share_lock_or_incorrect_calibration(self):
+        for probe in ({"access": 1, "denied": True, "error": 32}, {"access": 1, "denied": False, "error": 0}):
+            row = passing_row()
+            row["read_exclusions"][0]["data_probes"][0] = probe
+            self.assertFails(row)
+
+    def test_dacl_witness_requires_exact_user_data_only_explicit_deny(self):
+        for mask, flags, sid in ((0x21, 0, "S-1-5-21-1-2-3-1001"), (1, 16, "S-1-5-21-1-2-3-1001"),
+                                 (1, 0, "S-1-5-21-1-2-3-1002")):
+            row = passing_row()
+            descriptor = owned_security_descriptor(sid, mask, protected=True, deny_flags=flags)
+            row["read_exclusions"][0]["guarded"] = descriptor
+            row["read_exclusions"][0]["guarded_after_attempt"] = copy.deepcopy(descriptor)
+            self.assertFails(row)
+
+    def test_descriptor_hash_and_exact_original_dacl_restore_are_required(self):
+        for stage in ("original", "guarded", "guarded_after_attempt", "restored"):
+            row = passing_row()
+            row["read_exclusions"][0][stage]["security_descriptor_sha256"] = "f" * 64
+            self.assertFails(row)
+        row = passing_row()
+        row["read_exclusions"][0]["restored"] = copy.deepcopy(row["read_exclusions"][0]["guarded"])
+        self.assertFails(row)
+        row = passing_row()
+        row["read_exclusions"][0]["guarded_after_attempt"] = copy.deepcopy(row["read_exclusions"][0]["original"])
+        self.assertFails(row)
+
+    def test_ordinary_dacl_guard_must_precede_all_agent_processes(self):
+        row = passing_row("native-deny")
+        row["read_exclusions"][0]["timing"] = "after-authentic-native-allow"
+        self.assertFails(row)
+
+    def test_dacl_witness_cannot_be_attributed_to_replaced_same_content_file(self):
+        for field in ("guard_identity_before", "path_identity_before", "guard_identity_after", "path_identity_after"):
+            row = passing_row()
+            row["read_exclusions"][0][field]["file_id"] = "f" * 32
+            self.assertFails(row)
+
+    def test_security_descriptor_requires_self_relative_layout(self):
+        row = passing_row()
+        descriptor = row["read_exclusions"][0]["guarded"]
+        raw = bytearray.fromhex(descriptor["security_descriptor_hex"])
+        control = struct.unpack_from("<H", raw, 2)[0]
+        struct.pack_into("<H", raw, 2, control & ~0x8000)
+        descriptor["security_descriptor_hex"] = raw.hex()
+        descriptor["security_descriptor_sha256"] = D.sha(raw)
+        self.assertFails(row)
 
     def test_outside_and_unlisted_objects_need_their_own_witness(self):
         for name in ("junction", "unlisted"):

@@ -1929,8 +1929,9 @@ where
                                     &withheld(request_id, "invocation", &json!(["resource_destination_invalid"]))).await?;
                                 continue;
                             };
-                            // Metadata-only handles pin every ancestor and the leaf.
-                            // No data handle or read is issued before native Allow.
+                            // Sharing locks pin every ancestor and the leaf without
+                            // FILE_READ_DATA. No execution or mapping is performed;
+                            // ReadFile access is requested only after native Allow.
                             let prepared = prepared_windows_read.as_ref().context("Windows metadata not pinned before extraction")?;
                             admission.windows_read = Some(crate::native::resource::windows_read_binding_with_identity(
                                 policy, &args, prepared.identity()).map_err(anyhow::Error::msg)?);

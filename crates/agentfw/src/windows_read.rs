@@ -5,8 +5,11 @@
 //!
 //! This executor deliberately supports only ordinary, exactly named files on
 //! local NTFS volumes. Every directory from the drive root and the leaf stay
-//! open without write/delete sharing from preparation through the read. No
-//! file data access is requested until `read_bounded` is called after Allow.
+//! open without write/delete sharing from preparation through the read.
+//! Pins require directory traversal and leaf execute permission in addition to
+//! attributes: this access participates in Windows sharing checks, unlike an
+//! attributes-only open. The executor never executes or maps the file. It does
+//! not request FILE_READ_DATA or read contents until `read_bounded` after Allow.
 //!
 //! Native API contracts: Microsoft Learn's `NtCreateFile`, `OBJECT_ATTRIBUTES`
 //! (WDK), `GetFileInformationByHandleEx`, `GetFinalPathNameByHandleW`, and
@@ -34,8 +37,9 @@ use windows_sys::Win32::Storage::FileSystem::{
     FileAttributeTagInfo, FileIdInfo, FileStandardInfo, GetFileInformationByHandleEx, GetFileType,
     GetFinalPathNameByHandleW, GetVolumeInformationByHandleW, QueryDosDeviceW, ReadFile,
     FILE_ATTRIBUTE_DEVICE, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_OFFLINE,
-    FILE_ATTRIBUTE_REPARSE_POINT, FILE_ATTRIBUTE_TAG_INFO, FILE_ID_INFO, FILE_READ_ATTRIBUTES,
-    FILE_READ_DATA, FILE_SHARE_READ, FILE_STANDARD_INFO, FILE_TYPE_DISK, SYNCHRONIZE,
+    FILE_ATTRIBUTE_REPARSE_POINT, FILE_ATTRIBUTE_TAG_INFO, FILE_EXECUTE, FILE_ID_INFO,
+    FILE_READ_ATTRIBUTES, FILE_READ_DATA, FILE_SHARE_READ, FILE_STANDARD_INFO, FILE_TRAVERSE,
+    FILE_TYPE_DISK, SYNCHRONIZE,
 };
 use windows_sys::Win32::System::Threading::CreateEventW;
 use windows_sys::Win32::System::IO::{
@@ -135,7 +139,9 @@ struct PinnedDirectory {
     identity: Identity,
 }
 
-/// A prepared read owns metadata handles, not file contents or data access.
+/// A prepared read owns pin handles without FILE_READ_DATA and no file contents.
+/// The ACL must grant directory traversal and leaf execute permission as well
+/// as attributes; the executor never performs an execute or mapping operation.
 /// The caller must retain it across native admission and call `read_bounded`
 /// only after the correlated native Allow. It owns its blocking worker.
 #[derive(Debug)]
@@ -247,8 +253,8 @@ impl PreparedRead {
             max_bytes > 0 && max_bytes <= crate::sandbox::MAX_RESOURCE_READ_BYTES,
             "Windows read byte bound invalid"
         );
-        // Recheck all retained metadata before requesting data access. A prior
-        // metadata-only handle can change attributes without sharing checks.
+        // Recheck retained metadata before requesting FILE_READ_DATA. Attribute
+        // write handles can change attributes without sharing checks.
         for directory in &self.directories {
             ensure!(!canceled.load(Ordering::Acquire), "Windows read canceled");
             let current = check_directory(&directory.file)?;
@@ -482,7 +488,20 @@ fn open_native(
     };
     let mut status = IoStatusBlock::default();
     let mut handle = null_mut();
-    let access = FILE_READ_ATTRIBUTES | SYNCHRONIZE | if data { FILE_READ_DATA } else { 0 };
+    // Sharing checks ignore attributes-only opens. The 0x20 pin right is
+    // FILE_TRAVERSE on directories and FILE_EXECUTE on the regular leaf, so
+    // FILE_SHARE_READ excludes write/delete opens throughout admission. This
+    // needs the corresponding ACL permission but grants no ReadFile access.
+    // https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-fsa/8c0e3f4f-0729-49f4-a14d-7f7add593819
+    let access = FILE_READ_ATTRIBUTES
+        | SYNCHRONIZE
+        | if data {
+            FILE_READ_DATA
+        } else if directory {
+            FILE_TRAVERSE
+        } else {
+            FILE_EXECUTE
+        };
     // FILE_DIRECTORY_FILE has a narrower documented set of compatible options.
     // Open directory candidates without a type flag to retain no-follow,
     // no-recall, and immediate oplock completion together. pin_directory checks
@@ -1044,8 +1063,9 @@ mod tests {
             .write(true)
             .open(root.join("Docs\\Readme.txt"))
             .is_err());
-        // READ_ATTRIBUTES is not data access. This deterministic check proves
-        // preparation did not accidentally acquire a readable file handle.
+        // The pin's FILE_EXECUTE right permits sharing enforcement, but no
+        // FILE_READ_DATA is granted. The executor never maps or executes the
+        // file, and an actual ReadFile through this handle must be denied.
         let mut byte = [0];
         let mut transferred = 0;
         let ok = unsafe {
@@ -1151,8 +1171,8 @@ mod tests {
                 ))
                 .unwrap();
         });
-        // READ_ATTRIBUTES | SYNCHRONIZE does not break an oplock. Preparation
-        // must finish while the exclusive holder has not acknowledged a break.
+        // A share-counted leaf pin includes FILE_EXECUTE, so an existing
+        // exclusive oplock must refuse promptly before its owner acknowledges.
         let prepared = receiver.recv_timeout(Duration::from_secs(2));
         if prepared.is_err() {
             drop(lock);
@@ -1160,11 +1180,30 @@ mod tests {
             panic!("metadata preparation stalled behind an exclusive oplock");
         }
         worker.join().unwrap();
-        let prepared = prepared.unwrap().unwrap();
+        let error = prepared.unwrap().unwrap_err().to_string();
+        assert!(
+            error.contains("class=leaf-metadata") && error.contains("NTSTATUS=0x00000108"),
+            "{error}"
+        );
+        drop(lock);
+
+        // Independently exercise the same production data-open helper with a
+        // retained parent chain, while this target has no admitted leaf pin.
+        // A real admitted pin would already have refused the exclusive oplock.
+        fs::write(root.join("Anchor.txt"), b"anchor").unwrap();
+        let pinned_parent = prepare(&root, "Anchor.txt").unwrap();
+        let parent = pinned_parent
+            .directories
+            .last()
+            .unwrap()
+            .file
+            .try_clone()
+            .unwrap();
+        let lock = ExclusiveOplock::acquire(&path);
         let (sender, receiver) = std::sync::mpsc::channel();
         let worker = std::thread::spawn(move || {
             sender
-                .send(prepared.read_on_worker(64, &AtomicBool::new(false)))
+                .send(open_child(&parent, "Readme.txt", false, true))
                 .unwrap();
         });
         let result = receiver.recv_timeout(Duration::from_secs(2));

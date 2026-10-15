@@ -55,8 +55,10 @@ impl WindowsReadPolicy {
 }
 
 /// Exact arguments, workspace and leaf file identity, additive to the native
-/// session and single-use result binding. The collector retains metadata-only
-/// handles across admission and requests file data access only after Allow.
+/// session and single-use result binding. Retained handles carry attributes,
+/// synchronize and execute/traverse rights for sharing locks, never FILE_READ_DATA.
+/// The collector neither executes nor maps them and requests ReadFile access
+/// only after Allow.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct WindowsReadBinding {
@@ -520,8 +522,8 @@ fn windows_read_arguments<'a>(
     Ok((original, canonical))
 }
 
-/// Recompute v4 evidence with metadata-only handles. File data access remains
-/// the collector's responsibility after both admission decisions allow it.
+/// Recompute v4 evidence without FILE_READ_DATA. The collector requests that
+/// right and uses ReadFile only after both admission decisions allow it.
 pub fn windows_read_binding(
     policy: &Policy,
     args: &Value,
@@ -545,7 +547,7 @@ pub fn windows_read_binding(
     }
 }
 
-/// Build the same binding from the metadata-only handles retained by the
+/// Build the same binding from the non-data-read handles retained by the
 /// collector. Original argument spelling is included in `args_sha256`.
 #[cfg(windows)]
 pub(crate) fn windows_read_binding_with_identity(

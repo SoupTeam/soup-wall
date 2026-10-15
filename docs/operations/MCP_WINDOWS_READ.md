@@ -42,23 +42,29 @@ A syntactically valid digest cannot authorize another file or workspace.
 
 Only a local NTFS regular file below a local drive workspace is supported.
 The executor retains opened handles for the drive-to-workspace ancestors,
-target ancestors and metadata-only leaf before requesting native Allow. Each
+target ancestors and the leaf before requesting native Allow. These pins have
+attribute/synchronization rights plus directory traverse or leaf `FILE_EXECUTE`
+to enforce Windows write/delete sharing. They never request `FILE_READ_DATA`,
+call `ReadFile`, map, or execute document contents before Allow. The current
+user therefore needs the ordinary traverse/execute ACL permissions; a text file
+without execute permission is refused. Each
 component below the volume is opened relative to its retained parent handle;
 the volume itself is opened by its validated local NT device name, without
 resolving the drive letter again. Reparse processing is refused. V4 resource
 evidence comes from these retained handles instead of generic DOS path checks.
 Volume/file identities and exact handle-resolved spelling are
 checked. Retained handles deny write/delete sharing throughout the operation.
-Content access is opened only after a matching actual Allow and must identify
-the pinned leaf.
+The `FILE_READ_DATA` handle used by `ReadFile` is opened only after a matching
+actual Allow and must identify the pinned leaf. The executor never maps or
+executes document contents.
 
 Traversal, junctions, symlinks and other reparse points, multiple hard links,
 alternate streams, UNC/device paths, ambiguous case/short-name spellings,
 non-regular objects and unsupported filesystems fail closed. This conservative
 profile does not grant Windows create/write, network access or process sandboxing.
 Filesystem metadata is inspected before admission; this is not a claim of zero
-metadata access. Deny/Ask and transport/identity failures grant no content read
-and never forward the call to the MCP child.
+metadata access. Deny/Ask and transport/identity failures never open that data-read
+handle or forward the call to the MCP child.
 
 Content is limited to 262,144 bytes and complete valid UTF-8. The complete MCP
 result must also fit existing native result-envelope limits; escaping and
@@ -66,8 +72,8 @@ envelope overhead may cause a near-limit document to be withheld. Results and
 ordinary read failures use the same correlated inspection/release boundary.
 An ordinary failure settles its reservation so another useful call can proceed.
 
-Cancellation before Allow drops metadata authority without opening a data
-handle. Cancellation during an issued read cannot undo bytes already read.
+Cancellation before Allow drops preparation handles without opening a
+`FILE_READ_DATA` handle. Cancellation during an issued read cannot undo bytes already read.
 Overlapped reads request cancellation on cancellation/deadline and retain their
 buffer and handles until the kernel reports completion. The local NTFS scope
 excludes pipes and remote files; no hard deadline is promised for an unresponsive
@@ -100,7 +106,7 @@ python -B scripts/verify-sou58-windows-read.py --run --repo . `
 The dedicated Windows workflow runs the actual built Agent and executor tests
 under a disposable nonadministrator identity. Reports retain source/binary
 identities, identity/membership checks, original stdio replies, native receipts,
-the server execution ledger, calibrated OS read-exclusion witnesses and
+the server execution ledger, calibrated owned-file DACL witnesses and
 deterministic native replacement-race results. All twelve mandatory executor
 tests must pass without ignored tests, including the real held-oplock and
 validated NT volume-mapping regressions.
@@ -108,6 +114,19 @@ The file-symlink test runs separately with its required Windows privilege.
 Cleanup is confined to its owned
 account, processes and fixture directories. A mocked Windows API, WSL run or
 Linux regression pass is not native Windows acceptance.
+
+The independent fixture DACL denies only `FILE_READ_DATA` to the actual standard
+user SID. It preserves execute/attribute access, verifies `ReadFile` on a pin-like
+handle returns access denied, and calibrates denied data-handle opens. Ordinary
+guards are installed before Agent processes start. The `post-allow-acl-denial`
+case installs its guard after an authentic Allow and covers new data opens;
+the native tests separately verify that preparation handles cannot `ReadFile`.
+Recorded security descriptors prove the explicit deny and exact DACL restoration
+before the useful follow-up. These witnesses cover this `ReadFile` executor;
+they do not establish that mapping or executing a file is blocked by that DACL.
+The guard reads and restores security through the same owned handle with
+[GetSecurityInfo](https://learn.microsoft.com/en-us/windows/win32/api/aclapi/nf-aclapi-getsecurityinfo)
+and [SetSecurityInfo](https://learn.microsoft.com/en-us/windows/win32/api/aclapi/nf-aclapi-setsecurityinfo).
 
 Check the report's completeness, failed/skipped cases and exact source identity
 before claiming acceptance. Linux regression checks still cover the existing
