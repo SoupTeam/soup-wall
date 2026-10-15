@@ -1140,7 +1140,7 @@ pub async fn messages(
         return proxy_stream(
             state.clone(),
             builder,
-            request_id,
+            request_id.clone(),
             started,
             ANTHROPIC_BLOCK_FRAME,
             tenant_audit.map(|Extension(context)| context),
@@ -1154,11 +1154,16 @@ pub async fn messages(
             },
             Some(StreamToolContext {
                 protocol: crate::agent_scan::StreamProtocol::AnthropicMessages,
-                // `anthropic_tool_results` reads the untyped wire shape; the typed
-                // request round-trips to it losslessly via `rest`.
-                tool_results: serde_json::to_value(&decision.request)
-                    .map(|request| crate::agent_scan::anthropic_tool_results(&request))
-                    .unwrap_or_default(),
+                tool_results: match serde_json::to_value(&decision.request) {
+                    Ok(req_val) => match crate::agent_scan::anthropic_tool_results_strict(&req_val).into_result() {
+                        Ok(res) => res,
+                        Err(reason) => {
+                            audit_block(&request_id, 0, vec![reason.into()], vec![], vec![], started);
+                            return (StatusCode::BAD_REQUEST, Json(anthropic_error_body(reason))).into_response();
+                        }
+                    },
+                    Err(_) => Vec::new(),
+                },
             }),
         )
         .await;
@@ -1202,16 +1207,20 @@ pub async fn messages(
     )
     .await;
 
-    let events = crate::events::normalize_anthropic(&decision.request, &body);
+    let events = match crate::events::normalize_anthropic(&decision.request, &body) {
+        Ok(events) => events,
+        Err(reason) => {
+            audit_output_block(&request_id, reason, started);
+            return (StatusCode::BAD_GATEWAY, Json(anthropic_error_body(reason))).into_response();
+        }
+    };
+    
     if let Some(reason) = capability_refuse_events(&state, &request_id, &events) {
         audit_output_block(&request_id, &reason, started);
         return (StatusCode::BAD_GATEWAY, Json(anthropic_error_body(&reason))).into_response();
     }
+
     let assistant = crate::events::output_text(&events);
-    if let Some(reason) = decide_output(&state.firewall, &assistant) {
-        audit_output_block(&request_id, &reason, started);
-        return (StatusCode::BAD_GATEWAY, Json(anthropic_error_body(&reason))).into_response();
-    }
 
     // Agent layer: inspect the response's tool_use blocks against the request's
     // tool_result blocks. Non-streaming only.

