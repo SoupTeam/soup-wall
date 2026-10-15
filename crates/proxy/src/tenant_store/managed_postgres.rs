@@ -374,6 +374,7 @@ impl PostgresTenantStore {
         let applied = (report.status == "applied").then(now_unix);
         self.bounded(tx.execute("UPDATE managed_agent_deployments SET status=$4,applied_at_unix=$5 WHERE tenant_id=$1 AND agent_id=$2 AND deployment_sequence=$3", &[&tenant,&agent,&seq,&report.status,&applied])).await?;
         self.bounded(tx.commit()).await?;
+        drop(client);
         let _ = self
             .check_and_advance_active_rollouts_for_agent(tenant, agent)
             .await;
