@@ -237,6 +237,10 @@ managed daemon lifecycle, an accurate status display and a synthetic-secret demo
   outcomes that match tests. The README starts with this verified experience.
 - Setup and demonstration do not require real secrets or automatic provider traffic.
 
+The separate [authenticated runtime diagnostics](operations/AGENT_LIFECYCLE.md#authenticated-runtime-protection-diagnostics)
+report loaded identity, transport observations and explicit unknown coverage.
+Their component checks do not replace the independent active-protection witnesses above.
+
 ### Phase 6 — Complete team rollout and operational validation
 
 **Depends on:** Phases 1–5 and selected deployment/identity environments.

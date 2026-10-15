@@ -66,6 +66,20 @@ jobs:
           name: policy-composition
           path: target/policy-composition/
           if-no-files-found: warn
+      - name: Runtime protection diagnostics regressions
+        run: |
+          set -o pipefail
+          mkdir -p target/runtime-protection-status
+          git rev-parse HEAD > target/runtime-protection-status/source.txt
+          git ls-files crates/agent crates/agentfw | xargs sha256sum > target/runtime-protection-status/source-sha256.txt
+          cargo test --locked -p agentfw --test protection_status 2>&1 | tee target/runtime-protection-status/results.log
+      - name: Retain runtime diagnostics evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: runtime-protection-status
+          path: target/runtime-protection-status/
+          if-no-files-found: warn
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
