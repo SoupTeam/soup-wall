@@ -1045,6 +1045,35 @@ mod tests {
     }
 
     #[test]
+    fn genuine_signed_response_is_bound_to_sp_audience_and_expected_issuer() -> anyhow::Result<()> {
+        let corpus = KeycloakCorpus::load()?;
+        corpus.assert_valid()?;
+        for mutation in ["audience", "issuer"] {
+            let mut runtime = corpus.runtime();
+            let mut pending = corpus.pending();
+            match mutation {
+                "audience" => runtime.sp_entity_id = "urn:other-service-provider".into(),
+                "issuer" => {
+                    pending.idp_entity_id = "https://other-idp.example.test/metadata".into()
+                }
+                _ => unreachable!(),
+            }
+            // Preserve the genuine signature and timestamp. Only the trusted
+            // local expectation differs from the positive control.
+            let result = PreparedSso::new(
+                &runtime,
+                corpus.connection(),
+                pending,
+                &corpus.relay_state,
+                corpus.fields(),
+            )
+            .and_then(|prepared| prepared.finish(FixedReplayCache::new(corpus.now()).validation()));
+            assert!(result.is_err(), "accepted mismatched {mutation}");
+        }
+        Ok(())
+    }
+
+    #[test]
     fn keycloak_corpus_rejects_replayed_vendor_assertion() -> anyhow::Result<()> {
         let corpus = KeycloakCorpus::load()?;
         let mut replay = FixedReplayCache::new(corpus.now());

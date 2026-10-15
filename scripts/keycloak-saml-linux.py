@@ -413,6 +413,7 @@ def run(args):
                   {"X-LLM-Firewall-CSRF-Token": csrf})["status"] == 204)
             check("rotated-cookie-invalidates-previous-session", request("GET", gateway_base + "/customer/v1/session",
                   headers={"Cookie": "__Host-llm-fw-session=" + old_cookie}).status_code == 401)
+            pending_restart = capture_assertion()
             stop_child(gateway)
             if database.container:
                 before = database.identity_snapshot()
@@ -421,6 +422,8 @@ def run(args):
                 database.restart()
                 check("postgres-restart-preserves-populated-state", database.identity_snapshot() == before)
             gateway = start_gateway()
+            check("pending-saml-login-survives-gateway-and-database-restart", submit(pending_restart).status_code == 303)
+            check("pending-saml-login-remains-single-use-after-restart", submit(pending_restart).status_code == 400)
             check("session-persists-across-gateway-restart", browser_fetch(page, "/customer/v1/session")["status"] == 200)
             active_cookie = next(c["value"] for c in owner.cookies() if c["name"] == "__Host-llm-fw-session")
             report["phase"] = "console-logout"
@@ -499,11 +502,14 @@ def run(args):
                 check(name, "SAML login could not be completed" in denied_page.locator("body").inner_text()
                       and not any(c["name"] == "__Host-llm-fw-session" for c in denied.cookies()))
             # Only this disposable realm's administrator may rotate the vendor key.
-            auth = request("POST", issuer + "/protocol/openid-connect/token", data={
-                "client_id": "admin-cli", "grant_type": "password", "username": "fixture-operator",
-                "password": operator_password})
-            check("owned-realm-operator-authenticated", auth.status_code == 200)
-            vendor_admin = {"Authorization": "Bearer " + auth.json()["access_token"]}
+            def operator_headers():
+                auth = request("POST", issuer + "/protocol/openid-connect/token", data={
+                    "client_id": "admin-cli", "grant_type": "password", "username": "fixture-operator",
+                    "password": operator_password})
+                check("owned-realm-operator-authenticated", auth.status_code == 200)
+                return {"Authorization": "Bearer " + auth.json()["access_token"]}
+
+            vendor_admin = operator_headers()
             realm_admin = vendor_base + "/admin/realms/" + realm
             realm_id = request("GET", realm_admin, headers=vendor_admin).json()["id"]
             components = request("GET", realm_admin + "/components", headers=vendor_admin,
@@ -531,6 +537,9 @@ def run(args):
                   json=rotated).status_code == 200)
             check("retired-key-valid-unconsumed-assertion-rejected", submit(old_assertion).status_code == 400)
             check("new-key-login-after-explicit-pin-update", login(context(), users[0]).locator("#role").inner_text() == "owner")
+            # The retired realm key also signed the old admin access token.
+            # Authenticate again; never silently accept an unauthorized API response.
+            vendor_admin = operator_headers()
             # Vendor generates an otherwise valid short-lived assertion. Do not edit signed XML or the system clock.
             clients = request("GET", realm_admin + "/clients", headers=vendor_admin,
                               params={"clientId": client_id}).json()
