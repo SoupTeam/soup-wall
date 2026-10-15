@@ -7,6 +7,10 @@ with a separate, mutually exclusive `network` authority and binding. The earlier
 read and create contracts remain compatible. The registry and session
 start/end contract remain `sw-native/1`; earlier daemons refuse v3.
 
+[Constrained Windows document reads](MCP_WINDOWS_READ.md) add
+`sw-native/resources/4` with a separate `windows_read` authority and binding.
+It cannot coexist with create or network authority and does not broaden v1.
+
 ## Operator configuration
 
 The registry remains `sw-native/1`. Each tool can optionally carry a closed `resource_policy` object with:
@@ -15,8 +19,9 @@ The registry remains `sw-native/1`. Each tool can optionally carry a closed `res
 - `workspace` and `cwd`: existing absolute directories, with canonical cwd inside workspace.
 - `executor_sha256` and `classifier_sha256`: operator-reviewed revision digests.
 - `allowed_resources`: 1–256 complete normalized Resource values.
-- `execution` for the explicit v2 create profile, or `network` for the explicit
-  v3 HTTPS GET profile; both are absent from legacy reads and cannot coexist.
+- `execution` for the explicit v2 create profile, `network` for the explicit
+  v3 HTTPS GET profile, or `windows_read` for the explicit v4 Windows read
+  profile; all are absent from legacy reads and are mutually exclusive.
 
 Digests must be 64 lowercase hexadecimal characters. The profile must match the installed tool and schema. This policy is loaded from trusted operator configuration, never from a call or MCP annotations. Existing native policy and declared egress checks still apply after resource checks.
 
@@ -45,7 +50,12 @@ Result/context events retain the call's contract version and ordinary grant fiel
 
 ## Operation-level constrained executor (SOU-15)
 
-The confined file-read executor is supported on Unix. Non-Unix platforms refuse resource-policy calls with `resource_executor_unsupported` before reserving native capacity; their zero-execution refusal is tested. Resource-aware execution enforces operation-level isolation within this declared scope. An unconfined server process cannot be trusted to self-enforce resource policies or confine file/network access. Therefore:
+The legacy v1 confined file-read executor is supported on Unix. Windows requires
+the separate [v4 Windows profile](MCP_WINDOWS_READ.md); legacy or unsupported
+resource-policy operations remain refused before reserving native capacity.
+Resource-aware execution enforces operation-level isolation within this declared
+scope. An unconfined server process cannot be trusted to self-enforce resource
+policies or confine file/network access. Therefore:
 
 - For supported workspace file read operations (`read_document`), the proxy itself serves as the constrained operation executor:
   1. Validates the target canonical path strictly against the canonical workspace boundary (`AGENTFW_WORKSPACE` / `policy.workspace`). Unsupported tools, unreviewed action classes, invalid destinations, or invalid workspaces fail closed early before reserving native call capacity (`resource_executor_unsupported`, `resource_destination_invalid`, `resource_workspace_invalid`).
@@ -57,6 +67,7 @@ The confined file-read executor is supported on Unix. Non-Unix platforms refuse 
   7. Directly returns the result to the host, ensuring the unconfined server child process is **never invoked** for the operation.
 - The separately configured [Linux `create_file` executor](MCP_CREATE_FILE.md) supports one new direct workspace child under `sw-native/resources/2`. Its explicit operation/action/content/workspace authority cannot be downgraded to the read contract.
 - The separately configured [Linux `https_get` executor](MCP_HTTPS_GET.md) supports one exact HTTPS URL and reviewed socket address under `sw-native/resources/3`, with verified TLS and bounded reads. It requires actual native Allow and inspects the original response text before release.
+- The separately configured [Windows `read_document` executor](MCP_WINDOWS_READ.md) uses `sw-native/resources/4`, pinned local filesystem handles and volume/file identities. It preserves the bounded UTF-8 result contract and refuses path aliases, linked-file escapes and replacement attempts.
 - All other unsupported resource-policy operations remain refused with `resource_executor_unsupported`, preventing unconfined server execution.
 
 ## Verification and remaining work
