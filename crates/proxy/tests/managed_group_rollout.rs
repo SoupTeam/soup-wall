@@ -2104,3 +2104,308 @@ async fn test_manual_rollback_in_standard_wave_with_unresolved_worker_fails() {
         .unwrap()
         .contains("rollback unresolved: agent 'worker-nobase' has no restorable baseline and remains on candidate revision 'rev-cand'"));
 }
+
+#[tokio::test]
+async fn test_pilot_issuance_atomic_start_and_transient_failure_recovery() {
+    std::env::set_var("SOUP_AGENT_POLICY_KEY_ID", TEST_KEY_ID);
+    std::env::set_var("SOUP_AGENT_POLICY_SEED_HEX", TEST_SEED_HEX);
+
+    let tmp = tempfile::tempdir().unwrap();
+    let db_path = tmp.path().join("store.db");
+    let store = TenantStore::open(&db_path).unwrap();
+    let tenant = store.create_tenant("Atomic Pilot Tenant").unwrap();
+
+    store
+        .create_managed_group(&tenant.id, "grp-transient", "Transient Group")
+        .unwrap();
+    store.enroll_managed_agent(&tenant.id, "pilot-a").unwrap();
+    store.enroll_managed_agent(&tenant.id, "pilot-z").unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "grp-transient", "pilot-a", true)
+        .unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "grp-transient", "pilot-z", true)
+        .unwrap();
+
+    let yaml = "default: allow\n";
+    store
+        .create_managed_group_revision(&tenant.id, "grp-transient", "v1", yaml)
+        .unwrap();
+    store
+        .approve_managed_group_revision(&tenant.id, "grp-transient", "v1")
+        .unwrap();
+
+    let issuer = llm_firewall::tenant_store::ManagedIssuer::from_environment().unwrap();
+
+    // 1. Install trigger that aborts pilot-z insert
+    {
+        let db = rusqlite::Connection::open(&db_path).unwrap();
+        db.execute_batch(
+            "CREATE TRIGGER abort_pilot_z BEFORE INSERT ON managed_agent_deployments
+             WHEN NEW.agent_id = 'pilot-z'
+             BEGIN
+                 SELECT RAISE(ABORT, 'transient failure on pilot-z');
+             END;",
+        )
+        .unwrap();
+    }
+
+    // 2. Start fails cleanly due to transient trigger
+    let err = store
+        .start_managed_group_rollout(&tenant.id, "grp-transient", "v1", &issuer)
+        .unwrap_err();
+    assert!(err.to_string().contains("transient failure on pilot-z"));
+
+    // Verify atomic failure: no partial rollout plan and no orphan pilot-a deployment
+    assert!(store
+        .get_managed_group_rollout(&tenant.id, "grp-transient")
+        .unwrap()
+        .is_none());
+    let p_a_deps = store
+        .list_managed_deployments(&tenant.id, "pilot-a")
+        .unwrap();
+    assert!(
+        p_a_deps.is_empty(),
+        "pilot-a deployment must roll back atomically"
+    );
+
+    // 3. Drop trigger and reopen store
+    {
+        let db = rusqlite::Connection::open(&db_path).unwrap();
+        db.execute_batch("DROP TRIGGER abort_pilot_z;").unwrap();
+    }
+    drop(store);
+    let store = TenantStore::open(&db_path).unwrap();
+
+    // 4. Retry start: must succeed cleanly and issue both pilots
+    let ro = store
+        .start_managed_group_rollout(&tenant.id, "grp-transient", "v1", &issuer)
+        .unwrap();
+    assert_eq!(ro.phase, llm_firewall::tenant_store::RolloutPhase::Pilot);
+    assert_eq!(ro.active_deployments.len(), 2);
+    assert!(ro.active_deployments.contains_key("pilot-a"));
+    assert!(ro.active_deployments.contains_key("pilot-z"));
+}
+
+#[tokio::test]
+async fn test_partially_persisted_pilot_rollout_resumes_via_start_and_advance() {
+    std::env::set_var("SOUP_AGENT_POLICY_KEY_ID", TEST_KEY_ID);
+    std::env::set_var("SOUP_AGENT_POLICY_SEED_HEX", TEST_SEED_HEX);
+
+    let tmp = tempfile::tempdir().unwrap();
+    let db_path = tmp.path().join("store.db");
+    let store = TenantStore::open(&db_path).unwrap();
+    let tenant = store.create_tenant("Partial Pilot Tenant").unwrap();
+
+    store
+        .create_managed_group(&tenant.id, "grp-part", "Partial Group")
+        .unwrap();
+    store.enroll_managed_agent(&tenant.id, "p-1").unwrap();
+    store.enroll_managed_agent(&tenant.id, "p-2").unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "grp-part", "p-1", true)
+        .unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "grp-part", "p-2", true)
+        .unwrap();
+
+    let yaml = "default: allow\n";
+    store
+        .create_managed_group_revision(&tenant.id, "grp-part", "v1", yaml)
+        .unwrap();
+    store
+        .approve_managed_group_revision(&tenant.id, "grp-part", "v1")
+        .unwrap();
+
+    let issuer = llm_firewall::tenant_store::ManagedIssuer::from_environment().unwrap();
+
+    // Issue candidate revision and deployment to p-1 only
+    store
+        .create_managed_revision(&tenant.id, "p-1", "v1", yaml)
+        .unwrap();
+    store
+        .approve_managed_revision(&tenant.id, "p-1", "v1")
+        .unwrap();
+    store
+        .create_managed_revision(&tenant.id, "p-2", "v1", yaml)
+        .unwrap();
+    store
+        .approve_managed_revision(&tenant.id, "p-2", "v1")
+        .unwrap();
+
+    let dep_p1 = store
+        .deploy_managed_revision(&tenant.id, "p-1", "v1", false, &issuer)
+        .unwrap();
+
+    let digest = store
+        .list_managed_group_revisions(&tenant.id, "grp-part")
+        .unwrap()[0]
+        .policy_sha256
+        .clone();
+
+    {
+        let db = rusqlite::Connection::open(&db_path).unwrap();
+        let mut active = std::collections::BTreeMap::new();
+        active.insert("p-1", dep_p1.deployment_sequence);
+        let mut inits = std::collections::BTreeMap::new();
+        inits.insert("p-1", 0);
+        inits.insert("p-2", 0);
+        let prevs: std::collections::BTreeMap<&str, Option<&str>> =
+            [("p-1", None), ("p-2", None)].into_iter().collect();
+
+        db.execute(
+            "INSERT INTO managed_group_rollouts
+             (tenant_id, group_id, rollout_id, revision, policy_sha256, issuer_key_id, phase,
+              pilot_agents_json, standard_agents_json, active_deployments_json, previous_revisions_json,
+              failure_reason, created_at_unix, updated_at_unix, initial_sequences_json)
+             VALUES (?1, ?2, 'ro_interrupted', 'v1', ?3, ?4, 'pilot', ?5, '[]', ?6, ?7, NULL, 1000, 1000, ?8)",
+            rusqlite::params![
+                tenant.id,
+                "grp-part",
+                digest,
+                issuer.key_id(),
+                serde_json::to_string(&vec!["p-1", "p-2"]).unwrap(),
+                serde_json::to_string(&active).unwrap(),
+                serde_json::to_string(&prevs).unwrap(),
+                serde_json::to_string(&inits).unwrap(),
+            ],
+        )
+        .unwrap();
+    }
+
+    // Reopen store from disk (restart recovery)
+    drop(store);
+    let store = TenantStore::open(&db_path).unwrap();
+
+    // Part A: Retrying start resumes issuance of p-2
+    let resumed = store
+        .start_managed_group_rollout(&tenant.id, "grp-part", "v1", &issuer)
+        .unwrap();
+    assert_eq!(
+        resumed.phase,
+        llm_firewall::tenant_store::RolloutPhase::Pilot
+    );
+    assert_eq!(resumed.active_deployments.len(), 2);
+    assert_eq!(
+        resumed.active_deployments.get("p-1").copied(),
+        Some(dep_p1.deployment_sequence)
+    );
+    assert!(resumed.active_deployments.contains_key("p-2"));
+
+    // Now test Part B: advance with an unissued pilot in another group
+    store
+        .create_managed_group(&tenant.id, "grp-adv", "Advance Group")
+        .unwrap();
+    store.enroll_managed_agent(&tenant.id, "pa").unwrap();
+    store.enroll_managed_agent(&tenant.id, "pb").unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "grp-adv", "pa", true)
+        .unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "grp-adv", "pb", true)
+        .unwrap();
+    store
+        .create_managed_group_revision(&tenant.id, "grp-adv", "v1", yaml)
+        .unwrap();
+    store
+        .approve_managed_group_revision(&tenant.id, "grp-adv", "v1")
+        .unwrap();
+    store
+        .create_managed_revision(&tenant.id, "pa", "v1", yaml)
+        .unwrap();
+    store
+        .approve_managed_revision(&tenant.id, "pa", "v1")
+        .unwrap();
+    store
+        .create_managed_revision(&tenant.id, "pb", "v1", yaml)
+        .unwrap();
+    store
+        .approve_managed_revision(&tenant.id, "pb", "v1")
+        .unwrap();
+
+    let dep_pa = store
+        .deploy_managed_revision(&tenant.id, "pa", "v1", false, &issuer)
+        .unwrap();
+
+    {
+        let db = rusqlite::Connection::open(&db_path).unwrap();
+        let mut active = std::collections::BTreeMap::new();
+        active.insert("pa", dep_pa.deployment_sequence);
+        let mut inits = std::collections::BTreeMap::new();
+        inits.insert("pa", 0);
+        inits.insert("pb", 0);
+        let prevs: std::collections::BTreeMap<&str, Option<&str>> =
+            [("pa", None), ("pb", None)].into_iter().collect();
+
+        db.execute(
+            "INSERT INTO managed_group_rollouts
+             (tenant_id, group_id, rollout_id, revision, policy_sha256, issuer_key_id, phase,
+              pilot_agents_json, standard_agents_json, active_deployments_json, previous_revisions_json,
+              failure_reason, created_at_unix, updated_at_unix, initial_sequences_json)
+             VALUES (?1, ?2, 'ro_interrupted_adv', 'v1', ?3, ?4, 'pilot', ?5, '[]', ?6, ?7, NULL, 1000, 1000, ?8)",
+            rusqlite::params![
+                tenant.id,
+                "grp-adv",
+                digest,
+                issuer.key_id(),
+                serde_json::to_string(&vec!["pa", "pb"]).unwrap(),
+                serde_json::to_string(&active).unwrap(),
+                serde_json::to_string(&prevs).unwrap(),
+                serde_json::to_string(&inits).unwrap(),
+            ],
+        )
+        .unwrap();
+    }
+
+    // Acknowledge pa
+    store
+        .acknowledge_managed_bundle(
+            &tenant.id,
+            "pa",
+            &llm_firewall::tenant_store::AppliedReport {
+                deployment_sequence: dep_pa.deployment_sequence,
+                revision: "v1".into(),
+                policy_sha256: dep_pa.policy_sha256.clone(),
+                status: "applied".into(),
+            },
+        )
+        .unwrap();
+
+    // Call advance: advance should issue the missing pilot pb!
+    let adv1 = store
+        .advance_managed_group_rollout(&tenant.id, "grp-adv", Some(&issuer))
+        .unwrap()
+        .unwrap();
+    println!(
+        "adv1 phase: {:?}, active: {:?}",
+        adv1.phase, adv1.active_deployments
+    );
+    assert_eq!(adv1.phase, llm_firewall::tenant_store::RolloutPhase::Pilot);
+    assert_eq!(adv1.active_deployments.len(), 2);
+    let pb_seq = *adv1.active_deployments.get("pb").unwrap();
+
+    // Acknowledge pb
+    store
+        .acknowledge_managed_bundle(
+            &tenant.id,
+            "pb",
+            &llm_firewall::tenant_store::AppliedReport {
+                deployment_sequence: pb_seq,
+                revision: "v1".into(),
+                policy_sha256: digest.clone(),
+                status: "applied".into(),
+            },
+        )
+        .unwrap();
+
+    // Both pa and pb are now applied. The acknowledgment automatically completed the rollout:
+    let adv2 = store
+        .get_managed_group_rollout(&tenant.id, "grp-adv")
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        adv2.phase,
+        llm_firewall::tenant_store::RolloutPhase::Completed
+    );
+    assert_eq!(adv2.active_deployments.len(), 2);
+}

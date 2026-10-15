@@ -710,15 +710,98 @@ impl PostgresTenantStore {
         issuer: &ManagedIssuer,
     ) -> Result<ManagedGroupRollout> {
         let (_policy_yaml, policy_sha256, pilots, standards, prevs, initial_sequences) = {
+            let rev_row = self.bounded(client.query_opt(
+                "SELECT policy_yaml, policy_sha256 FROM managed_group_revisions WHERE tenant_id=$1 AND group_id=$2 AND revision=$3 AND approved_at_unix IS NOT NULL",
+                &[&tenant, &group_id, &revision],
+            )).await?;
+            let rev_row = rev_row.context("group revision not approved or not found")?;
+            let policy_yaml: String = rev_row.get(0);
+            let policy_sha256: String = rev_row.get(1);
+
             if let Some(existing) = self
                 .get_managed_group_rollout_query(client, tenant, group_id)
                 .await?
             {
                 if existing.revision == revision
+                    && existing.policy_sha256 == policy_sha256
+                    && existing.phase == RolloutPhase::Pilot
+                {
+                    let mut active_deployments = existing.active_deployments.clone();
+                    let mut active_changed = false;
+                    for pilot in &existing.pilot_agents {
+                        if !active_deployments.contains_key(pilot) {
+                            let existing_dep = self
+                                .bounded(client.query_opt(
+                                    "SELECT deployment_sequence, revision, policy_sha256, status
+                                     FROM managed_agent_deployments
+                                     WHERE tenant_id=$1 AND agent_id=$2
+                                     ORDER BY deployment_sequence DESC LIMIT 1",
+                                    &[&tenant, pilot],
+                                ))
+                                .await?;
+                            let seq = if let Some(row) = existing_dep {
+                                let d_seq: i64 = row.get(0);
+                                let d_rev: String = row.get(1);
+                                let d_sha: String = row.get(2);
+                                let d_st: String = row.get(3);
+                                if d_rev == revision && d_sha == policy_sha256 && d_st != "rejected"
+                                {
+                                    d_seq as u64
+                                } else {
+                                    let dep = self
+                                        .deploy_managed_revision_tx(
+                                            client,
+                                            tenant,
+                                            pilot,
+                                            revision,
+                                            DeploymentMode::Activate,
+                                            issuer,
+                                        )
+                                        .await?;
+                                    dep.deployment_sequence
+                                }
+                            } else {
+                                let dep = self
+                                    .deploy_managed_revision_tx(
+                                        client,
+                                        tenant,
+                                        pilot,
+                                        revision,
+                                        DeploymentMode::Activate,
+                                        issuer,
+                                    )
+                                    .await?;
+                                dep.deployment_sequence
+                            };
+                            active_deployments.insert(pilot.clone(), seq);
+                            active_changed = true;
+                        }
+                    }
+                    if active_changed {
+                        self.bounded(client.execute(
+                            "UPDATE managed_group_rollouts
+                             SET active_deployments_json=$3, updated_at_unix=$4
+                             WHERE tenant_id=$1 AND group_id=$2 AND rollout_id=$5",
+                            &[
+                                &tenant,
+                                &group_id,
+                                &serde_json::to_string(&active_deployments)?,
+                                &now_unix(),
+                                &existing.rollout_id,
+                            ],
+                        ))
+                        .await?;
+                    }
+                    return Ok(ManagedGroupRollout {
+                        active_deployments,
+                        ..existing
+                    });
+                }
+                if existing.revision == revision
                     && existing.issuer_key_id.as_deref() == Some(issuer.key_id())
                     && matches!(
                         existing.phase,
-                        RolloutPhase::Pilot | RolloutPhase::Standard | RolloutPhase::Completed
+                        RolloutPhase::Standard | RolloutPhase::Completed
                     )
                 {
                     return Ok(existing);
@@ -733,14 +816,6 @@ impl PostgresTenantStore {
                 "active rollout already in progress for group '{}'",
                 group_id
             );
-
-            let rev_row = self.bounded(client.query_opt(
-                "SELECT policy_yaml, policy_sha256 FROM managed_group_revisions WHERE tenant_id=$1 AND group_id=$2 AND revision=$3 AND approved_at_unix IS NOT NULL",
-                &[&tenant, &group_id, &revision],
-            )).await?;
-            let rev_row = rev_row.context("group revision not approved or not found")?;
-            let policy_yaml: String = rev_row.get(0);
-            let policy_sha256: String = rev_row.get(1);
 
             let members = self
                 .list_managed_group_members_query(client, tenant, group_id)
@@ -1287,6 +1362,90 @@ impl PostgresTenantStore {
                 Ok(Some(rollout))
             }
             RolloutPhase::Pilot => {
+                let mut active_changed = false;
+                for p in &rollout.pilot_agents {
+                    if !rollout.active_deployments.contains_key(p) {
+                        let existing_dep = self
+                            .bounded(client.query_opt(
+                                "SELECT deployment_sequence, revision, policy_sha256, status
+                                 FROM managed_agent_deployments
+                                 WHERE tenant_id=$1 AND agent_id=$2
+                                 ORDER BY deployment_sequence DESC LIMIT 1",
+                                &[&tenant, p],
+                            ))
+                            .await?;
+                        let seq = if let Some(row) = existing_dep {
+                            let d_seq: i64 = row.get(0);
+                            let d_rev: String = row.get(1);
+                            let d_sha: String = row.get(2);
+                            let d_st: String = row.get(3);
+                            if d_rev == rollout.revision
+                                && d_sha == rollout.policy_sha256
+                                && d_st != "rejected"
+                            {
+                                d_seq as u64
+                            } else {
+                                let default_issuer = ManagedIssuer::from_environment_for_key(
+                                    rollout.issuer_key_id.as_deref(),
+                                )
+                                .ok();
+                                let signing_issuer = default_issuer.as_ref().or(issuer);
+                                let signing_issuer = signing_issuer.context(
+                                    "signing issuer unavailable to issue missing pilot deployment",
+                                )?;
+                                let dep = self
+                                    .deploy_managed_revision_tx(
+                                        client,
+                                        tenant,
+                                        p,
+                                        &rollout.revision,
+                                        DeploymentMode::Activate,
+                                        signing_issuer,
+                                    )
+                                    .await?;
+                                dep.deployment_sequence
+                            }
+                        } else {
+                            let default_issuer = ManagedIssuer::from_environment_for_key(
+                                rollout.issuer_key_id.as_deref(),
+                            )
+                            .ok();
+                            let signing_issuer = default_issuer.as_ref().or(issuer);
+                            let signing_issuer = signing_issuer.context(
+                                "signing issuer unavailable to issue missing pilot deployment",
+                            )?;
+                            let dep = self
+                                .deploy_managed_revision_tx(
+                                    client,
+                                    tenant,
+                                    p,
+                                    &rollout.revision,
+                                    DeploymentMode::Activate,
+                                    signing_issuer,
+                                )
+                                .await?;
+                            dep.deployment_sequence
+                        };
+                        rollout.active_deployments.insert(p.clone(), seq);
+                        active_changed = true;
+                    }
+                }
+                if active_changed {
+                    self.bounded(client.execute(
+                        "UPDATE managed_group_rollouts
+                         SET active_deployments_json=$3, updated_at_unix=$4
+                         WHERE tenant_id=$1 AND group_id=$2 AND rollout_id=$5",
+                        &[
+                            &tenant,
+                            &group_id,
+                            &serde_json::to_string(&rollout.active_deployments)?,
+                            &now,
+                            &rollout.rollout_id,
+                        ],
+                    ))
+                    .await?;
+                }
+
                 let mut any_rejected = None;
                 let mut all_applied = true;
                 let mut conflict = None;
