@@ -265,7 +265,9 @@ enum ServiceCommand {
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.cmd {
-        Cmd::ProtectionStatus(args) => std::process::exit(agentfw::protection_status::run_cli(args)),
+        Cmd::ProtectionStatus(args) => {
+            std::process::exit(agentfw::protection_status::run_cli(args))
+        }
         Cmd::Serve => {
             #[cfg(target_os = "linux")]
             let _direct_guard =
@@ -917,7 +919,9 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
     }
 
     let diagnostics = agentfw::protection_status::Runtime::new(&cfg).with_binary(
-        std::env::current_exe().ok().and_then(|p| agentfw::lifecycle::sha256_file(&p).ok()),
+        std::env::current_exe()
+            .ok()
+            .and_then(|p| agentfw::lifecycle::sha256_file(&p).ok()),
     );
     let addr = cfg.socket_address();
     let listener = tokio::net::TcpListener::bind(&addr).await?;
@@ -1004,7 +1008,11 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
             })
             .await?;
     } else {
-        axum::serve(listener, agentfw::app_with_diagnostics(state, Arc::new(diagnostics))).await?;
+        axum::serve(
+            listener,
+            agentfw::app_with_diagnostics(state, Arc::new(diagnostics)),
+        )
+        .await?;
     }
     Ok(())
 }

@@ -239,7 +239,8 @@ impl Config {
 
     /// Resolve the profile path without creating directories or changing permissions.
     pub fn home_path() -> anyhow::Result<PathBuf> {
-        platform_home_dir().map(|p| p.join(".agentfw"))
+        platform_home_dir()
+            .map(|p| p.join(".agentfw"))
             .ok_or_else(|| anyhow::anyhow!("cannot determine home directory"))
     }
 

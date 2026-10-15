@@ -21,8 +21,8 @@ pub mod native;
 pub mod preflight;
 #[cfg(windows)]
 mod private_file_windows;
-pub mod provenance;
 pub mod protection_status;
+pub mod provenance;
 pub mod replay;
 pub mod sandbox;
 #[cfg(target_os = "linux")]
@@ -43,7 +43,10 @@ pub fn app(state: Shared) -> Router {
 }
 
 /// Attach immutable startup identity and bounded read-only transport observations.
-pub fn app_with_diagnostics(state: Shared, runtime: std::sync::Arc<protection_status::Runtime>) -> Router {
+pub fn app_with_diagnostics(
+    state: Shared,
+    runtime: std::sync::Arc<protection_status::Runtime>,
+) -> Router {
     Router::new()
         .route("/hook", post(handlers::hook))
         .route("/mcp", post(handlers::mcp))
@@ -55,7 +58,8 @@ pub fn app_with_diagnostics(state: Shared, runtime: std::sync::Arc<protection_st
         .route(protection_status::ENDPOINT, get(protection_status::handler))
         .layer(axum::Extension(runtime.clone()))
         .layer(axum::middleware::from_fn_with_state(
-            (state.clone(), runtime), protection_status::observe,
+            (state.clone(), runtime),
+            protection_status::observe,
         ))
         .with_state(state)
 }
