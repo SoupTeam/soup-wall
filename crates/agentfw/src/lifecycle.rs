@@ -53,7 +53,7 @@ impl ProcessRecord {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Operation {
+pub(crate) struct Operation {
     from: Record,
     to: Record,
     was_running: bool,
@@ -61,22 +61,22 @@ struct Operation {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct PendingStage {
+pub(crate) struct PendingStage {
     stage: String,
     target: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
-struct State {
-    active: Option<Record>,
-    previous: Option<Record>,
+pub(crate) struct State {
+    pub(crate) active: Option<Record>,
+    pub(crate) previous: Option<Record>,
     #[serde(default)]
-    owned: Vec<Record>,
-    process: Option<ProcessRecord>,
-    operation: Option<Operation>,
+    pub(crate) owned: Vec<Record>,
+    pub(crate) process: Option<ProcessRecord>,
+    pub(crate) operation: Option<Operation>,
     #[serde(default)]
-    pending_stage: Option<PendingStage>,
+    pub(crate) pending_stage: Option<PendingStage>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -692,7 +692,7 @@ impl Manager {
         })
     }
 
-    fn verify(&self, record: &Record) -> Result<()> {
+    pub(crate) fn verify(&self, record: &Record) -> Result<()> {
         validate_digest(&record.digest)?;
         let path = self.path_for(record)?;
         ensure_regular(&path)?;
@@ -703,7 +703,7 @@ impl Manager {
         Ok(())
     }
 
-    fn path_for(&self, record: &Record) -> Result<PathBuf> {
+    pub(crate) fn path_for(&self, record: &Record) -> Result<PathBuf> {
         validate_version(&record.version)?;
         let expected = format!("agentfw-{}{}", record.version, std::env::consts::EXE_SUFFIX);
         ensure!(record.binary == expected, "managed binary name is invalid");
@@ -721,13 +721,86 @@ impl Manager {
         }
     }
 
-    fn config_digest(&self) -> Result<String> {
+    pub(crate) fn config_digest(&self) -> Result<String> {
         let path = self.home.join("config.yaml");
         match fs::read(path) {
             Ok(bytes) => Ok(sha256(&bytes)),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(sha256(b"")),
             Err(error) => Err(error.into()),
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn direct_serve_guard(&self) -> Result<File> {
+        let lock = self.lock()?;
+        crate::service::require_unregistered(&self.home)?;
+        Ok(lock)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn service_snapshot(&self) -> Result<(State, Option<ManagedHealth>)> {
+        // Atomic manifest replacement permits a read without blocking the launcher.
+        let state = self.load()?;
+        let health = self.running(&state)?;
+        Ok((state, health))
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn service_launch(&self) -> Result<(PathBuf, ProcessRecord)> {
+        let _lock = self.lock()?;
+        let mut state = self.load()?;
+        ensure!(
+            state.pending_stage.is_none() && state.operation.is_none(),
+            "recover lifecycle transaction before service startup"
+        );
+        let (binary, process, _log) = self.prepare_launch(&mut state, std::process::id())?;
+        Ok((binary, process))
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn service_clear_dead(&self) -> Result<()> {
+        let _lock = self.lock()?;
+        let mut state = self.load()?;
+        if let Some(process) = &state.process {
+            ensure!(
+                !pid_alive(process.pid)?,
+                "recorded PID is still live; refusing to clear its identity"
+            );
+            let log = self.root.join(&process.launch_log);
+            if log.exists() {
+                ensure_regular(&log)?;
+                fs::remove_file(log)?;
+            }
+            state.process = None;
+            self.save(&state)?;
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn service_shutdown(&self, pid: u32) -> Result<()> {
+        let (state, health) = self.service_snapshot()?;
+        let Some(process) = state.process else {
+            ensure!(pid == 0, "unrecorded service process");
+            return Ok(());
+        };
+        if !pid_alive(process.pid)? {
+            return Ok(());
+        }
+        ensure!(
+            health.is_some() && process.pid == pid,
+            "service process identity cannot be verified; refusing shutdown"
+        );
+        self.request(&process, true)?
+            .context("authenticated shutdown was not accepted")?;
+        let deadline = Instant::now() + Duration::from_secs(25);
+        while Instant::now() < deadline {
+            if !pid_alive(process.pid)? {
+                return Ok(());
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        bail!("authenticated shutdown timed out; systemd will bound cleanup to this unit")
     }
 
     #[cfg(target_os = "linux")]
@@ -942,7 +1015,7 @@ fn port_occupied(config: &crate::Config) -> bool {
         })
 }
 
-fn pid_alive(pid: u32) -> Result<bool> {
+pub(crate) fn pid_alive(pid: u32) -> Result<bool> {
     if pid == 0 {
         return Ok(false);
     }
@@ -1006,5 +1079,34 @@ mod tests {
             config_digest: "other".into(),
             ..health
         }));
+    }
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn service_refuses_to_clear_or_stop_a_live_unverified_pid() {
+        let temp = tempfile::tempdir().unwrap();
+        let manager = Manager::new(temp.path());
+        let lock = manager.lock().unwrap();
+        let instance = crate::token::generate();
+        let state = State {
+            process: Some(ProcessRecord {
+                pid: std::process::id(),
+                instance: instance.clone(),
+                binary_digest: "0".repeat(64),
+                config_digest: "0".repeat(64),
+                port: 1,
+                bind: "127.0.0.1".into(),
+                launch_log: format!(".launch-{instance}.log"),
+            }),
+            ..State::default()
+        };
+        manager.save(&state).unwrap();
+        drop(lock);
+        assert!(manager.service_clear_dead().is_err());
+        assert!(manager.service_shutdown(std::process::id()).is_err());
+        assert!(pid_alive(std::process::id()).unwrap());
+        assert_eq!(
+            manager.load().unwrap().process.unwrap().pid,
+            std::process::id()
+        );
     }
 }

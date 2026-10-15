@@ -204,6 +204,10 @@ impl Service {
         let shown = self.show()?;
         if property(&shown, "LoadState") != "not-found" {
             self.verify_loaded()?;
+            if record.phase == Phase::Installed {
+                self.stop_locked()?;
+            }
+            let shown = self.show()?;
             ensure!(
                 property(&shown, "MainPID") == "0"
                     && matches!(property(&shown, "ActiveState"), "inactive" | "failed"),
@@ -221,6 +225,197 @@ impl Service {
         fs::remove_file(self.root.join(STATE))?;
         File::open(&self.root)?.sync_all()?;
         Ok(())
+    }
+
+    pub fn start(&self) -> Result<()> {
+        let _operation = self.operation_lock()?;
+        self.start_locked()
+    }
+
+    fn start_locked(&self) -> Result<()> {
+        self.installed()?;
+        let shown = self.verify_loaded()?;
+        let (state, health) = self.manager().service_snapshot()?;
+        if let Some(process) = &state.process {
+            ensure!(
+                health.is_some() && process.pid.to_string() == property(&shown, "MainPID"),
+                "existing process identity is not verified; inspect before starting"
+            );
+        }
+        control(&["start", &self.name])?;
+        ensure!(
+            self.verified_health()?.is_some(),
+            "systemd started the service without verified Agent readiness"
+        );
+        Ok(())
+    }
+
+    pub fn stop(&self) -> Result<()> {
+        let _operation = self.operation_lock()?;
+        self.stop_locked()
+    }
+
+    fn stop_locked(&self) -> Result<()> {
+        self.installed()?;
+        let shown = self.verify_loaded()?;
+        let main_pid: u32 = property(&shown, "MainPID").parse()?;
+        if main_pid != 0 {
+            let (_, health) = self.manager().service_snapshot()?;
+            ensure!(
+                health.is_some_and(|h| h.pid == main_pid),
+                "live process identity cannot be verified; refusing stop"
+            );
+        }
+        control(&["stop", &self.name])?;
+        let shown = self.verify_loaded()?;
+        ensure!(
+            property(&shown, "MainPID") == "0"
+                && matches!(property(&shown, "ActiveState"), "inactive" | "failed"),
+            "systemd did not stop the service"
+        );
+        self.manager().service_clear_dead()
+    }
+
+    pub fn restart(&self) -> Result<()> {
+        let _operation = self.operation_lock()?;
+        self.stop_locked()?;
+        self.start_locked()
+    }
+
+    fn installed(&self) -> Result<Ownership> {
+        let record = self.load()?;
+        ensure!(
+            record.phase == Phase::Installed,
+            "service operation is incomplete; inspect before recovery"
+        );
+        self.verify(&record)?;
+        Ok(record)
+    }
+
+    fn internal(&self) -> Result<BTreeMap<String, String>> {
+        let record = self.installed()?;
+        ensure!(
+            identity(&std::env::current_exe()?)?
+                == record
+                    .launcher_identity
+                    .context("launcher has no recorded identity")?,
+            "internal service command must use the owned launcher"
+        );
+        let shown = self.verify_loaded()?;
+        let group = property(&shown, "ControlGroup");
+        ensure!(
+            !group.is_empty()
+                && fs::read_to_string("/proc/self/cgroup")?
+                    .lines()
+                    .any(|line| line.rsplit_once(':').is_some_and(|(_, path)| path == group)),
+            "internal service command must run in its systemd unit"
+        );
+        Ok(shown)
+    }
+
+    pub fn launch(&self) -> Result<()> {
+        use std::os::unix::process::CommandExt;
+        let shown = self.internal()?;
+        ensure!(
+            property(&shown, "MainPID") == std::process::id().to_string(),
+            "launcher is not the systemd main process"
+        );
+        let (binary, process) = self.manager().service_launch()?;
+        let error = Command::new(binary)
+            .args([
+                "lifecycle",
+                "serve-managed",
+                "--instance",
+                &process.instance,
+            ])
+            .arg("--home")
+            .arg(&self.home)
+            .exec();
+        Err(error).context("cannot exec the installed Agent")
+    }
+
+    pub fn verify_managed_process(&self, instance: &str) -> Result<()> {
+        self.installed()?;
+        let shown = self.verify_loaded()?;
+        let (state, _) = self.manager().service_snapshot()?;
+        let process = state.process.context("service has no recorded process")?;
+        ensure!(
+            process.pid == std::process::id()
+                && process.instance == instance
+                && process.pid.to_string() == property(&shown, "MainPID"),
+            "managed process is not the recorded systemd main process"
+        );
+        Ok(())
+    }
+
+    fn verified_health(&self) -> Result<Option<crate::lifecycle::ManagedHealth>> {
+        self.installed()?;
+        let shown = self.verify_loaded()?;
+        let manager = self.manager();
+        let (state, health) = manager.service_snapshot()?;
+        let Some(health) = health else {
+            return Ok(None);
+        };
+        let active = state.active.context("service has no active version")?;
+        manager.verify(&active)?;
+        ensure!(
+            health.binary_digest == active.digest
+                && health.config_digest == manager.config_digest()?,
+            "running Agent differs from the installed version or current configuration"
+        );
+        ensure!(
+            property(&shown, "MainPID") == health.pid.to_string(),
+            "Agent PID differs from systemd MainPID"
+        );
+        ensure!(
+            fs::read_link(format!("/proc/{}/exe", health.pid))? == manager.path_for(&active)?,
+            "systemd main executable differs from the installed Agent"
+        );
+        Ok(Some(health))
+    }
+
+    pub fn ready(&self) -> Result<()> {
+        self.internal()?;
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while Instant::now() < deadline {
+            if self.verified_health()?.is_some() {
+                return Ok(());
+            }
+            let (state, _) = self.manager().service_snapshot()?;
+            if let Some(process) = state.process {
+                ensure!(
+                    crate::lifecycle::pid_alive(process.pid)?,
+                    "Agent exited before readiness"
+                );
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        bail!("Agent did not pass authenticated readiness within 30 seconds")
+    }
+
+    pub fn shutdown(&self) -> Result<()> {
+        let shown = self.internal()?;
+        self.manager()
+            .service_shutdown(property(&shown, "MainPID").parse()?)
+    }
+
+    pub fn inspect(&self) -> serde_json::Value {
+        let mut report = serde_json::json!({"format_version":1, "home":self.home, "unit_name":self.name, "registered":registered(&self.home), "ready":false});
+        let observed = (|| -> Result<()> {
+            let record = self.load()?;
+            report["phase"] = serde_json::to_value(record.phase)?;
+            self.verify(&record)?;
+            let shown = self.verify_loaded()?;
+            report["systemd"] = serde_json::to_value(shown)?;
+            let health = self.verified_health()?;
+            report["ready"] = serde_json::json!(health.is_some());
+            report["health"] = serde_json::to_value(health)?;
+            Ok(())
+        })();
+        if let Err(error) = observed {
+            report["error"] = serde_json::json!(error.to_string());
+        }
+        report
     }
 
     fn operation_lock(&self) -> Result<File> {

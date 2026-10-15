@@ -247,7 +247,17 @@ enum LifecycleCommand {
 enum ServiceCommand {
     Preview,
     Install,
+    Start,
+    Stop,
+    Restart,
+    Inspect,
     Uninstall,
+    #[command(hide = true)]
+    Launch,
+    #[command(hide = true)]
+    Ready,
+    #[command(hide = true)]
+    Shutdown,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -255,7 +265,8 @@ fn main() -> anyhow::Result<()> {
     match cli.cmd {
         Cmd::Serve => {
             #[cfg(target_os = "linux")]
-            agentfw::service::require_unregistered(&Config::home()?)?;
+            let _direct_guard =
+                agentfw::lifecycle::Manager::new(Config::home()?).direct_serve_guard()?;
             tracing_subscriber::fmt().json().init();
             tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
@@ -287,6 +298,10 @@ fn main() -> anyhow::Result<()> {
                 tracing_subscriber::fmt().json().init();
                 let manager = agentfw::lifecycle::Manager::new(&home);
                 manager.verify_managed_boot(&instance, &std::env::current_exe()?)?;
+                #[cfg(target_os = "linux")]
+                if agentfw::service::registered(&home) {
+                    agentfw::service::Service::new(&home)?.verify_managed_process(&instance)?;
+                }
                 return tokio::runtime::Builder::new_multi_thread()
                     .enable_all()
                     .build()?
@@ -347,12 +362,13 @@ fn main() -> anyhow::Result<()> {
             #[cfg(target_os = "linux")]
             {
                 // Unlike Config::home(), preview must not create the default profile.
-                let home = home.unwrap_or(
-                    std::env::var_os("HOME")
+                let home = match home {
+                    Some(home) => home,
+                    None => std::env::var_os("HOME")
                         .map(PathBuf::from)
                         .ok_or_else(|| anyhow::anyhow!("cannot determine home directory"))?
                         .join(".agentfw"),
-                );
+                };
                 let service = agentfw::service::Service::new(&home)?;
                 match command {
                     ServiceCommand::Preview => {
@@ -362,6 +378,24 @@ fn main() -> anyhow::Result<()> {
                         service.install()?;
                         println!("installed user service; Agent remains stopped and login autostart is disabled");
                     }
+                    ServiceCommand::Start => {
+                        service.start()?;
+                        println!("service started and Agent readiness verified");
+                    }
+                    ServiceCommand::Stop => {
+                        service.stop()?;
+                        println!("service stopped");
+                    }
+                    ServiceCommand::Restart => {
+                        service.restart()?;
+                        println!("service restarted and Agent readiness verified");
+                    }
+                    ServiceCommand::Inspect => {
+                        println!("{}", serde_json::to_string_pretty(&service.inspect())?)
+                    }
+                    ServiceCommand::Launch => service.launch()?,
+                    ServiceCommand::Ready => service.ready()?,
+                    ServiceCommand::Shutdown => service.shutdown()?,
                     ServiceCommand::Uninstall => {
                         service.uninstall()?;
                         println!("removed owned service files; Agent versions and user data are preserved");
