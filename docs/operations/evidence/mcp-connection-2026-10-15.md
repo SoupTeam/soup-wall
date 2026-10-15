@@ -3,6 +3,53 @@
 Task: [SOU-50](https://linear.app/soup-wall/issue/SOU-50).
 Date: October 15, 2026.
 
+## Publication Repair
+
+The current run passed all 280 acceptance checks on source
+`de050de3fbc217e4be25652b82615f067599882c`, including main's SOU-58 changes.
+The [raw report](mcp-publication-2026-10-15.json) records a clean source tree,
+unchanged source and binary, and complete process, container and profile cleanup.
+
+The repair addresses the publication race reported in
+[PR #129](https://github.com/SoupTeam/soup-wall/pull/129#discussion_r4287127292).
+Config writes now use an atomic exchange that retains the displaced inode.
+A private archive holds the original snapshot, proposed bytes and displaced
+file. The publication journal is synced before the exchange. A conflicting
+inode or changed bytes cause nonzero failure and retain all versions for
+reconciliation. No automatic rollback overwrites another writer's live config.
+
+Both connect and disconnect passed the following deterministic cases:
+
+| Interference | Observed outcome |
+| --- | --- |
+| In-place write immediately before exchange | Conflict; external bytes retained |
+| Destination replacement immediately before exchange | Conflict; replacement inode retained |
+| Write through an old descriptor after exchange | Conflict; descriptor's bytes retained |
+| Write to the live config immediately after exchange | Conflict; live edit and proposed bytes retained |
+| Process exit immediately before exchange | Journal retained; retry completes the operation |
+| Process exit immediately after exchange | Journal retained; retry completes the operation |
+
+Conflict retries left every version intact. Explicit fixture reconciliation
+preserved the external settings and unrelated server arguments. Existing
+useful-call, forbidden-send, daemon-loss and pending-transaction checks also
+passed through the installed Claude Code client and Docker bridge.
+
+All 22 connection tests and all 293 Agent library tests passed. The connection
+suite includes the publication-boundary scheduler, so ordinary Linux cargo tests
+exercise the race and crash cases. Formatting, Clippy with warnings denied and
+all 590 local documentation links passed.
+
+Agent SHA-256:
+`4b63012ea5a4c26f761b4745d3b43a38e8d82a6b738a0165be338f306610ae18`.
+
+Retained versions use private permissions and are not automatically removed.
+Writers holding an old descriptor can continue writing into the retained inode;
+this is conflict preservation, not isolation from arbitrary editors. Native
+Windows/macOS connection transactions remain unsupported.
+
+The earlier 104-check run below is historical evidence and does not cover the
+publication race. It is superseded by the run above for current acceptance.
+
 ## Scope
 
 The change adds transactional preview, connect, inspect and disconnect commands
