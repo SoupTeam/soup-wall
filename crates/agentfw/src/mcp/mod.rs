@@ -8,6 +8,7 @@
 pub mod admission;
 pub mod create_file;
 pub mod https_get;
+pub mod connection;
 pub mod input;
 pub mod jsonrpc;
 pub mod manifest;
