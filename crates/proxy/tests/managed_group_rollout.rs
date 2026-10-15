@@ -1156,3 +1156,289 @@ async fn test_group_rollout_fails_cleanly_when_issuer_unavailable() {
         .to_string()
         .contains("configured signing issuer is unavailable for standard wave deployment"));
 }
+
+#[tokio::test]
+async fn test_wave_retry_idempotent_no_duplicate_sequence_or_partial_rejection() {
+    let state = test_state();
+    let store = state.tenant_store.as_ref().unwrap();
+    let tenant = store.create_tenant("Wave Retry Tenant").unwrap();
+
+    store
+        .create_managed_group(&tenant.id, "wave-grp", "Wave Group")
+        .unwrap();
+    let _cred_pilot = store
+        .enroll_managed_agent(&tenant.id, "wave-pilot")
+        .unwrap();
+    let _cred_w1 = store.enroll_managed_agent(&tenant.id, "wave-w1").unwrap();
+    let _cred_w2 = store.enroll_managed_agent(&tenant.id, "wave-w2").unwrap();
+
+    store
+        .add_managed_group_member(&tenant.id, "wave-grp", "wave-pilot", true)
+        .unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "wave-grp", "wave-w1", false)
+        .unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "wave-grp", "wave-w2", false)
+        .unwrap();
+
+    store
+        .create_managed_group_revision(&tenant.id, "wave-grp", "rev-v1", "default: allow\n")
+        .unwrap();
+    store
+        .approve_managed_group_revision(&tenant.id, "wave-grp", "rev-v1")
+        .unwrap();
+
+    let issuer = llm_firewall::tenant_store::ManagedIssuer::from_environment().unwrap();
+    store
+        .start_managed_group_rollout(&tenant.id, "wave-grp", "rev-v1", &issuer)
+        .unwrap();
+
+    // Pre-create unapproved revision on wave-w2 to test pre-validation
+    store
+        .create_managed_revision(&tenant.id, "wave-w2", "rev-v1", "default: allow\n")
+        .unwrap();
+
+    // Acknowledge pilot
+    let pilot_dep = store
+        .list_managed_deployments(&tenant.id, "wave-pilot")
+        .unwrap();
+    let ro = store
+        .get_managed_group_rollout(&tenant.id, "wave-grp")
+        .unwrap()
+        .unwrap();
+    store
+        .acknowledge_managed_bundle(
+            &tenant.id,
+            "wave-pilot",
+            &llm_firewall::tenant_store::AppliedReport {
+                deployment_sequence: pilot_dep[0].deployment_sequence,
+                revision: "rev-v1".into(),
+                policy_sha256: ro.policy_sha256.clone(),
+                status: "applied".into(),
+            },
+        )
+        .unwrap();
+
+    // Advancing rollout to standard wave must fail during pre-validation before any side effects!
+    let preval_err = store
+        .advance_managed_group_rollout(&tenant.id, "wave-grp", Some(&issuer))
+        .unwrap_err();
+    assert!(preval_err
+        .to_string()
+        .contains("candidate revision 'rev-v1' on standard agent 'wave-w2' is not approved"));
+
+    // Verify wave-w1 had NO deployments issued (atomic wave pre-validation)
+    let w1_deps_before = store
+        .list_managed_deployments(&tenant.id, "wave-w1")
+        .unwrap();
+    assert!(w1_deps_before.is_empty());
+
+    // Approve the revision on wave-w2
+    store
+        .approve_managed_revision(&tenant.id, "wave-w2", "rev-v1")
+        .unwrap();
+
+    // Advancing now succeeds and issues sequence 1 for each standard worker
+    let adv1 = store
+        .advance_managed_group_rollout(&tenant.id, "wave-grp", Some(&issuer))
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        adv1.phase,
+        llm_firewall::tenant_store::RolloutPhase::Standard
+    );
+    let seq_w1 = *adv1.active_deployments.get("wave-w1").unwrap();
+    let seq_w2 = *adv1.active_deployments.get("wave-w2").unwrap();
+
+    // Advancing AGAIN before workers apply MUST be idempotent: reuse existing sequences, no duplicate deployments
+    let adv2 = store
+        .advance_managed_group_rollout(&tenant.id, "wave-grp", Some(&issuer))
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        adv2.phase,
+        llm_firewall::tenant_store::RolloutPhase::Standard
+    );
+    assert_eq!(*adv2.active_deployments.get("wave-w1").unwrap(), seq_w1);
+    assert_eq!(*adv2.active_deployments.get("wave-w2").unwrap(), seq_w2);
+
+    let w1_deps = store
+        .list_managed_deployments(&tenant.id, "wave-w1")
+        .unwrap();
+    let w2_deps = store
+        .list_managed_deployments(&tenant.id, "wave-w2")
+        .unwrap();
+    assert_eq!(w1_deps.len(), 1);
+    assert_eq!(w2_deps.len(), 1);
+}
+
+#[tokio::test]
+async fn test_missing_baseline_pilot_failure_marks_rollout_failed_unresolved() {
+    let state = test_state();
+    let store = state.tenant_store.as_ref().unwrap();
+    let tenant = store.create_tenant("Missing Baseline Tenant").unwrap();
+
+    store
+        .create_managed_group(&tenant.id, "mb-grp", "Missing Baseline Group")
+        .unwrap();
+    store
+        .enroll_managed_agent(&tenant.id, "pilot-with-base")
+        .unwrap();
+    store
+        .enroll_managed_agent(&tenant.id, "pilot-no-base")
+        .unwrap();
+
+    store
+        .add_managed_group_member(&tenant.id, "mb-grp", "pilot-with-base", true)
+        .unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "mb-grp", "pilot-no-base", true)
+        .unwrap();
+
+    let issuer = llm_firewall::tenant_store::ManagedIssuer::from_environment().unwrap();
+
+    // Deploy and acknowledge an earlier baseline for pilot-with-base ONLY
+    store
+        .create_managed_revision(
+            &tenant.id,
+            "pilot-with-base",
+            "rev-base",
+            "default: allow\n",
+        )
+        .unwrap();
+    store
+        .approve_managed_revision(&tenant.id, "pilot-with-base", "rev-base")
+        .unwrap();
+    let d0 = store
+        .deploy_managed_revision(&tenant.id, "pilot-with-base", "rev-base", false, &issuer)
+        .unwrap();
+    store
+        .acknowledge_managed_bundle(
+            &tenant.id,
+            "pilot-with-base",
+            &llm_firewall::tenant_store::AppliedReport {
+                deployment_sequence: d0.deployment_sequence,
+                revision: "rev-base".into(),
+                policy_sha256: d0.policy_sha256,
+                status: "applied".into(),
+            },
+        )
+        .unwrap();
+
+    // Create candidate group revision and start rollout
+    store
+        .create_managed_group_revision(&tenant.id, "mb-grp", "rev-candidate", "default: deny\n")
+        .unwrap();
+    store
+        .approve_managed_group_revision(&tenant.id, "mb-grp", "rev-candidate")
+        .unwrap();
+
+    store
+        .start_managed_group_rollout(&tenant.id, "mb-grp", "rev-candidate", &issuer)
+        .unwrap();
+
+    let dep_no_base = store
+        .list_managed_deployments(&tenant.id, "pilot-no-base")
+        .unwrap();
+    let ro = store
+        .get_managed_group_rollout(&tenant.id, "mb-grp")
+        .unwrap()
+        .unwrap();
+
+    // pilot-no-base rejects candidate
+    store
+        .acknowledge_managed_bundle(
+            &tenant.id,
+            "pilot-no-base",
+            &llm_firewall::tenant_store::AppliedReport {
+                deployment_sequence: dep_no_base[0].deployment_sequence,
+                revision: "rev-candidate".into(),
+                policy_sha256: ro.policy_sha256.clone(),
+                status: "rejected".into(),
+            },
+        )
+        .unwrap();
+
+    // Advance rollout: triggers rollback
+    let adv_rb = store
+        .advance_managed_group_rollout(&tenant.id, "mb-grp", Some(&issuer))
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        adv_rb.phase,
+        llm_firewall::tenant_store::RolloutPhase::RollingBack
+    );
+
+    // Verify pilot-with-base received rollback to rev-base, while pilot-no-base was NOT rolled back
+    let rb_with_base = store
+        .list_managed_deployments(&tenant.id, "pilot-with-base")
+        .unwrap();
+    assert_eq!(rb_with_base[0].revision, "rev-base");
+    assert_eq!(adv_rb.active_deployments.len(), 1);
+    assert!(adv_rb.active_deployments.contains_key("pilot-with-base"));
+
+    // pilot-with-base applies rollback deployment
+    store
+        .acknowledge_managed_bundle(
+            &tenant.id,
+            "pilot-with-base",
+            &llm_firewall::tenant_store::AppliedReport {
+                deployment_sequence: rb_with_base[0].deployment_sequence,
+                revision: "rev-base".into(),
+                policy_sha256: rb_with_base[0].policy_sha256.clone(),
+                status: "applied".into(),
+            },
+        )
+        .unwrap();
+
+    // Rollout MUST NOT claim rolled_back! It must transition to failed with unresolved reason.
+    let adv_done = store
+        .get_managed_group_rollout(&tenant.id, "mb-grp")
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        adv_done.phase,
+        llm_firewall::tenant_store::RolloutPhase::Failed
+    );
+    assert!(adv_done
+        .failure_reason
+        .as_deref()
+        .unwrap()
+        .contains("rollback unresolved: agent 'pilot-no-base' has no restorable baseline and remains on candidate revision 'rev-candidate'"));
+}
+
+#[tokio::test]
+async fn test_manual_rollback_with_missing_baseline_fails_closed() {
+    let state = test_state();
+    let store = state.tenant_store.as_ref().unwrap();
+    let tenant = store.create_tenant("Manual Rollback Test Tenant").unwrap();
+
+    store
+        .create_managed_group(&tenant.id, "mr-grp", "Manual Rollback Group")
+        .unwrap();
+    store.enroll_managed_agent(&tenant.id, "mr-pilot").unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "mr-grp", "mr-pilot", true)
+        .unwrap();
+
+    store
+        .create_managed_group_revision(&tenant.id, "mr-grp", "rev-1", "default: allow\n")
+        .unwrap();
+    store
+        .approve_managed_group_revision(&tenant.id, "mr-grp", "rev-1")
+        .unwrap();
+
+    let issuer = llm_firewall::tenant_store::ManagedIssuer::from_environment().unwrap();
+    store
+        .start_managed_group_rollout(&tenant.id, "mr-grp", "rev-1", &issuer)
+        .unwrap();
+
+    // mr-pilot had no prior baseline; manual rollback must fail closed
+    let rb_err = store
+        .rollback_managed_group_rollout(&tenant.id, "mr-grp", &issuer)
+        .unwrap_err();
+    assert!(rb_err
+        .to_string()
+        .contains("cannot rollback group rollout: no enrolled agents have a prior restorable applied baseline"));
+}

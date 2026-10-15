@@ -207,6 +207,12 @@ def inspect_sqlite(path):
                 raise RecoveryError('Incomplete managed Agent schema.')
             if 'managed_agent_revisions' in tables and 'managed_agent_enrollments' not in tables:
                 raise RecoveryError('Incomplete managed Agent schema.')
+            group_tables = {'managed_agent_groups', 'managed_agent_group_members',
+                            'managed_group_revisions', 'managed_group_rollouts'}
+            if tables & group_tables and not group_tables <= tables:
+                raise RecoveryError('Incomplete managed group schema.')
+            if group_tables <= tables and 'managed_agent_enrollments' not in tables:
+                raise RecoveryError('Incomplete managed Agent schema.')
             expected_objects = {name: value for name, value in definition['sqlite_objects'].items()
                                 if value['table'] in tables}
             actual_objects = {name: {'type': kind, 'table': table,

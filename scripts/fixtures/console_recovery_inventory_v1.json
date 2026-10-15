@@ -1220,6 +1220,26 @@
       "table": "managed_agent_enrollments",
       "type": "index"
     },
+    "managed_agent_group_members": {
+      "ddl_sha256": "3a462366b8c8ecd29c7998b18b2e254085e2b28d73a040e653797164237b0023",
+      "table": "managed_agent_group_members",
+      "type": "table"
+    },
+    "managed_agent_groups": {
+      "ddl_sha256": "a1b4a6ad6ea1ef2b2c88e607962346caf85850111866f285d65ae2e3b2361b83",
+      "table": "managed_agent_groups",
+      "type": "table"
+    },
+    "managed_group_revisions": {
+      "ddl_sha256": "1fdc044c8d0d73555ab46af14ea10c93b419afee5a1e1aad3e867bfea8149f62",
+      "table": "managed_group_revisions",
+      "type": "table"
+    },
+    "managed_group_rollouts": {
+      "ddl_sha256": "f95b65bbaaff1a6822f829318f237b3245713f3ccc0fa4cc1ecb53fe7a0eef53",
+      "table": "managed_group_rollouts",
+      "type": "table"
+    },
     "oidc_authorization_states": {
       "ddl_sha256": "4ef452f791d5dcdbe87659cf7dd53c47ddd6f3b5757d61bf960ef89f705fb4a4",
       "table": "oidc_authorization_states",
@@ -1624,7 +1644,11 @@
   "sqlite_optional_tables": [
     "managed_agent_enrollments",
     "managed_agent_revisions",
-    "managed_agent_deployments"
+    "managed_agent_deployments",
+    "managed_agent_groups",
+    "managed_agent_group_members",
+    "managed_group_revisions",
+    "managed_group_rollouts"
   ],
   "sqlite_schema_contract": "accepted-main-26-tables-and-columns-v1",
   "sqlite_tables": {
@@ -1663,6 +1687,43 @@
       "policy_yaml": "TEXT",
       "revision": "TEXT",
       "tenant_id": "TEXT"
+    },
+    "managed_agent_group_members": {
+      "agent_id": "TEXT",
+      "group_id": "TEXT",
+      "is_pilot": "INTEGER",
+      "joined_at_unix": "INTEGER",
+      "tenant_id": "TEXT"
+    },
+    "managed_agent_groups": {
+      "created_at_unix": "INTEGER",
+      "group_id": "TEXT",
+      "name": "TEXT",
+      "tenant_id": "TEXT"
+    },
+    "managed_group_revisions": {
+      "approved_at_unix": "INTEGER",
+      "group_id": "TEXT",
+      "policy_sha256": "TEXT",
+      "policy_yaml": "TEXT",
+      "revision": "TEXT",
+      "tenant_id": "TEXT"
+    },
+    "managed_group_rollouts": {
+      "active_deployments_json": "TEXT",
+      "created_at_unix": "INTEGER",
+      "failure_reason": "TEXT",
+      "group_id": "TEXT",
+      "issuer_key_id": "TEXT",
+      "phase": "TEXT",
+      "pilot_agents_json": "TEXT",
+      "policy_sha256": "TEXT",
+      "previous_revisions_json": "TEXT",
+      "revision": "TEXT",
+      "rollout_id": "TEXT",
+      "standard_agents_json": "TEXT",
+      "tenant_id": "TEXT",
+      "updated_at_unix": "INTEGER"
     },
     "oidc_authorization_states": {
       "consumed_at_unix": "INTEGER",

@@ -35,6 +35,13 @@ def native_sqlite_schema():
     return result
 
 
+def native_group_schema():
+    source = (ROOT / 'crates/proxy/src/tenant_store/managed_policy.rs').read_text()
+    start = source.index('CREATE TABLE IF NOT EXISTS managed_agent_groups (')
+    end = source.index(');",', start) + 2
+    return source[start:end]
+
+
 @contextmanager
 def local_database(path):
     connection = sqlite3.connect(path)
@@ -301,6 +308,23 @@ class RecoveryTests(unittest.TestCase):
             connection.executescript(native_sqlite_schema())
             connection.execute('DROP TABLE managed_agent_deployments')
         with self.assertRaises(recovery.RecoveryError):
+            recovery.inspect_sqlite(self.source)
+
+    def test_populated_group_recovery_control(self):
+        with local_database(self.source) as connection:
+            connection.executescript(native_group_schema())
+            connection.execute("INSERT INTO managed_agent_enrollments VALUES ('tenant_a','agent_1',X'0102',100,NULL)")
+            connection.execute("INSERT INTO managed_agent_groups VALUES ('tenant_a','grp_1','Group 1',100)")
+            connection.execute("INSERT INTO managed_agent_group_members VALUES ('tenant_a','grp_1','agent_1',1,100)")
+            connection.execute("INSERT INTO managed_group_revisions VALUES ('tenant_a','grp_1','v1','default: allow\\n','sha_v1',100)")
+            connection.execute("INSERT INTO managed_group_rollouts VALUES ('tenant_a','grp_1','r_1','v1','sha_v1',NULL,'completed','[]','[]','{}','{}',NULL,100,100)")
+        state = recovery.inspect_sqlite(self.source)
+        self.assertEqual(len(state['tables']), 47)
+        self.assertEqual(state['tables']['managed_agent_groups']['rows'],
+                         [[['text', 'tenant_a'], ['text', 'grp_1'], ['text', 'Group 1'], ['integer', 100]]])
+        with local_database(self.source) as connection:
+            connection.execute('DROP TABLE managed_agent_group_members')
+        with self.assertRaisesRegex(recovery.RecoveryError, 'Incomplete managed group schema'):
             recovery.inspect_sqlite(self.source)
 
     def test_postgres_alias_and_populated_guards_precede_restore_executor(self):

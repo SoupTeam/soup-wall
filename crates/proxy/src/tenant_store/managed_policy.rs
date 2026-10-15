@@ -1213,6 +1213,7 @@ impl TenantStore {
             Rollback {
                 rollout: ManagedGroupRollout,
                 to_rollback: Vec<(String, String)>,
+                unresolved: Vec<String>,
                 reason: String,
             },
             ConfirmRollback(ManagedGroupRollout),
@@ -1299,7 +1300,7 @@ impl TenantStore {
                 standard_agents: standard_agents.clone(),
                 active_deployments: active_deployments.clone(),
                 previous_revisions: previous_revisions.clone(),
-                failure_reason,
+                failure_reason: failure_reason.clone(),
                 created_at_unix: created_at,
                 updated_at_unix: updated_at,
             };
@@ -1311,6 +1312,9 @@ impl TenantStore {
                 RolloutPhase::RollingBack => {
                     let mut all_applied = true;
                     let mut conflict = None;
+                    if active_deployments.is_empty() {
+                        conflict = Some("rollback unresolved: no agents had an earlier applied baseline to restore".to_string());
+                    }
                     for (agent, seq) in &active_deployments {
                         let latest: Option<(i64, String, String, String)> = db
                             .query_row(
@@ -1323,11 +1327,28 @@ impl TenantStore {
                             )
                             .optional()?;
                         match latest {
-                            Some((latest_seq, _rev, _sha, st)) => {
+                            Some((latest_seq, latest_rev, _sha, st)) => {
                                 if latest_seq != *seq as i64 {
                                     conflict = Some(format!(
                                         "conflict: rollback deployment {} for agent '{}' was superseded by sequence {}",
                                         seq, agent, latest_seq
+                                    ));
+                                    break;
+                                }
+                                let expected_baseline =
+                                    previous_revisions.get(agent).and_then(|x| x.as_ref());
+                                if let Some(exp) = expected_baseline {
+                                    if &latest_rev != exp {
+                                        conflict = Some(format!(
+                                            "conflict: rollback deployment {} for agent '{}' was issued for revision '{}', but expected baseline '{}'",
+                                            seq, agent, latest_rev, exp
+                                        ));
+                                        break;
+                                    }
+                                } else {
+                                    conflict = Some(format!(
+                                        "cannot count candidate as confirmed rollback: agent '{}' has no baseline",
+                                        agent
                                     ));
                                     break;
                                 }
@@ -1340,13 +1361,41 @@ impl TenantStore {
                             }
                         }
                     }
+
+                    let mut unresolved_agents = Vec::new();
+                    for p in &pilot_agents {
+                        if previous_revisions.get(p).and_then(|x| x.as_ref()).is_none() {
+                            unresolved_agents.push(p.clone());
+                        }
+                    }
+                    if let Some(r_reason) = failure_reason.as_ref() {
+                        if r_reason.contains("standard") {
+                            for s in &standard_agents {
+                                if previous_revisions.get(s).and_then(|x| x.as_ref()).is_none() {
+                                    unresolved_agents.push(s.clone());
+                                }
+                            }
+                        }
+                    }
+
                     if let Some(reason) = conflict {
                         NextAction::Fail {
                             rollout: base_rollout,
                             reason,
                         }
                     } else if all_applied && !active_deployments.is_empty() {
-                        NextAction::ConfirmRollback(base_rollout)
+                        if !unresolved_agents.is_empty() {
+                            NextAction::Fail {
+                                rollout: base_rollout,
+                                reason: format!(
+                                    "rollback unresolved: agent '{}' has no restorable baseline and remains on candidate revision '{}'",
+                                    unresolved_agents.join(", "),
+                                    revision
+                                ),
+                            }
+                        } else {
+                            NextAction::ConfirmRollback(base_rollout)
+                        }
                     } else {
                         NextAction::StillRunning(base_rollout)
                     }
@@ -1421,26 +1470,61 @@ impl TenantStore {
                         }
                     } else if let Some((_rejected_agent, reason)) = any_rejected {
                         let mut to_rollback = Vec::new();
+                        let mut unresolved = Vec::new();
                         for (agent, seq) in &active_deployments {
-                            let prev = Self::find_last_applied_revision_before_conn(
-                                &db,
-                                tenant,
-                                agent,
-                                Some(*seq),
-                            )?;
+                            let prev = previous_revisions
+                                .get(agent)
+                                .and_then(|p| p.as_ref())
+                                .cloned()
+                                .or_else(|| {
+                                    Self::find_last_applied_revision_before_conn(
+                                        &db,
+                                        tenant,
+                                        agent,
+                                        Some(*seq),
+                                    )
+                                    .ok()
+                                    .flatten()
+                                });
                             if let Some(p) = prev {
                                 to_rollback.push((agent.clone(), p));
+                            } else {
+                                unresolved.push(agent.clone());
                             }
                         }
                         NextAction::Rollback {
                             rollout: base_rollout,
                             to_rollback,
+                            unresolved,
                             reason,
                         }
                     } else if all_applied {
                         if standard_agents.is_empty() {
                             NextAction::Complete(base_rollout)
                         } else {
+                            // Pre-validate all standard agents before side effects
+                            for w in &standard_agents {
+                                eligible(&db, tenant, w)?;
+                                let existing: Option<(String, Option<i64>)> = db
+                                    .query_row(
+                                        "SELECT policy_sha256, approved_at_unix FROM managed_agent_revisions WHERE tenant_id=?1 AND agent_id=?2 AND revision=?3",
+                                        params![tenant, w, revision],
+                                        |r| Ok((r.get(0)?, r.get(1)?)),
+                                    )
+                                    .optional()?;
+                                if let Some((sha, approved)) = existing {
+                                    ensure!(
+                                        sha == policy_sha256,
+                                        "revision collision on standard agent '{}': existing revision '{}' has different digest",
+                                        w, revision
+                                    );
+                                    ensure!(
+                                        approved.is_some(),
+                                        "candidate revision '{}' on standard agent '{}' is not approved",
+                                        revision, w
+                                    );
+                                }
+                            }
                             for w in &standard_agents {
                                 let existing_sha: Option<String> = db
                                     .query_row(
@@ -1449,13 +1533,7 @@ impl TenantStore {
                                         |r| r.get(0),
                                     )
                                     .optional()?;
-                                if let Some(sha) = existing_sha {
-                                    ensure!(
-                                        sha == policy_sha256,
-                                        "revision collision on standard agent '{}': existing revision '{}' has different digest",
-                                        w, revision
-                                    );
-                                } else {
+                                if existing_sha.is_none() {
                                     db.execute(
                                         "INSERT INTO managed_agent_revisions (tenant_id, agent_id, revision, policy_yaml, policy_sha256, approved_at_unix)
                                          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -1540,20 +1618,44 @@ impl TenantStore {
                         }
                     } else if let Some((_rejected_agent, reason)) = any_rejected {
                         let mut to_rollback = Vec::new();
+                        let mut unresolved = Vec::new();
+                        for p in &pilot_agents {
+                            let prev = previous_revisions.get(p).and_then(|x| x.as_ref()).cloned();
+                            if let Some(p_rev) = prev {
+                                if !to_rollback.iter().any(|(a, _)| a == p) {
+                                    to_rollback.push((p.clone(), p_rev));
+                                }
+                            } else if !unresolved.contains(p) {
+                                unresolved.push(p.clone());
+                            }
+                        }
                         for (agent, seq) in &active_deployments {
-                            let prev = Self::find_last_applied_revision_before_conn(
-                                &db,
-                                tenant,
-                                agent,
-                                Some(*seq),
-                            )?;
+                            let prev = previous_revisions
+                                .get(agent)
+                                .and_then(|p| p.as_ref())
+                                .cloned()
+                                .or_else(|| {
+                                    Self::find_last_applied_revision_before_conn(
+                                        &db,
+                                        tenant,
+                                        agent,
+                                        Some(*seq),
+                                    )
+                                    .ok()
+                                    .flatten()
+                                });
                             if let Some(p) = prev {
-                                to_rollback.push((agent.clone(), p));
+                                if !to_rollback.iter().any(|(a, _)| a == agent) {
+                                    to_rollback.push((agent.clone(), p));
+                                }
+                            } else if !unresolved.contains(agent) {
+                                unresolved.push(agent.clone());
                             }
                         }
                         NextAction::Rollback {
                             rollout: base_rollout,
                             to_rollback,
+                            unresolved,
                             reason,
                         }
                     } else if all_applied {
@@ -1601,8 +1703,28 @@ impl TenantStore {
             NextAction::Rollback {
                 mut rollout,
                 to_rollback,
+                unresolved,
                 reason,
             } => {
+                if to_rollback.is_empty() && !unresolved.is_empty() {
+                    let fail_reason = format!(
+                        "{}; rollback unresolved: agents [{}] have no restorable applied baseline",
+                        reason,
+                        unresolved.join(", ")
+                    );
+                    let db = self.connection()?;
+                    db.execute(
+                        "UPDATE managed_group_rollouts
+                         SET phase='failed', failure_reason=?3, updated_at_unix=?4
+                         WHERE tenant_id=?1 AND group_id=?2 AND rollout_id=?5",
+                        params![tenant, group_id, fail_reason, now, rollout.rollout_id],
+                    )?;
+                    rollout.phase = RolloutPhase::Failed;
+                    rollout.failure_reason = Some(fail_reason);
+                    rollout.updated_at_unix = now;
+                    return Ok(Some(rollout));
+                }
+
                 let default_issuer = ManagedIssuer::from_environment().ok();
                 let signing_issuer = default_issuer.as_ref().or(issuer);
                 let signing_issuer = match signing_issuer {
@@ -1614,12 +1736,49 @@ impl TenantStore {
                         );
                     }
                 };
+
+                rollout.active_deployments.clear();
                 for (agent, prev) in to_rollback {
-                    let dep =
-                        self.deploy_managed_revision(tenant, &agent, &prev, true, signing_issuer)?;
-                    rollout
-                        .active_deployments
-                        .insert(agent, dep.deployment_sequence);
+                    let latest_dep: Option<(i64, String, String)> = {
+                        let db = self.connection()?;
+                        db.query_row(
+                            "SELECT deployment_sequence, revision, status
+                             FROM managed_agent_deployments
+                             WHERE tenant_id=?1 AND agent_id=?2
+                             ORDER BY deployment_sequence DESC LIMIT 1",
+                            params![tenant, &agent],
+                            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                        )
+                        .optional()?
+                    };
+                    let seq = if let Some((d_seq, d_rev, d_status)) = latest_dep {
+                        if d_rev == prev
+                            && (d_status == "issued"
+                                || d_status == "delivered"
+                                || d_status == "applied")
+                        {
+                            d_seq as u64
+                        } else {
+                            let dep = self.deploy_managed_revision(
+                                tenant,
+                                &agent,
+                                &prev,
+                                true,
+                                signing_issuer,
+                            )?;
+                            dep.deployment_sequence
+                        }
+                    } else {
+                        let dep = self.deploy_managed_revision(
+                            tenant,
+                            &agent,
+                            &prev,
+                            true,
+                            signing_issuer,
+                        )?;
+                        dep.deployment_sequence
+                    };
+                    rollout.active_deployments.insert(agent, seq);
                 }
                 let db = self.connection()?;
                 db.execute(
@@ -1657,11 +1816,63 @@ impl TenantStore {
                     }
                 };
                 for w in standards {
-                    let dep =
-                        self.deploy_managed_revision(tenant, &w, &revision, false, signing_issuer)?;
-                    rollout
-                        .active_deployments
-                        .insert(w, dep.deployment_sequence);
+                    if rollout.active_deployments.contains_key(&w) {
+                        continue;
+                    }
+                    let latest_dep: Option<(i64, String, String, String)> = {
+                        let db = self.connection()?;
+                        db.query_row(
+                            "SELECT deployment_sequence, revision, policy_sha256, status
+                             FROM managed_agent_deployments
+                             WHERE tenant_id=?1 AND agent_id=?2
+                             ORDER BY deployment_sequence DESC LIMIT 1",
+                            params![tenant, &w],
+                            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                        )
+                        .optional()?
+                    };
+                    let seq = if let Some((d_seq, d_rev, d_sha, d_status)) = latest_dep {
+                        if d_rev == revision
+                            && d_sha == rollout.policy_sha256
+                            && (d_status == "issued"
+                                || d_status == "delivered"
+                                || d_status == "applied")
+                        {
+                            d_seq as u64
+                        } else {
+                            let dep = self.deploy_managed_revision(
+                                tenant,
+                                &w,
+                                &revision,
+                                false,
+                                signing_issuer,
+                            )?;
+                            dep.deployment_sequence
+                        }
+                    } else {
+                        let dep = self.deploy_managed_revision(
+                            tenant,
+                            &w,
+                            &revision,
+                            false,
+                            signing_issuer,
+                        )?;
+                        dep.deployment_sequence
+                    };
+                    rollout.active_deployments.insert(w.clone(), seq);
+                    let db = self.connection()?;
+                    db.execute(
+                        "UPDATE managed_group_rollouts
+                         SET active_deployments_json=?3, updated_at_unix=?4
+                         WHERE tenant_id=?1 AND group_id=?2 AND rollout_id=?5",
+                        params![
+                            tenant,
+                            group_id,
+                            serde_json::to_string(&rollout.active_deployments)?,
+                            now,
+                            rollout.rollout_id
+                        ],
+                    )?;
                 }
                 let db = self.connection()?;
                 db.execute(
@@ -1852,12 +2063,28 @@ impl TenantStore {
             }
 
             let mut to_rollback = Vec::new();
+            let mut unresolved = Vec::new();
             for (agent, seq) in &active_deployments {
-                let prev =
-                    Self::find_last_applied_revision_before_conn(&db, tenant, agent, Some(*seq))?;
+                let prev = previous_revisions
+                    .get(agent)
+                    .and_then(|p| p.as_ref())
+                    .cloned()
+                    .or_else(|| {
+                        Self::find_last_applied_revision_before_conn(&db, tenant, agent, Some(*seq))
+                            .ok()
+                            .flatten()
+                    });
                 if let Some(p) = prev {
                     to_rollback.push((agent.clone(), p));
+                } else {
+                    unresolved.push(agent.clone());
                 }
+            }
+
+            if to_rollback.is_empty() && !unresolved.is_empty() {
+                bail!(
+                    "cannot rollback group rollout: no enrolled agents have a prior restorable applied baseline"
+                );
             }
 
             let r = ManagedGroupRollout {
@@ -1887,11 +2114,36 @@ impl TenantStore {
                 bail!("configured signing issuer is unavailable for rollback");
             }
         };
+        rollout.active_deployments.clear();
         for (agent, prev) in to_rollback {
-            let dep = self.deploy_managed_revision(tenant, &agent, &prev, true, signing_issuer)?;
-            rollout
-                .active_deployments
-                .insert(agent, dep.deployment_sequence);
+            let latest_dep: Option<(i64, String, String)> = {
+                let db = self.connection()?;
+                db.query_row(
+                    "SELECT deployment_sequence, revision, status
+                     FROM managed_agent_deployments
+                     WHERE tenant_id=?1 AND agent_id=?2
+                     ORDER BY deployment_sequence DESC LIMIT 1",
+                    params![tenant, &agent],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )
+                .optional()?
+            };
+            let seq = if let Some((d_seq, d_rev, d_status)) = latest_dep {
+                if d_rev == prev
+                    && (d_status == "issued" || d_status == "delivered" || d_status == "applied")
+                {
+                    d_seq as u64
+                } else {
+                    let dep =
+                        self.deploy_managed_revision(tenant, &agent, &prev, true, signing_issuer)?;
+                    dep.deployment_sequence
+                }
+            } else {
+                let dep =
+                    self.deploy_managed_revision(tenant, &agent, &prev, true, signing_issuer)?;
+                dep.deployment_sequence
+            };
+            rollout.active_deployments.insert(agent, seq);
         }
 
         let now = now_unix();
