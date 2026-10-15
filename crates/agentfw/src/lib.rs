@@ -24,6 +24,8 @@ mod private_file_windows;
 pub mod provenance;
 pub mod replay;
 pub mod sandbox;
+#[cfg(target_os = "linux")]
+pub mod service;
 pub mod spans;
 pub mod token;
 

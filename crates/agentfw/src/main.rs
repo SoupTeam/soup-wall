@@ -39,6 +39,13 @@ enum Cmd {
         #[command(subcommand)]
         command: LifecycleCommand,
     },
+    /// Manage an opt-in Linux user service.
+    Service {
+        #[arg(long, global = true)]
+        home: Option<PathBuf>,
+        #[command(subcommand)]
+        command: ServiceCommand,
+    },
     /// Check that the daemon is up, and report its enforcement posture.
     ///
     /// Exits non-zero when it is not. The Claude Code hook fails open, so a
@@ -236,10 +243,30 @@ enum LifecycleCommand {
     },
 }
 
+#[derive(Subcommand)]
+enum ServiceCommand {
+    Preview,
+    Install,
+    Start,
+    Stop,
+    Restart,
+    Inspect,
+    Uninstall,
+    #[command(hide = true)]
+    Launch,
+    #[command(hide = true)]
+    Ready,
+    #[command(hide = true)]
+    Shutdown,
+}
+
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.cmd {
         Cmd::Serve => {
+            #[cfg(target_os = "linux")]
+            let _direct_guard =
+                agentfw::lifecycle::Manager::new(Config::home()?).direct_serve_guard()?;
             tracing_subscriber::fmt().json().init();
             tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
@@ -271,6 +298,10 @@ fn main() -> anyhow::Result<()> {
                 tracing_subscriber::fmt().json().init();
                 let manager = agentfw::lifecycle::Manager::new(&home);
                 manager.verify_managed_boot(&instance, &std::env::current_exe()?)?;
+                #[cfg(target_os = "linux")]
+                if agentfw::service::registered(&home) {
+                    agentfw::service::Service::new(&home)?.verify_managed_process(&instance)?;
+                }
                 return tokio::runtime::Builder::new_multi_thread()
                     .enable_all()
                     .build()?
@@ -326,6 +357,57 @@ fn main() -> anyhow::Result<()> {
                 LifecycleCommand::ServeManaged { .. } => unreachable!(),
             }
             Ok(())
+        }
+        Cmd::Service { home, command } => {
+            #[cfg(target_os = "linux")]
+            {
+                // Unlike Config::home(), preview must not create the default profile.
+                let home = match home {
+                    Some(home) => home,
+                    None => std::env::var_os("HOME")
+                        .map(PathBuf::from)
+                        .ok_or_else(|| anyhow::anyhow!("cannot determine home directory"))?
+                        .join(".agentfw"),
+                };
+                let service = agentfw::service::Service::new(&home)?;
+                match command {
+                    ServiceCommand::Preview => {
+                        println!("{}", serde_json::to_string_pretty(&service.preview()?)?)
+                    }
+                    ServiceCommand::Install => {
+                        service.install()?;
+                        println!("installed user service; Agent remains stopped and login autostart is disabled");
+                    }
+                    ServiceCommand::Start => {
+                        service.start()?;
+                        println!("service started and Agent readiness verified");
+                    }
+                    ServiceCommand::Stop => {
+                        service.stop()?;
+                        println!("service stopped");
+                    }
+                    ServiceCommand::Restart => {
+                        service.restart()?;
+                        println!("service restarted and Agent readiness verified");
+                    }
+                    ServiceCommand::Inspect => {
+                        println!("{}", serde_json::to_string_pretty(&service.inspect())?)
+                    }
+                    ServiceCommand::Launch => service.launch()?,
+                    ServiceCommand::Ready => service.ready()?,
+                    ServiceCommand::Shutdown => service.shutdown()?,
+                    ServiceCommand::Uninstall => {
+                        service.uninstall()?;
+                        println!("removed owned service files; Agent versions and user data are preserved");
+                    }
+                }
+                Ok(())
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                let _ = (home, command);
+                anyhow::bail!("user service management currently requires Linux and systemd");
+            }
         }
         Cmd::Preflight {
             require_enforce,
