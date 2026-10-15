@@ -1,0 +1,37 @@
+name: SOU-43 verified remote HTTPS Agent rollout
+
+on:
+  pull_request:
+    paths:
+      - 'crates/agentfw/**'
+      - 'crates/proxy/**'
+      - 'Cargo.lock'
+      - 'scripts/managed-policy-tls-demo.py'
+      - 'scripts/fixtures/managed_policy_tls_edge.py'
+      - '.github/workflows/managed-policy-tls.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  agent-https-rollout:
+    name: Real Agent verified HTTPS rollout and rollback
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Verify test fixture syntax
+        run: python3 -m py_compile scripts/managed-policy-tls-demo.py scripts/fixtures/managed_policy_tls_edge.py
+      - name: Build real SQLite Console and Agent
+        run: cargo build --locked -p llm-firewall -p agentfw
+      - name: Execute isolated nonloopback HTTPS Agent exchange
+        run: python3 scripts/managed-policy-tls-demo.py --no-build
+      - name: Retain sanitized owned-network HTTPS evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sou43-remote-https-agent-evidence
+          path: target/sou43-managed-policy-tls-evidence.json
+          if-no-files-found: warn

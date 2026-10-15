@@ -30,6 +30,7 @@ rand = "0.10"
 subtle = "2"
 clap = { version = "4", features = ["derive"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+rustls-pki-types = "1"
 futures-util = "0.3"
 sha2 = "0.10"
 # Pinned-issuer Ed25519 verification; crate already exists in the locked workspace.

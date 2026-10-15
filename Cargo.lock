@@ -56,6 +56,7 @@ dependencies = [
  "libc",
  "rand 0.10.3",
  "reqwest",
+ "rustls-pki-types",
  "serde",
  "serde_json",
  "serde_yaml",
