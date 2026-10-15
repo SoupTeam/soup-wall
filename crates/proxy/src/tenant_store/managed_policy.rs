@@ -301,8 +301,15 @@ fn schema(db: &rusqlite::Connection) -> Result<()> {
            PRIMARY KEY(tenant_id,agent_id,deployment_sequence),
            FOREIGN KEY(tenant_id,agent_id,revision)
              REFERENCES managed_agent_revisions(tenant_id,agent_id,revision)
-        );
-        CREATE TABLE IF NOT EXISTS managed_agent_groups (
+        );",
+    )
+    .context("cannot prepare managed policy tables")
+}
+
+fn group_schema(db: &rusqlite::Connection) -> Result<()> {
+    schema(db)?;
+    db.execute_batch(
+        "CREATE TABLE IF NOT EXISTS managed_agent_groups (
            tenant_id TEXT NOT NULL,
            group_id TEXT NOT NULL,
            name TEXT NOT NULL,
@@ -349,7 +356,7 @@ fn schema(db: &rusqlite::Connection) -> Result<()> {
            FOREIGN KEY(tenant_id, group_id) REFERENCES managed_agent_groups(tenant_id, group_id) ON DELETE CASCADE
         );",
     )
-    .context("cannot prepare managed policy tables")
+    .context("cannot prepare managed group tables")
 }
 
 type SqliteRolloutRow = (
@@ -680,7 +687,7 @@ impl TenantStore {
         );
         ensure!(!name.is_empty() && name.len() <= 256, "invalid group name");
         let db = self.connection()?;
-        schema(&db)?;
+        group_schema(&db)?;
         let tenant_active: Option<i64> = db
             .query_row(
                 "SELECT 1 FROM tenants WHERE id=?1 AND active=1",
@@ -707,7 +714,7 @@ impl TenantStore {
     pub fn list_managed_groups(&self, tenant: &str) -> Result<Vec<ManagedAgentGroup>> {
         ensure!(exact_id(tenant), "invalid tenant identifier");
         let db = self.connection()?;
-        schema(&db)?;
+        group_schema(&db)?;
         let mut stmt = db.prepare(
             "SELECT group_id, name, created_at_unix FROM managed_agent_groups
              WHERE tenant_id=?1 ORDER BY created_at_unix ASC",
@@ -730,7 +737,7 @@ impl TenantStore {
     ) -> Result<Option<ManagedAgentGroup>> {
         ensure!(exact_id(tenant) && exact_id(group_id), "invalid identifier");
         let db = self.connection()?;
-        schema(&db)?;
+        group_schema(&db)?;
         let res = db
             .query_row(
                 "SELECT name, created_at_unix FROM managed_agent_groups WHERE tenant_id=?1 AND group_id=?2",
@@ -751,7 +758,7 @@ impl TenantStore {
     pub fn delete_managed_group(&self, tenant: &str, group_id: &str) -> Result<bool> {
         ensure!(exact_id(tenant) && exact_id(group_id), "invalid identifier");
         let db = self.connection()?;
-        schema(&db)?;
+        group_schema(&db)?;
         let active: Option<i64> = db
             .query_row(
                 "SELECT 1 FROM managed_group_rollouts WHERE tenant_id=?1 AND group_id=?2 AND phase IN ('pilot','standard')",
@@ -778,7 +785,7 @@ impl TenantStore {
         is_pilot: bool,
     ) -> Result<ManagedGroupMember> {
         let db = self.connection()?;
-        schema(&db)?;
+        group_schema(&db)?;
         eligible_group(&db, tenant, group_id)?;
         eligible(&db, tenant, agent_id)?;
         let now = now_unix();
@@ -808,7 +815,7 @@ impl TenantStore {
             "invalid identifier"
         );
         let db = self.connection()?;
-        schema(&db)?;
+        group_schema(&db)?;
         let count = db.execute(
             "DELETE FROM managed_agent_group_members WHERE tenant_id=?1 AND group_id=?2 AND agent_id=?3",
             params![tenant, group_id, agent_id],
@@ -823,7 +830,7 @@ impl TenantStore {
     ) -> Result<Vec<ManagedGroupMember>> {
         ensure!(exact_id(tenant) && exact_id(group_id), "invalid identifier");
         let db = self.connection()?;
-        schema(&db)?;
+        group_schema(&db)?;
         eligible_group(&db, tenant, group_id)?;
         let mut stmt = db.prepare(
             "SELECT agent_id, is_pilot, joined_at_unix FROM managed_agent_group_members
@@ -857,7 +864,7 @@ impl TenantStore {
         AgentPolicySet::from_yaml(yaml).context("invalid AgentPolicySet YAML")?;
         let digest = hex(&Sha256::digest(yaml.as_bytes()));
         let db = self.connection()?;
-        schema(&db)?;
+        group_schema(&db)?;
         eligible_group(&db, tenant, group_id)?;
         db.execute(
             "INSERT INTO managed_group_revisions (tenant_id, group_id, revision, policy_yaml, policy_sha256)
@@ -881,7 +888,7 @@ impl TenantStore {
         revision: &str,
     ) -> Result<bool> {
         let db = self.connection()?;
-        schema(&db)?;
+        group_schema(&db)?;
         eligible_group(&db, tenant, group_id)?;
         let changed = db.execute(
             "UPDATE managed_group_revisions SET approved_at_unix=?4
@@ -898,7 +905,7 @@ impl TenantStore {
     ) -> Result<Vec<ManagedGroupRevision>> {
         ensure!(exact_id(tenant) && exact_id(group_id), "invalid identifier");
         let db = self.connection()?;
-        schema(&db)?;
+        group_schema(&db)?;
         eligible_group(&db, tenant, group_id)?;
         let mut stmt = db.prepare(
             "SELECT revision, policy_sha256, approved_at_unix FROM managed_group_revisions
@@ -926,7 +933,7 @@ impl TenantStore {
     ) -> Result<ManagedGroupRollout> {
         let (_policy_yaml, policy_sha256, pilot_agents, standard_agents, previous_revisions) = {
             let db = self.connection()?;
-            schema(&db)?;
+            group_schema(&db)?;
             eligible_group(&db, tenant, group_id)?;
 
             let active: Option<String> = db
@@ -1152,7 +1159,7 @@ impl TenantStore {
 
         let action = {
             let db = self.connection()?;
-            schema(&db)?;
+            group_schema(&db)?;
             let row: Option<SqliteRolloutRow> = db
                 .query_row(
                     "SELECT rollout_id, revision, policy_sha256, issuer_key_id, phase,
@@ -1539,7 +1546,7 @@ impl TenantStore {
     ) -> Result<Option<ManagedGroupRollout>> {
         ensure!(exact_id(tenant) && exact_id(group_id), "invalid identifier");
         let db = self.connection()?;
-        schema(&db)?;
+        group_schema(&db)?;
         let row: Option<SqliteRolloutRow> = db
             .query_row(
                 "SELECT rollout_id, revision, policy_sha256, issuer_key_id, phase,
@@ -1613,7 +1620,7 @@ impl TenantStore {
         ensure!(exact_id(tenant) && exact_id(group_id), "invalid identifier");
         let (mut rollout, to_rollback) = {
             let db = self.connection()?;
-            schema(&db)?;
+            group_schema(&db)?;
             let row: Option<SqliteRolloutRow> = db
                 .query_row(
                     "SELECT rollout_id, revision, policy_sha256, issuer_key_id, phase,
@@ -1841,7 +1848,16 @@ impl TenantStore {
     ) -> Result<()> {
         let group_ids = {
             let db = self.connection()?;
-            schema(&db)?;
+            let has_groups: bool = db
+                .query_row(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='managed_agent_groups'",
+                    [],
+                    |_| Ok(()),
+                )
+                .is_ok();
+            if !has_groups {
+                return Ok(());
+            }
             let mut stmt = db.prepare(
                 "SELECT DISTINCT m.group_id FROM managed_agent_group_members m
                  JOIN managed_group_rollouts r ON r.tenant_id=m.tenant_id AND r.group_id=m.group_id
