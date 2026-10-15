@@ -738,3 +738,32 @@ async fn real_daemon_reports_loaded_identity_and_survives_disk_drift() {
         std::fs::write(path, serde_json::to_vec_pretty(&evidence).unwrap()).unwrap();
     }
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn cli_refuses_fifo_config_and_token_without_waiting_for_a_writer() {
+    use std::os::unix::ffi::OsStrExt;
+    for (name, expected) in [
+        ("config.yaml", "status_config_unavailable"),
+        ("token", "status_token_unavailable"),
+    ] {
+        let home = tempfile::tempdir().unwrap();
+        let path = home.path().join(name);
+        let cpath = std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(cpath.as_ptr(), 0o600) }, 0);
+        let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_agentfw"));
+        command
+            .args(["protection-status", "--home"])
+            .arg(home.path())
+            .args(["--timeout-seconds", "1"])
+            .kill_on_drop(true);
+        let output = tokio::time::timeout(Duration::from_secs(5), command.output())
+            .await
+            .expect("status query blocked on a FIFO before its network deadline")
+            .unwrap();
+        assert_eq!(output.status.code(), Some(1));
+        let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(report["error_code"], expected);
+        assert_eq!(std::fs::read_dir(home.path()).unwrap().count(), 1);
+    }
+}

@@ -578,10 +578,29 @@ pub struct QueryArgs {
 
 fn read_limited(path: &std::path::Path, limit: u64) -> std::io::Result<Vec<u8>> {
     use std::io::Read;
+    let metadata = std::fs::metadata(path)?;
+    if !metadata.is_file() || metadata.len() > limit {
+        return Err(std::io::Error::other(
+            "status input must be a bounded regular file",
+        ));
+    }
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        // A regular path can be replaced by a FIFO after the metadata check.
+        options.custom_flags(libc::O_NONBLOCK);
+    }
+    let file = options.open(path)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_file() || metadata.len() > limit {
+        return Err(std::io::Error::other(
+            "status input must be a bounded regular file",
+        ));
+    }
     let mut bytes = Vec::new();
-    std::fs::File::open(path)?
-        .take(limit + 1)
-        .read_to_end(&mut bytes)?;
+    file.take(limit + 1).read_to_end(&mut bytes)?;
     if bytes.len() as u64 > limit {
         return Err(std::io::Error::other("status input over cap"));
     }
