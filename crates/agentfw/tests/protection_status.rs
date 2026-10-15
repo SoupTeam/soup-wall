@@ -16,7 +16,7 @@ use tower::ServiceExt;
 
 const TOKEN: &str = "status-test-token-do-not-print";
 const NATIVE_TOKEN: &str = "native-test-token-do-not-print";
-const NONCE: &str = "fresh-status-challenge-123456789";
+static NONCE: std::sync::LazyLock<String> = std::sync::LazyLock::new(agentfw::token::generate);
 const ALLOW: &str = "agent_policies: []\ndefault: allow\n";
 const DENY: &str = "agent_policies: []\ndefault: deny\n";
 
@@ -79,7 +79,7 @@ impl Fixture {
     }
     async fn get(&self) -> Snapshot {
         let (code, value) =
-            request(self.app.clone(), ENDPOINT, Some(TOKEN), Some(NONCE), None).await;
+            request(self.app.clone(), ENDPOINT, Some(TOKEN), Some(&NONCE), None).await;
         assert_eq!(code, StatusCode::OK, "{value}");
         serde_json::from_value(value).unwrap()
     }
@@ -119,7 +119,7 @@ async fn request(
 async fn status_requires_hook_auth_and_fresh_challenge() {
     let f = Fixture::new(true, true);
     for token in [None, Some("incorrect"), Some(NATIVE_TOKEN)] {
-        let (code, body) = request(f.app.clone(), ENDPOINT, token, Some(NONCE), None).await;
+        let (code, body) = request(f.app.clone(), ENDPOINT, token, Some(&NONCE), None).await;
         assert_eq!(code, StatusCode::UNAUTHORIZED);
         assert!(!body.to_string().contains(TOKEN));
         assert!(body.get("policy").is_none());
@@ -127,7 +127,7 @@ async fn status_requires_hook_auth_and_fresh_challenge() {
     let (code, _) = request(f.app.clone(), ENDPOINT, Some(TOKEN), None, None).await;
     assert_eq!(code, StatusCode::BAD_REQUEST);
     let s = f.get().await;
-    status::validate(&s, NONCE, status::now_ms(), &Expectations::default()).unwrap();
+    status::validate(&s, &NONCE, status::now_ms(), &Expectations::default()).unwrap();
 }
 
 #[tokio::test]
@@ -311,12 +311,12 @@ async fn lifecycle_identity_is_reused_and_health_remains_compatible() {
     };
     let runtime = Arc::new(Runtime::new(&f.state.config).with_lifecycle(identity.clone()));
     let app = app_with_diagnostics(f.state.clone(), runtime);
-    let value = request(app.clone(), ENDPOINT, Some(TOKEN), Some(NONCE), None)
+    let value = request(app.clone(), ENDPOINT, Some(TOKEN), Some(&NONCE), None)
         .await
         .1;
     let s: Snapshot = serde_json::from_value(value).unwrap();
     assert_eq!(s.runtime.lifecycle, Some(identity));
-    status::validate(&s, NONCE, status::now_ms(), &Expectations::default()).unwrap();
+    status::validate(&s, &NONCE, status::now_ms(), &Expectations::default()).unwrap();
     assert_eq!(
         request(app, "/health", None, None, None).await.1,
         health_before
@@ -332,7 +332,7 @@ async fn poisoned_engine_reports_unavailable_without_claiming_coverage() {
         panic!("fixture poison");
     })
     .join();
-    let (code, body) = request(f.app.clone(), ENDPOINT, Some(TOKEN), Some(NONCE), None).await;
+    let (code, body) = request(f.app.clone(), ENDPOINT, Some(TOKEN), Some(&NONCE), None).await;
     assert_eq!(code, StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(body["mode"], "unavailable");
     assert!(body.get("paths").is_none());
@@ -343,8 +343,8 @@ async fn stale_nonce_digest_instance_and_overclaimed_coverage_are_rejected() {
     let f = Fixture::new(true, true);
     let s = f.get().await;
     let now = status::now_ms();
-    assert!(status::validate(&s, "wrong-challenge", now, &Expectations::default()).is_err());
-    assert!(status::validate(&s, NONCE, now + 20_000, &Expectations::default()).is_err());
+    assert!(status::validate(&s, &agentfw::token::generate(), now, &Expectations::default()).is_err());
+    assert!(status::validate(&s, &NONCE, now + 20_000, &Expectations::default()).is_err());
     for expected in [
         Expectations {
             instance: Some("other-instance".into()),
@@ -368,19 +368,19 @@ async fn stale_nonce_digest_instance_and_overclaimed_coverage_are_rejected() {
         },
     ] {
         assert_eq!(
-            status::validate(&s, NONCE, now, &expected),
+            status::validate(&s, &NONCE, now, &expected),
             Err("status_identity_mismatch")
         );
     }
     let mut bad = s.clone();
     bad.paths[3].capability = Evidence::Supported;
-    assert!(status::validate(&bad, NONCE, now, &Expectations::default()).is_err());
+    assert!(status::validate(&bad, &NONCE, now, &Expectations::default()).is_err());
     let mut bad = s.clone();
     bad.paths[2].execution_coverage = Evidence::Supported;
-    assert!(status::validate(&bad, NONCE, now, &Expectations::default()).is_err());
+    assert!(status::validate(&bad, &NONCE, now, &Expectations::default()).is_err());
     let mut bad = s.clone();
     bad.mode = Mode::Unavailable;
-    assert!(status::validate(&bad, NONCE, now, &Expectations::default()).is_err());
+    assert!(status::validate(&bad, &NONCE, now, &Expectations::default()).is_err());
 }
 
 #[tokio::test]
@@ -555,7 +555,7 @@ async fn runtime_instances_are_distinct_and_cannot_be_substituted() {
     let first = f.get().await;
     let other = app_with_diagnostics(f.state.clone(), Arc::new(Runtime::new(&f.state.config)));
     let s: Snapshot = serde_json::from_value(
-        request(other, ENDPOINT, Some(TOKEN), Some(NONCE), None)
+        request(other, ENDPOINT, Some(TOKEN), Some(&NONCE), None)
             .await
             .1,
     )
@@ -564,7 +564,7 @@ async fn runtime_instances_are_distinct_and_cannot_be_substituted() {
     assert_eq!(
         status::validate(
             &s,
-            NONCE,
+            &NONCE,
             status::now_ms(),
             &Expectations {
                 instance: Some(first.runtime.instance),
@@ -649,6 +649,8 @@ async fn real_daemon_reports_loaded_identity_and_survives_disk_drift() {
     )
     .unwrap();
     std::fs::write(home.join("token"), TOKEN).unwrap();
+    let stderr_path = dir.path().join("daemon-stderr.txt");
+    let stderr = std::fs::File::create(&stderr_path).unwrap();
     let mut daemon = Daemon(
         std::process::Command::new(env!("CARGO_BIN_EXE_agentfw"))
             .arg("serve")
@@ -657,7 +659,7 @@ async fn real_daemon_reports_loaded_identity_and_survives_disk_drift() {
             .env_remove("SOUP_MANAGED_AGENT_CONSOLE")
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
+            .stderr(stderr)
             .spawn()
             .unwrap(),
     );
@@ -665,7 +667,8 @@ async fn real_daemon_reports_loaded_identity_and_survives_disk_drift() {
     for _ in 0..100 {
         assert!(
             daemon.0.try_wait().unwrap().is_none(),
-            "fixture daemon exited"
+            "fixture daemon exited: {}",
+            std::fs::read_to_string(&stderr_path).unwrap_or_default()
         );
         if let Ok(s) = status::query(
             &cfg,

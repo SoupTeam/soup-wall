@@ -312,14 +312,10 @@ pub async fn handler(
     let result = if !crate::token::verify(&st.token, auth) {
         Err((StatusCode::UNAUTHORIZED, "status_unauthorized"))
     } else {
-        let nonce = headers
-            .get(NONCE_HEADER)
-            .and_then(|h| h.to_str().ok())
-            .unwrap_or("");
-        if !is_nonce(nonce) {
-            Err((StatusCode::BAD_REQUEST, "status_nonce_required"))
-        } else {
-            snapshot(&st, &rt, nonce.into()).map_err(|code| (StatusCode::SERVICE_UNAVAILABLE, code))
+        match headers.get(NONCE_HEADER).and_then(|h| h.to_str().ok()) {
+            Some(nonce) if is_nonce(nonce) => snapshot(&st, &rt, nonce.into())
+                .map_err(|code| (StatusCode::SERVICE_UNAVAILABLE, code)),
+            _ => Err((StatusCode::BAD_REQUEST, "status_nonce_required")),
         }
     };
     let mut response = match result {

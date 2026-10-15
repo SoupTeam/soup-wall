@@ -919,9 +919,13 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
     }
 
     let diagnostics = agentfw::protection_status::Runtime::new(&cfg).with_binary(
-        std::env::current_exe()
-            .ok()
-            .and_then(|p| agentfw::lifecycle::sha256_file(&p).ok()),
+        if managed.is_none() {
+            std::env::current_exe()
+                .ok()
+                .and_then(|p| agentfw::lifecycle::sha256_file(&p).ok())
+        } else {
+            None
+        },
     );
     let addr = cfg.socket_address();
     let listener = tokio::net::TcpListener::bind(&addr).await?;
@@ -951,7 +955,9 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
                 Err(error) => return Err(error.into()),
             },
         };
-        let diagnostics = diagnostics.with_lifecycle(health.clone());
+        let diagnostics = diagnostics
+            .with_binary(Some(health.binary_digest.clone()))
+            .with_lifecycle(health.clone());
         let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
         let shutdown = Arc::new(Mutex::new(Some(shutdown_tx)));
         let read_health = health.clone();
