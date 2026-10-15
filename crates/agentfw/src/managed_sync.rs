@@ -58,6 +58,17 @@ fn fixed_hex_32(raw: &str) -> Result<[u8; 32]> {
     }
     Ok(data)
 }
+#[derive(Debug)]
+struct ConsoleUnavailableStatus(reqwest::StatusCode);
+
+impl std::fmt::Display for ConsoleUnavailableStatus {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "managed Console unavailable (HTTP {})", self.0)
+    }
+}
+
+impl std::error::Error for ConsoleUnavailableStatus {}
+
 const MAX_PRIVATE_CA_BYTES: usize = 64 * 1024;
 
 /// The credential-bearing Agent is restricted to a single origin. HTTP is
@@ -410,6 +421,11 @@ impl ManagedSync {
         if response.status() == reqwest::StatusCode::NO_CONTENT {
             return Ok(());
         }
+        if response.status().is_server_error() {
+            // A reachable TLS edge does not imply its upstream Console is
+            // available. 5xx must not be misreported as a rejected policy.
+            return Err(ConsoleUnavailableStatus(response.status()).into());
+        }
         ensure!(
             response.status().is_success(),
             "managed policy fetch rejected"
@@ -496,8 +512,10 @@ impl ManagedSync {
             let transport_state = match &result {
                 Ok(()) => "online",
                 Err(e)
-                    if e.chain()
-                        .any(|cause| cause.downcast_ref::<reqwest::Error>().is_some()) =>
+                    if e.chain().any(|cause| {
+                        cause.downcast_ref::<reqwest::Error>().is_some()
+                            || cause.downcast_ref::<ConsoleUnavailableStatus>().is_some()
+                    }) =>
                 {
                     "offline"
                 }
