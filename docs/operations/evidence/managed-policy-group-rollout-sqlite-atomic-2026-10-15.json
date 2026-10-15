@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "backend": "sqlite",
-  "started_at_unix": 1792087305,
-  "source_commit": "bc7ef142e66534ba35b5eacb016cc293f4811d9f",
-  "source_diff_sha256": "c28d7404dd986f7c2756ff54c2f44698a2951aece60bfb802f9eadd9457ab285",
+  "started_at_unix": 1792089157,
+  "source_commit": "7414575581c463a4c2e1e553551f32d3686ebbf8",
+  "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "source_sha256": {
     "scripts/managed-group-rollout-demo.py": "fa8731205026eb60fa640c230bfc5bc5d50d1233452de6f07478bf10a2614f7c",
     "scripts/console_recovery.py": "ee9e3bc8aaf0f8b18f4073e4ffe8adff01adb889c6a2fa66f9293190e321bc4b",
@@ -63,8 +63,8 @@
     "crates/proxy/src/spend_limit.rs": "b567a43e574697c7833e8a6242ee238094d6672b7b35cf113729017b9b25cea0",
     "crates/proxy/src/tenant_store/agent_enrollment.rs": "157dec7f698c62f368030ff1a20a5abb1ee42734f347702f2f02b79e7f05629f",
     "crates/proxy/src/tenant_store/managed_async.rs": "3eb874c5d17dd247e0503e020d69bf6c8c9905906841eea2a101792d7b6c8b85",
-    "crates/proxy/src/tenant_store/managed_policy.rs": "2221e57ccf2cdaaf86c016d1127ff72965fa98e5f9647c9790f87ce7c0efcc7a",
-    "crates/proxy/src/tenant_store/managed_postgres.rs": "2ee0e82ee0f289a4a18d30f0abb13a1fd9933cf44a986e82c7f59a1e57962381",
+    "crates/proxy/src/tenant_store/managed_policy.rs": "69cd35ba945e33ddb4253316f3071cf7d3b2faa0000c20ec2f957259d7055588",
+    "crates/proxy/src/tenant_store/managed_postgres.rs": "0308d4121b61d9db75f356287fccb2e38419ed0df7ae9e67afb4a0ebb3678017",
     "crates/proxy/src/tenant_store/postgres.rs": "edf6d29f555531aba07903fb6b6fd6e488d9f5e1661ccd8f5d1661e9712c858d",
     "crates/proxy/src/tenant_store/recovery_outbox_fixture.rs": "4c6c656c98dc80c34716607de047ca7a1cfbf0bcbffb5c9708fcd8b9ae62cb2e",
     "crates/proxy/src/tenant_store/webhook_delivery_tests.rs": "343d68ed41462df8ead56632307e677bbe20a9a32a6c1efaf14e614a42f1bdc7",
@@ -124,7 +124,7 @@
     "crates/agentfw/src/windows_read.rs": "1a89291d0524f5b273084fa76fc3d35bb8ebc62702c717451657d7d6acb52976"
   },
   "binary_sha256": {
-    "llm-firewall": "7e61352503f3400c8ca158686ef57b337f2549c6e39e72370e21b8f692362453",
+    "llm-firewall": "bfbc760f1e1db0fd2a9a9aef48d694f3476be4548c68e17d898fdb3bb0ef9549",
     "agentfw": "d8b8e82005042c0b2340c0acecc8e4745704a05e00643959eb1012e626be6b19"
   },
   "checks": {
