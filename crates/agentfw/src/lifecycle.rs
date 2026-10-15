@@ -108,6 +108,8 @@ impl Manager {
         expected_sha256: &str,
     ) -> Result<Record> {
         let _lock = self.lock()?;
+        #[cfg(target_os = "linux")]
+        crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
         ensure!(
             state.active.is_none(),
@@ -135,6 +137,8 @@ impl Manager {
         expected_sha256: &str,
     ) -> Result<Record> {
         let _lock = self.lock()?;
+        #[cfg(target_os = "linux")]
+        crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
         ensure!(
             state.operation.is_none() && state.pending_stage.is_none(),
@@ -188,6 +192,8 @@ impl Manager {
 
     pub fn rollback(&self) -> Result<Record> {
         let _lock = self.lock()?;
+        #[cfg(target_os = "linux")]
+        crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
         ensure!(
             state.operation.is_none() && state.pending_stage.is_none(),
@@ -279,6 +285,8 @@ impl Manager {
 
     pub fn start(&self) -> Result<()> {
         let _lock = self.lock()?;
+        #[cfg(target_os = "linux")]
+        crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
         ensure!(
             state.operation.is_none() && state.pending_stage.is_none(),
@@ -289,6 +297,8 @@ impl Manager {
 
     pub fn stop(&self) -> Result<()> {
         let _lock = self.lock()?;
+        #[cfg(target_os = "linux")]
+        crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
         ensure!(
             state.operation.is_none() && state.pending_stage.is_none(),
@@ -299,6 +309,8 @@ impl Manager {
 
     pub fn restart(&self) -> Result<()> {
         let _lock = self.lock()?;
+        #[cfg(target_os = "linux")]
+        crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
         ensure!(
             state.operation.is_none() && state.pending_stage.is_none(),
@@ -310,6 +322,8 @@ impl Manager {
 
     pub fn recover(&self) -> Result<()> {
         let _lock = self.lock()?;
+        #[cfg(target_os = "linux")]
+        crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
         if let Some(pending) = state.pending_stage.clone() {
             ensure!(
@@ -373,6 +387,8 @@ impl Manager {
 
     pub fn remove(&self) -> Result<()> {
         let _lock = self.lock()?;
+        #[cfg(target_os = "linux")]
+        crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
         ensure!(
             state.operation.is_none() && state.pending_stage.is_none(),
@@ -714,7 +730,17 @@ impl Manager {
         }
     }
 
-    fn lock(&self) -> Result<File> {
+    #[cfg(target_os = "linux")]
+    pub(crate) fn service_installable(&self) -> Result<()> {
+        let state = self.load()?;
+        ensure!(
+            state.process.is_none() && state.operation.is_none() && state.pending_stage.is_none(),
+            "stop and recover lifecycle before registering a service"
+        );
+        self.verify(state.active.as_ref().context("Agent is not installed")?)
+    }
+
+    pub(crate) fn lock(&self) -> Result<File> {
         if self.home.exists() {
             ensure_dir(&self.home)?;
         } else {
