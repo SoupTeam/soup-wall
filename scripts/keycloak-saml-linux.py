@@ -7,7 +7,7 @@ to an operator's realm or database. Reports contain checks and hashes, not token
 """
 import argparse
 import base64
-from contextlib import ExitStack, closing
+from contextlib import ExitStack
 import datetime as dt
 import hashlib
 import http.server
@@ -17,9 +17,8 @@ import os
 from pathlib import Path
 import secrets
 import shutil
-import signal
 import socket
-import sqlite3
+import ssl
 import subprocess
 import tempfile
 import threading
@@ -45,22 +44,25 @@ stop_child = shared.stop_child
 imported_credential = shared.imported_credential
 import xml.etree.ElementTree as ET
 
+def tls_handshake(port, hostname, ca):
+    context = ssl.create_default_context(cafile=str(ca))
+    with socket.create_connection(("127.0.0.1", port), timeout=5) as raw:
+        with context.wrap_socket(raw, server_hostname=hostname):
+            return True
+
 def run(args):
     report = {"schema_version": 1, "scope": "Disposable Keycloak SAML and Console browser acceptance",
               "started_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
               "artifact_label": args.artifact_label, "backend": args.backend, "checks": [], "passed": False,
               "cleanup_passed": False, "platform": os.name,
-              "runtimes": ({"keycloak_image": KEYCLOAK_IMAGE, "keycloak_version": "26.8.0",
-                            "keycloak_license": "Apache-2.0", "platform": "linux/amd64"}
-                           if args.docker else vendor.RUNTIMES),
+              "runtimes": {"keycloak_image": KEYCLOAK_IMAGE, "keycloak_version": "26.8.0",
+                            "keycloak_license": "Apache-2.0", "platform": "linux/amd64"},
               "limitations": ["Local synthetic realm; no customer deployment, MFA or external federation",
                               "Console logout revokes its local session; Keycloak SSO remains active",
-                              ("Browser trusts the ephemeral CA in its isolated HOME/NSS database"
-                               if args.docker else "Windows diagnostic browser uses an ephemeral SPKI pin"),
+                              "Browser trusts the ephemeral CA in its isolated HOME/NSS database",
                               "Gateway and HTTP driver verify TLS with an explicit ephemeral CA",
                               "Session expiry is advanced only in this run's disposable database fixture"]}
-    output = vendor.ReportOutput(args.out, [args.gateway, args.bootstrap_helper, args.keycloak_zip,
-                                          args.jdk_zip, Path(__file__)], report)
+    output = vendor.ReportOutput(args.out, [args.gateway, args.bootstrap_helper, Path(__file__)], report)
 
     def check(name, condition):
         report["checks"].append({"name": name, "passed": bool(condition)})
@@ -70,16 +72,9 @@ def run(args):
             raise RuntimeError(name)
 
     try:
-        if args.backend == "postgres" and not args.docker:
-            raise RuntimeError("PostgreSQL acceptance requires the owned Linux Docker service")
-        if args.docker:
-            if os.name != "posix" or not shutil.which("docker") or not shutil.which("certutil"):
-                raise RuntimeError("Linux Docker and NSS certutil are required")
-        elif os.name != "nt" or not args.keycloak_zip or not args.jdk_zip:
-            raise RuntimeError("use --docker on Linux or supply pinned archives for Windows diagnostics")
+        if os.name != "posix" or not shutil.which("docker") or not shutil.which("certutil"):
+            raise RuntimeError("Linux Docker and NSS certutil are required")
         import requests
-        from cryptography import x509
-        from cryptography.hazmat.primitives import serialization
         from playwright.sync_api import sync_playwright
 
         for name in ("gateway", "bootstrap_helper"):
@@ -100,15 +95,10 @@ def run(args):
         with ExitStack() as resources:
             directory = Path(tempfile.mkdtemp(prefix="soup-wall-keycloak-session-", dir=scratch)).resolve()
             resources.callback(vendor.cleanup_new_directory, directory, scratch, children)
-            if args.docker:
-                docker = shutil.which("docker")
-                subprocess.run([docker, "pull", "--platform", "linux/amd64", KEYCLOAK_IMAGE],
-                               check=True, capture_output=True, timeout=240)
-                check("pinned-container-image-pulled-by-digest", True)
-            else:
-                keycloak = vendor.unpack(args.keycloak_zip, directory / "keycloak", vendor.RUNTIMES["keycloak"])
-                jdk = vendor.unpack(args.jdk_zip, directory / "jdk", vendor.RUNTIMES["jdk"])
-                check("pinned-runtime-checksums", True)
+            docker = shutil.which("docker")
+            subprocess.run([docker, "pull", "--platform", "linux/amd64", KEYCLOAK_IMAGE],
+                           check=True, capture_output=True, timeout=240)
+            check("pinned-container-image-pulled-by-digest", True)
             ca, (cert, key), (sp_cert, sp_key) = vendor.certificate_files(directory)
             gateway_port, vendor_port = vendor.free_port(), vendor.free_port()
             vendor_base = f"https://127.0.0.1:{vendor_port}"
@@ -171,46 +161,33 @@ def run(args):
                 "email": "operator@example.test", "emailVerified": True, "firstName": "Fixture", "lastName": "Operator",
                 "clientRoles": {"realm-management": ["realm-admin"]},
                 "credentials": [imported_credential(operator_password)]})
-            import_dir = directory / "realm-import" if args.docker else keycloak / "data/import"
+            import_dir = directory / "realm-import"
             import_dir.mkdir(parents=True)
             (import_dir / "realm.json").write_text(json.dumps(realm_data), encoding="utf-8")
-            if args.docker:
-                profile = directory / "profile"
-                profile.mkdir()
-                temporary = directory / "tmp"
-                temporary.mkdir()
-                environment = {"HOME": str(profile), "TMPDIR": str(temporary), "PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"}
-            else:
-                environment = vendor.child_environment(directory)
+            profile = directory / "profile"
+            profile.mkdir()
+            temporary = directory / "tmp"
+            temporary.mkdir()
+            environment = {"HOME": str(profile), "TMPDIR": str(temporary), "PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"}
             vendor_log = resources.enter_context((directory / "vendor.log").open("wb"))
-            if args.docker:
-                created = subprocess.run([docker, "create", "--platform", "linux/amd64", "--network", "host",
-                    "--name", "soup-oidc-" + uuid.uuid4().hex, "--user", "0:0", "--cap-drop=ALL",
-                    "--security-opt=no-new-privileges", "--memory=1536m",
-                    "--mount", f"type=bind,src={import_dir},dst=/opt/keycloak/data/import,readonly",
-                    "--mount", f"type=bind,src={cert},dst=/fixture-cert.pem,readonly",
-                    "--mount", f"type=bind,src={key},dst=/fixture-key.pem,readonly",
-                    KEYCLOAK_IMAGE, "start-dev", "--import-realm", "--http-enabled=false",
-                    "--http-host=127.0.0.1", f"--https-port={vendor_port}", f"--hostname={vendor_base}",
-                    "--https-certificate-file=/fixture-cert.pem", "--https-certificate-key-file=/fixture-key.pem",
-                    "--log-level=warn"], check=True, capture_output=True, text=True, timeout=30)
-                container_id = created.stdout.strip()
-                if len(container_id) != 64 or any(c not in "0123456789abcdef" for c in container_id):
-                    raise RuntimeError("Docker did not return a created container ID")
-                def remove_container():
-                    subprocess.run([docker, "rm", "--force", container_id], check=True,
-                                   capture_output=True, timeout=30)
-                resources.callback(remove_container)
-                child = start_child([docker, "start", "--attach", container_id], directory, environment, vendor_log, resources)
-            else:
-                vendor_environment = dict(environment, JAVA_HOME=str(jdk),
-                    JAVA_OPTS_APPEND='-Duser.home="' + environment["USERPROFILE"] + '"',
-                    PATH=str(jdk / "bin") + os.pathsep + environment.get("PATH", ""))
-                child = start_child([environment["COMSPEC"], "/d", "/c", str(keycloak / "bin/kc.bat"),
-                    "start-dev", "--import-realm", "--http-enabled=false", "--http-host=127.0.0.1",
-                    f"--https-port={vendor_port}", f"--hostname={vendor_base}",
-                    f"--https-certificate-file={cert}", f"--https-certificate-key-file={key}",
-                    "--log-level=warn"], directory, vendor_environment, vendor_log, resources)
+            created = subprocess.run([docker, "create", "--platform", "linux/amd64", "--network", "host",
+                "--name", "soup-saml-" + uuid.uuid4().hex, "--user", "0:0", "--cap-drop=ALL",
+                "--security-opt=no-new-privileges", "--memory=1536m",
+                "--mount", f"type=bind,src={import_dir},dst=/opt/keycloak/data/import,readonly",
+                "--mount", f"type=bind,src={cert},dst=/fixture-cert.pem,readonly",
+                "--mount", f"type=bind,src={key},dst=/fixture-key.pem,readonly",
+                KEYCLOAK_IMAGE, "start-dev", "--import-realm", "--http-enabled=false",
+                "--http-host=127.0.0.1", f"--https-port={vendor_port}", f"--hostname={vendor_base}",
+                "--https-certificate-file=/fixture-cert.pem", "--https-certificate-key-file=/fixture-key.pem",
+                "--log-level=warn"], check=True, capture_output=True, text=True, timeout=30)
+            container_id = created.stdout.strip()
+            if len(container_id) != 64 or any(c not in "0123456789abcdef" for c in container_id):
+                raise RuntimeError("Docker did not return a created container ID")
+            def remove_container():
+                subprocess.run([docker, "rm", "--force", container_id], check=True,
+                               capture_output=True, timeout=30)
+            resources.callback(remove_container)
+            child = start_child([docker, "start", "--attach", container_id], directory, environment, vendor_log, resources)
             children.append(child)
             session = resources.enter_context(requests.Session())
             session.trust_env = False
@@ -293,6 +270,15 @@ def run(args):
                 return process
 
             gateway = start_gateway()
+            check("owned-https-certificate-and-hostname-accepted", tls_handshake(edge.server_port, "localhost", ca))
+            for name, hostname, trust in [("wrong-hostname", "wrong.example.test", ca),
+                                           ("untrusted-ca", "localhost", sp_cert)]:
+                try:
+                    tls_handshake(edge.server_port, hostname, trust)
+                except ssl.SSLCertVerificationError:
+                    check("https-" + name + "-refused", True)
+                else:
+                    check("https-" + name + "-refused", False)
             if database.container:
                 check("gateway-postgres-connections-use-tls", database.sql(
                     "SELECT count(*) FROM pg_stat_ssl s JOIN pg_stat_activity a USING(pid) "
@@ -393,6 +379,9 @@ def run(args):
                                headers={"Cookie": captured["cookie"] if cookie is None else cookie})
 
             captured = capture_assertion()
+            original = ET.fromstring(base64.b64decode(captured["fields"]["SAMLResponse"]))
+            check("genuine-vendor-assertion-contains-untrusted-owner-role", any(
+                value.text == "owner" for value in original.findall(".//saml:AttributeValue", vendor.NS)))
             count = database.sql("SELECT count(*) FROM oidc_browser_sessions")
             check("genuine-assertion-without-browser-binding-rejected", submit(captured, cookie="").status_code == 400)
             check("missing-binding-does-not-create-session", database.sql("SELECT count(*) FROM oidc_browser_sessions") == count)
@@ -545,7 +534,7 @@ def run(args):
             # Vendor generates an otherwise valid short-lived assertion. Do not edit signed XML or the system clock.
             clients = request("GET", realm_admin + "/clients", headers=vendor_admin,
                               params={"clientId": client_id}).json()
-            client_record = clients[0]
+            client_record = request("GET", realm_admin + "/clients/" + clients[0]["id"], headers=vendor_admin).json()
             client_record["attributes"]["saml.assertion.lifespan"] = "2"
             client_url = realm_admin + "/clients/" + client_record["id"]
             check("vendor-short-lived-assertion-configured", request("PUT", client_url,
@@ -596,8 +585,6 @@ def main():
     args = parser.parse_args()
     args.gateway = args.gateway.resolve(strict=True)
     args.bootstrap_helper = args.bootstrap_helper.resolve(strict=True)
-    args.docker = True
-    args.keycloak_zip = args.jdk_zip = None
     return run(args)
 
 if __name__ == "__main__":

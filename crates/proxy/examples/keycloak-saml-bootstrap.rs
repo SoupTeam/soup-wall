@@ -196,6 +196,56 @@ fn validate_postgres_fixture(value: &str, expected: &str) -> anyhow::Result<()> 
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    async fn lifecycle_seeds_roles_but_not_membership_in_the_other_workspace() {
+        let directory = tempfile::tempdir().unwrap();
+        let database = directory.path().join("lifecycle.sqlite");
+        let path = database.to_str().unwrap();
+        let scope = lifecycle(path, "https://fixture.example/realm", "owner", "analyst")
+            .await
+            .unwrap();
+        let store = TenantStore::open(path).unwrap();
+        let members = store
+            .list_workspace_members(scope["workspace_id"].as_str().unwrap())
+            .unwrap();
+        assert_eq!(members.len(), 2);
+        assert!(members.iter().any(|m| m.role == WorkspaceRole::Owner));
+        assert!(members.iter().any(|m| m.role == WorkspaceRole::Analyst));
+        assert!(store
+            .list_workspace_members(scope["other_workspace_id"].as_str().unwrap())
+            .unwrap()
+            .is_empty());
+        assert!(
+            lifecycle(path, "https://fixture.example/realm", "owner", "analyst")
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            store
+                .list_workspace_members(scope["workspace_id"].as_str().unwrap())
+                .unwrap()
+                .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn postgres_bootstrap_refuses_unbound_or_unverified_targets() {
+        let name = "soup_oidc_0123456789abcdef0123456789abcdef";
+        let valid =
+            format!("postgresql://oidc_fixture:synthetic@127.0.0.1:5432/{name}?sslmode=require");
+        assert!(validate_postgres_fixture(&valid, name).is_ok());
+        for bad in [
+            valid.replace("127.0.0.1", "192.0.2.1"),
+            valid.replace("require", "disable"),
+            valid.replace(name, "operator_database"),
+            format!("{valid}&options=anything"),
+            valid.replace("oidc_fixture:", "operator:"),
+        ] {
+            assert!(validate_postgres_fixture(&bad, name).is_err());
+        }
+    }
+
     #[test]
     fn bootstrap_preprovisions_two_active_owners_before_idp_import() {
         let directory = tempfile::tempdir().unwrap();
