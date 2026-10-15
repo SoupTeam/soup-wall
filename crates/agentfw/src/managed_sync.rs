@@ -4,7 +4,7 @@
 //! No network-fetched issuer keys, no changes to native/executor/enforce mode.
 
 use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -25,6 +25,8 @@ pub enum TrustSource {
 
 pub struct ManagedSync {
     console: reqwest::Url,
+    /// Optional operator-provisioned PEM-encoded private CA, never fetched from Console.
+    private_ca_pem: Option<Vec<u8>>,
     token: String,
     tenant: String,
     agent: String,
@@ -55,25 +57,80 @@ fn fixed_hex_32(raw: &str) -> Result<[u8; 32]> {
     }
     Ok(data)
 }
+const MAX_PRIVATE_CA_BYTES: usize = 64 * 1024;
+
+/// The credential-bearing Agent is restricted to a single origin. HTTP is
+/// permitted only for the existing loopback demonstration; HTTPS uses rustls
+/// hostname/certificate validation, including for private non-loopback hosts.
+fn parse_console_origin(raw: &str) -> Result<reqwest::Url> {
+    ensure!(
+        !raw.is_empty()
+            && raw.len() <= 2048
+            && raw == raw.trim()
+            && raw.is_ascii()
+            && !raw.bytes().any(|b| b == b'\\' || b.is_ascii_control()),
+        "invalid or ambiguous managed Console origin"
+    );
+    let url = reqwest::Url::parse(raw).context("invalid managed Console URL")?;
+    ensure!(
+        url.has_host()
+            && !url.cannot_be_a_base()
+            && url.username().is_empty()
+            && url.password().is_none()
+            && url.path() == "/"
+            && url.query().is_none()
+            && url.fragment().is_none()
+            && url.port() != Some(0),
+        "managed Console must be a single origin without credentials, path, query or fragment"
+    );
+    match url.scheme() {
+        "https" => Ok(url),
+        "http"
+            if matches!(
+                url.host_str(),
+                Some("127.0.0.1" | "localhost" | "[::1]")
+            ) =>
+        {
+            Ok(url)
+        }
+        _ => anyhow::bail!("remote managed Console requires verified HTTPS"),
+    }
+}
+
+/// Read at most one bounded operator-provisioned CA PEM. This is public
+/// certificate material, not a signing key, and is not fetched over the wire.
+/// Invalid/untrusted CA files fail configuration, never silently use plaintext.
+fn private_ca_from_environment(is_https: bool) -> Result<Option<Vec<u8>>> {
+    let Some(raw) = std::env::var_os("SOUP_MANAGED_AGENT_TLS_CA_FILE") else {
+        return Ok(None);
+    };
+    ensure!(is_https, "private CA is only supported for HTTPS Console origins");
+    let path = PathBuf::from(raw);
+    ensure!(
+        path.is_absolute(),
+        "SOUP_MANAGED_AGENT_TLS_CA_FILE must be an absolute path"
+    );
+    let mut reader = fs::File::open(&path).context("cannot open operator private CA")?;
+    let mut data = Vec::new();
+    (&mut reader)
+        .take((MAX_PRIVATE_CA_BYTES + 1) as u64)
+        .read_to_end(&mut data)
+        .context("cannot read operator private CA")?;
+    ensure!(
+        !data.is_empty() && data.len() <= MAX_PRIVATE_CA_BYTES,
+        "operator private CA PEM is missing or exceeds 64 KiB"
+    );
+    reqwest::Certificate::from_pem(&data).context("invalid operator private CA PEM")?;
+    Ok(Some(data))
+}
+
 impl ManagedSync {
     pub fn from_environment(home: &Path) -> Result<Option<Self>> {
         let Some(base) = std::env::var("SOUP_MANAGED_AGENT_CONSOLE").ok() else {
             return Ok(None);
         };
-        let console = reqwest::Url::parse(&base).context("invalid managed Console URL")?;
-        ensure!(
-            console.scheme() == "http"
-                && matches!(
-                    console.host_str(),
-                    Some("127.0.0.1" | "localhost" | "[::1]")
-                )
-                && console.username().is_empty()
-                && console.password().is_none()
-                && console.path() == "/"
-                && console.query().is_none()
-                && console.fragment().is_none(),
-            "managed Console must be a local loopback HTTP origin"
-        );
+        let console = parse_console_origin(&base)?;
+        let private_ca_pem = private_ca_from_environment(console.scheme() == "https")?;
         let token = std::env::var("SOUP_MANAGED_AGENT_TOKEN")
             .context("missing separate Agent credential")?;
         ensure!(
@@ -127,6 +184,7 @@ impl ManagedSync {
 
         Ok(Some(Self {
             console,
+            private_ca_pem,
             token,
             tenant,
             agent,
@@ -381,11 +439,24 @@ impl ManagedSync {
         self.acknowledge(client, state).await
     }
 
-    pub async fn run(self, state: Shared) {
-        let client = match reqwest::Client::builder()
+    /// Never follow 3xx to another origin: a redirect must not receive the
+    /// enrolled Agent Bearer credential (including across HTTPS→HTTP).
+    /// no_proxy also disables inherited HTTP_PROXY/HTTPS_PROXY routing.
+    fn build_client(&self) -> Result<reqwest::Client> {
+        let mut builder = reqwest::Client::builder()
             .no_proxy()
-            .timeout(Duration::from_secs(5))
-            .build()
+            .redirect(reqwest::redirect::Policy::none())
+            .timeout(Duration::from_secs(5));
+        if let Some(pem) = &self.private_ca_pem {
+            let certificate = reqwest::Certificate::from_pem(pem)
+                .context("invalid configured operator private CA")?;
+            builder = builder.add_root_certificate(certificate);
+        }
+        builder.build().context("unable to configure managed Console transport")
+    }
+
+    pub async fn run(self, state: Shared) {
+        let client = match self.build_client()
         {
             Ok(c) => c,
             Err(e) => {
@@ -419,5 +490,63 @@ impl ManagedSync {
                     "managed policy unavailable or rejected; last accepted policy preserved");
             }
         }
+    }
+}
+
+
+#[cfg(test)]
+mod https_transport_tests {
+    use super::*;
+
+    #[test]
+    fn accepts_https_remote_and_existing_loopback_http() {
+        for origin in [
+            "https://console.example.test/",
+            "https://console.example.test:8443/",
+            "https://192.0.2.42:9443/",
+            "https://[2001:db8::4]:443/",
+            "http://127.0.0.1:8080/",
+            "http://localhost:1234/",
+            "http://[::1]:9000/",
+        ] {
+            assert!(parse_console_origin(origin).is_ok(), "{origin}");
+        }
+    }
+
+    #[test]
+    fn rejects_remote_plaintext_credentials_and_ambiguous_origins() {
+        for origin in [
+            "http://example.test/",
+            "http://192.0.2.42:8080/",
+            "https://user:secret@example.test/",
+            "https://user@example.test/",
+            "https://example.test/path",
+            "https://example.test/?x=1",
+            "https://example.test/#fragment",
+            "https://example.test:0/",
+            "https://example.test\\@other.test/",
+            " https://example.test/",
+            "https://example.test/ ",
+            "file:///tmp/cert",
+            "https://",
+        ] {
+            assert!(parse_console_origin(origin).is_err(), "{origin}");
+        }
+    }
+
+    #[test]
+    fn private_ca_is_bounded_and_invalid_pem_is_rejected() {
+        let temp = tempfile::tempdir().unwrap();
+        let file = temp.path().join("private-root.pem");
+        fs::write(&file, vec![b'x'; MAX_PRIVATE_CA_BYTES + 1]).unwrap();
+        // Validate bounded stream read without inheriting process env in parallel tests.
+        let mut reader = fs::File::open(&file).unwrap();
+        let mut bytes = Vec::new();
+        (&mut reader)
+            .take((MAX_PRIVATE_CA_BYTES + 1) as u64)
+            .read_to_end(&mut bytes)
+            .unwrap();
+        assert_eq!(bytes.len(), MAX_PRIVATE_CA_BYTES + 1);
+        assert!(reqwest::Certificate::from_pem(b"not a certificate").is_err());
     }
 }
