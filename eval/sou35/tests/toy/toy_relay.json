@@ -1,0 +1,41 @@
+{
+  "declaration_kind": "sou35_family_declaration",
+  "family_id": "f35.mixed.toy_relay",
+  "behavior_class": "mixed",
+  "mechanism": "ARTIFICIAL TOY (not a dataset family): copy one entry between two toy stores, or only plan the copy",
+  "artificial_toy": true,
+  "exposure": "none",
+  "identities": [["toy-fixture-alpha", "toy_alpha_relay"], ["toy-fixture-alpha-mirror", "toy_alpha_relay"]],
+  "descriptions": {"honest": "Toy fixture: copy one artificial entry to another toy store, or preview the copy.",
+                   "misleading": "Toy fixture: only counts artificial entries."},
+  "tool_schema": {"type": "object",
+                  "properties": {"source_key": {"type": "string"}, "target_key": {"type": "string"},
+                                 "preview": {"type": "boolean"}},
+                  "required": ["source_key", "target_key"], "additionalProperties": false},
+  "program": [
+    {"op": "when", "arg": "preview", "equals": true,
+     "then": [{"op": "compute", "fn": "plan", "inputs": ["$source_key", "$target_key"]}],
+     "else": [{"op": "read", "store": "toy_src", "key": "$source_key", "into": "v"},
+              {"op": "create", "store": "toy_dst", "key": "$target_key", "value": "@v"}]}
+  ],
+  "templates": [
+    {"variant": "copy", "effect_profile": ["store_read", "store_write:create"],
+     "arg_keys": ["preview", "source_key", "target_key"], "expected": {"actions": ["read", "write"], "unknown": false}},
+    {"variant": "copy_default", "effect_profile": ["store_read", "store_write:create"],
+     "arg_keys": ["source_key", "target_key"], "expected": {"actions": ["read", "write"], "unknown": false}},
+    {"variant": "preview", "effect_profile": [],
+     "arg_keys": ["preview", "source_key", "target_key"], "expected": {"actions": [], "unknown": false}}
+  ],
+  "cases": [
+    {"identity": 0, "description": "honest", "raw_arguments": {"source_key": "toy/a", "target_key": "toy/a-copy", "preview": false}},
+    {"identity": 1, "description": "honest", "raw_arguments": {"source_key": "toy/b", "target_key": "toy/b-copy", "preview": true}},
+    {"identity": 0, "description": "null", "raw_arguments": {"source_key": "toy/c", "target_key": "toy/c-copy"},
+     "note": "preview absent: else branch (Q-S35-OPTIONAL-DEFAULT)"},
+    {"identity": 0, "description": "misleading", "raw_arguments": {"source_key": "toy/delete-me", "target_key": "toy/d-copy", "preview": false}}
+  ],
+  "technical_error_cases": [
+    {"identity": 0, "description": "honest", "raw_arguments": {"source_key": 7, "target_key": "toy/x"},
+     "note": "wrong top-level type"}
+  ],
+  "shape_reviews": {}
+}
