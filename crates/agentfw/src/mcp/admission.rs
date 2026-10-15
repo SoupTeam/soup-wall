@@ -364,6 +364,26 @@ pub fn compose_production_policy(
     compose_scoped_production_policy(classification, baseline, egress_declared, false)
 }
 
+fn compose_https_get_policy(
+    classification: &Classification,
+    baseline: ActionClass,
+    egress_declared: bool,
+) -> Result<ProductionVerdict, &'static str> {
+    let verdict = compose_production_policy(classification, baseline, egress_declared)?;
+    // The reviewed GET is classified as read by the existing rule baseline.
+    // Its operator-owned Network baseline and native egress gate remain
+    // authoritative. Empty, understated or mixed predictions add no authority.
+    Ok(
+        if verdict == ProductionVerdict::Allow
+            && !(baseline == ActionClass::Network && classification.actions.as_slice() == ["read"])
+        {
+            ProductionVerdict::Ask
+        } else {
+            verdict
+        },
+    )
+}
+
 /// Only a validated installed v2 create profile supplies this write authority.
 /// A description, classifier result, or generic side-effecting baseline cannot.
 fn compose_scoped_production_policy(
@@ -821,6 +841,7 @@ where
 struct ClassificationAuthority {
     egress_declared: bool,
     create_file: bool,
+    https_get: bool,
 }
 
 struct Collector<'a> {
@@ -915,12 +936,16 @@ impl<'a> Collector<'a> {
         let prod_eval = if let Err(failure) = mapped {
             Err(failure) // Invalid classifier replies never reach policy.
         } else if let Some(ref res) = result {
-            compose_scoped_production_policy(
-                res,
-                baseline,
-                authority.egress_declared,
-                authority.create_file,
-            )
+            if authority.https_get {
+                compose_https_get_policy(res, baseline, authority.egress_declared)
+            } else {
+                compose_scoped_production_policy(
+                    res,
+                    baseline,
+                    authority.egress_declared,
+                    authority.create_file,
+                )
+            }
         } else {
             Err(mapped.err().unwrap_or("classifier_unavailable"))
         };
@@ -1048,6 +1073,7 @@ impl<'a> Collector<'a> {
                 CONTRACT
                     | crate::native::resource::CONTRACT
                     | crate::native::resource::CREATE_CONTRACT
+                    | crate::native::resource::NETWORK_CONTRACT
             ),
             "unsupported native receipt contract"
         );
@@ -1510,7 +1536,14 @@ where
                         let installed = collector.config.native.registry.tools.iter().find(|tool| tool.name == name).context("MCP call tool is not installed")?;
                         let resource_reply = installed.resource_policy.is_some()
                             || collector.config.resource_profiles.contains_key(name)
-                            || name == "create_file";
+                            || name == "create_file" || name == "https_get";
+                        if name == "https_get"
+                            && !installed.resource_policy.as_ref().is_some_and(|policy| policy.is_https_get())
+                        {
+                            write_resource_reply(client, host, true,
+                                &withheld(request_id, "invocation", &json!(["resource_https_profile_required"]))).await?;
+                            continue;
+                        }
                         if name == "create_file"
                             && !installed.resource_policy.as_ref().is_some_and(|policy| policy.is_create_file())
                         {
@@ -1522,7 +1555,7 @@ where
                         ensure!(args.is_object(), "MCP call arguments must be an object");
                         schemas.get(name).context("MCP tool schema not installed")?.validate(&args)?;
                         let resource_admission = if let Some(policy) = &installed.resource_policy {
-                            if policy.is_create_file() {
+                            if policy.is_create_file() || policy.is_https_get() {
                                 if collector.config.server_id != policy.profile.server_id {
                                     write_resource_reply(client, host, true,
                                         &withheld(request_id, "invocation", &json!(["resource_server_identity_mismatch"]))).await?;
@@ -1558,7 +1591,7 @@ where
                                     continue;
                                 }
                             }
-                            if policy.is_create_file()
+                            if (policy.is_create_file() || policy.is_https_get())
                                 && collector.config.classifier.as_ref()
                                     .and_then(|classifier| classifier.revision())
                                     != Some(policy.classifier_sha256.as_str())
@@ -1660,6 +1693,16 @@ where
                                 input_sha256,
                                 resources: derived.resources.clone(),
                                 execution,
+                                network: if policy.is_https_get() {
+                                    match crate::native::resource::https_get_binding(policy, &args) {
+                                        Ok(binding) => Some(binding),
+                                        Err(reason) => {
+                                            write_resource_reply(client, host, true,
+                                                &withheld(request_id, "invocation", &json!([reason]))).await?;
+                                            continue;
+                                        }
+                                    }
+                                } else { None },
                             };
                             Some((admission, derived))
                         } else if collector.config.resource_profiles.contains_key(name) {
@@ -1689,6 +1732,8 @@ where
                                         egress_declared,
                                         create_file: resource_admission.as_ref()
                                             .is_some_and(|(admission, _)| admission.execution.is_some()),
+                                        https_get: installed.resource_policy.as_ref()
+                                            .is_some_and(|policy| policy.is_https_get()),
                                     },
                                 ),
                             )
@@ -1722,6 +1767,12 @@ where
                         }
                         #[cfg(target_os = "linux")]
                         let mut prepared_create = None;
+                        let https_get = installed.resource_policy.as_ref().is_some_and(|policy| policy.is_https_get());
+                        if https_get && !cfg!(target_os = "linux") {
+                            write_resource_reply(client, host, true,
+                                &withheld(request_id, "invocation", &json!(["resource_https_platform_unsupported"]))).await?;
+                            continue;
+                        }
                         #[cfg(unix)]
                         let mut pinned_resource_ws: Option<(
                             crate::sandbox::PinnedWorkspace,
@@ -1734,7 +1785,8 @@ where
                             continue;
                         }
                         #[cfg(unix)]
-                        if let Some((_, ref derived)) = resource_admission {
+                        if let Some((_, ref derived)) = resource_admission.as_ref()
+                            .filter(|_| !https_get) {
                             let policy = installed.resource_policy.as_ref().unwrap();
                             let creating = policy.is_create_file();
                             if creating && !cfg!(target_os = "linux") {
@@ -1819,6 +1871,70 @@ where
                                 &withheld(request_id, "invocation", &receipt["reason_codes"]),
                             )
                             .await?;
+                            continue;
+                        }
+                        if https_get {
+                            let policy = installed.resource_policy.as_ref().expect("network policy selected");
+                            let bound = resource_admission.as_ref().and_then(|(admission, _)| admission.network.as_ref())
+                                .context("network authority missing")?;
+                            // Recompute the complete immutable policy/arguments authority
+                            // after actual native Allow, immediately before dispatch.
+                            ensure!(&crate::native::resource::https_get_binding(policy, &args)
+                                .map_err(anyhow::Error::msg)? == bound, "network authority changed before dispatch");
+                            let authority = policy.network.as_ref().expect("network profile selected");
+                            let original_url = args["url"].as_str().context("validated URL missing")?;
+                            let fetched = without_resource_overlap(client, true, async {
+                                // Even DNS preparation starts only after real native
+                                // Allow. Every preparation failure completes the spent
+                                // reservation with an ordinary correlated error result.
+                                Ok(match super::https_get::PreparedHttpsGet::prepare(authority, original_url).await {
+                                    Ok(prepared) => prepared.execute().await,
+                                    Err(error) => Err(error),
+                                })
+                            }).await?;
+                            let (payload, fetched_text, result_kind, request_issued) = match fetched {
+                                Ok(result) => (json!({"success":true,"status":result.status,
+                                    "content_type":result.content_type,
+                                    "received_bytes":result.received_bytes,
+                                    "received_http_bytes":result.received_http_bytes,
+                                    "received_encrypted_bytes":result.received_encrypted_bytes,
+                                    "request_issued":result.request_issued}),
+                                    Some(result.text), "value", result.request_issued),
+                                Err(error) => (json!({"success":false,"error":error.code,
+                                    "request_issued":error.request_issued}),None,"error",error.request_issued),
+                            };
+                            eprintln!("{}", json!({"event":"mcp_https_get_execution",
+                                "host_call_id":request_id,"request_issued":request_issued,
+                                "result_kind":result_kind,"received_bytes":payload.get("received_bytes"),
+                                "received_http_bytes":payload.get("received_http_bytes"),
+                                "received_encrypted_bytes":payload.get("received_encrypted_bytes"),
+                                "error":payload.get("error")}));
+                            let mut content = vec![json!({"type":"text","text":payload.to_string()})];
+                            // Keep untrusted document text as an actual MCP text
+                            // block. Nesting it inside a JSON string would escape
+                            // line breaks before the native content inspector.
+                            if let Some(text) = fetched_text { content.push(json!({"type":"text","text":text})); }
+                            let response = json!({"jsonrpc":"2.0","id":request_id,
+                                "result":{"isError":result_kind == "error",
+                                    "content":content}});
+                            let mut raw_response = response.to_string().into_bytes();
+                            raw_response.push(b'\n');
+                            let result_content = std::str::from_utf8(&raw_response).context("HTTPS result is UTF-8")?;
+                            let result_receipt = without_resource_overlap(client, true,
+                                collector.event("result", json!({
+                                    "expected_contract_version":contract_version,
+                                    "tool":name,"args":args,"call_id":receipt["call_id"],
+                                    "result_kind":result_kind,"delivery":"mcp_host","content":result_content,
+                                    "expected_binding_sha256":receipt["binding_sha256"]
+                                }))).await?;
+                            if result_receipt["release"] != true {
+                                let mut reasons = result_receipt["reason_codes"].as_array().cloned().unwrap_or_default();
+                                if request_issued { reasons.push(json!("resource_https_request_may_have_been_issued")); }
+                                write_resource_reply(client, host, true,
+                                    &withheld(request_id,"result",&json!(reasons))).await?;
+                            } else {
+                                write_resource_reply(client, host, true, &raw_response).await?;
+                            }
                             continue;
                         }
                         #[cfg(target_os = "linux")]
@@ -2092,7 +2208,7 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
         let create_profile = config.native.registry.tools.iter().any(|tool| {
             tool.resource_policy
                 .as_ref()
-                .is_some_and(|policy| policy.is_create_file())
+                .is_some_and(|policy| policy.is_create_file() || policy.is_https_get())
         });
         // Discovery-only create servers receive EOF on a completed session.
         // Do not label a forced child kill as clean completion of this profile.
@@ -2293,6 +2409,77 @@ mod input_identity_tests {
         changed = result;
         changed["tools"][0]["annotations"]["customPermission"] = json!("allow");
         assert!(manifest(&changed, &native, &info).is_err());
+    }
+
+    #[test]
+    fn sou56_https_profile_requires_exact_read_prediction_and_retains_hard_denials() {
+        let prediction = |actions: &[&str], unknown, uncertainty| Classification {
+            actions: actions.iter().map(|action| (*action).to_owned()).collect(),
+            unknown,
+            confidence: 0.95,
+            uncertainty,
+            reason: "bounded HTTPS scope regression".into(),
+        };
+        assert_eq!(
+            compose_https_get_policy(
+                &prediction(&["read"], false, 0.1),
+                ActionClass::Network,
+                true
+            ),
+            Ok(ProductionVerdict::Allow)
+        );
+        for actions in [&[][..], &["send_data"], &["read", "send_data"], &["write"]] {
+            assert_eq!(
+                compose_https_get_policy(
+                    &prediction(actions, false, 0.1),
+                    ActionClass::Network,
+                    true
+                ),
+                Ok(ProductionVerdict::Ask)
+            );
+        }
+        for actions in [&["delete"][..], &["read", "change_permissions"]] {
+            assert_eq!(
+                compose_https_get_policy(
+                    &prediction(actions, false, 0.1),
+                    ActionClass::Network,
+                    true
+                ),
+                Ok(ProductionVerdict::Deny)
+            );
+        }
+        assert_eq!(
+            compose_https_get_policy(
+                &prediction(&["read"], true, 0.1),
+                ActionClass::Network,
+                true
+            ),
+            Ok(ProductionVerdict::Ask)
+        );
+        assert_eq!(
+            compose_https_get_policy(
+                &prediction(&["read"], false, 0.9),
+                ActionClass::Network,
+                true
+            ),
+            Ok(ProductionVerdict::Ask)
+        );
+        assert_eq!(
+            compose_https_get_policy(
+                &prediction(&["read"], false, 0.1),
+                ActionClass::ReadOnly,
+                true
+            ),
+            Ok(ProductionVerdict::Ask)
+        );
+        assert_eq!(
+            compose_https_get_policy(
+                &prediction(&["read"], false, f64::NAN),
+                ActionClass::Network,
+                true
+            ),
+            Err("classifier_invalid")
+        );
     }
 
     #[test]

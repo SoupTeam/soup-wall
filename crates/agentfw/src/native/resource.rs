@@ -14,6 +14,7 @@ use crate::mcp::resources::{
 
 pub const CONTRACT: &str = "sw-native/resources/1";
 pub const CREATE_CONTRACT: &str = "sw-native/resources/2";
+pub const NETWORK_CONTRACT: &str = "sw-native/resources/3";
 pub const CREATE_FILE_EXECUTOR_PROFILE: &str = "sw-native/create-file/linux-root-child/1";
 // Keep the complete original content within the selected rule classifier's
 // reviewed leaf bound; a truncated/unknown prediction must remain blocked.
@@ -36,6 +37,41 @@ pub fn create_file_schema() -> Value {
         "required": ["path", "content"],
         "additionalProperties": false
     })
+}
+
+/// The only network operation installed by the v3 resource contract.
+pub fn https_get_schema() -> Value {
+    json!({"type":"object", "properties":{
+        "url":{"type":"string", "minLength":1, "maxLength":2048}
+    }, "required":["url"], "additionalProperties":false})
+}
+
+/// Exact network execution authority, additive to (never a replacement for)
+/// native host/session/registry and single-use result correlation.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct NetworkBinding {
+    pub operation: String,
+    pub action: String,
+    pub executor_profile: String,
+    pub policy_sha256: String,
+    pub args_sha256: String,
+    pub authority_sha256: String,
+}
+
+impl NetworkBinding {
+    fn valid(&self) -> bool {
+        self.operation == "https_get"
+            && self.action == "get"
+            && self.executor_profile == crate::mcp::https_get::EXECUTOR_PROFILE
+            && [
+                &self.policy_sha256,
+                &self.args_sha256,
+                &self.authority_sha256,
+            ]
+            .iter()
+            .all(|digest| super::is_digest(digest))
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -107,6 +143,8 @@ pub struct Policy {
     pub allowed_resources: Vec<Resource>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution: Option<ExecutionPolicy>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network: Option<crate::mcp::https_get::HttpsGetAuthority>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -123,11 +161,15 @@ pub struct Admission {
     pub resources: Vec<ResourceEvidence>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution: Option<ExecutionBinding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network: Option<NetworkBinding>,
 }
 
 impl Admission {
     pub fn contract(&self) -> &'static str {
-        if self.execution.is_some() {
+        if self.network.is_some() {
+            NETWORK_CONTRACT
+        } else if self.execution.is_some() {
             CREATE_CONTRACT
         } else {
             CONTRACT
@@ -144,6 +186,11 @@ impl Admission {
                 }))
             || self.resources.is_empty()
             || self.resources.len() > 256
+            || (self.network.is_some() && self.execution.is_some())
+            || self
+                .network
+                .as_ref()
+                .is_some_and(|network| !network.valid())
             || self
                 .execution
                 .as_ref()
@@ -177,7 +224,9 @@ impl Admission {
 
 impl Policy {
     pub fn contract(&self) -> &'static str {
-        if self.execution.is_some() {
+        if self.network.is_some() {
+            NETWORK_CONTRACT
+        } else if self.execution.is_some() {
             CREATE_CONTRACT
         } else {
             CONTRACT
@@ -186,6 +235,10 @@ impl Policy {
 
     pub fn is_create_file(&self) -> bool {
         self.execution.is_some()
+    }
+
+    pub fn is_https_get(&self) -> bool {
+        self.network.is_some()
     }
 
     pub fn validate(&self, tool: &super::Tool) -> anyhow::Result<()> {
@@ -209,6 +262,45 @@ impl Policy {
                 && self.allowed_resources.len() <= 256,
             "invalid operator resource policy"
         );
+        anyhow::ensure!(
+            self.execution.is_none() || self.network.is_none(),
+            "conflicting operator execution policies"
+        );
+        if let Some(network) = &self.network {
+            network.validate().map_err(anyhow::Error::msg)?;
+            let selector = &self.profile.selectors[0];
+            anyhow::ensure!(
+                tool.name == "https_get"
+                    && tool.action_class == soup_wall_agent::ActionClass::Network
+                    && matches!(tool.result_provenance, super::ResultProvenance::Untrusted)
+                    && tool.schema_sha256 == super::canonical_digest(&https_get_schema())
+                    && self.executor_sha256 == crate::mcp::https_get::executor_profile_sha256()
+                    && tool.egress.len() == 1
+                    && tool.egress[0].pointer == "/url"
+                    && matches!(tool.egress[0].kind, super::EgressKind::UrlHost)
+                    && !tool.egress[0].optional
+                    && self.profile.selectors.len() == 1
+                    && selector.pointer == "/url"
+                    && selector.kind == crate::mcp::resources::ResourceKind::Url
+                    && selector.aliases.is_empty()
+                    && !selector.optional
+                    && selector.default.is_none()
+                    && !selector.allow_missing_leaf
+                    && self.allowed_resources.len() == 1,
+                "invalid operator HTTPS GET policy"
+            );
+            let (canonical, host, port) = crate::mcp::resources::canonical_url(&network.exact_url)
+                .map_err(anyhow::Error::msg)?;
+            anyhow::ensure!(
+                self.allowed_resources[0]
+                    == Resource::Url {
+                        canonical,
+                        host,
+                        port
+                    },
+                "HTTPS GET authority must select one exact URL"
+            );
+        }
         if let Some(execution) = &self.execution {
             let selector = self
                 .profile
@@ -252,6 +344,39 @@ impl Policy {
         }
         Ok(())
     }
+}
+
+/// No DNS lookup or request is performed here. The constrained executor checks
+/// and pins the current resolved addresses against this immutable authority.
+pub fn https_get_binding(policy: &Policy, args: &Value) -> Result<NetworkBinding, &'static str> {
+    let authority = policy
+        .network
+        .as_ref()
+        .ok_or("native_https_authority_missing")?;
+    authority
+        .validate()
+        .map_err(|_| "native_https_authority_invalid")?;
+    if policy.execution.is_some()
+        || policy.executor_sha256 != crate::mcp::https_get::executor_profile_sha256()
+    {
+        return Err("native_https_executor_revision_mismatch");
+    }
+    let object = args.as_object().ok_or("native_https_arguments_invalid")?;
+    if object.len() != 1 || args["url"].as_str() != Some(authority.exact_url.as_str()) {
+        return Err("native_https_url_not_allowed");
+    }
+    Ok(NetworkBinding {
+        operation: "https_get".into(),
+        action: "get".into(),
+        executor_profile: crate::mcp::https_get::EXECUTOR_PROFILE.into(),
+        policy_sha256: super::canonical_digest(
+            &serde_json::to_value(policy).expect("policy serializes"),
+        ),
+        args_sha256: super::canonical_digest(args),
+        authority_sha256: authority
+            .executor_id()
+            .map_err(|_| "native_https_authority_invalid")?,
+    })
 }
 
 /// Canonical operator paths plus stable filesystem identity. The constrained
@@ -406,6 +531,11 @@ pub fn authorize(
             return Err("native_create_binding_mismatch");
         }
     }
+    if let Some(bound) = &admission.network {
+        if &https_get_binding(policy, args)? != bound {
+            return Err("native_https_binding_mismatch");
+        }
+    }
     let profile_sha256 = super::canonical_digest(
         &serde_json::to_value(&policy.profile).expect("profile serializes"),
     );
@@ -527,6 +657,7 @@ mod tests {
             input_sha256: "a".repeat(64),
             resources,
             execution: Some(create_file_binding(policy, args).unwrap()),
+            network: None,
         }
     }
 

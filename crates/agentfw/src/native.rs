@@ -338,7 +338,7 @@ fn parse(body: &str) -> Result<Request, &'static str> {
             keys.extend(["tool", "args", "schema_sha256"]);
             if matches!(
                 request.contract_version.as_str(),
-                resource::CONTRACT | resource::CREATE_CONTRACT
+                resource::CONTRACT | resource::CREATE_CONTRACT | resource::NETWORK_CONTRACT
             ) {
                 keys.insert("resource_admission");
             }
@@ -360,7 +360,7 @@ fn parse(body: &str) -> Result<Request, &'static str> {
     if !identifier(&request.session_id)
         || !matches!(
             request.contract_version.as_str(),
-            CONTRACT | resource::CONTRACT | resource::CREATE_CONTRACT
+            CONTRACT | resource::CONTRACT | resource::CREATE_CONTRACT | resource::NETWORK_CONTRACT
         )
         || (matches!(event, "session_start" | "session_end")
             && request.contract_version != CONTRACT)
@@ -370,7 +370,7 @@ fn parse(body: &str) -> Result<Request, &'static str> {
     if event == "call"
         && matches!(
             request.contract_version.as_str(),
-            resource::CONTRACT | resource::CREATE_CONTRACT
+            resource::CONTRACT | resource::CREATE_CONTRACT | resource::NETWORK_CONTRACT
         )
     {
         let admission = request
@@ -661,6 +661,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         contract_version: match request.contract_version.as_str() {
             resource::CONTRACT => resource::CONTRACT,
             resource::CREATE_CONTRACT => resource::CREATE_CONTRACT,
+            resource::NETWORK_CONTRACT => resource::NETWORK_CONTRACT,
             _ => CONTRACT,
         },
         registry_sha256: native.registry_sha256.clone(),
@@ -788,6 +789,18 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         response.verdict = verdict_label(verdict);
         response.release = verdict == Verdict::Allow;
         response.reason_codes = outcome.rule.iter().cloned().collect();
+        if tool
+            .resource_policy
+            .as_ref()
+            .is_some_and(|policy| policy.is_https_get())
+            && !firewall.egress_hosts_allowlisted(&hosts)
+        {
+            response.verdict = "deny";
+            response.release = false;
+            response
+                .reason_codes
+                .push("native_https_egress_not_allowlisted".into());
+        }
         let bound = binding(
             &native.registry_sha256,
             &session.epoch,

@@ -1,0 +1,83 @@
+name: Constrained MCP HTTPS GET
+
+on:
+  pull_request:
+    paths:
+      - 'crates/agentfw/**'
+      - 'crates/agent/**'
+      - 'crates/adapter/**'
+      - 'rule_baseline/**'
+      - 'scripts/verify-sou56-https-get.py'
+      - 'scripts/verify-sou54-create-file.py'
+      - 'scripts/fixtures/mcp_https_get_probe_server.py'
+      - 'scripts/tests/test_sou56_https_get.py'
+      - '.github/workflows/mcp-https-get.yml'
+      - 'Cargo.lock'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mcp-https-get-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-https-get:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build and identify the exact candidate
+        shell: bash
+        run: |
+          set -o pipefail
+          git rev-parse HEAD > "$RUNNER_TEMP/sou56-source.txt"
+          rustc --version > "$RUNNER_TEMP/sou56-rust.txt"
+          openssl version > "$RUNNER_TEMP/sou56-openssl.txt"
+          cargo build --locked -p agentfw --bin agentfw --message-format=json > "$RUNNER_TEMP/sou56-build.jsonl"
+          sha256sum target/debug/agentfw > "$RUNNER_TEMP/sou56-binary.txt"
+      - name: Native executor, authority and compatibility regressions
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --locked -p agentfw --lib -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou56-native-unit.log"
+          cargo test --locked -p agentfw --test native_endpoint -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou56-native-router.log"
+          cargo clippy --locked -p agentfw --all-targets -- -D warnings 2>&1 | tee "$RUNNER_TEMP/sou56-clippy.log"
+      - name: Require nonempty passing native evidence
+        run: |
+          python3 - <<'PYCODE'
+          import importlib.util, os
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location('sou54_helpers', 'scripts/verify-sou54-create-file.py')
+          probe = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(probe)
+          for name in ('unit', 'router'):
+              value = Path(os.environ['RUNNER_TEMP'], 'sou56-native-' + name + '.log').read_text()
+              assert probe.native_test_passed({'exit_code': 0, 'stdout': value}), name + ': no verified passed native tests'
+          PYCODE
+      - name: Evidence grading controls and actual owned TLS fixture
+        run: python3 -B -m unittest discover -s scripts/tests -p 'test_sou56_https_get.py' -v
+      - name: Real enforcing daemon, original stdio calls and independent HTTPS ledgers
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 -B scripts/verify-sou56-https-get.py --run --repo "$PWD" \
+            --agentfw "$PWD/target/debug/agentfw" --expected-commit "$(git rev-parse HEAD)" \
+            --output "$RUNNER_TEMP/sou56-https-get-results.json" 2>&1 | tee "$RUNNER_TEMP/sou56-driver.log"
+      - name: Retain sanitized outcomes and exact source/build identities
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou56-https-get-evidence
+          path: |
+            ${{ runner.temp }}/sou56-*.json
+            ${{ runner.temp }}/sou56-*.jsonl
+            ${{ runner.temp }}/sou56-*.txt
+            ${{ runner.temp }}/sou56-*.log
+          if-no-files-found: warn
+          retention-days: 30
