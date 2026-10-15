@@ -130,7 +130,8 @@ fn binding(
         h.update(field.as_bytes());
     }
     if let Some(admission) = admission {
-        h.update(b"sw-native/resources/1\0");
+        h.update(admission.contract().as_bytes());
+        h.update(b"\0");
         let context =
             canonical(&serde_json::to_value(admission).expect("context serializes")).to_string();
         h.update((context.len() as u64).to_be_bytes());
@@ -335,7 +336,10 @@ fn parse(body: &str) -> Result<Request, &'static str> {
         "session_start" | "session_end" => {}
         "call" => {
             keys.extend(["tool", "args", "schema_sha256"]);
-            if request.contract_version == resource::CONTRACT {
+            if matches!(
+                request.contract_version.as_str(),
+                resource::CONTRACT | resource::CREATE_CONTRACT
+            ) {
                 keys.insert("resource_admission");
             }
         }
@@ -356,19 +360,27 @@ fn parse(body: &str) -> Result<Request, &'static str> {
     if !identifier(&request.session_id)
         || !matches!(
             request.contract_version.as_str(),
-            CONTRACT | resource::CONTRACT
+            CONTRACT | resource::CONTRACT | resource::CREATE_CONTRACT
         )
         || (matches!(event, "session_start" | "session_end")
             && request.contract_version != CONTRACT)
     {
         return Err("native_invalid_identity");
     }
-    if event == "call" && request.contract_version == resource::CONTRACT {
-        request
+    if event == "call"
+        && matches!(
+            request.contract_version.as_str(),
+            resource::CONTRACT | resource::CREATE_CONTRACT
+        )
+    {
+        let admission = request
             .resource_admission
             .as_ref()
-            .ok_or("native_resource_context_missing")?
-            .validate_shape()?;
+            .ok_or("native_resource_context_missing")?;
+        admission.validate_shape()?;
+        if admission.contract() != request.contract_version {
+            return Err("native_resource_contract_mismatch");
+        }
     } else if request.resource_admission.is_some() {
         return Err("native_invalid_fields");
     }
@@ -646,10 +658,10 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         session.calls.retain(|_, call| call.expires > now);
     }
     let mut response = Response {
-        contract_version: if request.contract_version == resource::CONTRACT {
-            resource::CONTRACT
-        } else {
-            CONTRACT
+        contract_version: match request.contract_version.as_str() {
+            resource::CONTRACT => resource::CONTRACT,
+            resource::CREATE_CONTRACT => resource::CREATE_CONTRACT,
+            _ => CONTRACT,
         },
         registry_sha256: native.registry_sha256.clone(),
         session_id: request.session_id.clone(),
@@ -733,6 +745,9 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             return Err("native_schema_mismatch");
         }
         if let Some(policy) = &tool.resource_policy {
+            if request.contract_version != policy.contract() {
+                return Err("native_resource_contract_required");
+            }
             let Some(admission) = &request.resource_admission else {
                 return Err("native_resource_contract_required");
             };

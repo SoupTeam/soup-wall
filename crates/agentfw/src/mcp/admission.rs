@@ -361,6 +361,17 @@ pub fn compose_production_policy(
     baseline: ActionClass,
     egress_declared: bool,
 ) -> Result<ProductionVerdict, &'static str> {
+    compose_scoped_production_policy(classification, baseline, egress_declared, false)
+}
+
+/// Only a validated installed v2 create profile supplies this write authority.
+/// A description, classifier result, or generic side-effecting baseline cannot.
+fn compose_scoped_production_policy(
+    classification: &Classification,
+    baseline: ActionClass,
+    egress_declared: bool,
+    create_file_authority: bool,
+) -> Result<ProductionVerdict, &'static str> {
     let valid = classification.confidence.is_finite()
         && (0.0..=1.0).contains(&classification.confidence)
         && classification.uncertainty.is_finite()
@@ -404,6 +415,19 @@ pub fn compose_production_policy(
 
     if classification.unknown || classification.uncertainty >= 0.8 {
         return Ok(ProductionVerdict::Ask);
+    }
+
+    if create_file_authority {
+        return Ok(
+            if baseline == ActionClass::SideEffecting
+                && classification.actions.as_slice() == ["write"]
+            {
+                ProductionVerdict::Allow
+            } else {
+                // Understated, empty or mixed predictions cannot activate a write.
+                ProductionVerdict::Ask
+            },
+        );
     }
 
     if classification.actions.iter().any(|a| a == "write") {
@@ -793,6 +817,12 @@ where
     Ok(())
 }
 
+#[derive(Clone, Copy)]
+struct ClassificationAuthority {
+    egress_declared: bool,
+    create_file: bool,
+}
+
 struct Collector<'a> {
     config: &'a AdmissionCfg,
     client: reqwest::Client,
@@ -823,7 +853,7 @@ impl<'a> Collector<'a> {
         name: &str,
         args: &Value,
         baseline: ActionClass,
-        egress_declared: bool,
+        authority: ClassificationAuthority,
     ) -> anyhow::Result<Result<ProductionVerdict, &'static str>> {
         let Some(classifier) = self.config.classifier.clone() else {
             return Ok(Ok(ProductionVerdict::Allow));
@@ -885,7 +915,12 @@ impl<'a> Collector<'a> {
         let prod_eval = if let Err(failure) = mapped {
             Err(failure) // Invalid classifier replies never reach policy.
         } else if let Some(ref res) = result {
-            compose_production_policy(res, baseline, egress_declared)
+            compose_scoped_production_policy(
+                res,
+                baseline,
+                authority.egress_declared,
+                authority.create_file,
+            )
         } else {
             Err(mapped.err().unwrap_or("classifier_unavailable"))
         };
@@ -908,6 +943,7 @@ impl<'a> Collector<'a> {
                 "confidence":result.confidence,"uncertainty":result.uncertainty,
                 "reason_sha256":sha(result.reason.as_bytes())})),
             "mapped_action_class":mapped_class,"trusted_baseline":baseline,
+            "operator_execution_profile":authority.create_file.then_some(crate::native::resource::CREATE_FILE_EXECUTOR_PROFILE),
             "baseline_mismatch":mapped_class.map(|class| class != baseline),
             "adapter_verdict":adapter_eval.as_ref().map(|(v, _)| match v {
                 AdapterVerdict::Allow => "allow",
@@ -997,8 +1033,9 @@ impl<'a> Collector<'a> {
     }
 
     async fn event(&self, event: &str, fields: Value) -> anyhow::Result<Value> {
-        let expected_contract = if fields.get("resource_admission").is_some() {
-            crate::native::resource::CONTRACT
+        let expected_contract = if let Some(admission) = fields.get("resource_admission") {
+            serde_json::from_value::<crate::native::resource::Admission>(admission.clone())?
+                .contract()
         } else {
             fields
                 .get("expected_contract_version")
@@ -1008,7 +1045,9 @@ impl<'a> Collector<'a> {
         ensure!(
             matches!(
                 expected_contract,
-                CONTRACT | crate::native::resource::CONTRACT
+                CONTRACT
+                    | crate::native::resource::CONTRACT
+                    | crate::native::resource::CREATE_CONTRACT
             ),
             "unsupported native receipt contract"
         );
@@ -1470,7 +1509,15 @@ where
                         let name = params["name"].as_str().context("MCP call tool absent")?;
                         let installed = collector.config.native.registry.tools.iter().find(|tool| tool.name == name).context("MCP call tool is not installed")?;
                         let resource_reply = installed.resource_policy.is_some()
-                            || collector.config.resource_profiles.contains_key(name);
+                            || collector.config.resource_profiles.contains_key(name)
+                            || name == "create_file";
+                        if name == "create_file"
+                            && !installed.resource_policy.as_ref().is_some_and(|policy| policy.is_create_file())
+                        {
+                            write_resource_reply(client, host, true,
+                                &withheld(request_id, "invocation", &json!(["resource_create_profile_required"]))).await?;
+                            continue;
+                        }
                         let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
                         ensure!(args.is_object(), "MCP call arguments must be an object");
                         schemas.get(name).context("MCP tool schema not installed")?.validate(&args)?;
@@ -1479,16 +1526,25 @@ where
                                 let policy_ws_canon = policy.workspace.canonicalize().ok();
                                 let agentfw_ws_canon =
                                     std::path::PathBuf::from(agentfw_ws).canonicalize().ok();
-                                if let (Some(policy_ws_canon), Some(agentfw_ws_canon)) =
-                                    (policy_ws_canon, agentfw_ws_canon)
-                                {
-                                    if policy_ws_canon != agentfw_ws_canon {
-                                        let reasons = json!(["resource_workspace_mismatch"]);
-                                        write_resource_reply(client, host, resource_reply, &withheld(request_id, "invocation", &reasons))
-                                            .await?;
-                                        continue;
-                                    }
+                                let same_workspace = matches!((&policy_ws_canon, &agentfw_ws_canon),
+                                    (Some(policy), Some(actual)) if policy == actual);
+                                let known_mismatch = policy_ws_canon.is_some()
+                                    && agentfw_ws_canon.is_some() && !same_workspace;
+                                if known_mismatch || (policy.is_create_file() && !same_workspace) {
+                                    let reasons = json!(["resource_workspace_mismatch"]);
+                                    write_resource_reply(client, host, resource_reply,
+                                        &withheld(request_id, "invocation", &reasons)).await?;
+                                    continue;
                                 }
+                            }
+                            if policy.is_create_file()
+                                && collector.config.classifier.as_ref()
+                                    .and_then(|classifier| classifier.revision())
+                                    != Some(policy.classifier_sha256.as_str())
+                            {
+                                write_resource_reply(client, host, true,
+                                    &withheld(request_id, "invocation", &json!(["resource_classifier_revision_mismatch"]))).await?;
+                                continue;
                             }
                             let snapshot = admitted_snapshot
                                 .as_ref()
@@ -1560,6 +1616,18 @@ where
                                 &serde_json::to_value(&policy.profile)
                                     .context("profile serializes")?,
                             );
+                            let execution = if policy.is_create_file() {
+                                match crate::native::resource::create_file_binding(policy, &args) {
+                                    Ok(binding) => Some(binding),
+                                    Err(reason) => {
+                                        write_resource_reply(client, host, resource_reply,
+                                            &withheld(request_id, "invocation", &json!([reason]))).await?;
+                                        continue;
+                                    }
+                                }
+                            } else {
+                                None
+                            };
                             let admission = crate::native::resource::Admission {
                                 server_id: policy.profile.server_id.clone(),
                                 host_call_id: request_id.clone(),
@@ -1570,6 +1638,7 @@ where
                                 definition_sha256: admitted_tool.definition_sha256.clone(),
                                 input_sha256,
                                 resources: derived.resources.clone(),
+                                execution,
                             };
                             Some((admission, derived))
                         } else if collector.config.resource_profiles.contains_key(name) {
@@ -1595,7 +1664,11 @@ where
                                     name,
                                     &args,
                                     installed.action_class,
-                                    egress_declared,
+                                    ClassificationAuthority {
+                                        egress_declared,
+                                        create_file: resource_admission.as_ref()
+                                            .is_some_and(|(admission, _)| admission.execution.is_some()),
+                                    },
                                 ),
                             )
                             .await?
@@ -1626,6 +1699,8 @@ where
                                 }
                             }
                         }
+                        #[cfg(target_os = "linux")]
+                        let mut prepared_create = None;
                         #[cfg(unix)]
                         let mut pinned_resource_ws: Option<(
                             crate::sandbox::PinnedWorkspace,
@@ -1640,8 +1715,17 @@ where
                         #[cfg(unix)]
                         if let Some((_, ref derived)) = resource_admission {
                             let policy = installed.resource_policy.as_ref().unwrap();
-                            if !(installed.action_class == ActionClass::ReadOnly
-                                && name == "read_document")
+                            let creating = policy.is_create_file();
+                            if creating && !cfg!(target_os = "linux") {
+                                let reasons = json!(["resource_create_platform_unsupported"]);
+                                write_resource_reply(client, host, resource_reply,
+                                    &withheld(request_id, "invocation", &reasons)).await?;
+                                continue;
+                            }
+                            if !((installed.action_class == ActionClass::ReadOnly
+                                && name == "read_document" && !creating)
+                                || (installed.action_class == ActionClass::SideEffecting
+                                    && name == "create_file" && creating))
                             {
                                 let reasons = json!(["resource_executor_unsupported"]);
                                 write_resource_reply(client, host, resource_reply, &withheld(request_id, "invocation", &reasons)).await?;
@@ -1671,7 +1755,23 @@ where
                                     write_resource_reply(client, host, resource_reply, &withheld(request_id, "invocation", &reasons)).await?;
                                     continue;
                                 }
-                                pinned_resource_ws = Some((pinned, target_path.to_path_buf()));
+                                if creating {
+                                    #[cfg(target_os = "linux")]
+                                    {
+                                        let content = args["content"].as_str()
+                                            .context("validated create content missing")?;
+                                        match super::create_file::PreparedCreate::prepare(&pinned, target_path, content) {
+                                            Ok(prepared) => prepared_create = Some(prepared),
+                                            Err(error) => {
+                                                write_resource_reply(client, host, resource_reply,
+                                                    &withheld(request_id, "invocation", &json!([error.code]))).await?;
+                                                continue;
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    pinned_resource_ws = Some((pinned, target_path.to_path_buf()));
+                                }
                             }
                         // A composed refusal must not reserve native capacity.
                         // Native trusted restrictions still gate every permitted call.
@@ -1683,7 +1783,7 @@ where
                         let contract_version = if let Some((ref admission, _)) = resource_admission
                         {
                             call_fields["resource_admission"] = serde_json::to_value(admission)?;
-                            crate::native::resource::CONTRACT.to_string()
+                            admission.contract().to_string()
                         } else {
                             CONTRACT.to_string()
                         };
@@ -1698,6 +1798,68 @@ where
                                 &withheld(request_id, "invocation", &receipt["reason_codes"]),
                             )
                             .await?;
+                            continue;
+                        }
+                        #[cfg(target_os = "linux")]
+                        if let Some(prepared) = prepared_create {
+                            // Only anonymous staging runs on the blocking worker. If an
+                            // unsupported cancellation/overlap wins, a detached stage can
+                            // never publish: its returned owner is simply dropped.
+                            let staging = tokio::task::spawn_blocking(move || prepared.stage());
+                            let staged = without_resource_overlap(client, true, async {
+                                staging.await.context("create staging worker failed")
+                            }).await?;
+                            let creation = match staged {
+                                Ok(staged) => without_resource_overlap(client, true, async {
+                                    Ok(staged.publish())
+                                }).await?,
+                                Err(error) => Err(error),
+                            };
+                            let (payload, committed, result_kind) = match creation {
+                                Ok(commit) => (json!({
+                                    "success": true, "created": true, "committed": commit.committed,
+                                    "path": args["path"], "bytes_written": commit.bytes_written,
+                                    "content_sha256": sha(args["content"].as_str().unwrap().as_bytes()),
+                                    "file_synced": commit.file_synced,
+                                    "directory_synced": commit.directory_synced
+                                }), commit.committed, "value"),
+                                Err(error) => (json!({
+                                    "success": false, "created": error.committed, "committed": error.committed,
+                                    "error": error.code, "staged_bytes": error.staged_bytes,
+                                    "committed_bytes": error.committed_bytes
+                                }), error.committed, "error"),
+                            };
+                            // A failed fsync or denied result cannot roll back a published file.
+                            eprintln!("{}", json!({"event":"mcp_create_file_execution",
+                                "host_call_id":request_id,"committed":committed,
+                                "result_kind":result_kind,
+                                "committed_bytes":payload.get("bytes_written").or_else(|| payload.get("committed_bytes")),
+                                "staged_bytes":payload.get("staged_bytes"),
+                                "error":payload.get("error")}));
+                            let response = json!({"jsonrpc":"2.0","id":request_id,
+                                "result":{"isError":result_kind == "error",
+                                    "content":[{"type":"text","text":payload.to_string()}]}});
+                            let mut raw_response = response.to_string().into_bytes();
+                            raw_response.push(b'\n');
+                            let result_content = std::str::from_utf8(&raw_response)
+                                .context("create receipt is UTF-8")?;
+                            let res_receipt = without_resource_overlap(client, true,
+                                collector.event("result", json!({
+                                    "expected_contract_version":contract_version,
+                                    "tool":name,"args":args,"call_id":receipt["call_id"],
+                                    "result_kind":result_kind,"delivery":"mcp_host",
+                                    "content":result_content,
+                                    "expected_binding_sha256":receipt["binding_sha256"]
+                                }))).await?;
+                            if res_receipt["release"] != true {
+                                let mut reasons = res_receipt["reason_codes"].as_array()
+                                    .cloned().unwrap_or_default();
+                                if committed { reasons.push(json!("resource_creation_committed")); }
+                                write_resource_reply(client, host, true,
+                                    &withheld(request_id,"result",&json!(reasons))).await?;
+                            } else {
+                                write_resource_reply(client, host, true, &raw_response).await?;
+                            }
                             continue;
                         }
                         if resource_admission.is_some() {
@@ -1905,8 +2067,28 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
                 .take()
                 .context("MCP server stdout unavailable")?,
         );
-        let outcome = relay(&collector, &mut client, &mut host, &mut server, &mut child).await;
-        let _ = process.kill().await;
+        let mut outcome = relay(&collector, &mut client, &mut host, &mut server, &mut child).await;
+        let create_profile = config.native.registry.tools.iter().any(|tool| {
+            tool.resource_policy
+                .as_ref()
+                .is_some_and(|policy| policy.is_create_file())
+        });
+        // Discovery-only create servers receive EOF on a completed session.
+        // Do not label a forced child kill as clean completion of this profile.
+        drop(child);
+        if create_profile && outcome.is_ok() {
+            match tokio::time::timeout(Duration::from_secs(2), process.wait()).await {
+                Ok(Ok(status)) if status.success() => {}
+                _ => {
+                    let _ = process.kill().await;
+                    outcome = Err(anyhow::anyhow!(
+                        "MCP create-profile server did not close cleanly"
+                    ));
+                }
+            }
+        } else {
+            let _ = process.kill().await;
+        }
         outcome
     }
     .await;
@@ -2090,6 +2272,92 @@ mod input_identity_tests {
         changed = result;
         changed["tools"][0]["annotations"]["customPermission"] = json!("allow");
         assert!(manifest(&changed, &native, &info).is_err());
+    }
+
+    #[test]
+    fn sou54_write_authority_preserves_hard_denials_and_unknown_refusal() {
+        let prediction = |actions: &[&str], unknown, uncertainty| Classification {
+            actions: actions.iter().map(|value| (*value).to_owned()).collect(),
+            unknown,
+            confidence: 0.95,
+            uncertainty,
+            reason: "bounded policy regression".into(),
+        };
+        assert_eq!(
+            compose_production_policy(
+                &prediction(&["write"], false, 0.1),
+                ActionClass::SideEffecting,
+                false
+            )
+            .unwrap(),
+            ProductionVerdict::Ask
+        );
+        assert_eq!(
+            compose_scoped_production_policy(
+                &prediction(&["write"], false, 0.1),
+                ActionClass::SideEffecting,
+                false,
+                true
+            )
+            .unwrap(),
+            ProductionVerdict::Allow
+        );
+        for actions in [
+            &["delete"][..],
+            &["write", "delete"],
+            &["write", "change_permissions"],
+            &["write", "send_data"],
+        ] {
+            assert_eq!(
+                compose_scoped_production_policy(
+                    &prediction(actions, false, 0.95),
+                    ActionClass::SideEffecting,
+                    false,
+                    true
+                )
+                .unwrap(),
+                ProductionVerdict::Deny
+            );
+        }
+        for (actions, unknown, uncertainty) in [
+            (&["write"][..], true, 0.1),
+            (&["write"][..], false, 0.8),
+            (&["read", "write"][..], false, 0.1),
+            (&["read"][..], false, 0.1),
+            (&[][..], false, 0.1),
+        ] {
+            assert_eq!(
+                compose_scoped_production_policy(
+                    &prediction(actions, unknown, uncertainty),
+                    ActionClass::SideEffecting,
+                    false,
+                    true
+                )
+                .unwrap(),
+                ProductionVerdict::Ask
+            );
+        }
+        assert_eq!(
+            compose_scoped_production_policy(
+                &prediction(&["write"], false, 0.9),
+                ActionClass::ReadOnly,
+                false,
+                true
+            )
+            .unwrap(),
+            ProductionVerdict::Deny
+        );
+        for invalid in [f64::NAN, f64::INFINITY, -0.1, 1.1] {
+            assert_eq!(
+                compose_scoped_production_policy(
+                    &prediction(&["write"], false, invalid),
+                    ActionClass::SideEffecting,
+                    false,
+                    true
+                ),
+                Err("classifier_invalid")
+            );
+        }
     }
 
     #[test]

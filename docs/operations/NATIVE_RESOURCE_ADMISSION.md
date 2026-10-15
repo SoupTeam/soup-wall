@@ -1,6 +1,6 @@
 # Native resource admission
 
-The opt-in `sw-native/resources/1` contract at `/native/v1` checks permissions and one-shot correlation for an authenticated trusted collector. It does not attest an executor sandbox. The shipped generic stdio relay refuses resource-profiled calls until a reviewed executor can enforce grants at the actual file/network boundary. See [MCP admission](MCP_STDIO_ADMISSION.md).
+The opt-in `sw-native/resources/1` contract at `/native/v1` checks permissions and one-shot correlation for an authenticated trusted collector. It does not attest an executor sandbox. The shipped generic stdio relay refuses resource-profiled calls except the reviewed operation executors below. [Constrained Linux file creation](MCP_CREATE_FILE.md) adds an explicitly installed `sw-native/resources/2` create-only profile; it does not enable arbitrary writes or server containment. See [MCP admission](MCP_STDIO_ADMISSION.md).
 
 ## Operator configuration
 
@@ -48,7 +48,8 @@ The confined file-read executor is supported on Unix. Non-Unix platforms refuse 
   5. Any post-admission failure (missing target, symlink refusal, invalid UTF-8, content size exceeded) immediately settles its call reservation via `collector.event("result", result_kind: "error")`, ensuring zero native session capacity leakage.
   6. On successful read, delivers the verified result through native result admission with bound host ID and release confirmation.
   7. Directly returns the result to the host, ensuring the unconfined server child process is **never invoked** for the operation.
-- Any unsupported operation, arbitrary tool, or network egress under resource policy is rejected immediately with `resource_executor_unsupported`, preventing unconfined server execution.
+- The separately configured [Linux `create_file` executor](MCP_CREATE_FILE.md) supports one new direct workspace child under `sw-native/resources/2`. Its explicit operation/action/content/workspace authority cannot be downgraded to the read contract.
+- Any other unsupported operation, arbitrary tool, or network egress under resource policy is rejected immediately with `resource_executor_unsupported`, preventing unconfined server execution.
 
 ## Verification and remaining work
 

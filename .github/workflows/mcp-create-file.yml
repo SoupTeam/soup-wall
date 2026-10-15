@@ -1,0 +1,82 @@
+name: Constrained MCP file creation
+
+on:
+  pull_request:
+    paths:
+      - 'crates/agentfw/**'
+      - 'crates/agent/**'
+      - 'crates/adapter/**'
+      - 'rule_baseline/**'
+      - 'scripts/verify-sou54-create-file.py'
+      - 'scripts/fixtures/mcp_create_file_probe_server.py'
+      - 'scripts/tests/test_sou54_create_file.py'
+      - '.github/workflows/mcp-create-file.yml'
+      - 'Cargo.lock'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mcp-create-file-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-create-file:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the exact candidate
+        shell: bash
+        run: |
+          set -o pipefail
+          git rev-parse HEAD > "$RUNNER_TEMP/sou54-source.txt"
+          rustc --version > "$RUNNER_TEMP/sou54-rust.txt"
+          cargo build --locked -p agentfw --bin agentfw --message-format=json > "$RUNNER_TEMP/sou54-build.jsonl"
+          sha256sum target/debug/agentfw > "$RUNNER_TEMP/sou54-binary.txt"
+      - name: Native authority, publication and effect-accounting regressions
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --locked -p agentfw --lib create_file -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou54-native-unit.log"
+          cargo test --locked -p agentfw --test native_endpoint create_file_v2 -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou54-native-router.log"
+          cargo test --locked -p agentfw --lib sou54_ -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou54-native-composition.log"
+          cargo test --locked -p agentfw --lib mcp::input::tests:: -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou54-native-input.log"
+      - name: Require nonempty native boundary evidence
+        run: |
+          python3 - <<'PYCODE'
+          import importlib.util, os
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location('sou54_probe', 'scripts/verify-sou54-create-file.py')
+          probe = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(probe)
+          for name in ('unit', 'router', 'composition', 'input'):
+              text = Path(os.environ['RUNNER_TEMP'], 'sou54-native-' + name + '.log').read_text()
+              assert probe.native_test_passed({'exit_code': 0, 'stdout': text}), name + ': no verified passed native tests'
+          PYCODE
+      - name: Evidence grading controls
+        run: python3 -m unittest discover -s scripts/tests -p 'test_sou54_create_file.py' -v
+      - name: Real enforcing daemon, stdio and independent file witnesses
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 scripts/verify-sou54-create-file.py --run --repo "$PWD" \
+            --agentfw "$PWD/target/debug/agentfw" --expected-commit "$(git rev-parse HEAD)" \
+            --output "$RUNNER_TEMP/sou54-create-file-results.json" 2>&1 | tee "$RUNNER_TEMP/sou54-driver.log"
+      - name: Retain sanitized outcomes and source/build witnesses
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou54-create-file-evidence
+          path: |
+            ${{ runner.temp }}/sou54-*.json
+            ${{ runner.temp }}/sou54-*.jsonl
+            ${{ runner.temp }}/sou54-*.txt
+            ${{ runner.temp }}/sou54-*.log
+          if-no-files-found: warn
+          retention-days: 30
