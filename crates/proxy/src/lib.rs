@@ -245,6 +245,14 @@ pub fn app(state: Shared) -> Router {
                 post(managed_agent_api::rollback_group_rollout),
             )
             .route(
+                "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/pause",
+                post(managed_agent_api::pause_group_rollout),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/resume",
+                post(managed_agent_api::resume_group_rollout),
+            )
+            .route(
                 "/admin/v1/managed-issuer",
                 get(managed_agent_api::issuer_public_key),
             )

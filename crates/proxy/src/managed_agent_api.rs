@@ -762,3 +762,58 @@ pub async fn rollback_group_rollout(
         Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "Console unavailable"),
     }
 }
+
+pub async fn pause_group_rollout(
+    State(state): State<Shared>,
+    Path((tenant_id, group_id)): Path<(String, String)>,
+) -> Response {
+    let Some(db) = store(&state) else {
+        return failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Console storage unavailable",
+        );
+    };
+    match tokio::task::spawn(async move {
+        db.pause_managed_group_rollout_async(&tenant_id, &group_id)
+            .await
+    })
+    .await
+    {
+        Ok(Ok(Some(rollout))) => Json(rollout).into_response(),
+        Ok(Ok(None)) => failure(StatusCode::NOT_FOUND, "no active rollout to pause"),
+        Ok(Err(e)) => {
+            tracing::warn!(error = %e, "pause rollout refused");
+            failure(StatusCode::BAD_REQUEST, "pause rollout refused")
+        }
+        Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "Console unavailable"),
+    }
+}
+
+pub async fn resume_group_rollout(
+    State(state): State<Shared>,
+    Path((tenant_id, group_id)): Path<(String, String)>,
+    body: Option<Json<RolloutActionRequest>>,
+) -> Response {
+    let Some(db) = store(&state) else {
+        return failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Console storage unavailable",
+        );
+    };
+    let target_key = body.and_then(|b| b.0.issuer_key_id);
+    match tokio::task::spawn(async move {
+        let issuer = ManagedIssuer::from_environment_for_key(target_key.as_deref())?;
+        db.resume_managed_group_rollout_async(&tenant_id, &group_id, &issuer)
+            .await
+    })
+    .await
+    {
+        Ok(Ok(Some(rollout))) => Json(rollout).into_response(),
+        Ok(Ok(None)) => failure(StatusCode::NOT_FOUND, "no paused rollout to resume"),
+        Ok(Err(e)) => {
+            tracing::warn!(error = %e, "resume rollout refused");
+            failure(StatusCode::BAD_REQUEST, "resume rollout refused")
+        }
+        Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "Console unavailable"),
+    }
+}

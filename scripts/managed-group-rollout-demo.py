@@ -279,17 +279,16 @@ def main():
         print("[*] Candidate 'v2-untrusted' launched with unpinned key; phase = 'pilot'")
 
         # Pilot polls candidate, rejects due to unpinned signing key, and sends rejected ack.
-        # Console automatically marks rollout rolled_back and issues rollback to v1-allow!
-        def rollout_rolled_back():
+        # Console automatically enters rolling_back and issues rollback deployment to v1-allow!
+        def rollout_in_rollback():
             _, r = request("GET", f"{console_url}/admin/v1/tenants/{tenant_id}/groups/{group_id}/rollout",
                            headers=admin_headers)
-            return r if r["phase"] == "rolled_back" else None
+            return r if r["phase"] in ("rolling_back", "rolled_back") else None
 
-        ro_rb = wait_for("rollout enters rolled_back phase", rollout_rolled_back, timeout=20)
-        print(f"[+] Rollout automatically rolled back! Phase = '{ro_rb['phase']}'")
-        print(f"[+] Failure Reason: '{ro_rb['failure_reason']}'")
+        ro_pending = wait_for("rollout enters rolling_back or rolled_back phase", rollout_in_rollback, timeout=20)
+        print(f"[+] Rollout entered rollback state machine: phase = '{ro_pending['phase']}'")
 
-        # Pilot now automatically receives the rollback deployment of v1-allow with seq=2!
+        # Pilot now automatically receives the rollback deployment of v1-allow with seq >= 2 and applies it!
         def pilot_rollback_applied():
             _, h = request("GET", f"{agent_configs['pilot-node']['url']}/health")
             pol = h.get("managed_policy")
@@ -299,6 +298,16 @@ def main():
 
         pol_pilot_rb = wait_for("pilot applies rollback to v1-allow", pilot_rollback_applied, timeout=20)
         print(f"[+] Pilot restored to safe baseline 'v1-allow' with new deployment sequence {pol_pilot_rb['deployment_sequence']}")
+
+        # Rollout is now confirmed rolled_back!
+        def rollout_confirmed_rolled_back():
+            _, r = request("GET", f"{console_url}/admin/v1/tenants/{tenant_id}/groups/{group_id}/rollout",
+                           headers=admin_headers)
+            return r if r["phase"] == "rolled_back" else None
+
+        ro_rb = wait_for("rollout reaches confirmed rolled_back phase", rollout_confirmed_rolled_back, timeout=20)
+        print(f"[+] Rollout confirmed rolled back! Final Phase = '{ro_rb['phase']}'")
+        print(f"[+] Failure Reason: '{ro_rb['failure_reason']}'")
 
         # CRITICAL VERIFICATION: Workers were never touched and remained on v1-allow seq 1!
         for wid in ("worker-node-1", "worker-node-2"):
@@ -316,6 +325,37 @@ def main():
             "pilot_rollback_sequence": pol_pilot_rb["deployment_sequence"],
             "standard_workers_protected": True,
             "standard_workers_never_saw_bad_revision": True,
+        }
+
+        # ====================================================================
+        # SCENARIO 3: Pause & Resume Controls
+        # ====================================================================
+        print("\n--- [Scenario 3] Rollout Pause & Resume Controls ---")
+        request("POST", f"{console_url}/admin/v1/tenants/{tenant_id}/groups/{group_id}/revisions",
+                {"revision": "v3-controlled", "policy_yaml": "default: allow\n"}, admin_headers)
+        request("POST", f"{console_url}/admin/v1/tenants/{tenant_id}/groups/{group_id}/revisions/v3-controlled/approve",
+                {}, admin_headers)
+        status, ro3 = request("POST", f"{console_url}/admin/v1/tenants/{tenant_id}/groups/{group_id}/rollout",
+                              {"revision": "v3-controlled"}, admin_headers)
+        assert status == 201
+        print("[*] Launched rollout for 'v3-controlled' (phase='pilot')")
+
+        # Pause rollout
+        status, p_ro = request("POST", f"{console_url}/admin/v1/tenants/{tenant_id}/groups/{group_id}/rollout/pause",
+                               {}, admin_headers)
+        assert status == 200 and p_ro["phase"] == "paused"
+        print("[+] Rollout successfully paused (phase='paused')")
+
+        # Resume rollout
+        status, res_ro = request("POST", f"{console_url}/admin/v1/tenants/{tenant_id}/groups/{group_id}/rollout/resume",
+                                 {}, admin_headers)
+        assert status == 200
+        print(f"[+] Rollout successfully resumed (phase='{res_ro['phase']}')")
+
+        evidence["phases"]["scenario_3_pause_resume"] = {
+            "paused_phase": p_ro["phase"],
+            "resumed_phase": res_ro["phase"],
+            "controls_verified": True,
         }
 
         # Write evidence

@@ -284,4 +284,28 @@ impl TenantStore {
             None => self.rollback_managed_group_rollout(tenant, group_id, issuer),
         }
     }
+    pub async fn pause_managed_group_rollout_async(
+        &self,
+        tenant: &str,
+        group_id: &str,
+    ) -> anyhow::Result<Option<ManagedGroupRollout>> {
+        match &self.postgres {
+            Some(pg) => pg.pause_managed_group_rollout(tenant, group_id).await,
+            None => self.pause_managed_group_rollout(tenant, group_id),
+        }
+    }
+    pub async fn resume_managed_group_rollout_async(
+        &self,
+        tenant: &str,
+        group_id: &str,
+        issuer: &ManagedIssuer,
+    ) -> anyhow::Result<Option<ManagedGroupRollout>> {
+        match &self.postgres {
+            Some(pg) => {
+                pg.resume_managed_group_rollout(tenant, group_id, issuer)
+                    .await
+            }
+            None => self.resume_managed_group_rollout(tenant, group_id, issuer),
+        }
+    }
 }

@@ -609,7 +609,7 @@ async fn test_staged_group_rollout_pilot_failure_automatic_rollback() {
         .unwrap();
     assert_eq!(p_rej.status(), StatusCode::NO_CONTENT);
 
-    // Verify rollout state is now rolled_back!
+    // Verify rollout state is now rolling_back!
     let ro_state = app(state.clone())
         .oneshot(
             Request::get(format!(
@@ -624,7 +624,7 @@ async fn test_staged_group_rollout_pilot_failure_automatic_rollback() {
         .unwrap();
     assert_eq!(ro_state.status(), StatusCode::OK);
     let ro_val = json_body(ro_state).await;
-    assert_eq!(ro_val["phase"], "rolled_back");
+    assert_eq!(ro_val["phase"], "rolling_back");
     assert!(ro_val["failure_reason"]
         .as_str()
         .unwrap()
@@ -648,6 +648,44 @@ async fn test_staged_group_rollout_pilot_failure_automatic_rollback() {
             > pilot_bad_bundle["deployment_sequence"].as_u64().unwrap()
     );
 
+    // Pilot acknowledges the rollback policy as applied!
+    let p_rollback_ack = app(state.clone())
+        .oneshot(
+            Request::post("/agent/v1/policy/ack")
+                .header("authorization", format!("Bearer {}", cred_pilot.token))
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(
+                    serde_json::to_string(&serde_json::json!({
+                        "deployment_sequence": rollback_bundle["deployment_sequence"],
+                        "revision": rollback_bundle["revision"],
+                        "policy_sha256": rollback_bundle["policy_sha256"],
+                        "status": "applied",
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(p_rollback_ack.status(), StatusCode::NO_CONTENT);
+
+    // Rollout state is now confirmed rolled_back!
+    let ro_confirmed = app(state.clone())
+        .oneshot(
+            Request::get(format!(
+                "/admin/v1/tenants/{}/groups/prod-grp/rollout",
+                tenant.id
+            ))
+            .header("x-llm-firewall-admin-token", OWNER_HEADER)
+            .body(axum::body::Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(ro_confirmed.status(), StatusCode::OK);
+    let ro_conf_val = json_body(ro_confirmed).await;
+    assert_eq!(ro_conf_val["phase"], "rolled_back");
+
     // Worker node STILL has never seen v2.0-bad
     let w_fetch2 = app(state.clone())
         .oneshot(
@@ -659,4 +697,196 @@ async fn test_staged_group_rollout_pilot_failure_automatic_rollback() {
         .await
         .unwrap();
     assert_eq!(w_fetch2.status(), StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn test_group_rollout_rejects_colliding_agent_revision() {
+    let state = test_state();
+    let store = state.tenant_store.as_ref().unwrap();
+    let tenant = store.create_tenant("Collision Test Tenant").unwrap();
+
+    store
+        .create_managed_group(&tenant.id, "grp-col", "Collision Group")
+        .unwrap();
+    store.enroll_managed_agent(&tenant.id, "pilot-col").unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "grp-col", "pilot-col", true)
+        .unwrap();
+
+    // Create revision "v1.0" on pilot-col directly with content A
+    store
+        .create_managed_revision(&tenant.id, "pilot-col", "v1.0", "default: allow\n")
+        .unwrap();
+
+    // Create group revision "v1.0" with content B (differing digest)
+    store
+        .create_managed_group_revision(&tenant.id, "grp-col", "v1.0", "default: deny\n")
+        .unwrap();
+    store
+        .approve_managed_group_revision(&tenant.id, "grp-col", "v1.0")
+        .unwrap();
+
+    // Starting group rollout should fail with 400 Bad Request due to revision digest collision
+    let start_resp = app(state.clone())
+        .oneshot(
+            Request::post(format!(
+                "/admin/v1/tenants/{}/groups/grp-col/rollout",
+                tenant.id
+            ))
+            .header("content-type", "application/json")
+            .header("x-llm-firewall-admin-token", OWNER_HEADER)
+            .body(axum::body::Body::from(r#"{"revision":"v1.0"}"#))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(start_resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_group_rollout_pause_and_resume() {
+    let state = test_state();
+    let store = state.tenant_store.as_ref().unwrap();
+    let tenant = store.create_tenant("Pause Resume Tenant").unwrap();
+
+    store
+        .create_managed_group(&tenant.id, "pause-grp", "Pause Group")
+        .unwrap();
+    let cred_pilot = store.enroll_managed_agent(&tenant.id, "pilot-pr").unwrap();
+    let cred_worker = store.enroll_managed_agent(&tenant.id, "worker-pr").unwrap();
+
+    store
+        .add_managed_group_member(&tenant.id, "pause-grp", "pilot-pr", true)
+        .unwrap();
+    store
+        .add_managed_group_member(&tenant.id, "pause-grp", "worker-pr", false)
+        .unwrap();
+
+    store
+        .create_managed_group_revision(&tenant.id, "pause-grp", "v1", "default: allow\n")
+        .unwrap();
+    store
+        .approve_managed_group_revision(&tenant.id, "pause-grp", "v1")
+        .unwrap();
+
+    // Start rollout
+    let start_resp = app(state.clone())
+        .oneshot(
+            Request::post(format!(
+                "/admin/v1/tenants/{}/groups/pause-grp/rollout",
+                tenant.id
+            ))
+            .header("content-type", "application/json")
+            .header("x-llm-firewall-admin-token", OWNER_HEADER)
+            .body(axum::body::Body::from(r#"{"revision":"v1"}"#))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(start_resp.status(), StatusCode::CREATED);
+    assert_eq!(json_body(start_resp).await["phase"], "pilot");
+
+    // Pause rollout
+    let pause_resp = app(state.clone())
+        .oneshot(
+            Request::post(format!(
+                "/admin/v1/tenants/{}/groups/pause-grp/rollout/pause",
+                tenant.id
+            ))
+            .header("x-llm-firewall-admin-token", OWNER_HEADER)
+            .body(axum::body::Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(pause_resp.status(), StatusCode::OK);
+    assert_eq!(json_body(pause_resp).await["phase"], "paused");
+
+    // Pilot fetches and acks policy
+    let p_fetch = app(state.clone())
+        .oneshot(
+            Request::get("/agent/v1/policy")
+                .header("authorization", format!("Bearer {}", cred_pilot.token))
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let p_bundle = json_body(p_fetch).await;
+
+    let p_ack = app(state.clone())
+        .oneshot(
+            Request::post("/agent/v1/policy/ack")
+                .header("authorization", format!("Bearer {}", cred_pilot.token))
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(
+                    serde_json::to_string(&serde_json::json!({
+                        "deployment_sequence": p_bundle["deployment_sequence"],
+                        "revision": p_bundle["revision"],
+                        "policy_sha256": p_bundle["policy_sha256"],
+                        "status": "applied",
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(p_ack.status(), StatusCode::NO_CONTENT);
+
+    // Rollout must STILL be paused (did not automatically promote to standard while paused)
+    let ro_paused = app(state.clone())
+        .oneshot(
+            Request::get(format!(
+                "/admin/v1/tenants/{}/groups/pause-grp/rollout",
+                tenant.id
+            ))
+            .header("x-llm-firewall-admin-token", OWNER_HEADER)
+            .body(axum::body::Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(json_body(ro_paused).await["phase"], "paused");
+
+    // Worker fetches policy -> 204 No Content (still blocked because paused)
+    let w_fetch = app(state.clone())
+        .oneshot(
+            Request::get("/agent/v1/policy")
+                .header("authorization", format!("Bearer {}", cred_worker.token))
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(w_fetch.status(), StatusCode::NO_CONTENT);
+
+    // Resume rollout
+    let resume_resp = app(state.clone())
+        .oneshot(
+            Request::post(format!(
+                "/admin/v1/tenants/{}/groups/pause-grp/rollout/resume",
+                tenant.id
+            ))
+            .header("x-llm-firewall-admin-token", OWNER_HEADER)
+            .body(axum::body::Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resume_resp.status(), StatusCode::OK);
+    // Upon resume, since pilot is already applied, it advances to standard!
+    assert_eq!(json_body(resume_resp).await["phase"], "standard");
+
+    // Worker can now fetch policy!
+    let w_fetch2 = app(state.clone())
+        .oneshot(
+            Request::get("/agent/v1/policy")
+                .header("authorization", format!("Bearer {}", cred_worker.token))
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(w_fetch2.status(), StatusCode::OK);
 }
