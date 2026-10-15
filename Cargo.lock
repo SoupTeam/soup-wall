@@ -47,7 +47,6 @@ dependencies = [
 name = "agentfw"
 version = "0.3.0"
 dependencies = [
- "rustls-pki-types",
  "anyhow",
  "aws-lc-rs",
  "axum",
@@ -57,6 +56,7 @@ dependencies = [
  "libc",
  "rand 0.10.3",
  "reqwest",
+ "rustls-pki-types",
  "serde",
  "serde_json",
  "serde_yaml",
