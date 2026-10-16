@@ -404,17 +404,40 @@ mod tests {
             operation_id: "0123456789abcdef0123456789abcdef".into(),
             replacement_token: new_token.clone(),
         };
-        let first = store.rotate_managed_agent(&tenant.id, "agent", &request).unwrap();
+        let first = store
+            .rotate_managed_agent(&tenant.id, "agent", &request)
+            .unwrap();
         assert_eq!(first.generation, 2);
         assert!(!first.already_applied);
-        assert!(store.authenticate_managed_agent(Some(&format!("Bearer {}",old.token))).unwrap().is_none());
-        assert!(store.authenticate_managed_agent(Some(&format!("Bearer {new_token}"))).unwrap().is_some());
-        assert!(store.rotate_managed_agent(&tenant.id,"agent",&request).unwrap().already_applied);
-        let stale = RotationRequest { operation_id: "abcdef0123456789abcdef0123456789".into(), ..request.clone() };
-        assert!(store.rotate_managed_agent(&tenant.id,"agent",&stale).is_err());
+        assert!(store
+            .authenticate_managed_agent(Some(&format!("Bearer {}", old.token)))
+            .unwrap()
+            .is_none());
+        assert!(store
+            .authenticate_managed_agent(Some(&format!("Bearer {new_token}")))
+            .unwrap()
+            .is_some());
+        assert!(
+            store
+                .rotate_managed_agent(&tenant.id, "agent", &request)
+                .unwrap()
+                .already_applied
+        );
+        let stale = RotationRequest {
+            operation_id: "abcdef0123456789abcdef0123456789".into(),
+            ..request.clone()
+        };
+        assert!(store
+            .rotate_managed_agent(&tenant.id, "agent", &stale)
+            .is_err());
         assert!(store.revoke_managed_agent(&tenant.id, "agent").unwrap());
-        assert!(store.rotate_managed_agent(&tenant.id,"agent",&request).is_err());
-        assert!(store.authenticate_managed_agent(Some(&format!("Bearer {new_token}"))).unwrap().is_none());
+        assert!(store
+            .rotate_managed_agent(&tenant.id, "agent", &request)
+            .is_err());
+        assert!(store
+            .authenticate_managed_agent(Some(&format!("Bearer {new_token}")))
+            .unwrap()
+            .is_none());
     }
 
     #[test]
