@@ -8,9 +8,9 @@ use crate::tenant_store::{
         acknowledgement_overdue, exact_id, hex, rollout_agent_status, DeploymentMode, MAX_YAML,
     },
     now_unix, random_base64url, AppliedReport, EnrolledAgent, IssuedAgentCredential,
-    RotationOutcome, RotationRequest,
     ManagedAgentGroup, ManagedDeployment, ManagedGroupMember, ManagedGroupRevision,
-    ManagedGroupRollout, ManagedIssuer, ManagedRevision, RolloutPhase, SignedManagedBundle,
+    ManagedGroupRollout, ManagedIssuer, ManagedRevision, RolloutPhase, RotationOutcome,
+    RotationRequest, SignedManagedBundle,
 };
 use anyhow::{bail, ensure, Context, Result};
 use sha2::{Digest, Sha256};
@@ -107,9 +107,14 @@ impl PostgresTenantStore {
         }
         // SOU-55: explicit version 28 follows accepted group rollout version 27.
         // Advisory transaction lock above serializes simultaneous schema upgrades.
-        if self.bounded(tx.query_opt(
-            "SELECT version FROM llm_firewall_schema_migrations WHERE version=28", &[],
-        )).await?.is_none() {
+        if self
+            .bounded(tx.query_opt(
+                "SELECT version FROM llm_firewall_schema_migrations WHERE version=28",
+                &[],
+            ))
+            .await?
+            .is_none()
+        {
             self.bounded(tx.batch_execute(
                 "ALTER TABLE managed_agent_enrollments
                      ADD COLUMN IF NOT EXISTS credential_generation BIGINT NOT NULL DEFAULT 1 CHECK(credential_generation > 0);
@@ -123,7 +128,8 @@ impl PostgresTenantStore {
             self.bounded(tx.execute(
                 "INSERT INTO llm_firewall_schema_migrations(version,applied_at_unix) VALUES(28,$1)",
                 &[&now_unix()],
-            )).await?;
+            ))
+            .await?;
         }
         self.bounded(tx.commit()).await?;
         Ok(())
@@ -557,7 +563,9 @@ impl PostgresTenantStore {
         drop(client);
         // Preserve accepted group gate progression after the exact authorized ACK,
         // outside the enrollment row lock and after returning the pool connection.
-        let _ = self.check_and_advance_active_rollouts_for_agent(tenant, agent).await;
+        let _ = self
+            .check_and_advance_active_rollouts_for_agent(tenant, agent)
+            .await;
         Ok(true)
     }
     pub(in crate::tenant_store) async fn list_managed_deployments(
