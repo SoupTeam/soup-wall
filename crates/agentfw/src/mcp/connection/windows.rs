@@ -1144,8 +1144,9 @@ mod tests {
 
     fn fixture() -> (tempfile::TempDir, PathBuf) {
         let root = tempfile::tempdir().unwrap();
-        crate::private_file_windows::ensure_private_directory(root.path()).unwrap();
-        let path = root.path().join("profile with spaces.json");
+        let profile = root.path().join("owned profile");
+        crate::private_file_windows::ensure_private_directory(&profile).unwrap();
+        let path = profile.join("profile with spaces.json");
         let value = json!({"mcpServers":{"notes":{"type":"stdio","command":r"C:\Fixture\server.exe","args":["a b","\u{65e5}\u{672c}\u{8a9e}"]},"other":{"command":"untouched","env":{"TOKEN":"fixture-only"}}},"settings":{"theme":"light"}});
         write_new(&path, &serde_json::to_vec(&value).unwrap()).unwrap();
         (root, path)
