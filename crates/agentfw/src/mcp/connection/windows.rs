@@ -14,7 +14,7 @@ use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::{AsRawHandle, FromRawHandle};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::ptr::{null, null_mut};
+use std::ptr::{null, null_mut, NonNull};
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
 use windows_sys::Win32::Foundation::{LocalFree, INVALID_HANDLE_VALUE};
@@ -145,21 +145,22 @@ fn verify_acl(file: &File) -> Result<()> {
     for index in 0..size.AceCount {
         let mut raw: *mut c_void = null_mut();
         ensure!(
-            unsafe { GetAce(dacl, index, &mut raw) } != 0 && !raw.is_null(),
+            unsafe { GetAce(dacl, index, &mut raw) } != 0,
             "invalid DACL entry"
         );
+        let raw = NonNull::new(raw).context("missing DACL entry")?;
         ensure!(
             offset + std::mem::size_of::<ACE_HEADER>() <= size.AclBytesInUse as usize,
             "DACL entry exceeds ACL bounds"
         );
-        let header = unsafe { std::ptr::read_unaligned(raw.cast::<ACE_HEADER>()) };
+        let header = unsafe { std::ptr::read_unaligned(raw.cast::<ACE_HEADER>().as_ptr()) };
         ensure!(
             header.AceType == 0
                 && header.AceSize as usize >= std::mem::size_of::<ACCESS_ALLOWED_ACE>()
                 && header.AceSize as usize <= size.AclBytesInUse as usize - offset,
             "unsupported DACL entry"
         );
-        let ace = unsafe { &*raw.cast::<ACCESS_ALLOWED_ACE>() };
+        let ace = unsafe { raw.cast::<ACCESS_ALLOWED_ACE>().as_ref() };
         let trustee = sid_to_string(std::ptr::addr_of!(ace.SidStart).cast_mut().cast())?;
         ensure!(
             trustee == sid || trustee == "S-1-5-18",
