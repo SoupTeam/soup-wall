@@ -16,8 +16,10 @@ impl CredentialSource {
     pub fn from_environment() -> Result<Self> {
         if let Some(value) = std::env::var_os("SOUP_MANAGED_AGENT_TOKEN_FILE") {
             let path = PathBuf::from(value);
-            ensure!(path.is_absolute() && path.file_name().is_some(),
-                "managed Agent token file must be an absolute filename");
+            ensure!(
+                path.is_absolute() && path.file_name().is_some(),
+                "managed Agent token file must be an absolute filename"
+            );
             return Ok(Self::File(path));
         }
         let token = std::env::var("SOUP_MANAGED_AGENT_TOKEN")
@@ -35,9 +37,15 @@ impl CredentialSource {
 }
 
 fn validate_token(value: &str) -> Result<()> {
-    ensure!(value.len() == 52 && value.starts_with("sw_agent_")
-        && value.bytes().skip(9).all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'),
-        "invalid managed Agent credential");
+    ensure!(
+        value.len() == 52
+            && value.starts_with("sw_agent_")
+            && value
+                .bytes()
+                .skip(9)
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'),
+        "invalid managed Agent credential"
+    );
     Ok(())
 }
 
@@ -46,20 +54,30 @@ fn load_private_token(path: &std::path::Path) -> Result<String> {
     use std::fs::OpenOptions;
     use std::io::Read;
     use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
-    ensure!(path.is_absolute() && path.file_name().is_some(), "invalid token file path");
+    ensure!(
+        path.is_absolute() && path.file_name().is_some(),
+        "invalid token file path"
+    );
     // O_NOFOLLOW refuses final-component symlinks; O_NONBLOCK avoids FIFOs
     // stalling on open even if path type changes between checks.
     let fd = OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC)
-        .open(path).context("cannot open managed token file")?;
+        .open(path)
+        .context("cannot open managed token file")?;
     let meta = fd.metadata().context("cannot inspect managed token file")?;
-    ensure!(meta.is_file() && meta.len() <= 64 && meta.len() >= 52 && meta.nlink() == 1,
-        "managed token file is not a bounded regular private file");
-    ensure!(meta.uid() == unsafe { libc::geteuid() } && (meta.mode() & 0o077) == 0,
-        "managed token file must belong to the Agent user and deny group/other access");
+    ensure!(
+        meta.is_file() && meta.len() <= 64 && meta.len() >= 52 && meta.nlink() == 1,
+        "managed token file is not a bounded regular private file"
+    );
+    ensure!(
+        meta.uid() == unsafe { libc::geteuid() } && (meta.mode() & 0o077) == 0,
+        "managed token file must belong to the Agent user and deny group/other access"
+    );
     let mut bytes = Vec::new();
-    fd.take(65).read_to_end(&mut bytes).context("cannot read managed token file")?;
+    fd.take(65)
+        .read_to_end(&mut bytes)
+        .context("cannot read managed token file")?;
     ensure!(bytes.len() == 52, "invalid managed token file length");
     let token = String::from_utf8(bytes).context("invalid managed token file encoding")?;
     validate_token(&token)?;
@@ -74,13 +92,19 @@ fn load_private_token(_path: &std::path::Path) -> Result<String> {
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
-    use std::{fs, os::unix::{fs::PermissionsExt, ffi::OsStrExt}, time::Duration};
+    use std::{
+        fs,
+        os::unix::{ffi::OsStrExt, fs::PermissionsExt},
+        time::Duration,
+    };
 
     fn write_private(path: &std::path::Path, token: &str) {
         fs::write(path, token).unwrap();
         fs::set_permissions(path, fs::Permissions::from_mode(0o600)).unwrap();
     }
-    fn token(ch: char) -> String { format!("sw_agent_{}", ch.to_string().repeat(43)) }
+    fn token(ch: char) -> String {
+        format!("sw_agent_{}", ch.to_string().repeat(43))
+    }
 
     #[test]
     fn secure_file_reload_and_failure_no_cache() {
