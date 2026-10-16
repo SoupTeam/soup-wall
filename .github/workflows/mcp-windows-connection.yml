@@ -64,6 +64,8 @@ jobs:
             Where-Object { $_.reason -eq 'compiler-artifact' -and $_.target.name -eq 'agentfw' -and $_.profile.test -and $_.executable }
           if (@($artifacts).Count -ne 1) { throw 'Unique native test binary required' }
           "CONNECTION_TEST_BINARY=$($artifacts.executable)" | Add-Content $env:GITHUB_ENV
+      - name: Check fixture ACL regression
+        run: python -B -m unittest discover -s scripts/tests -p test_windows_connection.py -v
       - name: Verify native transactions and actual host as a disposable standard user
         shell: pwsh
         run: |

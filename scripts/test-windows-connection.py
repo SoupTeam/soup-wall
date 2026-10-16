@@ -53,7 +53,7 @@ def secure(path, sid):
     suffix = "(OI)(CI)" if path.is_dir() else ""
     icacls = str(Path(os.environ["SystemRoot"]) / "System32/icacls.exe")
     result = subprocess.run([icacls, str(path), "/inheritance:r",
-        "/remove:g", "*S-1-1-0", "*S-1-3-0", "*S-1-5-11", "*S-1-5-32-544",
+        "/remove:g", "*S-1-1-0", "*S-1-3-0", "*S-1-3-4", "*S-1-5-11", "*S-1-5-32-544",
         "*S-1-5-32-545", "*S-1-5-32-546",
         "/grant:r", "*" + sid + ":" + suffix + "F", "*S-1-5-18:" + suffix + "F"],
         capture_output=True, timeout=20)

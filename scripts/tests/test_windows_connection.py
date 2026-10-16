@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 import importlib.util
+import os
 from pathlib import Path
+import subprocess
+import tempfile
 import unittest
 
 SCRIPT = Path(__file__).resolve().parents[1] / "test-windows-connection.py"
@@ -27,6 +30,25 @@ class NativeEvidenceTests(unittest.TestCase):
         self.assertFalse(D.native_tests_passed(self.valid() + "\ntest mcp::connection::windows::tests::crash_child ... ok", 0))
         self.assertFalse(D.native_tests_passed(self.valid(), 1))
         self.assertFalse(D.native_tests_passed(self.valid().replace("0 ignored", "1 ignored"), 0))
+
+    @unittest.skipUnless(os.name == "nt", "Windows ACL regression")
+    def test_fixture_removes_owner_rights_from_directory_and_file(self):
+        sid = D.account()["sid"]
+        icacls = str(Path(os.environ["SystemRoot"]) / "System32/icacls.exe")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            file = root / "config.json"
+            file.write_text("{}", encoding="utf-8")
+            for path in (root, file):
+                subprocess.run([icacls, str(path), "/grant", "*S-1-3-4:F"],
+                               capture_output=True, check=True, timeout=20)
+                before = subprocess.run([icacls, str(path), "/findsid", "*S-1-3-4"],
+                                        capture_output=True, check=True, timeout=20)
+                self.assertIn(str(path).encode(), before.stdout)
+                D.secure(path, sid)
+                output = subprocess.run([icacls, str(path), "/findsid", "*S-1-3-4"],
+                                        capture_output=True, check=True, timeout=20)
+                self.assertNotIn(str(path).encode(), output.stdout)
 
 if __name__ == "__main__":
     unittest.main()
