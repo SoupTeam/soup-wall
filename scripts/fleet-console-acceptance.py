@@ -76,7 +76,7 @@ def main():
         process=D.proc(stack,[str(agent_binary),'serve'],temp,agentenv,temp/'agent-first.log')
         def detail():return req('GET',fleet+'/agent-demo',auth=view)
         applied=D.wait_for('real Agent acknowledgement',lambda:(lambda d:d if d['agent']['latest_issued']['recorded_state']=='applied' else None)(detail()),timeout=90)
-        live=D.request('GET',agent+'/health')[1]['managed_policy']
+        live=D.wait_for('Agent health listener',lambda: D.request('GET',agent+'/health')[1].get('managed_policy'),timeout=90)
         check('real-Agent-applied-exact-issued-identity',live['policy_sha256']==applied['agent']['last_reported_applied']['policy_sha256'] and live['deployment_sequence']==1)
         evidence['applied']=applied
         process.terminate();process.wait(timeout=10)
@@ -130,7 +130,7 @@ def main():
             process=D.proc(stack,[str(agent_binary),'serve'],temp,agentenv,temp/'agent-rejected.log')
             rejected=D.wait_for('real Agent rejection',lambda:(lambda d:d if d['agent']['latest_issued']['recorded_state']=='rejected' else None)(detail()),timeout=90)
             check('rejected-keeps-historical-applied',rejected['agent']['last_reported_applied']['sequence']=='1' and rejected['agent']['latest_issued']['sequence']=='2');evidence['rejected']=rejected
-            check('real-Agent-keeps-previous-active-policy',D.request('GET',agent+'/health')[1]['managed_policy']['deployment_sequence']==1)
+            check('real-Agent-keeps-previous-active-policy',D.wait_for('restarted Agent health listener',lambda: D.request('GET',agent+'/health')[1].get('managed_policy'),timeout=90)['deployment_sequence']==1)
             page.locator('#fleet-refresh').click();expect(page.locator('#fleet-list')).to_contain_text('rejected');page.get_by_role('button',name='agent-demo',exact=True).click();expect(page.locator('#fleet-agent-detail')).to_contain_text('Latest deployment was rejected')
             page.clock.set_fixed_time((rejected['agent']['last_reported_applied']['reported_applied_at_unix']+600)*1000)
             page.get_by_role('button',name='agent-demo',exact=True).click();expect(page.locator('#fleet-agent-detail')).to_contain_text('historical evidence (5+ min)')

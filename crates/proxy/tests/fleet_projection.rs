@@ -285,3 +285,22 @@ async fn fleet_last_applied_survives_newer_pending_rejected_and_history_paging()
     assert_eq!(d.deployments[0].sequence, "55");
     assert_eq!(d.agent.last_reported_applied.unwrap().sequence, "1");
 }
+
+#[test]
+fn fleet_sequence_serialization_is_exact_beyond_javascript_integer_range() {
+    let record = llm_firewall::tenant_store::fleet::DeploymentRecord {
+        sequence: "9007199254740993".into(),
+        revision: "fixture".into(),
+        policy_sha256: "a".repeat(64),
+        action: "activate".into(),
+        recorded_state: "issued".into(),
+        issued_at_unix: 1,
+        reported_applied_at_unix: None,
+        delivered_at_unix: None,
+        rejected_at_unix: None,
+    };
+    let value = serde_json::to_value(record).unwrap();
+    assert_eq!(value["sequence"], "9007199254740993");
+    assert!(value["delivered_at_unix"].is_null());
+    assert!(value["rejected_at_unix"].is_null());
+}
