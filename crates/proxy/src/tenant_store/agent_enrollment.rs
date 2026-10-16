@@ -50,11 +50,18 @@ pub struct RotationOutcome {
 }
 
 pub(super) fn validated_rotation(input: &RotationRequest) -> Result<Vec<u8>> {
-    ensure!(input.expected_generation > 0 && input.expected_generation < i64::MAX,
-        "invalid credential generation");
-    ensure!(input.operation_id.len() == 32 &&
-        input.operation_id.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()),
-        "invalid rotation operation identifier");
+    ensure!(
+        input.expected_generation > 0 && input.expected_generation < i64::MAX,
+        "invalid credential generation"
+    );
+    ensure!(
+        input.operation_id.len() == 32
+            && input
+                .operation_id
+                .bytes()
+                .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()),
+        "invalid rotation operation identifier"
+    );
     credential_hash(&input.replacement_token).context("invalid replacement credential")
 }
 
@@ -192,17 +199,25 @@ impl TenantStore {
 
     /// Compare-and-swap rotation with a durable, non-secret retry receipt.
     /// Never resurrects revoked enrollments or overwrites concurrent rotations.
-    pub fn rotate_managed_agent(&self, tenant_id: &str, agent_id: &str, input: &RotationRequest)
-        -> Result<RotationOutcome>
-    {
-        ensure!(valid_id(tenant_id) && valid_id(agent_id), "invalid identity");
+    pub fn rotate_managed_agent(
+        &self,
+        tenant_id: &str,
+        agent_id: &str,
+        input: &RotationRequest,
+    ) -> Result<RotationOutcome> {
+        ensure!(
+            valid_id(tenant_id) && valid_id(agent_id),
+            "invalid identity"
+        );
         let new_hash = validated_rotation(input)?;
         let mut conn = self.connection()?;
         ensure_schema(&conn)?;
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let active: Option<i64> = tx.query_row(
-            "SELECT active FROM tenants WHERE id=?1", [tenant_id], |r| r.get(0)
-        ).optional()?;
+        let active: Option<i64> = tx
+            .query_row("SELECT active FROM tenants WHERE id=?1", [tenant_id], |r| {
+                r.get(0)
+            })
+            .optional()?;
         ensure!(active == Some(1), "tenant absent or inactive");
         let current: Option<RotationRow> =
             tx.query_row(
@@ -219,26 +234,50 @@ impl TenantStore {
             && last_digest.as_deref() == Some(new_hash.as_slice())
         {
             return Ok(RotationOutcome {
-                tenant_id: tenant_id.into(), agent_id: agent_id.into(),
-                generation, operation_id: input.operation_id.clone(), already_applied: true,
+                tenant_id: tenant_id.into(),
+                agent_id: agent_id.into(),
+                generation,
+                operation_id: input.operation_id.clone(),
+                already_applied: true,
             });
         }
-        ensure!(last_id.as_deref() != Some(&input.operation_id),
-            "operation identifier reused with different parameters");
-        ensure!(generation == input.expected_generation, "stale credential generation");
-        ensure!(old_hash != new_hash, "replacement must differ from current credential");
-        let next = generation.checked_add(1).context("credential generation exhausted")?;
+        ensure!(
+            last_id.as_deref() != Some(&input.operation_id),
+            "operation identifier reused with different parameters"
+        );
+        ensure!(
+            generation == input.expected_generation,
+            "stale credential generation"
+        );
+        ensure!(
+            old_hash != new_hash,
+            "replacement must differ from current credential"
+        );
+        let next = generation
+            .checked_add(1)
+            .context("credential generation exhausted")?;
         tx.execute(
             "UPDATE managed_agent_enrollments
              SET token_hash=?3,credential_generation=?4,last_rotation_id=?5,
                  last_rotation_expected_generation=?6,last_rotation_digest=?7
              WHERE tenant_id=?1 AND agent_id=?2 AND revoked_at_unix IS NULL",
-            params![tenant_id,agent_id,new_hash,next,input.operation_id,input.expected_generation,new_hash]
+            params![
+                tenant_id,
+                agent_id,
+                new_hash,
+                next,
+                input.operation_id,
+                input.expected_generation,
+                new_hash
+            ],
         )?;
         tx.commit()?;
         Ok(RotationOutcome {
-            tenant_id: tenant_id.into(), agent_id: agent_id.into(),
-            generation: next, operation_id: input.operation_id.clone(), already_applied: false,
+            tenant_id: tenant_id.into(),
+            agent_id: agent_id.into(),
+            generation: next,
+            operation_id: input.operation_id.clone(),
+            already_applied: false,
         })
     }
 
