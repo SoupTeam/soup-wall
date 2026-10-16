@@ -22,8 +22,34 @@ async fn main() -> anyhow::Result<()> {
     }
     let store = open_store(database).await?;
     anyhow::ensure!(
-        store.list_organizations_async().await?.is_empty(),
+        store
+            .list_organizations_async()
+            .await?
+            .iter()
+            .all(|org| org.id == "org_bootstrap")
+            && store.list_tenants_async().await?.is_empty(),
         "requires empty fixture store"
+    );
+    let bootstrap_identity = llm_firewall::tenant_store::ScimIdentity {
+        organization_id: "org_bootstrap".into(),
+        token_id: "fixture-probe".into(),
+    };
+    anyhow::ensure!(
+        store
+            .list_scim_tokens_async("org_bootstrap")
+            .await?
+            .is_empty()
+            && store
+                .list_scim_users_async(&bootstrap_identity, 1, 0)
+                .await?
+                .total_results
+                == 0
+            && store
+                .list_scim_groups_async(&bootstrap_identity, 1, 0)
+                .await?
+                .total_results
+                == 0,
+        "requires empty fixture directory"
     );
     let expiry = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64 + 1800;
     let mut issued = Vec::new();

@@ -24,7 +24,8 @@ def digest(path):
 def run(args):
     from httpx2 import Client
     from scim2_client.engines.httpx2 import SyncSCIMClient
-    from scim2_models import User, Group, SearchRequest
+    from scim2_models import SearchRequest
+    import scim2_client
     report = {"backend": args.backend, "passed": False, "cleanup_passed": False, "checks": [],
               "started_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
               "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
@@ -39,6 +40,8 @@ def run(args):
                               "Owned loopback HTTP client/server; PostgreSQL uses verified fixture TLS",
                               "User DELETE retains the existing deactivation/tombstone contract",
                               "Equality values are case-sensitive without normalization on both stores"]}
+    package_root = Path(scim2_client.__file__).parent
+    report["client_source_sha256"] = hashlib.sha256("\n".join(str(p.relative_to(package_root)) + ":" + digest(p) for p in sorted(package_root.rglob("*.py"))).encode()).hexdigest()
     def publish():
         args.out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     def check(name, condition):
