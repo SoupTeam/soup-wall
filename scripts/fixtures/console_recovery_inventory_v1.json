@@ -75,6 +75,7 @@
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"label","not_null":true,"position":4,"table_name":"scim_tokens"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"label","not_null":true,"position":4,"table_name":"tenant_tokens"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"last_error","not_null":false,"position":11,"table_name":"tenant_webhook_deliveries"},
+      {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"last_rotation_id","not_null":false,"position":7,"table_name":"managed_agent_enrollments"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"metadata_signing_cert_pem","not_null":true,"position":4,"table_name":"organization_saml_connections"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"metadata_xml","not_null":true,"position":3,"table_name":"organization_saml_connections"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"model_price_version","not_null":false,"position":13,"table_name":"usage_events"},
@@ -176,6 +177,7 @@
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"workspace_id","not_null":true,"position":3,"table_name":"workspace_invitations"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"workspace_id","not_null":true,"position":3,"table_name":"workspace_scim_group_mapping_audit"},
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":"0","name":"attempt_count","not_null":true,"position":6,"table_name":"tenant_webhook_deliveries"},
+      {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":"1","name":"credential_generation","not_null":true,"position":6,"table_name":"managed_agent_enrollments"},
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":"nextval('public.scim_audit_id_seq'::regclass)","name":"id","not_null":true,"position":1,"table_name":"scim_audit"},
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":"nextval('public.scim_group_audit_id_seq'::regclass)","name":"id","not_null":true,"position":1,"table_name":"scim_group_audit"},
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":"nextval('public.tenant_audit_id_seq'::regclass)","name":"id","not_null":true,"position":1,"table_name":"tenant_audit"},
@@ -245,6 +247,7 @@
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":null,"name":"input_tokens","not_null":false,"position":9,"table_name":"usage_events"},
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":null,"name":"input_usd_micros_per_million","not_null":false,"position":14,"table_name":"usage_events"},
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":null,"name":"issued_at_unix","not_null":true,"position":9,"table_name":"managed_agent_deployments"},
+      {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":null,"name":"last_rotation_expected_generation","not_null":false,"position":8,"table_name":"managed_agent_enrollments"},
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":null,"name":"latency_ms","not_null":true,"position":7,"table_name":"tenant_audit"},
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":null,"name":"locked_until_unix","not_null":false,"position":8,"table_name":"tenant_webhook_deliveries"},
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":null,"name":"next_attempt_at_unix","not_null":true,"position":7,"table_name":"tenant_webhook_deliveries"},
@@ -300,6 +303,7 @@
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"boolean","default_expr":"true","name":"active","not_null":true,"position":6,"table_name":"workspace_service_accounts"},
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"boolean","default_expr":"true","name":"active","not_null":true,"position":8,"table_name":"workspace_invitations"},
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"boolean","default_expr":null,"name":"executed","not_null":true,"position":6,"table_name":"usage_retention_runs"},
+      {"attgenerated":"","attidentity":"","collation":null,"data_type":"bytea","default_expr":null,"name":"last_rotation_digest","not_null":false,"position":9,"table_name":"managed_agent_enrollments"},
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bytea","default_expr":null,"name":"session_hash","not_null":true,"position":1,"table_name":"oidc_browser_sessions"},
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bytea","default_expr":null,"name":"state_hash","not_null":true,"position":1,"table_name":"oidc_authorization_states"},
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bytea","default_expr":null,"name":"state_hash","not_null":true,"position":1,"table_name":"saml_authorization_states"},
@@ -350,6 +354,7 @@
       {"contype":"c","definition":"CHECK ((action = ANY (ARRAY['group_mapping.create'::text, 'group_mapping.delete'::text])))","name":"workspace_scim_group_mapping_audit_action_check","table_name":"workspace_scim_group_mapping_audit"},
       {"contype":"c","definition":"CHECK ((ambiguous_count >= 0))","name":"usage_reconciliation_runs_ambiguous_count_check","table_name":"usage_reconciliation_runs"},
       {"contype":"c","definition":"CHECK ((attempt_count >= 0))","name":"tenant_webhook_deliveries_attempt_count_check","table_name":"tenant_webhook_deliveries"},
+      {"contype":"c","definition":"CHECK ((credential_generation > 0))","name":"managed_agent_enrollments_credential_generation_check","table_name":"managed_agent_enrollments"},
       {"contype":"c","definition":"CHECK ((deleted_event_count >= 0))","name":"usage_retention_runs_deleted_event_count_check","table_name":"usage_retention_runs"},
       {"contype":"c","definition":"CHECK ((deployment_sequence > 0))","name":"managed_agent_deployments_deployment_sequence_check","table_name":"managed_agent_deployments"},
       {"contype":"c","definition":"CHECK ((eligible_cost_usd_micros >= 0))","name":"usage_retention_runs_eligible_cost_usd_micros_check","table_name":"usage_retention_runs"},
@@ -816,6 +821,10 @@
     "managed_agent_enrollments": {
       "agent_id": "TEXT",
       "created_at_unix": "BIGINT",
+      "credential_generation": "BIGINT",
+      "last_rotation_digest": "BYTEA",
+      "last_rotation_expected_generation": "BIGINT",
+      "last_rotation_id": "TEXT",
       "revoked_at_unix": "BIGINT",
       "tenant_id": "TEXT",
       "token_hash": "BYTEA"
@@ -1206,7 +1215,7 @@
       "type": "table"
     },
     "managed_agent_enrollments": {
-      "ddl_sha256": "bca4b6003c83d97fa583aa4d2494611ee4088c546c559ae2337a431dfed7e910",
+      "ddl_sha256": "89fe6b97fd07437ef58ec821d20f84544571796b25154035eb76b0848320f31d",
       "table": "managed_agent_enrollments",
       "type": "table"
     },
@@ -1652,6 +1661,10 @@
     "managed_agent_enrollments": {
       "agent_id": "TEXT",
       "created_at_unix": "INTEGER",
+      "credential_generation": "INTEGER",
+      "last_rotation_digest": "BLOB",
+      "last_rotation_expected_generation": "INTEGER",
+      "last_rotation_id": "TEXT",
       "revoked_at_unix": "INTEGER",
       "tenant_id": "TEXT",
       "token_hash": "BLOB"
