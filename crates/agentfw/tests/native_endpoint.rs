@@ -3842,3 +3842,45 @@ async fn reviewb2_nested_session_must_not_redirect_incomplete_host_history() {
     assert!(fw.provenance_incomplete("host"),
         "actual authenticated host stays complete while nested unrelated session is marked: unrelated={}",fw.provenance_incomplete("unrelated"));
 }
+
+#[tokio::test]
+async fn reviewe358_duplicate_event_must_not_downgrade_to_no_opinion() {
+    let f = Fixture::new(ALLOW);
+    let body = r#"{"session_id":"host","hook_event_name":"PostToolUse","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/reviewer-no-execution"}}"#;
+    assert!(serde_json::from_str::<agentfw::hook::HookPayload>(body).is_err());
+    let scan = agentfw::handlers::RootJsonScan::scan(body);
+    assert!(scan.duplicate_keys.contains("hook_event_name"));
+    let (s, r) = review137_raw_hook(&f, Body::from(body)).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(
+        r["hookSpecificOutput"]["permissionDecision"], "deny",
+        "scanner found ambiguity, but protected enforce request got no refusal: {r}"
+    );
+}
+
+#[tokio::test]
+async fn reviewe358_unseen_duplicate_must_not_make_partial_root_proven_safe() {
+    let f = Fixture::configured(
+        ALLOW,
+        Config {
+            enforce: true,
+            max_body_bytes: 1024,
+            ..Config::default()
+        },
+    );
+    let body = format!("{{\"session_id\":\"host\",\"hook_event_name\":\"PostToolUse\",\"padding\":\"{}\",\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{{\"command\":\"rm -rf /tmp/reviewer-no-execution\"}}}}", "x".repeat(6000));
+    assert!(serde_json::from_str::<agentfw::hook::HookPayload>(&body).is_err());
+    let prefix = &body[..5120];
+    let scan = agentfw::handlers::RootJsonScan::scan(prefix);
+    assert!(!scan.closed_object);
+    assert!(
+        scan.is_proven_non_pre(),
+        "witness must reach premature proof branch"
+    );
+    let (s, r) = review137_raw_hook(&f, Body::from(body)).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(
+        r["hookSpecificOutput"]["permissionDecision"], "deny",
+        "unclosed root prefix was accepted as proof before duplicate tail: {r}"
+    );
+}

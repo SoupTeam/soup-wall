@@ -1642,4 +1642,46 @@ mod tests {
         );
         assert!(parse(&duplicate).is_err());
     }
+    #[test]
+    fn reviewe358_lossy_hook_must_not_take_firewall_before_native_mutex() {
+        let dir = tempfile::tempdir().unwrap();
+        let st = fixture(dir.path());
+        // This is the native inspect preemption point: native.sessions has
+        // been acquired, and its next operation needs st.firewall.
+        let native_guard = st.native.as_ref().unwrap().sessions.lock().unwrap();
+        let hook_st = st.clone();
+        let worker = std::thread::spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            runtime.block_on(async move {
+                let mut headers = axum::http::HeaderMap::new();
+                headers.insert("authorization", "Bearer hook-unit-key".parse().unwrap());
+                crate::handlers::hook(
+                    axum::extract::State(hook_st),
+                    headers,
+                    axum::body::Body::from("{"),
+                )
+                .await
+            })
+        });
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(250);
+        let mut hook_holds_firewall = false;
+        while std::time::Instant::now() < deadline {
+            if st.firewall.try_lock().is_err() {
+                hook_holds_firewall = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        // Release the controlled native owner so this witness can terminate.
+        // An actual native inspect would instead wait for the hook's firewall
+        // guard, completing the wait cycle indefinitely.
+        drop(native_guard);
+        let response = worker.join().unwrap();
+        assert_eq!(response.0, axum::http::StatusCode::OK);
+        assert!(!hook_holds_firewall,
+            "lock inversion: lossy hook holds firewall while waiting for native.sessions; native inspect holds native.sessions and next waits for firewall");
+    }
 }

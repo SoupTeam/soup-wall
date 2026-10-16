@@ -242,6 +242,51 @@ impl RootJsonScan {
         }
         true
     }
+
+    pub fn has_protected_tool(&self, raw: &str) -> bool {
+        let mut tools = Vec::new();
+        if let Some(t) = self
+            .string_fields
+            .get("tool_name")
+            .or_else(|| self.string_fields.get("tool"))
+        {
+            tools.push(t.as_str());
+        }
+        if let Some(all_t) = self.all_string_fields.get("tool_name") {
+            for t in all_t {
+                tools.push(t.as_str());
+            }
+        }
+        if let Some(all_t) = self.all_string_fields.get("tool") {
+            for t in all_t {
+                tools.push(t.as_str());
+            }
+        }
+        if tools.is_empty() {
+            return false;
+        }
+        const READ_ONLY: &[&str] = &[
+            "Read",
+            "Grep",
+            "Glob",
+            "NotebookRead",
+            "TodoRead",
+            "WebFetch",
+            "WebSearch",
+        ];
+        for tool in tools {
+            if !READ_ONLY.contains(&tool) {
+                if tool == "Bash" {
+                    if raw.contains("\"command\"") {
+                        return true;
+                    }
+                } else {
+                    return true;
+                }
+            }
+        }
+        false
+    }
 }
 
 fn parse_json_string(bytes: &[u8], start: usize) -> (Option<String>, usize) {
@@ -327,30 +372,34 @@ fn skip_primitive(bytes: &[u8], start: usize) -> usize {
 }
 
 fn mark_lossy_provenance(st: &AppState, scan: &RootJsonScan) {
-    let mut marked = HashSet::new();
+    let mut sessions_to_mark = Vec::new();
     if let Some(session_id) = scan.get_root_string("session_id").filter(|s| !s.is_empty()) {
-        let mut fw = st.firewall.lock().expect("firewall mutex");
-        fw.mark_provenance_incomplete(session_id);
-        marked.insert(session_id.to_string());
+        sessions_to_mark.push(session_id.to_string());
     } else {
         if let Some(vals) = scan.all_string_fields.get("session_id") {
-            let mut fw = st.firewall.lock().expect("firewall mutex");
             for sid in vals {
-                if !sid.is_empty() && !marked.contains(sid) {
-                    fw.mark_provenance_incomplete(sid);
-                    marked.insert(sid.clone());
+                if !sid.is_empty() && !sessions_to_mark.contains(sid) {
+                    sessions_to_mark.push(sid.clone());
                 }
             }
         }
+        // Snapshot active hosts before acquiring firewall lock to prevent deadlock
         if let Some(ref native) = st.native {
-            let mut fw = st.firewall.lock().expect("firewall mutex");
             for host in native.active_host_sessions() {
-                if !marked.contains(&host) {
-                    fw.mark_provenance_incomplete(&host);
-                    marked.insert(host);
+                if !sessions_to_mark.contains(&host) {
+                    sessions_to_mark.push(host);
                 }
             }
         }
+    }
+
+    if sessions_to_mark.is_empty() {
+        return;
+    }
+
+    let mut fw = st.firewall.lock().expect("firewall mutex");
+    for host in sessions_to_mark {
+        fw.mark_provenance_incomplete(&host);
     }
 }
 
@@ -548,7 +597,7 @@ pub async fn hook(
             let lossy_prefix = String::from_utf8_lossy(&prefix);
             let scan = RootJsonScan::scan(&lossy_prefix);
             mark_lossy_provenance(&st, &scan);
-            let is_proven_non_pre = scan.is_proven_non_pre();
+            let is_proven_non_pre = scan.is_proven_non_pre() && scan.closed_object;
             if st.config.enforce && !is_proven_non_pre {
                 let out = decision::Decision {
                     permission_decision: "deny",
@@ -574,7 +623,9 @@ pub async fn hook(
             tracing::warn!(error = %e, "unparsable hook payload; proceeding");
             let scan = RootJsonScan::scan(&body);
             mark_lossy_provenance(&st, &scan);
-            if st.config.enforce && scan.is_protected_pretooluse(&body) {
+            let is_proven_non_pre = scan.is_proven_non_pre() && scan.closed_object;
+            let has_protected_tool = scan.has_protected_tool(&body);
+            if st.config.enforce && (!is_proven_non_pre && has_protected_tool) {
                 let out = decision::Decision {
                     permission_decision: "deny",
                     reason: Some("unparsable hook payload; refused by policy".into()),
