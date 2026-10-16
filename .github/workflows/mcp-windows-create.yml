@@ -1,0 +1,174 @@
+name: Native Windows MCP file creation
+
+on:
+  pull_request:
+    paths:
+      - 'crates/agentfw/**'
+      - 'crates/agent/**'
+      - 'crates/adapter/**'
+      - 'rule_baseline/**'
+      - 'scripts/verify-sou60-windows-create.py'
+      - 'scripts/ci-windows-create.ps1'
+      - 'scripts/print-sou60-ci-diagnostics.py'
+      - 'scripts/verify-sou54-create-file.py'
+      - 'scripts/verify-sou58-windows-read.py'
+      - 'scripts/fixtures/mcp_windows_read_probe_server.py'
+      - 'scripts/fixtures/mcp_windows_create_probe_server.py'
+      - 'scripts/tests/test_sou60_windows_create.py'
+      - '.github/workflows/mcp-windows-create.yml'
+      - 'Cargo.lock'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mcp-windows-create-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-windows-standard-user:
+    runs-on: windows-2022
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build and identify the exact native Windows candidate
+        id: build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $commit = (& git rev-parse HEAD).Trim()
+          $commit | Set-Content "$env:RUNNER_TEMP/sou60-source.txt"
+          & rustc --version | Set-Content "$env:RUNNER_TEMP/sou60-rust.txt"
+          & cargo build --locked -p agentfw --bin agentfw --message-format=json > "$env:RUNNER_TEMP/sou60-build.jsonl"
+          if ($LASTEXITCODE -ne 0) { throw 'Exact candidate build failed' }
+          & cargo test --locked -p agentfw --lib --no-run --message-format=json > "$env:RUNNER_TEMP/sou60-test-build.jsonl"
+          if ($LASTEXITCODE -ne 0) { throw 'Native Windows test build failed' }
+          $artifacts = Get-Content "$env:RUNNER_TEMP/sou60-test-build.jsonl" | ForEach-Object { $_ | ConvertFrom-Json } |
+              Where-Object { $_.reason -eq 'compiler-artifact' -and $_.target.name -eq 'agentfw' -and $_.profile.test -and $_.executable }
+          if (@($artifacts).Count -ne 1) { throw 'Unique native lib test artifact required' }
+          "SOU60_TEST_BINARY=$($artifacts.executable)" | Add-Content $env:GITHUB_ENV
+          Get-FileHash target/debug/agentfw.exe, $artifacts.executable -Algorithm SHA256 |
+              Format-List | Out-File "$env:RUNNER_TEMP/sou60-binaries.txt"
+      - name: Evidence grading controls
+        shell: pwsh
+        run: |
+          & python -B -m unittest discover -s scripts/tests -p 'test_sou60_windows_create.py' -v 2>&1 |
+              Tee-Object -FilePath "$env:RUNNER_TEMP/sou60-grading-controls.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows evidence grading controls failed' }
+      - name: Native router authority and compatibility regressions
+        shell: pwsh
+        run: |
+          & cargo test --locked -p agentfw --test native_endpoint -- --nocapture 2>&1 |
+              Tee-Object -FilePath "$env:RUNNER_TEMP/sou60-router.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Native endpoint regressions failed' }
+      - name: Actual stdio, enforcing daemon and handle tests as a standard user
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: pwsh
+        run: |
+          ./scripts/ci-windows-create.ps1 -AgentBinary ./target/debug/agentfw.exe `
+              -TestBinary $env:SOU60_TEST_BINARY -PythonBinary (Get-Command python).Source `
+              -Commit ((& git rev-parse HEAD).Trim()) -OutputDirectory "$env:RUNNER_TEMP/sou60-standard-user"
+          if ($LASTEXITCODE -ne 0) { throw 'Standard-user native Windows acceptance failed' }
+      - name: Publish bounded native Windows failure diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          python -B scripts/print-sou60-ci-diagnostics.py --root "$env:RUNNER_TEMP" --summary "$env:GITHUB_STEP_SUMMARY"
+          if ($LASTEXITCODE -ne 0) { throw 'Could not publish native Windows diagnostics' }
+      - name: Retain sanitized outcomes and exact source/build witnesses
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou60-native-windows-create-evidence
+          path: |
+            ${{ runner.temp }}/sou60-*.txt
+            ${{ runner.temp }}/sou60-*.jsonl
+            ${{ runner.temp }}/sou60-*.log
+            ${{ runner.temp }}/sou60-standard-user/*.json
+            ${{ runner.temp }}/sou60-standard-user/*.log
+          if-no-files-found: warn
+          retention-days: 30
+  linux-read-create-https-regressions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build and identify the exact Linux candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD > "$RUNNER_TEMP/sou60-linux-source.txt"
+          rustc --version > "$RUNNER_TEMP/sou60-linux-rust.txt"
+          python3 --version > "$RUNNER_TEMP/sou60-linux-python.txt"
+          openssl version > "$RUNNER_TEMP/sou60-linux-openssl.txt"
+          cargo build --locked -p agentfw --bin agentfw --message-format=json > "$RUNNER_TEMP/sou60-linux-build.jsonl"
+          sha256sum target/debug/agentfw > "$RUNNER_TEMP/sou60-linux-binary.txt"
+      - name: Existing Linux evidence grading controls
+        run: |
+          python3 -B -m unittest discover -s scripts/tests -p 'test_sou54_create*.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_sou56_https_get.py' -v
+      - name: Actual Linux owned read and create operations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/verify-sou54-create-file.py --run --repo "$PWD" \
+            --agentfw "$PWD/target/debug/agentfw" --expected-commit "$(git rev-parse HEAD)" \
+            --output "$RUNNER_TEMP/sou60-linux-create.json" 2>&1 | tee "$RUNNER_TEMP/sou60-linux-create.log"
+      - name: Actual Linux owned offline HTTPS operations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/verify-sou56-https-get.py --run --repo "$PWD" \
+            --agentfw "$PWD/target/debug/agentfw" --expected-commit "$(git rev-parse HEAD)" \
+            --output "$RUNNER_TEMP/sou60-linux-https.json" 2>&1 | tee "$RUNNER_TEMP/sou60-linux-https.log"
+      - name: Publish bounded Linux regression outcomes
+        if: always()
+        shell: bash
+        run: |
+          python3 -B - <<'PYCODE'
+          import json, os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          outcomes = {}
+          for name in ('create', 'https'):
+              path = root / ('sou60-linux-' + name + '.json')
+              if path.is_file():
+                  report = json.loads(path.read_text())
+                  outcomes[name] = {key: report.get(key) for key in
+                      ('status', 'acceptance_passed', 'summary', 'source_before', 'source_binary_stable', 'binary_sha256')}
+                  outcomes[name]['all_owned_fixtures_removed'] = all(
+                      row.get('owned_fixture_removed') is True for row in report.get('cases', []))
+              else:
+                  outcomes[name] = {'status': 'incomplete', 'error': 'No owned acceptance report; no pass inferred'}
+          text = '## Linux read/create/HTTPS compatibility\n\n```json\n' + json.dumps(outcomes, indent=2) + '\n```\n'
+          assert len(text.encode()) < 12000
+          with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a') as summary:
+              summary.write(text)
+          PYCODE
+      - name: Retain exact-source Linux regression evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou60-linux-read-create-https-evidence
+          path: |
+            ${{ runner.temp }}/sou60-linux-*.txt
+            ${{ runner.temp }}/sou60-linux-*.json
+            ${{ runner.temp }}/sou60-linux-*.jsonl
+            ${{ runner.temp }}/sou60-linux-*.log
+          if-no-files-found: warn
+          retention-days: 30

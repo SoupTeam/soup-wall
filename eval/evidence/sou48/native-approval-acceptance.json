@@ -1,0 +1,161 @@
+{
+  "contract": "sou48-acceptance/1",
+  "base_git_head": "1eba4f42115d9c46e2808a88425b8ed902b99e30",
+  "identities": {
+    "binary_sha256": "e7b5d454d4869c6de61d97a148784162b460db70ba10cbca26afeeecfc4608c6",
+    "registry_sha256": "506dd839ae508c76f48dd5857718f216c872fdee35f996caefc501820383fba6",
+    "config_sha256_default": "35ef429e8c86000798c294719654862b29ed8ba9accb1c8531531dbf60a12564",
+    "source_sha256": {
+      "crates/agentfw/src/native/approval.rs": "672053b38afd5b53ec771d4691556efdad2d4315df2d6b9cee7782705ddf7c23",
+      "crates/agentfw/src/native.rs": "34c713ca4e26f3ca5af01334d435ea749c6ef4181acbec351a39f148c1897561",
+      "crates/agentfw/src/mcp/admission.rs": "7521b56f87431a4549b7d36e6a63b059627d82d27d0d5f7e057ce43e65dd7635",
+      "crates/agentfw/src/main.rs": "8d14eb257127f1551eff0261b0a46bb004f8f1b3350c41405850652a3ca380e4",
+      "crates/agentfw/src/grant.rs": "8da8477a08cba7b18ff6b2ee3db391ed967eb587b9c16155b03d0e4d41db22e8"
+    }
+  },
+  "passed": true,
+  "controls": [
+    {
+      "control": "zero_effects_before_approval",
+      "passed": true,
+      "witnesses": {
+        "child_calls": 0,
+        "receiver_hits": 0
+      },
+      "pending_id": "451qBUL32PTTTxJDXDnIK1U2dSdBZmT0d_zDKkdFRw0",
+      "binding_sha256": "f2b3b4d8e72777aa3cc7bba6e4c8688c9152771a864d050ed5de5e745cadbb74"
+    },
+    {
+      "control": "approval_with_wrong_digest_refused",
+      "passed": true
+    },
+    {
+      "control": "one_correct_approval_one_original_invocation",
+      "passed": true,
+      "witnesses": {
+        "child_calls": 1,
+        "receiver_hits": 1
+      },
+      "released_reply": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "ok delete_note"
+            }
+          ]
+        }
+      },
+      "child_received_original_bytes": true
+    },
+    {
+      "control": "replay_of_spent_approval_refused",
+      "passed": true
+    },
+    {
+      "control": "normal_continuation_after_approved_call",
+      "passed": true,
+      "reply": {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "ok read_document"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "control": "audit_has_ids_and_digests_not_arguments",
+      "passed": true
+    },
+    {
+      "control": "reject_runs_nothing",
+      "passed": true,
+      "reply": {
+        "id": 3,
+        "jsonrpc": "2.0",
+        "result": {
+          "content": [
+            {
+              "text": "Soup Wall withheld MCP invocation (fixture-destructive-confirmation, native_approval_rejected)",
+              "type": "text"
+            }
+          ],
+          "isError": true
+        }
+      }
+    },
+    {
+      "control": "approve_after_reject_refused",
+      "passed": true
+    },
+    {
+      "control": "timeout_runs_nothing",
+      "passed": true,
+      "reply": {
+        "id": 3,
+        "jsonrpc": "2.0",
+        "result": {
+          "content": [
+            {
+              "text": "Soup Wall withheld MCP invocation (fixture-destructive-confirmation, native_approval_timeout)",
+              "type": "text"
+            }
+          ],
+          "isError": true
+        }
+      }
+    },
+    {
+      "control": "hard_deny_not_rescuable",
+      "passed": true,
+      "reply": {
+        "id": 6,
+        "jsonrpc": "2.0",
+        "result": {
+          "content": [
+            {
+              "text": "Soup Wall withheld MCP invocation (fixture-privilege-deny)",
+              "type": "text"
+            }
+          ],
+          "isError": true
+        }
+      }
+    },
+    {
+      "control": "concurrent_input_closes_pending",
+      "passed": true,
+      "gateway_exit": 1
+    },
+    {
+      "control": "restart_cannot_be_rescued",
+      "passed": true,
+      "reply": null
+    },
+    {
+      "control": "default_config_keeps_refusal",
+      "passed": true,
+      "reply": {
+        "id": 3,
+        "jsonrpc": "2.0",
+        "result": {
+          "content": [
+            {
+              "text": "Soup Wall withheld MCP invocation (fixture-destructive-confirmation)",
+              "type": "text"
+            }
+          ],
+          "isError": true
+        }
+      }
+    }
+  ],
+  "note": "Control-flow demonstration with a disposable fixture; no model, dataset or generalization claim."
+}
