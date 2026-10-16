@@ -13,6 +13,7 @@ use rustls_pki_types::{pem::PemObject, CertificateDer};
 use serde_json::json;
 
 use crate::handlers::Shared;
+use crate::managed_credential::CredentialSource;
 use crate::managed_policy::{
     parse_bounded, parse_keyring, read_keyring_file, verify_candidate, PinnedIssuerKey,
     SignedAgentPolicy, VerifiedAgentPolicy, MAX_BUNDLE_BYTES,
@@ -28,7 +29,7 @@ pub struct ManagedSync {
     console: reqwest::Url,
     /// Optional operator-provisioned PEM-encoded private CA, never fetched from Console.
     private_ca_pem: Option<Vec<u8>>,
-    token: String,
+    credential_source: CredentialSource,
     tenant: String,
     agent: String,
     trust_source: TrustSource,
@@ -58,6 +59,16 @@ fn fixed_hex_32(raw: &str) -> Result<[u8; 32]> {
     }
     Ok(data)
 }
+#[derive(Debug)]
+struct CredentialUnavailable;
+
+impl std::fmt::Display for CredentialUnavailable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "managed Agent authentication unavailable")
+    }
+}
+impl std::error::Error for CredentialUnavailable {}
+
 #[derive(Debug)]
 struct ConsoleUnavailableStatus(reqwest::StatusCode);
 
@@ -189,12 +200,7 @@ impl ManagedSync {
         };
         let console = parse_console_origin(&base)?;
         let private_ca_pem = private_ca_from_environment(console.scheme() == "https")?;
-        let token = std::env::var("SOUP_MANAGED_AGENT_TOKEN")
-            .context("missing separate Agent credential")?;
-        ensure!(
-            token.len() == 52 && token.starts_with("sw_agent_"),
-            "invalid managed Agent credential"
-        );
+        let credential_source = CredentialSource::from_environment()?;
         let tenant = std::env::var("SOUP_MANAGED_AGENT_TENANT").context("missing pinned tenant")?;
         let agent = std::env::var("SOUP_MANAGED_AGENT_ID").context("missing pinned Agent ID")?;
         ensure!(
@@ -243,7 +249,7 @@ impl ManagedSync {
         Ok(Some(Self {
             console,
             private_ca_pem,
-            token,
+            credential_source,
             tenant,
             agent,
             trust_source,
@@ -385,7 +391,12 @@ impl ManagedSync {
         Ok(())
     }
 
-    async fn acknowledge(&self, client: &reqwest::Client, state: &Shared) -> Result<()> {
+    async fn acknowledge(
+        &self,
+        client: &reqwest::Client,
+        state: &Shared,
+        token: &str,
+    ) -> Result<()> {
         let current = state
             .firewall
             .lock()
@@ -394,7 +405,7 @@ impl ManagedSync {
             .context("no applied runtime policy")?;
         let response = client
             .post(self.endpoint("agent/v1/policy/ack")?)
-            .bearer_auth(&self.token)
+            .bearer_auth(token)
             .json(&json!({
                 "deployment_sequence": current.deployment_sequence,
                 "revision": current.revision,
@@ -404,6 +415,11 @@ impl ManagedSync {
             .send()
             .await
             .context("managed policy acknowledgement unavailable")?;
+        if response.status() == reqwest::StatusCode::UNAUTHORIZED
+            || response.status() == reqwest::StatusCode::FORBIDDEN
+        {
+            return Err(CredentialUnavailable.into());
+        }
         ensure!(
             response.status().is_success(),
             "Console rejected applied policy acknowledgement"
@@ -413,13 +429,18 @@ impl ManagedSync {
 
     /// A negative assertion is separate from applied and never claims that the
     /// running policy changed. Console validates identity + exact sequence/hash.
-    async fn report_rejection(&self, client: &reqwest::Client, bundle: &SignedAgentPolicy) {
+    async fn report_rejection(
+        &self,
+        client: &reqwest::Client,
+        bundle: &SignedAgentPolicy,
+        token: &str,
+    ) {
         let result = client
             .post(match self.endpoint("agent/v1/policy/ack") {
                 Ok(url) => url,
                 Err(_) => return,
             })
-            .bearer_auth(&self.token)
+            .bearer_auth(token)
             .json(&json!({
                 "deployment_sequence": bundle.deployment_sequence,
                 "revision": bundle.revision,
@@ -434,14 +455,23 @@ impl ManagedSync {
     }
 
     async fn poll_once(&self, client: &reqwest::Client, state: &Shared) -> Result<()> {
+        let token = self
+            .credential_source
+            .load()
+            .map_err(|_| CredentialUnavailable)?;
         let mut response = client
             .get(self.endpoint("agent/v1/policy")?)
-            .bearer_auth(&self.token)
+            .bearer_auth(token.as_str())
             .send()
             .await
             .context("managed Console unavailable")?;
         if response.status() == reqwest::StatusCode::NO_CONTENT {
             return Ok(());
+        }
+        if response.status() == reqwest::StatusCode::UNAUTHORIZED
+            || response.status() == reqwest::StatusCode::FORBIDDEN
+        {
+            return Err(CredentialUnavailable.into());
         }
         if response.status().is_server_error() {
             // A reachable TLS edge does not imply its upstream Console is
@@ -473,7 +503,7 @@ impl ManagedSync {
                 && a.revision == bundle.revision
                 && a.policy_sha256 == bundle.policy_sha256
         }) {
-            return self.acknowledge(client, state).await;
+            return self.acknowledge(client, state, &token).await;
         }
         let last = active.map_or(0, |a| a.deployment_sequence);
         let keys = match self.load_keys() {
@@ -483,7 +513,7 @@ impl ManagedSync {
                     error = %error,
                     "cannot load trusted keyring during candidate verification; reporting rejection"
                 );
-                self.report_rejection(client, &bundle).await;
+                self.report_rejection(client, &bundle, &token).await;
                 return Err(error);
             }
         };
@@ -491,15 +521,15 @@ impl ManagedSync {
             match verify_candidate(&bundle, &keys, &self.tenant, &self.agent, last, now()) {
                 Ok(verified) => verified,
                 Err(error) => {
-                    self.report_rejection(client, &bundle).await;
+                    self.report_rejection(client, &bundle, &token).await;
                     return Err(error);
                 }
             };
         if let Err(error) = self.activate(state, verified, &bundle) {
-            self.report_rejection(client, &bundle).await;
+            self.report_rejection(client, &bundle, &token).await;
             return Err(error);
         }
-        self.acknowledge(client, state).await
+        self.acknowledge(client, state, &token).await
     }
 
     /// Never follow 3xx to another origin: a redirect must not receive the
@@ -534,6 +564,12 @@ impl ManagedSync {
             let result = self.poll_once(&client, &state).await;
             let transport_state = match &result {
                 Ok(()) => "online",
+                Err(e)
+                    if e.chain()
+                        .any(|cause| cause.downcast_ref::<CredentialUnavailable>().is_some()) =>
+                {
+                    "auth_unavailable"
+                }
                 Err(e)
                     if e.chain().any(|cause| {
                         cause.downcast_ref::<reqwest::Error>().is_some()

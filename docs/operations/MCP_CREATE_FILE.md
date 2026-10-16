@@ -58,7 +58,9 @@ Supported execution is Linux on local filesystems with the required anonymous
 staging, publication and synchronization semantics. The initial filesystem set
 is ext4, XFS, Btrfs, tmpfs and overlayfs; actual syscalls must also succeed. macOS,
 Windows, unsupported filesystems, unavailable `/proc` descriptor publication or
-unavailable `O_TMPFILE` fail closed, with no named-file fallback. `workspace` and
+unavailable `O_TMPFILE` fail closed under this Linux v2 profile, with no named-file
+fallback. The distinct [Windows v5 profile](MCP_WINDOWS_CREATE.md) uses its own
+reviewed NTFS handle and publication implementation. `workspace` and
 `cwd` must resolve to the same root. Nested paths, traversal, ambiguous spellings,
 missing parents, symlinks, existing files, directories, hard links and special
 files are refused. The executor never overwrites, truncates or appends.
