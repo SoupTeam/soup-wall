@@ -285,6 +285,16 @@ def main():
         with ThreadPoolExecutor(max_workers=2) as pool:
             results = list(pool.map(attempt, competing))
         check("competing-rotations-exactly-one-wins", sorted(results) == [200, 409])
+        # Disabled tenants must not be reactivated through a rotation request.
+        disabled_base = f'{console}/admin/v1/tenants/{other["id"]}/agents'
+        expect(201, "POST", disabled_base,
+               {"agent_id": "disabled-agent"}, admin_headers)
+        expect(204, "PATCH", f'{console}/admin/v1/tenants/{other["id"]}',
+               {"active": False}, admin_headers)
+        expect(409, "POST", disabled_base + "/disabled-agent/credential-rotations",
+               {"expected_generation": 1, "operation_id": secrets.token_hex(16),
+                "replacement_token": token()}, admin_headers)
+        check("disabled-tenant-cannot-rotate", True)
         expect(204, "POST", base + "/revoke", {}, admin_headers)
         expect(409, "POST", endpoint,
                {"expected_generation": 2, "operation_id": secrets.token_hex(16),
