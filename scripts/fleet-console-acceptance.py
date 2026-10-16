@@ -9,6 +9,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path
 import secrets
 import subprocess
@@ -99,15 +100,26 @@ def main():
         check('revoked-no-history-filter',len(revoked['agents'])==1 and revoked['agents'][0]['agent_id']=='revoked')
         delivered=req('GET',fleet+'?delivery=delivered',auth=view)
         check('recorded-delivered-without-applied',len(delivered['agents'])==1 and delivered['agents'][0]['last_reported_applied'] is None)
-        with sync_playwright() as playwright:
-            browser=playwright.chromium.launch(headless=True);stack.callback(browser.close)
+        with sync_playwright() as playwright, ExitStack() as browser_stack:
+            browser=playwright.chromium.launch(headless=True);browser_stack.callback(browser.close)
             context=browser.new_context(viewport={'width':1440,'height':1000});page=context.new_page()
             page.goto(console+'/admin');page.locator('#admin-token').fill(viewer);page.locator('#unlock-form button').click();expect(page.locator('#console')).to_be_visible()
             page.locator('#tenant-list button').filter(has_text='Fleet Alpha').click()
             expect(page.locator('#fleet-list')).to_contain_text('agent-demo');page.get_by_role('button',name='agent-demo',exact=True).click()
             expect(page.locator('#fleet-agent-detail')).to_contain_text('Latest deployment is pending')
             page.locator('#fleet-panel').screenshot(path=str(args.output/'pending.png'))
-            check('browser-viewer-read-only',page.locator('#fleet-panel button').filter(has_text='Deploy').count()==0 and page.locator('#admin-token').input_value()=='')
+            # Exercise the production history cursor with a smaller server page.
+            def small_history(route):
+                response=route.fetch(url=route.request.url.replace('limit=25','limit=1'))
+                route.fulfill(response=response)
+            page.route('**'+fleet+'/agent-demo?*',small_history)
+            page.get_by_role('button',name='agent-demo',exact=True).click()
+            expect(page.locator('#fleet-history-next')).to_be_enabled()
+            page.locator('#fleet-history-next').click()
+            expect(page.locator('#fleet-history-next')).to_be_disabled()
+            check('browser-older-history-retains-latest-and-last-applied', '#2' in page.locator('#fleet-agent-detail').inner_text() and '#1' in page.locator('#fleet-agent-detail').inner_text())
+            page.unroute('**'+fleet+'/agent-demo?*',small_history)
+            check('browser-viewer-read-only',page.locator('#fleet-panel').get_by_role('button',name=re.compile(r'^(Enroll|Revoke|Deploy|Rollback)(?:$|\s)',re.I)).count()==0 and page.locator('#admin-token').input_value()=='')
             check('browser-no-token-storage',page.evaluate('localStorage.length === 0 && sessionStorage.length === 0'))
             # Force a late success even after AbortController cancellation to prove epoch guards.
             page.evaluate('''() => { const real=window.fetch; window.fetch=(url,options={})=>{const {signal,...rest}=options;return real(url,rest)}; }''')
@@ -115,7 +127,7 @@ def main():
             def hold(route):held.append(route)
             page.route('**'+fleet+'?*',hold)
             page.locator('#fleet-refresh').click();page.wait_for_timeout(100)
-            check('browser-pending-request-held',len(held)==1)
+            check('browser-pending-request-held',len(held)==1 and 'Loading' in page.locator('#fleet-status').inner_text())
             page.locator('#tenant-list button').filter(has_text='Fleet Beta').click();expect(page.locator('#fleet-list')).to_contain_text('agent-demo')
             response=held[0].fetch();held[0].fulfill(response=response);page.unroute('**'+fleet+'?*',hold)
             page.wait_for_timeout(100)
@@ -137,8 +149,8 @@ def main():
             page.locator('#fleet-panel').screenshot(path=str(args.output/'rejected-historical.png'))
             check('browser-loading-empty-error-pending-rejected-and-stale-walkthrough',True)
         for item in evidence.values():
-            raw=json.dumps(item);check('sanitized-'+item['agent']['latest_issued']['recorded_state'],all(s not in raw for s in [owner,viewer,*credentials.values(),'token_hash','policy_yaml','bundle_json','signature_hex',str(temp)]))
+            raw=json.dumps(item);check('sanitized-'+item['agent']['latest_issued']['recorded_state'],all(s not in raw for s in [owner,viewer,*credentials.values(),env['SOUP_AGENT_POLICY_SEED_HEX'],env['SOUP_AGENT_POLICY_SEED_HEX_UNTRUSTED'],'token_hash','policy_yaml','bundle_json','signature_hex','default: deny',str(temp)]))
             check('unknown-runtime-'+item['agent']['latest_issued']['recorded_state'],item['agent']['current_liveness']=='unknown' and item['agent']['runtime_coverage']=='unknown' and item['agent']['registry_identity'] is None)
-        report={'scope':'synthetic real Console/Agent and Chromium; not live fleet coverage','backend':args.backend,'source':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),'checks':checks,'snapshots':evidence,'browser_age_control':'browser clock advanced 10 minutes; stored ACK unchanged','binary_sha256':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in [console_binary,agent_binary]}}
+        report={'scope':'synthetic real Console/Agent and Chromium; not live fleet coverage','backend':args.backend,'source':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),'checks':checks,'snapshots':evidence,'browser_age_control':'browser clock advanced 10 minutes; stored ACK unchanged','config_sha256':{'console':hashlib.sha256((cd/'firewall.yaml').read_bytes()).hexdigest(),'agent':hashlib.sha256((home/'.agentfw/config.yaml').read_bytes()).hexdigest()},'binary_sha256':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in [console_binary,agent_binary]}}
         (args.output/'report.json').write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
 if __name__=='__main__':main()
