@@ -30,6 +30,8 @@ pub mod service;
 pub mod spans;
 pub mod token;
 #[cfg(windows)]
+pub(crate) mod windows_create;
+#[cfg(windows)]
 pub(crate) mod windows_read;
 
 use axum::routing::{get, post};

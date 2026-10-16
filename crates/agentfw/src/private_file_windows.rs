@@ -56,16 +56,28 @@ impl Drop for TokenHandle {
     }
 }
 
-struct PrivateAcl {
+pub(crate) struct PrivateAcl {
     descriptor: LocalMemory,
     dacl: *mut ACL,
 }
 
 impl PrivateAcl {
-    fn new() -> io::Result<Self> {
+    pub(crate) fn new() -> io::Result<Self> {
         let sid = current_user_sid()?;
         let sddl = format!("O:{sid}D:P(A;;GA;;;{sid})(A;;GA;;;SY)");
         Self::from_sddl(&sddl)
+    }
+
+    /// A protected empty DACL for a new create stage. It grants no future
+    /// content/attributes opens; the originally created handle retains its
+    /// granted rights. This is not a process sandbox against the file owner.
+    pub(crate) fn empty() -> io::Result<Self> {
+        let sid = current_user_sid()?;
+        Self::from_sddl(&format!("O:{sid}D:P"))
+    }
+
+    pub(crate) fn descriptor(&self) -> *mut c_void {
+        self.descriptor.0
     }
 
     fn for_directory() -> io::Result<Self> {
@@ -120,7 +132,7 @@ impl PrivateAcl {
         }
     }
 
-    fn apply(&self, handle: HANDLE) -> io::Result<()> {
+    pub(crate) fn apply(&self, handle: HANDLE) -> io::Result<()> {
         // SAFETY: The handle is open with WRITE_DAC. `dacl` points into the
         // security descriptor held by `self` for the duration of this call.
         let code = unsafe {

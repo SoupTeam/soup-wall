@@ -56,6 +56,8 @@ Then set `enforce: true` in `~/.agentfw/config.yaml`, restart the daemon, and co
 
 On Windows, `install` prints a PowerShell token command and uses `%USERPROFILE%\.agentfw`. See [Windows Agent installation and acceptance](docs/operations/WINDOWS_AGENT_ACCEPTANCE.md) for native setup and a disposable check of installation, ACLs, shadow/enforcement decisions, audit, and offline preflight.
 
+Explicitly installed constrained MCP profiles provide [Windows document reads](docs/operations/MCP_WINDOWS_READ.md) and [Windows create-only files](docs/operations/MCP_WINDOWS_CREATE.md) on local NTFS through native handles. These are separate reviewed operation profiles; ordinary MCP child processes retain their host permissions.
+
 For a reviewed stdio MCP server, [opt-in MCP admission](docs/operations/MCP_STDIO_ADMISSION.md)
 gates supported calls before execution and text results before release to the
 client. Enable it explicitly with `agentfw mcp --native-admission -- ...` and
