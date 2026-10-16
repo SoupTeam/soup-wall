@@ -5,6 +5,7 @@ import io
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest import mock
 
 SPEC = importlib.util.spec_from_file_location("agent_service_acceptance", Path(__file__).resolve().parents[1] / "test-agent-service.py")
 MODULE = importlib.util.module_from_spec(SPEC)
@@ -43,6 +44,16 @@ class ServiceAcceptanceGraderTests(unittest.TestCase):
         for suite in (None, "unknown", "FULL"):
             report["suite"] = suite
             self.assertFalse(MODULE.grade(report))
+
+    def test_outage_fixture_cannot_pass_when_manager_is_still_accessible(self):
+        runner = MODULE.Acceptance.__new__(MODULE.Acceptance)
+        runner.root = Path("/tmp/synthetic-service-outage")
+        runner.env = {}
+        runner.service = mock.Mock()
+        with mock.patch.object(MODULE.subprocess, "run", return_value=mock.Mock(returncode=0)):
+            with self.assertRaisesRegex(AssertionError, "did not isolate the real manager"):
+                runner.unavailable_manager()
+        runner.service.assert_not_called()
 
     def test_opt_in_is_required_before_creating_output(self):
         import tempfile

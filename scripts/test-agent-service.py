@@ -232,6 +232,7 @@ class Acceptance:
             self.service("uninstall", success=False)
             require(self.unit.exists(), "modified unit was deleted")
             require(self.inspect()["ready"] is False, "modified unit was accepted")
+            require(not self.lifecycle_status()["running"], "lifecycle status trusted a modified unit")
         finally:
             self.unit.write_bytes(original)
             # The test restores its deliberate edit; the production CLI correctly
@@ -247,7 +248,13 @@ class Acceptance:
         return self.home / "versions/lifecycle.json"
 
     def unavailable_manager(self):
-        env = dict(self.env, DBUS_SESSION_BUS_ADDRESS=f"unix:path={self.root}/missing-bus")
+        env = dict(self.env, XDG_RUNTIME_DIR=str(self.root / "missing-runtime"),
+                   DBUS_SESSION_BUS_ADDRESS=f"unix:path={self.root}/missing-bus")
+        # systemctl can prefer the manager's private socket under XDG_RUNTIME_DIR;
+        # overriding the D-Bus address alone does not isolate a live manager.
+        probe = subprocess.run(["/usr/bin/systemctl", "--user", "show", "--property=Version"],
+                               env=env, capture_output=True, timeout=15)
+        require(probe.returncode != 0, "outage fixture did not isolate the real manager")
         before = self.manifest().read_bytes()
         self.service("start", env=env, success=False)
         observed = json.loads(self.service("inspect", env=env))
@@ -335,15 +342,26 @@ class Acceptance:
         require(before == self.manifest().read_bytes(), "concurrent operation mutated the state")
         return {"rejected_operations": 8, "state_preserved": True}
 
+    def version_candidate(self, version):
+        candidate = self.root / f"candidate-{version}"
+        shutil.copyfile(self.binary, candidate)
+        with candidate.open("ab") as output:
+            output.write(b"\nsou52 synthetic version " + version.encode("ascii"))
+        candidate.chmod(0o700)
+        return candidate
+
     def running_updates(self):
         self.command("lifecycle", "start")
         before = self.wait_ready()
         self.command("lifecycle", "upgrade", "wrong-hash", self.binary, "--sha256", "0"*64, success=False)
         require(self.wait_ready()["instance"] == before["instance"], "invalid candidate interrupted the old service")
-        self.command("lifecycle", "upgrade", "two", self.binary, "--sha256", sha(self.binary))
+        candidate = self.version_candidate("two")
+        self.command("lifecycle", "upgrade", "two", candidate, "--sha256", sha(candidate))
         after = self.wait_ready(before)
         require(self.lifecycle_status()["active"]["version"] == "two", "upgrade did not select the candidate")
         require(after["pid"] != before["pid"], "upgrade did not create a new process")
+        require(after["binary_digest"] == sha(candidate) and after["binary_digest"] != before["binary_digest"],
+                "upgrade did not verify the changed executable")
         failed = self.root / "invalid-candidate"
         failed.write_bytes(b"#!/bin/sh\nexit 1\n")
         failed.chmod(0o700)
@@ -356,7 +374,8 @@ class Acceptance:
         self.command("lifecycle", "rollback", success=False)
         require(self.lifecycle_status()["active"]["version"] == "two", "failed rollback lost the working version")
         self.wait_ready()
-        self.command("lifecycle", "upgrade", "three", self.binary, "--sha256", sha(self.binary))
+        third = self.version_candidate("three")
+        self.command("lifecycle", "upgrade", "three", third, "--sha256", sha(third))
         self.command("lifecycle", "rollback")
         require(self.lifecycle_status()["active"]["version"] == "two", "explicit rollback selected the wrong version")
         return {"before": before, "after": after, "restored": restored, "failed_rollback_restored": True,
@@ -364,14 +383,16 @@ class Acceptance:
 
     def stopped_updates(self):
         self.command("lifecycle", "stop")
-        self.command("lifecycle", "upgrade", "four", self.binary, "--sha256", sha(self.binary))
+        fourth = self.version_candidate("four")
+        self.command("lifecycle", "upgrade", "four", fourth, "--sha256", sha(fourth))
         require(self.lifecycle_status()["active"]["version"] == "four", "stopped upgrade did not switch versions")
         require(not self.inspect()["ready"], "stopped upgrade started the Agent")
         self.command("lifecycle", "rollback")
         self.command("lifecycle", "recover")
         observed = self.inspect()
         require(not observed["ready"] and observed["systemd"]["MainPID"] == "0", "stopped rollback/recovery started the Agent")
-        return {"running_state_preserved": False, "runtime_validation": "not_run_while_stopped"}
+        return {"was_running": False, "running_intent_preserved": True,
+                "runtime_validation": "not_run_while_stopped"}
 
     def interrupt_update(self, running):
         if running:
