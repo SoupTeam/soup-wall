@@ -21,7 +21,7 @@ HEX64 = re.compile(r'^[0-9a-f]{64}$')
 PRIVATE_KEYS = frozenset({'seed', 'nonce', 'test_families', 'test_groups'})
 REQUIRED = {
     'declared': {'custody_kind', 'state', 'custodian', 'pool_digest', 'rule_digest'},
-    'committed': {'feasible_sets_digest', 'n_feasible_sets', 'commitment'},
+    'committed': {'feasible_sets_digest', 'n_feasible_sets', 'commitment', 'rulings_sha256'},
     'drawn': {'test_set_commitment', 'test_family_count'},
     'custody_accepted': {'acceptance'},
 }
@@ -65,7 +65,7 @@ def public_state_errors(state):
     missing = _required_for(state['state']) - set(state)
     if missing:
         e.append(f'custody state {state["state"]} lacks {sorted(missing)}')
-    for k in ('pool_digest', 'rule_digest', 'feasible_sets_digest', 'commitment', 'test_set_commitment'):
+    for k in ('pool_digest', 'rule_digest', 'feasible_sets_digest', 'commitment', 'test_set_commitment', 'rulings_sha256'):
         if k in state and not (isinstance(state[k], str) and HEX64.match(state[k])):
             e.append(f'{k} is not a 64-hex sha256 commitment')
     if not (isinstance(state.get('custodian'), str) and state['custodian'].strip()):
@@ -93,18 +93,21 @@ def _feasible(table, requirements, counts):
     return sets, adapters.sha([list(s) for s in sets])
 
 
-def commit(state, table, requirements, counts, seed):
+def commit(state, table, requirements, counts, seed, *, rulings_sha256):
     """-> (public_state, private_part). Fails if no test set can satisfy the recorded requirements (never relaxed)."""
     _expect(state, 'declared')
     if not (isinstance(seed, str) and HEX64.match(seed)):
         raise CustodyError('seed must be 64 lowercase hex characters (use new_seed())')
+    if not (isinstance(rulings_sha256, str) and HEX64.match(rulings_sha256)):
+        raise CustodyError('valid semantic rulings digest is required before commit')
     if rule_digest(requirements, counts) != state['rule_digest']:
         raise CustodyError('requirements/counts differ from the declared split rule')
     sets, digest = _feasible(table, requirements, counts)
     if not sets:
         raise CustodyError('IMPOSSIBLE: no test set satisfies the declared requirements; nothing committed')
     public = dict(state, state='committed', feasible_sets_digest=digest, n_feasible_sets=len(sets),
-                  commitment=_h(seed, state['pool_digest'], state['rule_digest'], digest))
+                  commitment=_h(seed, state['pool_digest'], state['rule_digest'], digest, rulings_sha256),
+                  rulings_sha256=rulings_sha256)
     return public, {'seed': seed}
 
 
@@ -113,7 +116,7 @@ def draw(state, table, requirements, counts, seed, group_families):
     `group_families` maps leakage group -> family ids. -> (public_state, private_part)."""
     _expect(state, 'committed')
     if not (isinstance(seed, str) and HEX64.match(seed)) or \
-            _h(seed, state['pool_digest'], state['rule_digest'], state['feasible_sets_digest']) != state['commitment']:
+            _h(seed, state['pool_digest'], state['rule_digest'], state['feasible_sets_digest'], state['rulings_sha256']) != state['commitment']:
         raise CustodyError('seed does not open the commitment')
     sets, digest = _feasible(table, requirements, counts)
     if digest != state['feasible_sets_digest'] or rule_digest(requirements, counts) != state['rule_digest']:

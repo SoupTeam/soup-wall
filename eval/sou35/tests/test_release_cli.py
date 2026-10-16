@@ -9,7 +9,7 @@ import unittest
 import uuid
 
 from _util import ROOT, TOY_DIR
-from test_release_workflow import TOY_VAULT
+from test_release_workflow import TOY_VAULT, rulings_for
 
 from sou35 import export, families, generate, release
 
@@ -29,9 +29,11 @@ class ReleaseCli(unittest.TestCase):
         (pool / 'toy_vault.json').write_text(json.dumps(TOY_VAULT), encoding='utf-8')
         decls = families.load_dir(pool)
         self.recs = generate.generate(decls, {})
+        self.register_file = self.ws / 'toy_rulings.json'
+        self.register_file.write_text(json.dumps(rulings_for(decls, self.recs)), encoding='utf-8')
         self.records = self.ws / 'records.jsonl'
         self.records.write_text(''.join(json.dumps(r) + '\n' for r in self.recs), encoding='utf-8')
-        self.common = ['--workspace', str(self.ws), '--pool', str(pool), '--records', str(self.records)]
+        self.common = ['--workspace', str(self.ws), '--pool', str(pool), '--records', str(self.records), '--rulings', str(self.register_file)]
 
     def tearDown(self):
         for path, existed in ((self.ws, None), (self.out, None)):
@@ -81,7 +83,8 @@ class ReleaseCli(unittest.TestCase):
     def auth(self, **over):
         m = json.loads((self.ws / release.FULL).read_text(encoding='utf-8'))
         a = {'scope': export.EXPORT_SCOPE, 'authorized_by': 'toy-authorizer', 'authorized_at': '2026-10-16T02:00:00Z',
-             'decision_ref': 'TOY-EXPORT-1', 'manifest_sha256': m['manifest_sha256'], **over}
+             'decision_ref': 'TOY-EXPORT-1', 'manifest_sha256': m['manifest_sha256'],
+             'rulings_sha256': m['rulings_sha256'], **over}
         p = self.ws / f'auth_{uuid.uuid4().hex}.json'
         p.write_text(json.dumps(a), encoding='utf-8')
         return str(p)

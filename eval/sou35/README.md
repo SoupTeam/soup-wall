@@ -14,11 +14,13 @@ artificial toy families (`tests/toy/`, `artificial_toy: true`) that exist only t
 | `sou35/feasibility.py` | Split feasibility over leakage groups; reports impossible requirements, counts only |
 | `sou35/custody.py` | Sealed-test custody: declare, commit, draw (commit-reveal), custodian acceptance; public states carry no seed or family id |
 | `sou35/manifest.py` | Versioned family-disjoint manifest: deterministic draft, validation, freeze with an approval record, public view |
-| `sou35/export.py` | Development export, refused unless the manifest is FROZEN and an explicit authorization binds it |
+| `sou35/export.py` | Development export: excludes all unreviewed cases; requires frozen v2 manifest, test proof and explicit authorisation |
+| `sou35/rulings.py` | Pool-bound, private semantic and case-evidence review decisions (recorded, not authenticated) |
 | `sou35/release.py` | Thin custodian CLI over custody, manifest and export (see `docs/benchmarks/sou35/VALIDATION.md`) |
 
 Approver, custodian and authorizer fields are recorded text bound into sha256 digests; they do not authenticate a
 person and nothing is signed. The full manifest names test families and stays with the sealed-test custodian.
+
 | `schema/` | `sou35_case.schema.json` (CP2 label contract reused verbatim), `sou35_family.schema.json` |
 
 ```sh
@@ -38,7 +40,8 @@ only after `git check-ignore` confirms the path is ignored. Pool membership (dev
   `private/` workspace and are never committed. Test-family identities are never published.
 - Labels are **mechanical synthetic evidence** (re-executed program, typed access audit). They are not human
   approved, are never called Gold, and inherit no SOU-13 reviewer decision. The schema has no `confirmed` status
-  and requires `human_semantic_approval: null`.
+  and requires `human_semantic_approval: null`. Release tooling now also requires an external-decision
+  register with exact per-case review digests; this is not a Gold declaration or a human signature.
 
 ## Pending human decisions
 
@@ -51,4 +54,4 @@ only after `git check-ignore` confirms the path is ignored. Pool membership (dev
 | Q-S35-OPTIONAL-DEFAULT | Whether an absent optional flag takes the declared default branch |
 | Q-S35-HUMAN-REVIEW | Independent human semantic reviewer (not assigned) |
 | Q-S35-DATA-USE | SOU-35 data-use permission (not granted; no license is assumed) |
-| (custody) | Sealed-test custodian (not assigned) |
+| (custody) | Owner assigned as sealed-test custodian by team lead on 2026-10-15 |

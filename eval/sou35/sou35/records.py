@@ -72,6 +72,8 @@ def _technical_errors(r, decl):
         e.append('technical-error record must not carry labels')
     if r['technical_error'] != 'classifier_invalid' or r['template_id'] != technical_template_id(decl):
         e.append('technical-error record must expect classifier_invalid under the technical template')
+    if r['expected_outcome'] != 'technical_error' or r['evaluation']['in_semantic_accuracy'] is not False:
+        e.append('technical-error case must be an unscored technical_error outcome')
     if r['evaluation']['role'] != 'technical_error_check':
         e.append('technical-error record must have role technical_error_check')
     return e
@@ -123,4 +125,15 @@ def dataset_errors(records, decls):
     ids = [r['id'] for r in records]
     if len(ids) != len(set(ids)):
         errors.append('duplicate record id')
+    expected = {(d['family_id'], kind, i) for d in decls
+                for kind, n in (('classification', len(d['cases'])),
+                                ('technical_error', len(d['technical_error_cases'])))
+                for i in range(n)}
+    actual = [(r['family_id'], r['source_material']['case_kind'], r['source_material']['case_index'])
+              for r in records if 'source_material' in r and 'family_id' in r and
+              all(k in r['source_material'] for k in ('case_kind', 'case_index'))]
+    if len(actual) != len(set(actual)):
+        errors.append('duplicate declared case index')
+    if set(actual) != expected:
+        errors.append('record inventory is not a complete bijection with the declared cases')
     return errors

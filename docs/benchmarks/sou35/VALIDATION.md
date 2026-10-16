@@ -35,7 +35,7 @@ and records; a refusal exits 1 and prints only an error category.
 
 ```sh
 cd eval/sou35
-R="--workspace sealed/<name> --pool private/pool --records private/records/candidates.jsonl"
+R="--workspace sealed/<name> --pool private/pool --records private/records/candidates.jsonl --rulings sealed/<name>/rulings.json"
 python -m sou35.release declare $R --custodian <name> --counts T/V/C/S      # full coverage requirements by default
 python -m sou35.release commit  $R                                          # seed stays in the workspace
 python -m sou35.release draw    $R --confirm
@@ -48,8 +48,22 @@ python -m sou35.release export  $R --authorization <auth.json> --out private/<di
 ```
 
 The export authorization file needs `scope: sou35_internal_dev_export`, `authorized_by`, `authorized_at`,
-`decision_ref` and the frozen manifest's `manifest_sha256`. These fields are recorded, not authenticated (see the
+`decision_ref` and the frozen manifest's `manifest_sha256` and `rulings_sha256`. These fields are recorded, not authenticated (see the
 dataset card).
+
+
+**New v2 precondition:** The private `--rulings` register must be prepared from externally authorised human
+semantic decisions and reviewed-case evidence before `commit`. Its shape is validated by `sou35.rulings`:
+`version: sou35-semantic-rulings-v1`, `scope: sou35_synthetic_candidate_pool`,
+`pool_digest`, `decisions` (question_id/status/reviewed_by/reviewed_at/decision_ref) and
+`reviewed_cases` (id/row_sha256/status/reviewed_by/reviewed_at/decision_ref).
+Decisions and case reviews marked `accepted` must have real externally retrievable review references.
+The custodian holds this register privately; **never use the artificial toy approvals for the real pool**.
+These fields are recorded, not authenticated. No real freeze/export/draw has been performed.
+Unapproved records are excluded from development export entirely, including their labels.
+
+**Upgrade note:** The v1 manifest was never frozen for the real candidate pool; the new v2 manifest and
+custody state are incompatible with v1. Do not reuse an earlier draw or infer an accepted semantic ruling.
 
 Isolation checks before any PR:
 
@@ -59,7 +73,7 @@ git check-ignore -v eval/sou35/private/pool/x.json eval/sou35/private/records/ca
 test ! -e eval/sou13/cp2_sealed && echo "consumed SOU-13 sealed material absent"
 ```
 
-## Recorded results (2026-10-15, branch `feat/sou35-fresh-dataset`, base `e6f6305`)
+## Earlier baseline results before v2 safeguards (2026-10-15, branch `feat/sou35-fresh-dataset`, base `e6f6305`)
 
 | Where / command | Result |
 | --- | --- |
@@ -77,3 +91,6 @@ a source file FAILS naming only the file, and the canary is not printed. Limits:
 strings under 12 characters are not scanned; only `eval/sou35` and `docs/benchmarks/sou35` are scanned; PR text,
 commit messages and Linear are not covered; it runs only where the private pool exists; and a leak that makes a
 Python file unparseable can be echoed by the interpreter's own traceback.
+
+The baseline counts above apply to commit `0023729`, not to the v2 patch. Run the complete SOU-35
+and SOU-13 test suites locally after applying the patch and replace these results only when verified.

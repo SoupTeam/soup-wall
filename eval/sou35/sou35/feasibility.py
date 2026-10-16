@@ -25,7 +25,11 @@ def default_requirements(features=FULL_HELD_OUT):
     return {s: (frozenset(features) if s in HELD_OUT else frozenset()) for s in SPLITS}
 
 
-def record_features(r):
+def record_features(r, rulings_register=None):
+    if rulings_register is not None:
+        from . import rulings
+        if not rulings.is_admissible(r, rulings_register):
+            return set()
     if r['expected_outcome'] == 'technical_error':
         return {'technical_error'}
     t, unknown = r['annotation']['per_action_targets'], r['annotation']['unknown']
@@ -39,16 +43,16 @@ def record_features(r):
     return out
 
 
-def family_features(records):
+def family_features(records, rulings_register=None):
     out = {}
     for r in records:
-        out.setdefault(r['family_id'], set()).update(record_features(r))
+        out.setdefault(r['family_id'], set()).update(record_features(r, rulings_register))
     return {k: frozenset(v) for k, v in out.items()}
 
 
-def group_table(records):
+def group_table(records, rulings_register=None):
     """{leakage_group_id: (n_families, features)} from the records' declared leakage groups."""
-    fam_feats = family_features(records)
+    fam_feats = family_features(records, rulings_register)
     fam_group = {r['family_id']: r['leakage_group_id'] for r in records}
     table = {}
     for fid, gid in fam_group.items():

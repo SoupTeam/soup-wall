@@ -3,8 +3,8 @@
 **Status (2026-10-15): private candidate pool, NOT released.** This repository contains no real SOU-35 candidate
 data: no private family declaration, invocation record, seed or sealed-test identity. It includes only three
 clearly artificial toy declarations (`eval/sou35/tests/toy/`, `artificial_toy: true`) used by tests. No label is
-human-approved or Gold. No data-use permission, license, independent reviewer or sealed-test custodian has been
-granted or assigned for SOU-35. Development/test membership is **undetermined**.
+human-approved or Gold. No data-use permission, license or independent semantic review approval has been
+granted for SOU-35. The team lead designated the dataset owner as sealed-test custodian on October 15. Development/test membership is **undetermined**.
 
 ## Purpose
 
@@ -86,25 +86,39 @@ be Gold.
 | Q-S35-OPTIONAL-DEFAULT | Does an absent optional flag take the declared default branch? |
 | Q-S35-HUMAN-REVIEW | Independent human semantic reviewer: not assigned. |
 | Q-S35-DATA-USE | Data-use permission: not granted. No license is assumed. |
-| Custody | Sealed-test custodian, test-family draw and split freeze: not assigned, not performed. |
+| Custody | Dataset owner named custodian by team lead; test-family draw and split freeze not performed. |
 
 ## Roles and trust boundary
 
 Tooling exists (toy-tested only) for sealed-test custody, a versioned family-disjoint split manifest, and a gated
 development export. None of it has been run on the candidate pool.
 
-- **Sealed-test custodian (not assigned).** Runs commit, draw, accept, freeze and the development export
+- **Sealed-test custodian (dataset owner, assigned by team lead).** Runs commit, draw, accept, freeze and the development export
   (`python -m sou35.release`). Holds the custodian seed, the draw nonce, the test-family list and the **full
   manifest**, which names test families. None of these may leave the custodian's ignored `sealed/` workspace.
 - **What leaves custody.** Only the public manifest view (development families, test counts and sha256
-  commitments) and the development export (train/validation/calibration only; scored rows are provisional
-  classification records, pending and technical-error rows are kept separate). Tests confirm neither contains
+  commitments) and the development export (train/validation/calibration only; only case-evidence-reviewed,
+  externally authorised classification records are exported; unresolved/technical records are excluded). Tests confirm neither contains
   test family ids, test case ids, the seed, the nonce or the full manifest's frozen assignment.
 - **Approvals are recorded, not authenticated.** `approved_by`, the custodian acceptance and the export
   `authorized_by` are text supplied by the operator, then bound into sha256-digested documents. A digest proves the
   document has not changed since; it does not prove which person decided. Nothing is cryptographically signed (the
-  SOU-13 signed-anchor procedure is not adopted here). Each record must reference an external human decision record
-  through `decision_ref`; the tooling rejects only blank fields and AI-annotator identities.
+  SOU-13 signed-anchor procedure is not adopted here). A private pool-bound rulings register records externally verifiable decision references, along with
+  per-case evidence-review digests. This binds a claimed review to exact records but is not a signature or a Gold
+  addendum. The named independent reviewer and data-use authority must be verified outside the code.
+
+## Fail-closed release controls (not yet run on real data)
+
+A versioned, **private** rulings register must bind to the declaration-pool digest and contain accepted decisions
+for any questions affecting a scored record plus case-level evidence-review attestations bound to each exact
+record digest. Missing, pending, rejected or unreviewed cases cannot count towards accepted split coverage and are
+excluded completely from development exports. Real `accepted` entries must be transcribed from independently
+recorded human decisions, never created automatically.
+
+The v2 full manifest binds the canonical record inventory and the rulings register. Custody commitments bind the
+register before drawing test families. The library and CLI require the custodian-held test-set proof for validation,
+public-view generation and export. No v1 manifest may be silently upgraded; restart a not-yet-executed custody
+workflow after authorised rulings are available. This protects integrity, not the identity of an operator.
 
 ## Intended use
 

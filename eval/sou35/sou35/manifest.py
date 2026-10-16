@@ -12,9 +12,9 @@ The FULL manifest names test families: it is custodian/owner material for the ig
 Amendment of a frozen manifest is not supported: any change requires a new manifest version."""
 import copy
 
-from . import adapters, custody, feasibility
+from . import adapters, custody, feasibility, records as record_validation, rulings
 
-MANIFEST_VERSION = 'sou35-manifest-v1'
+MANIFEST_VERSION = 'sou35-manifest-v2'  # v1 cannot be upgraded in-place
 DEV_SPLITS = ('train', 'validation', 'calibration')
 
 
@@ -38,7 +38,13 @@ def _profile(requirements):
     return 'full' if requirements == feasibility.default_requirements() else 'custom'
 
 
-def build_draft(decls, records, custody_state, test_families, nonce, counts, requirements, salt):
+def build_draft(decls, records, custody_state, test_families, nonce, counts, requirements, salt, *, rulings_register):
+    if rulings.errors(rulings_register, decls):
+        raise ManifestError('semantic rulings register is missing, invalid or out of scope')
+    if record_validation.dataset_errors(records, decls):
+        raise ManifestError('candidate records failed validation')
+    if custody_state.get('rulings_sha256') != rulings.digest(rulings_register):
+        raise ManifestError('custody commitment is not bound to the semantic rulings register')
     if custody_state.get('state') not in ('drawn', 'custody_accepted'):
         raise ManifestError('test families must come from a drawn custody state')
     if not custody.verify_test_set(custody_state, test_families, nonce):
@@ -51,7 +57,7 @@ def build_draft(decls, records, custody_state, test_families, nonce, counts, req
     test_groups = {fam_group[f] for f in test_families}
     if sorted(f for g in test_groups for f in groups[g]) != sorted(test_families):
         raise ManifestError('test families must form whole leakage groups')
-    table = feasibility.group_table(records)
+    table = feasibility.group_table(records, rulings_register)
     allowed = {g: (('test',) if g in test_groups else DEV_SPLITS) for g in groups}
     order = sorted(groups, key=lambda g: (adapters.splits_module().hash_key(salt, g), g))
     alloc = feasibility.find_allocation(table, requirements, counts, allowed, order)
@@ -65,7 +71,9 @@ def build_draft(decls, records, custody_state, test_families, nonce, counts, req
         'salt': salt, 'counts': dict(counts),
         'requirements': {s: sorted(r) for s, r in requirements.items()}, 'requirements_profile': _profile(requirements),
         'pool_digest': custody_state['pool_digest'],
-        'custody': {k: custody_state[k] for k in ('custodian', 'commitment', 'test_set_commitment', 'rule_digest')},
+        'record_inventory_sha256': record_inventory_digest(records),
+        'rulings_sha256': rulings.digest(rulings_register),
+        'custody': {k: custody_state[k] for k in ('custodian', 'commitment', 'test_set_commitment', 'rule_digest', 'rulings_sha256')},
         'family_split': fam_split, 'family_group': {f: fam_group[f] for f in sorted(fam_group)},
         'family_fingerprints': {d['family_id']: adapters.fingerprint(d) for d in sorted(decls, key=lambda d: d['family_id'])},
         'split_summary': {s: {'families': len(by_split[s]),
@@ -76,13 +84,32 @@ def build_draft(decls, records, custody_state, test_families, nonce, counts, req
     return _sign(body)
 
 
+def record_inventory_digest(records):
+    """Pin every case, including original arguments, annotation and effect evidence."""
+    return adapters.sha([{'id': r['id'], 'row_sha256': adapters.sha(r)}
+                         for r in sorted(records, key=lambda r: r['id'])])
+
+
 def _requirements(m):
     return {s: frozenset(r) for s, r in m['requirements'].items()}
 
 
-def manifest_errors(m, decls, records, custody_state, test_families=None, nonce=None):
-    """Empty list = valid. Private test material (test_families, nonce) is checked when supplied."""
+def manifest_errors(m, decls, records, custody_state, test_families=None, nonce=None, *, rulings_register=None):
+    """Only a custodian with the complete test proof and ruling register can validate a manifest."""
     e = []
+    if not isinstance(m, dict):
+        return ['manifest is not an object']
+    if rulings.errors(rulings_register, decls):
+        e.append('missing, invalid or out-of-scope semantic rulings register')
+    elif m.get('rulings_sha256') != rulings.digest(rulings_register) or \
+            custody_state.get('rulings_sha256') != rulings.digest(rulings_register):
+        e.append('semantic rulings digest differs from manifest/custody commitment')
+    if test_families is None or nonce is None:
+        e.append('custodian test-set proof is mandatory')
+    if record_validation.dataset_errors(records, decls):
+        e.append('candidate record validation failed')
+    if m.get('record_inventory_sha256') != record_inventory_digest(records):
+        e.append('record inventory/source/evidence differs from frozen manifest')
     if m.get('manifest_sha256') != adapters.sha({k: v for k, v in m.items() if k != 'manifest_sha256'}):
         e.append('manifest_sha256 does not match the manifest content (tampered?)')
     if m.get('manifest_kind') != 'sou35_family_split_manifest' or m.get('manifest_version') != MANIFEST_VERSION:
@@ -112,7 +139,7 @@ def manifest_errors(m, decls, records, custody_state, test_families=None, nonce=
         e.append(f'split family counts {count} differ from recorded counts {m["counts"]}')
     req = _requirements(m)
     for s in feasibility.SPLITS:
-        feats = set().union(*(feasibility.record_features(r) for r in records if split[r['family_id']] == s)) \
+        feats = set().union(*(feasibility.record_features(r, rulings_register) for r in records if split[r['family_id']] == s)) \
             if any(split[r['family_id']] == s for r in records) else set()
         missing = req[s] - feats
         if missing:
@@ -124,15 +151,15 @@ def manifest_errors(m, decls, records, custody_state, test_families=None, nonce=
     elif {k: custody_state.get(k) for k in m['custody']} != m['custody'] or \
             custody_state['pool_digest'] != m['pool_digest']:
         e.append('manifest is not bound to this custody state')
-    if test_families is not None:
+    if test_families is not None and nonce is not None:
         if sorted(f for f, s in split.items() if s == 'test') != sorted(test_families) or \
                 not custody.verify_test_set(custody_state, test_families, nonce):
             e.append('test split is not the committed custody draw')
     if m.get('status') == 'DRAFT':
         if m.get('freeze_record') is not None:
             e.append('a DRAFT manifest cannot carry a freeze record')
-        if test_families is not None and not e:
-            rebuilt = build_draft(decls, records, custody_state, test_families, nonce, m['counts'], req, m['salt'])
+        if test_families is not None and nonce is not None and not e:
+            rebuilt = build_draft(decls, records, custody_state, test_families, nonce, m['counts'], req, m['salt'], rulings_register=rulings_register)
             if rebuilt != m:
                 e.append('DRAFT manifest is not the deterministic rebuild')
     else:
@@ -146,7 +173,7 @@ def manifest_errors(m, decls, records, custody_state, test_families=None, nonce=
     return e
 
 
-def freeze(m, decls, records, custody_state, test_families, nonce, *, approved_by, approved_at, decision_ref):
+def freeze(m, decls, records, custody_state, test_families, nonce, *, rulings_register, approved_by, approved_at, decision_ref):
     if not all(isinstance(v, str) and v.strip() for v in (approved_by, approved_at, decision_ref)):
         raise ManifestError('freeze requires approved_by, approved_at and decision_ref')
     if approved_by.startswith('ai_assisted'):
@@ -155,7 +182,7 @@ def freeze(m, decls, records, custody_state, test_families, nonce, *, approved_b
         raise ManifestError('only a DRAFT manifest can be frozen')
     if custody_state.get('state') != 'custody_accepted':
         raise ManifestError('custody must be accepted by the named custodian before freezing')
-    errors = manifest_errors(m, decls, records, custody_state, test_families, nonce)
+    errors = manifest_errors(m, decls, records, custody_state, test_families, nonce, rulings_register=rulings_register)
     if errors:
         raise ManifestError(f'cannot freeze an invalid manifest: {errors}')
     out = copy.deepcopy(m)
@@ -166,8 +193,11 @@ def freeze(m, decls, records, custody_state, test_families, nonce, *, approved_b
     return _sign(out)
 
 
-def public_view(m):
-    """No test family is named: the test split is reported as counts and custody commitments only."""
+def public_view(m, decls, records, custody_state, test_families, nonce, *, rulings_register):
+    """No test family is named; refuse an unverified full manifest."""
+    errors = manifest_errors(m, decls, records, custody_state, test_families, nonce, rulings_register=rulings_register)
+    if errors:
+        raise ManifestError('public view refused: unverified full manifest/custody proof')
     dev = {f: s for f, s in m['family_split'].items() if s != 'test'}
     fr = m.get('freeze_record')
     return _sign({
