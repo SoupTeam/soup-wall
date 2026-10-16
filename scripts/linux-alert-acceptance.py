@@ -542,7 +542,9 @@ policy_file: policies/default.yaml
         self.started = True
         self.compose("up", "--detach", "postgres", "redis", "receiver", "upstream")
         self.wait("postgres_ready", lambda: self.compose("exec", "--no-TTY", "postgres", "pg_isready", "-U", "firewall", "-d", "firewall").strip(), 60)
+        self.current_step = "gateway_migration"
         self.compose("run", "--rm", "--no-deps", "gateway", "migrate")
+        self.current_step = "gateway_monitoring_start"
         self.compose("up", "--detach", "gateway", "prometheus", "alertmanager")
         for service, target in [("gateway", 8080), ("receiver", 8443), ("prometheus", 9090), ("alertmanager", 9093)]:
             self.urls[service] = self.published_endpoint(service, target)
@@ -605,7 +607,12 @@ subjectAltName = DNS:receiver,DNS:localhost,IP:127.0.0.1
                    leaf_certificate_sha256=digest((self.directory / "server.pem").read_bytes()))
 
     def published_endpoint(self, service, target):
+        known_service = service if service in {"gateway", "receiver", "prometheus", "alertmanager"} else "unknown"
+        self.current_step = "published_endpoint_" + known_service
         identifiers = self.compose("ps", "--quiet", service).split()
+        witness = {"service": known_service, "container_count": len(identifiers),
+                   "unique_hex_container_id": len(identifiers) == 1 and re.fullmatch(r"[a-f0-9]{12,64}", identifiers[0]) is not None}
+        self.report.setdefault("endpoint_witnesses", []).append(witness)
         if len(identifiers) != 1 or re.fullmatch(r"[a-f0-9]{12,64}", identifiers[0]) is None:
             raise DrillError("owned service container is unavailable or ambiguous")
         template = ('{"owner":{{json (index .Config.Labels "soup-wall.monitoring-run")}},'
@@ -616,15 +623,21 @@ subjectAltName = DNS:receiver,DNS:localhost,IP:127.0.0.1
             data = json.loads(self.command(["docker", "inspect", "--format", template, identifiers[0]]))
         except ValueError:
             raise DrillError("invalid owned port-binding witness") from None
+        witness["ownership_matches"] = (isinstance(data, dict) and data.get("owner") == self.owner
+                                          and data.get("project") == self.project and data.get("service") == service)
         if (not isinstance(data, dict) or data.get("owner") != self.owner
                 or data.get("project") != self.project or data.get("service") != service):
             raise DrillError("published endpoint ownership mismatch")
         ports = data.get("ports")
         bindings = ports.get(str(target) + "/tcp") if isinstance(ports, dict) else None
+        witness["network_settings_ports_present"] = isinstance(ports, dict)
+        witness["binding_count"] = len(bindings) if isinstance(bindings, list) else 0
         if not isinstance(bindings, list) or len(bindings) != 1 or not isinstance(bindings[0], dict):
             raise DrillError("published endpoint is unavailable or ambiguous")
         binding = bindings[0]
         value = binding.get("HostPort")
+        witness["loopback_host_ip"] = binding.get("HostIp") == "127.0.0.1"
+        witness["assigned_numeric_host_port"] = isinstance(value, str) and re.fullmatch(r"[0-9]+", value) is not None and 1 <= int(value) <= 65535
         if (binding.get("HostIp") != "127.0.0.1" or not isinstance(value, str)
                 or re.fullmatch(r"[0-9]+", value) is None or not 1 <= int(value) <= 65535):
             raise DrillError("published endpoint is not an assigned numeric loopback port")
@@ -824,6 +837,11 @@ def execute(args):
         report["status"] = "pass"
     except (Exception, KeyboardInterrupt) as error:
         report["status"], report["error_type"] = "incomplete", type(error).__name__
+        safe_reasons = {"owned service container is unavailable or ambiguous", "invalid owned port-binding witness",
+            "published endpoint ownership mismatch", "published endpoint is unavailable or ambiguous",
+            "published endpoint is not an assigned numeric loopback port", "owned runtime command failed", "acceptance witness failed"}
+        report["error_reason"] = str(error) if type(error) is DrillError and str(error) in safe_reasons else "details_withheld"
+        report["error_phase"] = getattr(runtime, "current_step", "unknown")
         if runtime:
             try:
                 report["partial_receiver_receipts"] = runtime.receipts()[1]
