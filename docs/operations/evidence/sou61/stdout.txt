@@ -1,0 +1,10 @@
+Soup Wall Agent self-test (linux-stdio-mcp-admission-v1)
+  PASS        allowed_read               read returned the exact 54 expected bytes; 1 MCP execution, 0 deliveries
+  PASS        adversarial_result         the read executed once and its injected result was withheld (ask-injection-in-result); marker never reached the client
+  PASS        protected_send_refused     send refused (deny-secret-egress); 0 MCP executions, 0 receiver connections
+  PASS        useful_read_after_refusal  read returned the exact 55 expected bytes; 1 MCP execution, 0 deliveries
+  PASS        daemon_loss                daemon killed; collector stopped (collector_closed); 0 MCP executions, 0 receiver connections
+  cleanup: owned processes stopped and workspace removed
+Result: PASSED (exit 0). Every scenario was witnessed: useful reads completed, the protected send was refused before the MCP child and receiver, and daemon loss failed closed.
+Scope: scripted MCP client and bundled fixture server; not Claude Code, model-context or live-model coverage.
+Report: <demo>/out/self-test-report.json
