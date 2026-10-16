@@ -1151,7 +1151,10 @@ mod tests {
     use std::os::windows::fs::OpenOptionsExt;
 
     fn fixture() -> (tempfile::TempDir, PathBuf) {
-        let root = tempfile::tempdir().unwrap();
+        let temporary = fs::canonicalize(std::env::temp_dir()).unwrap();
+        let temporary = temporary.to_str().unwrap();
+        let root =
+            tempfile::tempdir_in(temporary.strip_prefix(r"\\?\").unwrap_or(temporary)).unwrap();
         let profile = root.path().to_path_buf();
         fs::remove_dir(&profile).unwrap();
         crate::private_file_windows::ensure_private_directory(&profile).unwrap();
