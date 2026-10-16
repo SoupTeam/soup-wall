@@ -84,3 +84,41 @@ The evidence commit changes documentation only.
 
 There are no hidden automatic retries. Each attempted run has its own evidence
 path/run identity; a failed attempt is never changed into a passing report.
+
+## Review follow-up: Agent fixture startup
+
+On `1f5dc36`, the general all-features job failed 10 of 11 MCP concurrency
+cases at the shared fixture's 15-second daemon-readiness deadline. The old
+exception discarded the daemon log when the temporary profile was removed.
+[Original failure](https://github.com/SoupTeam/soup-wall/actions/runs/38937932091/job/117098284312).
+The SCIM client checks passed independently; this failure still blocked merge.
+
+Diagnostic commit `b03e23c` retains a bounded, token-redacted, JSON-escaped log
+tail and the daemon exit status. Its all-features run passed all 11 concurrency
+cases in 38.19 seconds with the original 15-second startup limit:
+[diagnostic run](https://github.com/SoupTeam/soup-wall/actions/runs/38953774748/job/117151394825).
+This establishes intermittent behavior, not the exact cause of the original
+runner failure. Initial SAML/PostgreSQL and OIDC/PostgreSQL browser jobs also
+failed on this diagnostic commit; they are separate from the passing SCIM and
+all-features checks and are not counted as passing overall CI.
+
+A controlled local diagnostic exercised the real all-features Windows daemon
+with four parallel owned profiles. The ordinary 37,022,208-byte binary became
+healthy in about 3 seconds. Adding an inert PE overlay (no executable-code
+change) made a disposable 573,893,120-byte diagnostic binary: all four launches
+failed the 15-second readiness budget while the processes were still alive
+and their logs were empty; the same four launches with a 60-second budget
+became healthy in 24.188-24.578 seconds. The daemon computes its executable
+SHA-256 before binding the listener. This reproduces size/load-sensitive
+startup, but does not prove the original Linux runner had the same cause.
+The overlay binary is not shipped and is not SCIM acceptance evidence.
+An earlier local diagnostic attempt encountered Windows cleanup contention;
+it is not counted as a clean passing run. The retained comparison completed
+with owned temporary-directory cleanup.
+
+The shared demonstration fixture now allows 60 seconds for startup only.
+It still requires a successful loopback health response, refuses an exited
+child immediately, and fails at the bounded deadline. Call, classification,
+admission and execution timeouts are unchanged. Regression tests cover slow
+healthy startup, early exit, deadline exhaustion and sanitized diagnostics.
+Current-head CI remains the merge gate, as recorded in PR #148.

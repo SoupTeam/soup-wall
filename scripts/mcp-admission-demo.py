@@ -234,9 +234,12 @@ class Harness:
             return None
 
 
-def wait_healthy(port, daemon):
+def wait_healthy(port, daemon, timeout=60):
+    # Debug/all-features executables are large and the daemon hashes its own
+    # binary before binding. Parallel integration fixtures need a startup-only
+    # budget; this does not change any call/admission/execution deadline.
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    deadline = time.monotonic() + 15
+    deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if daemon.poll() is not None:
             return False
