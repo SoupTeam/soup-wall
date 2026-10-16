@@ -9,8 +9,6 @@ use soup_wall_adapter::{DecisionResponse, Verdict as AdapterVerdict, CONTRACT_VE
 use soup_wall_agent::{AgentEvent, AgentFirewall, EventKind, Provenance, Verdict};
 
 use crate::events::{EventDirection, EventKind as SecurityEventKind, SecurityEvent};
-use crate::openai::ChatRequest;
-use crate::responses::ResponsesRequest;
 
 /// A tool the model wants to run, with its arguments as JSON.
 #[derive(Debug, Clone, PartialEq)]
@@ -608,9 +606,20 @@ fn verdict_rank(v: Verdict) -> u8 {
     }
 }
 
+// Wrappers to satisfy existing tests and internal calls
+pub fn anthropic_tool_results(request: &serde_json::Value) -> Vec<String> {
+    anthropic_tool_results_strict(request).into_result().unwrap_or_default()
+}
+
+pub fn anthropic_tool_calls(response: &serde_json::Value) -> Vec<ToolCall> {
+    anthropic_tool_calls_strict(response).into_result().unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::openai::ChatRequest;
+    use crate::responses::ResponsesRequest;
 
     #[test]
     fn openai_tool_results_come_from_role_tool_messages() {
@@ -971,13 +980,3 @@ mod tests {
         assert!(matches!(result, ContentStatus::Supported(_)));
     }
 }
-
-// Wrappers to satisfy existing tests and internal calls
-pub fn anthropic_tool_results(request: &serde_json::Value) -> Vec<String> {
-    anthropic_tool_results_strict(request).into_result().unwrap_or_default()
-}
-
-pub fn anthropic_tool_calls(response: &serde_json::Value) -> Vec<ToolCall> {
-    anthropic_tool_calls_strict(response).into_result().unwrap_or_default()
-}
-
