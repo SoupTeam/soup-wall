@@ -9,9 +9,9 @@ RUN --mount=type=cache,id=sou38-registry,target=/usr/local/cargo/registry \
     cargo build --locked --release -p llm-firewall \
     && cp target/release/llm-firewall /soup-wall-gateway
 
-FROM caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d AS edge
+FROM caddy:2.11.7-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f AS edge
 
-FROM python:3.12-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258
+FROM python:3.14-slim-bookworm@sha256:48b13b003dda20b16f9442b8475aa05fe21bf6579a8c881db92ffb4d8fd20f83
 COPY --from=build /soup-wall-gateway /usr/local/bin/soup-wall-gateway
 COPY --from=edge /usr/bin/caddy /usr/local/bin/caddy
 RUN cp /usr/local/bin/caddy /tmp/caddy && mv /tmp/caddy /usr/local/bin/caddy

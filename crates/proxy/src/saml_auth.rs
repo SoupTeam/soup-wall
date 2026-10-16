@@ -18,7 +18,8 @@ use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use saml_rs::{
-    AcsEndpoint, BrowserInput, CertificatePem, Credentials, EntityId, FormField, IdpDescriptor,
+    AcsEndpoint, AssertionSignaturePolicy, AudienceValidationPolicy, AuthnRequestSigningPolicy,
+    BrowserInput, CertificatePem, ClockSkew, Credentials, EntityId, FormField, IdpDescriptor,
     MetadataTrustPolicy, PendingAuthnRequest, PendingSnapshot, PrivateKeyPem, RelayStateParam,
     ReplayCache, ReplayKey, ReplayPolicy, Saml, SamlError, SamlValidationContext, SpConfig,
     SpValidationPolicy, SsoResponse, SsoResponseBinding, StartSso, XmlEncryptionPolicy, XmlPolicy,
@@ -38,6 +39,24 @@ const SAML_STATE_TTL_SECONDS: i64 = 10 * 60;
 const MAX_FORM_FIELDS: usize = 64;
 const MAX_FORM_FIELD_BYTES: usize = 2 * 1024 * 1024;
 const FLOW_COOKIE_NAME: &str = "__Host-llm-fw-saml-flow";
+
+fn sp_validation_policy() -> SpValidationPolicy {
+    // Preserve the former strict preset's named requirements across upgrades.
+    SpValidationPolicy {
+        assertions: AssertionSignaturePolicy::RequireSigned,
+        authn_requests: AuthnRequestSigningPolicy::Sign,
+        audience: AudienceValidationPolicy::Validate,
+        ..SpValidationPolicy::recommended()
+    }
+}
+
+fn validation_context(now: SystemTime, replay: ReplayPolicy<'_>) -> SamlValidationContext<'_> {
+    // saml-rs 0.6 defaults to five minutes of tolerance. Console assertions
+    // retain their original exact NotBefore/NotOnOrAfter boundary.
+    SamlValidationContext::new(now, replay)
+        .with_clock_skew(ClockSkew::strict())
+        .with_replay_retention(Duration::from_secs(SAML_STATE_TTL_SECONDS as u64))
+}
 
 // SAML uses a cross-site POST, so Lax would discard the correlation cookie.
 // This cookie grants no access; the opaque session keeps its existing Lax policy.
@@ -168,7 +187,7 @@ impl SamlRuntimeConfig {
                     signing_certificate: Some(CertificatePem::new(self.sp_certificate_pem.clone())),
                     ..Credentials::default()
                 })
-                .validation(SpValidationPolicy::strict())
+                .validation(sp_validation_policy())
                 .xml(xml)
                 .build()?,
         )
@@ -506,8 +525,7 @@ fn finish_sso(
         .lock()
         .expect("SAML replay cache mutex poisoned");
     let validation =
-        SamlValidationContext::new(SystemTime::now(), ReplayPolicy::RequireCache(&mut *replay))
-            .with_replay_retention(Duration::from_secs(SAML_STATE_TTL_SECONDS as u64));
+        validation_context(SystemTime::now(), ReplayPolicy::RequireCache(&mut *replay));
     prepared.finish(validation)
 }
 
@@ -649,9 +667,9 @@ mod tests {
     use saml_rs::crypto::keys::load_private_key;
     use saml_rs::entity::{SignatureAction, SignatureConfig};
     use saml_rs::{
-        BrowserInput, CertificatePem, Credentials, EntityId, IdpConfig, IdpValidationPolicy,
-        MetadataTrustPolicy, NameId, PrivateKeyPem, ReplayPolicy, RespondSso, Saml,
-        SamlValidationContext, SpDescriptor, SsoEndpoint, Subject,
+        AuthnRequestValidationPolicy, BrowserInput, CertificatePem, Credentials, EntityId,
+        IdpConfig, IdpValidationPolicy, MetadataTrustPolicy, NameId, PrivateKeyPem, ReplayPolicy,
+        RespondSso, Saml, SamlValidationContext, SpDescriptor, SsoEndpoint, Subject,
     };
     use soup_wall_core::{Firewall, InjectionDetector, PolicySet};
 
@@ -703,7 +721,7 @@ mod tests {
                 signing_certificate: Some(CertificatePem::new(FIXTURE_CERT)),
                 ..Credentials::default()
             })
-            .validation(IdpValidationPolicy::strict())
+            .validation(idp_validation_policy())
             .build()?;
         Ok(Saml::idp(config)?)
     }
@@ -732,7 +750,14 @@ mod tests {
     }
 
     fn validation() -> SamlValidationContext<'static> {
-        SamlValidationContext::new(SystemTime::now(), ReplayPolicy::DisabledForCompatibility)
+        validation_context(SystemTime::now(), ReplayPolicy::DisabledForCompatibility)
+    }
+
+    fn idp_validation_policy() -> IdpValidationPolicy {
+        IdpValidationPolicy {
+            authn_requests: AuthnRequestValidationPolicy::RequireSigned,
+            ..IdpValidationPolicy::recommended()
+        }
     }
 
     struct FixedReplayCache {
@@ -749,8 +774,7 @@ mod tests {
         }
 
         fn validation(&mut self) -> SamlValidationContext<'_> {
-            SamlValidationContext::new(self.now, ReplayPolicy::RequireCache(self))
-                .with_replay_retention(Duration::from_secs(SAML_STATE_TTL_SECONDS as u64))
+            validation_context(self.now, ReplayPolicy::RequireCache(self))
         }
     }
 
@@ -1140,23 +1164,43 @@ mod tests {
             pending.acs_url.clone(),
             pending.acs_binding.clone(),
         );
+        let request = PendingAuthnRequest::from_snapshot(snapshot)?;
         let verified = runtime
             .sp()?
             .finish_sso(
                 &idp_descriptor(&connection)?,
-                &PendingAuthnRequest::from_snapshot(snapshot)?,
+                &request,
                 BrowserInput::<SsoResponse>::post(
                     fields
                         .iter()
                         .map(|(name, value)| FormField::new(name, value))
                         .collect(),
                 ),
-                SamlValidationContext::new(captured_at, ReplayPolicy::DisabledForCompatibility),
+                validation_context(captured_at, ReplayPolicy::DisabledForCompatibility),
             )
             .map_err(|error| {
                 anyhow::anyhow!("fixed-time signed fixture control failed: {error}")
             })?;
         assert_eq!(verified.name_id().value(), "alice@example.test");
+        // The same genuine signed response must fail one second after its
+        // deadline, even though the upstream default now allows five minutes.
+        assert!(runtime
+            .sp()?
+            .finish_sso(
+                &idp_descriptor(&connection)?,
+                &request,
+                BrowserInput::<SsoResponse>::post(
+                    fields
+                        .iter()
+                        .map(|(name, value)| FormField::new(name, value))
+                        .collect()
+                ),
+                validation_context(
+                    captured_at + Duration::from_secs(300),
+                    ReplayPolicy::DisabledForCompatibility
+                ),
+            )
+            .is_err());
         assert!(finish_sso(
             &runtime,
             connection.clone(),
@@ -1354,7 +1398,7 @@ mod tests {
                     encryption_certificate: Some(CertificatePem::new(FIXTURE_CERT)),
                     ..Credentials::default()
                 })
-                .validation(SpValidationPolicy::strict())
+                .validation(sp_validation_policy())
                 .build()?,
         )?;
         let sp_descriptor = SpDescriptor::from_metadata_xml_for(
@@ -1370,7 +1414,7 @@ mod tests {
                     signing_certificate: Some(CertificatePem::new(FIXTURE_CERT)),
                     ..Credentials::default()
                 })
-                .validation(IdpValidationPolicy::strict())
+                .validation(idp_validation_policy())
                 .xml(XmlPolicy {
                     encryption: XmlEncryptionPolicy::encrypt_assertions(),
                     ..XmlPolicy::default()
