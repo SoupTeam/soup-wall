@@ -147,10 +147,10 @@ claimed as verified.
 ## Opt-in Linux user service
 
 A Linux user with a working `systemd --user` manager can register an installed
-Agent as a background service. This is the first part of SOU-52 (roadmap Phase 5,
-following SOU-29 and SOU-18). Updates and rollback through systemd are a separate
-follow-up. While a service is registered, ordinary lifecycle mutations and plain
-`serve` refuse this profile. Run `service uninstall` before removing or migrating
+Agent as a background service (SOU-52, roadmap Phase 5, following SOU-29 and
+SOU-18). Registered profiles route lifecycle start, stop, restart, upgrade,
+rollback and recovery through systemd. Plain `serve` refuses this profile.
+Run `service uninstall` before removing or migrating
 its installed versions. Other profiles continue to use the existing lifecycle.
 
 Install an Agent version using the commands above first. Run service commands
@@ -208,8 +208,10 @@ restart. Shutdown requests use the existing authenticated endpoint; systemd
 bounds shutdown to 30 seconds and cleans only this unit's control group. A live
 PID whose identity cannot be verified is never adopted or stopped by the CLI.
 After a rate limit, inspect the underlying failure before retrying; the CLI does
-not automatically reset the limiter. Waiting for the interval and then explicitly
-starting is sufficient once the problem is resolved.
+not reset the limiter during ordinary startup or automatic crash recovery.
+A transaction restoring its original working version can reset an already failed
+unit once before its explicit recovery start. Waiting for the interval and then
+explicitly starting is sufficient once an ordinary crash-loop problem is resolved.
 
 Service operations use a separate nonblocking operation lock. The lifecycle
 state lock is brief and is released before waiting on systemd or health replies.
@@ -220,11 +222,71 @@ requires explicit operator investigation; the tool will not repair or delete it
 as its own. If the manager cannot complete a request, inspect before retrying.
 
 `uninstall` stops a verified service and removes only its owned unit, launcher
-and ownership record. Installed versions, configuration, keys, tokens, audits and
+and ownership record. Uninstall refuses an unfinished lifecycle transaction;
+run `lifecycle recover` first. Installed versions, configuration, keys, tokens, audits and
 unrelated files remain. The service directory and its coordination lock may remain
 for safe serialization. The unit discards process stdout/stderr instead of writing
 request payloads or tokens to the journal. Manager state and authenticated identity
 are available through `inspect`; application audit remains in the Agent profile.
+
+### Service updates and recovery
+
+Use the current CLI with the same profile selected for service installation:
+
+```sh
+agentfw lifecycle upgrade 0.3.1 /absolute/path/to/new-agentfw --sha256 DIGEST
+agentfw lifecycle rollback
+agentfw lifecycle recover
+agentfw lifecycle status
+agentfw service inspect
+```
+
+The lifecycle commands use the default profile under the caller's home directory.
+For another profile, select its parent as the caller's home, as with the existing
+lifecycle commands. `service --home` selects the profile directory directly.
+
+The service coordinator verifies and stages the candidate before stopping the
+current version. The existing lifecycle journal records both versions and whether
+the service was running. State locks are released before any systemd or health
+wait. The stable launcher executes the selected installed version; only the two
+journaled versions may launch during a transaction. The unit definition and
+launcher are not replaced by an Agent version update.
+
+A running update must reach authenticated readiness on the new PID/instance.
+If startup fails, the coordinator cancels queued restarts, restores the old
+version and verifies its readiness. It returns an error describing the failed
+update even after successful restoration. A failed explicit rollback similarly
+restores the original version. If restoration cannot finish, the journal remains
+and the command reports incomplete recovery. Restore the missing verified binary
+or resolve the reported conflict, then retry `lifecycle recover`.
+
+An initially stopped service stays stopped during upgrade, rollback and recovery.
+Staging and hash verification do not establish runtime readiness in that case;
+start explicitly to validate the selected version. Recovery of an interrupted
+transaction restores its original version and recorded running intent. Ordinary
+start/stop/restart, another update, and uninstall refuse a pending transaction.
+Concurrent commands fail on the service operation lock. `inspect` includes the
+transaction, interruption flag, ownership phase and verified runtime identity.
+
+A registration created by SOU-52 part 1 has an older stable launcher. The new CLI
+checks its transaction protocol **before staging or stopping** and refuses updates
+if it is too old. Migrate the registration using the new CLI:
+
+```sh
+agentfw service stop
+agentfw service uninstall
+agentfw service install
+# Start only if this profile was previously running.
+agentfw service start
+```
+
+This preserves installed Agent versions, configuration, keys, tokens and audit.
+A newly installed launcher reports `transaction_protocol: 1` in `service preview`.
+For interrupted registration, uninstall removes a partial copy only when its
+recorded filesystem identity still matches. An incomplete older record without
+an identity requires an exact full hash match. Unidentified or replaced files
+remain for operator investigation. Interrupted removal can resume with its unit
+file already absent and a stale stopped definition still cached in systemd.
 
 ### Real Linux service acceptance
 
@@ -235,18 +297,25 @@ inside a build container is not evidence for this procedure.
 ```sh
 python3 scripts/test-agent-service.py --run \
   --agentfw /absolute/path/to/agentfw \
-  --output target/agent-service-core.json
+  --suite full --output target/agent-service-full.json
 python3 -m unittest discover -s scripts/tests -p test_agent_service.py -v
 ```
 
 The explicit `--run` creates a unique temporary profile and unit. The output must
-not already exist. Seven cases cover nonmutating preview and repeat install,
+not already exist. The default `full` suite runs 19 cases; `--suite core` runs
+only the original seven and is insufficient for final acceptance. The core covers nonmutating preview and repeat install,
 authenticated startup, useful allowed and denied local MCP calls with independent
 execution witnesses and unchanged IDs/arguments/results, crash recovery and a
 useful follow-up call, persistent explicit stop, repeated-crash limits, rejection
 of an edited unit, and data-preserving repeated uninstall. MCP calls use the
 existing trusted local fixture and rule-based classifier, with no external model
-or provider. This does not claim containment of an arbitrary MCP server.
+or provider. The full suite also checks manager unavailability, a replaced
+launcher, unexpected drop-ins, occupied ports, a live unverified PID, concurrent
+commands, running and stopped updates/rollback, killed update coordinators,
+failed restoration and recovery retry, and interrupted registration/removal.
+It checks that keys survive and tokens/payloads do not appear in the report or
+the owned service's journal and launch logs. This does not claim containment of
+an arbitrary MCP server.
 
 The report records exact source revision, whether tracked sources were dirty,
 environment, binary/configuration digests, process IDs, instances, recovery times,
@@ -261,8 +330,11 @@ rate limited. The acceptance driver requires the user manager's own structured
 process observations; a generic failed state alone does not prove the limit.
 The [upstream unit limiter](https://github.com/systemd/systemd/blob/v259/src/core/unit.c)
 and [service lifecycle documentation](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html)
-describe the relevant systemd behavior. Complete upgrade/rollback and interruption
-acceptance belongs to the second SOU-52 PR; a core pass does not close SOU-52.
+describe the relevant systemd behavior. Closing SOU-52 requires both implementation
+PRs to be accepted and a full real-manager pass on the accepted source. A core
+pass, a mock manager, or a passing Rust/Python suite alone does not establish that.
+The final PR retains the sanitized exact-source JSON report and binary hashes;
+repeat the command above in the target Linux environment before operational use.
 
 
 ## Authenticated runtime protection diagnostics
