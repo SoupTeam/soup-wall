@@ -148,7 +148,7 @@ pub fn normalize_chat(
         events.push(tool_call(
             Provider::OpenAiChat,
             EventDirection::Output,
-            None, // OpenAi tool_calls strict parser currently doesn't preserve call_id natively in ToolCall struct, so we leave it None for generalized events
+            call.id.as_deref(), // OpenAi tool_calls strict parser currently doesn't preserve call_id natively in ToolCall struct, so we leave it None for generalized events
             &call.name,
             &call.args,
         ));
@@ -290,7 +290,7 @@ pub fn normalize_responses(
         events.push(tool_call(
             Provider::OpenAiResponses,
             EventDirection::Output,
-            None,
+            call.id.as_deref(),
             &call.name,
             &call.args,
         ));
@@ -406,20 +406,17 @@ pub fn normalize_anthropic(
 
     if let Some(blocks) = response.get("content").and_then(Value::as_array) {
         for block in blocks {
-            match block.get("type").and_then(Value::as_str) {
-                Some("text") => {
-                    if let Some(content) = block.get("text").and_then(Value::as_str) {
-                        if !content.is_empty() {
-                            events.push(text(
-                                Provider::Anthropic,
-                                EventDirection::Output,
-                                Some("assistant"),
-                                content,
-                            ));
-                        }
+            if let Some("text") = block.get("type").and_then(Value::as_str) {
+                if let Some(content) = block.get("text").and_then(Value::as_str) {
+                    if !content.is_empty() {
+                        events.push(text(
+                            Provider::Anthropic,
+                            EventDirection::Output,
+                            Some("assistant"),
+                            content,
+                        ));
                     }
                 }
-                _ => {}
             }
         }
     }
@@ -429,7 +426,7 @@ pub fn normalize_anthropic(
         events.push(tool_call(
             Provider::Anthropic,
             EventDirection::Output,
-            None,
+            call.id.as_deref(),
             &call.name,
             &call.args,
         ));
