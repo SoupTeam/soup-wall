@@ -1208,7 +1208,7 @@ mod tests {
             .stage()
             .unwrap();
         let owned_name = staged.stage_name.clone();
-        let held = open_stage_with_access(&staged, 0).unwrap();
+        let held = open_stage_with_access(&staged, FILE_READ_ATTRIBUTES).unwrap();
         let result = staged.publish().unwrap_err();
         assert_eq!(result.code, "windows_create_stage_cleanup_unverified");
         assert!(result.committed);

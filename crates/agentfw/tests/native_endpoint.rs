@@ -1677,7 +1677,7 @@ fn windows_create_fixture() -> (Fixture, agentfw::native::resource::Policy) {
     let mut configured = registry();
     configured["tools"].as_array_mut().unwrap().push(json!({
         "name":"create_file","schema_sha256":schema_sha256,"action_class":"side_effecting",
-        "result_provenance":"local_project","egress":[],"resource_policy":resource_policy
+        "result_provenance":"untrusted","egress":[],"resource_policy":resource_policy
     }));
     let bytes = serde_json::to_vec(&configured).unwrap();
     fixture.registry_sha256 = sha(&bytes);
