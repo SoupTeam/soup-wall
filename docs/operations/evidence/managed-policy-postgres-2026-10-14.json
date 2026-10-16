@@ -1,0 +1,88 @@
+{
+  "scope": "disposable-real-agentfw-and-postgres-console",
+  "postgres_image": "postgres@sha256:ec9f656f17c8b4dfebf49e58cf5c46d493d4846d4ea6d8b85d0637f68ee33bfc",
+  "postgres_version": "16.15 (Debian 16.15-1.pgdg12+2)",
+  "source_commit": "b760038abc945909e1abe7b4f183542b2554f752",
+  "source_hashes": {
+    "crates/proxy/src/managed_agent_api.rs": "08688e6066d3dc24f9f17fd3522f79fbcf1a585a7c83963d64a2fbf9cadad046",
+    "crates/proxy/src/tenant_store/managed_async.rs": "38b171a240c670ccbc3434c36717684081825caa37793401c6082621fb3eb155",
+    "crates/proxy/src/tenant_store/managed_policy.rs": "4294184493649444d6b1452318eeb95cbdddcce7faae375879d01234c5480a35",
+    "crates/proxy/src/tenant_store/managed_postgres.rs": "c1e299f0ba04a3878740849d70d5a91859bac0677aead5af90d06719ad7b5095",
+    "crates/proxy/src/tenant_store/postgres.rs": "9e2d45f95d8030a94c46bd69923941344cda37926a45708a062b691dc479dd01",
+    "scripts/keycloak-oidc-acceptance.py": "f3d8c30663aa6086134768beaf8071ebf7b0572c39f822a67c0073f8d708d938",
+    "scripts/keycloak-saml-acceptance.py": "9e68691adcf58bdbbc1a0b8cbdbc3742dfbfa28a0eea8c0588d78c9c60ac3008",
+    "scripts/managed-policy-postgres-demo.py": "c5e7c4ac437068c73199ba2fe0b059d910e6f295e5850843ee9f86cb718915a0"
+  },
+  "binary_hashes": {
+    "console": "d3a53d16285dcee9eeb0225b2c0aa7c4db3237a4153aa0c7df99e686b025c3a7",
+    "agent": "e77e09ed5049b818e4d09d5592f3fa58983d76778373b6c97aadcfde15a9b285",
+    "previous_console": "74d979283d808d34757d0bb921083555ade6f4620b1e536dd5203182ba84b3d6"
+  },
+  "configuration": {
+    "console_and_agent": "existing loopback HTTP transport",
+    "database": "TLS verified against disposable CA",
+    "console_config_sha256": "ae13166b9b621f14fb73bb39857b16698a84db47ea5c14a2264699193fd6d3aa",
+    "issuer": "ephemeral Ed25519 seed, never persisted"
+  },
+  "no_external_provider": true,
+  "checks": {
+    "previous-schema-is-25": true,
+    "populated-v25-to-v26-preserves-existing-identities": true,
+    "schema-upgraded-to-26": true,
+    "inventory-never-reveals-token-or-hash": true,
+    "credential-hash-only": true,
+    "credential-hash-matches-domain-separated-token": true,
+    "database-connections-use-tls": true,
+    "concurrent-deployments-have-unique-monotonic-sequences": true,
+    "unapproved-and-immutable-revision-writes-refused": true,
+    "delivery-retry-identical": true,
+    "rejected-terminal-idempotent-and-conflicting-stale-wrong-audience-acks-refused": true,
+    "same-agent-id-different-tenant-isolated": true,
+    "revocation-refuses-delivery-ack-and-new-deployments": true,
+    "runtime-ack-1-deployment_sequence-matches": true,
+    "runtime-ack-1-revision-matches": true,
+    "runtime-ack-1-policy_sha256-matches": true,
+    "runtime-ack-2-deployment_sequence-matches": true,
+    "runtime-ack-2-revision-matches": true,
+    "runtime-ack-2-policy_sha256-matches": true,
+    "runtime-ack-3-deployment_sequence-matches": true,
+    "runtime-ack-3-revision-matches": true,
+    "runtime-ack-3-policy_sha256-matches": true,
+    "applied-ack-retry-preserves-timestamp": true,
+    "applied-conflict-and-superseded-ack-refused": true,
+    "populated-remigration-and-db-restart-preserve-managed-records": true,
+    "console-restart-preserves-credential-and-ack": true,
+    "runtime-retains-policy-through-console-and-db-restart": true,
+    "agent_admin_isolation": true,
+    "cross_tenant_revocation_refused": true,
+    "authenticated_runtime_applied": true,
+    "rollback_sequence_increased": true,
+    "policy_payload_restored": true,
+    "credential_revocation_enforced": true,
+    "offline_last_accepted_policy_retained": true,
+    "owned-fixture-cleanup-completed": true
+  },
+  "deployments": [
+    {
+      "sequence": 1,
+      "revision": "v-deny",
+      "sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+      "decision": "deny",
+      "ack": "applied"
+    },
+    {
+      "sequence": 2,
+      "revision": "v-allow",
+      "sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+      "decision": "defer",
+      "ack": "applied"
+    },
+    {
+      "sequence": 3,
+      "revision": "v-deny",
+      "sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+      "decision": "deny",
+      "ack": "applied"
+    }
+  ]
+}

@@ -159,6 +159,11 @@ impl AgentFirewall {
         });
     }
 
+    /// Read-only view of the actual policy; diagnostics must hold the engine lock.
+    pub fn policy_for_diagnostics(&self) -> &AgentPolicySet {
+        &self.policy
+    }
+
     pub fn active_managed_policy(&self) -> Option<ManagedActivePolicy> {
         self.managed_active.clone()
     }

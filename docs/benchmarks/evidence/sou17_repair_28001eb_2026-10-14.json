@@ -1,0 +1,436 @@
+{
+  "schema_version": "sou17-repair-checkpoint/1",
+  "source": {
+    "commit": "28001eb2ee151ad5bba83aa9bbab143dac383cfd",
+    "dirty": false,
+    "inputs_digest": "88c8d92749dba74e12009ddd05a508a50ec5d64808c6c0483b35e32c95ee2c82"
+  },
+  "source_after": {
+    "commit": "28001eb2ee151ad5bba83aa9bbab143dac383cfd",
+    "dirty": false,
+    "inputs_digest": "88c8d92749dba74e12009ddd05a508a50ec5d64808c6c0483b35e32c95ee2c82"
+  },
+  "agentfw_sha256": "419b448fff837c390a1fd76cc6c23def82c3ad0f726d6724fd46cafb88559d5e",
+  "acceptance_passed": false,
+  "status": "intermediate_repair_rejected_by_confirmed_reply_backpressure_overlap",
+  "launcher": {
+    "status": "pass",
+    "cases": 118,
+    "suites": [
+      [
+        "resilience_tests",
+        19
+      ],
+      [
+        "mcp_admission",
+        59
+      ],
+      [
+        "native_endpoint",
+        37
+      ],
+      [
+        "mcp_concurrency",
+        3
+      ]
+    ],
+    "new_case_witnesses": [
+      {
+        "command": [
+          "/Users/konung/projects/soup-wall/target/debug/deps/mcp_admission-69a83e0e86cf5064",
+          "--exact",
+          "sou17_post_admission_fifo_refused_and_same_session_read_recovers",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "elapsed_ms": 207.795,
+        "evidence": [
+          {
+            "authentic_call_allow": true,
+            "boundary": "production_mcp_resource_executor",
+            "child_executor_entries": 0,
+            "fifo_refusal_raw": "{\"id\":\"fifo-after-real-allow\",\"jsonrpc\":\"2.0\",\"result\":{\"content\":[{\"text\":\"Soup Wall withheld MCP invocation (resource_read_failed)\",\"type\":\"text\"}],\"isError\":true}}",
+            "fixture_elapsed_ms": 122.964,
+            "protected_contents_released": false,
+            "same_session_recovery": {
+              "id": "fifo-recovered-read",
+              "jsonrpc": "2.0",
+              "result": {
+                "content": [
+                  {
+                    "text": "recovered owned contents",
+                    "type": "text"
+                  }
+                ]
+              }
+            },
+            "test": "post_admission_fifo_same_session_recovery"
+          }
+        ],
+        "evidence_diagnostics": [],
+        "exit_code": 0,
+        "log": "mcp_admission-054.log",
+        "name": "sou17_post_admission_fifo_refused_and_same_session_read_recovers",
+        "status": "pass",
+        "suite": "mcp_admission",
+        "test_status": "pass",
+        "timed_out": false
+      },
+      {
+        "command": [
+          "/Users/konung/projects/soup-wall/target/debug/deps/mcp_admission-69a83e0e86cf5064",
+          "--exact",
+          "sou17_resource_overlap_during_classifier_refused_before_native_call",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "elapsed_ms": 139.748,
+        "evidence": [
+          {
+            "boundary": "production_mcp_resource_executor",
+            "broker_output_produced": false,
+            "child_executor_entries": 0,
+            "classifier_source": "staged pinned local Python fixture",
+            "client_tool_result_bytes": 0,
+            "ended_native_session": true,
+            "file_bytes_unchanged": true,
+            "native_call_events": 0,
+            "native_result_events": 0,
+            "protected_contents_released": false,
+            "test": "resource_overlap_classifier_gate"
+          }
+        ],
+        "evidence_diagnostics": [],
+        "exit_code": 0,
+        "log": "mcp_admission-055.log",
+        "name": "sou17_resource_overlap_during_classifier_refused_before_native_call",
+        "status": "pass",
+        "suite": "mcp_admission",
+        "test_status": "pass",
+        "timed_out": false
+      },
+      {
+        "command": [
+          "/Users/konung/projects/soup-wall/target/debug/deps/mcp_admission-69a83e0e86cf5064",
+          "--exact",
+          "sou17_resource_overlap_during_native_gates_refused_with_useful_peer",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "elapsed_ms": 895.721,
+        "evidence": [
+          {
+            "boundary": "production_mcp_resource_executor",
+            "broker_output_produced": false,
+            "child_executor_entries": 0,
+            "client_tool_result_bytes": 0,
+            "ended_native_session": true,
+            "file_bytes_unchanged": true,
+            "overlap": "complete",
+            "produced_result_raw": null,
+            "protected_contents_released": false,
+            "request_id": 3,
+            "same_daemon_peer_recovery": {
+              "id": 3,
+              "jsonrpc": "2.0",
+              "result": {
+                "content": [
+                  {
+                    "text": "SOU17_STAGED_RESOURCE_CANARY",
+                    "type": "text"
+                  }
+                ]
+              }
+            },
+            "stage": "call",
+            "test": "resource_overlap_native_gate"
+          },
+          {
+            "boundary": "production_mcp_resource_executor",
+            "broker_output_produced": false,
+            "child_executor_entries": 0,
+            "client_tool_result_bytes": 0,
+            "ended_native_session": true,
+            "file_bytes_unchanged": true,
+            "overlap": "partial",
+            "produced_result_raw": null,
+            "protected_contents_released": false,
+            "request_id": 3,
+            "same_daemon_peer_recovery": {
+              "id": 3,
+              "jsonrpc": "2.0",
+              "result": {
+                "content": [
+                  {
+                    "text": "SOU17_STAGED_RESOURCE_CANARY",
+                    "type": "text"
+                  }
+                ]
+              }
+            },
+            "stage": "call",
+            "test": "resource_overlap_native_gate"
+          },
+          {
+            "boundary": "production_mcp_resource_executor",
+            "broker_output_produced": true,
+            "child_executor_entries": 0,
+            "client_tool_result_bytes": 0,
+            "ended_native_session": true,
+            "file_bytes_unchanged": true,
+            "overlap": "complete",
+            "produced_result_raw": "{\"id\":3,\"jsonrpc\":\"2.0\",\"result\":{\"content\":[{\"text\":\"SOU17_STAGED_RESOURCE_CANARY\",\"type\":\"text\"}]}}\n",
+            "protected_contents_released": false,
+            "request_id": 3,
+            "same_daemon_peer_recovery": {
+              "id": 3,
+              "jsonrpc": "2.0",
+              "result": {
+                "content": [
+                  {
+                    "text": "SOU17_STAGED_RESOURCE_CANARY",
+                    "type": "text"
+                  }
+                ]
+              }
+            },
+            "stage": "result",
+            "test": "resource_overlap_native_gate"
+          },
+          {
+            "boundary": "production_mcp_resource_executor",
+            "broker_output_produced": true,
+            "child_executor_entries": 0,
+            "client_tool_result_bytes": 0,
+            "ended_native_session": true,
+            "file_bytes_unchanged": true,
+            "overlap": "partial",
+            "produced_result_raw": "{\"id\":3,\"jsonrpc\":\"2.0\",\"result\":{\"content\":[{\"text\":\"SOU17_STAGED_RESOURCE_CANARY\",\"type\":\"text\"}]}}\n",
+            "protected_contents_released": false,
+            "request_id": 3,
+            "same_daemon_peer_recovery": {
+              "id": 3,
+              "jsonrpc": "2.0",
+              "result": {
+                "content": [
+                  {
+                    "text": "SOU17_STAGED_RESOURCE_CANARY",
+                    "type": "text"
+                  }
+                ]
+              }
+            },
+            "stage": "result",
+            "test": "resource_overlap_native_gate"
+          },
+          {
+            "boundary": "production_mcp_resource_executor",
+            "broker_output_produced": true,
+            "child_executor_entries": 0,
+            "client_tool_result_bytes": 0,
+            "ended_native_session": true,
+            "file_bytes_unchanged": true,
+            "overlap": "cancel",
+            "produced_result_raw": "{\"id\":3,\"jsonrpc\":\"2.0\",\"result\":{\"content\":[{\"text\":\"SOU17_STAGED_RESOURCE_CANARY\",\"type\":\"text\"}]}}\n",
+            "protected_contents_released": false,
+            "request_id": 3,
+            "same_daemon_peer_recovery": {
+              "id": 3,
+              "jsonrpc": "2.0",
+              "result": {
+                "content": [
+                  {
+                    "text": "SOU17_STAGED_RESOURCE_CANARY",
+                    "type": "text"
+                  }
+                ]
+              }
+            },
+            "stage": "result",
+            "test": "resource_overlap_native_gate"
+          }
+        ],
+        "evidence_diagnostics": [],
+        "exit_code": 0,
+        "log": "mcp_admission-056.log",
+        "name": "sou17_resource_overlap_during_native_gates_refused_with_useful_peer",
+        "status": "pass",
+        "suite": "mcp_admission",
+        "test_status": "pass",
+        "timed_out": false
+      },
+      {
+        "command": [
+          "/Users/konung/projects/soup-wall/target/debug/deps/mcp_concurrency-1a2786326ab3e9af",
+          "--exact",
+          "partial_queued_resource_call_is_refused_before_native_execution",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "elapsed_ms": 716.261,
+        "evidence": [
+          {
+            "broker_output_produced": false,
+            "child_tool_calls": 0,
+            "client_tool_result_bytes": 0,
+            "files_unchanged": true,
+            "mode": "partial",
+            "native_gates": 0,
+            "native_session_cleanup_observed": true,
+            "owned_profile_removed": true,
+            "protected_contents_released": false,
+            "receiver_deliveries": 0,
+            "status": "pass"
+          }
+        ],
+        "evidence_diagnostics": [],
+        "exit_code": 0,
+        "log": "mcp_concurrency-000.log",
+        "name": "partial_queued_resource_call_is_refused_before_native_execution",
+        "status": "pass",
+        "suite": "mcp_concurrency",
+        "test_status": "pass",
+        "timed_out": false
+      },
+      {
+        "command": [
+          "/Users/konung/projects/soup-wall/target/debug/deps/mcp_concurrency-1a2786326ab3e9af",
+          "--exact",
+          "queued_resource_calls_are_refused_before_native_execution",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "elapsed_ms": 734.54,
+        "evidence": [
+          {
+            "broker_output_produced": false,
+            "child_tool_calls": 0,
+            "client_tool_result_bytes": 0,
+            "files_unchanged": true,
+            "mode": "complete",
+            "native_gates": 0,
+            "native_session_cleanup_observed": true,
+            "owned_profile_removed": true,
+            "protected_contents_released": false,
+            "receiver_deliveries": 0,
+            "status": "pass"
+          }
+        ],
+        "evidence_diagnostics": [],
+        "exit_code": 0,
+        "log": "mcp_concurrency-001.log",
+        "name": "queued_resource_calls_are_refused_before_native_execution",
+        "status": "pass",
+        "suite": "mcp_concurrency",
+        "test_status": "pass",
+        "timed_out": false
+      },
+      {
+        "command": [
+          "/Users/konung/projects/soup-wall/target/debug/deps/mcp_concurrency-1a2786326ab3e9af",
+          "--exact",
+          "sequential_resource_failures_keep_useful_same_session_continuation",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "elapsed_ms": 3704.639,
+        "evidence": [
+          {
+            "broker_output_produced": true,
+            "child_tool_calls": 0,
+            "client_tool_result_bytes": 11272,
+            "files_unchanged": true,
+            "mode": "sequential",
+            "native_gates": 142,
+            "native_session_cleanup_observed": true,
+            "owned_profile_removed": true,
+            "protected_contents_released": true,
+            "receiver_deliveries": 0,
+            "status": "pass"
+          }
+        ],
+        "evidence_diagnostics": [],
+        "exit_code": 0,
+        "log": "mcp_concurrency-002.log",
+        "name": "sequential_resource_failures_keep_useful_same_session_continuation",
+        "status": "pass",
+        "suite": "mcp_concurrency",
+        "test_status": "pass",
+        "timed_out": false
+      }
+    ]
+  },
+  "completed_profiles": {
+    "generic/results.json": {
+      "sha256": "be13ce0eeca76a3357442edfde4f985bd009cb83e1ba2565c4e8750d522a8332",
+      "status": "pass",
+      "counts": {
+        "pass": 15,
+        "fail": 0,
+        "inconclusive": 0
+      },
+      "execution_count": 4,
+      "released_original_result_bytes": 505,
+      "stable": true,
+      "binary_sha256_before": "419b448fff837c390a1fd76cc6c23def82c3ad0f726d6724fd46cafb88559d5e"
+    },
+    "resources/results.json": {
+      "sha256": "0d82e8e7fe575e5d3610adb0ebc35df2dd5ca87b8a8f6f1f62376686f8c974c6",
+      "status": "pass",
+      "source_binary_stable": true,
+      "binary_sha256": "419b448fff837c390a1fd76cc6c23def82c3ad0f726d6724fd46cafb88559d5e"
+    },
+    "pending/results.json": {
+      "sha256": "7cd12a380d1fbcff0dbff0b812839290935e64ce16559c12d291d344113bc2d4",
+      "status": "pass",
+      "counts": {
+        "pass": 11,
+        "fail": 0,
+        "technical_unsupported": 0,
+        "inconclusive": 0
+      },
+      "stable": true
+    },
+    "capacity/results.json": {
+      "sha256": "65045541fab37680f73de9378316c6640b267c53bbc30e0c54992aa2e5d1a81b",
+      "status": "pass"
+    }
+  },
+  "mistyped_pin_rejection": {
+    "status": "error",
+    "tests": 0,
+    "suites": 0,
+    "sha256": "c7acb783d98b7072621e55fe08ae4f7b7004de53ee483a5b8477dc83b7997403"
+  },
+  "backpressure_overlap": {
+    "issue": "SOU-45",
+    "source_head": "28001eb2ee151ad5bba83aa9bbab143dac383cfd",
+    "source_scope_literal": "local reviewed-but-uncommitted FIFO/resource-overlap patch; not pristine main acceptance",
+    "source_binary_stable": true,
+    "source_paths_sha256": {
+      "crates/agentfw/src/mcp/admission.rs": "ef93e646fc15308ada11f92f2e3087420fe4cb449de6bd8318c9c08a704e43ab",
+      "crates/agentfw/src/sandbox.rs": "ff43da9ce1ea36de5f00ecce0c6b042d5b218eb860c671501d101c452d2bb367",
+      "scripts/verify-sou18-resources.py": "11b78abdb41d46ae56ee447c35d6f4fa95d4561d4eba0bbe2279573894d85532"
+    },
+    "source_hashes_verified_against_commit": {
+      "crates/agentfw/src/mcp/admission.rs": true,
+      "crates/agentfw/src/sandbox.rs": true,
+      "scripts/verify-sou18-resources.py": true
+    },
+    "binary_sha256": "419b448fff837c390a1fd76cc6c23def82c3ad0f726d6724fd46cafb88559d5e",
+    "stdout_bytes_before_second_request": 65536,
+    "expected_first_result_bytes_lower_bound": 208000,
+    "reply_ids": [
+      "absolute-read",
+      "second-before-drain"
+    ],
+    "native_gates_before_second": 2,
+    "native_gates_final": 4,
+    "collector_exit": 0,
+    "first_read_already_allowed_and_partial_content_emitted": true,
+    "first_effect_or_released_bytes_must_not_be_reported_zero": true,
+    "raw_sha256": "ece644186797b07ad9f4ffd25fe9de09379ae585f00bc58104155788980f3415",
+    "raw_relative_path": "target/sou17-final-main/resource-validation/backpressure-benign/results.json",
+    "pending_fix": "Resource reply-write guard with red/green actual boundary regression and large sequential control; new exact source rerun required."
+  }
+}

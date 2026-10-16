@@ -27,6 +27,10 @@ HELPERS = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(HELPERS)
 SUITES = (("soup-wall-adapter", "resilience_tests"),
           ("agentfw", "mcp_admission"), ("agentfw", "native_endpoint"))
+# The constrained broker executor is explicitly Unix-only. Its actual pipe
+# overlap checks use the same production resource probe as SOU-18.
+if sys.platform in {"linux", "darwin"}:
+    SUITES += (("agentfw", "mcp_concurrency"),)
 LIMITATIONS = [
     "Early regression only; final acceptance is pending SOU-15 integration on an exact clean commit.",
     "Existing shared adapter runner and real native/MCP fixtures are distinct integration surfaces.",

@@ -23,9 +23,12 @@ use sha2::{Digest, Sha256};
 use tokio::sync::mpsc;
 
 mod agent_enrollment;
+mod managed_async;
 mod managed_policy;
 pub use managed_policy::{
-    AppliedReport, ManagedDeployment, ManagedIssuer, ManagedRevision, SignedManagedBundle,
+    AppliedReport, ManagedAgentGroup, ManagedDeployment, ManagedGroupMember, ManagedGroupRevision,
+    ManagedGroupRollout, ManagedIssuer, ManagedRevision, ManagedRolloutAgentStatus, RolloutPhase,
+    SignedManagedBundle,
 };
 mod postgres;
 pub use agent_enrollment::{EnrolledAgent, IssuedAgentCredential};
@@ -1939,6 +1942,7 @@ impl TenantStore {
             )
             .context("failed to backfill SQLite tenant workspaces")?;
 
+        managed_policy::migrate_existing_groups(&connection)?;
         Ok(Self {
             connection: Some(Arc::new(Mutex::new(connection))),
             postgres: None,
@@ -11229,6 +11233,8 @@ async fn send_webhook_request(
     }
 }
 
+#[cfg(all(test, unix))]
+mod recovery_outbox_fixture;
 #[cfg(test)]
 mod webhook_delivery_tests;
 #[cfg(test)]

@@ -1,0 +1,98 @@
+{
+  "observed_at": "2026-10-14T16:37:35.269Z",
+  "repository": "SoupTeam/soup-wall",
+  "source_commit": "5fc6d72fd73ebe9faa70c56607fc492163df1a42",
+  "scope": "main default branch",
+  "access": "Authenticated GitHub repository UI",
+  "main_open": 1,
+  "main_closed": 85,
+  "main_severity": {
+    "critical": 1,
+    "high": 0,
+    "medium": 0,
+    "low": 0
+  },
+  "analysis": {
+    "tool": "CodeQL",
+    "version": "2.27.2",
+    "setup": "default",
+    "events": [
+      "push to main",
+      "pull request to main"
+    ],
+    "all_configurations_working_as_expected": true,
+    "commit": "5fc6d72fd73ebe9faa70c56607fc492163df1a42",
+    "scanned_files": {
+      "actions": "11/11",
+      "python": "192/192",
+      "rust": "191/191"
+    },
+    "configurations": [
+      {
+        "language": "rust",
+        "scan_at": "2026-10-14T15:20:00Z",
+        "query_pack": "0.1.44",
+        "libraries": "0.2.23"
+      },
+      {
+        "language": "python",
+        "scan_at": "2026-10-14T15:11:00Z",
+        "query_pack": "1.8.12",
+        "libraries": "7.2.7"
+      },
+      {
+        "language": "actions",
+        "scan_at": "2026-10-14T15:10:00Z",
+        "query_pack": "0.6.37",
+        "libraries": "0.6.3"
+      }
+    ]
+  },
+  "alerts": [
+    {
+      "number": 112,
+      "url": "https://github.com/SoupTeam/soup-wall/security/code-scanning/112",
+      "rule": "rust/hard-coded-cryptographic-value",
+      "severity": "Critical",
+      "path": "crates/agentfw/src/grant.rs",
+      "line": 448,
+      "analyzed_branch": "main",
+      "analyzed_commit": "5fc6d72fd73ebe9faa70c56607fc492163df1a42",
+      "state": "Open",
+      "triage": "Evidence-backed false positive",
+      "rationale": "0o600 is a Unix file permission mode passed to Permissions::from_mode and set_permissions. It is not a nonce, cryptographic key or salt. The 16-step displayed flow carries the io::Result through write_unlocked and the issue tuple to a test Grant before reading grant.nonce for a filename. In actual code, issue passes its explicit nonce parameter into mint_with_epoch and write_unlocked returns only a PathBuf; it does not mutate the borrowed Grant. The shown test obtains its nonce from crate::token::generate at grant.rs:854, which fills 32 random bytes at token.rs:14-17. A hard-coded crypto source is therefore not present in this path.",
+      "reviewer": "@Nari_Ab (SOU-17 coordinator)",
+      "implementation_context": "SOU-30 / PR #94",
+      "dismissal_performed": false
+    }
+  ],
+  "previous_alerts": [
+    {
+      "number": 113,
+      "state_header": "Open in historical PR refs/pull/105/head",
+      "state_activity": "Fixed in branch refs/pull/105/head at ae3e742a41f4512e7114b05d6cd094adec55f801",
+      "scope": "Only in Pull Request; absent from current main open inventory",
+      "note": "Header still presents historical open occurrence at 30e75b7. Do not collapse this display discrepancy into a current-main defect."
+    },
+    {
+      "number": 114,
+      "state": "Dismissed false positive by winux125 at 2026-10-14T10:46:00Z",
+      "scope": "main",
+      "rationale": "Fresh 256-bit machine secret from secrets.token_hex(32); Redis 7.2 ACL requires SHA-256 verifier; protected mode 0600 hash-only config; re-triage upon entropy/input/protocol change."
+    },
+    {
+      "number": 115,
+      "state": "Dismissed false positive by winux125 at 2026-10-14T10:45:00Z",
+      "scope": "main",
+      "rationale": "Companion regression checks the required Redis ACL SHA-256 verifier."
+    }
+  ],
+  "confirmed_defects": 0,
+  "unresolved_defects": 0,
+  "remediation_issues_required": [],
+  "limitations": [
+    "Open alert #112 remains open; this is a documented triage verdict, not a claimed clean zero-alert scan.",
+    "No alert dismissal or security configuration mutation was performed.",
+    "Scanning supports source review; it does not prove runtime enforcement."
+  ]
+}

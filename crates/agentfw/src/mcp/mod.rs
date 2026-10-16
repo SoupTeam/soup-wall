@@ -6,9 +6,14 @@
 //! and text results; see `docs/operations/MCP_STDIO_ADMISSION.md`.
 
 pub mod admission;
+pub mod connection;
+pub mod create_file;
+pub mod https_get;
 pub mod input;
 pub mod jsonrpc;
 pub mod manifest;
 pub mod proxy;
 pub mod resources;
+#[cfg(unix)]
+mod stdio;
 pub mod store;

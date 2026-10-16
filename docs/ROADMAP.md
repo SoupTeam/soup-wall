@@ -217,6 +217,11 @@ policy and proposed variants as distinct frozen experiments.
 - Reviewed results meet the acceptance limits recorded before the runs. Missing
   access, budget or evaluator fidelity leaves this phase open.
 
+Status: the [matched evaluation protocol](benchmarks/agentdojo-matched-protocol.md)
+(SOU-36) adds a frozen workspace plan, a live gate, pair validation and an
+independent report. Its limits are proposed, not approved, and no model access,
+budget or live evidence exists, so this phase stays open.
+
 ### Phase 5 — Make setup and status verifiable
 
 **Depends on:** the accepted integration and policy from Phases 1–3; Phase 4
@@ -236,6 +241,10 @@ managed daemon lifecycle, an accurate status display and a synthetic-secret demo
 - Startup failures, daemon loss, stale configuration and recovery have documented
   outcomes that match tests. The README starts with this verified experience.
 - Setup and demonstration do not require real secrets or automatic provider traffic.
+
+The separate [authenticated runtime diagnostics](operations/AGENT_LIFECYCLE.md#authenticated-runtime-protection-diagnostics)
+report loaded identity, transport observations and explicit unknown coverage.
+Their component checks do not replace the independent active-protection witnesses above.
 
 ### Phase 6 — Complete team rollout and operational validation
 

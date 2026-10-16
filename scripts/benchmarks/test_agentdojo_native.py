@@ -519,7 +519,8 @@ class NativeDaemonTests(unittest.TestCase):
 def run_fixture_checks(checkout, binary, temporary_parent, source_snapshots=None):
     global UPSTREAM, AGENT_BINARY, TEMP_PARENT, EXPECTED_BINARY, LOCAL_PROVIDER_REQUESTS
     LOCAL_PROVIDER_REQUESTS = 0
-    required = {"cli", "agentdojo_live", "agentdojo_native", "test_agentdojo_live", "test_agentdojo_native"}
+    required = {"cli", "agentdojo_live", "agentdojo_native", "agentdojo_protocol", "test_agentdojo_live",
+                "test_agentdojo_native"}
     if (not isinstance(source_snapshots, dict) or set(source_snapshots) != required
             or not all(native.is_hash(value) for value in source_snapshots.values())):
         raise adapter.AdapterError("Native fixture requires compiled source snapshots from its explicit CLI")

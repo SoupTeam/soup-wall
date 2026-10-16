@@ -1,0 +1,104 @@
+name: Native Windows MCP document read
+
+on:
+  pull_request:
+    paths:
+      - 'crates/agentfw/**'
+      - 'crates/agent/**'
+      - 'crates/adapter/**'
+      - 'rule_baseline/**'
+      - 'scripts/verify-sou58-windows-read.py'
+      - 'scripts/ci-windows-read.ps1'
+      - 'scripts/print-sou58-ci-diagnostics.py'
+      - 'scripts/verify-sou54-create-file.py'
+      - 'scripts/fixtures/mcp_windows_read_probe_server.py'
+      - 'scripts/tests/test_sou58_windows_read.py'
+      - '.github/workflows/mcp-windows-read.yml'
+      - 'Cargo.lock'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mcp-windows-read-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-windows-standard-user:
+    runs-on: windows-2022
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build and identify the exact native Windows candidate
+        id: build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $commit = (& git rev-parse HEAD).Trim()
+          $commit | Set-Content "$env:RUNNER_TEMP/sou58-source.txt"
+          & rustc --version | Set-Content "$env:RUNNER_TEMP/sou58-rust.txt"
+          & cargo build --locked -p agentfw --bin agentfw --message-format=json > "$env:RUNNER_TEMP/sou58-build.jsonl"
+          if ($LASTEXITCODE -ne 0) { throw 'Exact candidate build failed' }
+          & cargo test --locked -p agentfw --lib --no-run --message-format=json > "$env:RUNNER_TEMP/sou58-test-build.jsonl"
+          if ($LASTEXITCODE -ne 0) { throw 'Native Windows test build failed' }
+          $artifacts = Get-Content "$env:RUNNER_TEMP/sou58-test-build.jsonl" | ForEach-Object { $_ | ConvertFrom-Json } |
+              Where-Object { $_.reason -eq 'compiler-artifact' -and $_.target.name -eq 'agentfw' -and $_.profile.test -and $_.executable }
+          if (@($artifacts).Count -ne 1) { throw 'Unique native lib test artifact required' }
+          "SOU58_TEST_BINARY=$($artifacts.executable)" | Add-Content $env:GITHUB_ENV
+          Get-FileHash target/debug/agentfw.exe, $artifacts.executable -Algorithm SHA256 |
+              Format-List | Out-File "$env:RUNNER_TEMP/sou58-binaries.txt"
+      - name: Evidence grading controls
+        shell: pwsh
+        run: python -B -m unittest discover -s scripts/tests -p 'test_sou58_windows_read.py' -v
+      - name: Native router authority and compatibility regressions
+        shell: pwsh
+        run: |
+          & cargo test --locked -p agentfw --test native_endpoint -- --nocapture 2>&1 |
+              Tee-Object -FilePath "$env:RUNNER_TEMP/sou58-router.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Native endpoint regressions failed' }
+      - name: Privileged file symlink native API regression
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: pwsh
+        run: |
+          & $env:SOU58_TEST_BINARY windows_read::tests::refuses_symlink_when_creation_is_available --ignored --nocapture 2>&1 |
+              Tee-Object -FilePath "$env:RUNNER_TEMP/sou58-privileged-symlink.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Privileged file symlink regression failed' }
+          $log = Get-Content "$env:RUNNER_TEMP/sou58-privileged-symlink.log" -Raw
+          if ($log -notmatch 'test result: ok\. 1 passed; 0 failed; 0 ignored;') {
+              throw 'One executed privileged symlink API test is required'
+          }
+      - name: Actual stdio, enforcing daemon and handle tests as a standard user
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: pwsh
+        run: |
+          ./scripts/ci-windows-read.ps1 -AgentBinary ./target/debug/agentfw.exe `
+              -TestBinary $env:SOU58_TEST_BINARY -PythonBinary (Get-Command python).Source `
+              -Commit ((& git rev-parse HEAD).Trim()) -OutputDirectory "$env:RUNNER_TEMP/sou58-standard-user"
+          if ($LASTEXITCODE -ne 0) { throw 'Standard-user native Windows acceptance failed' }
+      - name: Publish bounded native Windows failure diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          python -B scripts/print-sou58-ci-diagnostics.py --root "$env:RUNNER_TEMP" --summary "$env:GITHUB_STEP_SUMMARY"
+          if ($LASTEXITCODE -ne 0) { throw 'Could not publish native Windows diagnostics' }
+      - name: Retain sanitized outcomes and exact source/build witnesses
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou58-native-windows-read-evidence
+          path: |
+            ${{ runner.temp }}/sou58-*.txt
+            ${{ runner.temp }}/sou58-*.jsonl
+            ${{ runner.temp }}/sou58-*.log
+            ${{ runner.temp }}/sou58-standard-user/*.json
+            ${{ runner.temp }}/sou58-standard-user/*.log
+          if-no-files-found: warn
+          retention-days: 30

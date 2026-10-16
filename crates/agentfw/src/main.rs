@@ -11,7 +11,7 @@ use agentfw::sandbox::{
     GuardedFileDeleteSpec, GuardedFileRenameSpec, GuardedFileWriteSpec, GuardedNetworkFetchSpec,
     NetworkPolicy, SandboxSpec,
 };
-use agentfw::{app, Config};
+use agentfw::Config;
 use clap::{Parser, Subcommand};
 use soup_wall_agent::{AgentFirewall, AgentPolicySet, DEFAULT_TAINT_CAP};
 
@@ -23,9 +23,27 @@ struct Cli {
 }
 
 #[derive(Subcommand)]
+enum NativeApprovalCmd {
+    /// List outstanding requests (digests only, no raw arguments).
+    List,
+    /// Show one request in full, including the exact arguments.
+    Inspect { id: String },
+    /// Approve exactly this call; --binding must be the digest shown by inspect.
+    Approve {
+        id: String,
+        #[arg(long)]
+        binding: String,
+    },
+    /// Reject this call.
+    Reject { id: String },
+}
+
+#[derive(Subcommand)]
 enum Cmd {
     /// Run the daemon.
     Serve,
+    /// Query authenticated runtime diagnostics; unknown protection exits 2.
+    ProtectionStatus(agentfw::protection_status::QueryArgs),
     /// Summarize an audit log: what would this policy have done?
     Replay {
         /// Path to the audit log (defaults to ~/.agentfw/audit.jsonl).
@@ -38,6 +56,13 @@ enum Cmd {
     Lifecycle {
         #[command(subcommand)]
         command: LifecycleCommand,
+    },
+    /// Manage an opt-in Linux user service.
+    Service {
+        #[arg(long, global = true)]
+        home: Option<PathBuf>,
+        #[command(subcommand)]
+        command: ServiceCommand,
     },
     /// Check that the daemon is up, and report its enforcement posture.
     ///
@@ -84,15 +109,31 @@ enum Cmd {
         /// This opt-in path fails closed; result release is to the MCP host, not model context.
         #[arg(long)]
         native_admission: bool,
+        /// With --native-admission: hold one Ask call up to N seconds for a
+        /// single-use operator approval (needs `native.approval` in the daemon
+        /// config). 0 or absent keeps the default correlated refusal.
+        #[arg(long, default_value_t = 0)]
+        native_approval_wait_seconds: u64,
         /// The real server command and its args, after `--`.
         #[arg(last = true, required = true)]
         command: Vec<String>,
+    },
+    /// Operator commands for pending native MCP Ask approvals (SOU-48).
+    /// Approval is explicit single-use authorization, not proof of human presence.
+    NativeApproval {
+        #[command(subcommand)]
+        action: NativeApprovalCmd,
     },
     /// Inspect a selected Claude-style MCP JSON config without starting servers.
     /// Only server names and supported transport flags are printed.
     McpInspectConfig {
         #[arg(long)]
         path: PathBuf,
+    },
+    /// Manage one explicitly selected Claude Code stdio MCP entry.
+    McpConnection {
+        #[command(subcommand)]
+        command: agentfw::mcp::connection::Command,
     },
     /// Run one high-risk command inside the Linux bubblewrap sandbox.
     Sandbox {
@@ -236,10 +277,33 @@ enum LifecycleCommand {
     },
 }
 
+#[derive(Subcommand)]
+enum ServiceCommand {
+    Preview,
+    Install,
+    Start,
+    Stop,
+    Restart,
+    Inspect,
+    Uninstall,
+    #[command(hide = true)]
+    Launch,
+    #[command(hide = true)]
+    Ready,
+    #[command(hide = true)]
+    Shutdown,
+}
+
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.cmd {
+        Cmd::ProtectionStatus(args) => {
+            std::process::exit(agentfw::protection_status::run_cli(args))
+        }
         Cmd::Serve => {
+            #[cfg(target_os = "linux")]
+            let _direct_guard =
+                agentfw::lifecycle::Manager::new(Config::home()?).direct_serve_guard()?;
             tracing_subscriber::fmt().json().init();
             tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
@@ -271,6 +335,10 @@ fn main() -> anyhow::Result<()> {
                 tracing_subscriber::fmt().json().init();
                 let manager = agentfw::lifecycle::Manager::new(&home);
                 manager.verify_managed_boot(&instance, &std::env::current_exe()?)?;
+                #[cfg(target_os = "linux")]
+                if agentfw::service::registered(&home) {
+                    agentfw::service::Service::new(&home)?.verify_managed_process(&instance)?;
+                }
                 return tokio::runtime::Builder::new_multi_thread()
                     .enable_all()
                     .build()?
@@ -327,6 +395,57 @@ fn main() -> anyhow::Result<()> {
             }
             Ok(())
         }
+        Cmd::Service { home, command } => {
+            #[cfg(target_os = "linux")]
+            {
+                // Unlike Config::home(), preview must not create the default profile.
+                let home = match home {
+                    Some(home) => home,
+                    None => std::env::var_os("HOME")
+                        .map(PathBuf::from)
+                        .ok_or_else(|| anyhow::anyhow!("cannot determine home directory"))?
+                        .join(".agentfw"),
+                };
+                let service = agentfw::service::Service::new(&home)?;
+                match command {
+                    ServiceCommand::Preview => {
+                        println!("{}", serde_json::to_string_pretty(&service.preview()?)?)
+                    }
+                    ServiceCommand::Install => {
+                        service.install()?;
+                        println!("installed user service; Agent remains stopped and login autostart is disabled");
+                    }
+                    ServiceCommand::Start => {
+                        service.start()?;
+                        println!("service started and Agent readiness verified");
+                    }
+                    ServiceCommand::Stop => {
+                        service.stop()?;
+                        println!("service stopped");
+                    }
+                    ServiceCommand::Restart => {
+                        service.restart()?;
+                        println!("service restarted and Agent readiness verified");
+                    }
+                    ServiceCommand::Inspect => {
+                        println!("{}", serde_json::to_string_pretty(&service.inspect())?)
+                    }
+                    ServiceCommand::Launch => service.launch()?,
+                    ServiceCommand::Ready => service.ready()?,
+                    ServiceCommand::Shutdown => service.shutdown()?,
+                    ServiceCommand::Uninstall => {
+                        service.uninstall()?;
+                        println!("removed owned service files; Agent versions and user data are preserved");
+                    }
+                }
+                Ok(())
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                let _ = (home, command);
+                anyhow::bail!("user service management currently requires Linux and systemd");
+            }
+        }
         Cmd::Preflight {
             require_enforce,
             timeout_seconds,
@@ -379,6 +498,37 @@ fn main() -> anyhow::Result<()> {
             );
             Ok(())
         }
+        Cmd::NativeApproval { action } => {
+            let home = Config::home()?;
+            match action {
+                NativeApprovalCmd::List => {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&agentfw::native::approval::operator_list(
+                            &home
+                        ))?
+                    );
+                }
+                NativeApprovalCmd::Inspect { id } => {
+                    let v = agentfw::native::approval::operator_inspect(&home, &id)?;
+                    println!("{}", serde_json::to_string_pretty(&v)?);
+                    println!(
+                        "To approve exactly this call:\n  agentfw native-approval approve {id} --binding {}",
+                        v["binding_sha256"].as_str().unwrap_or("")
+                    );
+                }
+                NativeApprovalCmd::Approve { id, binding } => {
+                    let token = agentfw::token::load_or_create(&home.join("token"))?;
+                    agentfw::native::approval::operator_approve(&home, &token, &id, &binding)?;
+                    println!("Approved {id}. Single use, bound to the exact original call digest.");
+                }
+                NativeApprovalCmd::Reject { id } => {
+                    agentfw::native::approval::operator_reject(&home, &id)?;
+                    println!("Rejected {id}.");
+                }
+            }
+            Ok(())
+        }
         Cmd::McpInspectConfig { path } => {
             use std::io::Read;
             let mut bytes = Vec::new();
@@ -389,9 +539,11 @@ fn main() -> anyhow::Result<()> {
             println!("{}", serde_json::to_string_pretty(&inventory)?);
             Ok(())
         }
+        Cmd::McpConnection { command } => agentfw::mcp::connection::run(command),
         Cmd::Mcp {
             id,
             native_admission,
+            native_approval_wait_seconds,
             command,
         } => {
             let (cmd, args) = command
@@ -435,6 +587,12 @@ fn main() -> anyhow::Result<()> {
                     args: args.to_vec(),
                     classifier: agentfw::mcp::admission::classifier_from_env()?,
                     resource_profiles: agentfw::mcp::admission::resource_profiles_from_env()?,
+                    approval: (native_approval_wait_seconds > 0).then(|| {
+                        agentfw::mcp::admission::ApprovalWait {
+                            url: cfg.endpoint_url("/native/approval/v1"),
+                            wait: Duration::from_secs(native_approval_wait_seconds.min(300)),
+                        }
+                    }),
                 };
                 let runtime = tokio::runtime::Builder::new_multi_thread()
                     .enable_all()
@@ -806,7 +964,18 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
             .as_ref()
             .map(|native| {
                 let native_token = agentfw::token::load_or_create(&home.join("native-token"))?;
-                agentfw::native::NativeState::load(native, native_token)
+                let state = agentfw::native::NativeState::load(native, native_token)?;
+                match &native.approval {
+                    Some(approval) => {
+                        let hook_token = agentfw::token::load_or_create(&home.join("token"))?;
+                        state.with_approval(
+                            &home,
+                            &agentfw::grant::derive_key(&hook_token),
+                            approval.ttl_seconds,
+                        )
+                    }
+                    None => Ok(state),
+                }
             })
             .transpose()?,
         firewall: Mutex::new(firewall),
@@ -831,6 +1000,14 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
         tokio::spawn(managed.run(state.clone()));
     }
 
+    let diagnostics =
+        agentfw::protection_status::Runtime::new(&cfg).with_binary(if managed.is_none() {
+            std::env::current_exe()
+                .ok()
+                .and_then(|p| agentfw::lifecycle::sha256_file(&p).ok())
+        } else {
+            None
+        });
     let addr = cfg.socket_address();
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     tracing::info!(
@@ -859,13 +1036,16 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
                 Err(error) => return Err(error.into()),
             },
         };
+        let diagnostics = diagnostics
+            .with_binary(Some(health.binary_digest.clone()))
+            .with_lifecycle(health.clone());
         let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
         let shutdown = Arc::new(Mutex::new(Some(shutdown_tx)));
         let read_health = health.clone();
         let read_token = state.token.clone();
         let stop_health = health;
         let stop_token = state.token.clone();
-        let router = app(state).route(
+        let router = agentfw::app_with_diagnostics(state, Arc::new(diagnostics)).route(
             "/lifecycle/v1",
             get(move |headers: HeaderMap| {
                 let health = read_health.clone();
@@ -915,7 +1095,11 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
             })
             .await?;
     } else {
-        axum::serve(listener, app(state)).await?;
+        axum::serve(
+            listener,
+            agentfw::app_with_diagnostics(state, Arc::new(diagnostics)),
+        )
+        .await?;
     }
     Ok(())
 }

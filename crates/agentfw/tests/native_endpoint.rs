@@ -1438,6 +1438,484 @@ fn resource_context(profile: &Value, resources: Value) -> Value {
         "resources":resources})
 }
 
+#[cfg(not(windows))]
+#[tokio::test]
+async fn windows_read_v4_requests_are_unavailable_on_other_platforms() {
+    let fixture = Fixture::new(ALLOW);
+    fixture.start("windows-read-platform").await;
+    let mut request = fixture.call(
+        "windows-read-platform",
+        "read_document",
+        &json!({"path":"file.txt"}),
+    );
+    request["contract_version"] = json!(agentfw::native::resource::WINDOWS_READ_CONTRACT);
+    request["resource_admission"] = resource_context(
+        &json!({
+            "server_id":"resource-fixture","tool_name":"read_document",
+            "schema_sha256":schema(),"selectors":[]
+        }),
+        json!([]),
+    );
+    let (status, refused) = fixture.post(&request).await;
+    assert_failure(status, &refused, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        refused["error_code"],
+        "native_windows_read_platform_unsupported"
+    );
+}
+
+#[cfg(windows)]
+fn windows_read_fixture() -> (Fixture, agentfw::native::resource::Policy) {
+    use agentfw::native::resource::{
+        windows_read_executor_sha256, windows_read_schema, WINDOWS_READ_EXECUTOR_PROFILE,
+        WINDOWS_READ_MAX_CONTENT,
+    };
+    let mut fixture = Fixture::new(ALLOW);
+    let workspace = fixture.dir.path().join("windows-read-workspace");
+    std::fs::create_dir(&workspace).unwrap();
+    let workspace = workspace.canonicalize().unwrap();
+    let target = workspace.join("approved.txt");
+    std::fs::write(&target, "approved bytes").unwrap();
+    let schema_sha256 = agentfw::native::canonical_digest(&windows_read_schema());
+    let resource_policy = json!({
+        "profile":{"server_id":"windows-native-fixture","tool_name":"read_document",
+            "schema_sha256":schema_sha256,"selectors":[{"pointer":"/path","kind":"path"}]},
+        "workspace":workspace,"cwd":workspace,
+        "executor_sha256":windows_read_executor_sha256(),"classifier_sha256":"c".repeat(64),
+        "allowed_resources":[{"kind":"path","canonical":target}],
+        "windows_read":{"executor_profile":WINDOWS_READ_EXECUTOR_PROFILE,
+            "max_content_bytes":WINDOWS_READ_MAX_CONTENT}
+    });
+    let policy = serde_json::from_value(resource_policy.clone()).unwrap();
+    let mut configured = registry();
+    let tool = configured["tools"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|tool| tool["name"] == "read_document")
+        .unwrap();
+    tool["schema_sha256"] = json!(schema_sha256);
+    tool["resource_policy"] = resource_policy;
+    let bytes = serde_json::to_vec(&configured).unwrap();
+    fixture.registry_sha256 = sha(&bytes);
+    fixture.state = make_state(
+        fixture.dir.path(),
+        Config {
+            enforce: true,
+            ..Config::default()
+        },
+        ALLOW,
+        &bytes,
+        &fixture.registry_sha256,
+    );
+    (fixture, policy)
+}
+
+#[cfg(windows)]
+fn windows_read_call(
+    fixture: &Fixture,
+    policy: &agentfw::native::resource::Policy,
+    session: &str,
+    args: &Value,
+) -> Value {
+    let admission = agentfw::native::resource::Admission {
+        server_id: policy.profile.server_id.clone(),
+        host_call_id: json!("original-windows-read-id"),
+        profile_sha256: agentfw::native::canonical_digest(
+            &serde_json::to_value(&policy.profile).unwrap(),
+        ),
+        executor_sha256: policy.executor_sha256.clone(),
+        classifier_sha256: policy.classifier_sha256.clone(),
+        snapshot_sha256: "d".repeat(64),
+        definition_sha256: "f".repeat(64),
+        input_sha256: "a".repeat(64),
+        resources: vec![agentfw::mcp::resources::ResourceEvidence {
+            pointer: "/path".into(),
+            source: agentfw::mcp::resources::EvidenceSource::Argument,
+            resource: policy.allowed_resources[0].clone(),
+        }],
+        execution: None,
+        network: None,
+        windows_read: Some(agentfw::native::resource::windows_read_binding(policy, args).unwrap()),
+    };
+    let mut request = fixture.call(session, "read_document", args);
+    request["contract_version"] = json!(agentfw::native::resource::WINDOWS_READ_CONTRACT);
+    request["schema_sha256"] = json!(policy.profile.schema_sha256);
+    request["resource_admission"] = serde_json::to_value(admission).unwrap();
+    request
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn windows_read_v4_native_binds_identity_arguments_and_single_use_result() {
+    let (fixture, policy) = windows_read_fixture();
+    fixture.start("windows-bound").await;
+    let args = json!({"path":"approved.txt"});
+    let request = windows_read_call(&fixture, &policy, "windows-bound", &args);
+    for field in [
+        "policy_sha256",
+        "args_sha256",
+        "workspace_sha256",
+        "target_sha256",
+    ] {
+        let mut changed = request.clone();
+        changed["resource_admission"]["windows_read"][field] = json!("0".repeat(64));
+        let (status, refused) = fixture.post(&changed).await;
+        assert_eq!(status, StatusCode::OK, "{refused}");
+        assert_eq!(refused["release"], false);
+        assert_eq!(
+            refused["reason_codes"],
+            json!(["native_windows_read_binding_mismatch"])
+        );
+        assert!(refused["call_id"].is_null());
+    }
+    let mut changed = request.clone();
+    changed["args"]["path"] = json!(policy.workspace.join("approved.txt"));
+    let (_, refused) = fixture.post(&changed).await;
+    assert_eq!(refused["release"], false, "{refused}");
+    let (_, allowed) = fixture.post(&request).await;
+    assert_eq!(allowed["release"], true, "{allowed}");
+    assert_eq!(
+        allowed["contract_version"],
+        agentfw::native::resource::WINDOWS_READ_CONTRACT
+    );
+    let mut result = fixture.result(
+        "windows-bound",
+        &allowed,
+        "read_document",
+        &args,
+        "value",
+        "approved bytes",
+    );
+    result["contract_version"] = json!(agentfw::native::resource::WINDOWS_READ_CONTRACT);
+    let (_, released) = fixture.post(&result).await;
+    assert_eq!(released["release"], true, "{released}");
+    let (_, replayed) = fixture.post(&result).await;
+    assert_eq!(replayed["release"], false, "{replayed}");
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn windows_read_v4_native_refuses_downgrade_and_replaced_leaf() {
+    let (fixture, policy) = windows_read_fixture();
+    fixture.start("windows-replaced").await;
+    let args = json!({"path":"approved.txt"});
+    let request = windows_read_call(&fixture, &policy, "windows-replaced", &args);
+    for contract in [
+        agentfw::native::resource::CONTRACT,
+        agentfw::native::resource::CREATE_CONTRACT,
+        agentfw::native::resource::NETWORK_CONTRACT,
+        agentfw::native::resource::WINDOWS_CREATE_CONTRACT,
+    ] {
+        let mut changed = request.clone();
+        changed["contract_version"] = json!(contract);
+        let (status, refused) = fixture.post(&changed).await;
+        assert_failure(status, &refused, StatusCode::BAD_REQUEST);
+        assert_eq!(refused["error_code"], "native_resource_contract_mismatch");
+    }
+    let original = policy.workspace.join("approved.txt");
+    std::fs::rename(&original, policy.workspace.join("original.txt")).unwrap();
+    std::fs::write(&original, "substituted bytes").unwrap();
+    let (_, refused) = fixture.post(&request).await;
+    assert_eq!(refused["release"], false, "{refused}");
+    assert_eq!(
+        refused["reason_codes"],
+        json!(["native_windows_read_binding_mismatch"])
+    );
+    assert!(refused["call_id"].is_null());
+}
+
+#[cfg(not(windows))]
+#[tokio::test]
+async fn windows_create_v5_requests_are_unavailable_on_other_platforms() {
+    let fixture = Fixture::new(ALLOW);
+    fixture.start("windows-create-platform").await;
+    let mut request = fixture.call(
+        "windows-create-platform",
+        "create_file",
+        &json!({"path":"new.txt","content":"owned bytes"}),
+    );
+    request["contract_version"] = json!(agentfw::native::resource::WINDOWS_CREATE_CONTRACT);
+    request["resource_admission"] = resource_context(
+        &json!({
+            "server_id":"resource-fixture","tool_name":"create_file",
+            "schema_sha256":schema(),"selectors":[]
+        }),
+        json!([]),
+    );
+    let (status, refused) = fixture.post(&request).await;
+    assert_failure(status, &refused, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        refused["error_code"],
+        "native_windows_create_platform_unsupported"
+    );
+}
+
+#[cfg(windows)]
+fn windows_create_fixture() -> (Fixture, agentfw::native::resource::Policy) {
+    use agentfw::native::resource::{
+        create_file_schema, windows_create_executor_sha256, CREATE_FILE_MAX_CONTENT,
+        WINDOWS_CREATE_EXECUTOR_PROFILE,
+    };
+    let mut fixture = Fixture::new(ALLOW);
+    let workspace = fixture.dir.path().join("windows-create-workspace");
+    std::fs::create_dir(&workspace).unwrap();
+    let workspace = workspace.canonicalize().unwrap();
+    let schema_sha256 = agentfw::native::canonical_digest(&create_file_schema());
+    let resource_policy = json!({
+        "profile":{"server_id":"windows-create-native-fixture","tool_name":"create_file",
+            "schema_sha256":schema_sha256,"selectors":[{"pointer":"/path","kind":"path",
+            "allow_missing_leaf":true}]},
+        "workspace":workspace,"cwd":workspace,
+        "executor_sha256":windows_create_executor_sha256(),"classifier_sha256":"c".repeat(64),
+        "allowed_resources":[{"kind":"path","canonical":workspace.join("new.txt")}],
+        "execution":{"operation":"create_file","action":"write",
+            "max_content_bytes":CREATE_FILE_MAX_CONTENT,
+            "executor_profile":WINDOWS_CREATE_EXECUTOR_PROFILE}
+    });
+    let policy = serde_json::from_value(resource_policy.clone()).unwrap();
+    let mut configured = registry();
+    configured["tools"].as_array_mut().unwrap().push(json!({
+        "name":"create_file","schema_sha256":schema_sha256,"action_class":"side_effecting",
+        "result_provenance":"untrusted","egress":[],"resource_policy":resource_policy
+    }));
+    let bytes = serde_json::to_vec(&configured).unwrap();
+    fixture.registry_sha256 = sha(&bytes);
+    fixture.state = make_state(
+        fixture.dir.path(),
+        Config {
+            enforce: true,
+            ..Config::default()
+        },
+        ALLOW,
+        &bytes,
+        &fixture.registry_sha256,
+    );
+    (fixture, policy)
+}
+
+#[cfg(windows)]
+fn windows_create_call(
+    fixture: &Fixture,
+    policy: &agentfw::native::resource::Policy,
+    session: &str,
+    args: &Value,
+) -> Value {
+    let admission = agentfw::native::resource::Admission {
+        server_id: policy.profile.server_id.clone(),
+        host_call_id: json!("original-windows-create-id"),
+        profile_sha256: agentfw::native::canonical_digest(
+            &serde_json::to_value(&policy.profile).unwrap(),
+        ),
+        executor_sha256: policy.executor_sha256.clone(),
+        classifier_sha256: policy.classifier_sha256.clone(),
+        snapshot_sha256: "d".repeat(64),
+        definition_sha256: "f".repeat(64),
+        input_sha256: "a".repeat(64),
+        resources: vec![agentfw::mcp::resources::ResourceEvidence {
+            pointer: "/path".into(),
+            source: agentfw::mcp::resources::EvidenceSource::Argument,
+            resource: policy.allowed_resources[0].clone(),
+        }],
+        execution: Some(agentfw::native::resource::windows_create_binding(policy, args).unwrap()),
+        network: None,
+        windows_read: None,
+    };
+    let mut request = fixture.call(session, "create_file", args);
+    request["contract_version"] = json!(agentfw::native::resource::WINDOWS_CREATE_CONTRACT);
+    request["schema_sha256"] = json!(policy.profile.schema_sha256);
+    request["resource_admission"] = serde_json::to_value(admission).unwrap();
+    request
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn windows_create_v5_binds_exact_arguments_content_policy_and_workspace() {
+    let (fixture, policy) = windows_create_fixture();
+    fixture.start("windows-create-bound").await;
+    let args = json!({"path":"new.txt","content":"exact UTF-8 ☃\n"});
+    let request = windows_create_call(&fixture, &policy, "windows-create-bound", &args);
+    for field in [
+        "policy_sha256",
+        "args_sha256",
+        "content_sha256",
+        "workspace_sha256",
+    ] {
+        let mut changed = request.clone();
+        changed["resource_admission"]["execution"][field] = json!("0".repeat(64));
+        let (status, refused) = fixture.post(&changed).await;
+        assert_eq!(status, StatusCode::OK, "{field}: {refused}");
+        assert_eq!(refused["release"], false, "{field}: {refused}");
+        assert_eq!(
+            refused["reason_codes"],
+            json!(["native_create_binding_mismatch"])
+        );
+        assert!(refused["call_id"].is_null());
+    }
+    let mut changed = request.clone();
+    changed["args"]["content"] = json!("substituted UTF-8 bytes");
+    let (_, refused) = fixture.post(&changed).await;
+    assert_eq!(
+        refused["reason_codes"],
+        json!(["native_create_binding_mismatch"])
+    );
+    assert_eq!(refused["release"], false);
+    let (status, allowed) = fixture.post(&request).await;
+    assert_eq!(status, StatusCode::OK, "{allowed}");
+    assert_eq!(allowed["release"], true, "{allowed}");
+    assert_eq!(
+        allowed["contract_version"],
+        agentfw::native::resource::WINDOWS_CREATE_CONTRACT
+    );
+    let mut result = fixture.result(
+        "windows-create-bound",
+        &allowed,
+        "create_file",
+        &args,
+        "value",
+        "Created.",
+    );
+    result["contract_version"] = json!(agentfw::native::resource::WINDOWS_CREATE_CONTRACT);
+    result["delivery"] = json!("mcp_host");
+    result["content"] = json!(json!({"jsonrpc":"2.0","id":"original-windows-create-id",
+        "result":{"content":[{"type":"text","text":"Created."}]}})
+    .to_string());
+    let (_, released) = fixture.post(&result).await;
+    assert_eq!(released["release"], true, "{released}");
+    let (status, replayed) = fixture.post(&result).await;
+    assert_failure(status, &replayed, StatusCode::CONFLICT);
+    assert_eq!(replayed["error_code"], "native_call_unknown_or_spent");
+    // Native admission alone never creates a file. Windows execution is proved
+    // separately through the actual stdio broker and independent filesystem.
+    assert_eq!(std::fs::read_dir(&policy.workspace).unwrap().count(), 0);
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn windows_create_v5_results_are_bound_to_session_and_original_host_call() {
+    let (fixture, policy) = windows_create_fixture();
+    fixture.start("windows-create-one").await;
+    fixture.start("windows-create-two").await;
+    let args = json!({"path":"new.txt","content":"complete document"});
+    let request = windows_create_call(&fixture, &policy, "windows-create-one", &args);
+    let (_, first) = fixture.post(&request).await;
+    assert_eq!(first["release"], true, "{first}");
+    let mut second_request = request.clone();
+    second_request["session_id"] = json!("windows-create-two");
+    let (_, second) = fixture.post(&second_request).await;
+    assert_eq!(second["release"], true, "{second}");
+    assert_ne!(first["binding_sha256"], second["binding_sha256"]);
+    let mut result = fixture.result(
+        "windows-create-two",
+        &first,
+        "create_file",
+        &args,
+        "value",
+        "Created.",
+    );
+    result["contract_version"] = json!(agentfw::native::resource::WINDOWS_CREATE_CONTRACT);
+    let (status, wrong_session) = fixture.post(&result).await;
+    assert_failure(status, &wrong_session, StatusCode::CONFLICT);
+    assert_eq!(wrong_session["error_code"], "native_call_unknown_or_spent");
+    result["session_id"] = json!("windows-create-one");
+    result["delivery"] = json!("mcp_host");
+    result["content"] = json!(json!({"jsonrpc":"2.0","id":"another-host-call",
+        "result":{"content":[{"type":"text","text":"Created."}]}})
+    .to_string());
+    let (status, wrong_host) = fixture.post(&result).await;
+    assert_failure(status, &wrong_host, StatusCode::CONFLICT);
+    assert_eq!(wrong_host["error_code"], "native_host_call_mismatch");
+    let (status, spent) = fixture.post(&result).await;
+    assert_failure(status, &spent, StatusCode::CONFLICT);
+    assert_eq!(spent["error_code"], "native_call_unknown_or_spent");
+    let (_, continued) = fixture.post(&request).await;
+    assert_eq!(continued["release"], true, "{continued}");
+    assert!(!policy.workspace.join("new.txt").exists());
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn windows_create_v5_refuses_older_and_unknown_execution_contracts() {
+    let (fixture, policy) = windows_create_fixture();
+    fixture.start("windows-create-contract").await;
+    let args = json!({"path":"new.txt","content":"original document"});
+    let request = windows_create_call(&fixture, &policy, "windows-create-contract", &args);
+    for contract in [
+        agentfw::native::resource::CONTRACT,
+        agentfw::native::resource::CREATE_CONTRACT,
+        agentfw::native::resource::NETWORK_CONTRACT,
+        agentfw::native::resource::WINDOWS_READ_CONTRACT,
+    ] {
+        let mut changed = request.clone();
+        changed["contract_version"] = json!(contract);
+        let (status, refused) = fixture.post(&changed).await;
+        assert_failure(status, &refused, StatusCode::BAD_REQUEST);
+        assert_eq!(refused["error_code"], "native_resource_contract_mismatch");
+    }
+    let mut changed = request.clone();
+    changed["contract_version"] = json!(agentfw::native::resource::CREATE_CONTRACT);
+    changed["resource_admission"]["execution"]["executor_profile"] =
+        json!(agentfw::native::resource::CREATE_FILE_EXECUTOR_PROFILE);
+    let (status, downgraded) = fixture.post(&changed).await;
+    assert_failure(status, &downgraded, StatusCode::CONFLICT);
+    assert_eq!(
+        downgraded["error_code"],
+        "native_resource_contract_required"
+    );
+    changed = request.clone();
+    changed["resource_admission"]["execution"]["executor_profile"] =
+        json!("sw-native/create-file/windows-handles/unknown");
+    let (status, unsupported) = fixture.post(&changed).await;
+    assert_failure(status, &unsupported, StatusCode::BAD_REQUEST);
+    assert!(!policy.workspace.join("new.txt").exists());
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn windows_create_v5_refuses_parent_replacement_before_authorization() {
+    let (fixture, policy) = windows_create_fixture();
+    fixture.start("windows-create-root").await;
+    let args = json!({"path":"new.txt","content":"bound to the original parent"});
+    let request = windows_create_call(&fixture, &policy, "windows-create-root", &args);
+    let original = policy.workspace.with_extension("original");
+    std::fs::rename(&policy.workspace, &original).unwrap();
+    std::fs::create_dir(&policy.workspace).unwrap();
+    let (status, refused) = fixture.post(&request).await;
+    assert_eq!(status, StatusCode::OK, "{refused}");
+    assert_eq!(refused["release"], false, "{refused}");
+    assert_eq!(
+        refused["reason_codes"],
+        json!(["native_create_binding_mismatch"])
+    );
+    assert!(refused["call_id"].is_null());
+    assert_eq!(std::fs::read_dir(&policy.workspace).unwrap().count(), 0);
+    assert_eq!(std::fs::read_dir(&original).unwrap().count(), 0);
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn windows_create_v5_refuses_a_target_created_after_configuration() {
+    let (fixture, policy) = windows_create_fixture();
+    fixture.start("windows-create-existing").await;
+    let args = json!({"path":"new.txt","content":"must never overwrite"});
+    let request = windows_create_call(&fixture, &policy, "windows-create-existing", &args);
+    let target = policy.workspace.join("new.txt");
+    std::fs::write(&target, b"independent competing creator").unwrap();
+    let (status, refused) = fixture.post(&request).await;
+    assert_eq!(status, StatusCode::OK, "{refused}");
+    assert_eq!(refused["release"], false, "{refused}");
+    assert_eq!(
+        refused["reason_codes"],
+        json!(["native_windows_create_target_invalid"])
+    );
+    assert!(refused["call_id"].is_null());
+    assert_eq!(
+        std::fs::read(&target).unwrap(),
+        b"independent competing creator"
+    );
+    assert_eq!(std::fs::read_dir(&policy.workspace).unwrap().count(), 1);
+}
+
 fn resource_call(
     fixture: &Fixture,
     session: &str,
@@ -1775,4 +2253,815 @@ async fn resource_metadata_respects_the_configured_record_byte_cap() {
     let (status, reply) = fixture.post(&request).await;
     assert_failure(status, &reply, StatusCode::PAYLOAD_TOO_LARGE);
     assert_eq!(reply["error_code"], "native_record_over_cap");
+}
+
+#[cfg(unix)]
+fn create_file_fixture() -> (Fixture, agentfw::native::resource::Policy) {
+    use agentfw::native::resource::{
+        create_file_executor_sha256, create_file_schema, CREATE_FILE_EXECUTOR_PROFILE,
+        CREATE_FILE_MAX_CONTENT,
+    };
+    let mut fixture = Fixture::new(ALLOW);
+    let workspace = fixture.dir.path().join("create-workspace");
+    std::fs::create_dir(&workspace).unwrap();
+    let workspace = workspace.canonicalize().unwrap();
+    let schema_sha256 = agentfw::native::canonical_digest(&create_file_schema());
+    let resource_policy = json!({
+        "profile":{"server_id":"create-native-fixture","tool_name":"create_file",
+            "schema_sha256":schema_sha256,"selectors":[{"pointer":"/path","kind":"path",
+            "allow_missing_leaf":true}]},
+        "workspace":workspace,"cwd":workspace,
+        "executor_sha256":create_file_executor_sha256(),"classifier_sha256":"c".repeat(64),
+        "allowed_resources":[{"kind":"path","canonical":workspace.join("new.txt")}],
+        "execution":{"operation":"create_file","action":"write",
+            "max_content_bytes":CREATE_FILE_MAX_CONTENT,"executor_profile":CREATE_FILE_EXECUTOR_PROFILE}
+    });
+    let policy = serde_json::from_value(resource_policy.clone()).unwrap();
+    let mut configured = registry();
+    configured["tools"].as_array_mut().unwrap().push(json!({
+        "name":"create_file","schema_sha256":schema_sha256,"action_class":"side_effecting",
+        "result_provenance":"local_project","egress":[],"resource_policy":resource_policy
+    }));
+    let bytes = serde_json::to_vec(&configured).unwrap();
+    fixture.registry_sha256 = sha(&bytes);
+    fixture.state = make_state(
+        fixture.dir.path(),
+        Config {
+            enforce: true,
+            ..Config::default()
+        },
+        ALLOW,
+        &bytes,
+        &fixture.registry_sha256,
+    );
+    (fixture, policy)
+}
+
+#[cfg(unix)]
+fn create_file_call(
+    fixture: &Fixture,
+    policy: &agentfw::native::resource::Policy,
+    session: &str,
+    args: &Value,
+) -> Value {
+    let admission = agentfw::native::resource::Admission {
+        server_id: policy.profile.server_id.clone(),
+        host_call_id: json!("original-create-id"),
+        profile_sha256: agentfw::native::canonical_digest(
+            &serde_json::to_value(&policy.profile).unwrap(),
+        ),
+        executor_sha256: policy.executor_sha256.clone(),
+        classifier_sha256: policy.classifier_sha256.clone(),
+        snapshot_sha256: "d".repeat(64),
+        definition_sha256: "f".repeat(64),
+        input_sha256: "a".repeat(64),
+        resources: vec![agentfw::mcp::resources::ResourceEvidence {
+            pointer: "/path".into(),
+            source: agentfw::mcp::resources::EvidenceSource::Argument,
+            resource: policy.allowed_resources[0].clone(),
+        }],
+        execution: Some(agentfw::native::resource::create_file_binding(policy, args).unwrap()),
+        network: None,
+        windows_read: None,
+    };
+    let mut body = fixture.event(session, "call");
+    body["contract_version"] = json!(agentfw::native::resource::CREATE_CONTRACT);
+    body["tool"] = json!("create_file");
+    body["args"] = args.clone();
+    body["schema_sha256"] = json!(policy.profile.schema_sha256);
+    body["resource_admission"] = serde_json::to_value(admission).unwrap();
+    body
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn create_file_v2_native_admission_binds_args_operation_host_and_session() {
+    let (fixture, policy) = create_file_fixture();
+    fixture.start("write-one").await;
+    fixture.start("write-two").await;
+    let args = json!({"path":"new.txt","content":"exact UTF-8 ☃\n"});
+    let body = create_file_call(&fixture, &policy, "write-one", &args);
+    let (status, first) = fixture.post(&body).await;
+    assert_eq!(status, StatusCode::OK, "{first}");
+    assert_eq!(
+        first["contract_version"],
+        agentfw::native::resource::CREATE_CONTRACT
+    );
+    assert_eq!(first["verdict"], "allow", "{first}");
+    assert_eq!(first["release"], true);
+    assert!(first["binding_sha256"]
+        .as_str()
+        .is_some_and(agentfw::native::is_digest));
+    let mut second_body = body.clone();
+    second_body["session_id"] = json!("write-two");
+    let (_, second) = fixture.post(&second_body).await;
+    assert_eq!(second["release"], true, "{second}");
+    assert_ne!(first["binding_sha256"], second["binding_sha256"]);
+    let mut result = fixture.result(
+        "write-two",
+        &first,
+        "create_file",
+        &args,
+        "value",
+        "Created.",
+    );
+    result["contract_version"] = json!(agentfw::native::resource::CREATE_CONTRACT);
+    let (status, wrong_session) = fixture.post(&result).await;
+    assert_failure(status, &wrong_session, StatusCode::CONFLICT);
+    assert_eq!(wrong_session["error_code"], "native_call_unknown_or_spent");
+    result["session_id"] = json!("write-one");
+    result["delivery"] = json!("mcp_host");
+    result["content"] = json!(json!({"jsonrpc":"2.0","id":"different-host-id",
+        "result":{"content":[{"type":"text","text":"Created."}]}})
+    .to_string());
+    let (status, wrong_host) = fixture.post(&result).await;
+    assert_failure(status, &wrong_host, StatusCode::CONFLICT);
+    assert_eq!(wrong_host["error_code"], "native_host_call_mismatch");
+    let (status, replay) = fixture.post(&result).await;
+    assert_failure(status, &replay, StatusCode::CONFLICT);
+    assert_eq!(replay["error_code"], "native_call_unknown_or_spent");
+    // Admission alone performs no filesystem mutation; the separate constrained
+    // broker must obtain a release before its actual execution boundary.
+    assert!(!policy.workspace.join("new.txt").exists());
+    let (status, continued) = fixture.post(&body).await;
+    assert_eq!(status, StatusCode::OK, "{continued}");
+    assert_eq!(continued["release"], true);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn create_file_v2_native_refuses_downgrade_and_content_substitution() {
+    let (fixture, policy) = create_file_fixture();
+    fixture.start("write-refusals").await;
+    let args = json!({"path":"new.txt","content":"original bytes"});
+    let body = create_file_call(&fixture, &policy, "write-refusals", &args);
+    let mut changed = body.clone();
+    changed["args"]["content"] = json!("replacement bytes");
+    let (status, refused) = fixture.post(&changed).await;
+    assert_eq!(status, StatusCode::OK, "{refused}");
+    assert_eq!(refused["verdict"], "deny");
+    assert_eq!(refused["release"], false);
+    assert_eq!(
+        refused["reason_codes"],
+        json!(["native_create_binding_mismatch"])
+    );
+    assert!(refused["call_id"].is_null());
+    changed = body.clone();
+    changed["contract_version"] = json!(agentfw::native::resource::CONTRACT);
+    let (status, shape_downgrade) = fixture.post(&changed).await;
+    assert_failure(status, &shape_downgrade, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        shape_downgrade["error_code"],
+        "native_resource_contract_mismatch"
+    );
+    changed["resource_admission"]
+        .as_object_mut()
+        .unwrap()
+        .remove("execution");
+    let (status, policy_downgrade) = fixture.post(&changed).await;
+    assert_failure(status, &policy_downgrade, StatusCode::CONFLICT);
+    assert_eq!(
+        policy_downgrade["error_code"],
+        "native_resource_contract_required"
+    );
+    changed = body.clone();
+    changed["resource_admission"]["execution"]["action"] = json!("read");
+    let (status, wrong_action) = fixture.post(&changed).await;
+    assert_failure(status, &wrong_action, StatusCode::BAD_REQUEST);
+    changed = body.clone();
+    changed["resource_admission"]["executor_sha256"] = json!("e".repeat(64));
+    let (_, wrong_executor) = fixture.post(&changed).await;
+    assert_eq!(wrong_executor["release"], false);
+    assert_eq!(
+        wrong_executor["reason_codes"],
+        json!(["native_resource_revision_mismatch"])
+    );
+    assert!(!policy.workspace.join("new.txt").exists());
+    let (status, allowed) = fixture.post(&body).await;
+    assert_eq!(status, StatusCode::OK, "{allowed}");
+    assert_eq!(allowed["release"], true);
+}
+
+const HTTPS_NATIVE_URL: &str = "https://fixture.example/document.json?edition=approved";
+const HTTPS_ALLOW: &str =
+    "agent_policies: []\negress_allowlist: [fixture.example]\ndefault: allow\n";
+
+// This fixture only exercises daemon authorization. No resolver, socket or HTTP
+// client runs, and the synthetic approved address is never contacted.
+fn https_get_fixture(firewall_policy: &str) -> (Fixture, agentfw::native::resource::Policy) {
+    let mut fixture = Fixture::new(firewall_policy);
+    let workspace = fixture.dir.path().canonicalize().unwrap();
+    let schema_sha256 =
+        agentfw::native::canonical_digest(&agentfw::native::resource::https_get_schema());
+    let resource_policy = json!({
+        "profile":{"server_id":"https-native-fixture","tool_name":"https_get",
+            "schema_sha256":schema_sha256,"selectors":[{"pointer":"/url","kind":"url"}]},
+        "workspace":workspace,"cwd":workspace,
+        "executor_sha256":agentfw::mcp::https_get::executor_profile_sha256(),
+        "classifier_sha256":"c".repeat(64),
+        "allowed_resources":[url_resource(HTTPS_NATIVE_URL)["resource"]],
+        "network":{"exact_url":HTTPS_NATIVE_URL,"approved_addresses":["93.184.216.34"],
+            "private_endpoint":null,"root_certificate_pem":null}
+    });
+    let policy = serde_json::from_value(resource_policy.clone()).unwrap();
+    let mut configured = registry();
+    configured["tools"].as_array_mut().unwrap().push(json!({
+        "name":"https_get","schema_sha256":schema_sha256,"action_class":"network",
+        "result_provenance":"untrusted",
+        "egress":[{"pointer":"/url","kind":"url_host","optional":false}],
+        "resource_policy":resource_policy
+    }));
+    let bytes = serde_json::to_vec(&configured).unwrap();
+    fixture.registry_sha256 = sha(&bytes);
+    fixture.state = make_state(
+        fixture.dir.path(),
+        Config {
+            enforce: true,
+            ..Config::default()
+        },
+        firewall_policy,
+        &bytes,
+        &fixture.registry_sha256,
+    );
+    (fixture, policy)
+}
+
+fn https_get_call(
+    fixture: &Fixture,
+    policy: &agentfw::native::resource::Policy,
+    session: &str,
+) -> Value {
+    let args = json!({"url":policy.network.as_ref().unwrap().exact_url});
+    let admission = agentfw::native::resource::Admission {
+        server_id: policy.profile.server_id.clone(),
+        host_call_id: json!("original-https-id"),
+        profile_sha256: agentfw::native::canonical_digest(
+            &serde_json::to_value(&policy.profile).unwrap(),
+        ),
+        executor_sha256: policy.executor_sha256.clone(),
+        classifier_sha256: policy.classifier_sha256.clone(),
+        snapshot_sha256: "d".repeat(64),
+        definition_sha256: "f".repeat(64),
+        input_sha256: "a".repeat(64),
+        resources: vec![agentfw::mcp::resources::ResourceEvidence {
+            pointer: "/url".into(),
+            source: agentfw::mcp::resources::EvidenceSource::Argument,
+            resource: policy.allowed_resources[0].clone(),
+        }],
+        execution: None,
+        network: Some(agentfw::native::resource::https_get_binding(policy, &args).unwrap()),
+        windows_read: None,
+    };
+    let mut body = fixture.event(session, "call");
+    body["contract_version"] = json!(agentfw::native::resource::NETWORK_CONTRACT);
+    body["tool"] = json!("https_get");
+    body["args"] = args;
+    body["schema_sha256"] = json!(policy.profile.schema_sha256);
+    body["resource_admission"] = serde_json::to_value(admission).unwrap();
+    body
+}
+
+fn https_get_result(
+    fixture: &Fixture,
+    request: &Value,
+    admitted: &Value,
+    host_id: &Value,
+    kind: &str,
+    text: &str,
+) -> Value {
+    let content = json!({"jsonrpc":"2.0","id":host_id,
+        "result":{"isError":kind == "error","content":[{"type":"text","text":text}]}})
+    .to_string();
+    let mut body = fixture.result(
+        request["session_id"].as_str().unwrap(),
+        admitted,
+        "https_get",
+        &request["args"],
+        kind,
+        &content,
+    );
+    body["contract_version"] = json!(agentfw::native::resource::NETWORK_CONTRACT);
+    body["delivery"] = json!("mcp_host");
+    body
+}
+
+#[tokio::test]
+async fn https_get_v3_native_binds_original_host_session_and_exact_resources() {
+    let (fixture, policy) = https_get_fixture(HTTPS_ALLOW);
+    fixture.start("https-one").await;
+    fixture.start("https-two").await;
+    let request = https_get_call(&fixture, &policy, "https-one");
+    let (status, first) = fixture.post(&request).await;
+    assert_eq!(status, StatusCode::OK, "{first}");
+    assert_eq!(
+        first["contract_version"],
+        agentfw::native::resource::NETWORK_CONTRACT
+    );
+    assert_eq!(first["release"], true, "{first}");
+    assert_eq!(
+        first["resources_sha256"],
+        agentfw::native::canonical_digest(&request["resource_admission"]["resources"])
+    );
+    assert!(first["binding_sha256"]
+        .as_str()
+        .is_some_and(agentfw::native::is_digest));
+
+    let mut other = request.clone();
+    other["resource_admission"]["host_call_id"] = json!(57);
+    let (_, second) = fixture.post(&other).await;
+    assert_eq!(second["release"], true, "{second}");
+    assert_ne!(first["binding_sha256"], second["binding_sha256"]);
+    other = request.clone();
+    other["session_id"] = json!("https-two");
+    let (_, third) = fixture.post(&other).await;
+    assert_eq!(third["release"], true, "{third}");
+    assert_ne!(first["binding_sha256"], third["binding_sha256"]);
+
+    let mut result = https_get_result(
+        &fixture,
+        &request,
+        &first,
+        &json!("original-https-id"),
+        "value",
+        "{\"inventory\":7}",
+    );
+    result["session_id"] = json!("https-two");
+    let (status, refused) = fixture.post(&result).await;
+    assert_failure(status, &refused, StatusCode::CONFLICT);
+    assert_eq!(refused["error_code"], "native_call_unknown_or_spent");
+    result["session_id"] = json!("https-one");
+    let (status, released) = fixture.post(&result).await;
+    assert_eq!(status, StatusCode::OK, "{released}");
+    assert_eq!(released["release"], true);
+    assert_eq!(released["binding_sha256"], first["binding_sha256"]);
+    assert_eq!(
+        released["content_sha256"],
+        sha(result["content"].as_str().unwrap().as_bytes())
+    );
+    let (status, replay) = fixture.post(&result).await;
+    assert_failure(status, &replay, StatusCode::CONFLICT);
+    assert_eq!(replay["error_code"], "native_call_unknown_or_spent");
+}
+
+#[tokio::test]
+async fn https_get_v3_native_refuses_url_host_port_query_and_argument_substitution() {
+    let (fixture, policy) = https_get_fixture(HTTPS_ALLOW);
+    fixture.start("https-url-refusals").await;
+    let request = https_get_call(&fixture, &policy, "https-url-refusals");
+    for url in [
+        "https://other.example/document.json?edition=approved",
+        "https://fixture.example:444/document.json?edition=approved",
+        "https://fixture.example/other.json?edition=approved",
+        "https://fixture.example/document.json?edition=replacement",
+        "https://fixture.example/document.json",
+        "https://fixture.example/document.json?edition=approved#fragment",
+        "http://fixture.example/document.json?edition=approved",
+    ] {
+        let mut changed = request.clone();
+        changed["args"]["url"] = json!(url);
+        let (status, refused) = fixture.post(&changed).await;
+        assert_eq!(status, StatusCode::OK, "{url}: {refused}");
+        assert_eq!(refused["release"], false, "{url}: {refused}");
+        assert_eq!(
+            refused["reason_codes"],
+            json!(["native_https_url_not_allowed"])
+        );
+        assert!(refused["call_id"].is_null());
+    }
+    for extra in ["headers", "body", "method", "credentials"] {
+        let mut changed = request.clone();
+        changed["args"][extra] = json!("unreviewed");
+        let (status, refused) = fixture.post(&changed).await;
+        assert_eq!(status, StatusCode::OK, "{extra}: {refused}");
+        assert_eq!(refused["release"], false);
+        assert!(refused["call_id"].is_null());
+    }
+    let (_, continued) = fixture.post(&request).await;
+    assert_eq!(continued["release"], true, "{continued}");
+}
+
+#[tokio::test]
+async fn https_get_v3_native_refuses_recomputed_address_and_policy_authority() {
+    let (fixture, policy) = https_get_fixture(HTTPS_ALLOW);
+    fixture.start("https-authority-refusals").await;
+    let request = https_get_call(&fixture, &policy, "https-authority-refusals");
+    let args = &request["args"];
+    let mut changed_address = serde_json::to_value(&policy).unwrap();
+    changed_address["network"]["approved_addresses"] = json!(["93.184.216.35"]);
+    let changed_address: agentfw::native::resource::Policy =
+        serde_json::from_value(changed_address).unwrap();
+    let mut changed_policy = policy.clone();
+    changed_policy.classifier_sha256 = "b".repeat(64);
+    let mut changed_trust = policy.clone();
+    // A parseable owned certificate is enough for a no-network authority test;
+    // the executor's handshake tests establish CA/hostname/expiry behavior.
+    changed_trust.network.as_mut().unwrap().root_certificate_pem =
+        Some(include_str!("../../proxy/tests/fixtures/saml/local-idp-cert.pem").to_owned());
+    let mut changed_private = serde_json::to_value(&changed_trust).unwrap();
+    changed_private["network"]["approved_addresses"] = json!(["127.0.0.1"]);
+    changed_private["network"]["private_endpoint"] = json!({
+        "host":"fixture.example","port":443,"address":"127.0.0.1"});
+    let changed_private: agentfw::native::resource::Policy =
+        serde_json::from_value(changed_private).unwrap();
+    for changed in [
+        &changed_address,
+        &changed_policy,
+        &changed_trust,
+        &changed_private,
+    ] {
+        let mut forged = request.clone();
+        forged["resource_admission"]["network"] = serde_json::to_value(
+            agentfw::native::resource::https_get_binding(changed, args).unwrap(),
+        )
+        .unwrap();
+        assert_ne!(
+            forged["resource_admission"]["network"],
+            request["resource_admission"]["network"]
+        );
+        let (status, refused) = fixture.post(&forged).await;
+        assert_eq!(status, StatusCode::OK, "{refused}");
+        assert_eq!(refused["release"], false);
+        assert_eq!(
+            refused["reason_codes"],
+            json!(["native_https_binding_mismatch"])
+        );
+        assert!(refused["call_id"].is_null());
+    }
+    for field in ["policy_sha256", "args_sha256", "authority_sha256"] {
+        let mut changed = request.clone();
+        changed["resource_admission"]["network"][field] = json!("b".repeat(64));
+        let (_, refused) = fixture.post(&changed).await;
+        assert_eq!(
+            refused["reason_codes"],
+            json!(["native_https_binding_mismatch"]),
+            "{field}: {refused}"
+        );
+        assert!(refused["call_id"].is_null());
+    }
+}
+
+#[tokio::test]
+async fn https_get_v3_native_refuses_contract_downgrade_and_unknown_network_semantics() {
+    let (fixture, policy) = https_get_fixture(HTTPS_ALLOW);
+    fixture.start("https-downshift").await;
+    let request = https_get_call(&fixture, &policy, "https-downshift");
+    for contract in [
+        agentfw::native::resource::CONTRACT,
+        agentfw::native::resource::CREATE_CONTRACT,
+    ] {
+        let mut changed = request.clone();
+        changed["contract_version"] = json!(contract);
+        let (status, refused) = fixture.post(&changed).await;
+        assert_failure(status, &refused, StatusCode::BAD_REQUEST);
+        assert_eq!(refused["error_code"], "native_resource_contract_mismatch");
+    }
+    let mut changed = request.clone();
+    changed["contract_version"] = json!(agentfw::native::resource::CONTRACT);
+    changed["resource_admission"]
+        .as_object_mut()
+        .unwrap()
+        .remove("network");
+    let (status, refused) = fixture.post(&changed).await;
+    assert_failure(status, &refused, StatusCode::CONFLICT);
+    assert_eq!(refused["error_code"], "native_resource_contract_required");
+    changed = request.clone();
+    changed["contract_version"] = json!(CONTRACT);
+    changed
+        .as_object_mut()
+        .unwrap()
+        .remove("resource_admission");
+    let (status, refused) = fixture.post(&changed).await;
+    assert_failure(status, &refused, StatusCode::CONFLICT);
+    assert_eq!(refused["error_code"], "native_resource_contract_required");
+    for (field, value) in [
+        ("operation", "post"),
+        ("action", "read"),
+        ("executor_profile", "unreviewed"),
+    ] {
+        let mut changed = request.clone();
+        changed["resource_admission"]["network"][field] = json!(value);
+        let (status, refused) = fixture.post(&changed).await;
+        assert_failure(status, &refused, StatusCode::BAD_REQUEST);
+        assert_eq!(refused["error_code"], "native_resource_invalid");
+    }
+    let (_, allowed) = fixture.post(&request).await;
+    assert_eq!(allowed["release"], true, "{allowed}");
+}
+
+#[tokio::test]
+async fn https_get_v3_native_requires_explicit_egress_even_with_default_allow() {
+    let (fixture, policy) = https_get_fixture(ALLOW);
+    fixture.start("https-no-egress").await;
+    let request = https_get_call(&fixture, &policy, "https-no-egress");
+    let (status, refused) = fixture.post(&request).await;
+    assert_eq!(status, StatusCode::OK, "{refused}");
+    assert_eq!(refused["verdict"], "deny");
+    assert_eq!(refused["release"], false);
+    assert_eq!(
+        refused["reason_codes"],
+        json!(["native_https_egress_not_allowlisted"])
+    );
+    assert!(refused["call_id"].is_null());
+}
+
+#[tokio::test]
+async fn https_get_v3_native_result_wrong_host_or_contract_spends_the_call() {
+    let (fixture, policy) = https_get_fixture(HTTPS_ALLOW);
+    fixture.start("https-result-id").await;
+    let request = https_get_call(&fixture, &policy, "https-result-id");
+    for mismatch in ["host", "contract", "args"] {
+        let (_, call) = fixture.post(&request).await;
+        assert_eq!(call["release"], true, "{call}");
+        let mut result = https_get_result(
+            &fixture,
+            &request,
+            &call,
+            &json!("original-https-id"),
+            "value",
+            "Useful owned document.",
+        );
+        match mismatch {
+            "host" => {
+                result["content"] = json!(json!({"jsonrpc":"2.0","id":"substitute",
+                "result":{"content":[{"type":"text","text":"Useful owned document."}]}})
+                .to_string())
+            }
+            "contract" => result["contract_version"] = json!(agentfw::native::resource::CONTRACT),
+            _ => result["args"]["url"] = json!("https://fixture.example/substitute"),
+        }
+        let (status, refused) = fixture.post(&result).await;
+        assert_failure(status, &refused, StatusCode::CONFLICT);
+        assert_eq!(
+            refused["error_code"],
+            if mismatch == "host" {
+                "native_host_call_mismatch"
+            } else {
+                "native_call_binding_mismatch"
+            }
+        );
+        let corrected = https_get_result(
+            &fixture,
+            &request,
+            &call,
+            &json!("original-https-id"),
+            "value",
+            "Useful owned document.",
+        );
+        let (status, replay) = fixture.post(&corrected).await;
+        assert_failure(status, &replay, StatusCode::CONFLICT);
+        assert_eq!(replay["error_code"], "native_call_unknown_or_spent");
+    }
+}
+
+#[tokio::test]
+async fn https_get_v3_native_repeated_refusals_and_errors_preserve_call_capacity() {
+    let (fixture, policy) = https_get_fixture(HTTPS_ALLOW);
+    fixture.start("https-capacity").await;
+    let request = https_get_call(&fixture, &policy, "https-capacity");
+    let mut refused_request = request.clone();
+    refused_request["resource_admission"]["network"]["authority_sha256"] = json!("b".repeat(64));
+    for _ in 0..70 {
+        let (_, refused) = fixture.post(&refused_request).await;
+        assert_eq!(refused["release"], false);
+        assert!(refused["call_id"].is_null());
+        let (_, call) = fixture.post(&request).await;
+        assert_eq!(call["release"], true, "{call}");
+        let result = https_get_result(
+            &fixture,
+            &request,
+            &call,
+            &json!("original-https-id"),
+            "error",
+            "https_get_timeout",
+        );
+        let (status, completed) = fixture.post(&result).await;
+        assert_eq!(status, StatusCode::OK, "{completed}");
+        assert_eq!(completed["release"], true);
+    }
+    let (_, call) = fixture.post(&request).await;
+    let result = https_get_result(
+        &fixture,
+        &request,
+        &call,
+        &json!("original-https-id"),
+        "value",
+        "{\"inventory\":7}",
+    );
+    let (_, continued) = fixture.post(&result).await;
+    assert_eq!(continued["release"], true, "{continued}");
+    let (status, ended) = fixture
+        .post(&fixture.event("https-capacity", "session_end"))
+        .await;
+    assert_allow(status, &ended);
+    fixture.start("https-capacity").await;
+    let (_, restarted) = fixture.post(&request).await;
+    assert_eq!(restarted["release"], true);
+    assert_ne!(call["binding_sha256"], restarted["binding_sha256"]);
+    let (status, stale) = fixture.post(&result).await;
+    assert_failure(status, &stale, StatusCode::CONFLICT);
+    assert_eq!(stale["error_code"], "native_call_unknown_or_spent");
+}
+
+#[tokio::test]
+async fn https_get_v3_native_inspects_the_actual_untrusted_result_before_release() {
+    let policy_text = "agent_policies:\n  - name: fixture-https-injection\n    when: { detector: injection, facet: tool_result }\n    action: ask\negress_allowlist: [fixture.example]\ndefault: allow\n";
+    let (fixture, policy) = https_get_fixture(policy_text);
+    fixture.start("https-result-inspection").await;
+    let request = https_get_call(&fixture, &policy, "https-result-inspection");
+    let (_, call) = fixture.post(&request).await;
+    assert_eq!(call["release"], true, "{call}");
+    let result = https_get_result(
+        &fixture,
+        &request,
+        &call,
+        &json!("original-https-id"),
+        "value",
+        INJECTION,
+    );
+    let (status, held) = fixture.post(&result).await;
+    assert_eq!(status, StatusCode::OK, "{held}");
+    assert_eq!(held["verdict"], "ask");
+    assert_eq!(held["release"], false);
+    assert_eq!(
+        held["content_sha256"],
+        sha(result["content"].as_str().unwrap().as_bytes())
+    );
+    let (status, replay) = fixture.post(&result).await;
+    assert_failure(status, &replay, StatusCode::CONFLICT);
+    assert_eq!(replay["error_code"], "native_call_unknown_or_spent");
+    let (_, next) = fixture.post(&request).await;
+    assert_eq!(next["release"], true, "{next}");
+    let useful = https_get_result(
+        &fixture,
+        &request,
+        &next,
+        &json!("original-https-id"),
+        "value",
+        "Inventory contains seven red widgets.",
+    );
+    let (status, released) = fixture.post(&useful).await;
+    assert_eq!(status, StatusCode::OK, "{released}");
+    assert_eq!(released["release"], true);
+}
+
+#[test]
+fn https_get_v3_native_registry_requires_the_closed_reviewed_profile() {
+    let (_fixture, policy) = https_get_fixture(HTTPS_ALLOW);
+    let tool = json!({
+        "name":"https_get","schema_sha256":policy.profile.schema_sha256,
+        "action_class":"network","result_provenance":"untrusted",
+        "egress":[{"pointer":"/url","kind":"url_host","optional":false}],
+        "resource_policy":policy
+    });
+    for (pointer, value) in [
+        ("/action_class", json!("read_only")),
+        ("/result_provenance", json!("local_project")),
+        ("/schema_sha256", json!("b".repeat(64))),
+        ("/name", json!("generic_fetch")),
+        ("/egress", json!([])),
+        ("/egress/0/optional", json!(true)),
+        ("/egress/0/kind", json!("email_domain")),
+        ("/egress/0/pointer", json!("/other_url")),
+        (
+            "/resource_policy/profile/selectors/0/aliases",
+            json!(["/other_url"]),
+        ),
+        ("/resource_policy/profile/selectors/0/optional", json!(true)),
+        (
+            "/resource_policy/profile/selectors/0/default",
+            json!(HTTPS_NATIVE_URL),
+        ),
+        ("/resource_policy/profile/selectors/0/kind", json!("domain")),
+        (
+            "/resource_policy/profile/selectors/0/pointer",
+            json!("/other_url"),
+        ),
+        (
+            "/resource_policy/profile/selectors/0/allow_missing_leaf",
+            json!(true),
+        ),
+        ("/resource_policy/executor_sha256", json!("b".repeat(64))),
+        (
+            "/resource_policy/network/approved_addresses",
+            json!(["127.0.0.1"]),
+        ),
+        (
+            "/resource_policy/allowed_resources/0/canonical",
+            json!("https://fixture.example/substitute"),
+        ),
+        ("/resource_policy/allowed_resources/0/port", json!(444)),
+        (
+            "/resource_policy/allowed_resources/0/host",
+            json!("substitute.example"),
+        ),
+        (
+            "/resource_policy/execution",
+            json!({"operation":"create_file","action":"write",
+            "max_content_bytes":agentfw::native::resource::CREATE_FILE_MAX_CONTENT,
+            "executor_profile":agentfw::native::resource::CREATE_FILE_EXECUTOR_PROFILE}),
+        ),
+    ] {
+        let mut changed = tool.clone();
+        // Some closed default fields are omitted from serialized policies. Add
+        // them to the owned object rather than relying on pointer creation.
+        if let Some(target) = changed.pointer_mut(pointer) {
+            *target = value;
+        } else {
+            let (parent, key) = pointer.rsplit_once('/').unwrap();
+            changed
+                .pointer_mut(parent)
+                .unwrap()
+                .as_object_mut()
+                .unwrap()
+                .insert(key.to_owned(), value);
+        }
+        let bytes = serde_json::to_vec(&json!({"contract_version":CONTRACT,
+            "registry_id":"https-closed-profile","tools":[changed]}))
+        .unwrap();
+        assert!(
+            NativeState::from_bytes(&bytes, &sha(&bytes), NATIVE_TOKEN.into()).is_err(),
+            "accepted unreviewed startup authority at {pointer}"
+        );
+    }
+    let mut unknown = tool;
+    unknown["resource_policy"]["network"]["allow_all_private_addresses"] = json!(true);
+    let bytes = serde_json::to_vec(&json!({"contract_version":CONTRACT,
+        "registry_id":"https-no-unsafe-switch","tools":[unknown]}))
+    .unwrap();
+    assert!(NativeState::from_bytes(&bytes, &sha(&bytes), NATIVE_TOKEN.into()).is_err());
+}
+
+#[tokio::test]
+async fn https_get_v3_native_rechecks_registry_schema_revisions_and_resource_evidence() {
+    let (fixture, policy) = https_get_fixture(HTTPS_ALLOW);
+    fixture.start("https-evidence").await;
+    let request = https_get_call(&fixture, &policy, "https-evidence");
+    for (field, value) in [
+        ("server_id", json!("different-operator-server")),
+        ("profile_sha256", json!("b".repeat(64))),
+        ("executor_sha256", json!("b".repeat(64))),
+        ("classifier_sha256", json!("b".repeat(64))),
+    ] {
+        let mut changed = request.clone();
+        changed["resource_admission"][field] = value;
+        let (status, refused) = fixture.post(&changed).await;
+        assert_eq!(status, StatusCode::OK, "{field}: {refused}");
+        assert_eq!(
+            refused["reason_codes"],
+            json!(["native_resource_revision_mismatch"])
+        );
+        assert_eq!(refused["release"], false);
+        assert!(refused["call_id"].is_null());
+    }
+    for (field, error) in [
+        ("registry_sha256", "native_registry_mismatch"),
+        ("schema_sha256", "native_schema_mismatch"),
+    ] {
+        let mut changed = request.clone();
+        changed[field] = json!("b".repeat(64));
+        let (status, refused) = fixture.post(&changed).await;
+        assert_failure(status, &refused, StatusCode::CONFLICT);
+        assert_eq!(refused["error_code"], error);
+    }
+    for (pointer, value) in [
+        (
+            "/resource_admission/resources/0/pointer",
+            json!("/other_url"),
+        ),
+        (
+            "/resource_admission/resources/0/source",
+            json!("reviewed_default"),
+        ),
+        (
+            "/resource_admission/resources/0/resource/host",
+            json!("different.example"),
+        ),
+        ("/resource_admission/resources/0/resource/port", json!(444)),
+        (
+            "/resource_admission/resources/0/resource/canonical",
+            json!("https://fixture.example/document.json?edition=substitute"),
+        ),
+    ] {
+        let mut changed = request.clone();
+        *changed.pointer_mut(pointer).unwrap() = value;
+        let (status, refused) = fixture.post(&changed).await;
+        assert_eq!(status, StatusCode::OK, "{pointer}: {refused}");
+        assert_eq!(
+            refused["reason_codes"],
+            json!(["native_resource_argument_mismatch"])
+        );
+        assert_eq!(refused["release"], false);
+        assert!(refused["call_id"].is_null());
+    }
+    let (_, original) = fixture.post(&request).await;
+    assert_eq!(original["release"], true, "{original}");
+    // A trusted collector's discovery/classification identities are evidence;
+    // all three must affect the reservation binding without becoming grants.
+    for field in ["snapshot_sha256", "definition_sha256", "input_sha256"] {
+        let mut changed = request.clone();
+        changed["resource_admission"][field] = json!("b".repeat(64));
+        let (_, admitted) = fixture.post(&changed).await;
+        assert_eq!(admitted["release"], true, "{field}: {admitted}");
+        assert_ne!(original["binding_sha256"], admitted["binding_sha256"]);
+    }
 }

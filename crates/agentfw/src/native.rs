@@ -18,6 +18,7 @@ use soup_wall_agent::{ActionClass, AgentEvent, EventKind, Outcome, Provenance, T
 use crate::config::NativeCfg;
 use crate::handlers::Shared;
 
+pub mod approval;
 pub mod resource;
 
 pub const CONTRACT: &str = "sw-native/1";
@@ -130,7 +131,8 @@ fn binding(
         h.update(field.as_bytes());
     }
     if let Some(admission) = admission {
-        h.update(b"sw-native/resources/1\0");
+        h.update(admission.contract().as_bytes());
+        h.update(b"\0");
         let context =
             canonical(&serde_json::to_value(admission).expect("context serializes")).to_string();
         h.update((context.len() as u64).to_be_bytes());
@@ -228,6 +230,7 @@ pub struct NativeState {
     pub registry_sha256: String,
     pub token: String,
     sessions: Mutex<Sessions>,
+    pub(crate) approval: Option<approval::ApprovalState>,
 }
 
 impl NativeState {
@@ -269,7 +272,19 @@ impl NativeState {
             registry_sha256: expected.into(),
             token,
             sessions: Mutex::default(),
+            approval: None,
         })
+    }
+
+    /// Enable the opt-in pending-approval lifecycle (SOU-48). Absent = refusal.
+    pub fn with_approval(
+        mut self,
+        home: &std::path::Path,
+        grant_key: &[u8],
+        ttl_seconds: u64,
+    ) -> anyhow::Result<Self> {
+        self.approval = Some(approval::ApprovalState::new(home, grant_key, ttl_seconds)?);
+        Ok(self)
     }
 
     pub fn load(config: &NativeCfg, token: String) -> anyhow::Result<Self> {
@@ -315,6 +330,7 @@ struct Request {
     result_kind: Option<String>,
     delivery: Option<String>,
     resource_admission: Option<resource::Admission>,
+    approval_id: Option<String>,
 }
 
 fn parse(body: &str) -> Result<Request, &'static str> {
@@ -335,7 +351,17 @@ fn parse(body: &str) -> Result<Request, &'static str> {
         "session_start" | "session_end" => {}
         "call" => {
             keys.extend(["tool", "args", "schema_sha256"]);
-            if request.contract_version == resource::CONTRACT {
+            if object.contains_key("approval_id") {
+                keys.insert("approval_id");
+            }
+            if matches!(
+                request.contract_version.as_str(),
+                resource::CONTRACT
+                    | resource::CREATE_CONTRACT
+                    | resource::NETWORK_CONTRACT
+                    | resource::WINDOWS_READ_CONTRACT
+                    | resource::WINDOWS_CREATE_CONTRACT
+            ) {
                 keys.insert("resource_admission");
             }
         }
@@ -356,21 +382,52 @@ fn parse(body: &str) -> Result<Request, &'static str> {
     if !identifier(&request.session_id)
         || !matches!(
             request.contract_version.as_str(),
-            CONTRACT | resource::CONTRACT
+            CONTRACT
+                | resource::CONTRACT
+                | resource::CREATE_CONTRACT
+                | resource::NETWORK_CONTRACT
+                | resource::WINDOWS_READ_CONTRACT
+                | resource::WINDOWS_CREATE_CONTRACT
         )
         || (matches!(event, "session_start" | "session_end")
             && request.contract_version != CONTRACT)
     {
         return Err("native_invalid_identity");
     }
-    if event == "call" && request.contract_version == resource::CONTRACT {
-        request
+    if request.contract_version == resource::WINDOWS_READ_CONTRACT && !cfg!(windows) {
+        return Err("native_windows_read_platform_unsupported");
+    }
+    if request.contract_version == resource::WINDOWS_CREATE_CONTRACT && !cfg!(windows) {
+        return Err("native_windows_create_platform_unsupported");
+    }
+    if event == "call"
+        && matches!(
+            request.contract_version.as_str(),
+            resource::CONTRACT
+                | resource::CREATE_CONTRACT
+                | resource::NETWORK_CONTRACT
+                | resource::WINDOWS_READ_CONTRACT
+                | resource::WINDOWS_CREATE_CONTRACT
+        )
+    {
+        let admission = request
             .resource_admission
             .as_ref()
-            .ok_or("native_resource_context_missing")?
-            .validate_shape()?;
+            .ok_or("native_resource_context_missing")?;
+        admission.validate_shape()?;
+        if admission.contract() != request.contract_version {
+            return Err("native_resource_contract_mismatch");
+        }
     } else if request.resource_admission.is_some() {
         return Err("native_invalid_fields");
+    }
+    if let Some(id) = &request.approval_id {
+        if !identifier(id)
+            || request.contract_version != CONTRACT
+            || request.resource_admission.is_some()
+        {
+            return Err("native_invalid_fields");
+        }
     }
     if let Some(args) = &request.args {
         if !args.is_object() || args.to_string().len() > MAX_CONTENT {
@@ -638,6 +695,9 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         .collect();
     for id in expired {
         if let Some(old) = state.entries.remove(&id) {
+            if let Some(approval) = &native.approval {
+                approval.close_session(&id, "session_expired");
+            }
             firewall.inspect(&event(&old.epoch, old.seq + 1, EventKind::SessionEnd));
             st.spans.end_session(&old.epoch);
         }
@@ -646,10 +706,13 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         session.calls.retain(|_, call| call.expires > now);
     }
     let mut response = Response {
-        contract_version: if request.contract_version == resource::CONTRACT {
-            resource::CONTRACT
-        } else {
-            CONTRACT
+        contract_version: match request.contract_version.as_str() {
+            resource::CONTRACT => resource::CONTRACT,
+            resource::CREATE_CONTRACT => resource::CREATE_CONTRACT,
+            resource::NETWORK_CONTRACT => resource::NETWORK_CONTRACT,
+            resource::WINDOWS_READ_CONTRACT => resource::WINDOWS_READ_CONTRACT,
+            resource::WINDOWS_CREATE_CONTRACT => resource::WINDOWS_CREATE_CONTRACT,
+            _ => CONTRACT,
         },
         registry_sha256: native.registry_sha256.clone(),
         session_id: request.session_id.clone(),
@@ -696,6 +759,9 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             .entries
             .remove(&request.session_id)
             .ok_or("native_session_unknown")?;
+        if let Some(approval) = &native.approval {
+            approval.close_session(&request.session_id, "session_ended");
+        }
         firewall.inspect(&event(
             &session.epoch,
             session.seq + 1,
@@ -733,6 +799,9 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             return Err("native_schema_mismatch");
         }
         if let Some(policy) = &tool.resource_policy {
+            if request.contract_version != policy.contract() {
+                return Err("native_resource_contract_required");
+            }
             let Some(admission) = &request.resource_admission else {
                 return Err("native_resource_contract_required");
             };
@@ -773,6 +842,18 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         response.verdict = verdict_label(verdict);
         response.release = verdict == Verdict::Allow;
         response.reason_codes = outcome.rule.iter().cloned().collect();
+        if tool
+            .resource_policy
+            .as_ref()
+            .is_some_and(|policy| policy.is_https_get())
+            && !firewall.egress_hosts_allowlisted(&hosts)
+        {
+            response.verdict = "deny";
+            response.release = false;
+            response
+                .reason_codes
+                .push("native_https_egress_not_allowlisted".into());
+        }
         let bound = binding(
             &native.registry_sha256,
             &session.epoch,
@@ -781,6 +862,35 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             args,
             request.resource_admission.as_ref(),
         );
+        if let Some(approval_id) = &request.approval_id {
+            // Exact single-use operator approval, rechecked against the policy
+            // verdict computed just now. A hard Deny can never be rescued.
+            let approval = native.approval.as_ref().ok_or("native_approval_disabled")?;
+            match approval.redeem(
+                approval_id,
+                &request.session_id,
+                &session.epoch,
+                name,
+                &tool.schema_sha256,
+                &bound,
+                verdict,
+            ) {
+                Ok(()) => {
+                    response.verdict = "allow";
+                    response.release = true;
+                    response
+                        .reason_codes
+                        .push(format!("native_approval_redeemed:{approval_id}"));
+                }
+                Err(code) => {
+                    response.release = false;
+                    if verdict != Verdict::Deny {
+                        response.verdict = "ask";
+                    }
+                    response.reason_codes.push(code.into());
+                }
+            }
+        }
         if response.release {
             response.binding_sha256 = Some(bound.clone());
             response.call_id = Some(crate::token::generate());

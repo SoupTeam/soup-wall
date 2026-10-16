@@ -1,0 +1,90 @@
+name: Encrypted Console recovery
+
+on:
+  pull_request:
+    paths:
+      - 'crates/proxy/**'
+      - 'crates/agent/**'
+      - 'crates/agentfw/**'
+      - 'scripts/console*recovery*'
+      - 'scripts/fixtures/console_recovery_inventory_v1.json'
+      - 'scripts/tests/test_console_recovery*'
+      - 'scripts/alert_receiver.py'
+      - 'scripts/keycloak-oidc-acceptance.py'
+      - 'scripts/keycloak-saml-acceptance.py'
+      - '.github/workflows/console-recovery.yml'
+      - 'Cargo.lock'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: console-recovery-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  owned-recovery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/recovery-build
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install established recovery tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y age postgresql-client-16
+          python3 -m venv "$RUNNER_TEMP/recovery-python"
+          "$RUNNER_TEMP/recovery-python/bin/python" -m pip install cryptography==50.0.2
+      - name: Private PostgreSQL fixture certificate ownership
+        run: |
+          docker pull --platform linux/amd64 postgres@sha256:ec9f656f17c8b4dfebf49e58cf5c46d493d4846d4ea6d8b85d0637f68ee33bfc
+          SOUP_TEST_PRIVATE_POSTGRES_TLS=1 python3 -m unittest discover -s scripts/tests -p 'test_keycloak_oidc_acceptance.py' -v
+      - name: Build Console, Agent and explicit fixtures
+        id: binaries
+        run: |
+          cargo build --locked -p llm-firewall --bin llm-firewall --example console-recovery-fixture -p agentfw --bin agentfw
+          cargo test --locked -p llm-firewall --example console-recovery-fixture
+          cargo test --locked -p llm-firewall --lib --no-run --message-format=json > "$RUNNER_TEMP/recovery-build.jsonl"
+          python3 - <<'PYCODE'
+          import json, os
+          from pathlib import Path
+          binaries = [m['executable'] for line in Path(os.environ['RUNNER_TEMP'], 'recovery-build.jsonl').read_text().splitlines()
+                      if (m := json.loads(line)).get('reason') == 'compiler-artifact'
+                      and m.get('executable') and m.get('profile', {}).get('test')]
+          assert len(binaries) == 1
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              print('outbox=' + binaries[0], file=output)
+          PYCODE
+      - name: Recovery regressions
+        run: python3 -m unittest discover -s scripts/tests -p 'test_console_recovery*.py' -v
+      - name: Restore SQLite and deliver a new signed policy
+        run: |
+          "$RUNNER_TEMP/recovery-python/bin/python" scripts/console-recovery-acceptance.py --run --backend sqlite \
+            --output "$RUNNER_TEMP/recovery-sqlite.json" \
+            --console-binary "$CARGO_TARGET_DIR/debug/llm-firewall" \
+            --agent-binary "$CARGO_TARGET_DIR/debug/agentfw" \
+            --fixture-helper "$CARGO_TARGET_DIR/debug/examples/console-recovery-fixture" \
+            --webhook-driver "$PWD/scripts/console-recovery-webhook-fixture.py" \
+            --outbox-test-binary '${{ steps.binaries.outputs.outbox }}'
+      - name: Restore PostgreSQL and deliver a new signed policy
+        run: |
+          PATH="/usr/lib/postgresql/16/bin:$PATH" "$RUNNER_TEMP/recovery-python/bin/python" scripts/console-recovery-acceptance.py --run --backend postgres \
+            --output "$RUNNER_TEMP/recovery-postgres.json" \
+            --console-binary "$CARGO_TARGET_DIR/debug/llm-firewall" \
+            --agent-binary "$CARGO_TARGET_DIR/debug/agentfw" \
+            --fixture-helper "$CARGO_TARGET_DIR/debug/examples/console-recovery-fixture" \
+            --webhook-driver "$PWD/scripts/console-recovery-webhook-fixture.py" \
+            --outbox-test-binary '${{ steps.binaries.outputs.outbox }}'
+      - name: Retain sanitized outcomes only
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: console-recovery-outcomes
+          path: ${{ runner.temp }}/recovery-*.json
+          if-no-files-found: warn
+          retention-days: 30

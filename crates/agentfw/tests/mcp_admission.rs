@@ -237,11 +237,17 @@ struct DaemonFaults {
     stall_call_admission: AtomicBool,
     call_requests_started: AtomicUsize,
     release_stalled_calls: Notify,
+    stall_result_admission: AtomicBool,
+    result_requests_started: AtomicUsize,
+    release_stalled_results: Notify,
+    stalled_result_content: Mutex<Option<String>>,
     tamper_resources_sha: AtomicBool,
+    #[cfg(unix)]
+    replace_admitted_read_with_fifo: Mutex<Option<std::path::PathBuf>>,
 }
 
-/// Keep the real daemon for session, manifest and result checks. Only call
-/// admission is suspended, so cleanup cannot add a second HTTP timeout.
+/// Keep the real daemon for session and manifest checks. Selected call/result
+/// admission can be suspended; session cleanup never waits on those barriers.
 async fn delay_call_admission(
     State(faults): State<Arc<DaemonFaults>>,
     request: Request,
@@ -260,7 +266,44 @@ async fn delay_call_admission(
         faults.call_requests_started.fetch_add(1, Ordering::SeqCst);
         faults.release_stalled_calls.notified().await;
     }
+    if faults.stall_result_admission.load(Ordering::SeqCst) && value["event"] == "result" {
+        *faults.stalled_result_content.lock().unwrap() =
+            value["content"].as_str().map(str::to_owned);
+        faults
+            .result_requests_started
+            .fetch_add(1, Ordering::SeqCst);
+        faults.release_stalled_results.notified().await;
+    }
     let res = next.run(request).await;
+    #[cfg(unix)]
+    let res = {
+        let swap = if value["event"] == "call" {
+            faults
+                .replace_admitted_read_with_fifo
+                .lock()
+                .unwrap()
+                .take()
+        } else {
+            None
+        };
+        if let Some(target) = swap {
+            use std::os::unix::ffi::OsStrExt;
+            let (parts, body) = res.into_parts();
+            let bytes = axum::body::to_bytes(body, agentfw::native::MAX_BODY)
+                .await
+                .expect("bounded real native receipt");
+            let receipt: Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(receipt["release"], true, "swap only after authentic Allow");
+            assert_eq!(value["args"]["path"], target.to_str().unwrap());
+            std::fs::remove_file(&target).unwrap();
+            let path = std::ffi::CString::new(target.as_os_str().as_bytes()).unwrap();
+            // SAFETY: NUL-terminated owned temporary leaf; no outside path.
+            assert_eq!(unsafe { libc::mkfifo(path.as_ptr(), 0o600) }, 0);
+            Response::from_parts(parts, Body::from(bytes))
+        } else {
+            res
+        }
+    };
     if faults.tamper_resources_sha.load(Ordering::SeqCst) && value["event"] == "call" {
         let (parts, body) = res.into_parts();
         let bytes = axum::body::to_bytes(body, agentfw::native::MAX_BODY)
@@ -275,11 +318,22 @@ async fn delay_call_admission(
     }
 }
 
-fn fixture_state(home: &Path, port: u16, enforce: bool) -> Arc<AppState> {
+fn fixture_state(
+    home: &Path,
+    port: u16,
+    enforce: bool,
+    approval_ttl: Option<u64>,
+) -> Arc<AppState> {
     let bytes = std::fs::read(home.parent().unwrap().join("registry.json")).unwrap();
     let digest = sha(&bytes);
+    let mut native = NativeState::from_bytes(&bytes, &digest, TOKEN.into()).unwrap();
+    if let Some(ttl) = approval_ttl {
+        native = native
+            .with_approval(home, &agentfw::grant::derive_key("fixture-hook-token"), ttl)
+            .unwrap();
+    }
     Arc::new(AppState {
-        native: Some(NativeState::from_bytes(&bytes, &digest, TOKEN.into()).unwrap()),
+        native: Some(native),
         firewall: Mutex::new(AgentFirewall::new(
             AgentPolicySet::from_yaml(POLICY).unwrap(),
             DEFAULT_TAINT_CAP,
@@ -341,13 +395,38 @@ fn spawn_gateway_with_profiles(
     profiles: Option<&str>,
     fixed_destinations: bool,
 ) -> (Child, ChildStdin, GatewayOutput) {
+    spawn_gateway_full(
+        directory,
+        ledger,
+        mode,
+        stderr,
+        classifier,
+        profiles,
+        fixed_destinations,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn spawn_gateway_full(
+    directory: &Path,
+    ledger: &Path,
+    mode: &str,
+    stderr: &Path,
+    classifier: Option<&str>,
+    profiles: Option<&str>,
+    fixed_destinations: bool,
+    approval_wait: Option<u64>,
+) -> (Child, ChildStdin, GatewayOutput) {
     let python = if cfg!(windows) { "python" } else { "python3" };
     let server_py = directory.join("server.py");
     std::fs::write(&server_py, SERVER).unwrap();
     let mut command = Command::new(env!("CARGO_BIN_EXE_agentfw"));
+    command.args(["mcp", "--native-admission"]);
+    if let Some(wait) = approval_wait {
+        command.args(["--native-approval-wait-seconds", &wait.to_string()]);
+    }
     command.args([
-        "mcp",
-        "--native-admission",
         "--id",
         "fixture",
         "--",
@@ -480,6 +559,7 @@ struct Fixture {
     daemon: tokio::task::JoinHandle<()>,
     daemon_shutdown: Option<oneshot::Sender<()>>,
     daemon_faults: Arc<DaemonFaults>,
+    approval_ttl: Option<u64>,
     child: Child,
     input: ChildStdin,
     output: tokio::io::Lines<BufReader<ChildStdout>>,
@@ -549,6 +629,30 @@ impl Fixture {
         profiles: Option<&str>,
         fixed_destinations: bool,
     ) -> Self {
+        Self::build(
+            mode,
+            enforce,
+            classifier,
+            profiles,
+            fixed_destinations,
+            None,
+        )
+        .await
+    }
+
+    /// Native Ask approval enabled: daemon `ttl` seconds, collector waits `wait` seconds.
+    async fn with_approval(mode: &str, classifier: Option<&str>, ttl: u64, wait: u64) -> Self {
+        Self::build(mode, true, classifier, None, false, Some((ttl, wait))).await
+    }
+
+    async fn build(
+        mode: &str,
+        enforce: bool,
+        classifier: Option<&str>,
+        profiles: Option<&str>,
+        fixed_destinations: bool,
+        approval: Option<(u64, u64)>,
+    ) -> Self {
         let classified_read = classifier == Some("read");
         // macOS places the default temp directory under the /var -> /private/var
         // symlink, which the native registry guard correctly refuses.
@@ -606,7 +710,7 @@ impl Fixture {
         let daemon_faults = Arc::new(DaemonFaults::default());
         let (daemon, daemon_shutdown) = start_daemon(
             listener,
-            fixture_state(&home, port, enforce),
+            fixture_state(&home, port, enforce, approval.map(|a| a.0)),
             daemon_faults.clone(),
         );
         let path = registry_path.to_string_lossy().replace('\'', "''");
@@ -617,7 +721,7 @@ impl Fixture {
         let private_before_launch = [home.clone(), home.join("token"), home.join("native-token")]
             .iter()
             .all(|path| protected_dacl(path));
-        let (child, input, output) = spawn_gateway_with_profiles(
+        let (child, input, output) = spawn_gateway_full(
             dir.path(),
             &ledger,
             mode,
@@ -625,6 +729,7 @@ impl Fixture {
             classifier,
             profiles,
             fixed_destinations,
+            approval.map(|a| a.1),
         );
         Self {
             _dir: dir,
@@ -633,6 +738,7 @@ impl Fixture {
             daemon,
             daemon_shutdown: Some(daemon_shutdown),
             daemon_faults,
+            approval_ttl: approval.map(|a| a.0),
             child,
             input,
             output,
@@ -695,7 +801,7 @@ impl Fixture {
         let daemon_faults = Arc::new(DaemonFaults::default());
         let (daemon, daemon_shutdown) = start_daemon(
             listener,
-            fixture_state(&home, port, enforce),
+            fixture_state(&home, port, enforce, None),
             daemon_faults.clone(),
         );
         let path = registry_path.to_string_lossy().replace('\'', "''");
@@ -715,6 +821,7 @@ impl Fixture {
             daemon,
             daemon_shutdown: Some(daemon_shutdown),
             daemon_faults,
+            approval_ttl: None,
             child,
             input,
             output,
@@ -770,7 +877,12 @@ impl Fixture {
         self.daemon_faults = Arc::new(DaemonFaults::default());
         let (daemon, shutdown) = start_daemon(
             listener,
-            fixture_state(&self._dir.path().join(".agentfw"), self.port, self.enforce),
+            fixture_state(
+                &self._dir.path().join(".agentfw"),
+                self.port,
+                self.enforce,
+                self.approval_ttl,
+            ),
             self.daemon_faults.clone(),
         );
         self.daemon = daemon;
@@ -2781,7 +2893,7 @@ async fn sou24_readonly_write_with_high_uncertainty_is_hard_denied() {
 }
 
 #[tokio::test]
-async fn sou15_resource_policy_refuses_execution_without_confined_executor() {
+async fn sou15_operation_constrained_resource_executor_enforces_boundaries() {
     let mut fixture =
         Fixture::with_resource_policy("classified-read", true, None, |dir, registry| {
             let file = dir.join("reviewed-input.txt");
@@ -2815,10 +2927,11 @@ async fn sou15_resource_policy_refuses_execution_without_confined_executor() {
         .await;
     fixture.ready().await;
 
+    // 1. Authorized read succeeds through constrained executor without executing unconfined child.
     let target_file = fixture._dir.path().join("reviewed-input.txt");
     let call = json!({
         "jsonrpc": "2.0",
-        "id": "res-policy-refusal",
+        "id": "res-policy-auth",
         "method": "tools/call",
         "params": {
             "name": "read_document",
@@ -2829,12 +2942,1163 @@ async fn sou15_resource_policy_refuses_execution_without_confined_executor() {
     });
     let reply: Value =
         serde_json::from_str(&fixture.exchange(&call.to_string()).await.unwrap()).unwrap();
-    assert_eq!(reply["id"], "res-policy-refusal");
-    assert_eq!(reply["result"]["isError"], true);
-    assert!(reply.to_string().contains("resource_executor_unsupported"));
+    assert_eq!(reply["id"], "res-policy-auth");
+    #[cfg(unix)]
+    {
+        assert!(reply["result"]["isError"].is_null() || reply["result"]["isError"] == false);
+        assert_eq!(
+            reply["result"]["content"][0]["text"].as_str().unwrap(),
+            "synthetic contents"
+        );
+        assert_eq!(
+            executed(&fixture.ledger).len(),
+            0,
+            "constrained executor handles read directly; child process must never execute"
+        );
+    }
+    #[cfg(not(unix))]
+    {
+        assert_eq!(reply["result"]["isError"], true);
+        assert!(
+            reply.to_string().contains("resource_executor_unsupported"),
+            "expected resource_executor_unsupported, got {reply}"
+        );
+        assert_eq!(
+            executed(&fixture.ledger).len(),
+            0,
+            "unsupported platform refuses before reserving call; child process must never execute"
+        );
+    }
+
+    // 2. Unauthorized workspace target is refused by native resource admission.
+    let unauthorized_file = fixture._dir.path().join("unauthorized.txt");
+    std::fs::write(&unauthorized_file, "secret payload").unwrap();
+    let unauth_call = json!({
+        "jsonrpc": "2.0",
+        "id": "res-policy-unauth",
+        "method": "tools/call",
+        "params": {
+            "name": "read_document",
+            "arguments": {
+                "path": unauthorized_file.to_str().unwrap()
+            }
+        }
+    });
+    let unauth_reply: Value =
+        serde_json::from_str(&fixture.exchange(&unauth_call.to_string()).await.unwrap()).unwrap();
+    assert_eq!(unauth_reply["id"], "res-policy-unauth");
+    assert_eq!(unauth_reply["result"]["isError"], true);
+    #[cfg(unix)]
+    assert!(unauth_reply
+        .to_string()
+        .contains("native_resource_not_allowed"));
+    #[cfg(not(unix))]
+    assert!(
+        unauth_reply
+            .to_string()
+            .contains("resource_executor_unsupported")
+            || unauth_reply
+                .to_string()
+                .contains("native_resource_not_allowed")
+    );
     assert_eq!(
         executed(&fixture.ledger).len(),
         0,
-        "resource-policy calls must be refused without execution until a confined executor is reviewed"
+        "unauthorized read must never reach child process"
     );
+
+    // 3. Path traversal outside workspace is refused before admission.
+    let traversal_call = json!({
+        "jsonrpc": "2.0",
+        "id": "res-policy-traversal",
+        "method": "tools/call",
+        "params": {
+            "name": "read_document",
+            "arguments": {
+                "path": "../outside.txt"
+            }
+        }
+    });
+    let trav_reply: Value =
+        serde_json::from_str(&fixture.exchange(&traversal_call.to_string()).await.unwrap())
+            .unwrap();
+    assert_eq!(trav_reply["id"], "res-policy-traversal");
+    assert_eq!(trav_reply["result"]["isError"], true);
+    assert!(
+        trav_reply.to_string().contains("resource_path_traversal")
+            || trav_reply
+                .to_string()
+                .contains("native_resource_not_allowed")
+    );
+    assert_eq!(
+        executed(&fixture.ledger).len(),
+        0,
+        "traversal read must never reach child process"
+    );
+}
+
+#[tokio::test]
+async fn sou15_parent_swap_symlink_traversal_refuses_outside_canary() {
+    let outside_temp = tempfile::tempdir().unwrap();
+    let outside_dir = outside_temp.path().canonicalize().unwrap();
+    let outside_canary_file = outside_dir.join("input.txt");
+    std::fs::write(
+        &outside_canary_file,
+        "REVIEW107_PARENT_SWAP validated_inside=true outside_content_read=true",
+    )
+    .unwrap();
+
+    let mut fixture =
+        Fixture::with_resource_policy("classified-read", true, None, |dir, registry| {
+            let canonical_dir = dir.canonicalize().unwrap();
+            let sub_dir = canonical_dir.join("sub");
+            std::fs::create_dir_all(&sub_dir).unwrap();
+            let input_file = sub_dir.join("input.txt");
+            std::fs::write(&input_file, "inside trusted content").unwrap();
+            let canonical_input = input_file
+                .canonicalize()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string();
+
+            let schema = json!({
+                "type": "object",
+                "properties": { "path": { "type": "string" } },
+                "required": ["path"],
+                "additionalProperties": false
+            });
+            let profile = json!({
+                "server_id": "fixture",
+                "tool_name": "read_document",
+                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "selectors": [{ "pointer": "/path", "kind": "path" }]
+            });
+            registry["tools"][0]["resource_policy"] = json!({
+                "profile": profile,
+                "workspace": canonical_dir,
+                "cwd": canonical_dir,
+                "executor_sha256": "e".repeat(64),
+                "classifier_sha256": "c".repeat(64),
+                "allowed_resources": [{
+                    "kind": "path",
+                    "canonical": canonical_input
+                }]
+            });
+        })
+        .await;
+    fixture.ready().await;
+
+    let target_file = fixture._dir.path().join("sub").join("input.txt");
+    let read_call = json!({
+        "jsonrpc": "2.0",
+        "id": "benign-sub-read",
+        "method": "tools/call",
+        "params": {
+            "name": "read_document",
+            "arguments": {
+                "path": target_file.to_str().unwrap()
+            }
+        }
+    });
+
+    #[cfg(unix)]
+    {
+        // 1. Initial benign read succeeds and returns inside content
+        let reply: Value =
+            serde_json::from_str(&fixture.exchange(&read_call.to_string()).await.unwrap()).unwrap();
+        assert_eq!(reply["id"], "benign-sub-read");
+        assert_eq!(
+            reply["result"]["content"][0]["text"].as_str().unwrap(),
+            "inside trusted content"
+        );
+        assert_eq!(executed(&fixture.ledger).len(), 0);
+
+        // 2. Perform parent directory swap: rename 'sub' to 'sub_orig' and create symlink 'sub -> outside_dir'
+        let sub_path = fixture._dir.path().join("sub");
+        let sub_orig = fixture._dir.path().join("sub_orig");
+        std::fs::rename(&sub_path, &sub_orig).unwrap();
+        std::os::unix::fs::symlink(&outside_dir, &sub_path).unwrap();
+
+        // 3. Attempt read of sub/input.txt after parent directory swap:
+        // Must fail closed with resource_read_failed / resource_path_link; outside canary MUST NEVER be returned.
+        let swapped_call = json!({
+            "jsonrpc": "2.0",
+            "id": "swapped-sub-read",
+            "method": "tools/call",
+            "params": {
+                "name": "read_document",
+                "arguments": {
+                    "path": target_file.to_str().unwrap()
+                }
+            }
+        });
+        let swapped_reply: Value =
+            serde_json::from_str(&fixture.exchange(&swapped_call.to_string()).await.unwrap())
+                .unwrap();
+        assert_eq!(swapped_reply["id"], "swapped-sub-read");
+        assert_eq!(swapped_reply["result"]["isError"], true);
+        let reply_str = swapped_reply.to_string();
+        assert!(
+            !reply_str.contains("REVIEW107_PARENT_SWAP"),
+            "outside canary content must never be leaked through parent symlink swap"
+        );
+        assert!(
+            reply_str.contains("resource_path_link")
+                || reply_str.contains("resource_read_failed")
+                || reply_str.contains("resource_target_outside_workspace"),
+            "expected refusal reason in {reply_str}"
+        );
+        assert_eq!(
+            executed(&fixture.ledger).len(),
+            0,
+            "parent swapped read must never execute child process"
+        );
+
+        // 4. Test production read helper directly against parent swap (reproducing Baubek's exact probe)
+        let direct_result =
+            agentfw::sandbox::read_workspace_file(fixture._dir.path(), &target_file);
+        assert!(
+            direct_result.is_err(),
+            "direct read helper must refuse parent swapped target"
+        );
+        let err_msg = direct_result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("symlink") || err_msg.contains("outside the workspace"),
+            "expected symlink refusal, got {err_msg}"
+        );
+    }
+    #[cfg(not(unix))]
+    {
+        let reply: Value =
+            serde_json::from_str(&fixture.exchange(&read_call.to_string()).await.unwrap()).unwrap();
+        assert_eq!(reply["id"], "benign-sub-read");
+        assert_eq!(reply["result"]["isError"], true);
+        assert!(reply.to_string().contains("resource_executor_unsupported"));
+        assert_eq!(executed(&fixture.ledger).len(), 0);
+
+        let direct_result =
+            agentfw::sandbox::read_workspace_file(fixture._dir.path(), &target_file);
+        assert!(direct_result.is_err());
+        assert!(direct_result
+            .unwrap_err()
+            .to_string()
+            .contains("unsupported"));
+    }
+}
+
+#[tokio::test]
+async fn sou15_post_admission_read_failure_capacity_leak_prevented_and_continuation_succeeds() {
+    let mut fixture =
+        Fixture::with_resource_policy("classified-read", true, None, |dir, registry| {
+            let file = dir.join("permitted-doc.txt");
+            std::fs::write(&file, "initial valid content").unwrap();
+            let canonical_file = file.canonicalize().unwrap().to_str().unwrap().to_string();
+            let canonical_dir = dir.canonicalize().unwrap();
+            let schema = json!({
+                "type": "object",
+                "properties": { "path": { "type": "string" } },
+                "required": ["path"],
+                "additionalProperties": false
+            });
+            let profile = json!({
+                "server_id": "fixture",
+                "tool_name": "read_document",
+                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "selectors": [{ "pointer": "/path", "kind": "path" }]
+            });
+            registry["tools"][0]["resource_policy"] = json!({
+                "profile": profile,
+                "workspace": canonical_dir,
+                "cwd": canonical_dir,
+                "executor_sha256": "e".repeat(64),
+                "classifier_sha256": "c".repeat(64),
+                "allowed_resources": [{
+                    "kind": "path",
+                    "canonical": canonical_file
+                }]
+            });
+        })
+        .await;
+    fixture.ready().await;
+
+    let target_file = fixture._dir.path().join("permitted-doc.txt");
+
+    #[cfg(unix)]
+    {
+        // Replace permitted file with invalid UTF-8 bytes to trigger post-admission resource_read_failed
+        std::fs::write(&target_file, [0xFF, 0xFE, 0xFD, 0xFC]).unwrap();
+
+        // Perform 70 consecutive failing reads (> 64 session capacity cap).
+        // If post-admission failures leak reservations, request 65 will fail with native_capacity_exceeded.
+        for i in 0..70 {
+            let failing_call = json!({
+                "jsonrpc": "2.0",
+                "id": format!("utf8-fail-{i}"),
+                "method": "tools/call",
+                "params": {
+                    "name": "read_document",
+                    "arguments": {
+                        "path": target_file.to_str().unwrap()
+                    }
+                }
+            });
+            let reply: Value =
+                serde_json::from_str(&fixture.exchange(&failing_call.to_string()).await.unwrap())
+                    .unwrap();
+            assert_eq!(reply["id"], format!("utf8-fail-{i}"));
+            assert_eq!(reply["result"]["isError"], true);
+            assert!(
+                reply.to_string().contains("resource_read_failed"),
+                "expected resource_read_failed, got {reply}"
+            );
+        }
+        assert_eq!(
+            executed(&fixture.ledger).len(),
+            0,
+            "failed reads must have zero server execution"
+        );
+
+        // Restore valid UTF-8 content to the permitted file
+        std::fs::write(&target_file, "recovered valid document content").unwrap();
+
+        // Call 71 in the SAME session must succeed and return the valid content
+        let success_call = json!({
+            "jsonrpc": "2.0",
+            "id": "success-call-71",
+            "method": "tools/call",
+            "params": {
+                "name": "read_document",
+                "arguments": {
+                    "path": target_file.to_str().unwrap()
+                }
+            }
+        });
+        let reply: Value =
+            serde_json::from_str(&fixture.exchange(&success_call.to_string()).await.unwrap())
+                .unwrap();
+        assert_eq!(reply["id"], "success-call-71");
+        assert!(reply["result"]["isError"].is_null() || reply["result"]["isError"] == false);
+        assert_eq!(
+            reply["result"]["content"][0]["text"].as_str().unwrap(),
+            "recovered valid document content"
+        );
+        assert_eq!(
+            executed(&fixture.ledger).len(),
+            0,
+            "constrained read handles success directly with zero child execution"
+        );
+    }
+    #[cfg(not(unix))]
+    {
+        let failing_call = json!({
+            "jsonrpc": "2.0",
+            "id": "unsupported-call-win",
+            "method": "tools/call",
+            "params": {
+                "name": "read_document",
+                "arguments": {
+                    "path": target_file.to_str().unwrap()
+                }
+            }
+        });
+        let reply: Value =
+            serde_json::from_str(&fixture.exchange(&failing_call.to_string()).await.unwrap())
+                .unwrap();
+        assert_eq!(reply["id"], "unsupported-call-win");
+        assert_eq!(reply["result"]["isError"], true);
+        assert!(reply.to_string().contains("resource_executor_unsupported"));
+        assert_eq!(executed(&fixture.ledger).len(), 0);
+    }
+}
+
+#[tokio::test]
+async fn sou15_leaf_symlink_and_oversized_content_bounds() {
+    let temp = tempfile::tempdir().unwrap();
+    let ws = temp.path().canonicalize().unwrap();
+
+    #[cfg(unix)]
+    {
+        // 1. Regular file read succeeds
+        let normal_file = ws.join("normal.txt");
+        std::fs::write(&normal_file, "clean content").unwrap();
+        assert_eq!(
+            agentfw::sandbox::read_workspace_file(&ws, &normal_file).unwrap(),
+            "clean content"
+        );
+
+        // 2. Symlink leaf file fails closed
+        let outside_temp = tempfile::tempdir().unwrap();
+        let outside_target = outside_temp.path().join("canary.txt");
+        std::fs::write(&outside_target, "CANARY_SECRET").unwrap();
+        let symlink_file = ws.join("symlink_leaf.txt");
+        std::os::unix::fs::symlink(&outside_target, &symlink_file).unwrap();
+        let symlink_err = agentfw::sandbox::read_workspace_file(&ws, &symlink_file).unwrap_err();
+        assert!(
+            symlink_err.to_string().contains("symlink"),
+            "expected symlink refusal, got {symlink_err}"
+        );
+
+        // 3. Oversized content exceeding MAX_CONTENT fails closed
+        let oversized_file = ws.join("oversized.txt");
+        let large_data = vec![b'A'; agentfw::sandbox::MAX_RESOURCE_READ_BYTES + 1024];
+        std::fs::write(&oversized_file, &large_data).unwrap();
+        let size_err = agentfw::sandbox::read_workspace_file(&ws, &oversized_file).unwrap_err();
+        assert!(
+            size_err
+                .to_string()
+                .contains("exceeds maximum allowed size"),
+            "expected size limit refusal, got {size_err}"
+        );
+    }
+    #[cfg(not(unix))]
+    {
+        let normal_file = ws.join("normal.txt");
+        std::fs::write(&normal_file, "clean content").unwrap();
+        let res = agentfw::sandbox::read_workspace_file(&ws, &normal_file);
+        assert!(res.is_err());
+        assert!(res.unwrap_err().to_string().contains("unsupported"));
+    }
+}
+
+#[tokio::test]
+async fn sou15_root_directory_swap_refused_and_pinned_continuation() {
+    let outside_temp = tempfile::tempdir().unwrap();
+    let outside_dir = outside_temp.path().canonicalize().unwrap();
+    let outside_canary_file = outside_dir.join("input.txt");
+    std::fs::write(
+        &outside_canary_file,
+        "REVIEW107_ROOT_SWAP authorized_inside=true actual_outside_canary=true",
+    )
+    .unwrap();
+
+    let mut fixture =
+        Fixture::with_resource_policy("classified-read", true, None, |dir, registry| {
+            let canonical_dir = dir.canonicalize().unwrap();
+            let input_file = dir.join("input.txt");
+            std::fs::write(&input_file, "inside canary content").unwrap();
+            let canonical_input = input_file
+                .canonicalize()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string();
+            let schema = json!({
+                "type": "object",
+                "properties": { "path": { "type": "string" } },
+                "required": ["path"],
+                "additionalProperties": false
+            });
+            let profile = json!({
+                "server_id": "fixture",
+                "tool_name": "read_document",
+                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "selectors": [{ "pointer": "/path", "kind": "path" }]
+            });
+            registry["tools"][0]["resource_policy"] = json!({
+                "profile": profile,
+                "workspace": canonical_dir,
+                "cwd": canonical_dir,
+                "executor_sha256": "e".repeat(64),
+                "classifier_sha256": "c".repeat(64),
+                "allowed_resources": [{
+                    "kind": "path",
+                    "canonical": canonical_input
+                }]
+            });
+        })
+        .await;
+    fixture.ready().await;
+
+    let target_file = fixture._dir.path().join("input.txt");
+    let read_call = json!({
+        "jsonrpc": "2.0",
+        "id": "benign-root-read",
+        "method": "tools/call",
+        "params": {
+            "name": "read_document",
+            "arguments": {
+                "path": target_file.to_str().unwrap()
+            }
+        }
+    });
+
+    #[cfg(unix)]
+    {
+        // 1. Initial benign read succeeds and returns inside content
+        let reply: Value =
+            serde_json::from_str(&fixture.exchange(&read_call.to_string()).await.unwrap()).unwrap();
+        assert_eq!(reply["id"], "benign-root-read");
+        assert_eq!(
+            reply["result"]["content"][0]["text"].as_str().unwrap(),
+            "inside canary content"
+        );
+        assert_eq!(executed(&fixture.ledger).len(), 0);
+
+        // 2. Pin the trusted workspace before root substitution
+        let pinned = agentfw::sandbox::PinnedWorkspace::open(fixture._dir.path()).unwrap();
+        assert!(pinned.verify_root_identity());
+
+        // 3. Reproduce Baubek's exact probe:
+        // Rename the owned workspace directory, replace the original root path with a symlink to outside_dir
+        let ws_parent = fixture._dir.path().parent().unwrap().to_path_buf();
+        let ws_name = fixture._dir.path().file_name().unwrap().to_os_string();
+        let ws_path = fixture._dir.path().to_path_buf();
+        let ws_renamed = ws_parent.join(format!("{}_orig", ws_name.to_str().unwrap()));
+
+        std::fs::rename(&ws_path, &ws_renamed).unwrap();
+        std::os::unix::fs::symlink(&outside_dir, &ws_path).unwrap();
+
+        // 4. Verify refusal controls on swapped root path:
+        // Direct read via the swapped path MUST fail closed and MUST NEVER leak the outside canary.
+        let direct_res = agentfw::sandbox::read_workspace_file(&ws_path, &target_file);
+        assert!(
+            direct_res.is_err(),
+            "direct read helper must refuse swapped root symlink"
+        );
+        let err_msg = direct_res.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("symlink") || err_msg.contains("outside the workspace"),
+            "expected symlink refusal, got {err_msg}"
+        );
+        assert!(
+            !err_msg.contains("REVIEW107_ROOT_SWAP"),
+            "outside canary content must never be leaked"
+        );
+
+        // 5. Verify root identity check on pinned workspace detects the substitution
+        assert!(
+            !pinned.verify_root_identity(),
+            "verify_root_identity must return false when root path is swapped"
+        );
+        let strict_err = pinned
+            .read_file_refusing_swapped_root(&target_file)
+            .unwrap_err();
+        assert!(
+            strict_err
+                .to_string()
+                .contains("refuses a substituted workspace root"),
+            "expected refusal on substituted root"
+        );
+
+        // 6. Verify useful old-root continuation on the pinned handle:
+        // Pinned workspace continues reading from the pinned kernel directory descriptor!
+        let continued_content = pinned.read_file(&target_file).unwrap();
+        assert_eq!(
+            continued_content, "inside canary content",
+            "pinned handle continues reading authorized inside content"
+        );
+        assert!(
+            !continued_content.contains("REVIEW107_ROOT_SWAP"),
+            "pinned handle must never read the outside canary"
+        );
+
+        // 7. Verify MCP exchange with swapped root path fails closed before admission:
+        let swapped_call = json!({
+            "jsonrpc": "2.0",
+            "id": "swapped-root-exchange",
+            "method": "tools/call",
+            "params": {
+                "name": "read_document",
+                "arguments": {
+                    "path": target_file.to_str().unwrap()
+                }
+            }
+        });
+        let swapped_reply: Value =
+            serde_json::from_str(&fixture.exchange(&swapped_call.to_string()).await.unwrap())
+                .unwrap();
+        assert_eq!(swapped_reply["id"], "swapped-root-exchange");
+        assert_eq!(swapped_reply["result"]["isError"], true);
+        let swapped_reply_str = swapped_reply.to_string();
+        assert!(
+            !swapped_reply_str.contains("REVIEW107_ROOT_SWAP"),
+            "MCP broker must never leak outside canary on swapped root"
+        );
+        assert_eq!(
+            executed(&fixture.ledger).len(),
+            0,
+            "swapped root read must never execute child process"
+        );
+
+        // Clean up symlink so fixture tempdir can remove cleanly
+        let _ = std::fs::remove_file(&ws_path);
+        let _ = std::fs::rename(&ws_renamed, &ws_path);
+    }
+    #[cfg(not(unix))]
+    {
+        let reply: Value =
+            serde_json::from_str(&fixture.exchange(&read_call.to_string()).await.unwrap()).unwrap();
+        assert_eq!(reply["id"], "benign-root-read");
+        assert_eq!(reply["result"]["isError"], true);
+        assert!(reply.to_string().contains("resource_executor_unsupported"));
+        assert_eq!(executed(&fixture.ledger).len(), 0);
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn sou17_post_admission_fifo_refused_and_same_session_read_recovers() {
+    let mut fixture = Fixture::with_resource_policy(
+        "classified-read",
+        true,
+        Some("rule-baseline"),
+        |dir, registry| {
+            let workspace = dir.canonicalize().unwrap();
+            let target = workspace.join("admitted-resource.txt");
+            std::fs::write(&target, "useful owned contents").unwrap();
+            let schema = json!({"type":"object","properties":{"path":{"type":"string"}},
+                "required":["path"],"additionalProperties":false});
+            registry["tools"][0]["resource_policy"] = json!({
+                "profile":{"server_id":"fixture","tool_name":"read_document",
+                    "schema_sha256":sha(schema.to_string().as_bytes()),
+                    "selectors":[{"pointer":"/path","kind":"path"}]},
+                "workspace":workspace,"cwd":workspace,
+                "executor_sha256":"e".repeat(64),"classifier_sha256":"c".repeat(64),
+                "allowed_resources":[{"kind":"path","canonical":target}]
+            });
+        },
+    )
+    .await;
+    fixture.ready().await;
+    let target = fixture._dir.path().join("admitted-resource.txt");
+    *fixture
+        .daemon_faults
+        .replace_admitted_read_with_fifo
+        .lock()
+        .unwrap() = Some(target.clone());
+    let frame = json!({"jsonrpc":"2.0","id":"fifo-after-real-allow","method":"tools/call",
+        "params":{"name":"read_document","arguments":{"path":target}}});
+    let started = std::time::Instant::now();
+    let raw = tokio::time::timeout(Duration::from_secs(2), fixture.exchange(&frame.to_string()))
+        .await
+        .expect("an admitted FIFO must be refused without waiting for a writer")
+        .expect("read refusal must remain correlated and leave the session useful");
+    let response: Value = serde_json::from_str(&raw).unwrap();
+    assert_eq!(response["id"], "fifo-after-real-allow");
+    assert_eq!(response["result"]["isError"], true);
+    assert!(raw.contains("resource_read_failed"));
+    assert!(!raw.contains("useful owned contents"));
+    assert!(
+        executed(&fixture.ledger).is_empty(),
+        "broker must not forward a resource operation to the child"
+    );
+    let before = std::fs::read_to_string(&fixture.audit).unwrap();
+    let rows = before
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .filter(|row| row["event"] == "native_call" || row["event"] == "native_result")
+        .collect::<Vec<_>>();
+    assert_eq!(
+        rows.len(),
+        2,
+        "post-admission failure must complete its reservation"
+    );
+    assert_eq!(rows[0]["event"], "native_call");
+    assert_eq!(
+        rows[0]["released"], true,
+        "FIFO swap happened after actual native Allow"
+    );
+    assert_eq!(rows[1]["event"], "native_result");
+    assert_eq!(rows[0]["call_id"], rows[1]["call_id"]);
+    assert_eq!(rows[0]["binding_sha256"], rows[1]["binding_sha256"]);
+    assert_eq!(rows[0]["session"], rows[1]["session"]);
+
+    std::fs::remove_file(&target).unwrap();
+    std::fs::write(&target, "recovered owned contents").unwrap();
+    let followup = json!({"jsonrpc":"2.0","id":"fifo-recovered-read","method":"tools/call",
+        "params":{"name":"read_document","arguments":{"path":target}}});
+    let recovered: Value =
+        serde_json::from_str(&fixture.exchange(&followup.to_string()).await.unwrap()).unwrap();
+    assert_eq!(recovered["id"], "fifo-recovered-read");
+    assert_eq!(
+        recovered["result"]["content"][0]["text"],
+        "recovered owned contents"
+    );
+    assert!(executed(&fixture.ledger).is_empty());
+    let history = std::fs::read_to_string(&fixture.audit).unwrap();
+    let sessions = history
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .filter(|row| row["event"] == "native_call")
+        .map(|row| row["session"].clone())
+        .collect::<Vec<_>>();
+    assert_eq!(sessions.len(), 2);
+    assert_eq!(
+        sessions[0], sessions[1],
+        "recovery must use the original native session"
+    );
+    eprintln!(
+        "SOU17_EVIDENCE {}",
+        json!({
+            "test":"post_admission_fifo_same_session_recovery",
+            "boundary":"production_mcp_resource_executor",
+            "fifo_refusal_raw":raw,"authentic_call_allow":true,
+            "child_executor_entries":0,"protected_contents_released":false,
+            "same_session_recovery":recovered,"fixture_elapsed_ms":started.elapsed().as_secs_f64()*1000.0
+        })
+    );
+}
+
+#[cfg(unix)]
+async fn sou17_resource_gate_fixture(classifier: Option<&str>) -> Fixture {
+    let fixture =
+        Fixture::with_resource_policy("classified-read", true, classifier, |dir, registry| {
+            let workspace = dir.canonicalize().unwrap();
+            let target = workspace.join("staged-resource.txt");
+            std::fs::write(&target, "SOU17_STAGED_RESOURCE_CANARY").unwrap();
+            let schema = json!({"type":"object","properties":{"path":{"type":"string"}},
+                "required":["path"],"additionalProperties":false});
+            registry["tools"][0]["resource_policy"] = json!({
+                "profile":{"server_id":"fixture","tool_name":"read_document",
+                    "schema_sha256":sha(schema.to_string().as_bytes()),
+                    "selectors":[{"pointer":"/path","kind":"path"}]},
+                "workspace":workspace,"cwd":workspace,
+                "executor_sha256":"e".repeat(64),"classifier_sha256":"c".repeat(64),
+                "allowed_resources":[{"kind":"path","canonical":target}]
+            });
+        })
+        .await;
+    // Paired with the server startup witness, a present empty ledger is an
+    // independent observation rather than a missing-file zero assumption.
+    std::fs::File::create(&fixture.ledger).unwrap();
+    fixture
+}
+
+#[cfg(unix)]
+async fn sou17_resource_peer_read(fixture: &Fixture, frame: &str) -> Value {
+    let ledger = fixture._dir.path().join("resource-peer.jsonl");
+    std::fs::File::create(&ledger).unwrap();
+    let stderr = fixture._dir.path().join("resource-peer-stderr.log");
+    let (child, input, output) = spawn_gateway(
+        fixture._dir.path(),
+        &ledger,
+        "classified-read",
+        &stderr,
+        Some("rule-baseline"),
+    );
+    let mut peer = PeerGateway {
+        child,
+        input,
+        output,
+        ledger,
+        stderr,
+    };
+    peer.ready().await;
+    let response: Value = serde_json::from_str(&peer.exchange(frame).await.unwrap()).unwrap();
+    assert_eq!(
+        response["result"]["content"][0]["text"],
+        "SOU17_STAGED_RESOURCE_CANARY"
+    );
+    assert!(std::fs::read(&peer.ledger).unwrap().is_empty());
+    response
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn sou17_resource_overlap_during_native_gates_refused_with_useful_peer() {
+    for (stage, overlap) in [
+        ("call", "complete"),
+        ("call", "partial"),
+        ("result", "complete"),
+        ("result", "partial"),
+        ("result", "cancel"),
+    ] {
+        let mut fixture = sou17_resource_gate_fixture(Some("rule-baseline")).await;
+        fixture.ready().await;
+        let target = fixture._dir.path().join("staged-resource.txt");
+        let contents = std::fs::read(&target).unwrap();
+        let frame = json!({"jsonrpc":"2.0","id":3,"method":"tools/call",
+            "params":{"name":"read_document","arguments":{"path":target}}});
+        let extra = match overlap {
+            "partial" => "{\"jsonrpc\":\"2.0\"".to_owned(),
+            "cancel" => {
+                json!({"jsonrpc":"2.0","method":"notifications/cancelled",
+                "params":{"requestId":3,"reason":"owned test cancellation"}})
+                .to_string()
+                    + "\n"
+            }
+            _ => {
+                json!({"jsonrpc":"2.0","id":4,"method":"tools/call",
+                "params":{"name":"read_document","arguments":{"path":target}}})
+                .to_string()
+                    + "\n"
+            }
+        };
+        let faults = fixture.daemon_faults.clone();
+        let (stall, counter) = if stage == "call" {
+            (&faults.stall_call_admission, &faults.call_requests_started)
+        } else {
+            (
+                &faults.stall_result_admission,
+                &faults.result_requests_started,
+            )
+        };
+        stall.store(true, Ordering::SeqCst);
+        fixture
+            .input
+            .write_all(format!("{frame}\n").as_bytes())
+            .await
+            .unwrap();
+        fixture.input.flush().await.unwrap();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while counter.load(Ordering::SeqCst) == 0 {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("actual native boundary must reach the selected gate");
+        let produced = faults.stalled_result_content.lock().unwrap().clone();
+        if stage == "result" {
+            let value: Value = serde_json::from_str(produced.as_ref().unwrap()).unwrap();
+            assert_eq!(value["id"], 3);
+            assert_eq!(
+                value["result"]["content"][0]["text"],
+                "SOU17_STAGED_RESOURCE_CANARY"
+            );
+        } else {
+            assert!(produced.is_none());
+        }
+        fixture.input.write_all(extra.as_bytes()).await.unwrap();
+        fixture.input.flush().await.unwrap();
+        let output = tokio::time::timeout(Duration::from_secs(2), fixture.receive())
+            .await
+            .expect("queued/cancelled resource work must close before releasing content");
+        assert!(
+            output.is_none(),
+            "no tool result may be released after overlap"
+        );
+        fixture.assert_gateway_failed().await;
+        assert!(std::fs::read_to_string(&fixture.stderr)
+            .unwrap()
+            .contains("concurrent MCP requests are not supported"));
+        let audit = std::fs::read_to_string(&fixture.audit).unwrap();
+        let rows = audit
+            .lines()
+            .map(|line| serde_json::from_str::<Value>(line).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            rows.iter().filter(|r| r["event"] == "native_call").count(),
+            usize::from(stage == "result")
+        );
+        if stage == "result" {
+            let admitted = rows.iter().find(|r| r["event"] == "native_call").unwrap();
+            assert_eq!(
+                admitted["released"], true,
+                "first broker read had authentic native Allow"
+            );
+            assert_eq!(admitted["verdict"], "allow");
+            assert_eq!(admitted["shadow"], false, "native gate enforced the call");
+        }
+        assert!(!rows
+            .iter()
+            .any(|r| r["event"] == "native_result" && r["released"] == true));
+        assert!(rows
+            .iter()
+            .any(|r| r["event"] == "native_session_end" && r["released"] == true));
+        assert!(std::fs::read(&fixture.ledger).unwrap().is_empty());
+        assert_eq!(std::fs::read(&target).unwrap(), contents);
+        stall.store(false, Ordering::SeqCst);
+        if stage == "call" {
+            faults.release_stalled_calls.notify_one();
+        } else {
+            faults.release_stalled_results.notify_one();
+        }
+        // A separate native session with the same daemon/profile remains useful;
+        // the closed session and any abandoned grant cannot authorize the peer.
+        let useful = sou17_resource_peer_read(&fixture, &frame.to_string()).await;
+        eprintln!(
+            "SOU17_EVIDENCE {}",
+            json!({"test":"resource_overlap_native_gate",
+            "boundary":"production_mcp_resource_executor","stage":stage,"overlap":overlap,
+            "request_id":3,"child_executor_entries":0,"file_bytes_unchanged":true,
+            "broker_output_produced":stage == "result","produced_result_raw":produced,
+            "client_tool_result_bytes":0,"protected_contents_released":false,
+            "ended_native_session":true,"same_daemon_peer_recovery":useful})
+        );
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn sou17_resource_overlap_during_classifier_refused_before_native_call() {
+    let script_dir = tempfile::tempdir().unwrap();
+    let script = script_dir.path().join("classifier.py");
+    let ready = script_dir.path().join("ready");
+    let release = script_dir.path().join("release");
+    let source = format!("import json,pathlib,sys,time\njson.load(sys.stdin)\npathlib.Path({}).write_text('ready')\nrelease=pathlib.Path({})\ndeadline=time.monotonic()+3\nwhile not release.exists():\n if time.monotonic()>deadline: raise SystemExit(75)\n time.sleep(0.005)\nprint(json.dumps({{'status':'ok','actions':['read'],'unknown':False,'confidence':1.0,'uncertainty':0.0,'reason':'staged classifier fixture'}}))\n", serde_json::to_string(ready.to_str().unwrap()).unwrap(), serde_json::to_string(release.to_str().unwrap()).unwrap());
+    std::fs::write(&script, source).unwrap();
+    let classifier = format!("script:{}", script.to_str().unwrap());
+    let mut fixture = sou17_resource_gate_fixture(Some(&classifier)).await;
+    fixture.ready().await;
+    let target = fixture._dir.path().join("staged-resource.txt");
+    let contents = std::fs::read(&target).unwrap();
+    let frame = json!({"jsonrpc":"2.0","id":3,"method":"tools/call",
+        "params":{"name":"read_document","arguments":{"path":target}}});
+    fixture
+        .input
+        .write_all(format!("{frame}\n").as_bytes())
+        .await
+        .unwrap();
+    fixture.input.flush().await.unwrap();
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while !ready.is_file() {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("pinned classifier subprocess must reach its fixture barrier");
+    let extra = json!({"jsonrpc":"2.0","id":4,"method":"tools/call",
+        "params":{"name":"read_document","arguments":{"path":target}}});
+    fixture
+        .input
+        .write_all(format!("{extra}\n").as_bytes())
+        .await
+        .unwrap();
+    fixture.input.flush().await.unwrap();
+    // Keep classification held until the production collector has rejected
+    // overlap and ended its native session. Release only after that witness;
+    // a fixed sleep could finish before a delayed CI observer sends its call.
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let audit = std::fs::read_to_string(&fixture.audit).unwrap();
+            if audit.lines().any(|line| {
+                let row: Value = serde_json::from_str(line).unwrap();
+                row["event"] == "native_session_end" && row["released"] == true
+            }) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("held classification must be cancelled with native session cleanup");
+    std::fs::write(&release, "release").unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_secs(2), fixture.receive())
+            .await
+            .unwrap()
+            .is_none()
+    );
+    fixture.assert_gateway_failed().await;
+    assert!(std::fs::read_to_string(&fixture.stderr)
+        .unwrap()
+        .contains("concurrent MCP requests are not supported"));
+    let audit = std::fs::read_to_string(&fixture.audit).unwrap();
+    let rows = audit
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .collect::<Vec<_>>();
+    assert!(!rows
+        .iter()
+        .any(|r| r["event"] == "native_call" || r["event"] == "native_result"));
+    assert!(rows
+        .iter()
+        .any(|r| r["event"] == "native_session_end" && r["released"] == true));
+    assert!(std::fs::read(&fixture.ledger).unwrap().is_empty());
+    assert_eq!(std::fs::read(&target).unwrap(), contents);
+    eprintln!(
+        "SOU17_EVIDENCE {}",
+        json!({"test":"resource_overlap_classifier_gate",
+        "boundary":"production_mcp_resource_executor","classifier_source":"staged pinned local Python fixture",
+        "native_call_events":0,"native_result_events":0,"client_tool_result_bytes":0,
+        "child_executor_entries":0,"file_bytes_unchanged":true,"ended_native_session":true,
+        "protected_contents_released":false,"broker_output_produced":false})
+    );
+}
+
+// ---- SOU-48: exact single-use operator approval for native Ask calls ----
+
+const HOOK_TOKEN: &str = "fixture-hook-token";
+const DELETE_FRAME: &str = r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"delete_note","arguments":{"name":"inventory"},"_meta":{"claudecode/toolUseId":"toolu_mcp_delete","progressToken":0}}}"#;
+const READ_FRAME: &str = r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"read_document","arguments":{}}}"#;
+
+impl Fixture {
+    fn agent_home(&self) -> std::path::PathBuf {
+        self._dir.path().join(".agentfw")
+    }
+
+    async fn send_only(&mut self, raw: &str) {
+        self.input
+            .write_all(format!("{raw}\n").as_bytes())
+            .await
+            .unwrap();
+        self.input.flush().await.unwrap();
+    }
+
+    /// The single outstanding request, as the operator would list it.
+    async fn wait_pending(&self) -> Value {
+        let home = self.agent_home();
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                let rows = agentfw::native::approval::operator_list(&home);
+                if let Some(row) = rows.first() {
+                    assert_eq!(rows.len(), 1, "exactly one outstanding approval");
+                    return row.clone();
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| {
+            panic!(
+                "a pending approval must appear; gateway stderr: {}",
+                std::fs::read_to_string(&self.stderr).unwrap_or_default()
+            )
+        })
+    }
+}
+
+fn operator_approve(fixture: &Fixture, row: &Value) -> anyhow::Result<()> {
+    agentfw::native::approval::operator_approve(
+        &fixture.agent_home(),
+        HOOK_TOKEN,
+        row["pending_id"].as_str().unwrap(),
+        row["binding_sha256"].as_str().unwrap(),
+    )
+}
+
+#[tokio::test]
+async fn sou48_one_correct_approval_runs_the_original_call_once_then_work_continues() {
+    let mut fixture = Fixture::with_approval("normal", None, 60, 30).await;
+    fixture.ready().await;
+    fixture.send_only(DELETE_FRAME).await;
+    let row = fixture.wait_pending().await;
+    assert_eq!(row["tool"], "delete_note");
+    assert!(
+        executed(&fixture.ledger).is_empty(),
+        "zero child calls before approval"
+    );
+    let inspected = agentfw::native::approval::operator_inspect(
+        &fixture.agent_home(),
+        row["pending_id"].as_str().unwrap(),
+    )
+    .unwrap();
+    assert_eq!(inspected["args"], json!({"name": "inventory"}));
+    operator_approve(&fixture, &row).unwrap();
+    let reply: Value = serde_json::from_str(&fixture.receive().await.unwrap()).unwrap();
+    assert_eq!(reply["id"], 3, "the original correlation id is kept");
+    assert!(reply["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap()
+        .contains("7 red widgets"));
+    assert_eq!(
+        std::fs::read_to_string(&fixture.ledger).unwrap(),
+        format!("{DELETE_FRAME}\n"),
+        "the child received the original request bytes exactly once"
+    );
+    assert!(agentfw::native::approval::operator_list(&fixture.agent_home()).is_empty());
+    // A completed approved call does not leave the session broken.
+    assert!(fixture
+        .exchange(READ_FRAME)
+        .await
+        .unwrap()
+        .contains("7 red widgets"));
+    assert_eq!(executed(&fixture.ledger).len(), 2);
+    // Audit carries approval id and digests but never the raw arguments.
+    let audit = std::fs::read_to_string(&fixture.audit).unwrap();
+    assert!(
+        audit.contains("native_approval_requested")
+            && audit.contains(row["binding_sha256"].as_str().unwrap())
+    );
+    assert!(!audit.contains("\"args\""));
+}
+
+#[tokio::test]
+async fn sou48_reject_and_timeout_run_nothing_and_work_continues() {
+    let mut fixture = Fixture::with_approval("normal", None, 60, 30).await;
+    fixture.ready().await;
+    fixture.send_only(DELETE_FRAME).await;
+    let row = fixture.wait_pending().await;
+    agentfw::native::approval::operator_reject(
+        &fixture.agent_home(),
+        row["pending_id"].as_str().unwrap(),
+    )
+    .unwrap();
+    let reply = fixture.receive().await.unwrap();
+    assert!(reply.contains("native_approval_rejected"), "{reply}");
+    assert!(executed(&fixture.ledger).is_empty());
+    assert!(operator_approve(&fixture, &row).is_err(), "decided once");
+    assert!(fixture
+        .exchange(READ_FRAME)
+        .await
+        .unwrap()
+        .contains("7 red widgets"));
+
+    let mut waiting = Fixture::with_approval("normal", None, 60, 1).await;
+    waiting.ready().await;
+    let reply = waiting.exchange(DELETE_FRAME).await.unwrap();
+    assert!(reply.contains("native_approval_timeout"), "{reply}");
+    assert!(executed(&waiting.ledger).is_empty());
+    assert!(agentfw::native::approval::operator_list(&waiting.agent_home()).is_empty());
+}
+
+#[tokio::test]
+async fn sou48_concurrent_input_and_restart_close_the_pending_call() {
+    let mut fixture = Fixture::with_approval("normal", None, 60, 30).await;
+    fixture.ready().await;
+    fixture.send_only(DELETE_FRAME).await;
+    let row = fixture.wait_pending().await;
+    fixture.send_only(READ_FRAME).await;
+    fixture.assert_gateway_failed().await;
+    assert!(executed(&fixture.ledger).is_empty());
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(
+        operator_approve(&fixture, &row).is_err(),
+        "cancelled request cannot be approved"
+    );
+    assert!(executed(&fixture.ledger).is_empty());
+
+    let mut restarted = Fixture::with_approval("normal", None, 60, 30).await;
+    restarted.ready().await;
+    restarted.send_only(DELETE_FRAME).await;
+    let row = restarted.wait_pending().await;
+    restarted.restart_daemon().await;
+    assert!(
+        operator_approve(&restarted, &row).is_err(),
+        "a restart cannot be rescued"
+    );
+    let reply = restarted.receive().await.unwrap();
+    assert!(reply.contains("native_approval_unknown"), "{reply}");
+    assert!(executed(&restarted.ledger).is_empty());
+    // The restarted daemon has no such session: the next call cannot proceed either.
+    assert!(restarted.exchange(READ_FRAME).await.is_none());
+    restarted.assert_gateway_failed().await;
+    assert!(executed(&restarted.ledger).is_empty());
+}
+
+#[tokio::test]
+async fn sou48_classifier_ask_waits_for_the_same_exact_approval() {
+    let root = std::env::temp_dir().canonicalize().unwrap();
+    let temp = tempfile::tempdir_in(root).unwrap();
+    let script = temp.path().join("ask.py");
+    std::fs::write(
+        &script,
+        r#"import json,sys
+request=json.loads(sys.stdin.readline())
+print(json.dumps({'status':'ok','actions':['read'],'unknown':False,'confidence':0.95,'uncertainty':0.9,'reason':'synthetic'}))
+"#,
+    )
+    .unwrap();
+    let selection = format!("script:{}", script.display());
+    let mut fixture = Fixture::with_approval("normal", Some(&selection), 60, 30).await;
+    fixture.ready().await;
+    fixture.send_only(READ_FRAME).await;
+    let row = fixture.wait_pending().await;
+    assert_eq!(row["source"], "classifier");
+    assert!(executed(&fixture.ledger).is_empty());
+    operator_approve(&fixture, &row).unwrap();
+    let reply = fixture.receive().await.unwrap();
+    assert!(reply.contains("7 red widgets"), "{reply}");
+    assert_eq!(
+        std::fs::read_to_string(&fixture.ledger).unwrap(),
+        format!("{READ_FRAME}\n")
+    );
+    // The next uncertain call needs its own approval: nothing carried over.
+    fixture
+        .send_only(&READ_FRAME.replace("\"id\":4", "\"id\":5"))
+        .await;
+    let again = fixture.wait_pending().await;
+    assert_ne!(again["pending_id"], row["pending_id"]);
+    assert_eq!(executed(&fixture.ledger).len(), 1);
 }

@@ -30,6 +30,12 @@ rand = "0.10"
 subtle = "2"
 clap = { version = "4", features = ["derive"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+rustls-pki-types = "1"
+# Constrained HTTPS uses a single pinned socket with counted TLS/HTTP reads.
+# These crates are already in the locked reqwest dependency graph.
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+webpki-roots = "1"
+httparse = "1"
 futures-util = "0.3"
 sha2 = "0.10"
 # Pinned-issuer Ed25519 verification; crate already exists in the locked workspace.
@@ -38,8 +44,11 @@ aws-lc-rs = { version = "1", features = ["prebuilt-nasm"] }
 # for the proxy CSRF proofs; declared here for the approval-grant HMAC.
 hmac = "0.12"
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_Diagnostics_Debug", "Win32_System_Threading"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_Diagnostics_Debug", "Win32_System_IO", "Win32_System_Threading"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

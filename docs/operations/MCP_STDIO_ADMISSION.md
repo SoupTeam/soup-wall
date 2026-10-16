@@ -95,6 +95,44 @@ Transport uncertainty ends the collector rather than silently switching to
 the legacy relay. Explicitly inspect the retained evidence and refusal behavior
 before attaching another server or runtime.
 
+For tools carrying an installed `resource_policy` (SOU-15), operation-level
+constrained execution executes verified workspace file reads (`read_document`)
+directly through the broker under native resource admission (`sw-native/resources/1`)
+without executing the unconfined child process. Any non-reviewed operation or
+arbitrary tool under resource policy is refused fail-closed with
+`resource_executor_unsupported`. The explicitly installed [Linux create-only profile](MCP_CREATE_FILE.md) additionally supports `create_file` under `sw-native/resources/2`; unsupported writes remain refused. The separate [Linux HTTPS GET profile](MCP_HTTPS_GET.md) adds one exact URL/address-bound fetch under `sw-native/resources/3`, with verified TLS and complete bounded text/JSON result inspection. Legacy read/create protocols remain compatible; there is no network fallback to the MCP child. See [Native resource admission](NATIVE_RESOURCE_ADMISSION.md).
+
+
+The separate [Windows document-read profile](MCP_WINDOWS_READ.md) adds
+`read_document` under `sw-native/resources/4`, with handle-bound workspace/file
+authority and native standard-user acceptance. The separate [Windows create-only
+profile](MCP_WINDOWS_CREATE.md) adds one new root-child `create_file` under
+`sw-native/resources/5`, without overwriting a competing creator. Windows v1
+resource reads and unsupported profiles retain their refusal behavior.
+
+## Unix host transport
+
+On Unix, `--native-admission` requires stdin and stdout pipe or socket descriptors
+that the runtime can register for readiness. Launch the collector through the
+MCP host or a subprocess with piped stdin/stdout. A terminal or regular-file
+redirection is explicitly refused with `native MCP stdio requires a pipe or socket`;
+there is no fallback to the legacy relay. To save a transcript, let the client
+drain the stdout pipe into its output file. Diagnostics remain on stderr.
+
+Native Unix pipe I/O uses owned close-on-exec duplicates and direct nonblocking
+operations. A completed response means its full LF-terminated frame was written,
+so the next immediate sequential request does not wait for a separate blocking
+stdout worker. Cancellation/EOF does not leave a blocking standard-input worker
+holding runtime shutdown open. Descriptor status flags are restored on shutdown
+and failed registration. Windows retains the existing host transport; the bounded
+resource executor remains Unix-only.
+
+These transport requirements do not change MCP identifiers, original arguments,
+native event formats or policy authority. Unsupported overlap still ends the
+uncertain session; any authorized first read or bytes already emitted remain
+actual effects, and a later refusal cannot undo them. See the retained
+[SOU-17 CI lifecycle evidence](../benchmarks/evidence/sou17_ci_lifecycle_2026-10-14.md).
+
 ## Selected harness and event contract
 
 The initial harness is Claude Code acting as a stdio MCP client, where the

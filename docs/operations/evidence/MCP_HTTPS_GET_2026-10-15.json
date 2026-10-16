@@ -1,0 +1,148 @@
+{
+  "issue": "SOU-56",
+  "status": "local_acceptance_passed_pending_PR_CI_and_maintainer_review",
+  "accepted_base": "786003df8223139546dc8ef68ed6adc493bb68f8",
+  "exact_build_runtime_source": "283108482d792a33c1a07a3eb9e9a94c2484334c",
+  "source_clean_and_binary_stable": true,
+  "binary_sha256": "043baf5b7051e057ab63cb3b4ebc81f022b2adff4c31300ff4a356897a37c971",
+  "image_id": "sha256:8837b0ac3f566cc131f2f1d621e8bc302fc229f2e8e582a8c6344a44d98c918e",
+  "environment": {
+    "source": "283108482d792a33c1a07a3eb9e9a94c2484334c",
+    "binary_build_source": "283108482d792a33c1a07a3eb9e9a94c2484334c",
+    "uid": 65532,
+    "gid": 65532,
+    "kernel": "6.12.76-linuxkit",
+    "architecture": "aarch64",
+    "python": "3.11.2",
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+    "openssl": "OpenSSL 3.0.20 7 Apr 2026 (Library: OpenSSL 3.0.20 7 Apr 2026)",
+    "filesystem": "overlayfs",
+    "binary_sha256": "043baf5b7051e057ab63cb3b4ebc81f022b2adff4c31300ff4a356897a37c971",
+    "source_manifest_sha256": "867ee6cb72f2467d9b4ac270ca8cec24947da0748724533ff8293d4fbb27e52c",
+    "process_protection": [
+      "CapEff:\t0000000000000000",
+      "NoNewPrivs:\t1",
+      "Seccomp:\t2"
+    ],
+    "command": [
+      "/usr/bin/python3",
+      "-B",
+      "scripts/verify-sou56-https-get.py",
+      "--run",
+      "--repo",
+      "/tmp/sou56-source",
+      "--agentfw",
+      "/bundle/agentfw",
+      "--expected-commit",
+      "283108482d792a33c1a07a3eb9e9a94c2484334c",
+      "--output",
+      "/out/https-final.json"
+    ],
+    "exit_code": 0
+  },
+  "runtime": {
+    "cases_run": 48,
+    "cases_expected": 48,
+    "passed": 48,
+    "failed": 0,
+    "skips": 0
+  },
+  "receiver": {
+    "sessions": 56,
+    "connections": 97,
+    "requests": 93,
+    "secondary_connections": 0,
+    "proxy_connections": 0,
+    "successful_fetch_replies": 7,
+    "correlated_https_results": 97,
+    "useful_read_continuations": 48,
+    "false_interruptions_among_seven_deliberately_permitted_fetches": 0
+  },
+  "checks": {
+    "linux_agent_unit": {
+      "passed": 269,
+      "failed": 0,
+      "ignored": 0
+    },
+    "linux_native_endpoint": {
+      "passed": 49,
+      "failed": 0,
+      "ignored": 0
+    },
+    "linux_workspace_tests": {
+      "passed": 1111,
+      "failed": 0,
+      "ignored": 9
+    },
+    "linux_workspace_clippy": "passed, warnings denied",
+    "format": "passed",
+    "python_scripts": {
+      "run": 565,
+      "passed": 539,
+      "skipped": 26,
+      "failed": 0
+    },
+    "python_benchmarks": {
+      "run": 44,
+      "passed": 26,
+      "skipped": 18,
+      "failed": 0
+    },
+    "python_https_fixture_and_grader": {
+      "passed": 24,
+      "failed": 0
+    },
+    "actionlint": "passed",
+    "local_markdown_links": "passed"
+  },
+  "independent_agent_review": {
+    "result": "no actionable findings after repairs",
+    "maintainer_approval": false
+  },
+  "original_red_results": {
+    "first_runtime": "Terminated with signal 9 during the concurrent resource-exhausted workspace build; partial log only, no complete report.",
+    "second_runtime": {
+      "original_passed": 1,
+      "original_failed": 46,
+      "runtime_cases": 47,
+      "reason": "grader mistakenly required native registry identity on ordinary MCP audit entries",
+      "immutable_original_sha256": "4ad988f853e14755cb66764e11cbd928cf8cf6300d84449e92def7c3c8f170bb",
+      "separate_regrade_existing_cases": 47
+    },
+    "build_setup": "initial Cargo cache unavailable; initial Clippy collapsible_if; parallel workspace linker resource exhaustion; original logs retained"
+  },
+  "raw_archive": {
+    "file": "MCP_HTTPS_GET_2026-10-15.raw.tar.gz",
+    "bytes": 295593,
+    "sha256": "1b894c57f20ad50653f827184efc678b03e2489fcbf93d7f8475a303155934a9",
+    "members": 26,
+    "manifest": "MCP_HTTPS_GET_2026-10-15.raw-manifest.json",
+    "manifest_sha256": "82f22e176cfebe5baf21dc2d7fd1e5a93f48dcc26e9a740bf2240c3b5475b922",
+    "all_members_independently_reverified": true
+  },
+  "limits": {
+    "requests_per_call": 1,
+    "connect_seconds": 3,
+    "total_seconds": 5,
+    "response_bytes": 4096,
+    "encrypted_receive_bytes": 65536,
+    "http_plaintext_bytes": 16384,
+    "http_header_bytes": 8192,
+    "repeated_failures": 70,
+    "supported_status": 200,
+    "methods": [
+      "GET"
+    ]
+  },
+  "limitations": [
+    "Owned local endpoints with an exact address/HTTPS identity exception; no external provider traffic.",
+    "Scripted MCP client, not an interactive model-host acceptance claim.",
+    "Socket/request ledgers are produced by receiver processes independent of the broker and MCP child.",
+    "Proxy controls retain authenticated request/reply bodies but never Authorization headers and never fabricate Allow.",
+    "Result withholding cannot undo an already issued GET; the receiver witness is retained.",
+    "Unsupported overlap/cancellation/replay ends the original session; useful recovery then uses a fresh session.",
+    "The cross-session transport control substitutes an ended session ID, retains the real daemon 409, and proves useful recovery in a third session.",
+    "Active cancellation is queued only after the independent receiver records the GET; the already issued request is retained while result release is refused.",
+    "Binary digests identify artifacts; matching build logs establish build provenance."
+  ]
+}

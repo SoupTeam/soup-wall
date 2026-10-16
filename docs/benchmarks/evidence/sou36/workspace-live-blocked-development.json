@@ -1,0 +1,16 @@
+{
+  "status": "blocked",
+  "live_gate_complete": false,
+  "live_gate_blockers": [
+    "model access is not selected",
+    "budget is not approved",
+    "sets.development.budget: max_reserved_usd is not selected",
+    "sets.development.budget: input_usd_per_million is not selected",
+    "sets.development.budget: output_usd_per_million is not selected",
+    "candidate agent binary identity is not frozen",
+    "model identity provider is not selected",
+    "model identity model_id is not selected",
+    "model identity provider_url_sha256 is not selected"
+  ],
+  "model_calls": 0
+}

@@ -4,7 +4,7 @@
 //! Flat, first-match YAML policy over agent signals. Mirrors `core::policy` in shape
 //! so operators only learn one format.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use soup_wall_core::{Finding, Severity};
 use std::sync::OnceLock;
 
@@ -15,7 +15,7 @@ use crate::facet::Facet;
 use crate::taint::TaintMark;
 
 /// What to do about an event.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Verdict {
     Allow,
@@ -29,7 +29,7 @@ pub enum Verdict {
 }
 
 /// Which untrusted source classes a rule cares about.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TaintSource {
     Network,
@@ -77,7 +77,7 @@ pub struct Signals {
 /// in effect, which matches every event of the rule's shape — a fat-fingered narrow rule
 /// becomes a catch-all, and if its action is `allow` it disables every rule below it. A
 /// security policy failing open on a typo, with no diagnostic, is worse than a hard error.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentCondition {
     #[serde(default)]
@@ -124,7 +124,7 @@ struct RawAgentRule {
     fallback: Option<Verdict>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(try_from = "RawAgentRule")]
 pub struct AgentRule {
     pub name: String,
@@ -187,7 +187,7 @@ fn default_verdict() -> Verdict {
     Verdict::Allow
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentPolicySet {
     #[serde(default)]

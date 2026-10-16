@@ -14,8 +14,9 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use axum::extract::{Form, Query, State};
-use axum::http::{header, StatusCode};
+use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use saml_rs::{
     AcsEndpoint, BrowserInput, CertificatePem, Credentials, EntityId, FormField, IdpDescriptor,
     MetadataTrustPolicy, PendingAuthnRequest, PendingSnapshot, PrivateKeyPem, RelayStateParam,
@@ -23,6 +24,8 @@ use saml_rs::{
     SpValidationPolicy, SsoResponse, SsoResponseBinding, StartSso, XmlEncryptionPolicy, XmlPolicy,
 };
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
+use subtle::ConstantTimeEq;
 
 use crate::handlers::Shared;
 use crate::oidc::OidcStateCipher;
@@ -34,6 +37,45 @@ pub const SAML_ACS_PATH: &str = "/auth/saml/acs";
 const SAML_STATE_TTL_SECONDS: i64 = 10 * 60;
 const MAX_FORM_FIELDS: usize = 64;
 const MAX_FORM_FIELD_BYTES: usize = 2 * 1024 * 1024;
+const FLOW_COOKIE_NAME: &str = "__Host-llm-fw-saml-flow";
+
+// SAML uses a cross-site POST, so Lax would discard the correlation cookie.
+// This cookie grants no access; the opaque session keeps its existing Lax policy.
+fn flow_cookie(relay: &str) -> HeaderValue {
+    let binding = URL_SAFE_NO_PAD.encode(Sha256::digest(relay.as_bytes()));
+    HeaderValue::from_str(&format!(
+        "{FLOW_COOKIE_NAME}={binding}; Path=/; Max-Age={SAML_STATE_TTL_SECONDS}; Secure; HttpOnly; SameSite=None"
+    )).expect("digest is a valid cookie value")
+}
+
+fn browser_matches(headers: &HeaderMap, relay: &str) -> bool {
+    let expected = URL_SAFE_NO_PAD.encode(Sha256::digest(relay.as_bytes()));
+    let mut found = None;
+    for header in headers.get_all(header::COOKIE) {
+        let Ok(value) = header.to_str() else {
+            return false;
+        };
+        for part in value.split(';') {
+            if let Some((name, value)) = part.trim().split_once('=') {
+                if name == FLOW_COOKIE_NAME {
+                    if found.is_some() {
+                        return false;
+                    }
+                    found = Some(value);
+                }
+            }
+        }
+    }
+    found.is_some_and(|value| bool::from(value.as_bytes().ct_eq(expected.as_bytes())))
+}
+
+fn login_redirect(url: String, relay: String) -> Response {
+    let mut response = Redirect::to(&url).into_response();
+    response
+        .headers_mut()
+        .append(header::SET_COOKIE, flow_cookie(&relay));
+    response
+}
 
 /// Secret-bearing local SP configuration. Values are loaded from the process
 /// environment only and deliberately do not implement `Serialize`.
@@ -192,7 +234,7 @@ pub async fn start_login(
     )
     .await
     {
-        Ok(url) => Redirect::to(&url).into_response(),
+        Ok((url, relay)) => login_redirect(url, relay),
         Err(error) => {
             tracing::warn!(error = %error, "SAML login start failed");
             login_failed()
@@ -254,7 +296,7 @@ pub async fn start_invitation_login(
     )
     .await
     {
-        Ok(url) => Redirect::to(&url).into_response(),
+        Ok((url, relay)) => login_redirect(url, relay),
         Err(error) => {
             tracing::warn!(error = %error, "SAML invitation login start failed");
             login_failed()
@@ -269,7 +311,7 @@ async fn start_login_inner(
     connection: OrganizationSamlConnection,
     workspace_id: &str,
     invitation_id: Option<&str>,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<(String, String)> {
     let sp = runtime.sp()?;
     let idp = idp_descriptor(&connection)?;
     let expires_at_unix = now_unix()?
@@ -303,7 +345,7 @@ async fn start_login_inner(
     store
         .reserve_saml_authorization_state_async(&state_value, &pending, expires_at_unix)
         .await?;
-    Ok(started.outbound.redirect_url()?.to_owned())
+    Ok((started.outbound.redirect_url()?.to_owned(), state_value))
 }
 
 #[derive(Deserialize)]
@@ -313,6 +355,7 @@ pub struct SamlAcsForm(pub Vec<(String, String)>);
 /// SAMLResponse fields are rejected to avoid parser differentials.
 pub async fn acs(
     State(state): State<Shared>,
+    headers: HeaderMap,
     Form(fields): Form<Vec<(String, String)>>,
 ) -> Response {
     let Some(store) = state.tenant_store.as_ref() else {
@@ -345,7 +388,9 @@ pub async fn acs(
         .iter()
         .find_map(|(key, value)| (key == "RelayState").then_some(value.clone()))
         .unwrap_or_default();
-    if cipher.open_saml_relay_state(&state_value).is_err() {
+    if !browser_matches(&headers, &state_value)
+        || cipher.open_saml_relay_state(&state_value).is_err()
+    {
         return login_failed();
     }
     let pending = match store
@@ -620,6 +665,26 @@ mod tests {
     const SP_ACS_URL: &str = "https://sp.example.test/auth/saml/acs";
     const IDP_ENTITY_ID: &str = "https://idp.example.test/metadata";
     const IDP_SSO_URL: &str = "https://idp.example.test/sso";
+
+    #[test]
+    fn saml_post_requires_unique_originating_browser_cookie() {
+        let relay = "synthetic-relay-a";
+        let cookie = flow_cookie(relay);
+        let text = cookie.to_str().unwrap();
+        assert!(text.contains("SameSite=None"));
+        assert!(text.contains("Secure; HttpOnly"));
+        assert!(!text.contains("Domain="));
+        let mut headers = HeaderMap::new();
+        assert!(!browser_matches(&headers, relay));
+        headers.insert(
+            header::COOKIE,
+            text.split(';').next().unwrap().parse().unwrap(),
+        );
+        assert!(browser_matches(&headers, relay));
+        assert!(!browser_matches(&headers, "synthetic-relay-b"));
+        headers.append(header::COOKIE, headers[header::COOKIE].clone());
+        assert!(!browser_matches(&headers, relay));
+    }
 
     fn fixture_runtime() -> SamlRuntimeConfig {
         SamlRuntimeConfig {
@@ -976,6 +1041,35 @@ mod tests {
         corpus.assert_valid()?;
         let mut replay = FixedReplayCache::new(corpus.now() + Duration::from_secs(24 * 60 * 60));
         assert!(corpus.verify(&mut replay).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn genuine_signed_response_is_bound_to_sp_audience_and_expected_issuer() -> anyhow::Result<()> {
+        let corpus = KeycloakCorpus::load()?;
+        corpus.assert_valid()?;
+        for mutation in ["audience", "issuer"] {
+            let mut runtime = corpus.runtime();
+            let mut pending = corpus.pending();
+            match mutation {
+                "audience" => runtime.sp_entity_id = "urn:other-service-provider".into(),
+                "issuer" => {
+                    pending.idp_entity_id = "https://other-idp.example.test/metadata".into()
+                }
+                _ => unreachable!(),
+            }
+            // Preserve the genuine signature and timestamp. Only the trusted
+            // local expectation differs from the positive control.
+            let result = PreparedSso::new(
+                &runtime,
+                corpus.connection(),
+                pending,
+                &corpus.relay_state,
+                corpus.fields(),
+            )
+            .and_then(|prepared| prepared.finish(FixedReplayCache::new(corpus.now()).validation()));
+            assert!(result.is_err(), "accepted mismatched {mutation}");
+        }
         Ok(())
     }
 
@@ -1384,7 +1478,7 @@ mod tests {
         )?;
         let cipher = OidcStateCipher::from_base64url_key(&URL_SAFE_NO_PAD.encode([7_u8; 32]))?;
 
-        let redirect_url =
+        let (redirect_url, _) =
             start_login_inner(&store, &cipher, &runtime, connection, &workspace.id, None).await?;
         let redirect = Url::parse(&redirect_url)?;
         let query = redirect

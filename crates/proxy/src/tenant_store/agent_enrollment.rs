@@ -29,7 +29,7 @@ pub struct IssuedAgentCredential {
     pub token: String,
 }
 
-fn valid_id(value: &str) -> bool {
+pub(super) fn valid_id(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
         && value
@@ -37,7 +37,7 @@ fn valid_id(value: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.'))
 }
 
-fn credential_hash(token: &str) -> Option<Vec<u8>> {
+pub(super) fn credential_hash(token: &str) -> Option<Vec<u8>> {
     if token.len() != 52
         || !token.starts_with("sw_agent_")
         || !token

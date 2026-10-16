@@ -14,6 +14,13 @@ adds the accepted generic classifier/policy matrix and complete raw reports.
 The [October 14 resource-executor check](evidence/SOU18_RESOURCES_2026-10-14.md)
 tests the Windows lifecycle fixes together with SOU-15 PR #107. It records nine
 passing resource/startup cases and a failing same-session recovery case.
+The [post-merge rerun](evidence/SOU18_MAIN_2026-10-14.md) records main `5fc6d72`
+after PRs #107 and #110: all ten resource checks pass, including useful recovery
+after 70 read errors. The earlier failure report remains unchanged.
+The [October 15 acceptance report](evidence/SOU18_ACCEPTANCE_2026-10-15.md)
+records main `4f428e4`, the native CI platform matrix, an actual Claude Code
+session and daemon outage, and live CodeQL merge-rule observations. Its scope
+and missing environments remain explicit; earlier child reports are unchanged.
 
 ## Run the local probes together
 
@@ -94,6 +101,47 @@ classifier accuracy or prove CodeQL merge protection. Repeat it on the final
 agreed candidate and complete the remaining host, constrained-resource and
 administrator checks separately.
 
+## Check an actual Claude Code session and daemon outage
+
+Use an explicitly selected Claude Code executable with the existing local
+Messages provider and trusted MCP fixture. This exercises the real host without
+a provider account or paid model. It does not certify arbitrary MCP servers or
+the host's other tools. Keep a clean candidate separate from evidence output.
+
+```sh
+python3 "$CANDIDATE_DIR/scripts/mcp-admission-demo.py" \
+  --classifier rule-baseline --agentfw /absolute/path/to/agentfw \
+  --claude /absolute/path/to/claude --out /absolute/path/new-host-report.json
+python3 scripts/verify-sou18-claude-outage.py \
+  --repo "$CANDIDATE_DIR" --agentfw /absolute/path/to/agentfw \
+  --claude /absolute/path/to/claude --expected-commit "$CANDIDATE_SHA" \
+  --output /absolute/path/outside/candidate/new-host-outage-run
+```
+
+The first command checks allowed read/send, a previously unseen publishing tool,
+Deny, Ask, result withholding and useful continuation. The second requires a
+successful read before stopping its own daemon, then observes a benign send
+through the same actual host. A disconnected host alone cannot pass: original
+proposals, the server ledger, local receiver, native decisions and the returned
+error must agree. Classification and local policy can still run after daemon
+loss; failure to reach native admission is a transport failure, not policy Deny.
+
+The outage probe requires native Linux or macOS and a new output directory. It
+uses a temporary profile, disables unrelated host tools, applies a 120-second
+host timeout and removes its owned profile. It retains synthetic traffic only.
+Exit 0 is a bounded pass, 1 a failed observation, and 2 incomplete evidence or
+invalid invocation. Reproduce each claimed platform separately.
+
+For the October 15 Linux x86_64 run, the explicitly selected vendor version was
+`@anthropic-ai/claude-code@2.1.296`. It was installed outside the candidate with
+`npm install --prefix /absolute/path/to/disposable-host --ignore-scripts
+--no-audit --no-fund --save-exact @anthropic-ai/claude-code@2.1.296`. The executable
+was `node_modules/@anthropic-ai/claude-code-linux-x64/claude` under that prefix;
+the wrapper was not used because install scripts were disabled. This is a
+platform-specific reproduction example, not a global installation command.
+Retain the lockfile integrity, vendor license, executable hash, version and
+provider mode. The report links those identities; no vendor binary is distributed.
+
 ## Check operation-level resource execution
 
 After building the exact SOU-15 candidate, run the independent
@@ -124,6 +172,10 @@ arbitrary server process or protection from concurrent path replacement.
 The ten cases cover absolute/relative reads, an unlisted file, traversal,
 symlinks, unsupported operations, result withholding, workspace mismatch,
 missing-workspace startup failure and recovery after 70 invalid UTF-8 reads.
+An unsupported tool must retain its classification evidence but stop before
+native admission: both `native_call` and `native_result` must be absent. An
+ordinary native resource denial is checked separately and requires its native
+denial record.
 The recovery case requires a useful allowed read in the same session after the
 errors; a new connection or zero child calls cannot replace that proof.
 
@@ -140,8 +192,8 @@ Keep the build manifest with these outputs. The supplied executor/classifier
 digests in the resource profile are operator declarations, not independent
 attestations. The combined runner above still covers its original four stages;
 run this probe separately and retain a failure even if those stages pass.
-The dated evidence does not supersede SOU-15 review findings. Rerun both commands
-after the executor changes and have SOU-17/SOU-18 use the same agreed candidate.
+Rerun both commands after executor changes and have SOU-17/SOU-18 use the same
+agreed candidate. Historical reports describe only their pinned revisions.
 
 ## Disposable installation and status checks
 
@@ -415,6 +467,10 @@ caused by missing reviews does not prove a scanning-rule rejection. Preserve the
 head SHA, analysis ID, rule result, thresholds and timestamps for each case.
 
 Until all three cases are observed, retain `not_run`/unverified evidence.
+The [October 15 report](evidence/SOU18_ACCEPTANCE_2026-10-15.md#codeql-merge-rule)
+records the separate live observations for disposable PR #117. Read-only audit
+JSON still retains its original `not_run` flags and API access gaps; the live
+record supplements it rather than rewriting a historical observation.
 False-positive dismissals need the authorized reviewer's recorded rationale;
 do not lower thresholds or silently bypass findings. Link
 [SOU-17](https://linear.app/soup-wall/issue/SOU-17/task-11-independently-verify-failure-overlap-and-replay-behavior)'s

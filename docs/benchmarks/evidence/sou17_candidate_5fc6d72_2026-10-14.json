@@ -1,0 +1,5079 @@
+{
+  "schema_version": "sou17-current-main/1",
+  "acceptance_passed": false,
+  "status": "blocked_by_confirmed_runtime_findings",
+  "source": {
+    "commit": "5fc6d72fd73ebe9faa70c56607fc492163df1a42",
+    "tree": "ee49a2ffc0e78136767e4075223c5129fd3e5dd7",
+    "clean_before_after": true,
+    "inputs_digest": "3c13497dc96c677c64a249e53e0d9eb8ca26a2db63a353a3f6096acc51f6e28b",
+    "selected_file_sha256": {
+      "Cargo.lock": "408062e53fc9330027e9d118499633755e8ba7e4c8bd0bd386266667f5f940ad",
+      "contract/updated_contract2.md": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0",
+      "crates/adapter/src/runner.rs": "99ef70172faa380c5e9b0fa466c25a777edd80a54624a4e8541cd6df2f92cc5a",
+      "crates/adapter/tests/resilience_tests.rs": "9664ea07735d4b1e2d3dafa436cb80c9fa8f9306e688a33078bdfaaf34bcf278",
+      "crates/agentfw/src/grant.rs": "3d3267c60b2b32632c144f06a04283319c606bb52866098c70d23f82b8073a73",
+      "crates/agentfw/src/mcp/admission.rs": "7b0366a49d029e68e92832f032c34a1423611bb0b0db60740e42e5a8fbbdbdfd",
+      "crates/agentfw/src/native/resource.rs": "87f246b42bcb6dbc4ef85e9f04988c9823b8bb751d3db8d86622c00ebba4e666",
+      "crates/agentfw/src/sandbox.rs": "7e9146c5a44021f21128982be799d04d53b399da08efdd013f18635dd8af299a",
+      "crates/agentfw/src/token.rs": "edc3bfa80ace9ba4fc3e50501ed88849ef97fbcb3e334dc1ec406730ecb2e696",
+      "crates/agentfw/tests/mcp_admission.rs": "72ecbd4b93b054a645b6df840bb20274b28dec5a1596031c7ee5a577b6c80e60",
+      "crates/agentfw/tests/native_endpoint.rs": "0ecb8baa15887a07436dfb510265a4b2fe69c11b9231f718c1da6578c0e77b3b",
+      "rule_baseline/rule_baseline.py": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+      "scripts/fixtures/mcp_resource_probe_server.py": "fe79d9eb96dc784f8c3d9b9492ad8d9c14bc03ade8776dbf521bd30a48278d7e",
+      "scripts/verify-sou18-resources.py": "f1993c9f7affb9b6dfbd42bcfb572e2202d4d94fdc1781be06ee1a52b964a7e8"
+    },
+    "agentfw_sha256": "a11ac87ef488feb64f62ac2db7794db09f79364164227d130c6bfb2a329e1dd5"
+  },
+  "environment": {
+    "host_os": "Darwin",
+    "host_architecture": "arm64",
+    "host_kernel": "25.3.0",
+    "host_python": "3.14.3",
+    "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)",
+    "cargo": "cargo 1.99.0 (5f94df478 2026-08-27)",
+    "build_settings": {
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_PROFILE_DEV_DEBUG": "0",
+      "CARGO_PROFILE_TEST_DEBUG": "0",
+      "CARGO_TARGET_DIR": "/Users/konung/projects/soup-wall/target"
+    }
+  },
+  "existing_regressions": {
+    "status": "pass",
+    "total": 112,
+    "suites": [
+      {
+        "target": "resilience_tests",
+        "cases": 19,
+        "sha256": "81d695421a853e42e95ca098a86bf72c5f86d6850a5b74c194d388361099c03e"
+      },
+      {
+        "target": "mcp_admission",
+        "cases": 56,
+        "sha256": "22b1ae7bfb1a5b5cadeb84dd6aecb252b96e6a5ed1f511ef352676b19e1031ff"
+      },
+      {
+        "target": "native_endpoint",
+        "cases": 37,
+        "sha256": "c344850649c0a9e1d280f919a0fb467e868cd08a1e1766eb3d14055f62e66443"
+      }
+    ],
+    "raw_outcomes": [
+      {
+        "name": "allowed_call_preserves_arguments_and_identifiers_and_creates_witness",
+        "status": "pass",
+        "elapsed_ms": 5.909,
+        "evidence": [],
+        "suite": "resilience_tests"
+      },
+      {
+        "name": "deny_survives_a_mixed_read_and_dangerous_classification",
+        "status": "pass",
+        "elapsed_ms": 6.076,
+        "evidence": [],
+        "suite": "resilience_tests"
+      },
+      {
+        "name": "duplicate_top_level_fields_are_denied_without_executor_entry",
+        "status": "pass",
+        "elapsed_ms": 5.841,
+        "evidence": [],
+        "suite": "resilience_tests"
+      },
+      {
+        "name": "hard_deny_survives_overlapping_allow_and_confirmation_signals",
+        "status": "pass",
+        "elapsed_ms": 23.956,
+        "evidence": [
+          {
+            "boundary": "shared_adapter_runner_only",
+            "call_id": "overlap-Delete-0-false",
+            "classification": {
+              "categories": [
+                "read",
+                "write",
+                "unknown",
+                "delete"
+              ],
+              "confidence": 0.949999988079071,
+              "reason": "deterministic local classifier fixture",
+              "uncertainty": 1.0
+            },
+            "executor_entries": 0,
+            "latency_ms": 0.001375,
+            "receipt_executed": false,
+            "side_effect_exists": false,
+            "verdict": "deny"
+          },
+          {
+            "boundary": "shared_adapter_runner_only",
+            "call_id": "overlap-Delete-0-true",
+            "classification": {
+              "categories": [
+                "delete",
+                "unknown",
+                "write",
+                "read"
+              ],
+              "confidence": 0.949999988079071,
+              "reason": "deterministic local classifier fixture",
+              "uncertainty": 1.0
+            },
+            "executor_entries": 0,
+            "latency_ms": 0.000375,
+            "receipt_executed": false,
+            "side_effect_exists": false,
+            "verdict": "deny"
+          },
+          {
+            "boundary": "shared_adapter_runner_only",
+            "call_id": "overlap-Delete-1-false",
+            "classification": {
+              "categories": [
+                "write",
+                "unknown",
+                "delete",
+                "read"
+              ],
+              "confidence": 0.949999988079071,
+              "reason": "deterministic local classifier fixture",
+              "uncertainty": 1.0
+            },
+            "executor_entries": 0,
+            "latency_ms": 0.000375,
+            "receipt_executed": false,
+            "side_effect_exists": false,
+            "verdict": "deny"
+          },
+          {
+            "boundary": "shared_adapter_runner_only",
+            "call_id": "overlap-Delete-1-true",
+            "classification": {
+              "categories": [
+                "read",
+                "delete",
+                "unknown",
+                "write"
+              ],
+              "confidence": 0.949999988079071,
+              "reason": "deterministic local classifier fixture",
+              "uncertainty": 1.0
+            },
+            "executor_entries": 0,
+            "latency_ms": 0.000542,
+            "receipt_executed": false,
+            "side_effect_exists": false,
+            "verdict": "deny"
+          },
+          {
+            "boundary": "shared_adapter_runner_only",
+            "call_id": "overlap-Delete-2-false",
+            "classification": {
+              "categories": [
+                "unknown",
+                "delete",
+                "read",
+                "write"
+              ],
+              "confidence": 0.949999988079071,
+              "reason": "deterministic local classifier fixture",
+              "uncertainty": 1.0
+            },
+            "executor_entries": 0,
+            "latency_ms": 0.000417,
+            "receipt_executed": false,
+            "side_effect_exists": false,
+            "verdict": "deny"
+          },
+          {
+            "boundary": "shared_adapter_runner_only",
+            "call_id": "overlap-Delete-2-true",
+            "classification": {
+              "categories": [
+                "write",
+                "read",
+                "delete",
+                "unknown"
+              ],
+              "confidence": 0.949999988079071,
+              "reason": "deterministic local classifier fixture",
+              "uncertainty": 1.0
+            },
+            "executor_entries": 0,
+            "latency_ms": 0.000375,
+            "receipt_executed": false,
+            "side_effect_exists": false,
+            "verdict": "deny"
+          },
+          {
+            "boundary": "shared_adapter_runner_only",
+            "call_id": "overlap-Delete-3-false",
+            "classification": {
+              "categories": [
+                "delete",
+                "read",
+                "write",
+                "unknown"
+              ],
+              "confidence": 0.949999988079071,
+              "reason": "deterministic local classifier fixture",
+              "uncertainty": 1.0
+            },
+            "executor_entries": 0,
+            "latency_ms": 0.00033299999999999996,
+            "receipt_executed": false,
+            "side_effect_exists": false,
+            "verdict": "deny"
+          },
+          {
+            "boundary": "shared_adapter_runner_only",
+            "call_id": "overlap-Delete-3-true",
+            "classification": {
+              "categories": [
+                "unknown",
+                "write",
+                "read",
+                "delete"
+              ],
+              "confidence": 0.949999988079071,
+              "reason": "deterministic local classifier fixture",
+              "uncertainty": 1.0
+            },
+            "executor_entries": 0,
+            "latency_ms": 0.00025,
+            "receipt_executed": false,
+            "side_effect_exists": false,
+            "verdict": "deny"
+          },
+          {
+            "boundary": "shared_adapter_runner_only",
+            "call_id": "overlap-SendData-0-false",
+            "classification": {
+              "categories": [
+                "read",
+                "write",
+                "unknown",
+                "send_data"
+              ],
+              "confidence": 0.949999988079071,
+              "reason": "deterministic local classifier fixture",
+              "uncertainty": 1.0
+            },
+            "executor_entries": 0,
+            "latency_ms": 0.00041600000000000003,
+            "receipt_executed": false,
+            "side_effect_exists": false,
+            "verdict": "deny"
+          },
+          {
+            "boundary": "shared_adapter_runner_only",
+            "call_id": "overlap-SendData-0-true",
+            "classification": {
+              "categories": [
+                "send_data",
+                "unknown",
+                "write",
+                "read"
+              ],
+              "confidence": 0.949999988079071,
+              "reason": "deterministic local classifier fixture",
+              "uncertainty": 1.0
+            },
+            "executor_entries": 0,
+            "latency_ms": 0.000375,
+            "receipt_executed": false,
+            "side_effect_exists": false,
+            "verdict": "deny"
+          },
+          {
+            "boundary": "shared_adapter_runner_only",
+            "call_id": "overlap-SendData-1-false",
+            "classification": {
+              "categories": [
+                "write",
+                "unknown",
+                "send_data",
+                "read"
+              ],
+              "confidence": 0.949999988079071,
+              "reason": "deterministic local classifier fixture",
+              "uncertainty": 1.0
+            },
+            "executor_entries": 0,
+            "latency_ms": 0.00033299999999999996,
+            "receipt_executed": false,
+            "side_effect_exists": false,
+            "verdict": "deny"
+          },
+          {
+            "boundary": "shared_adapter_runner_only",
+            "call_id": "overlap-SendData-1-true",
+            "classification": {
+              "categories": [
+                "read",
+                "send_data",
+                "unknown",
+                "write"
+              ],
+              "confidence": 0.949999988079071,
+              "reason": "deterministic local classifier fixture",
+              "uncertainty": 1.0
+            },
+            "executor_entries": 0,
+            "latency_ms": 0.00025,
+            "receipt_executed": false,
+            "side_effect_exists": false,
+            "verdict": "deny"
+          },
+          {
+            "boundary": "shared_adapter_runner_only",
+            "call_id": "overlap-SendData-2-false",
+            "classification": {
+              "categories": [
+                "unknown",
+                "send_data",
+                "read",
+                "write"
+              ],
+              "confidence": 0.949999988079071,
+              "reason": "deterministic local classifier fixture",
+              "uncertainty": 1.0
+            },
+            "executor_entries": 0,
+            "latency_ms": 0.00025,
+            "receipt_executed": false,
+            "side_effect_exists": false,
+            "verdict": "deny"
+          },
+          {
+            "boundary": "shared_adapter_runner_only",
+            "call_id": "overlap-SendData-2-true",
+            "classification": {
+              "categories": [
+                "write",
+                "read",
+                "send_data",
+                "unknown"
+              ],
+              "confidence": 0.949999988079071,
+              "reason": "deterministic local classifier fixture",
+              "uncertainty": 1.0
+            },
+            "executor_entries": 0,
+            "latency_ms": 0.000292,
+            "receipt_executed": false,
+            "side_effect_exists": false,
+            "verdict": "deny"
+          },
+          {
+            "boundary": "shared_adapter_runner_only",
+            "call_id": "overlap-SendData-3-false",
+            "classification": {
+              "categories": [
+                "send_data",
+                "read",
+                "write",
+                "unknown"
+              ],
+              "confidence": 0.949999988079071,
+              "reason": "deterministic local classifier fixture",
+              "uncertainty": 1.0
+            },
+            "executor_entries": 0,
+            "latency_ms": 0.000334,
+            "receipt_executed": false,
+            "side_effect_exists": false,
+            "verdict": "deny"
+          },
+          {
+            "boundary": "shared_adapter_runner_only",
+            "call_id": "overlap-SendData-3-true",
+            "classification": {
+              "categories": [
+                "unknown",
+                "write",
+                "read",
+                "send_data"
+              ],
+              "confidence": 0.949999988079071,
+              "reason": "deterministic local classifier fixture",
+              "uncertainty": 1.0
+            },
+            "executor_entries": 0,
+            "latency_ms": 0.00033299999999999996,
+            "receipt_executed": false,
+            "side_effect_exists": false,
+            "verdict": "deny"
+          },
+          {
+            "boundary": "shared_adapter_runner_only",
+            "call_id": "overlap-ChangePermissions-0-false",
+            "classification": {
+              "categories": [
+                "read",
+                "write",
+                "unknown",
+                "change_permissions"
+              ],
+              "confidence": 0.949999988079071,
+              "reason": "deterministic local classifier fixture",
+              "uncertainty": 1.0
+            },
+            "executor_entries": 0,
+            "latency_ms": 0.000375,
+            "receipt_executed": false,
+            "side_effect_exists": false,
+            "verdict": "deny"
+          },
+          {
+            "boundary": "shared_adapter_runner_only",
+            "call_id": "overlap-ChangePermissions-0-true",
+            "classification": {
+              "categories": [
+                "change_permissions",
+                "unknown",
+                "write",
+                "read"
+              ],
+              "confidence": 0.949999988079071,
+              "reason": "deterministic local classifier fixture",
+              "uncertainty": 1.0
+            },
+            "executor_entries": 0,
+            "latency_ms": 0.00029099999999999997,
+            "receipt_executed": false,
+            "side_effect_exists": false,
+            "verdict": "deny"
+          },
+          {
+            "boundary": "shared_adapter_runner_only",
+            "call_id": "overlap-ChangePermissions-1-false",
+            "classification": {
+              "categories": [
+                "write",
+                "unknown",
+                "change_permissions",
+                "read"
+              ],
+              "confidence": 0.949999988079071,
+              "reason": "deterministic local classifier fixture",
+              "uncertainty": 1.0
+            },
+            "executor_entries": 0,
+            "latency_ms": 0.000417,
+            "receipt_executed": false,
+            "side_effect_exists": false,
+            "verdict": "deny"
+          },
+          {
+            "boundary": "shared_adapter_runner_only",
+            "call_id": "overlap-ChangePermissions-1-true",
+            "classification": {
+              "categories": [
+                "read",
+                "change_permissions",
+                "unknown",
+                "write"
+              ],
+              "confidence": 0.949999988079071,
+              "reason": "deterministic local classifier fixture",
+              "uncertainty": 1.0
+            },
+            "executor_entries": 0,
+            "latency_ms": 0.000375,
+            "receipt_executed": false,
+            "side_effect_exists": false,
+            "verdict": "deny"
+          },
+          {
+            "boundary": "shared_adapter_runner_only",
+            "call_id": "overlap-ChangePermissions-2-false",
+            "classification": {
+              "categories": [
+                "unknown",
+                "change_permissions",
+                "read",
+                "write"
+              ],
+              "confidence": 0.949999988079071,
+              "reason": "deterministic local classifier fixture",
+              "uncertainty": 1.0
+            },
+            "executor_entries": 0,
+            "latency_ms": 0.000334,
+            "receipt_executed": false,
+            "side_effect_exists": false,
+            "verdict": "deny"
+          },
+          {
+            "boundary": "shared_adapter_runner_only",
+            "call_id": "overlap-ChangePermissions-2-true",
+            "classification": {
+              "categories": [
+                "write",
+                "read",
+                "change_permissions",
+                "unknown"
+              ],
+              "confidence": 0.949999988079071,
+              "reason": "deterministic local classifier fixture",
+              "uncertainty": 1.0
+            },
+            "executor_entries": 0,
+            "latency_ms": 0.000375,
+            "receipt_executed": false,
+            "side_effect_exists": false,
+            "verdict": "deny"
+          },
+          {
+            "boundary": "shared_adapter_runner_only",
+            "call_id": "overlap-ChangePermissions-3-false",
+            "classification": {
+              "categories": [
+                "change_permissions",
+                "read",
+                "write",
+                "unknown"
+              ],
+              "confidence": 0.949999988079071,
+              "reason": "deterministic local classifier fixture",
+              "uncertainty": 1.0
+            },
+            "executor_entries": 0,
+            "latency_ms": 0.00033299999999999996,
+            "receipt_executed": false,
+            "side_effect_exists": false,
+            "verdict": "deny"
+          },
+          {
+            "boundary": "shared_adapter_runner_only",
+            "call_id": "overlap-ChangePermissions-3-true",
+            "classification": {
+              "categories": [
+                "unknown",
+                "write",
+                "read",
+                "change_permissions"
+              ],
+              "confidence": 0.949999988079071,
+              "reason": "deterministic local classifier fixture",
+              "uncertainty": 1.0
+            },
+            "executor_entries": 0,
+            "latency_ms": 0.002375,
+            "receipt_executed": false,
+            "side_effect_exists": false,
+            "verdict": "deny"
+          }
+        ],
+        "suite": "resilience_tests"
+      },
+      {
+        "name": "incorrect_required_field_types_are_denied_without_executor_entry",
+        "status": "pass",
+        "elapsed_ms": 11.95,
+        "evidence": [],
+        "suite": "resilience_tests"
+      },
+      {
+        "name": "invalid_classifier_json_is_denied_without_executor_entry",
+        "status": "pass",
+        "elapsed_ms": 12.367,
+        "evidence": [],
+        "suite": "resilience_tests"
+      },
+      {
+        "name": "invalid_event_identifiers_and_version_are_denied_without_panic",
+        "status": "pass",
+        "elapsed_ms": 12.336,
+        "evidence": [],
+        "suite": "resilience_tests"
+      },
+      {
+        "name": "malformed_json_is_denied_without_executor_entry",
+        "status": "pass",
+        "elapsed_ms": 12.286,
+        "evidence": [],
+        "suite": "resilience_tests"
+      },
+      {
+        "name": "misleading_description_cannot_release_a_delete",
+        "status": "pass",
+        "elapsed_ms": 6.255,
+        "evidence": [],
+        "suite": "resilience_tests"
+      },
+      {
+        "name": "missing_required_fields_are_denied_without_executor_entry",
+        "status": "pass",
+        "elapsed_ms": 5.968,
+        "evidence": [],
+        "suite": "resilience_tests"
+      },
+      {
+        "name": "regression_executor_error_does_not_erase_a_witnessed_effect",
+        "status": "pass",
+        "elapsed_ms": 5.94,
+        "evidence": [],
+        "suite": "resilience_tests"
+      },
+      {
+        "name": "regression_invalid_classifier_scores_fail_closed",
+        "status": "pass",
+        "elapsed_ms": 12.059,
+        "evidence": [],
+        "suite": "resilience_tests"
+      },
+      {
+        "name": "regression_permission_change_cannot_be_weakened_by_read",
+        "status": "pass",
+        "elapsed_ms": 5.819,
+        "evidence": [],
+        "suite": "resilience_tests"
+      },
+      {
+        "name": "regression_schema_invalid_arguments_are_denied_before_executor_entry",
+        "status": "pass",
+        "elapsed_ms": 5.693,
+        "evidence": [],
+        "suite": "resilience_tests"
+      },
+      {
+        "name": "regression_unknown_component_cannot_be_weakened_by_read",
+        "status": "pass",
+        "elapsed_ms": 5.965,
+        "evidence": [],
+        "suite": "resilience_tests"
+      },
+      {
+        "name": "regression_unknown_name_with_read_substring_stays_blocked",
+        "status": "pass",
+        "elapsed_ms": 5.805,
+        "evidence": [],
+        "suite": "resilience_tests"
+      },
+      {
+        "name": "uncertain_read_stays_blocked_at_and_above_policy_boundary",
+        "status": "pass",
+        "elapsed_ms": 5.796,
+        "evidence": [],
+        "suite": "resilience_tests"
+      },
+      {
+        "name": "unknown_classifier_result_stays_blocked_in_headless_execution",
+        "status": "pass",
+        "elapsed_ms": 5.743,
+        "evidence": [],
+        "suite": "resilience_tests"
+      },
+      {
+        "name": "unknown_tool_requires_confirmation_and_never_executes",
+        "status": "pass",
+        "elapsed_ms": 5.652,
+        "evidence": [],
+        "suite": "resilience_tests"
+      },
+      {
+        "name": "classified_read_keeps_original_call_and_result_bytes",
+        "status": "pass",
+        "elapsed_ms": 893.705,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "classifier_failures_never_reach_policy_or_the_server",
+        "status": "pass",
+        "elapsed_ms": 2145.427,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "composed_refusals_do_not_reserve_native_capacity_or_block_useful_followup",
+        "status": "pass",
+        "elapsed_ms": 3992.285,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_accepts_codex_discovery_and_calls_without_granting_authority",
+        "status": "pass",
+        "elapsed_ms": 144.692,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_accepts_observed_claude_correlation_metadata_without_changing_call_bytes",
+        "status": "pass",
+        "elapsed_ms": 141.447,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_allows_real_read_but_denies_secret_send_before_server_execution",
+        "status": "pass",
+        "elapsed_ms": 150.908,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_cancellation_after_effect_withholds_result_without_undoing_execution",
+        "status": "pass",
+        "elapsed_ms": 142.934,
+        "evidence": [
+          {
+            "call_id": 3,
+            "client_result_bytes": 0,
+            "effect_observed": true,
+            "execution_count": 1,
+            "gated_result_marker_released": false,
+            "outcome": "transport_refused_after_effect",
+            "policy_sha256": "5016bcd9f01c27c9fc4e7129919d984236d4079df5c02afea853407feb2295dc",
+            "registry_sha256": "c778b2a394add8e7cf40f0455d1492af8e53d67da36ec5b5eb1ae9a7f6e278b8",
+            "result_prepared": false,
+            "schema_version": "sou17-native-evidence/0.1",
+            "test": "unsupported_cancellation_after_effect"
+          }
+        ],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_cancellation_while_call_admission_is_stalled_is_fail_closed",
+        "status": "pass",
+        "elapsed_ms": 5288.042,
+        "evidence": [
+          {
+            "args_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "authoritative_verdict": "allow",
+            "call_id": 3,
+            "cancellation_frame_written": true,
+            "cancellation_handling": "queued_until_native_admission_timeout",
+            "cancellation_request_id": 3,
+            "cancellation_written_after_ms": 41.412541,
+            "classification": {
+              "actions": [
+                "read"
+              ],
+              "confidence": 0.7,
+              "reason_sha256": "d12452c6675a4920aa32b7070567aa495c3d8862aabd4ac2c919053a9dd9adbc",
+              "uncertainty": 0.3,
+              "unknown": false
+            },
+            "classifier_policy_status": "reached",
+            "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+            "classifier_source": "rule-baseline/python",
+            "client_result_byte_scope": "json_payload_without_line_ending",
+            "client_result_bytes": 0,
+            "definition_sha256": "12fe78cadc8f5acc5c0a0029e02810380623ffbcc3295a1889e3586e0dd3c057",
+            "effect_observed": false,
+            "execution_count": 0,
+            "execution_count_semantics": "complete_dispatch_records",
+            "executor_ledger_file_created": false,
+            "executor_ledger_raw": "",
+            "gated_result_marker_released": false,
+            "input_sha256": "ef6d8a292427c038b7e2b004da0c2b6359993e4c736bc49bce15906d812bc792",
+            "native_admission_gate_released": false,
+            "native_call_requests_started": 1,
+            "native_gate_released_after_ms": null,
+            "outcome": "transport_timeout_before_effect",
+            "policy_sha256": "5016bcd9f01c27c9fc4e7129919d984236d4079df5c02afea853407feb2295dc",
+            "pre_effect_cancellation_guarantee_asserted": false,
+            "registry_sha256": "c778b2a394add8e7cf40f0455d1492af8e53d67da36ec5b5eb1ae9a7f6e278b8",
+            "request_latency_ms": 5048.204791,
+            "result_prepared": false,
+            "schema_version": "sou17-native-evidence/0.1",
+            "server_effect_marker_present": false,
+            "snapshot_sha256": "c3248979ad8003ef8518768959e1b83c565b6a45e08afc2a8fb6217911bd7d92",
+            "test": "production_classifier_cancellation_during_native_timeout"
+          },
+          {
+            "args_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "authoritative_verdict": "allow",
+            "call_id": 3,
+            "cancellation_frame_written": true,
+            "cancellation_handling": "queued_cancellation_refused_after_native_allow",
+            "cancellation_request_id": 3,
+            "cancellation_written_after_ms": 53.161209,
+            "classification": {
+              "actions": [
+                "read"
+              ],
+              "confidence": 0.7,
+              "reason_sha256": "d12452c6675a4920aa32b7070567aa495c3d8862aabd4ac2c919053a9dd9adbc",
+              "uncertainty": 0.3,
+              "unknown": false
+            },
+            "classifier_policy_status": "reached",
+            "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+            "classifier_source": "rule-baseline/python",
+            "client_result_byte_scope": "json_payload_without_line_ending",
+            "client_result_bytes": 0,
+            "definition_sha256": "12fe78cadc8f5acc5c0a0029e02810380623ffbcc3295a1889e3586e0dd3c057",
+            "effect_observed": false,
+            "execution_count": 0,
+            "execution_count_semantics": "complete_dispatch_records",
+            "executor_ledger_file_created": false,
+            "executor_ledger_raw": "",
+            "gated_result_marker_released": false,
+            "input_sha256": "ef6d8a292427c038b7e2b004da0c2b6359993e4c736bc49bce15906d812bc792",
+            "native_admission_gate_released": true,
+            "native_call_requests_started": 1,
+            "native_gate_released_after_ms": 53.16275,
+            "outcome": "transport_refused_after_admission",
+            "policy_sha256": "5016bcd9f01c27c9fc4e7129919d984236d4079df5c02afea853407feb2295dc",
+            "pre_effect_cancellation_guarantee_asserted": false,
+            "registry_sha256": "c778b2a394add8e7cf40f0455d1492af8e53d67da36ec5b5eb1ae9a7f6e278b8",
+            "request_latency_ms": 70.41654199999999,
+            "result_prepared": false,
+            "schema_version": "sou17-native-evidence/0.1",
+            "server_effect_marker_present": false,
+            "snapshot_sha256": "c3248979ad8003ef8518768959e1b83c565b6a45e08afc2a8fb6217911bd7d92",
+            "test": "production_classifier_cancellation_then_native_allow"
+          }
+        ],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_checks_codex_results_before_releasing_original_content",
+        "status": "pass",
+        "elapsed_ms": 144.331,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_concurrent_call_after_effect_never_reaches_second_executor",
+        "status": "pass",
+        "elapsed_ms": 147.928,
+        "evidence": [
+          {
+            "call_id": [
+              3,
+              4
+            ],
+            "client_result_bytes": 0,
+            "effect_observed": true,
+            "execution_count": 1,
+            "gated_result_marker_released": false,
+            "outcome": "transport_refused_after_first_effect",
+            "policy_sha256": "5016bcd9f01c27c9fc4e7129919d984236d4079df5c02afea853407feb2295dc",
+            "registry_sha256": "c778b2a394add8e7cf40f0455d1492af8e53d67da36ec5b5eb1ae9a7f6e278b8",
+            "result_prepared": false,
+            "schema_version": "sou17-native-evidence/0.1",
+            "test": "unsupported_concurrent_call"
+          }
+        ],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_daemon_call_timeout_never_executes_call",
+        "status": "pass",
+        "elapsed_ms": 5191.175,
+        "evidence": [
+          {
+            "args_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "authoritative_verdict": "allow",
+            "call_id": 3,
+            "classification": {
+              "actions": [
+                "read"
+              ],
+              "confidence": 0.7,
+              "reason_sha256": "d12452c6675a4920aa32b7070567aa495c3d8862aabd4ac2c919053a9dd9adbc",
+              "uncertainty": 0.3,
+              "unknown": false
+            },
+            "classifier_policy_status": "reached",
+            "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+            "classifier_source": "rule-baseline/python",
+            "client_result_byte_scope": "json_payload_without_line_ending",
+            "client_result_bytes": 0,
+            "definition_sha256": "12fe78cadc8f5acc5c0a0029e02810380623ffbcc3295a1889e3586e0dd3c057",
+            "effect_observed": false,
+            "execution_count": 0,
+            "gated_result_marker_released": false,
+            "input_sha256": "ef6d8a292427c038b7e2b004da0c2b6359993e4c736bc49bce15906d812bc792",
+            "native_call_requests_started": 1,
+            "outcome": "transport_timeout_before_effect",
+            "policy_sha256": "5016bcd9f01c27c9fc4e7129919d984236d4079df5c02afea853407feb2295dc",
+            "registry_sha256": "c778b2a394add8e7cf40f0455d1492af8e53d67da36ec5b5eb1ae9a7f6e278b8",
+            "request_latency_ms": 5049.1205,
+            "result_prepared": false,
+            "schema_version": "sou17-native-evidence/0.1",
+            "snapshot_sha256": "c3248979ad8003ef8518768959e1b83c565b6a45e08afc2a8fb6217911bd7d92",
+            "test": "production_classifier_call_daemon_timeout"
+          }
+        ],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_daemon_outage_after_execution_withholds_result",
+        "status": "pass",
+        "elapsed_ms": 330.794,
+        "evidence": [
+          {
+            "args_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "authoritative_verdict": "allow",
+            "call_id": 3,
+            "classification": {
+              "actions": [
+                "read"
+              ],
+              "confidence": 0.7,
+              "reason_sha256": "d12452c6675a4920aa32b7070567aa495c3d8862aabd4ac2c919053a9dd9adbc",
+              "uncertainty": 0.3,
+              "unknown": false
+            },
+            "classifier_policy_status": "reached",
+            "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+            "classifier_source": "rule-baseline/python",
+            "client_result_byte_scope": "json_payload_without_line_ending",
+            "client_result_bytes": 0,
+            "definition_sha256": "12fe78cadc8f5acc5c0a0029e02810380623ffbcc3295a1889e3586e0dd3c057",
+            "effect_observed": true,
+            "execution_count": 1,
+            "gated_result_marker_released": false,
+            "input_sha256": "ef6d8a292427c038b7e2b004da0c2b6359993e4c736bc49bce15906d812bc792",
+            "outcome": "transport_refused_after_effect",
+            "policy_sha256": "5016bcd9f01c27c9fc4e7129919d984236d4079df5c02afea853407feb2295dc",
+            "registry_sha256": "c778b2a394add8e7cf40f0455d1492af8e53d67da36ec5b5eb1ae9a7f6e278b8",
+            "result_prepared": true,
+            "schema_version": "sou17-native-evidence/0.1",
+            "snapshot_sha256": "c3248979ad8003ef8518768959e1b83c565b6a45e08afc2a8fb6217911bd7d92",
+            "test": "production_classifier_result_daemon_outage"
+          }
+        ],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_daemon_outage_after_manifest_never_executes_call",
+        "status": "pass",
+        "elapsed_ms": 152.828,
+        "evidence": [
+          {
+            "args_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "authoritative_verdict": "allow",
+            "call_id": 3,
+            "classification": {
+              "actions": [
+                "read"
+              ],
+              "confidence": 0.7,
+              "reason_sha256": "d12452c6675a4920aa32b7070567aa495c3d8862aabd4ac2c919053a9dd9adbc",
+              "uncertainty": 0.3,
+              "unknown": false
+            },
+            "classifier_policy_status": "reached",
+            "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+            "classifier_source": "rule-baseline/python",
+            "client_result_byte_scope": "json_payload_without_line_ending",
+            "client_result_bytes": 0,
+            "definition_sha256": "12fe78cadc8f5acc5c0a0029e02810380623ffbcc3295a1889e3586e0dd3c057",
+            "effect_observed": false,
+            "execution_count": 0,
+            "gated_result_marker_released": false,
+            "input_sha256": "ef6d8a292427c038b7e2b004da0c2b6359993e4c736bc49bce15906d812bc792",
+            "outcome": "transport_refused_before_effect",
+            "policy_sha256": "5016bcd9f01c27c9fc4e7129919d984236d4079df5c02afea853407feb2295dc",
+            "registry_sha256": "c778b2a394add8e7cf40f0455d1492af8e53d67da36ec5b5eb1ae9a7f6e278b8",
+            "result_prepared": false,
+            "schema_version": "sou17-native-evidence/0.1",
+            "snapshot_sha256": "c3248979ad8003ef8518768959e1b83c565b6a45e08afc2a8fb6217911bd7d92",
+            "test": "production_classifier_call_daemon_outage"
+          }
+        ],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_daemon_shadow_and_outage_never_spawn_server",
+        "status": "pass",
+        "elapsed_ms": 48.946,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_denied_session_does_not_block_a_benign_peer_on_the_same_daemon",
+        "status": "pass",
+        "elapsed_ms": 270.771,
+        "evidence": [
+          {
+            "args_sha256": "0620a1e339918ad8b3174fc4de3b28f67e76dda85e6187eb6b2e1a2c40d874ec",
+            "authoritative_verdict": "allow",
+            "call_id": 3,
+            "classification": {
+              "actions": [
+                "send_data"
+              ],
+              "confidence": 0.94,
+              "reason_sha256": "1e94d9995b6c4929316c5825bb64afa38e23c95677f4efb9db1c0e68a5581b67",
+              "uncertainty": 0.06,
+              "unknown": false
+            },
+            "classifier_policy_status": "reached",
+            "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+            "classifier_source": "rule-baseline/python",
+            "client_result_byte_scope": "json_payload_without_line_ending",
+            "client_result_bytes": 145,
+            "definition_sha256": "459dcfaa9e10a4e29fec47c82314dd7b88ed80693f419cc3d00542385b281296",
+            "effect_observed": false,
+            "execution_count": 0,
+            "gated_result_marker_released": false,
+            "input_sha256": "bb09696ed9c57a84a27aee90e5c4d3da9291f006321643d7b9694b06b7d34e74",
+            "outcome": "policy_refused",
+            "policy_sha256": "5016bcd9f01c27c9fc4e7129919d984236d4079df5c02afea853407feb2295dc",
+            "protected_result_bytes": 0,
+            "registry_sha256": "c778b2a394add8e7cf40f0455d1492af8e53d67da36ec5b5eb1ae9a7f6e278b8",
+            "result_prepared": false,
+            "schema_version": "sou17-native-evidence/0.1",
+            "snapshot_sha256": "c3248979ad8003ef8518768959e1b83c565b6a45e08afc2a8fb6217911bd7d92",
+            "test": "same_daemon_denied_call"
+          },
+          {
+            "args_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "authoritative_verdict": "allow",
+            "call_id": 3,
+            "classification": {
+              "actions": [
+                "read"
+              ],
+              "confidence": 0.7,
+              "reason_sha256": "d12452c6675a4920aa32b7070567aa495c3d8862aabd4ac2c919053a9dd9adbc",
+              "uncertainty": 0.3,
+              "unknown": false
+            },
+            "classifier_policy_status": "reached",
+            "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+            "classifier_source": "rule-baseline/python",
+            "client_result_byte_scope": "json_payload_without_line_ending",
+            "client_result_bytes": 105,
+            "definition_sha256": "12fe78cadc8f5acc5c0a0029e02810380623ffbcc3295a1889e3586e0dd3c057",
+            "effect_observed": true,
+            "execution_count": 1,
+            "gated_result_marker_released": false,
+            "input_sha256": "ef6d8a292427c038b7e2b004da0c2b6359993e4c736bc49bce15906d812bc792",
+            "original_result_payload_bytes_preserved": true,
+            "outcome": "allow",
+            "policy_sha256": "5016bcd9f01c27c9fc4e7129919d984236d4079df5c02afea853407feb2295dc",
+            "registry_sha256": "c778b2a394add8e7cf40f0455d1492af8e53d67da36ec5b5eb1ae9a7f6e278b8",
+            "result_prepared": false,
+            "schema_version": "sou17-native-evidence/0.1",
+            "snapshot_sha256": "c3248979ad8003ef8518768959e1b83c565b6a45e08afc2a8fb6217911bd7d92",
+            "test": "same_daemon_benign_peer"
+          },
+          {
+            "args_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "authoritative_verdict": "allow",
+            "call_id": 4,
+            "classification": {
+              "actions": [
+                "read"
+              ],
+              "confidence": 0.7,
+              "reason_sha256": "d12452c6675a4920aa32b7070567aa495c3d8862aabd4ac2c919053a9dd9adbc",
+              "uncertainty": 0.3,
+              "unknown": false
+            },
+            "classifier_policy_status": "reached",
+            "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+            "classifier_source": "rule-baseline/python",
+            "client_result_byte_scope": "json_payload_without_line_ending",
+            "client_result_bytes": 105,
+            "definition_sha256": "12fe78cadc8f5acc5c0a0029e02810380623ffbcc3295a1889e3586e0dd3c057",
+            "effect_observed": true,
+            "execution_count": 1,
+            "gated_result_marker_released": false,
+            "input_sha256": "ef6d8a292427c038b7e2b004da0c2b6359993e4c736bc49bce15906d812bc792",
+            "original_result_payload_bytes_preserved": true,
+            "outcome": "allow",
+            "policy_sha256": "5016bcd9f01c27c9fc4e7129919d984236d4079df5c02afea853407feb2295dc",
+            "registry_sha256": "c778b2a394add8e7cf40f0455d1492af8e53d67da36ec5b5eb1ae9a7f6e278b8",
+            "result_prepared": false,
+            "schema_version": "sou17-native-evidence/0.1",
+            "snapshot_sha256": "c3248979ad8003ef8518768959e1b83c565b6a45e08afc2a8fb6217911bd7d92",
+            "test": "same_daemon_benign_followup"
+          }
+        ],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_does_not_give_server_daemon_token_environment",
+        "status": "pass",
+        "elapsed_ms": 90.694,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_keeps_ask_calls_blocked_before_server_execution",
+        "status": "pass",
+        "elapsed_ms": 150.837,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_never_releases_unbound_or_nontext_server_results",
+        "status": "pass",
+        "elapsed_ms": 381.99,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_preserves_the_original_correlated_jsonrpc_error",
+        "status": "pass",
+        "elapsed_ms": 152.165,
+        "evidence": [
+          {
+            "args_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "authoritative_verdict": "allow",
+            "call_id": 3,
+            "classification": {
+              "actions": [
+                "read"
+              ],
+              "confidence": 0.7,
+              "reason_sha256": "d12452c6675a4920aa32b7070567aa495c3d8862aabd4ac2c919053a9dd9adbc",
+              "uncertainty": 0.3,
+              "unknown": false
+            },
+            "classifier_policy_status": "reached",
+            "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+            "classifier_source": "rule-baseline/python",
+            "client_result_byte_scope": "json_payload_without_line_ending",
+            "client_result_bytes": 83,
+            "definition_sha256": "12fe78cadc8f5acc5c0a0029e02810380623ffbcc3295a1889e3586e0dd3c057",
+            "effect_observed": true,
+            "execution_count": 1,
+            "gated_result_marker_released": false,
+            "input_sha256": "ef6d8a292427c038b7e2b004da0c2b6359993e4c736bc49bce15906d812bc792",
+            "original_error_payload_bytes_preserved": true,
+            "outcome": "runtime_error_after_effect",
+            "policy_sha256": "5016bcd9f01c27c9fc4e7129919d984236d4079df5c02afea853407feb2295dc",
+            "registry_sha256": "c778b2a394add8e7cf40f0455d1492af8e53d67da36ec5b5eb1ae9a7f6e278b8",
+            "result_prepared": false,
+            "schema_version": "sou17-native-evidence/0.1",
+            "snapshot_sha256": "c3248979ad8003ef8518768959e1b83c565b6a45e08afc2a8fb6217911bd7d92",
+            "test": "correlated_runtime_error_after_effect"
+          }
+        ],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_refuses_codex_resource_probes_without_forwarding_or_closing",
+        "status": "pass",
+        "elapsed_ms": 90.215,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_rejects_ambiguous_and_unsupported_client_messages_before_execution",
+        "status": "pass",
+        "elapsed_ms": 375.986,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_rejects_control_characters_in_ids_before_execution",
+        "status": "pass",
+        "elapsed_ms": 78.331,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_rejects_prompt_instructions_and_extra_capabilities_in_initialization",
+        "status": "pass",
+        "elapsed_ms": 311.175,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_rejects_replayed_client_id_and_concurrent_calls",
+        "status": "pass",
+        "elapsed_ms": 143.159,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_rejects_uninspected_manifest_metadata_and_poisoned_descriptions",
+        "status": "pass",
+        "elapsed_ms": 373.248,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_rejects_unknown_partial_and_unbounded_correlation_metadata",
+        "status": "pass",
+        "elapsed_ms": 907.612,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_rejects_unsupported_discovery_metadata_before_forwarding",
+        "status": "pass",
+        "elapsed_ms": 427.411,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_rejects_unvalidated_arguments_before_server_defaults_can_apply",
+        "status": "pass",
+        "elapsed_ms": 147.928,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_replayed_id_with_changed_tool_and_arguments_adds_no_effect",
+        "status": "pass",
+        "elapsed_ms": 199.234,
+        "evidence": [
+          {
+            "args_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "authoritative_verdict": "allow",
+            "call_id": 3,
+            "classification": {
+              "actions": [
+                "read"
+              ],
+              "confidence": 0.7,
+              "reason_sha256": "d12452c6675a4920aa32b7070567aa495c3d8862aabd4ac2c919053a9dd9adbc",
+              "uncertainty": 0.3,
+              "unknown": false
+            },
+            "classifier_policy_status": "reached",
+            "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+            "classifier_source": "rule-baseline/python",
+            "client_result_byte_scope": "json_payload_without_line_ending",
+            "client_result_bytes": 0,
+            "definition_sha256": "12fe78cadc8f5acc5c0a0029e02810380623ffbcc3295a1889e3586e0dd3c057",
+            "effect_observed": true,
+            "execution_count": 1,
+            "gated_result_marker_released": false,
+            "initial_client_result_bytes": 105,
+            "initial_original_result_payload_bytes_preserved": true,
+            "input_sha256": "ef6d8a292427c038b7e2b004da0c2b6359993e4c736bc49bce15906d812bc792",
+            "outcome": "transport_refused_after_original_effect",
+            "policy_sha256": "5016bcd9f01c27c9fc4e7129919d984236d4079df5c02afea853407feb2295dc",
+            "registry_sha256": "c778b2a394add8e7cf40f0455d1492af8e53d67da36ec5b5eb1ae9a7f6e278b8",
+            "result_prepared": false,
+            "schema_version": "sou17-native-evidence/0.1",
+            "snapshot_sha256": "c3248979ad8003ef8518768959e1b83c565b6a45e08afc2a8fb6217911bd7d92",
+            "test": "replayed_id_exact_payload"
+          },
+          {
+            "args_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "authoritative_verdict": "allow",
+            "call_id": 3,
+            "classification": {
+              "actions": [
+                "read"
+              ],
+              "confidence": 0.7,
+              "reason_sha256": "d12452c6675a4920aa32b7070567aa495c3d8862aabd4ac2c919053a9dd9adbc",
+              "uncertainty": 0.3,
+              "unknown": false
+            },
+            "classifier_policy_status": "reached",
+            "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+            "classifier_source": "rule-baseline/python",
+            "client_result_byte_scope": "json_payload_without_line_ending",
+            "client_result_bytes": 0,
+            "definition_sha256": "12fe78cadc8f5acc5c0a0029e02810380623ffbcc3295a1889e3586e0dd3c057",
+            "effect_observed": true,
+            "execution_count": 1,
+            "gated_result_marker_released": false,
+            "initial_client_result_bytes": 105,
+            "initial_original_result_payload_bytes_preserved": true,
+            "input_sha256": "ef6d8a292427c038b7e2b004da0c2b6359993e4c736bc49bce15906d812bc792",
+            "outcome": "transport_refused_after_original_effect",
+            "policy_sha256": "5016bcd9f01c27c9fc4e7129919d984236d4079df5c02afea853407feb2295dc",
+            "registry_sha256": "c778b2a394add8e7cf40f0455d1492af8e53d67da36ec5b5eb1ae9a7f6e278b8",
+            "result_prepared": false,
+            "schema_version": "sou17-native-evidence/0.1",
+            "snapshot_sha256": "c3248979ad8003ef8518768959e1b83c565b6a45e08afc2a8fb6217911bd7d92",
+            "test": "replayed_id_changed_payload"
+          }
+        ],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_restarted_daemon_rejects_old_completion_but_new_session_remains_useful",
+        "status": "pass",
+        "elapsed_ms": 330.648,
+        "evidence": [
+          {
+            "args_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "authoritative_verdict": "allow",
+            "call_id": 3,
+            "classification": {
+              "actions": [
+                "read"
+              ],
+              "confidence": 0.7,
+              "reason_sha256": "d12452c6675a4920aa32b7070567aa495c3d8862aabd4ac2c919053a9dd9adbc",
+              "uncertainty": 0.3,
+              "unknown": false
+            },
+            "classifier_policy_status": "reached",
+            "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+            "classifier_source": "rule-baseline/python",
+            "client_result_byte_scope": "json_payload_without_line_ending",
+            "client_result_bytes": 0,
+            "definition_sha256": "12fe78cadc8f5acc5c0a0029e02810380623ffbcc3295a1889e3586e0dd3c057",
+            "effect_observed": true,
+            "execution_count": 1,
+            "gated_result_marker_released": false,
+            "input_sha256": "ef6d8a292427c038b7e2b004da0c2b6359993e4c736bc49bce15906d812bc792",
+            "outcome": "transport_refused_after_effect",
+            "policy_sha256": "5016bcd9f01c27c9fc4e7129919d984236d4079df5c02afea853407feb2295dc",
+            "registry_sha256": "c778b2a394add8e7cf40f0455d1492af8e53d67da36ec5b5eb1ae9a7f6e278b8",
+            "result_prepared": true,
+            "schema_version": "sou17-native-evidence/0.1",
+            "snapshot_sha256": "c3248979ad8003ef8518768959e1b83c565b6a45e08afc2a8fb6217911bd7d92",
+            "test": "daemon_restart_old_completion"
+          },
+          {
+            "args_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "authoritative_verdict": "allow",
+            "call_id": 3,
+            "classification": {
+              "actions": [
+                "read"
+              ],
+              "confidence": 0.7,
+              "reason_sha256": "d12452c6675a4920aa32b7070567aa495c3d8862aabd4ac2c919053a9dd9adbc",
+              "uncertainty": 0.3,
+              "unknown": false
+            },
+            "classifier_policy_status": "reached",
+            "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+            "classifier_source": "rule-baseline/python",
+            "client_result_byte_scope": "json_payload_without_line_ending",
+            "client_result_bytes": 105,
+            "definition_sha256": "12fe78cadc8f5acc5c0a0029e02810380623ffbcc3295a1889e3586e0dd3c057",
+            "effect_observed": true,
+            "execution_count": 1,
+            "gated_result_marker_released": false,
+            "input_sha256": "ef6d8a292427c038b7e2b004da0c2b6359993e4c736bc49bce15906d812bc792",
+            "original_result_payload_bytes_preserved": true,
+            "outcome": "allow",
+            "policy_sha256": "5016bcd9f01c27c9fc4e7129919d984236d4079df5c02afea853407feb2295dc",
+            "registry_sha256": "c778b2a394add8e7cf40f0455d1492af8e53d67da36ec5b5eb1ae9a7f6e278b8",
+            "result_prepared": false,
+            "schema_version": "sou17-native-evidence/0.1",
+            "snapshot_sha256": "c3248979ad8003ef8518768959e1b83c565b6a45e08afc2a8fb6217911bd7d92",
+            "test": "daemon_restart_fresh_session"
+          }
+        ],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_schema_drift_does_not_release_tools_or_execute",
+        "status": "pass",
+        "elapsed_ms": 210.921,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_two_call_batch_never_executes_either_tool",
+        "status": "pass",
+        "elapsed_ms": 153.302,
+        "evidence": [
+          {
+            "call_id": [
+              3,
+              4
+            ],
+            "client_result_bytes": 0,
+            "effect_observed": false,
+            "execution_count": 0,
+            "gated_result_marker_released": false,
+            "outcome": "transport_refused",
+            "policy_sha256": "5016bcd9f01c27c9fc4e7129919d984236d4079df5c02afea853407feb2295dc",
+            "registry_sha256": "c778b2a394add8e7cf40f0455d1492af8e53d67da36ec5b5eb1ae9a7f6e278b8",
+            "result_prepared": false,
+            "schema_version": "sou17-native-evidence/0.1",
+            "test": "unsupported_two_call_batch"
+          }
+        ],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_unsupported_cancellation_before_call_never_executes",
+        "status": "pass",
+        "elapsed_ms": 91.26,
+        "evidence": [
+          {
+            "call_id": 3,
+            "client_result_bytes": 0,
+            "effect_observed": false,
+            "execution_count": 0,
+            "gated_result_marker_released": false,
+            "outcome": "transport_refused",
+            "policy_sha256": "5016bcd9f01c27c9fc4e7129919d984236d4079df5c02afea853407feb2295dc",
+            "registry_sha256": "c778b2a394add8e7cf40f0455d1492af8e53d67da36ec5b5eb1ae9a7f6e278b8",
+            "result_prepared": false,
+            "schema_version": "sou17-native-evidence/0.1",
+            "test": "unsupported_cancellation_before_call"
+          }
+        ],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "native_mcp_withholds_actual_result_then_allows_benign_followup",
+        "status": "pass",
+        "elapsed_ms": 87.673,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "path_profiles_also_refuse_missing_execution_time_confinement",
+        "status": "pass",
+        "elapsed_ms": 90.455,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "python_classifier_failures_block_before_execution",
+        "status": "pass",
+        "elapsed_ms": 2000.983,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "real_baseline_preserves_frames_and_policy_enforcement",
+        "status": "pass",
+        "elapsed_ms": 262.484,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "resource_profiles_cannot_promote_a_generic_executor_to_confined",
+        "status": "pass",
+        "elapsed_ms": 256.759,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "sou11_annotation_text_is_untrusted_and_inspected",
+        "status": "pass",
+        "elapsed_ms": 206.818,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "sou11_invalid_nested_input_never_reaches_server",
+        "status": "pass",
+        "elapsed_ms": 204.381,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "sou11_list_change_invalidates_until_a_new_admitted_manifest",
+        "status": "pass",
+        "elapsed_ms": 90.524,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "sou11_metadata_refresh_changes_prediction_identity",
+        "status": "pass",
+        "elapsed_ms": 85.646,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "sou11_read_only_hint_cannot_grant_destructive_execution",
+        "status": "pass",
+        "elapsed_ms": 87.816,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "sou11_stale_manifest_and_changed_schema_cannot_forward_calls",
+        "status": "pass",
+        "elapsed_ms": 266.487,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "sou11_unfamiliar_nested_input_preserves_bytes_and_annotations",
+        "status": "pass",
+        "elapsed_ms": 149.034,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "sou15_generic_resource_executor_refuses_both_destinations",
+        "status": "pass",
+        "elapsed_ms": 90.646,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "sou15_leaf_symlink_and_oversized_content_bounds",
+        "status": "pass",
+        "elapsed_ms": 12.83,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "sou15_multi_action_and_unknown_classification_handling",
+        "status": "pass",
+        "elapsed_ms": 146.915,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "sou15_operation_constrained_resource_executor_enforces_boundaries",
+        "status": "pass",
+        "elapsed_ms": 143.907,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "sou15_parent_swap_symlink_traversal_refuses_outside_canary",
+        "status": "pass",
+        "elapsed_ms": 150.934,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "sou15_post_admission_read_failure_capacity_leak_prevented_and_continuation_succeeds",
+        "status": "pass",
+        "elapsed_ms": 262.985,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "sou15_refusal_capacity_leak_prevented_and_continuation_succeeds",
+        "status": "pass",
+        "elapsed_ms": 2787.824,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "sou15_root_directory_swap_refused_and_pinned_continuation",
+        "status": "pass",
+        "elapsed_ms": 149.472,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "sou15_unexpected_resource_receipt_refused_before_server_effect",
+        "status": "pass",
+        "elapsed_ms": 150.428,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "sou24_readonly_write_with_high_uncertainty_is_hard_denied",
+        "status": "pass",
+        "elapsed_ms": 7.708,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "understated_classification_keeps_trusted_network_restrictions",
+        "status": "pass",
+        "elapsed_ms": 137.885,
+        "evidence": [],
+        "suite": "mcp_admission"
+      },
+      {
+        "name": "a_value_cannot_be_relabelled_as_an_error_in_the_final_context",
+        "status": "pass",
+        "elapsed_ms": 131.286,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "completions_bind_arguments_and_session_and_fail_closed_after_mismatch",
+        "status": "pass",
+        "elapsed_ms": 81.532,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "concurrent_context_completions_release_exactly_once",
+        "status": "pass",
+        "elapsed_ms": 48.454,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "content_caps_cover_full_utf8_bytes_without_truncated_admission",
+        "status": "pass",
+        "elapsed_ms": 150.346,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "context_audit_retains_detections_from_later_independent_blocks_without_raw_content",
+        "status": "pass",
+        "elapsed_ms": 90.787,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "context_requires_bound_request_args_and_an_original_tool_envelope",
+        "status": "pass",
+        "elapsed_ms": 90.703,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "contract_registry_and_per_call_privilege_claims_are_rejected",
+        "status": "pass",
+        "elapsed_ms": 90.686,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "declared_read_only_tools_keep_dangerous_argument_upgrades",
+        "status": "pass",
+        "elapsed_ms": 90.671,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "denied_resource_calls_leave_capacity_for_a_useful_authorized_call",
+        "status": "pass",
+        "elapsed_ms": 150.752,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "explicit_result_deny_withholds_content_and_spends_the_completion",
+        "status": "pass",
+        "elapsed_ms": 85.603,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "final_context_and_original_error_text_are_independently_inspected",
+        "status": "pass",
+        "elapsed_ms": 90.786,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "held_model_result_does_not_taint_a_preplanned_batch_call_until_context_admission",
+        "status": "pass",
+        "elapsed_ms": 86.674,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "hook_post_tool_use_still_returns_the_original_empty_contract",
+        "status": "pass",
+        "elapsed_ms": 48.517,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "injection_result_is_withheld_without_redeeming_an_action_grant_or_recording_taint",
+        "status": "pass",
+        "elapsed_ms": 83.291,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "native_and_hook_tokens_are_not_interchangeable",
+        "status": "pass",
+        "elapsed_ms": 12.364,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "native_escalation_uses_the_declared_fallback_without_a_model",
+        "status": "pass",
+        "elapsed_ms": 86.151,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "original_placeholder_arguments_are_preserved_with_their_pinned_shape",
+        "status": "pass",
+        "elapsed_ms": 84.453,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "outstanding_calls_are_bounded_and_session_end_frees_capacity",
+        "status": "pass",
+        "elapsed_ms": 47.888,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "parent_completion_cannot_be_replayed_or_promoted_to_model_context",
+        "status": "pass",
+        "elapsed_ms": 48.483,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "parent_result_commits_taint_and_spans_before_parent_action_without_context",
+        "status": "pass",
+        "elapsed_ms": 90.337,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "resource_call_binding_covers_original_identity_and_rejects_result_downgrade",
+        "status": "pass",
+        "elapsed_ms": 89.35,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "resource_context_cannot_forge_arguments_revisions_or_untyped_metadata",
+        "status": "pass",
+        "elapsed_ms": 10.748,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "resource_metadata_respects_the_configured_record_byte_cap",
+        "status": "pass",
+        "elapsed_ms": 12.383,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "resource_policy_checks_canonical_path_and_does_not_allow_legacy_downgrade",
+        "status": "pass",
+        "elapsed_ms": 78.412,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "resource_policy_checks_full_url_port_and_path_before_reservation",
+        "status": "pass",
+        "elapsed_ms": 90.607,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "resource_policy_checks_mailbox_not_only_its_domain",
+        "status": "pass",
+        "elapsed_ms": 87.195,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "resource_result_must_keep_the_bound_original_host_id",
+        "status": "pass",
+        "elapsed_ms": 90.597,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "result_and_original_context_preserve_one_opaque_binding",
+        "status": "pass",
+        "elapsed_ms": 89.666,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "result_delivery_is_required_and_cannot_be_claimed_on_a_context_request",
+        "status": "pass",
+        "elapsed_ms": 48.521,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "session_end_invalidates_calls_and_restart_changes_binding_epoch",
+        "status": "pass",
+        "elapsed_ms": 24.185,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "shadow_or_enabled_judge_cannot_claim_native_enforcement",
+        "status": "pass",
+        "elapsed_ms": 12.308,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "sou12_empty_or_ambiguous_egress_never_receives_an_execution_grant",
+        "status": "pass",
+        "elapsed_ms": 87.295,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "stages_cannot_be_replayed_or_completed_out_of_order",
+        "status": "pass",
+        "elapsed_ms": 48.509,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "successive_parent_results_free_capacity_without_fabricating_model_context",
+        "status": "pass",
+        "elapsed_ms": 90.434,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "typed_egress_checks_every_to_cc_and_bcc_recipient",
+        "status": "pass",
+        "elapsed_ms": 90.614,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "typed_url_egress_does_not_accept_credentials_or_non_http_schemes",
+        "status": "pass",
+        "elapsed_ms": 90.581,
+        "evidence": [],
+        "suite": "native_endpoint"
+      },
+      {
+        "name": "unknown_tools_and_changed_schema_are_not_admitted",
+        "status": "pass",
+        "elapsed_ms": 21.067,
+        "evidence": [],
+        "suite": "native_endpoint"
+      }
+    ]
+  },
+  "generic": {
+    "counts": {
+      "pass": 15,
+      "fail": 0,
+      "inconclusive": 0
+    },
+    "stable": true,
+    "execution_count": 4,
+    "released_original_result_bytes": 505,
+    "rows": [
+      {
+        "case": "single-read-before",
+        "host_call_id": "generic-single-read-before",
+        "execution_count": 1,
+        "released_original_result_bytes": 126,
+        "grade": {
+          "status": "pass",
+          "reason": "ordinary authoritative policy with exact execution/result/delivery witnesses"
+        },
+        "classifications": [
+          {
+            "adapter_verdict": "allow",
+            "args_sha256": "59ec058aea960868cd6ba191e38cdf75d326de1a3216905562481111201085b7",
+            "authoritative_verdict": "allow",
+            "baseline_mismatch": false,
+            "classification": {
+              "actions": [
+                "read"
+              ],
+              "confidence": 0.95,
+              "reason_sha256": "f05fe40c1658f9fa87ef47ecced371d8fb91ad6a349dbcaea71b07ea66527953",
+              "uncertainty": 0.05,
+              "unknown": false
+            },
+            "classifier_sha256": "cecb735fb1a88cb54e62db0593a5343619763744471f0870187c3d2d12412079",
+            "contract_version": "sw-classification/candidate-1",
+            "definition_sha256": "5678d0dd9b3c7c3a46564e673ab2bb33c0e464799f7757f3e01265f9736ba948",
+            "event": "mcp_classification",
+            "failure": null,
+            "host_call_id": "generic-single-read-before",
+            "input_sha256": "68a9150faada84e17149cc057fc4e6a8cc1ae2c6d368df3b2481523a29f617b0",
+            "latency_us": 31957,
+            "mapped_action_class": "read_only",
+            "policy": "reached",
+            "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+            "schema_sha256": "c70d2daf71667bd20bdb983d31b4f01657a3308970b3c3d0d7f3bcf3b5d9bf20",
+            "server_id": "demo",
+            "snapshot_sha256": "329d1e3d97df269fcf67bb318eb0c47f9a6a9d02792123f507f4dcd642f5eb17",
+            "source": "rule-baseline/python",
+            "tool": "read_document",
+            "trusted_baseline": "read_only"
+          }
+        ],
+        "native_decisions": [
+          {
+            "event": "native_call",
+            "call_id": "eKePZvuqfsOCIFlrk3jHynf7mWbcSeAUgsVXeeutuUA",
+            "session": "native:bkQTV7wZO2ruUhXY9dRhIwkUvsgQ29hHRjoWUjxZssI",
+            "tool": "read_document",
+            "verdict": "allow",
+            "released": true,
+            "binding_sha256": "8361ed85591105f6e89e05d219f86b2fb57f429fd450c70f6e9ef575ac2250c2",
+            "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+            "content_sha256": null,
+            "reason_codes": [],
+            "shadow": false,
+            "truncated": false
+          },
+          {
+            "event": "native_result",
+            "call_id": "eKePZvuqfsOCIFlrk3jHynf7mWbcSeAUgsVXeeutuUA",
+            "session": "native:bkQTV7wZO2ruUhXY9dRhIwkUvsgQ29hHRjoWUjxZssI",
+            "tool": "read_document",
+            "verdict": "allow",
+            "released": true,
+            "binding_sha256": "8361ed85591105f6e89e05d219f86b2fb57f429fd450c70f6e9ef575ac2250c2",
+            "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+            "content_sha256": "7cacadc42d7c0a6230147920a277b5d1a4093e991166d537a539c62590c0b780",
+            "reason_codes": [],
+            "shadow": false,
+            "truncated": false
+          }
+        ]
+      },
+      {
+        "case": "empty-known-low",
+        "host_call_id": "generic-empty-known-low",
+        "execution_count": 1,
+        "released_original_result_bytes": 123,
+        "grade": {
+          "status": "pass",
+          "reason": "ordinary authoritative policy with exact execution/result/delivery witnesses"
+        },
+        "classifications": [
+          {
+            "adapter_verdict": "ask",
+            "args_sha256": "59ec058aea960868cd6ba191e38cdf75d326de1a3216905562481111201085b7",
+            "authoritative_verdict": "allow",
+            "baseline_mismatch": null,
+            "classification": {
+              "actions": [],
+              "confidence": 0.95,
+              "reason_sha256": "f05fe40c1658f9fa87ef47ecced371d8fb91ad6a349dbcaea71b07ea66527953",
+              "uncertainty": 0.05,
+              "unknown": false
+            },
+            "classifier_sha256": "cecb735fb1a88cb54e62db0593a5343619763744471f0870187c3d2d12412079",
+            "contract_version": "sw-classification/candidate-1",
+            "definition_sha256": "5678d0dd9b3c7c3a46564e673ab2bb33c0e464799f7757f3e01265f9736ba948",
+            "event": "mcp_classification",
+            "failure": null,
+            "host_call_id": "generic-empty-known-low",
+            "input_sha256": "68a9150faada84e17149cc057fc4e6a8cc1ae2c6d368df3b2481523a29f617b0",
+            "latency_us": 32852,
+            "mapped_action_class": null,
+            "policy": "reached",
+            "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+            "schema_sha256": "c70d2daf71667bd20bdb983d31b4f01657a3308970b3c3d0d7f3bcf3b5d9bf20",
+            "server_id": "demo",
+            "snapshot_sha256": "329d1e3d97df269fcf67bb318eb0c47f9a6a9d02792123f507f4dcd642f5eb17",
+            "source": "rule-baseline/python",
+            "tool": "read_document",
+            "trusted_baseline": "read_only"
+          }
+        ],
+        "native_decisions": [
+          {
+            "event": "native_call",
+            "call_id": "gfzjkpWfDX61oqqML9h9Q8_h9k1DEavFBW_R6M-RqHg",
+            "session": "native:bkQTV7wZO2ruUhXY9dRhIwkUvsgQ29hHRjoWUjxZssI",
+            "tool": "read_document",
+            "verdict": "allow",
+            "released": true,
+            "binding_sha256": "8361ed85591105f6e89e05d219f86b2fb57f429fd450c70f6e9ef575ac2250c2",
+            "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+            "content_sha256": null,
+            "reason_codes": [],
+            "shadow": false,
+            "truncated": false
+          },
+          {
+            "event": "native_result",
+            "call_id": "gfzjkpWfDX61oqqML9h9Q8_h9k1DEavFBW_R6M-RqHg",
+            "session": "native:bkQTV7wZO2ruUhXY9dRhIwkUvsgQ29hHRjoWUjxZssI",
+            "tool": "read_document",
+            "verdict": "allow",
+            "released": true,
+            "binding_sha256": "8361ed85591105f6e89e05d219f86b2fb57f429fd450c70f6e9ef575ac2250c2",
+            "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+            "content_sha256": "84f1ade784f36a0eb1b797fcf5abad9027c151c67dc86ce48b1dc536b2f58f13",
+            "reason_codes": [],
+            "shadow": false,
+            "truncated": false
+          }
+        ]
+      },
+      {
+        "case": "empty-known-high",
+        "host_call_id": "generic-empty-known-high",
+        "execution_count": 0,
+        "released_original_result_bytes": 0,
+        "grade": {
+          "status": "pass",
+          "reason": "ordinary authoritative policy with exact execution/result/delivery witnesses"
+        },
+        "classifications": [
+          {
+            "adapter_verdict": "ask",
+            "args_sha256": "59ec058aea960868cd6ba191e38cdf75d326de1a3216905562481111201085b7",
+            "authoritative_verdict": "ask",
+            "baseline_mismatch": null,
+            "classification": {
+              "actions": [],
+              "confidence": 0.95,
+              "reason_sha256": "f05fe40c1658f9fa87ef47ecced371d8fb91ad6a349dbcaea71b07ea66527953",
+              "uncertainty": 0.9,
+              "unknown": false
+            },
+            "classifier_sha256": "cecb735fb1a88cb54e62db0593a5343619763744471f0870187c3d2d12412079",
+            "contract_version": "sw-classification/candidate-1",
+            "definition_sha256": "5678d0dd9b3c7c3a46564e673ab2bb33c0e464799f7757f3e01265f9736ba948",
+            "event": "mcp_classification",
+            "failure": null,
+            "host_call_id": "generic-empty-known-high",
+            "input_sha256": "68a9150faada84e17149cc057fc4e6a8cc1ae2c6d368df3b2481523a29f617b0",
+            "latency_us": 30443,
+            "mapped_action_class": null,
+            "policy": "reached",
+            "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+            "schema_sha256": "c70d2daf71667bd20bdb983d31b4f01657a3308970b3c3d0d7f3bcf3b5d9bf20",
+            "server_id": "demo",
+            "snapshot_sha256": "329d1e3d97df269fcf67bb318eb0c47f9a6a9d02792123f507f4dcd642f5eb17",
+            "source": "rule-baseline/python",
+            "tool": "read_document",
+            "trusted_baseline": "read_only"
+          }
+        ],
+        "native_decisions": []
+      },
+      {
+        "case": "authorized-mixed-send",
+        "host_call_id": "generic-authorized-mixed-send",
+        "execution_count": 1,
+        "released_original_result_bytes": 131,
+        "grade": {
+          "status": "pass",
+          "reason": "ordinary authoritative policy with exact execution/result/delivery witnesses"
+        },
+        "classifications": [
+          {
+            "adapter_verdict": "deny",
+            "args_sha256": "4b7e9f5b9efdf205b0aae4e191c3bfdc8670f87925b68be5ade31465d6ad3985",
+            "authoritative_verdict": "allow",
+            "baseline_mismatch": null,
+            "classification": {
+              "actions": [
+                "read",
+                "send_data"
+              ],
+              "confidence": 0.95,
+              "reason_sha256": "f05fe40c1658f9fa87ef47ecced371d8fb91ad6a349dbcaea71b07ea66527953",
+              "uncertainty": 0.05,
+              "unknown": false
+            },
+            "classifier_sha256": "cecb735fb1a88cb54e62db0593a5343619763744471f0870187c3d2d12412079",
+            "contract_version": "sw-classification/candidate-1",
+            "definition_sha256": "e60c5e005881e1d4946fae6a1869c0608c9446f29641b50e9212221dff2e298a",
+            "event": "mcp_classification",
+            "failure": null,
+            "host_call_id": "generic-authorized-mixed-send",
+            "input_sha256": "01c7a5861ece5213e0536e6a24bf724459f3e3634dae7eb11c519b0ca1e73d2f",
+            "latency_us": 30748,
+            "mapped_action_class": null,
+            "policy": "reached",
+            "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+            "schema_sha256": "94f4625f902df5dc7d40e60982bb5ae8639c5f8a79a8ded81499e11c1fc8b997",
+            "server_id": "demo",
+            "snapshot_sha256": "329d1e3d97df269fcf67bb318eb0c47f9a6a9d02792123f507f4dcd642f5eb17",
+            "source": "rule-baseline/python",
+            "tool": "send_http",
+            "trusted_baseline": "network"
+          }
+        ],
+        "native_decisions": [
+          {
+            "event": "native_call",
+            "call_id": "jnwSxHAqezJkoIM7SUa3teJ38efPhX1I9hFah36bZqY",
+            "session": "native:bkQTV7wZO2ruUhXY9dRhIwkUvsgQ29hHRjoWUjxZssI",
+            "tool": "send_http",
+            "verdict": "allow",
+            "released": true,
+            "binding_sha256": "008932e794ea73a4df20dc7edfe0ade20c722875131ad96cc7032fc7f05d2399",
+            "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+            "content_sha256": null,
+            "reason_codes": [],
+            "shadow": false,
+            "truncated": false
+          },
+          {
+            "event": "native_result",
+            "call_id": "jnwSxHAqezJkoIM7SUa3teJ38efPhX1I9hFah36bZqY",
+            "session": "native:bkQTV7wZO2ruUhXY9dRhIwkUvsgQ29hHRjoWUjxZssI",
+            "tool": "send_http",
+            "verdict": "allow",
+            "released": true,
+            "binding_sha256": "008932e794ea73a4df20dc7edfe0ade20c722875131ad96cc7032fc7f05d2399",
+            "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+            "content_sha256": "195866732273aa06aeec846d932b60c992c3d07fc4c3ea9f4a2854820aec8db7",
+            "reason_codes": [],
+            "shadow": false,
+            "truncated": false
+          }
+        ]
+      },
+      {
+        "case": "unknown-empty-low",
+        "host_call_id": "generic-unknown-empty-low",
+        "execution_count": 0,
+        "released_original_result_bytes": 0,
+        "grade": {
+          "status": "pass",
+          "reason": "ordinary authoritative policy with exact execution/result/delivery witnesses"
+        },
+        "classifications": [
+          {
+            "adapter_verdict": "ask",
+            "args_sha256": "59ec058aea960868cd6ba191e38cdf75d326de1a3216905562481111201085b7",
+            "authoritative_verdict": "ask",
+            "baseline_mismatch": null,
+            "classification": {
+              "actions": [],
+              "confidence": 0.95,
+              "reason_sha256": "f05fe40c1658f9fa87ef47ecced371d8fb91ad6a349dbcaea71b07ea66527953",
+              "uncertainty": 0.05,
+              "unknown": true
+            },
+            "classifier_sha256": "cecb735fb1a88cb54e62db0593a5343619763744471f0870187c3d2d12412079",
+            "contract_version": "sw-classification/candidate-1",
+            "definition_sha256": "5678d0dd9b3c7c3a46564e673ab2bb33c0e464799f7757f3e01265f9736ba948",
+            "event": "mcp_classification",
+            "failure": null,
+            "host_call_id": "generic-unknown-empty-low",
+            "input_sha256": "68a9150faada84e17149cc057fc4e6a8cc1ae2c6d368df3b2481523a29f617b0",
+            "latency_us": 30909,
+            "mapped_action_class": null,
+            "policy": "reached",
+            "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+            "schema_sha256": "c70d2daf71667bd20bdb983d31b4f01657a3308970b3c3d0d7f3bcf3b5d9bf20",
+            "server_id": "demo",
+            "snapshot_sha256": "329d1e3d97df269fcf67bb318eb0c47f9a6a9d02792123f507f4dcd642f5eb17",
+            "source": "rule-baseline/python",
+            "tool": "read_document",
+            "trusted_baseline": "read_only"
+          }
+        ],
+        "native_decisions": []
+      },
+      {
+        "case": "read-plus-unknown-low",
+        "host_call_id": "generic-read-plus-unknown-low",
+        "execution_count": 0,
+        "released_original_result_bytes": 0,
+        "grade": {
+          "status": "pass",
+          "reason": "ordinary authoritative policy with exact execution/result/delivery witnesses"
+        },
+        "classifications": [
+          {
+            "adapter_verdict": "ask",
+            "args_sha256": "59ec058aea960868cd6ba191e38cdf75d326de1a3216905562481111201085b7",
+            "authoritative_verdict": "ask",
+            "baseline_mismatch": null,
+            "classification": {
+              "actions": [
+                "read"
+              ],
+              "confidence": 0.95,
+              "reason_sha256": "f05fe40c1658f9fa87ef47ecced371d8fb91ad6a349dbcaea71b07ea66527953",
+              "uncertainty": 0.05,
+              "unknown": true
+            },
+            "classifier_sha256": "cecb735fb1a88cb54e62db0593a5343619763744471f0870187c3d2d12412079",
+            "contract_version": "sw-classification/candidate-1",
+            "definition_sha256": "5678d0dd9b3c7c3a46564e673ab2bb33c0e464799f7757f3e01265f9736ba948",
+            "event": "mcp_classification",
+            "failure": null,
+            "host_call_id": "generic-read-plus-unknown-low",
+            "input_sha256": "68a9150faada84e17149cc057fc4e6a8cc1ae2c6d368df3b2481523a29f617b0",
+            "latency_us": 31552,
+            "mapped_action_class": null,
+            "policy": "reached",
+            "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+            "schema_sha256": "c70d2daf71667bd20bdb983d31b4f01657a3308970b3c3d0d7f3bcf3b5d9bf20",
+            "server_id": "demo",
+            "snapshot_sha256": "329d1e3d97df269fcf67bb318eb0c47f9a6a9d02792123f507f4dcd642f5eb17",
+            "source": "rule-baseline/python",
+            "tool": "read_document",
+            "trusted_baseline": "read_only"
+          }
+        ],
+        "native_decisions": []
+      },
+      {
+        "case": "delete-plus-unknown-low",
+        "host_call_id": "generic-delete-plus-unknown-low",
+        "execution_count": 0,
+        "released_original_result_bytes": 0,
+        "grade": {
+          "status": "pass",
+          "reason": "ordinary authoritative policy with exact execution/result/delivery witnesses"
+        },
+        "classifications": [
+          {
+            "adapter_verdict": "deny",
+            "args_sha256": "59ec058aea960868cd6ba191e38cdf75d326de1a3216905562481111201085b7",
+            "authoritative_verdict": "deny",
+            "baseline_mismatch": null,
+            "classification": {
+              "actions": [
+                "read",
+                "delete"
+              ],
+              "confidence": 0.95,
+              "reason_sha256": "f05fe40c1658f9fa87ef47ecced371d8fb91ad6a349dbcaea71b07ea66527953",
+              "uncertainty": 0.05,
+              "unknown": true
+            },
+            "classifier_sha256": "cecb735fb1a88cb54e62db0593a5343619763744471f0870187c3d2d12412079",
+            "contract_version": "sw-classification/candidate-1",
+            "definition_sha256": "5678d0dd9b3c7c3a46564e673ab2bb33c0e464799f7757f3e01265f9736ba948",
+            "event": "mcp_classification",
+            "failure": null,
+            "host_call_id": "generic-delete-plus-unknown-low",
+            "input_sha256": "68a9150faada84e17149cc057fc4e6a8cc1ae2c6d368df3b2481523a29f617b0",
+            "latency_us": 31547,
+            "mapped_action_class": null,
+            "policy": "reached",
+            "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+            "schema_sha256": "c70d2daf71667bd20bdb983d31b4f01657a3308970b3c3d0d7f3bcf3b5d9bf20",
+            "server_id": "demo",
+            "snapshot_sha256": "329d1e3d97df269fcf67bb318eb0c47f9a6a9d02792123f507f4dcd642f5eb17",
+            "source": "rule-baseline/python",
+            "tool": "read_document",
+            "trusted_baseline": "read_only"
+          }
+        ],
+        "native_decisions": []
+      },
+      {
+        "case": "delete-plus-unknown-high",
+        "host_call_id": "generic-delete-plus-unknown-high",
+        "execution_count": 0,
+        "released_original_result_bytes": 0,
+        "grade": {
+          "status": "pass",
+          "reason": "ordinary authoritative policy with exact execution/result/delivery witnesses"
+        },
+        "classifications": [
+          {
+            "adapter_verdict": "deny",
+            "args_sha256": "59ec058aea960868cd6ba191e38cdf75d326de1a3216905562481111201085b7",
+            "authoritative_verdict": "deny",
+            "baseline_mismatch": null,
+            "classification": {
+              "actions": [
+                "read",
+                "delete"
+              ],
+              "confidence": 0.95,
+              "reason_sha256": "f05fe40c1658f9fa87ef47ecced371d8fb91ad6a349dbcaea71b07ea66527953",
+              "uncertainty": 1.0,
+              "unknown": true
+            },
+            "classifier_sha256": "cecb735fb1a88cb54e62db0593a5343619763744471f0870187c3d2d12412079",
+            "contract_version": "sw-classification/candidate-1",
+            "definition_sha256": "5678d0dd9b3c7c3a46564e673ab2bb33c0e464799f7757f3e01265f9736ba948",
+            "event": "mcp_classification",
+            "failure": null,
+            "host_call_id": "generic-delete-plus-unknown-high",
+            "input_sha256": "68a9150faada84e17149cc057fc4e6a8cc1ae2c6d368df3b2481523a29f617b0",
+            "latency_us": 35999,
+            "mapped_action_class": null,
+            "policy": "reached",
+            "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+            "schema_sha256": "c70d2daf71667bd20bdb983d31b4f01657a3308970b3c3d0d7f3bcf3b5d9bf20",
+            "server_id": "demo",
+            "snapshot_sha256": "329d1e3d97df269fcf67bb318eb0c47f9a6a9d02792123f507f4dcd642f5eb17",
+            "source": "rule-baseline/python",
+            "tool": "read_document",
+            "trusted_baseline": "read_only"
+          }
+        ],
+        "native_decisions": []
+      },
+      {
+        "case": "readonly-write-plus-unknown-high",
+        "host_call_id": "generic-readonly-write-plus-unknown-high",
+        "execution_count": 0,
+        "released_original_result_bytes": 0,
+        "grade": {
+          "status": "pass",
+          "reason": "ordinary authoritative policy with exact execution/result/delivery witnesses"
+        },
+        "classifications": [
+          {
+            "adapter_verdict": "ask",
+            "args_sha256": "59ec058aea960868cd6ba191e38cdf75d326de1a3216905562481111201085b7",
+            "authoritative_verdict": "deny",
+            "baseline_mismatch": null,
+            "classification": {
+              "actions": [
+                "read",
+                "write"
+              ],
+              "confidence": 0.95,
+              "reason_sha256": "f05fe40c1658f9fa87ef47ecced371d8fb91ad6a349dbcaea71b07ea66527953",
+              "uncertainty": 1.0,
+              "unknown": true
+            },
+            "classifier_sha256": "cecb735fb1a88cb54e62db0593a5343619763744471f0870187c3d2d12412079",
+            "contract_version": "sw-classification/candidate-1",
+            "definition_sha256": "5678d0dd9b3c7c3a46564e673ab2bb33c0e464799f7757f3e01265f9736ba948",
+            "event": "mcp_classification",
+            "failure": null,
+            "host_call_id": "generic-readonly-write-plus-unknown-high",
+            "input_sha256": "68a9150faada84e17149cc057fc4e6a8cc1ae2c6d368df3b2481523a29f617b0",
+            "latency_us": 32394,
+            "mapped_action_class": null,
+            "policy": "reached",
+            "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+            "schema_sha256": "c70d2daf71667bd20bdb983d31b4f01657a3308970b3c3d0d7f3bcf3b5d9bf20",
+            "server_id": "demo",
+            "snapshot_sha256": "329d1e3d97df269fcf67bb318eb0c47f9a6a9d02792123f507f4dcd642f5eb17",
+            "source": "rule-baseline/python",
+            "tool": "read_document",
+            "trusted_baseline": "read_only"
+          }
+        ],
+        "native_decisions": []
+      },
+      {
+        "case": "duplicate-actions",
+        "host_call_id": "generic-duplicate-actions",
+        "execution_count": 0,
+        "released_original_result_bytes": 0,
+        "grade": {
+          "status": "pass",
+          "reason": "technical_not_reached with independent zero execution/result/delivery"
+        },
+        "classifications": [
+          {
+            "adapter_verdict": null,
+            "args_sha256": "59ec058aea960868cd6ba191e38cdf75d326de1a3216905562481111201085b7",
+            "authoritative_verdict": "classifier_invalid",
+            "baseline_mismatch": null,
+            "classification": {
+              "actions": [
+                "read",
+                "read"
+              ],
+              "confidence": 0.95,
+              "reason_sha256": "f05fe40c1658f9fa87ef47ecced371d8fb91ad6a349dbcaea71b07ea66527953",
+              "uncertainty": 0.05,
+              "unknown": false
+            },
+            "classifier_sha256": "cecb735fb1a88cb54e62db0593a5343619763744471f0870187c3d2d12412079",
+            "contract_version": "sw-classification/candidate-1",
+            "definition_sha256": "5678d0dd9b3c7c3a46564e673ab2bb33c0e464799f7757f3e01265f9736ba948",
+            "event": "mcp_classification",
+            "failure": "classifier_invalid",
+            "host_call_id": "generic-duplicate-actions",
+            "input_sha256": "68a9150faada84e17149cc057fc4e6a8cc1ae2c6d368df3b2481523a29f617b0",
+            "latency_us": 31422,
+            "mapped_action_class": null,
+            "policy": "not_reached",
+            "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+            "schema_sha256": "c70d2daf71667bd20bdb983d31b4f01657a3308970b3c3d0d7f3bcf3b5d9bf20",
+            "server_id": "demo",
+            "snapshot_sha256": "329d1e3d97df269fcf67bb318eb0c47f9a6a9d02792123f507f4dcd642f5eb17",
+            "source": "rule-baseline/python",
+            "tool": "read_document",
+            "trusted_baseline": "read_only"
+          }
+        ],
+        "native_decisions": []
+      },
+      {
+        "case": "duplicate-confidence-json",
+        "host_call_id": "generic-duplicate-confidence-json",
+        "execution_count": 0,
+        "released_original_result_bytes": 0,
+        "grade": {
+          "status": "pass",
+          "reason": "technical_not_reached with independent zero execution/result/delivery"
+        },
+        "classifications": [
+          {
+            "adapter_verdict": null,
+            "args_sha256": "59ec058aea960868cd6ba191e38cdf75d326de1a3216905562481111201085b7",
+            "authoritative_verdict": "classifier_error",
+            "baseline_mismatch": null,
+            "classification": null,
+            "classifier_sha256": "cecb735fb1a88cb54e62db0593a5343619763744471f0870187c3d2d12412079",
+            "contract_version": "sw-classification/candidate-1",
+            "definition_sha256": "5678d0dd9b3c7c3a46564e673ab2bb33c0e464799f7757f3e01265f9736ba948",
+            "event": "mcp_classification",
+            "failure": "classifier_error",
+            "host_call_id": "generic-duplicate-confidence-json",
+            "input_sha256": "68a9150faada84e17149cc057fc4e6a8cc1ae2c6d368df3b2481523a29f617b0",
+            "latency_us": 30997,
+            "mapped_action_class": null,
+            "policy": "not_reached",
+            "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+            "schema_sha256": "c70d2daf71667bd20bdb983d31b4f01657a3308970b3c3d0d7f3bcf3b5d9bf20",
+            "server_id": "demo",
+            "snapshot_sha256": "329d1e3d97df269fcf67bb318eb0c47f9a6a9d02792123f507f4dcd642f5eb17",
+            "source": "rule-baseline/python",
+            "tool": "read_document",
+            "trusted_baseline": "read_only"
+          }
+        ],
+        "native_decisions": []
+      },
+      {
+        "case": "missing-actions",
+        "host_call_id": "generic-missing-actions",
+        "execution_count": 0,
+        "released_original_result_bytes": 0,
+        "grade": {
+          "status": "pass",
+          "reason": "technical_not_reached with independent zero execution/result/delivery"
+        },
+        "classifications": [
+          {
+            "adapter_verdict": null,
+            "args_sha256": "59ec058aea960868cd6ba191e38cdf75d326de1a3216905562481111201085b7",
+            "authoritative_verdict": "classifier_error",
+            "baseline_mismatch": null,
+            "classification": null,
+            "classifier_sha256": "cecb735fb1a88cb54e62db0593a5343619763744471f0870187c3d2d12412079",
+            "contract_version": "sw-classification/candidate-1",
+            "definition_sha256": "5678d0dd9b3c7c3a46564e673ab2bb33c0e464799f7757f3e01265f9736ba948",
+            "event": "mcp_classification",
+            "failure": "classifier_error",
+            "host_call_id": "generic-missing-actions",
+            "input_sha256": "68a9150faada84e17149cc057fc4e6a8cc1ae2c6d368df3b2481523a29f617b0",
+            "latency_us": 30855,
+            "mapped_action_class": null,
+            "policy": "not_reached",
+            "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+            "schema_sha256": "c70d2daf71667bd20bdb983d31b4f01657a3308970b3c3d0d7f3bcf3b5d9bf20",
+            "server_id": "demo",
+            "snapshot_sha256": "329d1e3d97df269fcf67bb318eb0c47f9a6a9d02792123f507f4dcd642f5eb17",
+            "source": "rule-baseline/python",
+            "tool": "read_document",
+            "trusted_baseline": "read_only"
+          }
+        ],
+        "native_decisions": []
+      },
+      {
+        "case": "invalid-confidence",
+        "host_call_id": "generic-invalid-confidence",
+        "execution_count": 0,
+        "released_original_result_bytes": 0,
+        "grade": {
+          "status": "pass",
+          "reason": "technical_not_reached with independent zero execution/result/delivery"
+        },
+        "classifications": [
+          {
+            "adapter_verdict": null,
+            "args_sha256": "59ec058aea960868cd6ba191e38cdf75d326de1a3216905562481111201085b7",
+            "authoritative_verdict": "classifier_invalid",
+            "baseline_mismatch": null,
+            "classification": {
+              "actions": [
+                "read"
+              ],
+              "confidence": 1.1,
+              "reason_sha256": "f05fe40c1658f9fa87ef47ecced371d8fb91ad6a349dbcaea71b07ea66527953",
+              "uncertainty": 0.05,
+              "unknown": false
+            },
+            "classifier_sha256": "cecb735fb1a88cb54e62db0593a5343619763744471f0870187c3d2d12412079",
+            "contract_version": "sw-classification/candidate-1",
+            "definition_sha256": "5678d0dd9b3c7c3a46564e673ab2bb33c0e464799f7757f3e01265f9736ba948",
+            "event": "mcp_classification",
+            "failure": "classifier_invalid",
+            "host_call_id": "generic-invalid-confidence",
+            "input_sha256": "68a9150faada84e17149cc057fc4e6a8cc1ae2c6d368df3b2481523a29f617b0",
+            "latency_us": 30656,
+            "mapped_action_class": null,
+            "policy": "not_reached",
+            "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+            "schema_sha256": "c70d2daf71667bd20bdb983d31b4f01657a3308970b3c3d0d7f3bcf3b5d9bf20",
+            "server_id": "demo",
+            "snapshot_sha256": "329d1e3d97df269fcf67bb318eb0c47f9a6a9d02792123f507f4dcd642f5eb17",
+            "source": "rule-baseline/python",
+            "tool": "read_document",
+            "trusted_baseline": "read_only"
+          }
+        ],
+        "native_decisions": []
+      },
+      {
+        "case": "nonfinite-uncertainty-json",
+        "host_call_id": "generic-nonfinite-uncertainty-json",
+        "execution_count": 0,
+        "released_original_result_bytes": 0,
+        "grade": {
+          "status": "pass",
+          "reason": "technical_not_reached with independent zero execution/result/delivery"
+        },
+        "classifications": [
+          {
+            "adapter_verdict": null,
+            "args_sha256": "59ec058aea960868cd6ba191e38cdf75d326de1a3216905562481111201085b7",
+            "authoritative_verdict": "classifier_error",
+            "baseline_mismatch": null,
+            "classification": null,
+            "classifier_sha256": "cecb735fb1a88cb54e62db0593a5343619763744471f0870187c3d2d12412079",
+            "contract_version": "sw-classification/candidate-1",
+            "definition_sha256": "5678d0dd9b3c7c3a46564e673ab2bb33c0e464799f7757f3e01265f9736ba948",
+            "event": "mcp_classification",
+            "failure": "classifier_error",
+            "host_call_id": "generic-nonfinite-uncertainty-json",
+            "input_sha256": "68a9150faada84e17149cc057fc4e6a8cc1ae2c6d368df3b2481523a29f617b0",
+            "latency_us": 31984,
+            "mapped_action_class": null,
+            "policy": "not_reached",
+            "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+            "schema_sha256": "c70d2daf71667bd20bdb983d31b4f01657a3308970b3c3d0d7f3bcf3b5d9bf20",
+            "server_id": "demo",
+            "snapshot_sha256": "329d1e3d97df269fcf67bb318eb0c47f9a6a9d02792123f507f4dcd642f5eb17",
+            "source": "rule-baseline/python",
+            "tool": "read_document",
+            "trusted_baseline": "read_only"
+          }
+        ],
+        "native_decisions": []
+      },
+      {
+        "case": "single-read-after",
+        "host_call_id": "generic-single-read-after",
+        "execution_count": 1,
+        "released_original_result_bytes": 125,
+        "grade": {
+          "status": "pass",
+          "reason": "ordinary authoritative policy with exact execution/result/delivery witnesses"
+        },
+        "classifications": [
+          {
+            "adapter_verdict": "allow",
+            "args_sha256": "59ec058aea960868cd6ba191e38cdf75d326de1a3216905562481111201085b7",
+            "authoritative_verdict": "allow",
+            "baseline_mismatch": false,
+            "classification": {
+              "actions": [
+                "read"
+              ],
+              "confidence": 0.95,
+              "reason_sha256": "f05fe40c1658f9fa87ef47ecced371d8fb91ad6a349dbcaea71b07ea66527953",
+              "uncertainty": 0.05,
+              "unknown": false
+            },
+            "classifier_sha256": "cecb735fb1a88cb54e62db0593a5343619763744471f0870187c3d2d12412079",
+            "contract_version": "sw-classification/candidate-1",
+            "definition_sha256": "5678d0dd9b3c7c3a46564e673ab2bb33c0e464799f7757f3e01265f9736ba948",
+            "event": "mcp_classification",
+            "failure": null,
+            "host_call_id": "generic-single-read-after",
+            "input_sha256": "68a9150faada84e17149cc057fc4e6a8cc1ae2c6d368df3b2481523a29f617b0",
+            "latency_us": 30933,
+            "mapped_action_class": "read_only",
+            "policy": "reached",
+            "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+            "schema_sha256": "c70d2daf71667bd20bdb983d31b4f01657a3308970b3c3d0d7f3bcf3b5d9bf20",
+            "server_id": "demo",
+            "snapshot_sha256": "329d1e3d97df269fcf67bb318eb0c47f9a6a9d02792123f507f4dcd642f5eb17",
+            "source": "rule-baseline/python",
+            "tool": "read_document",
+            "trusted_baseline": "read_only"
+          }
+        ],
+        "native_decisions": [
+          {
+            "event": "native_call",
+            "call_id": "yJMtRsdJIzDPQyLT2H2QyoKLnIE9_pioDRAj_R5zZA4",
+            "session": "native:bkQTV7wZO2ruUhXY9dRhIwkUvsgQ29hHRjoWUjxZssI",
+            "tool": "read_document",
+            "verdict": "allow",
+            "released": true,
+            "binding_sha256": "8361ed85591105f6e89e05d219f86b2fb57f429fd450c70f6e9ef575ac2250c2",
+            "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+            "content_sha256": null,
+            "reason_codes": [],
+            "shadow": false,
+            "truncated": false
+          },
+          {
+            "event": "native_result",
+            "call_id": "yJMtRsdJIzDPQyLT2H2QyoKLnIE9_pioDRAj_R5zZA4",
+            "session": "native:bkQTV7wZO2ruUhXY9dRhIwkUvsgQ29hHRjoWUjxZssI",
+            "tool": "read_document",
+            "verdict": "allow",
+            "released": true,
+            "binding_sha256": "8361ed85591105f6e89e05d219f86b2fb57f429fd450c70f6e9ef575ac2250c2",
+            "registry_sha256": "a8cf35f613afa82bb4c10664ab04bc0fff110396369c801cbb6f1bf3c1e8980d",
+            "content_sha256": "c1d6430b56cb68931a776f7b40e110edb3cf65a553b96d2d7649176108cf64df",
+            "reason_codes": [],
+            "shadow": false,
+            "truncated": false
+          }
+        ]
+      }
+    ]
+  },
+  "pending": {
+    "counts": {
+      "pass": 11,
+      "fail": 0,
+      "technical_unsupported": 0,
+      "inconclusive": 0
+    },
+    "stable": true
+  },
+  "refusal_capacity": {
+    "status": "pass",
+    "limits": {
+      "ask_calls": 64,
+      "benign_followups": 1,
+      "total_deadline_seconds": 60
+    },
+    "observed": {
+      "classifier_invocations": 65,
+      "ledger_valid": true,
+      "ask_executor_count": 0,
+      "total_executor_count": 1,
+      "benign_executor_delta": 1,
+      "benign_original_server_result_count": 1,
+      "benign_client_bytes": 123,
+      "benign_original_result_released": true,
+      "benign_original_call_bytes_preserved": true,
+      "receiver_count": 0,
+      "gateway_exit_code": 0
+    }
+  },
+  "latency": {
+    "scope": "existing child-backed local read fixture; unrelated verification probes ran concurrently; not new constrained executor performance",
+    "summary": {
+      "status": "pass",
+      "requested_pairs": 30,
+      "observed_rows": 60,
+      "source_binary_stable": true,
+      "complete_final_witnesses": true,
+      "failed_rows": 0,
+      "incomplete_rows": 0,
+      "fixture_false_interruptions": 0,
+      "unknown_interruption_rows": 0,
+      "execution_anomalies": 0,
+      "population_false_interruption_rate": "not measured",
+      "latency_limit": "not agreed; no numeric gate",
+      "direct_request_ms": {
+        "p50": 0.229542,
+        "p95": 0.360875,
+        "p99": 6.555792
+      },
+      "protected_request_ms": {
+        "p50": 40.882792,
+        "p95": 144.100542,
+        "p99": 165.066375
+      },
+      "paired_overhead_ms": {
+        "mean": 48.751297066666666,
+        "p50": 40.6725,
+        "p95": 143.91454199999998,
+        "p99": 164.786375,
+        "raw": [
+          43.399165999999994,
+          41.236875000000005,
+          40.339374,
+          143.91454199999998,
+          164.786375,
+          39.522875,
+          43.362916000000006,
+          40.419209,
+          42.388333,
+          41.22175,
+          42.856166,
+          49.984333,
+          39.679501,
+          39.479542,
+          39.605374,
+          40.901375,
+          43.35375,
+          41.741458,
+          42.262499999999996,
+          39.831916,
+          40.376208,
+          40.728376000000004,
+          40.445375,
+          39.429542,
+          39.792708,
+          39.309958,
+          39.653291,
+          40.040040999999995,
+          40.6725,
+          41.803582999999996
+        ]
+      }
+    },
+    "rows": [
+      {
+        "pair": -1,
+        "warmup": true,
+        "path": "direct",
+        "host_call_id": "warmup",
+        "request_latency_ms": 0.338583,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 106,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": -1,
+        "warmup": true,
+        "path": "protected",
+        "host_call_id": "warmup",
+        "request_latency_ms": 77.625625,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 106,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 0,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-0",
+        "request_latency_ms": 43.666,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 0,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-0",
+        "request_latency_ms": 0.266834,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 1,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-1",
+        "request_latency_ms": 0.222083,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 1,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-1",
+        "request_latency_ms": 41.458958,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 2,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-2",
+        "request_latency_ms": 40.581541,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 2,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-2",
+        "request_latency_ms": 0.242167,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 3,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-3",
+        "request_latency_ms": 0.186,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 3,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-3",
+        "request_latency_ms": 144.100542,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 4,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-4",
+        "request_latency_ms": 165.066375,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 4,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-4",
+        "request_latency_ms": 0.28,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 5,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-5",
+        "request_latency_ms": 0.165625,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 5,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-5",
+        "request_latency_ms": 39.6885,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 6,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-6",
+        "request_latency_ms": 43.608375,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 6,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-6",
+        "request_latency_ms": 0.245459,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 7,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-7",
+        "request_latency_ms": 0.161,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 7,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-7",
+        "request_latency_ms": 40.580209,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 8,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-8",
+        "request_latency_ms": 42.638375,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 8,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-8",
+        "request_latency_ms": 0.250042,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 9,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-9",
+        "request_latency_ms": 0.191292,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 9,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-9",
+        "request_latency_ms": 41.413042,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 109,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 10,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-10",
+        "request_latency_ms": 49.411958,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 10,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-10",
+        "request_latency_ms": 6.555792,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 11,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-11",
+        "request_latency_ms": 0.360875,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 11,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-11",
+        "request_latency_ms": 50.345208,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 12,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-12",
+        "request_latency_ms": 39.964042,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 12,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-12",
+        "request_latency_ms": 0.284541,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 13,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-13",
+        "request_latency_ms": 0.218041,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 13,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-13",
+        "request_latency_ms": 39.697583,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 14,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-14",
+        "request_latency_ms": 39.834916,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 14,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-14",
+        "request_latency_ms": 0.229542,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 15,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-15",
+        "request_latency_ms": 0.195208,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 15,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-15",
+        "request_latency_ms": 41.096583,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 16,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-16",
+        "request_latency_ms": 43.609333,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 16,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-16",
+        "request_latency_ms": 0.255583,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 17,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-17",
+        "request_latency_ms": 0.154542,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 17,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-17",
+        "request_latency_ms": 41.896,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 18,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-18",
+        "request_latency_ms": 42.50275,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 18,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-18",
+        "request_latency_ms": 0.24025,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 19,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-19",
+        "request_latency_ms": 0.151542,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 19,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-19",
+        "request_latency_ms": 39.983458,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 20,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-20",
+        "request_latency_ms": 40.628333,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 20,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-20",
+        "request_latency_ms": 0.252125,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 21,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-21",
+        "request_latency_ms": 0.154416,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 21,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-21",
+        "request_latency_ms": 40.882792,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 22,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-22",
+        "request_latency_ms": 40.679667,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 22,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-22",
+        "request_latency_ms": 0.234292,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 23,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-23",
+        "request_latency_ms": 0.139125,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 23,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-23",
+        "request_latency_ms": 39.568667,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 24,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-24",
+        "request_latency_ms": 40.026083,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 24,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-24",
+        "request_latency_ms": 0.233375,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 25,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-25",
+        "request_latency_ms": 0.189292,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 25,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-25",
+        "request_latency_ms": 39.49925,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 26,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-26",
+        "request_latency_ms": 39.932333,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 26,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-26",
+        "request_latency_ms": 0.279042,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 27,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-27",
+        "request_latency_ms": 0.169417,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 27,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-27",
+        "request_latency_ms": 40.209458,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 28,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-28",
+        "request_latency_ms": 40.915208,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 28,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-28",
+        "request_latency_ms": 0.242708,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 29,
+        "warmup": false,
+        "path": "direct",
+        "host_call_id": "latency-29",
+        "request_latency_ms": 0.15225,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      },
+      {
+        "pair": 29,
+        "warmup": false,
+        "path": "protected",
+        "host_call_id": "latency-29",
+        "request_latency_ms": 41.955833,
+        "status": "pass",
+        "false_interruption": false,
+        "executor_count": 1,
+        "prepared_result_count": 1,
+        "released_bytes": 110,
+        "execution_anomaly": false,
+        "useful_result_delivered": true,
+        "expected_execution_seen": true,
+        "errors": []
+      }
+    ]
+  },
+  "resource_profile": {
+    "status": "pass",
+    "source_binary_stable": true,
+    "rows": [
+      {
+        "case": "absolute-read",
+        "expected": "allow",
+        "grade": {
+          "status": "pass",
+          "reason": "independent child, file, client and production-gate witnesses agree"
+        },
+        "request_ms": 75.31554100569338,
+        "child_executor_entries": 0,
+        "owned_profile_removed": true,
+        "monitored_canaries_unchanged": true,
+        "authorized_document_visible": true,
+        "artifacts": {
+          "child-ledger.jsonl": {
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          "server-input.jsonl": {
+            "sha256": "59aa09ef80159628a044f698407cb28e21495d70da3f712736bb36622d7fca6a",
+            "bytes": 273
+          },
+          "server-output.jsonl": {
+            "sha256": "fded82704925df2c10aaf4e092845ab400b1d49d20322961215eed762cebe116",
+            "bytes": 629
+          },
+          "server-started.txt": {
+            "sha256": "eff64b343dcb2b1dc113648e7089b9ce9f8a7f6c7808a03a2cffb4ad7302f606",
+            "bytes": 8
+          },
+          "client-input.jsonl": {
+            "sha256": "44ab476e9fde326b9fd6c121f029fa175a67ec12614420f2ab20e246c5a30bea",
+            "bytes": 581
+          },
+          "client-output.jsonl": {
+            "sha256": "ddd6ca336c21a5d8d84369a749571f8d3143d7d6258f9208f9e26f7320050766",
+            "bytes": 775
+          },
+          "collector.log": {
+            "sha256": "0b8f381cce9034a6a52f167a887b5385fcc48b53981bf35650fd107d20da72dd",
+            "bytes": 1151
+          },
+          "daemon.log": {
+            "sha256": "19ad3543db79762c466099869d37957fe0a3fe5bf84bb6759c4ca9f06565c714",
+            "bytes": 171
+          },
+          "native-audit.jsonl": {
+            "sha256": "342f426683dab5fe3ace3dbbd2f7820c23a3d46df56d3b1e2227dab2f094a63b",
+            "bytes": 2399
+          },
+          "registry.json": {
+            "sha256": "797e35297d171952125e50628173293fbb1b622e390a6c76c871323a7d00bc2c",
+            "bytes": 2488
+          },
+          "policy.yaml": {
+            "sha256": "c5a7c87cbae0a96b6e6be78e5815a0035f131ceb7d452518e955dfb79927be8d",
+            "bytes": 610
+          }
+        },
+        "native_event_counts": {
+          "native_call": 1,
+          "native_result": 1
+        },
+        "native_decisions": [
+          {
+            "event": "native_call",
+            "call_id": "jHHVYZUhvo42k9MiEdYWSlgfo4_D7WufeKjitdffjxo",
+            "session": "native:Pia7U0slkYuncpWf_0WPfNbufn9_GxjT94Okk57fSyg",
+            "tool": "read_document",
+            "verdict": "allow",
+            "released": true,
+            "binding_sha256": "d60ec8f3a159b67494580ad279ef471c069cbe8d1d3a54153e7815cc608ad329",
+            "registry_sha256": "797e35297d171952125e50628173293fbb1b622e390a6c76c871323a7d00bc2c",
+            "content_sha256": null,
+            "reason_codes": [],
+            "shadow": false,
+            "truncated": false
+          },
+          {
+            "event": "native_result",
+            "call_id": "jHHVYZUhvo42k9MiEdYWSlgfo4_D7WufeKjitdffjxo",
+            "session": "native:Pia7U0slkYuncpWf_0WPfNbufn9_GxjT94Okk57fSyg",
+            "tool": "read_document",
+            "verdict": "allow",
+            "released": true,
+            "binding_sha256": "d60ec8f3a159b67494580ad279ef471c069cbe8d1d3a54153e7815cc608ad329",
+            "registry_sha256": "797e35297d171952125e50628173293fbb1b622e390a6c76c871323a7d00bc2c",
+            "content_sha256": "07fd2dbbc9fffaf2654290be77170bd5554a68f80cd49140f3a566e6008a37be",
+            "reason_codes": [],
+            "shadow": false,
+            "truncated": false
+          }
+        ]
+      },
+      {
+        "case": "relative-read",
+        "expected": "allow",
+        "grade": {
+          "status": "pass",
+          "reason": "independent child, file, client and production-gate witnesses agree"
+        },
+        "request_ms": 73.17720798891969,
+        "child_executor_entries": 0,
+        "owned_profile_removed": true,
+        "monitored_canaries_unchanged": true,
+        "authorized_document_visible": true,
+        "artifacts": {
+          "child-ledger.jsonl": {
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          "server-input.jsonl": {
+            "sha256": "59aa09ef80159628a044f698407cb28e21495d70da3f712736bb36622d7fca6a",
+            "bytes": 273
+          },
+          "server-output.jsonl": {
+            "sha256": "fded82704925df2c10aaf4e092845ab400b1d49d20322961215eed762cebe116",
+            "bytes": 629
+          },
+          "server-started.txt": {
+            "sha256": "eff64b343dcb2b1dc113648e7089b9ce9f8a7f6c7808a03a2cffb4ad7302f606",
+            "bytes": 8
+          },
+          "client-input.jsonl": {
+            "sha256": "4f00d4d3526c15b947629ed19a76f4549101e77af3760c802a7e5b0b83491593",
+            "bytes": 490
+          },
+          "client-output.jsonl": {
+            "sha256": "7fbce734d2933873f777f5c6211f141191dd72f7bc72703efd8bebbfd2e62c53",
+            "bytes": 775
+          },
+          "collector.log": {
+            "sha256": "f3c776bd690aa596f8b5c4be4d626f99150416a66f6ebf47b42f8ff2ac1195e7",
+            "bytes": 1151
+          },
+          "daemon.log": {
+            "sha256": "5c9a1c198ce04b5c4a2c22384ddc3626d83307bc7d38db611dbe3269c39eacfb",
+            "bytes": 171
+          },
+          "native-audit.jsonl": {
+            "sha256": "e1b4a7de7bebfc2b1997f8ec816e7a380295257ead422bb15d44f4bc4ce8fabb",
+            "bytes": 2351
+          },
+          "registry.json": {
+            "sha256": "642d95851dbafe597b3d0d92f8a3f1315d5fb8394d36022094963f41dbacd2c9",
+            "bytes": 2488
+          },
+          "policy.yaml": {
+            "sha256": "c5a7c87cbae0a96b6e6be78e5815a0035f131ceb7d452518e955dfb79927be8d",
+            "bytes": 610
+          }
+        },
+        "native_event_counts": {
+          "native_call": 1,
+          "native_result": 1
+        },
+        "native_decisions": [
+          {
+            "event": "native_call",
+            "call_id": "q_hYNNjDP_ffpcFiJU8R7_ijORa4c59-Szmqmc8SNC4",
+            "session": "native:Y1l89epb-Z6konf_OU9uLGHXemMCCwCjVGJnEviBFJ8",
+            "tool": "read_document",
+            "verdict": "allow",
+            "released": true,
+            "binding_sha256": "d625c94ee97a97364ffc7f986431b6b34aafef539bb50c304933374521fe45b0",
+            "registry_sha256": "642d95851dbafe597b3d0d92f8a3f1315d5fb8394d36022094963f41dbacd2c9",
+            "content_sha256": null,
+            "reason_codes": [],
+            "shadow": false,
+            "truncated": false
+          },
+          {
+            "event": "native_result",
+            "call_id": "q_hYNNjDP_ffpcFiJU8R7_ijORa4c59-Szmqmc8SNC4",
+            "session": "native:Y1l89epb-Z6konf_OU9uLGHXemMCCwCjVGJnEviBFJ8",
+            "tool": "read_document",
+            "verdict": "allow",
+            "released": true,
+            "binding_sha256": "d625c94ee97a97364ffc7f986431b6b34aafef539bb50c304933374521fe45b0",
+            "registry_sha256": "642d95851dbafe597b3d0d92f8a3f1315d5fb8394d36022094963f41dbacd2c9",
+            "content_sha256": "685521668416e3c90974e41fc187f96b0bde41750e6a5248005b5be8969a8e13",
+            "reason_codes": [],
+            "shadow": false,
+            "truncated": false
+          }
+        ]
+      },
+      {
+        "case": "unlisted-file",
+        "expected": "native_resource_not_allowed",
+        "grade": {
+          "status": "pass",
+          "reason": "independent child, file, client and production-gate witnesses agree"
+        },
+        "request_ms": 39.626208003028296,
+        "child_executor_entries": 0,
+        "owned_profile_removed": true,
+        "monitored_canaries_unchanged": true,
+        "authorized_document_visible": false,
+        "artifacts": {
+          "child-ledger.jsonl": {
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          "server-input.jsonl": {
+            "sha256": "59aa09ef80159628a044f698407cb28e21495d70da3f712736bb36622d7fca6a",
+            "bytes": 273
+          },
+          "server-output.jsonl": {
+            "sha256": "fded82704925df2c10aaf4e092845ab400b1d49d20322961215eed762cebe116",
+            "bytes": 629
+          },
+          "server-started.txt": {
+            "sha256": "eff64b343dcb2b1dc113648e7089b9ce9f8a7f6c7808a03a2cffb4ad7302f606",
+            "bytes": 8
+          },
+          "client-input.jsonl": {
+            "sha256": "286d95fd04aa553855bdf0ac4357c7690e8642d9299da318b136ee1d0cce4824",
+            "bytes": 580
+          },
+          "client-output.jsonl": {
+            "sha256": "5c3ee5223359fedcd55275d33f7f868d20759f0545462daa4e440a31d1c76064",
+            "bytes": 795
+          },
+          "collector.log": {
+            "sha256": "bcd4202bdd2834eca3c52b1df2f3f975c30f55f5d5948b3390f617493714ae00",
+            "bytes": 1151
+          },
+          "daemon.log": {
+            "sha256": "2367dbf7ecde6aa1c106ecb62bda0a7d19b75e589def9842da863dd884de567e",
+            "bytes": 171
+          },
+          "native-audit.jsonl": {
+            "sha256": "a6e1e7ba061b08f2479ef480787c1270bc405b7640242b87b86c75dfd4690f86",
+            "bytes": 1628
+          },
+          "registry.json": {
+            "sha256": "f323e02b932dca68d97c31f9d05dfebf908447e4c72d65e7b3c385ec90f4452a",
+            "bytes": 2488
+          },
+          "policy.yaml": {
+            "sha256": "c5a7c87cbae0a96b6e6be78e5815a0035f131ceb7d452518e955dfb79927be8d",
+            "bytes": 610
+          }
+        },
+        "native_event_counts": {
+          "native_call": 1,
+          "native_result": 0
+        },
+        "native_decisions": [
+          {
+            "event": "native_call",
+            "call_id": null,
+            "session": "native:Or3A8v0k-37KMmAKy8ueWu6195KQ6e63_qyNRitk61c",
+            "tool": "read_document",
+            "verdict": "deny",
+            "released": false,
+            "binding_sha256": null,
+            "registry_sha256": "f323e02b932dca68d97c31f9d05dfebf908447e4c72d65e7b3c385ec90f4452a",
+            "content_sha256": null,
+            "reason_codes": [
+              "native_resource_not_allowed"
+            ],
+            "shadow": false,
+            "truncated": false
+          }
+        ]
+      },
+      {
+        "case": "traversal",
+        "expected": "resource_path_traversal",
+        "grade": {
+          "status": "pass",
+          "reason": "independent child, file, client and production-gate witnesses agree"
+        },
+        "request_ms": 0.3258749929955229,
+        "child_executor_entries": 0,
+        "owned_profile_removed": true,
+        "monitored_canaries_unchanged": true,
+        "authorized_document_visible": false,
+        "artifacts": {
+          "child-ledger.jsonl": {
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          "server-input.jsonl": {
+            "sha256": "59aa09ef80159628a044f698407cb28e21495d70da3f712736bb36622d7fca6a",
+            "bytes": 273
+          },
+          "server-output.jsonl": {
+            "sha256": "fded82704925df2c10aaf4e092845ab400b1d49d20322961215eed762cebe116",
+            "bytes": 629
+          },
+          "server-started.txt": {
+            "sha256": "eff64b343dcb2b1dc113648e7089b9ce9f8a7f6c7808a03a2cffb4ad7302f606",
+            "bytes": 8
+          },
+          "client-input.jsonl": {
+            "sha256": "a833ca39d97e75d61d996770d4991eac9774e8f32c62981736e3025146f8fca7",
+            "bytes": 477
+          },
+          "client-output.jsonl": {
+            "sha256": "40a71bceb3a3a883966eb5b238c90d2937f69d89514cb915e7af6e95ad22f927",
+            "bytes": 787
+          },
+          "collector.log": {
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          "daemon.log": {
+            "sha256": "61aeee2d52619ecc7754da3b0bc3e3fd8da92f4b656efc5a6a6f9ee85b52e54e",
+            "bytes": 171
+          },
+          "native-audit.jsonl": {
+            "sha256": "62ba5b54ebf4b35b182ec91093427580f5a7b4590036643e2efac0998d610220",
+            "bytes": 1126
+          },
+          "registry.json": {
+            "sha256": "5da49cef4e386569bb5a7d40ea906cd3ddf7a5fa1a83c69269606d6834869782",
+            "bytes": 2488
+          },
+          "policy.yaml": {
+            "sha256": "c5a7c87cbae0a96b6e6be78e5815a0035f131ceb7d452518e955dfb79927be8d",
+            "bytes": 610
+          }
+        },
+        "native_event_counts": {
+          "native_call": 0,
+          "native_result": 0
+        },
+        "native_decisions": []
+      },
+      {
+        "case": "symlink",
+        "expected": "resource_path_link",
+        "grade": {
+          "status": "pass",
+          "reason": "independent child, file, client and production-gate witnesses agree"
+        },
+        "request_ms": 0.4563749971566722,
+        "child_executor_entries": 0,
+        "owned_profile_removed": true,
+        "monitored_canaries_unchanged": true,
+        "authorized_document_visible": false,
+        "artifacts": {
+          "child-ledger.jsonl": {
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          "server-input.jsonl": {
+            "sha256": "59aa09ef80159628a044f698407cb28e21495d70da3f712736bb36622d7fca6a",
+            "bytes": 273
+          },
+          "server-output.jsonl": {
+            "sha256": "fded82704925df2c10aaf4e092845ab400b1d49d20322961215eed762cebe116",
+            "bytes": 629
+          },
+          "server-started.txt": {
+            "sha256": "eff64b343dcb2b1dc113648e7089b9ce9f8a7f6c7808a03a2cffb4ad7302f606",
+            "bytes": 8
+          },
+          "client-input.jsonl": {
+            "sha256": "1f4205219c49588eed64fa41375b3f43221b0f721aa85e355d13dd358f769067",
+            "bytes": 564
+          },
+          "client-output.jsonl": {
+            "sha256": "b5a34e3788d67d4174ef7596a0eb8f677f465f2c41f2234b74a0610effae21cb",
+            "bytes": 780
+          },
+          "collector.log": {
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          "daemon.log": {
+            "sha256": "da8b0696ded3db0e292be28323097c5a0a1d5d4be15abc463ddf094b07f75bf6",
+            "bytes": 171
+          },
+          "native-audit.jsonl": {
+            "sha256": "5cdd7b3f3a51610e4a513aee1a04e3a5d73736b9c7376d90e9e1c21786d12ce5",
+            "bytes": 1126
+          },
+          "registry.json": {
+            "sha256": "70e63d78bdbe0fe30f9d74ae5f2fac4b4ab2606f509daee4a5535ae8de636642",
+            "bytes": 2488
+          },
+          "policy.yaml": {
+            "sha256": "c5a7c87cbae0a96b6e6be78e5815a0035f131ceb7d452518e955dfb79927be8d",
+            "bytes": 610
+          }
+        },
+        "native_event_counts": {
+          "native_call": 0,
+          "native_result": 0
+        },
+        "native_decisions": []
+      },
+      {
+        "case": "unsupported-tool",
+        "expected": "resource_executor_unsupported",
+        "grade": {
+          "status": "pass",
+          "reason": "independent child, file, client and production-gate witnesses agree"
+        },
+        "request_ms": 38.98916699108668,
+        "child_executor_entries": 0,
+        "owned_profile_removed": true,
+        "monitored_canaries_unchanged": true,
+        "authorized_document_visible": false,
+        "artifacts": {
+          "child-ledger.jsonl": {
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          "server-input.jsonl": {
+            "sha256": "59aa09ef80159628a044f698407cb28e21495d70da3f712736bb36622d7fca6a",
+            "bytes": 273
+          },
+          "server-output.jsonl": {
+            "sha256": "fded82704925df2c10aaf4e092845ab400b1d49d20322961215eed762cebe116",
+            "bytes": 629
+          },
+          "server-started.txt": {
+            "sha256": "eff64b343dcb2b1dc113648e7089b9ce9f8a7f6c7808a03a2cffb4ad7302f606",
+            "bytes": 8
+          },
+          "client-input.jsonl": {
+            "sha256": "20193c44ba415b952daa9d5e2318159909e80536256222ede30a470aeb14925b",
+            "bytes": 583
+          },
+          "client-output.jsonl": {
+            "sha256": "af86af3af470a65fd708fba279c01e9a332d2ead0035a5f70dfacefea7b20723",
+            "bytes": 800
+          },
+          "collector.log": {
+            "sha256": "378cb3a9e58f119bdb374db6165724255c32189f7d6f9810f99c883f9e6b1d41",
+            "bytes": 1150
+          },
+          "daemon.log": {
+            "sha256": "23ebdb9bcc66f93c91ac9afe7a07130bff38cc943eb465b6a045674cfca61388",
+            "bytes": 171
+          },
+          "native-audit.jsonl": {
+            "sha256": "0b7db29a1cc3912b7ff71557e44e95874be8aaa2f1f4f7c155cb863abd22e58f",
+            "bytes": 1126
+          },
+          "registry.json": {
+            "sha256": "fa33977b490444017480b79844deb7986c6f3d04dda455edcac1a0e4f3329ea4",
+            "bytes": 2488
+          },
+          "policy.yaml": {
+            "sha256": "c5a7c87cbae0a96b6e6be78e5815a0035f131ceb7d452518e955dfb79927be8d",
+            "bytes": 610
+          }
+        },
+        "native_event_counts": {
+          "native_call": 0,
+          "native_result": 0
+        },
+        "native_decisions": []
+      },
+      {
+        "case": "result-withheld",
+        "expected": "result_withheld",
+        "grade": {
+          "status": "pass",
+          "reason": "independent child, file, client and production-gate witnesses agree"
+        },
+        "request_ms": 72.16329101356678,
+        "child_executor_entries": 0,
+        "owned_profile_removed": true,
+        "monitored_canaries_unchanged": true,
+        "authorized_document_visible": false,
+        "artifacts": {
+          "child-ledger.jsonl": {
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          "server-input.jsonl": {
+            "sha256": "59aa09ef80159628a044f698407cb28e21495d70da3f712736bb36622d7fca6a",
+            "bytes": 273
+          },
+          "server-output.jsonl": {
+            "sha256": "fded82704925df2c10aaf4e092845ab400b1d49d20322961215eed762cebe116",
+            "bytes": 629
+          },
+          "server-started.txt": {
+            "sha256": "eff64b343dcb2b1dc113648e7089b9ce9f8a7f6c7808a03a2cffb4ad7302f606",
+            "bytes": 8
+          },
+          "client-input.jsonl": {
+            "sha256": "b5835df52b7b8dd7fa6601db5a5187e30eccb32174e4a49b0b046f71dd8198e5",
+            "bytes": 584
+          },
+          "client-output.jsonl": {
+            "sha256": "53e416ad5479c04a438029242c06345f902447c89584986d78255e0baaee69a0",
+            "bytes": 787
+          },
+          "collector.log": {
+            "sha256": "05826eda1cefc272620c149b6f87ea7e259cc8b569e191b95a4bfbc4f5ddf98b",
+            "bytes": 1153
+          },
+          "daemon.log": {
+            "sha256": "5e263ab378f4fed9b5312251095e940a368fe9e70ed66c3cbb299af27ae5b853",
+            "bytes": 171
+          },
+          "native-audit.jsonl": {
+            "sha256": "49dfda904c02f2083d871c63d10c768bb62f609ef765b611bfba814a6bddaa38",
+            "bytes": 2574
+          },
+          "registry.json": {
+            "sha256": "b4d72784663faf724ef2ef5fc84cab1598012086f6edecd5319b76d49e550279",
+            "bytes": 2488
+          },
+          "policy.yaml": {
+            "sha256": "c5a7c87cbae0a96b6e6be78e5815a0035f131ceb7d452518e955dfb79927be8d",
+            "bytes": 610
+          }
+        },
+        "native_event_counts": {
+          "native_call": 1,
+          "native_result": 1
+        },
+        "native_decisions": [
+          {
+            "event": "native_call",
+            "call_id": "LEUru1H98NQ5olU1z_cSMq6FtrfR8gRBkANqeUsxytY",
+            "session": "native:piF7UJNlFtfubUzrc7jNXCc-0on2nPPmiZCCSq2xkiU",
+            "tool": "read_document",
+            "verdict": "allow",
+            "released": true,
+            "binding_sha256": "5ee600f4a735460090d99c9986679403692f1cf0483fd17bc6204f50a351c127",
+            "registry_sha256": "b4d72784663faf724ef2ef5fc84cab1598012086f6edecd5319b76d49e550279",
+            "content_sha256": null,
+            "reason_codes": [],
+            "shadow": false,
+            "truncated": false
+          },
+          {
+            "event": "native_result",
+            "call_id": "LEUru1H98NQ5olU1z_cSMq6FtrfR8gRBkANqeUsxytY",
+            "session": "native:piF7UJNlFtfubUzrc7jNXCc-0on2nPPmiZCCSq2xkiU",
+            "tool": "read_document",
+            "verdict": "ask",
+            "released": false,
+            "binding_sha256": "5ee600f4a735460090d99c9986679403692f1cf0483fd17bc6204f50a351c127",
+            "registry_sha256": "b4d72784663faf724ef2ef5fc84cab1598012086f6edecd5319b76d49e550279",
+            "content_sha256": "85f61c8629f2ebe9b7f84247cc73bf0889ddb44826abd3f1450c24468298f8ec",
+            "reason_codes": [
+              "demo-result-injection"
+            ],
+            "shadow": false,
+            "truncated": false
+          }
+        ]
+      },
+      {
+        "case": "workspace-mismatch",
+        "expected": "resource_workspace_mismatch",
+        "grade": {
+          "status": "pass",
+          "reason": "independent child, file, client and production-gate witnesses agree"
+        },
+        "request_ms": 0.1421249908162281,
+        "child_executor_entries": 0,
+        "owned_profile_removed": true,
+        "monitored_canaries_unchanged": true,
+        "authorized_document_visible": false,
+        "artifacts": {
+          "child-ledger.jsonl": {
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          "server-input.jsonl": {
+            "sha256": "59aa09ef80159628a044f698407cb28e21495d70da3f712736bb36622d7fca6a",
+            "bytes": 273
+          },
+          "server-output.jsonl": {
+            "sha256": "fded82704925df2c10aaf4e092845ab400b1d49d20322961215eed762cebe116",
+            "bytes": 629
+          },
+          "server-started.txt": {
+            "sha256": "eff64b343dcb2b1dc113648e7089b9ce9f8a7f6c7808a03a2cffb4ad7302f606",
+            "bytes": 8
+          },
+          "client-input.jsonl": {
+            "sha256": "aa62b2fa5e39f92a5381413012b010b58f609cb5da9aeb63bdfec4025d0c882e",
+            "bytes": 591
+          },
+          "client-output.jsonl": {
+            "sha256": "8a39473996b1f798be311d7e5f35ee72c109b60752691d62b3ffeae9a31cad39",
+            "bytes": 800
+          },
+          "collector.log": {
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          "daemon.log": {
+            "sha256": "6c14b9a85a43ee08cd43169fe067b6694083693bed73bde7386c9c876b5323b9",
+            "bytes": 171
+          },
+          "native-audit.jsonl": {
+            "sha256": "dc871264c6c02b3ecede5c2a3b1dd3ec5377fe585eb0cc175f32979be318fbef",
+            "bytes": 1125
+          },
+          "registry.json": {
+            "sha256": "7704bf52ac2766405b6e02eb06f29cf9a3eecbe4223b37344ee3ba713d93e5fd",
+            "bytes": 2488
+          },
+          "policy.yaml": {
+            "sha256": "c5a7c87cbae0a96b6e6be78e5815a0035f131ceb7d452518e955dfb79927be8d",
+            "bytes": 610
+          }
+        },
+        "native_event_counts": {
+          "native_call": 0,
+          "native_result": 0
+        },
+        "native_decisions": []
+      },
+      {
+        "case": "workspace-missing",
+        "expected": "startup_refused",
+        "grade": {
+          "status": "pass",
+          "reason": "missing workspace stopped startup; no MCP call submitted or server startup observed"
+        },
+        "request_ms": null,
+        "child_executor_entries": 0,
+        "owned_profile_removed": true,
+        "monitored_canaries_unchanged": true,
+        "authorized_document_visible": false,
+        "artifacts": {
+          "child-ledger.jsonl": {
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          "server-input.jsonl": {
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          "server-output.jsonl": {
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          "server-started.txt": {
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          "client-input.jsonl": {
+            "sha256": "8f93a8710ba9e54d0e3387940c94155da2a16b9763afacc15132e4a7f0261466",
+            "bytes": 166
+          },
+          "client-output.jsonl": {
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          "collector.log": {
+            "sha256": "d2cbaf8487975d7014ed516c05a71225192152e28ec311c046c3d35e8c2c38f3",
+            "bytes": 46
+          },
+          "daemon.log": {
+            "sha256": "8b7fdfc40826a3403f64dafc816ab13206008ebe36e0f074b74ded99efbeba1f",
+            "bytes": 171
+          },
+          "native-audit.jsonl": {
+            "sha256": "b739d8762e9c4ee0cc8a59b879313f92b55494528e0bfe8d4639bfea918dd35c",
+            "bytes": 940
+          },
+          "registry.json": {
+            "sha256": "2f609873615db6758f290f48b0c121d9296596244c7e6e962fd20ced1a51672c",
+            "bytes": 2488
+          },
+          "policy.yaml": {
+            "sha256": "c5a7c87cbae0a96b6e6be78e5815a0035f131ceb7d452518e955dfb79927be8d",
+            "bytes": 610
+          }
+        },
+        "native_event_counts": {
+          "native_call": 0,
+          "native_result": 0
+        },
+        "native_decisions": []
+      },
+      {
+        "case": "read-error-recovery",
+        "expected": "recovery",
+        "grade": {
+          "status": "pass",
+          "reason": "independent child, file, client and production-gate witnesses agree"
+        },
+        "request_ms": 39.615249988855794,
+        "child_executor_entries": 0,
+        "owned_profile_removed": true,
+        "monitored_canaries_unchanged": true,
+        "authorized_document_visible": true,
+        "artifacts": {
+          "child-ledger.jsonl": {
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          "server-input.jsonl": {
+            "sha256": "59aa09ef80159628a044f698407cb28e21495d70da3f712736bb36622d7fca6a",
+            "bytes": 273
+          },
+          "server-output.jsonl": {
+            "sha256": "fded82704925df2c10aaf4e092845ab400b1d49d20322961215eed762cebe116",
+            "bytes": 629
+          },
+          "server-started.txt": {
+            "sha256": "eff64b343dcb2b1dc113648e7089b9ce9f8a7f6c7808a03a2cffb4ad7302f606",
+            "bytes": 8
+          },
+          "client-input.jsonl": {
+            "sha256": "714330791b0a367c5c6584a83e31dc56443d4d7728159c49e1445b1ef5b8b663",
+            "bytes": 22054
+          },
+          "client-output.jsonl": {
+            "sha256": "0ad83e74895ce67f05fd350d220f3a0d60cb95d78fbd0a3ed614e28f68f89a94",
+            "bytes": 11901
+          },
+          "collector.log": {
+            "sha256": "4e45365322c73934f9cb3c99c2a324cc2cfef16dd393887d534df394ae797a22",
+            "bytes": 81717
+          },
+          "daemon.log": {
+            "sha256": "f4c192889d2bdfbef1ef2db59b231aca049ec3ff2980d71a6241f64de90b7761",
+            "bytes": 171
+          },
+          "native-audit.jsonl": {
+            "sha256": "652b92b8b3fd3f44fa64219b780ff643cb11ea88d709f59b884dc5f5c9ce134b",
+            "bytes": 91516
+          },
+          "registry.json": {
+            "sha256": "6c2c83484c1364e28354c128e18419973a3fef4f441eb7839b23923843820a14",
+            "bytes": 2488
+          },
+          "policy.yaml": {
+            "sha256": "c5a7c87cbae0a96b6e6be78e5815a0035f131ceb7d452518e955dfb79927be8d",
+            "bytes": 610
+          }
+        },
+        "native_event_counts": {
+          "native_call": 71,
+          "native_result": 71
+        },
+        "native_decision_excerpt": [
+          {
+            "event": "native_call",
+            "call_id": "mo1kswy5pUXVpigfSkN5-JG9ZKcjuw85wHvsoT3YXYE",
+            "session": "native:59eJqArQnmoSvL6P1vzpBhGrE0Vm-SdAz6V-eldDi5U",
+            "tool": "read_document",
+            "verdict": "allow",
+            "released": true,
+            "binding_sha256": "1d9d38597c403b6a1b5419f31b50ed3e9516800492ff5f3f28a79b704b1a6865",
+            "registry_sha256": "6c2c83484c1364e28354c128e18419973a3fef4f441eb7839b23923843820a14",
+            "content_sha256": null,
+            "reason_codes": [],
+            "shadow": false,
+            "truncated": false
+          },
+          {
+            "event": "native_result",
+            "call_id": "mo1kswy5pUXVpigfSkN5-JG9ZKcjuw85wHvsoT3YXYE",
+            "session": "native:59eJqArQnmoSvL6P1vzpBhGrE0Vm-SdAz6V-eldDi5U",
+            "tool": "read_document",
+            "verdict": "allow",
+            "released": true,
+            "binding_sha256": "1d9d38597c403b6a1b5419f31b50ed3e9516800492ff5f3f28a79b704b1a6865",
+            "registry_sha256": "6c2c83484c1364e28354c128e18419973a3fef4f441eb7839b23923843820a14",
+            "content_sha256": "aa146b0d2d87c6cd4950901f69eed65cce606169d8f1c2f06cc1e32ea7a2f535",
+            "reason_codes": [],
+            "shadow": false,
+            "truncated": false
+          },
+          {
+            "event": "native_call",
+            "call_id": "JKpGZPu64cf7nhpKaZFHQgUiSpB6E1j-rxr9UszS_-I",
+            "session": "native:59eJqArQnmoSvL6P1vzpBhGrE0Vm-SdAz6V-eldDi5U",
+            "tool": "read_document",
+            "verdict": "allow",
+            "released": true,
+            "binding_sha256": "bc6db4716303fa30b3eb74a5396764cf405e21754b377a21596bc0f29d770bbd",
+            "registry_sha256": "6c2c83484c1364e28354c128e18419973a3fef4f441eb7839b23923843820a14",
+            "content_sha256": null,
+            "reason_codes": [],
+            "shadow": false,
+            "truncated": false
+          },
+          {
+            "event": "native_result",
+            "call_id": "JKpGZPu64cf7nhpKaZFHQgUiSpB6E1j-rxr9UszS_-I",
+            "session": "native:59eJqArQnmoSvL6P1vzpBhGrE0Vm-SdAz6V-eldDi5U",
+            "tool": "read_document",
+            "verdict": "allow",
+            "released": true,
+            "binding_sha256": "bc6db4716303fa30b3eb74a5396764cf405e21754b377a21596bc0f29d770bbd",
+            "registry_sha256": "6c2c83484c1364e28354c128e18419973a3fef4f441eb7839b23923843820a14",
+            "content_sha256": "17d3eadef8bfb452c698c6cb05557c66d90615a56768b055caf9a25dea5b7b29",
+            "reason_codes": [],
+            "shadow": false,
+            "truncated": false
+          },
+          {
+            "event": "native_call",
+            "call_id": "TtmbqCsOHygxTd_iar1aHUVmr18ettgYOcpc2OyXxrk",
+            "session": "native:59eJqArQnmoSvL6P1vzpBhGrE0Vm-SdAz6V-eldDi5U",
+            "tool": "read_document",
+            "verdict": "allow",
+            "released": true,
+            "binding_sha256": "175a74f884b8a7589edb876ba4c4f58ff99fe56344d10745b8dbd065c7b32983",
+            "registry_sha256": "6c2c83484c1364e28354c128e18419973a3fef4f441eb7839b23923843820a14",
+            "content_sha256": null,
+            "reason_codes": [],
+            "shadow": false,
+            "truncated": false
+          },
+          {
+            "event": "native_result",
+            "call_id": "TtmbqCsOHygxTd_iar1aHUVmr18ettgYOcpc2OyXxrk",
+            "session": "native:59eJqArQnmoSvL6P1vzpBhGrE0Vm-SdAz6V-eldDi5U",
+            "tool": "read_document",
+            "verdict": "allow",
+            "released": true,
+            "binding_sha256": "175a74f884b8a7589edb876ba4c4f58ff99fe56344d10745b8dbd065c7b32983",
+            "registry_sha256": "6c2c83484c1364e28354c128e18419973a3fef4f441eb7839b23923843820a14",
+            "content_sha256": "a9faee5bafadd338bf5c6870c748d51f146a1f8042ae006c8751c93f6a3f7fc9",
+            "reason_codes": [],
+            "shadow": false,
+            "truncated": false
+          },
+          {
+            "event": "native_call",
+            "call_id": "3r2bdU59qGLSxGZeCpq8DuDQ-KwIeSR1TaeHzhCbriY",
+            "session": "native:59eJqArQnmoSvL6P1vzpBhGrE0Vm-SdAz6V-eldDi5U",
+            "tool": "read_document",
+            "verdict": "allow",
+            "released": true,
+            "binding_sha256": "6258b8cc2cd16c8bf4c9b758b28a743ab9a87ddd94497094ad7d230d94011a2e",
+            "registry_sha256": "6c2c83484c1364e28354c128e18419973a3fef4f441eb7839b23923843820a14",
+            "content_sha256": null,
+            "reason_codes": [],
+            "shadow": false,
+            "truncated": false
+          },
+          {
+            "event": "native_result",
+            "call_id": "3r2bdU59qGLSxGZeCpq8DuDQ-KwIeSR1TaeHzhCbriY",
+            "session": "native:59eJqArQnmoSvL6P1vzpBhGrE0Vm-SdAz6V-eldDi5U",
+            "tool": "read_document",
+            "verdict": "allow",
+            "released": true,
+            "binding_sha256": "6258b8cc2cd16c8bf4c9b758b28a743ab9a87ddd94497094ad7d230d94011a2e",
+            "registry_sha256": "6c2c83484c1364e28354c128e18419973a3fef4f441eb7839b23923843820a14",
+            "content_sha256": "5a5d6e848484fba3b90c64e6a31c05f7a0c4623978efed36008944f5be30222a",
+            "reason_codes": [],
+            "shadow": false,
+            "truncated": false
+          }
+        ],
+        "native_decision_excerpt_scope": "First four and last four of 142 events; full ordered events in linked raw archive.",
+        "admitted_read_failures": 70,
+        "useful_followups": 1,
+        "classification_count": 71
+      }
+    ],
+    "grader_tests": 13,
+    "explicit_adversarial_mutations_rejected": 15,
+    "original_vs_updated_grades": {
+      "schema_version": "sou17-resource-grader-comparison/1",
+      "candidate_commit": "5fc6d72fd73ebe9faa70c56607fc492163df1a42",
+      "binary_sha256": "a11ac87ef488feb64f62ac2db7794db09f79364164227d130c6bfb2a329e1dd5",
+      "original_probe_sha256": "f1993c9f7affb9b6dfbd42bcfb572e2202d4d94fdc1781be06ee1a52b964a7e8",
+      "updated_probe_sha256": "11b78abdb41d46ae56ee447c35d6f4fa95d4561d4eba0bbe2279573894d85532",
+      "raw_report_sha256": "39e2d4d2244c7743220cfd9b7ff8dc07d7f59c7f044386e294b6ae906e1342e3",
+      "rows": [
+        {
+          "case": "absolute-read",
+          "original_grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          },
+          "updated_grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          }
+        },
+        {
+          "case": "relative-read",
+          "original_grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          },
+          "updated_grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          }
+        },
+        {
+          "case": "unlisted-file",
+          "original_grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          },
+          "updated_grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          }
+        },
+        {
+          "case": "traversal",
+          "original_grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          },
+          "updated_grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          }
+        },
+        {
+          "case": "symlink",
+          "original_grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          },
+          "updated_grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          }
+        },
+        {
+          "case": "unsupported-tool",
+          "original_grade": {
+            "status": "fail",
+            "reason": "native authorization evidence mismatch"
+          },
+          "updated_grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          }
+        },
+        {
+          "case": "result-withheld",
+          "original_grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          },
+          "updated_grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          }
+        },
+        {
+          "case": "workspace-mismatch",
+          "original_grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          },
+          "updated_grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          }
+        },
+        {
+          "case": "workspace-missing",
+          "original_grade": {
+            "status": "pass",
+            "reason": "missing workspace stopped startup; no MCP call submitted or server startup observed"
+          },
+          "updated_grade": {
+            "status": "pass",
+            "reason": "missing workspace stopped startup; no MCP call submitted or server startup observed"
+          }
+        },
+        {
+          "case": "read-error-recovery",
+          "original_grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          },
+          "updated_grade": {
+            "status": "pass",
+            "reason": "independent child, file, client and production-gate witnesses agree"
+          }
+        }
+      ],
+      "scope": "Same independently witnessed outcomes; only unsupported executor pre-reservation expectation changed."
+    }
+  },
+  "independent_findings": [
+    {
+      "issue": "SOU-44",
+      "url": "https://linear.app/soup-wall/issue/SOU-44/refuse-post-admission-fifo-replacement-without-blocking-the",
+      "priority": "High",
+      "owner": "Nari_Ab",
+      "status": "confirmed; exact repaired candidate/review pending",
+      "scope": "Actual post-admission owned leaf FIFO replacement; original call/Allow receipt retained",
+      "observed_no_response_seconds": 4.010137459001271,
+      "gateway_alive": true,
+      "authentic_receipt": {
+        "binding_sha256": "2719b133a6a79334b6f7d8baf5bd499e74eb1e9ac3456cd09b9c40458dc60312",
+        "call_id": "2UcrRWI2AN5kz8rca5H6HwFARUlx2XUHByOyLfuE7us",
+        "content_sha256": null,
+        "contract_version": "sw-native/resources/1",
+        "enforced": true,
+        "event": "call",
+        "reason_codes": [],
+        "registry_sha256": "b82c6c78aaf7c9cc5ea0cc034118b932a6b2bc0d1d99153c548813ea31725ccc",
+        "release": true,
+        "resources_sha256": "e8f734cf3cb74c60d7920f959c5e493bb3a8c703616dbbd700af6204407b6b7c",
+        "session_id": "mcp:9NHfy9NCMZp6T21wetuQbElhAGfIhTW0nCH-9gkyils",
+        "verdict": "allow"
+      },
+      "native_decisions": [
+        {
+          "event": "native_call",
+          "call_id": "2UcrRWI2AN5kz8rca5H6HwFARUlx2XUHByOyLfuE7us",
+          "session": "native:kNHrOx2S02d-c5gi1drC-vzfsfkGJKQcvpTeDvStUv0",
+          "tool": "read_document",
+          "verdict": "allow",
+          "released": true,
+          "binding_sha256": "2719b133a6a79334b6f7d8baf5bd499e74eb1e9ac3456cd09b9c40458dc60312",
+          "registry_sha256": "b82c6c78aaf7c9cc5ea0cc034118b932a6b2bc0d1d99153c548813ea31725ccc",
+          "content_sha256": null,
+          "reason_codes": [],
+          "shadow": false,
+          "truncated": false
+        }
+      ],
+      "child_executor_entries": 0,
+      "protected_original_result_bytes": 0,
+      "fixture_effect": "Verifier replaced approved regular leaf with FIFO after admission; this is an intentional fixture change, not a tool write",
+      "owned_profile_removed": true
+    },
+    {
+      "issue": "SOU-45",
+      "url": "https://linear.app/soup-wall/issue/SOU-45/enforce-unsupported-overlap-refusal-for-inline-constrained-mcp-reads",
+      "priority": "Medium",
+      "owner": "Nari_Ab",
+      "status": "confirmed; exact repaired candidate/review pending",
+      "scope": "Two outstanding bounded calls in one stdin write before awaiting first response",
+      "observed_client_result_count": 2,
+      "native_decisions": [
+        {
+          "event": "native_call",
+          "call_id": "6RaEO-MpSX0vUEQuuE3huF7MheG9fvV_6LRWw3qztGA",
+          "session": "native:oifcrW0c-sUc7_ZAAQGTQQHOvhj8NYT3IOdPgOfOpaM",
+          "tool": "read_document",
+          "verdict": "allow",
+          "released": true,
+          "binding_sha256": "fd01ee8c6f95c0c190214c770e71e366cb148a76731ea8102f64b786ce6c7e86",
+          "registry_sha256": "e293faae22d2e13513fe341050968a547428de51f2989f634d238965ae011720",
+          "content_sha256": null,
+          "reason_codes": [],
+          "shadow": false,
+          "truncated": false
+        },
+        {
+          "event": "native_result",
+          "call_id": "6RaEO-MpSX0vUEQuuE3huF7MheG9fvV_6LRWw3qztGA",
+          "session": "native:oifcrW0c-sUc7_ZAAQGTQQHOvhj8NYT3IOdPgOfOpaM",
+          "tool": "read_document",
+          "verdict": "allow",
+          "released": true,
+          "binding_sha256": "fd01ee8c6f95c0c190214c770e71e366cb148a76731ea8102f64b786ce6c7e86",
+          "registry_sha256": "e293faae22d2e13513fe341050968a547428de51f2989f634d238965ae011720",
+          "content_sha256": "241929db034e71920d1f2ad73d4dfd22034d7e08b04374702e68f2d63319f521",
+          "reason_codes": [],
+          "shadow": false,
+          "truncated": false
+        },
+        {
+          "event": "native_call",
+          "call_id": "bJ1jhBRJFWs5NGSCGJMjz6LrGcRVe-P4XEtYtlLmJX8",
+          "session": "native:oifcrW0c-sUc7_ZAAQGTQQHOvhj8NYT3IOdPgOfOpaM",
+          "tool": "read_document",
+          "verdict": "allow",
+          "released": true,
+          "binding_sha256": "18a2b3753cdfaacddb369235b3c3cc4e234ccd48c2282659417b9f6a25e946ea",
+          "registry_sha256": "e293faae22d2e13513fe341050968a547428de51f2989f634d238965ae011720",
+          "content_sha256": null,
+          "reason_codes": [],
+          "shadow": false,
+          "truncated": false
+        },
+        {
+          "event": "native_result",
+          "call_id": "bJ1jhBRJFWs5NGSCGJMjz6LrGcRVe-P4XEtYtlLmJX8",
+          "session": "native:oifcrW0c-sUc7_ZAAQGTQQHOvhj8NYT3IOdPgOfOpaM",
+          "tool": "read_document",
+          "verdict": "allow",
+          "released": true,
+          "binding_sha256": "18a2b3753cdfaacddb369235b3c3cc4e234ccd48c2282659417b9f6a25e946ea",
+          "registry_sha256": "e293faae22d2e13513fe341050968a547428de51f2989f634d238965ae011720",
+          "content_sha256": "09f80da42126c3b1dbc5357309e7a1d1dacf1b302e6779e4c9747e43641e4f16",
+          "reason_codes": [],
+          "shadow": false,
+          "truncated": false
+        }
+      ],
+      "child_executor_entries": 0,
+      "collector_exit": 0,
+      "owned_profile_removed": true,
+      "interpretation": "Serialized inline executions both admitted/released; no claim of simultaneous OS execution or authorization bypass"
+    }
+  ],
+  "code_scanning": {
+    "observed_at": "2026-10-14T16:37:35.269Z",
+    "repository": "SoupTeam/soup-wall",
+    "source_commit": "5fc6d72fd73ebe9faa70c56607fc492163df1a42",
+    "scope": "main default branch",
+    "access": "Authenticated GitHub repository UI",
+    "main_open": 1,
+    "main_closed": 85,
+    "main_severity": {
+      "critical": 1,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "analysis": {
+      "tool": "CodeQL",
+      "version": "2.27.2",
+      "setup": "default",
+      "events": [
+        "push to main",
+        "pull request to main"
+      ],
+      "all_configurations_working_as_expected": true,
+      "commit": "5fc6d72fd73ebe9faa70c56607fc492163df1a42",
+      "scanned_files": {
+        "actions": "11/11",
+        "python": "192/192",
+        "rust": "191/191"
+      },
+      "configurations": [
+        {
+          "language": "rust",
+          "scan_at": "2026-10-14T15:20:00Z",
+          "query_pack": "0.1.44",
+          "libraries": "0.2.23"
+        },
+        {
+          "language": "python",
+          "scan_at": "2026-10-14T15:11:00Z",
+          "query_pack": "1.8.12",
+          "libraries": "7.2.7"
+        },
+        {
+          "language": "actions",
+          "scan_at": "2026-10-14T15:10:00Z",
+          "query_pack": "0.6.37",
+          "libraries": "0.6.3"
+        }
+      ]
+    },
+    "alerts": [
+      {
+        "number": 112,
+        "url": "https://github.com/SoupTeam/soup-wall/security/code-scanning/112",
+        "rule": "rust/hard-coded-cryptographic-value",
+        "severity": "Critical",
+        "path": "crates/agentfw/src/grant.rs",
+        "line": 448,
+        "analyzed_branch": "main",
+        "analyzed_commit": "5fc6d72fd73ebe9faa70c56607fc492163df1a42",
+        "state": "Open",
+        "triage": "Evidence-backed false positive",
+        "rationale": "0o600 is a Unix file permission mode passed to Permissions::from_mode and set_permissions. It is not a nonce, cryptographic key or salt. The 16-step displayed flow carries the io::Result through write_unlocked and the issue tuple to a test Grant before reading grant.nonce for a filename. In actual code, issue passes its explicit nonce parameter into mint_with_epoch and write_unlocked returns only a PathBuf; it does not mutate the borrowed Grant. The shown test obtains its nonce from crate::token::generate at grant.rs:854, which fills 32 random bytes at token.rs:14-17. A hard-coded crypto source is therefore not present in this path.",
+        "reviewer": "@Nari_Ab (SOU-17 coordinator)",
+        "implementation_context": "SOU-30 / PR #94",
+        "dismissal_performed": false
+      }
+    ],
+    "previous_alerts": [
+      {
+        "number": 113,
+        "state_header": "Open in historical PR refs/pull/105/head",
+        "state_activity": "Fixed in branch refs/pull/105/head at ae3e742a41f4512e7114b05d6cd094adec55f801",
+        "scope": "Only in Pull Request; absent from current main open inventory",
+        "note": "Header still presents historical open occurrence at 30e75b7. Do not collapse this display discrepancy into a current-main defect."
+      },
+      {
+        "number": 114,
+        "state": "Dismissed false positive by winux125 at 2026-10-14T10:46:00Z",
+        "scope": "main",
+        "rationale": "Fresh 256-bit machine secret from secrets.token_hex(32); Redis 7.2 ACL requires SHA-256 verifier; protected mode 0600 hash-only config; re-triage upon entropy/input/protocol change."
+      },
+      {
+        "number": 115,
+        "state": "Dismissed false positive by winux125 at 2026-10-14T10:45:00Z",
+        "scope": "main",
+        "rationale": "Companion regression checks the required Redis ACL SHA-256 verifier."
+      }
+    ],
+    "confirmed_defects": 0,
+    "unresolved_defects": 0,
+    "remediation_issues_required": [],
+    "limitations": [
+      "Open alert #112 remains open; this is a documented triage verdict, not a claimed clean zero-alert scan.",
+      "No alert dismissal or security configuration mutation was performed.",
+      "Scanning supports source review; it does not prove runtime enforcement."
+    ]
+  },
+  "raw_evidence_manifest": [
+    {
+      "archive_path": "target/sou17-final-2026-10-14/boundary-audit/fifo-admitted-results.json",
+      "retained_path": "target/sou17-final-2026-10-14/boundary-audit/fifo-admitted-results.json",
+      "bytes": 10321,
+      "sha256": "80b7e80ad3c6eea3e324b34ba31c797aaca93d5755be785e2195853cebec28b4"
+    },
+    {
+      "archive_path": "target/sou17-final-2026-10-14/boundary-audit/fifo-helper-results.json",
+      "retained_path": "target/sou17-final-2026-10-14/boundary-audit/fifo-helper-results.json",
+      "bytes": 506,
+      "sha256": "1cbfa102c30e962f35d7e55b8bbf2b69525f8335f607673b3fee1f44788bf7fb"
+    },
+    {
+      "archive_path": "target/sou17-final-2026-10-14/boundary-audit/fifo-mcp-results.json",
+      "retained_path": "target/sou17-final-2026-10-14/boundary-audit/fifo-mcp-results.json",
+      "bytes": 10461,
+      "sha256": "b8130445d0b54e9b8f16f85906f840fbad498d2bf62b4d07a7d9d538d598db2f"
+    },
+    {
+      "archive_path": "target/sou17-final-2026-10-14/boundary-audit/fifo_admitted_probe.py",
+      "retained_path": "target/sou17-final-2026-10-14/boundary-audit/fifo_admitted_probe.py",
+      "bytes": 4375,
+      "sha256": "1a9411a3c2812eb96d9d454bca36607c08a484a3f5bff79884979eca047cfc47"
+    },
+    {
+      "archive_path": "target/sou17-final-2026-10-14/boundary-audit/fifo_probe.rs",
+      "retained_path": "target/sou17-final-2026-10-14/boundary-audit/fifo_probe.rs",
+      "bytes": 621,
+      "sha256": "a4c82869441af70bbcb8449238a4ac26e3397739d8e04ca66e5626a6d89c175e"
+    },
+    {
+      "archive_path": "target/sou17-final-2026-10-14/boundary-audit/pipeline-results.json",
+      "retained_path": "target/sou17-final-2026-10-14/boundary-audit/pipeline-results.json",
+      "bytes": 15897,
+      "sha256": "822dd4b7ea67a2d5c6d13d260a4126a7a71f5c9101d9308bff16f89593ea911f"
+    },
+    {
+      "archive_path": "target/sou17-final-2026-10-14/boundary-audit/pipeline_probe.py",
+      "retained_path": "target/sou17-final-2026-10-14/boundary-audit/pipeline_probe.py",
+      "bytes": 2719,
+      "sha256": "2030c4fcdde9d8f6d04fb5bce0714ae93e3c336e565767899dd3644c25181e74"
+    },
+    {
+      "archive_path": "target/sou17-final-2026-10-14/code-scanning-browser-evidence.json",
+      "retained_path": "target/sou17-final-2026-10-14/code-scanning-browser-evidence.json",
+      "bytes": 86135,
+      "sha256": "99fd903852f1776eb7dceeda685072ce80d101ea9637d618c2a7232bbba09553"
+    },
+    {
+      "archive_path": "target/sou17-final-2026-10-14/code-scanning-source-excerpts.json",
+      "retained_path": "target/sou17-final-2026-10-14/code-scanning-source-excerpts.json",
+      "bytes": 22923,
+      "sha256": "c2c38e0f465bc7e824139e4bd2d408c378fc4f7ea3961b19f23dff9454a891cf"
+    },
+    {
+      "archive_path": "target/sou17-final-2026-10-14/code-scanning-summary.json",
+      "retained_path": "target/sou17-final-2026-10-14/code-scanning-summary.json",
+      "bytes": 3885,
+      "sha256": "57966693e911ce02cd420f7a631eac9443ae12a0d69de3349269202699e7b47b"
+    },
+    {
+      "archive_path": "target/sou17-final-main/capacity/results.json",
+      "retained_path": "target/sou17-final-main/capacity/results.json",
+      "bytes": 136549,
+      "sha256": "a82107602ad21d757619cec2beeb48dae7c8cf4c552879361b91cb7e82d734ed"
+    },
+    {
+      "archive_path": "target/sou17-final-main/generic/results.json",
+      "retained_path": "target/sou17-final-main/generic/results.json",
+      "bytes": 276982,
+      "sha256": "928c10e3e9545b6082a5850dc6be75f1c0622d09579f0d3a7a7a1a4e3e2ffbcf"
+    },
+    {
+      "archive_path": "target/sou17-final-main/latency/results.json",
+      "retained_path": "target/sou17-final-main/latency/results.json",
+      "bytes": 401910,
+      "sha256": "422c0d00bf73e3eeedb8088fdb73780c67aea58eb821bcd553582f1e588da326"
+    },
+    {
+      "archive_path": "target/sou17-final-main/pending/results.json",
+      "retained_path": "target/sou17-final-main/pending/results.json",
+      "bytes": 206505,
+      "sha256": "4771b9f58d213b3fc0abc512fc94ff4fe2544161112152c192bb5d9ffa25fb17"
+    },
+    {
+      "archive_path": "target/sou17-final-main/python-benchmarks.log",
+      "retained_path": "target/sou17-final-main/python-benchmarks.log",
+      "bytes": 8526,
+      "sha256": "4a80242b22be9b073d738c55507f664284a8ce3c633d719dc9540c84547d1d13"
+    },
+    {
+      "archive_path": "target/sou17-final-main/python-tests.log",
+      "retained_path": "target/sou17-final-main/python-tests.log",
+      "bytes": 80537,
+      "sha256": "e92e6574b59568cd7efdc6743f935eb0e510f2bc22d0bb98a0a8a14eaade1890"
+    },
+    {
+      "archive_path": "target/sou17-final-main/regressions/run-6ud80ugm/results.json",
+      "retained_path": "target/sou17-final-main/regressions/run-6ud80ugm/results.json",
+      "bytes": 298999,
+      "sha256": "6d285a7804ec94fa7ba8fa552337bf1cb93479646c1681906c5a4cbdbd832a76"
+    },
+    {
+      "archive_path": "target/sou17-final-main/resource-validation/grader-comparison.json",
+      "retained_path": "target/sou17-final-main/resource-validation/grader-comparison.json",
+      "bytes": 4039,
+      "sha256": "4be9977280e6075c3ca76fe4e4c04d0732cf9c8b49860c3a2408e20aa5413c54"
+    },
+    {
+      "archive_path": "target/sou17-final-main/resource-validation/grader-tests.log",
+      "retained_path": "target/sou17-final-main/resource-validation/grader-tests.log",
+      "bytes": 2341,
+      "sha256": "1a1123b9a4798468baeca174873666f00765d00e4cec929bc9781843732d245f"
+    },
+    {
+      "archive_path": "target/sou17-final-main/resource-validation/mcp-resource-tests.log",
+      "retained_path": "target/sou17-final-main/resource-validation/mcp-resource-tests.log",
+      "bytes": 777,
+      "sha256": "d01049eeb2eafc4ec25620017991e33955fd74a857f3a44c7da4322a28323e3b"
+    },
+    {
+      "archive_path": "target/sou17-final-main/resource-validation/probe/results.json",
+      "retained_path": "target/sou17-final-main/resource-validation/probe/results.json",
+      "bytes": 745320,
+      "sha256": "9e6735a80579d9eab63dfdc598e3a2632b1ccc2fdc60b5a49211a424e14eaa22"
+    },
+    {
+      "archive_path": "target/sou17-final-main/resource-validation/probe-strict/results.json",
+      "retained_path": "target/sou17-final-main/resource-validation/probe-strict/results.json",
+      "bytes": 745303,
+      "sha256": "39e2d4d2244c7743220cfd9b7ff8dc07d7f59c7f044386e294b6ae906e1342e3"
+    }
+  ],
+  "limits": [
+    "No runtime acceptance while confirmed findings remain unresolved.",
+    "Resource profile is Unix bounded UTF-8 read_document only; no arbitrary child process or generic network/write confinement claim.",
+    "Unknown, unconfirmed Ask and Deny are never counted as useful authorized execution.",
+    "Fixture false interruptions are not a population classifier accuracy/FPR evaluation.",
+    "Historical source observations are preserved; repaired source requires affected checks again."
+  ],
+  "initial_contributor_checks": {
+    "python_scripts": {
+      "run": 460,
+      "passed": 450,
+      "individual_native_windows_skips": 10,
+      "failures": 0
+    },
+    "python_benchmarks": {
+      "run": 44,
+      "passed": 28,
+      "individual_skips": 16,
+      "additional_class_level_skip_records": 2,
+      "failures": 0
+    },
+    "scope": "Original clean-main Python checks before updated grader adoption; not acceptance of later code modifications."
+  },
+  "raw_evidence_archive": {
+    "file": "sou17_candidate_5fc6d72_2026-10-14_raw.tar.gz",
+    "sha256": "9fb69497d6844cae94c88b69953076f333f64b108596850a333b9af1cfb9be54",
+    "bytes": 582512,
+    "entries": 22,
+    "format": "Deterministic tar.gz; MANIFEST.json records all original byte lengths and SHA-256 hashes.",
+    "credential_review": "Archived runtime fields contain published synthetic fixture data, opaque expired local identifiers and local source paths; no profile token/configuration files or credential-bearing request headers included. Explicit bearer/token/provider-key/private-key pattern check yielded no matches."
+  }
+}
