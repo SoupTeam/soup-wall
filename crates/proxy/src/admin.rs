@@ -231,7 +231,7 @@ pub async fn require_admin_token(
 
 fn required_admin_role(method: &axum::http::Method, path: &str) -> AdminRole {
     if (path.starts_with("/admin/v1/tenants/")
-        && path.contains("/agents")
+        && (path.contains("/agents") || path.contains("/groups"))
         && *method != axum::http::Method::GET)
         || path.contains("/scim-tokens")
         || (path.contains("/policy-versions/")

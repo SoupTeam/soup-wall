@@ -384,7 +384,7 @@ fn compose_https_get_policy(
     )
 }
 
-/// Only a validated installed v2 create profile supplies this write authority.
+/// Only a validated installed constrained create profile supplies write authority.
 /// A description, classifier result, or generic side-effecting baseline cannot.
 fn compose_scoped_production_policy(
     classification: &Classification,
@@ -566,6 +566,14 @@ pub struct AdmissionCfg {
     pub args: Vec<String>,
     pub classifier: Option<Arc<dyn InvocationClassifier>>,
     pub resource_profiles: BTreeMap<String, super::resources::ResourceProfile>,
+    /// Opt-in wait for a single-use operator approval of a native Ask call.
+    /// `None` keeps the default correlated refusal.
+    pub approval: Option<ApprovalWait>,
+}
+
+pub struct ApprovalWait {
+    pub url: String,
+    pub wait: Duration,
 }
 
 // A generic spawned program has no enforced filesystem/destination capability.
@@ -840,7 +848,7 @@ where
 #[derive(Clone, Copy)]
 struct ClassificationAuthority {
     egress_declared: bool,
-    create_file: bool,
+    create_file_profile: Option<&'static str>,
     https_get: bool,
 }
 
@@ -943,7 +951,7 @@ impl<'a> Collector<'a> {
                     res,
                     baseline,
                     authority.egress_declared,
-                    authority.create_file,
+                    authority.create_file_profile.is_some(),
                 )
             }
         } else {
@@ -968,7 +976,7 @@ impl<'a> Collector<'a> {
                 "confidence":result.confidence,"uncertainty":result.uncertainty,
                 "reason_sha256":sha(result.reason.as_bytes())})),
             "mapped_action_class":mapped_class,"trusted_baseline":baseline,
-            "operator_execution_profile":authority.create_file.then_some(crate::native::resource::CREATE_FILE_EXECUTOR_PROFILE),
+            "operator_execution_profile":authority.create_file_profile,
             "baseline_mismatch":mapped_class.map(|class| class != baseline),
             "adapter_verdict":adapter_eval.as_ref().map(|(v, _)| match v {
                 AdapterVerdict::Allow => "allow",
@@ -1016,6 +1024,161 @@ impl<'a> Collector<'a> {
         let Strict(reply) =
             serde_json::from_slice(&bytes).context("malformed MCP admission receipt")?;
         Ok(reply)
+    }
+
+    /// One call on the approval route. `Err(code)` is a daemon refusal code.
+    async fn approval_post(&self, body: &Value) -> anyhow::Result<Result<Value, String>> {
+        let approval = self.config.approval.as_ref().context("approval disabled")?;
+        let response = self
+            .client
+            .post(&approval.url)
+            .bearer_auth(&self.config.native.token)
+            .json(body)
+            .send()
+            .await
+            .context("MCP approval unavailable")?;
+        let ok = response.status().is_success();
+        let mut bytes = Vec::new();
+        let mut chunks = response.bytes_stream();
+        while let Some(chunk) = chunks.next().await {
+            let chunk = chunk?;
+            ensure!(
+                bytes.len() + chunk.len() <= 16 * 1024,
+                "MCP approval response exceeds limit"
+            );
+            bytes.extend_from_slice(&chunk);
+        }
+        let Strict(reply) =
+            serde_json::from_slice(&bytes).context("malformed MCP approval reply")?;
+        if !ok {
+            let code = reply["error_code"]
+                .as_str()
+                .filter(|c| {
+                    c.len() <= 64 && c.chars().all(|ch| ch.is_ascii_lowercase() || ch == '_')
+                })
+                .unwrap_or("native_approval_refused");
+            return Ok(Err(code.to_owned()));
+        }
+        keys(
+            &reply,
+            &[
+                "contract_version",
+                "action",
+                "pending_id",
+                "state",
+                "expires_in_ms",
+                "binding_sha256",
+            ],
+        )?;
+        ensure!(
+            reply["contract_version"] == crate::native::approval::APPROVAL_CONTRACT
+                && reply["pending_id"]
+                    .as_str()
+                    .is_some_and(|id| !id.is_empty() && id.len() <= 128)
+                && reply["state"].as_str().is_some()
+                && reply["expires_in_ms"].is_u64(),
+            "MCP approval reply identity mismatch"
+        );
+        Ok(Ok(reply))
+    }
+
+    /// Hold ONE plain native call while an operator decides. The original frame is
+    /// never replaced: on `Ok(Ok(id))` the caller re-presents the same call with the
+    /// id. Any client byte or EOF while waiting cancels the pending approval and
+    /// closes the session, so nothing can execute later.
+    async fn obtain_approval<R>(
+        &self,
+        client: &mut R,
+        source: &str,
+        name: &str,
+        args: &Value,
+        schema_sha256: &str,
+    ) -> anyhow::Result<Result<String, String>>
+    where
+        R: AsyncBufRead + Unpin,
+    {
+        let approval = self.config.approval.as_ref().context("approval disabled")?;
+        let base = |action: &str| {
+            json!({"contract_version":CONTRACT,"registry_sha256":self.config.native.registry_sha256,
+                "session_id":self.session,"action":action})
+        };
+        let mut body = base("request");
+        body.as_object_mut().expect("object").extend([
+            ("source".to_owned(), json!(source)),
+            ("tool".to_owned(), json!(name)),
+            ("args".to_owned(), args.clone()),
+            ("schema_sha256".to_owned(), json!(schema_sha256)),
+        ]);
+        let reply = match self.approval_post(&body).await? {
+            Ok(reply) => reply,
+            Err(code) => return Ok(Err(code)),
+        };
+        ensure!(
+            reply["action"] == "request",
+            "MCP approval reply action mismatch"
+        );
+        let id = reply["pending_id"]
+            .as_str()
+            .context("pending id")?
+            .to_owned();
+        let expires = reply["expires_in_ms"].as_u64().unwrap_or(0);
+        eprintln!(
+            "{}",
+            json!({"event":"mcp_native_approval_pending","pending_id":id,"tool":name,
+                "binding_sha256":reply["binding_sha256"],"expires_in_ms":expires,
+                "source":source})
+        );
+        let limit = tokio::time::Instant::now() + approval.wait.min(Duration::from_millis(expires));
+        let cancel = |id: &str| {
+            let mut body = base("cancel");
+            body["pending_id"] = json!(id);
+            body
+        };
+        loop {
+            tokio::select! {
+                biased;
+                available = client.fill_buf() => {
+                    let closed = available.map(|b| b.is_empty()).unwrap_or(true);
+                    let _ = self.approval_post(&cancel(&id)).await;
+                    if closed {
+                        bail!("MCP client closed with an outstanding approval");
+                    }
+                    bail!("concurrent MCP input during a pending approval");
+                }
+                _ = tokio::time::sleep(Duration::from_millis(250)) => {}
+            }
+            let mut status = base("status");
+            status["pending_id"] = json!(id);
+            let reply = match self.approval_post(&status).await {
+                Ok(Ok(reply)) => reply,
+                Ok(Err(code)) => return Ok(Err(code)),
+                Err(error) => {
+                    let _ = self.approval_post(&cancel(&id)).await;
+                    return Err(error);
+                }
+            };
+            ensure!(
+                reply["pending_id"] == id.as_str() && reply["action"] == "status",
+                "MCP approval status changed identity"
+            );
+            match reply["state"].as_str().unwrap_or("") {
+                "approved" => return Ok(Ok(id)),
+                "pending" => {
+                    if tokio::time::Instant::now() >= limit {
+                        let _ = self.approval_post(&cancel(&id)).await;
+                        return Ok(Err("native_approval_timeout".to_owned()));
+                    }
+                }
+                other => {
+                    let code: String = other
+                        .chars()
+                        .filter(|c| c.is_ascii_lowercase())
+                        .take(24)
+                        .collect();
+                    return Ok(Err(format!("native_approval_{code}")));
+                }
+            }
+        }
     }
 
     async fn inspect_manifest(&self, value: &Value) -> anyhow::Result<()> {
@@ -1075,6 +1238,7 @@ impl<'a> Collector<'a> {
                     | crate::native::resource::CREATE_CONTRACT
                     | crate::native::resource::NETWORK_CONTRACT
                     | crate::native::resource::WINDOWS_READ_CONTRACT
+                    | crate::native::resource::WINDOWS_CREATE_CONTRACT
             ),
             "unsupported native receipt contract"
         );
@@ -1557,9 +1721,11 @@ where
                         schemas.get(name).context("MCP tool schema not installed")?.validate(&args)?;
                         #[cfg(windows)]
                         let mut prepared_windows_read = None;
+                        #[cfg(any(target_os = "linux", windows))]
+                        let mut prepared_create = None;
                         let resource_admission = if let Some(policy) = &installed.resource_policy {
                             #[cfg(windows)]
-                            if policy.is_windows_read() {
+                            if policy.is_windows_handles() {
                                 // Refuse different roots and raw path aliases before
                                 // generic extraction can follow an untrusted junction
                                 // or mapped drive even for filesystem metadata.
@@ -1575,30 +1741,44 @@ where
                                     continue;
                                 }
                                 let [super::resources::Resource::Path { canonical }] = policy.allowed_resources.as_slice() else {
-                                    bail!("validated Windows read authority missing");
+                                    bail!("validated Windows handle authority missing");
                                 };
                                 let original = args["path"].as_str().context("validated Windows path missing")?;
-                                let prepared = match crate::windows_read::PreparedRead::prepare(
-                                    &policy.workspace, &policy.cwd, original, canonical) {
-                                    Ok(prepared) => prepared,
-                                    Err(_) => {
-                                        write_resource_reply(client, host, true,
-                                            &withheld(request_id, "invocation", &json!(["resource_windows_read_prepare_failed"]))).await?;
-                                        continue;
-                                    }
-                                };
-                                prepared_windows_read = Some(prepared);
+                                if policy.is_windows_create() {
+                                    let content = args["content"].as_str().context("validated create content missing")?;
+                                    let prepared = match crate::windows_create::PreparedCreate::prepare(
+                                        &policy.workspace, &policy.cwd, original, canonical, content) {
+                                        Ok(prepared) => prepared,
+                                        Err(error) => {
+                                            write_resource_reply(client, host, true,
+                                                &withheld(request_id, "invocation", &json!([error.code]))).await?;
+                                            continue;
+                                        }
+                                    };
+                                    prepared_create = Some(prepared);
+                                } else {
+                                    let prepared = match crate::windows_read::PreparedRead::prepare(
+                                        &policy.workspace, &policy.cwd, original, canonical) {
+                                        Ok(prepared) => prepared,
+                                        Err(_) => {
+                                            write_resource_reply(client, host, true,
+                                                &withheld(request_id, "invocation", &json!(["resource_windows_read_prepare_failed"]))).await?;
+                                            continue;
+                                        }
+                                    };
+                                    prepared_windows_read = Some(prepared);
+                                }
                             }
-                            if policy.is_create_file() || policy.is_https_get() || policy.is_windows_read() {
+                            if policy.is_create_file() || policy.is_https_get() || policy.is_windows_handles() {
                                 if collector.config.server_id != policy.profile.server_id {
                                     write_resource_reply(client, host, true,
                                         &withheld(request_id, "invocation", &json!(["resource_server_identity_mismatch"]))).await?;
                                     continue;
                                 }
-                                if !policy.is_windows_read() {
+                                if !policy.is_windows_handles() {
                                     // Match run()'s actual operator-selected session root,
                                     // including its cwd fallback when no override exists.
-                                    // V4 already checked its exact spelling without DOS I/O.
+                                    // Handle profiles checked exact spelling without DOS I/O.
                                     let actual_workspace = std::env::var_os("AGENTFW_WORKSPACE")
                                         .map(std::path::PathBuf::from)
                                         .or_else(|| std::env::current_dir().ok())
@@ -1627,7 +1807,7 @@ where
                                     continue;
                                 }
                             }
-                            if (policy.is_create_file() || policy.is_https_get() || policy.is_windows_read())
+                            if (policy.is_create_file() || policy.is_https_get() || policy.is_windows_handles())
                                 && collector.config.classifier.as_ref()
                                     .and_then(|classifier| classifier.revision())
                                     != Some(policy.classifier_sha256.as_str())
@@ -1688,15 +1868,21 @@ where
                                 fixed_destinations: true,
                             };
                             #[cfg(windows)]
-                            let derived = if policy.is_windows_read() {
-                                let prepared = prepared_windows_read.as_ref()
-                                    .context("Windows metadata not pinned before extraction")?;
-                                // The fixed v4 selector is proven by the retained
-                                // native handles. Do not reopen DOS paths through
-                                // generic extraction: device mappings are mutable
-                                // independently of the pinned filesystem objects.
-                                let resources = crate::native::resource::windows_read_evidence(
-                                    policy, &args, prepared.identity()).map_err(anyhow::Error::msg)?;
+                            let derived = if policy.is_windows_handles() {
+                                // Fixed Windows selectors are proven by retained native
+                                // handles. Device mappings can change independently;
+                                // generic DOS extraction must not reopen these paths.
+                                let resources = if policy.is_windows_create() {
+                                    let prepared = prepared_create.as_ref()
+                                        .context("Windows create parent not pinned before extraction")?;
+                                    crate::native::resource::windows_create_evidence(
+                                        policy, &args, prepared.identity()).map_err(anyhow::Error::msg)?
+                                } else {
+                                    let prepared = prepared_windows_read.as_ref()
+                                        .context("Windows read metadata not pinned before extraction")?;
+                                    crate::native::resource::windows_read_evidence(
+                                        policy, &args, prepared.identity()).map_err(anyhow::Error::msg)?
+                                };
                                 super::resources::Extraction {
                                     server_id: input.server_id.clone(),
                                     tool_name: input.tool.clone(),
@@ -1733,7 +1919,18 @@ where
                                     .context("profile serializes")?,
                             );
                             let execution = if policy.is_create_file() {
-                                match crate::native::resource::create_file_binding(policy, &args) {
+                                #[cfg(windows)]
+                                let create_binding = if policy.is_windows_create() {
+                                    let prepared = prepared_create.as_ref()
+                                        .context("Windows create parent not pinned before binding")?;
+                                    crate::native::resource::windows_create_binding_with_identity(
+                                        policy, &args, prepared.identity())
+                                } else {
+                                    crate::native::resource::create_file_binding(policy, &args)
+                                };
+                                #[cfg(not(windows))]
+                                let create_binding = crate::native::resource::create_file_binding(policy, &args);
+                                match create_binding {
                                     Ok(binding) => Some(binding),
                                     Err(reason) => {
                                         write_resource_reply(client, host, resource_reply,
@@ -1776,6 +1973,7 @@ where
                             None
                         };
                         let mut prod_verdict = None;
+                        let mut approval_id: Option<String> = None;
                         if collector.config.classifier.is_some() {
                             let snapshot = admitted_snapshot
                                 .as_ref()
@@ -1793,8 +1991,14 @@ where
                                     installed.action_class,
                                     ClassificationAuthority {
                                         egress_declared,
-                                        create_file: resource_admission.as_ref()
-                                            .is_some_and(|(admission, _)| admission.execution.is_some()),
+                                        create_file_profile: installed.resource_policy.as_ref()
+                                            .filter(|policy| policy.is_create_file()
+                                                && resource_admission.as_ref().is_some_and(|(admission, _)| admission.execution.is_some()))
+                                            .map(|policy| if policy.is_windows_create() {
+                                                crate::native::resource::WINDOWS_CREATE_EXECUTOR_PROFILE
+                                            } else {
+                                                crate::native::resource::CREATE_FILE_EXECUTOR_PROFILE
+                                            }),
                                         https_get: installed.resource_policy.as_ref()
                                             .is_some_and(|policy| policy.is_https_get()),
                                     },
@@ -1815,10 +2019,34 @@ where
                             match verdict {
                                 ProductionVerdict::Allow => {}
                                 ProductionVerdict::Ask => {
-                                    let reasons = json!(["policy_unconfirmed_ask"]);
-                                    write_resource_reply(client, host, resource_reply, &withheld(request_id, "invocation", &reasons))
-                                        .await?;
-                                    continue;
+                                    let mut reasons = json!(["policy_unconfirmed_ask"]);
+                                    if collector.config.approval.is_some()
+                                        && !resource_reply
+                                        && resource_admission.is_none()
+                                    {
+                                        match collector.obtain_approval(client, "classifier", name, &args, &installed.schema_sha256).await? {
+                                            Err(code) => reasons = json!(["policy_unconfirmed_ask", code]),
+                                            Ok(id) => {
+                                                // Re-evaluate the classifier now: a changed verdict
+                                                // (or failure) cannot ride the old approval.
+                                                let snapshot = admitted_snapshot.as_ref().context("classifier discovery state missing")?;
+                                                let egress_declared = installed.action_class == ActionClass::Network
+                                                    || !installed.egress.is_empty();
+                                                let again = collector.classify(snapshot, request_id, name, &args, installed.action_class,
+                                                    ClassificationAuthority { egress_declared, create_file_profile: None, https_get: false }).await?;
+                                                if matches!(again, Ok(ProductionVerdict::Ask | ProductionVerdict::Allow)) {
+                                                    approval_id = Some(id);
+                                                } else {
+                                                    reasons = json!(["policy_unconfirmed_ask", "native_approval_reclassify_refused"]);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if approval_id.is_none() {
+                                        write_resource_reply(client, host, resource_reply, &withheld(request_id, "invocation", &reasons))
+                                            .await?;
+                                        continue;
+                                    }
                                 }
                                 ProductionVerdict::Deny => {
                                     let reasons = json!(["policy_denied"]);
@@ -1830,8 +2058,6 @@ where
                         }
                         #[cfg(windows)]
                         let mut resource_admission = resource_admission;
-                        #[cfg(target_os = "linux")]
-                        let mut prepared_create = None;
                         let https_get = installed.resource_policy.as_ref().is_some_and(|policy| policy.is_https_get());
                         if https_get && !cfg!(target_os = "linux") {
                             write_resource_reply(client, host, true,
@@ -1853,9 +2079,14 @@ where
                         if let Some((_, ref derived)) = resource_admission.as_ref()
                             .filter(|_| !https_get) {
                             let policy = installed.resource_policy.as_ref().unwrap();
-                            if policy.is_windows_read() {
+                            if policy.is_windows_handles() {
+                                let reason = if policy.is_windows_create() {
+                                    "resource_windows_create_platform_unsupported"
+                                } else {
+                                    "resource_windows_read_platform_unsupported"
+                                };
                                 write_resource_reply(client, host, resource_reply,
-                                    &withheld(request_id, "invocation", &json!(["resource_windows_read_platform_unsupported"]))).await?;
+                                    &withheld(request_id, "invocation", &json!([reason]))).await?;
                                 continue;
                             }
                             let creating = policy.is_create_file();
@@ -1919,7 +2150,7 @@ where
                         #[cfg(windows)]
                         if let Some((ref mut admission, ref derived)) = resource_admission.as_mut() {
                             let policy = installed.resource_policy.as_ref().expect("resource policy installed");
-                            if !policy.is_windows_read() {
+                            if !policy.is_windows_handles() {
                                 write_resource_reply(client, host, true,
                                     &withheld(request_id, "invocation", &json!(["resource_executor_unsupported"]))).await?;
                                 continue;
@@ -1929,12 +2160,20 @@ where
                                     &withheld(request_id, "invocation", &json!(["resource_destination_invalid"]))).await?;
                                 continue;
                             };
-                            // Sharing locks pin every ancestor and the leaf without
-                            // FILE_READ_DATA. No execution or mapping is performed;
-                            // ReadFile access is requested only after native Allow.
-                            let prepared = prepared_windows_read.as_ref().context("Windows metadata not pinned before extraction")?;
-                            admission.windows_read = Some(crate::native::resource::windows_read_binding_with_identity(
-                                policy, &args, prepared.identity()).map_err(anyhow::Error::msg)?);
+                            if policy.is_windows_create() {
+                                ensure!(installed.action_class == ActionClass::SideEffecting && name == "create_file",
+                                    "Windows create tool semantics changed");
+                                let prepared = prepared_create.as_ref().context("Windows create parent not pinned before admission")?;
+                                let bound = crate::native::resource::windows_create_binding_with_identity(
+                                    policy, &args, prepared.identity()).map_err(anyhow::Error::msg)?;
+                                ensure!(admission.execution.as_ref() == Some(&bound), "Windows create binding changed");
+                            } else {
+                                // Sharing locks pin every ancestor and the leaf without
+                                // FILE_READ_DATA; the data open follows native Allow.
+                                let prepared = prepared_windows_read.as_ref().context("Windows metadata not pinned before extraction")?;
+                                admission.windows_read = Some(crate::native::resource::windows_read_binding_with_identity(
+                                    policy, &args, prepared.identity()).map_err(anyhow::Error::msg)?);
+                            }
                         }
                         // A composed refusal must not reserve native capacity.
                         // Native trusted restrictions still gate every permitted call.
@@ -1950,12 +2189,35 @@ where
                         } else {
                             CONTRACT.to_string()
                         };
-                        let receipt = without_resource_overlap(
+                        if let Some(id) = &approval_id {
+                            call_fields["approval_id"] = json!(id);
+                        }
+                        let mut receipt = without_resource_overlap(
                             client,
                             resource_admission.is_some(),
-                            collector.event("call", call_fields),
+                            collector.event("call", call_fields.clone()),
                         )
                         .await?;
+                        if receipt["release"] != true
+                            && receipt["verdict"] == "ask"
+                            && approval_id.is_none()
+                            && collector.config.approval.is_some()
+                            && !resource_reply
+                            && resource_admission.is_none()
+                        {
+                            match collector.obtain_approval(client, "daemon", name, &args, &installed.schema_sha256).await? {
+                                Err(code) => {
+                                    let mut reasons = receipt["reason_codes"].as_array().cloned().unwrap_or_default();
+                                    reasons.push(json!(code));
+                                    receipt["reason_codes"] = json!(reasons);
+                                }
+                                Ok(id) => {
+                                    // Same original call, now carrying the approval id.
+                                    call_fields["approval_id"] = json!(id);
+                                    receipt = collector.event("call", call_fields.clone()).await?;
+                                }
+                            }
+                        }
                         if receipt["release"] != true {
                             write_resource_reply(client, host, resource_reply,
                                 &withheld(request_id, "invocation", &receipt["reason_codes"]),
@@ -2027,17 +2289,33 @@ where
                             }
                             continue;
                         }
-                        #[cfg(target_os = "linux")]
+                        #[cfg(any(target_os = "linux", windows))]
                         if let Some(prepared) = prepared_create {
-                            // Only anonymous staging runs on the blocking worker. If an
-                            // unsupported cancellation/overlap wins, a detached stage can
-                            // never publish: its returned owner is simply dropped.
+                            #[cfg(windows)]
+                            {
+                                let policy = installed.resource_policy.as_ref().expect("Windows create policy selected");
+                                let bound = resource_admission.as_ref().and_then(|(admission, _)| admission.execution.as_ref())
+                                    .context("Windows create authority missing")?;
+                                ensure!(&crate::native::resource::windows_create_binding_with_identity(
+                                    policy, &args, prepared.identity()).map_err(anyhow::Error::msg)? == bound,
+                                    "Windows create authority changed before staging");
+                            }
+                            // Only staging runs on the blocking worker. If unsupported
+                            // cancellation/overlap wins, a detached worker cannot publish:
+                            // dropping its returned owner cleans only its own stage.
                             let staging = tokio::task::spawn_blocking(move || prepared.stage());
                             let staged = without_resource_overlap(client, true, async {
                                 staging.await.context("create staging worker failed")
                             }).await?;
                             let creation = match staged {
                                 Ok(staged) => without_resource_overlap(client, true, async {
+                                    // The syscall can complete immediately before process
+                                    // interruption. Record intent first; absent a completion,
+                                    // publication is indeterminate, never evidence of no write.
+                                    eprintln!("{}", json!({"event":"mcp_create_file_publication_intent",
+                                        "host_call_id":request_id,"publication_attempted":true,
+                                        "staged_bytes":args["content"].as_str().map(str::len),
+                                        "outcome":"indeterminate_until_completion"}));
                                     Ok(staged.publish())
                                 }).await?,
                                 Err(error) => Err(error),
@@ -2283,25 +2561,38 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
                 path.to_str()
                     .map(|text| text.strip_prefix("\\\\?\\").unwrap_or(text).to_owned())
             };
-            let mut pins = Vec::new();
+            let mut read_pins = Vec::new();
+            let mut create_pins = Vec::new();
             for policy in config.native.registry.tools.iter().filter_map(|tool| {
                 tool.resource_policy
                     .as_ref()
-                    .filter(|policy| policy.is_windows_read())
+                    .filter(|policy| policy.is_windows_handles())
             }) {
                 // Compare names before any ordinary path API can resolve a
                 // distinct environment-selected junction or mapped drive.
                 ensure!(
                     normal(&workspace).is_some() && normal(&workspace) == normal(&policy.workspace),
-                    "MCP Windows read startup workspace mismatch"
+                    "MCP Windows startup workspace mismatch"
                 );
+                if policy.is_windows_create() {
+                    create_pins.push(
+                        crate::windows_read::CreateParent::prepare_workspace(
+                            &policy.workspace,
+                            &policy.cwd,
+                        )
+                        .map_err(|_| {
+                            anyhow::anyhow!("MCP Windows create startup metadata refused")
+                        })?,
+                    );
+                    continue;
+                }
                 let [super::resources::Resource::Path { canonical }] =
                     policy.allowed_resources.as_slice()
                 else {
                     bail!("MCP Windows read startup authority invalid");
                 };
                 let original = canonical.strip_prefix("\\\\?\\").unwrap_or(canonical);
-                pins.push(
+                read_pins.push(
                     crate::windows_read::PreparedRead::prepare(
                         &policy.workspace,
                         &policy.cwd,
@@ -2311,7 +2602,7 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
                     .map_err(|_| anyhow::anyhow!("MCP Windows read startup metadata refused"))?,
                 );
             }
-            pins
+            (read_pins, create_pins)
         };
         #[cfg(unix)]
         let mut client =
@@ -2355,16 +2646,16 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
                 .as_ref()
                 .is_some_and(|policy| policy.is_create_file() || policy.is_https_get())
         });
-        let windows_read_profile = config.native.registry.tools.iter().any(|tool| {
+        let windows_handles_profile = config.native.registry.tools.iter().any(|tool| {
             tool.resource_policy
                 .as_ref()
-                .is_some_and(|policy| policy.is_windows_read())
+                .is_some_and(|policy| policy.is_windows_handles())
         });
-        // Discovery-only servers receive EOF. Windows read fixtures must also
+        // Discovery-only servers receive EOF. Windows handle profiles also
         // finalize their independent no-execution ledger after a refused session.
         // The bounded wait cannot turn a protocol failure into success.
         drop(child);
-        if (create_profile && outcome.is_ok()) || windows_read_profile {
+        if (create_profile && outcome.is_ok()) || windows_handles_profile {
             match tokio::time::timeout(Duration::from_secs(2), process.wait()).await {
                 Ok(Ok(status)) if status.success() => {}
                 _ => {
@@ -2975,6 +3266,7 @@ mod resource_receipt_tests {
                 args: vec![],
                 classifier: None,
                 resource_profiles: BTreeMap::new(),
+                approval: None,
             };
             let collector = Collector::new(&config).unwrap();
             let mut response = json!({"contract_version":contract,"registry_sha256":config.native.registry_sha256,
