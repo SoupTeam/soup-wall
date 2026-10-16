@@ -422,7 +422,8 @@ impl Service {
         if main_pid != 0 {
             let (_, health) = self.manager().service_snapshot()?;
             ensure!(
-                health.is_some_and(|h| h.pid == main_pid),
+                health.is_some_and(|h| h.pid == main_pid)
+                    || self.preparing_launcher(&shown, main_pid)?,
                 "live process identity cannot be verified; refusing stop"
             );
         }
@@ -434,6 +435,34 @@ impl Service {
             "systemd did not stop the service"
         );
         self.manager().service_clear_dead()
+    }
+
+    fn preparing_launcher(&self, shown: &BTreeMap<String, String>, pid: u32) -> Result<bool> {
+        // A restart can be in the owned launcher before any Agent/HTTP identity
+        // exists. Confirm executable inode and the exact unit cgroup; never infer
+        // ownership from a PID or a startup state alone.
+        if !matches!(property(shown, "SubState"), "start" | "start-post") {
+            return Ok(false);
+        }
+        let record = self.installed()?;
+        let Some(expected) = record.launcher_identity else {
+            return Ok(false);
+        };
+        let exe = format!("/proc/{pid}/exe");
+        let Ok(path) = fs::read_link(&exe) else {
+            return Ok(false);
+        };
+        if path != self.launcher() {
+            return Ok(false);
+        }
+        let metadata = fs::metadata(&exe)?;
+        let group = property(shown, "ControlGroup");
+        Ok(metadata.dev() == expected.device
+            && metadata.ino() == expected.inode
+            && !group.is_empty()
+            && fs::read_to_string(format!("/proc/{pid}/cgroup"))?
+                .lines()
+                .any(|line| line.rsplit_once(':').is_some_and(|(_, path)| path == group)))
     }
 
     pub fn restart(&self) -> Result<()> {

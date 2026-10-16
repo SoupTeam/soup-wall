@@ -297,6 +297,9 @@ class Acceptance:
         import socket
         port = json.loads((self.home / "config.yaml").read_text())["port"]
         with socket.socket() as listener:
+            # Agent connections may leave TIME_WAIT after an authenticated stop.
+            # Reuse that closed endpoint, never an existing listening socket.
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             listener.bind(("127.0.0.1", port))
             listener.listen()
             self.service("start", success=False)

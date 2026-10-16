@@ -207,6 +207,9 @@ recovery. Explicit `service stop` uses `systemctl stop`, which suppresses automa
 restart. Shutdown requests use the existing authenticated endpoint; systemd
 bounds shutdown to 30 seconds and cleans only this unit's control group. A live
 PID whose identity cannot be verified is never adopted or stopped by the CLI.
+Before the Agent exists, stop can cancel a preparing launcher only after matching
+its recorded executable inode and the exact owned unit control group. This also
+cancels a pending retry after a failed start without touching a foreign listener.
 After a rate limit, inspect the underlying failure before retrying; the CLI does
 not reset the limiter during ordinary startup or automatic crash recovery.
 A transaction restoring its original working version can reset an already failed
