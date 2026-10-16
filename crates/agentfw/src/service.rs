@@ -293,6 +293,41 @@ impl Service {
         Ok(target)
     }
 
+    pub fn rollback(&self) -> Result<Record> {
+        let _operation = self.operation_lock()?;
+        self.idle()?;
+        self.require_transaction_launcher()?;
+        let running = self.running_intent()?;
+        let target = self.manager().service_prepare_rollback(running)?;
+        self.switch_transaction(&target)?;
+        Ok(target)
+    }
+
+    pub fn recover(&self) -> Result<()> {
+        let _operation = self.operation_lock()?;
+        self.installed()?;
+        self.verify_loaded()?;
+        self.require_transaction_launcher()?;
+        self.manager().service_recover_staging()?;
+        let (state, _) = self.manager().service_snapshot()?;
+        if state.operation.is_some() {
+            return self.restore_transaction().context(
+                "service recovery is incomplete; resolve the conflict and retry lifecycle recover",
+            );
+        }
+        let shown = self.verify_loaded()?;
+        if property(&shown, "MainPID") != "0" {
+            ensure!(
+                self.verified_health()?.is_some(),
+                "live service identity cannot be verified; refusing recovery"
+            );
+        } else {
+            self.manager().service_clear_dead()?;
+        }
+        self.manager()
+            .verify(state.active.as_ref().context("Agent is not installed")?)
+    }
+
     fn switch_transaction(&self, target: &Record) -> Result<()> {
         let (state, _) = self.manager().service_snapshot()?;
         let operation = state.operation.context("no service transaction")?;
@@ -912,21 +947,13 @@ mod tests {
         fs::create_dir(temp.path().join("service")).unwrap();
         fs::write(temp.path().join("service/ownership.json"), "invalid").unwrap();
         let manager = Manager::new(temp.path());
-        assert!(manager
-            .start()
-            .unwrap_err()
-            .to_string()
-            .contains("registered service"));
+        assert!(manager.start().is_err());
         assert!(manager
             .remove()
             .unwrap_err()
             .to_string()
             .contains("registered service"));
-        assert!(manager
-            .recover()
-            .unwrap_err()
-            .to_string()
-            .contains("registered service"));
+        assert!(manager.recover().is_err());
     }
 
     #[test]

@@ -199,6 +199,10 @@ impl Manager {
     }
 
     pub fn rollback(&self) -> Result<Record> {
+        #[cfg(target_os = "linux")]
+        if crate::service::registered(&self.home) {
+            return crate::service::Service::new(&self.home)?.rollback();
+        }
         let _lock = self.lock()?;
         #[cfg(target_os = "linux")]
         crate::service::require_unregistered(&self.home)?;
@@ -292,6 +296,10 @@ impl Manager {
     }
 
     pub fn start(&self) -> Result<()> {
+        #[cfg(target_os = "linux")]
+        if crate::service::registered(&self.home) {
+            return crate::service::Service::new(&self.home)?.start();
+        }
         let _lock = self.lock()?;
         #[cfg(target_os = "linux")]
         crate::service::require_unregistered(&self.home)?;
@@ -304,6 +312,10 @@ impl Manager {
     }
 
     pub fn stop(&self) -> Result<()> {
+        #[cfg(target_os = "linux")]
+        if crate::service::registered(&self.home) {
+            return crate::service::Service::new(&self.home)?.stop();
+        }
         let _lock = self.lock()?;
         #[cfg(target_os = "linux")]
         crate::service::require_unregistered(&self.home)?;
@@ -316,6 +328,10 @@ impl Manager {
     }
 
     pub fn restart(&self) -> Result<()> {
+        #[cfg(target_os = "linux")]
+        if crate::service::registered(&self.home) {
+            return crate::service::Service::new(&self.home)?.restart();
+        }
         let _lock = self.lock()?;
         #[cfg(target_os = "linux")]
         crate::service::require_unregistered(&self.home)?;
@@ -329,35 +345,15 @@ impl Manager {
     }
 
     pub fn recover(&self) -> Result<()> {
+        #[cfg(target_os = "linux")]
+        if crate::service::registered(&self.home) {
+            return crate::service::Service::new(&self.home)?.recover();
+        }
         let _lock = self.lock()?;
         #[cfg(target_os = "linux")]
         crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
-        if let Some(pending) = state.pending_stage.clone() {
-            ensure!(
-                !state
-                    .owned
-                    .iter()
-                    .any(|record| record.binary == pending.target),
-                "recorded staging target overlaps an installed version"
-            );
-            for name in [&pending.stage, &pending.target] {
-                let path = self.root.join(name);
-                match fs::symlink_metadata(&path) {
-                    Ok(metadata) => {
-                        ensure!(
-                            metadata.file_type().is_file(),
-                            "recorded stage is not a regular file"
-                        );
-                        fs::remove_file(path)?;
-                    }
-                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(error) => return Err(error.into()),
-                }
-            }
-            state.pending_stage = None;
-            self.save(&state)?;
-        }
+        self.cleanup_pending_stage(&mut state)?;
         if let Some(process) = state.process.clone() {
             if self.running(&state)?.is_none() {
                 ensure!(
@@ -782,6 +778,63 @@ impl Manager {
     }
 
     #[cfg(target_os = "linux")]
+    pub(crate) fn service_prepare_rollback(&self, was_running: bool) -> Result<Record> {
+        let _lock = self.lock()?;
+        let mut state = self.load()?;
+        ensure!(
+            state.operation.is_none() && state.pending_stage.is_none(),
+            "recover the interrupted operation first"
+        );
+        let from = state.active.clone().context("Agent is not installed")?;
+        let to = state.previous.clone().context("no previous version")?;
+        self.verify(&from)?;
+        self.verify(&to)?;
+        state.operation = Some(Operation {
+            from,
+            to: to.clone(),
+            was_running,
+        });
+        self.save(&state)?;
+        Ok(to)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn service_recover_staging(&self) -> Result<()> {
+        let _lock = self.lock()?;
+        let mut state = self.load()?;
+        self.cleanup_pending_stage(&mut state)
+    }
+
+    fn cleanup_pending_stage(&self, state: &mut State) -> Result<()> {
+        if let Some(pending) = state.pending_stage.clone() {
+            ensure!(
+                !state
+                    .owned
+                    .iter()
+                    .any(|record| record.binary == pending.target),
+                "recorded staging target overlaps an installed version"
+            );
+            for name in [&pending.stage, &pending.target] {
+                let path = self.root.join(name);
+                match fs::symlink_metadata(&path) {
+                    Ok(metadata) => {
+                        ensure!(
+                            metadata.file_type().is_file(),
+                            "recorded stage is not a regular file"
+                        );
+                        fs::remove_file(path)?;
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(error.into()),
+                }
+            }
+            state.pending_stage = None;
+            self.save(state)?;
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
     pub(crate) fn service_select(&self, selected: &Record) -> Result<()> {
         let _lock = self.lock()?;
         let mut state = self.load()?;
@@ -1178,6 +1231,41 @@ mod tests {
         assert_eq!(state.active, Some(original));
         assert_eq!(state.previous, Some(target));
         assert!(state.operation.is_none());
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn stopped_service_rollback_and_interrupted_stage_keep_running_intent() {
+        let temp = tempfile::tempdir().unwrap();
+        let manager = Manager::new(temp.path());
+        let candidate = temp.path().join("candidate");
+        fs::write(&candidate, b"synthetic executable").unwrap();
+        let digest = sha256_file(&candidate).unwrap();
+        let first = manager.install("one", &candidate, &digest).unwrap();
+        let second = manager
+            .service_prepare_upgrade("two", &candidate, &digest, false)
+            .unwrap();
+        manager.service_select(&second).unwrap();
+        manager.service_finish().unwrap();
+        assert_eq!(manager.service_prepare_rollback(false).unwrap(), first);
+        assert!(!manager.load().unwrap().operation.unwrap().was_running);
+        manager.service_select(&first).unwrap();
+        manager.service_finish().unwrap();
+        let lock = manager.lock().unwrap();
+        let mut state = manager.load().unwrap();
+        let stage = format!(".{}.stage", crate::token::generate());
+        fs::write(manager.root.join(&stage), b"partial").unwrap();
+        state.pending_stage = Some(PendingStage {
+            stage: stage.clone(),
+            target: "agentfw-incomplete".into(),
+        });
+        manager.save(&state).unwrap();
+        drop(lock);
+        manager.service_recover_staging().unwrap();
+        assert!(!manager.root.join(stage).exists());
+        let state = manager.load().unwrap();
+        assert_eq!(state.active, Some(first));
+        assert!(state.process.is_none() && state.pending_stage.is_none());
     }
 
     #[test]
