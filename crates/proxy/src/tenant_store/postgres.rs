@@ -8,6 +8,8 @@
 
 #[path = "managed_postgres.rs"]
 mod managed;
+#[path = "fleet_postgres.rs"]
+mod fleet;
 
 use std::future::Future;
 use std::path::Path;
