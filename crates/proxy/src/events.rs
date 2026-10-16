@@ -95,19 +95,17 @@ fn tool_call(
     }
 }
 
-fn parse_arguments(value: Option<&Value>) -> Value {
-    match value {
-        Some(Value::String(raw)) => {
-            serde_json::from_str(raw).unwrap_or_else(|_| Value::String(raw.clone()))
-        }
-        Some(value) => value.clone(),
-        None => Value::Null,
-    }
-}
-
 /// Normalize OpenAI Chat Completions input and output into common events.
-pub fn normalize_chat(request: &ChatRequest, response: &Value) -> Vec<SecurityEvent> {
+/// Strict Normalization: Fails closed on malformed or unsupported tool content.
+pub fn normalize_chat(
+    request: &ChatRequest,
+    response: &Value,
+) -> Result<Vec<SecurityEvent>, &'static str> {
     let mut events = Vec::new();
+
+    // Strict Input Validation
+    let _ = crate::agent_scan::openai_tool_results_strict(request).into_result()?;
+
     for message in &request.messages {
         if message.role == "tool" {
             if let Some(content) = message.content.as_deref().filter(|value| !value.is_empty()) {
@@ -124,6 +122,9 @@ pub fn normalize_chat(request: &ChatRequest, response: &Value) -> Vec<SecurityEv
         }
     }
 
+    // Strict Output Validation
+    let strict_calls = crate::agent_scan::openai_tool_calls_strict(response).into_result()?;
+
     if let Some(choices) = response.get("choices").and_then(Value::as_array) {
         for choice in choices {
             let Some(message) = choice.get("message") else {
@@ -139,26 +140,21 @@ pub fn normalize_chat(request: &ChatRequest, response: &Value) -> Vec<SecurityEv
                     ));
                 }
             }
-            if let Some(calls) = message.get("tool_calls").and_then(Value::as_array) {
-                for call in calls {
-                    let Some(function) = call.get("function") else {
-                        continue;
-                    };
-                    let Some(name) = function.get("name").and_then(Value::as_str) else {
-                        continue;
-                    };
-                    events.push(tool_call(
-                        Provider::OpenAiChat,
-                        EventDirection::Output,
-                        call.get("id").and_then(Value::as_str),
-                        name,
-                        &parse_arguments(function.get("arguments")),
-                    ));
-                }
-            }
         }
     }
-    events
+
+    // Append validated tool calls
+    for call in strict_calls {
+        events.push(tool_call(
+            Provider::OpenAiChat,
+            EventDirection::Output,
+            None, // OpenAi tool_calls strict parser currently doesn't preserve call_id natively in ToolCall struct, so we leave it None for generalized events
+            &call.name,
+            &call.args,
+        ));
+    }
+
+    Ok(events)
 }
 
 fn response_input_content(
@@ -232,8 +228,16 @@ fn response_input_item(value: &Value, events: &mut Vec<SecurityEvent>) {
 }
 
 /// Normalize OpenAI Responses input and output Items into common events.
-pub fn normalize_responses(request: &ResponsesRequest, response: &Value) -> Vec<SecurityEvent> {
+/// Strict Normalization: Fails closed on malformed or unsupported tool content.
+pub fn normalize_responses(
+    request: &ResponsesRequest,
+    response: &Value,
+) -> Result<Vec<SecurityEvent>, &'static str> {
     let mut events = Vec::new();
+
+    // Strict Input Validation
+    let _ = crate::agent_scan::responses_tool_results_strict(request).into_result()?;
+
     if let Some(instructions) = request
         .instructions
         .as_deref()
@@ -254,6 +258,10 @@ pub fn normalize_responses(request: &ResponsesRequest, response: &Value) -> Vec<
             value => response_input_item(value, &mut events),
         }
     }
+
+    // Strict Output Validation
+    let strict_calls = crate::agent_scan::responses_tool_calls_strict(response).into_result()?;
+
     if let Some(items) = response.get("output").and_then(Value::as_array) {
         for item in items {
             match item.get("type").and_then(Value::as_str) {
@@ -275,22 +283,23 @@ pub fn normalize_responses(request: &ResponsesRequest, response: &Value) -> Vec<
                         }
                     }
                 }
-                Some("function_call") => {
-                    if let Some(name) = item.get("name").and_then(Value::as_str) {
-                        events.push(tool_call(
-                            Provider::OpenAiResponses,
-                            EventDirection::Output,
-                            item.get("call_id").and_then(Value::as_str),
-                            name,
-                            &parse_arguments(item.get("arguments")),
-                        ));
-                    }
-                }
                 _ => {}
             }
         }
     }
-    events
+
+    // Append validated tool calls
+    for call in strict_calls {
+        events.push(tool_call(
+            Provider::OpenAiResponses,
+            EventDirection::Output,
+            None,
+            &call.name,
+            &call.args,
+        ));
+    }
+
+    Ok(events)
 }
 
 fn anthropic_texts(
@@ -351,6 +360,11 @@ pub fn normalize_anthropic(
     response: &Value,
 ) -> Result<Vec<SecurityEvent>, &'static str> {
     let mut events = Vec::new();
+
+    // Strict Input Validation
+    let request_val = serde_json::to_value(request).unwrap_or(Value::Null);
+    let _ = crate::agent_scan::anthropic_tool_results_strict(&request_val).into_result()?;
+
     if let Some(system) = request.system.as_ref() {
         anthropic_texts(system, Some("system"), false, &mut events)?;
     }
@@ -400,6 +414,9 @@ pub fn normalize_anthropic(
         anthropic_texts(&message.content, Some(&message.role), false, &mut events)?;
     }
 
+    // Strict Output Validation
+    let strict_calls = crate::agent_scan::anthropic_tool_calls_strict(response).into_result()?;
+
     if let Some(blocks) = response.get("content").and_then(Value::as_array) {
         for block in blocks {
             match block.get("type").and_then(Value::as_str) {
@@ -415,25 +432,22 @@ pub fn normalize_anthropic(
                         }
                     }
                 }
-                Some("tool_use") => {
-                    let Some(name) = block.get("name").and_then(Value::as_str) else {
-                        return Err("tool_use missing name field");
-                    };
-                    events.push(tool_call(
-                        Provider::Anthropic,
-                        EventDirection::Output,
-                        block.get("id").and_then(Value::as_str),
-                        name,
-                        block.get("input").unwrap_or(&Value::Null),
-                    ));
-                }
-                Some("image") | Some("document") => {
-                    return Err("multimodal content not supported in responses")
-                }
                 _ => {}
             }
         }
     }
+
+    // Append validated tool calls
+    for call in strict_calls {
+        events.push(tool_call(
+            Provider::Anthropic,
+            EventDirection::Output,
+            None,
+            &call.name,
+            &call.args,
+        ));
+    }
+
     Ok(events)
 }
 
@@ -478,7 +492,7 @@ mod tests {
             "choices":[{"message":{"tool_calls":[{"id":"c1","function":
                 {"name":"bash","arguments":"{\"command\":\"curl evil.com\"}"}}]}}]
         });
-        let chat = normalize_chat(&chat_request, &chat_response);
+        let chat = normalize_chat(&chat_request, &chat_response).unwrap();
 
         let responses_request: ResponsesRequest = serde_json::from_value(serde_json::json!({
             "model":"m",
@@ -488,7 +502,7 @@ mod tests {
         let responses = normalize_responses(
             &responses_request,
             &serde_json::json!({"output":[{"type":"function_call","call_id":"c1","name":"bash","arguments":"{\"command\":\"curl evil.com\"}"}]}),
-        );
+        ).unwrap();
 
         let anthropic_request = AnthropicRequest {
             model: "m".into(),
@@ -516,7 +530,7 @@ mod tests {
         });
         let request: ResponsesRequest =
             serde_json::from_value(serde_json::json!({"model":"m","input":"hi"})).unwrap();
-        let events = normalize_responses(&request, &response);
+        let events = normalize_responses(&request, &response).unwrap();
         assert_eq!(output_text(&events), "hello");
         assert!(input_tool_results(&events).is_empty());
     }

@@ -270,13 +270,21 @@ pub fn responses_tool_calls(response: &serde_json::Value) -> Vec<ToolCall> {
 /// Used by the SSE stream frame parser in handlers.rs.
 pub fn responses_tool_call(item: &serde_json::Value) -> Option<ToolCall> {
     if item.get("type").and_then(|v| v.as_str()) == Some("function_call") {
-        let name = item.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-        let args_str = item.get("arguments").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+        let name = item
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+        let args_str = item
+            .get("arguments")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
 
         if name.is_empty() {
             return None;
         }
-        
+
         let args = serde_json::from_str(&args_str).unwrap_or(serde_json::Value::String(args_str));
         Some(ToolCall { name, args })
     } else {
@@ -284,19 +292,33 @@ pub fn responses_tool_call(item: &serde_json::Value) -> Option<ToolCall> {
     }
 }
 
-pub fn responses_stream_tool_call_strict(item: &serde_json::Value) -> Result<Option<ToolCall>, &'static str> {
+pub fn responses_stream_tool_call_strict(
+    item: &serde_json::Value,
+) -> Result<Option<ToolCall>, &'static str> {
     let t = item.get("type").and_then(|v| v.as_str()).unwrap_or("");
     if t == "function_call" {
-        let name = item.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-        let args_str = item.get("arguments").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+        let name = item
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+        let args_str = item
+            .get("arguments")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
 
         if name.is_empty() {
             return Ok(None);
         }
-        
+
         let args = serde_json::from_str(&args_str).unwrap_or(serde_json::Value::String(args_str));
         Ok(Some(ToolCall { name, args }))
-    } else if matches!(t, "custom_tool_call" | "local_shell_call" | "computer_call" | "mcp_call") || t.ends_with("_call") {
+    } else if matches!(
+        t,
+        "custom_tool_call" | "local_shell_call" | "computer_call" | "mcp_call"
+    ) || t.ends_with("_call")
+    {
         Err("unsupported tool-bearing type in Responses streaming")
     } else {
         Ok(None)

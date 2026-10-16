@@ -891,7 +891,13 @@ pub async fn chat_completions(
     )
     .await;
 
-    let events = crate::events::normalize_chat(&decision.request, &body);
+    let events = match crate::events::normalize_chat(&decision.request, &body) {
+        Ok(events) => events,
+        Err(reason) => {
+            audit_output_block(&request_id, reason, started);
+            return (StatusCode::BAD_GATEWAY, Json(error_body(reason))).into_response();
+        }
+    };
     if let Some(reason) = capability_refuse_events(&state, &request_id, &events) {
         audit_output_block(&request_id, &reason, started);
         return (StatusCode::BAD_GATEWAY, Json(error_body(&reason))).into_response();
@@ -1059,7 +1065,13 @@ pub async fn responses(
     )
     .await;
 
-    let events = crate::events::normalize_responses(&decision.request, &body);
+    let events = match crate::events::normalize_responses(&decision.request, &body) {
+        Ok(events) => events,
+        Err(reason) => {
+            audit_output_block(&request_id, reason, started);
+            return (StatusCode::BAD_GATEWAY, Json(error_body(reason))).into_response();
+        }
+    };
     if let Some(reason) = capability_refuse_events(&state, &request_id, &events) {
         audit_output_block(&request_id, &reason, started);
         return (StatusCode::BAD_GATEWAY, Json(error_body(&reason))).into_response();
@@ -1617,12 +1629,23 @@ async fn proxy_responses_stream(
                 if let Some(event) = &frame.event {
                     match event.get("type").and_then(serde_json::Value::as_str) {
                         Some("response.output_item.added") => {
-                            if event
+                            if let Some(item_type) = event
                                 .pointer("/item/type")
                                 .and_then(serde_json::Value::as_str)
-                                == Some("function_call")
                             {
-                                in_flight_function_calls += 1;
+                                if item_type == "function_call" {
+                                    in_flight_function_calls += 1;
+                                } else if matches!(
+                                    item_type,
+                                    "custom_tool_call"
+                                        | "local_shell_call"
+                                        | "computer_call"
+                                        | "mcp_call"
+                                ) || item_type.ends_with("_call")
+                                {
+                                    block_reason = Some(format!("unsupported tool-bearing type '{}' detected before byte release", item_type));
+                                    break;
+                                }
                             }
                         }
                         Some("response.function_call_arguments.delta")
