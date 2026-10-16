@@ -25,8 +25,13 @@ Repository facts:
   not measured. Its generic action and `LocalSystem` provenance fallbacks do
   not represent the semantics of those native tools. Preserve that result.
 - Main already contains operator-installed native call/result/context admission.
-  The schema identity and registry are pinned, but the trusted collector still
-  supplies original runtime validation and complete semantic declarations.
+  The schema identity and registry are pinned; the trusted collector supplies
+  original runtime validation and complete semantic declarations. The selected
+  [real filesystem MCP profile](operations/MCP_REAL_FILESYSTEM.md) adds an
+  explicit original-server identity, bounded concurrent call/result admission,
+  cancellation accounting and a Linux process sandbox. Its required runtime
+  evidence is retained by the dedicated acceptance workflow; other servers and
+  platforms do not inherit that coverage.
 - The baseline also contains bounded stdio MCP admission. An actual Claude Code
   control/protected pair shows a synthetic-secret send executing without the
   gate and not executing with it; an independent ordinary-task check succeeds
@@ -78,7 +83,7 @@ See [architecture](ARCHITECTURE.md), [methodology](methodology.md),
 | --- | --- | --- |
 | Core | Detection, normalization, masking, text policy and optional ML code | Reviewed detector use and pinned optional assets for the accepted scope; no classifier-only security claims |
 | Agent | Taint, action/egress policy, grants, audit/replay and Linux guarded execution | Complete selected real-tool semantics, runtime child identity/authority, and policy composition |
-| Native and MCP integration | Immutable registry, authenticated admission and correlated result receipts; bounded stdio collector in the baseline | Coverage of selected runtime paths, explicit unsupported cases, and independently witnessed prevention with useful continuation |
+| Native and MCP integration | Immutable registry, authenticated admission and correlated result receipts; legacy sequential stdio and an explicit selected real-server Linux profile | Extend reviewed runtime coverage, authenticate shared host-session provenance, and retain independent execution/prevention witnesses with useful continuation |
 | Gateway | Chat Completions, Responses and Messages inspection with bounded streaming | Accepted provider/platform behavior, compatibility and operational checks on the final candidate |
 | Console | Tenants, roles, identity, tenant policy versions, webhook queues and usage evidence | Authenticated Agent enrollment, verified policy bundles, observed application, staged rollout and confirmed rollback |
 | Evaluation | Synthetic regressions, pinned historical importer, runtime adapters and scripted integration proofs | Frozen matched live evaluation using original independent attack/task evaluators |
