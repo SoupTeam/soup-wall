@@ -26,7 +26,7 @@ const fleet = (() => {
     values.forEach(a => {
       const row=make("tr"), cell=make("td"), button=make("button",a.agent_id,"secondary tiny");
       button.type="button"; button.addEventListener("click",()=>loadAgent(a.agent_id)); cell.append(button);
-      row.append(cell,make("td",a.revoked_at_unix == null ? "Enrolled" : "Revoked"),make("td",identity(a.latest_issued)),make("td",identity(a.last_reported_applied)),make("td",age(a.last_reported_applied?.reported_applied_at_unix)));
+      row.append(cell,make("td",a.revoked_at_unix == null ? "Enrolled" : "Revoked"),make("td",identity(a.latest_issued)),make("td",a.last_reported_applied ? identity(a.last_reported_applied) : "No applied acknowledgement"),make("td",age(a.last_reported_applied?.reported_applied_at_unix)));
       body.append(row);
     }); table.append(body); root.append(table);
   };
@@ -62,7 +62,7 @@ const fleet = (() => {
       root.append(make("p",`Enrolled: ${when(a.enrolled_at_unix)} · Revoked: ${when(a.revoked_at_unix)}`));
       const summaries=make("div",undefined,"grid-two");
       [["Latest issued",a.latest_issued],["Historical last reported applied",a.last_reported_applied]].forEach(([label,d])=>{
-        const card=make("div",undefined,"metric");card.append(make("h3",label),make("p",identity(d)),make("code",d?.policy_sha256||"Digest unavailable"));
+        const card=make("div",undefined,"metric");card.append(make("h3",label),make("p",d ? identity(d) : label === "Latest issued" ? "No deployment history" : "No applied acknowledgement"),make("code",d?.policy_sha256||"Digest unavailable"));
         if(d)card.append(make("p",`Issued: ${when(d.issued_at_unix)} · Applied report: ${when(d.reported_applied_at_unix)}`));
         summaries.append(card);
       });root.append(summaries);
