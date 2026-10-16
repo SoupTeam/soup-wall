@@ -3,9 +3,10 @@
 //! delivery, acknowledgement and revocation for one tenant/Agent audience.
 use super::PostgresTenantStore;
 use crate::tenant_store::{
-    agent_enrollment::{credential_hash, valid_id},
+    agent_enrollment::{credential_hash, valid_id, validated_rotation},
     managed_policy::{exact_id, hex, MAX_YAML},
     now_unix, random_base64url, AppliedReport, EnrolledAgent, IssuedAgentCredential,
+    RotationOutcome, RotationRequest,
     ManagedDeployment, ManagedIssuer, ManagedRevision, SignedManagedBundle,
 };
 use anyhow::{ensure, Context, Result};
@@ -79,6 +80,15 @@ impl PostgresTenantStore {
             ))
             .await?;
         }
+        // Additive, idempotent upgrade for old version-26 enrollment tables.
+        // Held under the existing advisory migration lock.
+        self.bounded(tx.batch_execute(
+            "ALTER TABLE managed_agent_enrollments
+                ADD COLUMN IF NOT EXISTS credential_generation BIGINT NOT NULL DEFAULT 1 CHECK(credential_generation > 0);
+             ALTER TABLE managed_agent_enrollments ADD COLUMN IF NOT EXISTS last_rotation_id TEXT;
+             ALTER TABLE managed_agent_enrollments ADD COLUMN IF NOT EXISTS last_rotation_expected_generation BIGINT;
+             ALTER TABLE managed_agent_enrollments ADD COLUMN IF NOT EXISTS last_rotation_digest BYTEA;"
+        )).await?;
         self.bounded(tx.commit()).await?;
         Ok(())
     }
@@ -125,6 +135,52 @@ impl PostgresTenantStore {
             token,
         })
     }
+    pub(in crate::tenant_store) async fn rotate_managed_agent(
+        &self, tenant: &str, agent: &str, input: &RotationRequest
+    ) -> Result<RotationOutcome> {
+        let new_hash = validated_rotation(input)?;
+        let mut client = self.checkout().await?;
+        let tx = self.bounded(client.transaction()).await?;
+        self.lock_managed_agent(&tx, tenant, agent).await?;
+        let row = self.bounded(tx.query_one(
+            "SELECT token_hash,credential_generation,last_rotation_id,
+                    last_rotation_expected_generation,last_rotation_digest
+             FROM managed_agent_enrollments WHERE tenant_id=$1 AND agent_id=$2 FOR UPDATE",
+            &[&tenant,&agent]
+        )).await?;
+        let old_hash: Vec<u8> = row.get(0);
+        let generation: i64 = row.get(1);
+        let last_id: Option<String> = row.get(2);
+        let last_generation: Option<i64> = row.get(3);
+        let last_digest: Option<Vec<u8>> = row.get(4);
+        if last_id.as_deref() == Some(&input.operation_id)
+            && last_generation == Some(input.expected_generation)
+            && last_digest.as_deref() == Some(new_hash.as_slice())
+        {
+            return Ok(RotationOutcome {
+                tenant_id: tenant.into(), agent_id: agent.into(), generation,
+                operation_id: input.operation_id.clone(), already_applied: true,
+            });
+        }
+        ensure!(last_id.as_deref() != Some(&input.operation_id),
+            "operation identifier reused with different parameters");
+        ensure!(generation == input.expected_generation, "stale credential generation");
+        ensure!(old_hash != new_hash, "replacement must differ from current credential");
+        let next = generation.checked_add(1).context("credential generation exhausted")?;
+        self.bounded(tx.execute(
+            "UPDATE managed_agent_enrollments
+             SET token_hash=$3,credential_generation=$4,last_rotation_id=$5,
+                 last_rotation_expected_generation=$6,last_rotation_digest=$7
+             WHERE tenant_id=$1 AND agent_id=$2 AND revoked_at_unix IS NULL",
+            &[&tenant,&agent,&new_hash,&next,&input.operation_id,&input.expected_generation,&new_hash]
+        )).await?;
+        self.bounded(tx.commit()).await?;
+        Ok(RotationOutcome {
+            tenant_id: tenant.into(), agent_id: agent.into(), generation: next,
+            operation_id: input.operation_id.clone(), already_applied: false,
+        })
+    }
+
     pub(in crate::tenant_store) async fn authenticate_managed_agent(
         &self,
         authorization: Option<&str>,

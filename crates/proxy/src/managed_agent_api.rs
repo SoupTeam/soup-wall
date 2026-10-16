@@ -12,7 +12,7 @@ use axum::Json;
 use serde::Deserialize;
 
 use crate::handlers::Shared;
-use crate::tenant_store::{AppliedReport, EnrolledAgent, ManagedIssuer, TenantStore};
+use crate::tenant_store::{AppliedReport, EnrolledAgent, ManagedIssuer, TenantStore, RotationRequest};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -115,6 +115,24 @@ pub async fn revoke(
             StatusCode::SERVICE_UNAVAILABLE,
             "Agent revocation unavailable",
         ),
+    }
+}
+
+/// Admin-only credential rotation. Never authenticates using the Agent bearer.
+pub async fn rotate_credential(
+    State(state): State<Shared>,
+    Path((tenant_id, agent_id)): Path<(String, String)>,
+    Json(input): Json<RotationRequest>,
+) -> Response {
+    let Some(store) = store(&state) else {
+        return failure(StatusCode::SERVICE_UNAVAILABLE, "Console storage unavailable");
+    };
+    match tokio::task::spawn(async move {
+        store.rotate_managed_agent_async(&tenant_id, &agent_id, &input).await
+    }).await {
+        Ok(Ok(receipt)) => Json(receipt).into_response(),
+        Ok(Err(_)) => failure(StatusCode::CONFLICT, "credential rotation refused"),
+        Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "credential rotation unavailable"),
     }
 }
 

@@ -12,6 +12,14 @@ impl TenantStore {
             None => self.enroll_managed_agent(tenant_id, agent_id),
         }
     }
+    pub async fn rotate_managed_agent_async(
+        &self, tenant_id: &str, agent_id: &str, input: &RotationRequest
+    ) -> anyhow::Result<RotationOutcome> {
+        match &self.postgres {
+            Some(pg) => pg.rotate_managed_agent(tenant_id, agent_id, input).await,
+            None => self.rotate_managed_agent(tenant_id, agent_id, input),
+        }
+    }
     pub async fn authenticate_managed_agent_async(
         &self,
         authorization: Option<&str>,
