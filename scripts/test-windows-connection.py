@@ -51,9 +51,11 @@ def account():
 
 def secure(path, sid):
     suffix = "(OI)(CI)" if path.is_dir() else ""
-    result = subprocess.run([str(Path(os.environ["SystemRoot"]) / "System32/icacls.exe"),
-        str(path), "/inheritance:r", "/grant:r", "*" + sid + ":" + suffix + "F",
-        "*S-1-5-18:" + suffix + "F"], capture_output=True, timeout=20)
+    icacls = str(Path(os.environ["SystemRoot"]) / "System32/icacls.exe")
+    result = subprocess.run([icacls, str(path), "/inheritance:r",
+        "/remove:g", "*S-1-5-32-544", "*S-1-5-11", "*S-1-5-32-545", "*S-1-5-32-546",
+        "/grant:r", "*" + sid + ":" + suffix + "F", "*S-1-5-18:" + suffix + "F"],
+        capture_output=True, timeout=20)
     require(result.returncode == 0, "owned fixture ACL setup failed")
 
 def write(path, value, sid):
