@@ -2033,7 +2033,7 @@ where
                                                 let egress_declared = installed.action_class == ActionClass::Network
                                                     || !installed.egress.is_empty();
                                                 let again = collector.classify(snapshot, request_id, name, &args, installed.action_class,
-                                                    ClassificationAuthority { egress_declared, create_file: false, https_get: false }).await?;
+                                                    ClassificationAuthority { egress_declared, create_file_profile: None, https_get: false }).await?;
                                                 if matches!(again, Ok(ProductionVerdict::Ask | ProductionVerdict::Allow)) {
                                                     approval_id = Some(id);
                                                 } else {
