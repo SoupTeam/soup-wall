@@ -84,106 +84,147 @@ impl<T> ContentStatus<T> {
 }
 
 /// Tool outputs in an OpenAI request: `role:"tool"` messages' string content.
-pub fn openai_tool_results(req: &ChatRequest) -> Vec<String> {
-    req.messages
-        .iter()
-        .filter(|m| m.role == "tool")
-        .filter_map(|m| m.content.clone())
-        .filter(|c| !c.is_empty())
-        .collect()
-}
-
-/// Tool calls in an OpenAI response: `choices[].message.tool_calls[].function`.
-pub fn openai_tool_calls(response: &serde_json::Value) -> Vec<ToolCall> {
-    let mut out = Vec::new();
-    let Some(choices) = response.get("choices").and_then(|c| c.as_array()) else {
-        return out;
-    };
-    for ch in choices {
-        let Some(calls) = ch.pointer("/message/tool_calls").and_then(|c| c.as_array()) else {
-            continue;
-        };
-        for c in calls {
-            let Some(f) = c.get("function") else { continue };
-            let Some(name) = f.get("name").and_then(|n| n.as_str()) else {
-                continue;
-            };
-            // `arguments` is a JSON *string*; parse it, falling back to a string value.
-            let args = match f.get("arguments") {
-                Some(serde_json::Value::String(s)) => {
-                    serde_json::from_str(s).unwrap_or(serde_json::Value::String(s.clone()))
-                }
-                Some(v) => v.clone(),
-                None => serde_json::Value::Null,
-            };
-            out.push(ToolCall {
-                name: name.to_string(),
-                args,
-            });
+pub fn openai_tool_results_strict(request: &crate::openai::ChatRequest) -> ContentStatus<Vec<String>> {
+    let mut results = Vec::new();
+    for msg in &request.messages {
+        if msg.role == "tool" {
+            if let Some(text) = &msg.content {
+                results.push(text.clone());
+            } else {
+                return ContentStatus::Malformed("tool message missing content string");
+            }
         }
     }
-    out
+    ContentStatus::Supported(results)
 }
 
-/// Tool outputs in a Responses request are typed `function_call_output` input
-/// items. Their output may be a string or a list of text content parts.
-pub fn responses_tool_results(req: &ResponsesRequest) -> Vec<String> {
-    let mut results = Vec::new();
-    let Some(items) = req.input.as_ref().and_then(serde_json::Value::as_array) else {
-        return results;
+pub fn openai_tool_results(request: &crate::openai::ChatRequest) -> Vec<String> {
+    openai_tool_results_strict(request).into_result().unwrap_or_default()
+}
+
+pub fn openai_tool_calls_strict(response: &serde_json::Value) -> ContentStatus<Vec<ToolCall>> {
+    let mut calls = Vec::new();
+    let choices = match response.get("choices").and_then(|v| v.as_array()) {
+        Some(c) => c,
+        None => return ContentStatus::Supported(calls), 
     };
-    for item in items {
-        if item.get("type").and_then(serde_json::Value::as_str) != Some("function_call_output") {
-            continue;
-        }
-        match item.get("output") {
-            Some(serde_json::Value::String(text)) if !text.is_empty() => {
-                results.push(text.clone());
+
+    for choice in choices {
+        let msg = match choice.get("message") {
+            Some(m) => m,
+            None => continue,
+        };
+        
+        if let Some(tool_calls) = msg.get("tool_calls").and_then(|v| v.as_array()) {
+            for tc in tool_calls {
+                let tool_type = tc.get("type").and_then(|v| v.as_str()).unwrap_or("function");
+                if tool_type != "function" {
+                    return ContentStatus::Unsupported("unsupported tool type in OpenAI response (only 'function' allowed)");
+                }
+                
+                if let Some(func) = tc.get("function") {
+                    let name = func.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                    let args_str = func.get("arguments").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                    
+                    if name.is_empty() {
+                        return ContentStatus::Malformed("tool_call missing function name");
+                    }
+                    
+                    let args = serde_json::from_str(&args_str).unwrap_or(serde_json::Value::String(args_str));
+                    calls.push(ToolCall { name, args });
+                } else {
+                    return ContentStatus::Malformed("tool_call missing function block");
+                }
             }
-            Some(serde_json::Value::Array(parts)) => {
-                for part in parts {
-                    if let Some(text) = part.get("text").and_then(serde_json::Value::as_str) {
-                        if !text.is_empty() {
-                            results.push(text.to_string());
+        }
+    }
+    ContentStatus::Supported(calls)
+}
+
+pub fn openai_tool_calls(response: &serde_json::Value) -> Vec<ToolCall> {
+    openai_tool_calls_strict(response).into_result().unwrap_or_default()
+}
+
+
+pub fn responses_tool_results_strict(request: &crate::responses::ResponsesRequest) -> ContentStatus<Vec<String>> {
+    let mut results = Vec::new();
+    let items = match request.input.as_ref().and_then(|v| v.as_array()) {
+        Some(arr) => arr,
+        None => return ContentStatus::Supported(results),
+    };
+
+    for item in items {
+        if item.get("type").and_then(|v| v.as_str()) == Some("function_call_output") {
+            match item.get("output") {
+                Some(serde_json::Value::String(text)) => results.push(text.clone()),
+                Some(serde_json::Value::Array(arr)) => {
+                    for block in arr {
+                        if block.get("type").and_then(|v| v.as_str()) == Some("input_text") {
+                            if let Some(text) = block.get("text").and_then(|v| v.as_str()) {
+                                results.push(text.to_string());
+                            } else {
+                                return ContentStatus::Malformed("input_text block missing text field");
+                            }
+                        } else {
+                            return ContentStatus::Unsupported("multimedia or non-string tool results are not supported in Responses");
                         }
                     }
                 }
+                Some(_) => return ContentStatus::Unsupported("multimedia or non-string tool results are not supported in Responses"),
+                None => return ContentStatus::Malformed("function_call_output missing output field"),
             }
-            _ => {}
         }
     }
-    results
+    ContentStatus::Supported(results)
 }
 
-/// Convert one Responses `function_call` output item into the provider-neutral
-/// tool-call representation used by the agent firewall.
-pub fn responses_tool_call(item: &serde_json::Value) -> Option<ToolCall> {
-    if item.get("type").and_then(serde_json::Value::as_str) != Some("function_call") {
-        return None;
-    }
-    let name = item.get("name").and_then(serde_json::Value::as_str)?;
-    let args = match item.get("arguments") {
-        Some(serde_json::Value::String(value)) => {
-            serde_json::from_str(value).unwrap_or_else(|_| serde_json::Value::String(value.clone()))
-        }
-        Some(value) => value.clone(),
-        None => serde_json::Value::Null,
+pub fn responses_tool_results(request: &crate::responses::ResponsesRequest) -> Vec<String> {
+    responses_tool_results_strict(request).into_result().unwrap_or_default()
+}
+
+pub fn responses_tool_calls_strict(response: &serde_json::Value) -> ContentStatus<Vec<ToolCall>> {
+    let mut calls = Vec::new();
+    let outputs = match response.get("output").and_then(|v| v.as_array()) {
+        Some(out) => out,
+        None => return ContentStatus::Supported(calls),
     };
-    Some(ToolCall {
-        name: name.to_string(),
-        args,
-    })
+
+    for item in outputs {
+        if item.get("type").and_then(|v| v.as_str()) == Some("function_call") {
+            let name = item.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+            let args_str = item.get("arguments").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+
+            if name.is_empty() {
+                return ContentStatus::Malformed("Responses function_call missing name");
+            }
+            
+            let args = serde_json::from_str(&args_str).unwrap_or(serde_json::Value::String(args_str));
+            calls.push(ToolCall { name, args });
+        }
+    }
+    ContentStatus::Supported(calls)
 }
 
-/// Function calls returned in `response.output[]`.
 pub fn responses_tool_calls(response: &serde_json::Value) -> Vec<ToolCall> {
-    response
-        .get("output")
-        .and_then(serde_json::Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(responses_tool_call)
-        .collect()
+    responses_tool_calls_strict(response).into_result().unwrap_or_default()
+}
+
+/// Convert a single Responses output item into a ToolCall if it is a function_call.
+/// Used by the SSE stream frame parser in handlers.rs.
+pub fn responses_tool_call(item: &serde_json::Value) -> Option<ToolCall> {
+    if item.get("type").and_then(|v| v.as_str()) == Some("function_call") {
+        let name = item.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+        let args_str = item.get("arguments").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+
+        if name.is_empty() {
+            return None;
+        }
+        
+        let args = serde_json::from_str(&args_str).unwrap_or(serde_json::Value::String(args_str));
+        Some(ToolCall { name, args })
+    } else {
+        None
+    }
 }
 
 /// Feed the tool results as taint, then each tool call as an action; return the worst
@@ -875,6 +916,60 @@ mod tests {
         let done = asm.flush();
         assert_eq!(done[0].args, serde_json::json!("not json at all"));
     }
+    #[test]
+    fn strict_anthropic_parser_blocks_multimedia() {
+        let malicious_payload = serde_json::json!({
+            "model": "claude-3-opus",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_123",
+                            "content": [
+                                {
+                                    "type": "image",
+                                    "source": { "type": "base64", "media_type": "image/jpeg", "data": "fake" }
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        });
+
+        let result = anthropic_tool_results_strict(&malicious_payload);
+        
+        match result {
+            ContentStatus::Unsupported(reason) => {
+                assert!(reason.contains("multimodal"));
+            },
+            _ => panic!("Expected Unsupported multimedia error, got: {:?}", result),
+        }
+    }
+
+    #[test]
+    fn strict_anthropic_parser_allows_text() {
+        let safe_payload = serde_json::json!({
+            "model": "claude-3-opus",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_123",
+                            "content": "Safe text output"
+                        }
+                    ]
+                }
+            ]
+        });
+
+        let result = anthropic_tool_results_strict(&safe_payload);
+        assert!(matches!(result, ContentStatus::Supported(_)));
+    }
 }
 
 // Wrappers to satisfy existing tests and internal calls
@@ -885,3 +980,4 @@ pub fn anthropic_tool_results(request: &serde_json::Value) -> Vec<String> {
 pub fn anthropic_tool_calls(response: &serde_json::Value) -> Vec<ToolCall> {
     anthropic_tool_calls_strict(response).into_result().unwrap_or_default()
 }
+
