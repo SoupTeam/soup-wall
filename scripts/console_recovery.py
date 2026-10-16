@@ -61,7 +61,7 @@ def strict_json(data):
 
 def inventory():
     value = strict_json(INVENTORY_PATH.read_bytes())
-    if value.get('format_version') != FORMAT_VERSION or value.get('postgres_schema_version') != 27:
+    if value.get('format_version') != FORMAT_VERSION or value.get('postgres_schema_version') != 28:
         raise RecoveryError('Unsupported recovery inventory.')
     return value
 
@@ -271,7 +271,7 @@ def pack_archive(directory, backend, identity, state, dump):
         raise RecoveryError('Recovery archive exceeds the supported size limit.')
     manifest = {'format_version': FORMAT_VERSION, 'backend': backend,
                 'source_identity': identity, 'accepted_source': inventory()['accepted_source'],
-                'schema_version': 27, 'inventory_sha256': digest(raw_inventory),
+                'schema_version': 28, 'inventory_sha256': digest(raw_inventory),
                 'files': {name: {'bytes': len(data), 'sha256': digest(data)} for name, data in files.items()}}
     files['manifest.json'] = canonical(manifest)
     path = directory / 'archive.tar'
@@ -314,7 +314,7 @@ def validate_private_state(state, backend):
     if backend != 'postgres':
         return  # SQLite's full image is independently inspected before target creation.
     if (set(state) != {'backend', 'schema_version', 'tables', 'sequences', 'schema'}
-            or type(state['schema_version']) is not int or state['schema_version'] != 27
+            or type(state['schema_version']) is not int or state['schema_version'] != 28
             or canonical(state.get('schema')) != canonical(definition.get('postgres_schema'))
             or not isinstance(state.get('schema'),dict)
             or set(state['tables']) != set(definition['postgres_tables'])
@@ -379,7 +379,7 @@ def decrypted_archive(archive, identity, *, workdir, age='age'):
                     'inventory_sha256', 'files'}
         if (not isinstance(manifest, dict) or set(manifest) != required
                 or type(manifest['format_version']) is not int or manifest['format_version'] != FORMAT_VERSION
-                or type(manifest['schema_version']) is not int or manifest['schema_version'] != 27
+                or type(manifest['schema_version']) is not int or manifest['schema_version'] != 28
                 or manifest['backend'] not in {'sqlite', 'postgres'}
                 or manifest['accepted_source'] != inventory()['accepted_source']
                 or not isinstance(manifest['source_identity'], dict)):
@@ -617,9 +617,9 @@ class PostgresBackend:
                 or set(catalog['sequences']) != set(definition['postgres_sequences'])):
             raise RecoveryError('PostgreSQL tables or sequences do not match the versioned inventory.')
         versions = strict_json(self.sql("SELECT json_agg(version ORDER BY version) FROM llm_firewall_schema_migrations;"))
-        if (not isinstance(versions,list) or versions != list(range(1, 28))
+        if (not isinstance(versions,list) or versions != list(range(1, 29))
                 or any(type(value) is not int for value in versions)):
-            raise RecoveryError('PostgreSQL schema must have exactly accepted migrations 1 through 27.')
+            raise RecoveryError('PostgreSQL schema must have exactly accepted migrations 1 through 28.')
         columns = strict_json(self.sql("SELECT json_object_agg(table_name,columns) FROM "
             "(SELECT table_name,json_object_agg(column_name,udt_name) AS columns FROM information_schema.columns "
             "WHERE table_schema='public' GROUP BY table_name) t;"))
@@ -641,7 +641,7 @@ class PostgresBackend:
             return "(SELECT jsonb_object_agg(name,value) FROM (" + ' UNION ALL '.join(items) + ') t)'
         value = strict_json(self.sql("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; "
             "SET LOCAL TIME ZONE 'UTC'; SELECT jsonb_build_object('backend','postgres',"
-            "'schema_version',27,'tables'," + map_sql(catalog['tables']) + ",'sequences'," +
+            "'schema_version',28,'tables'," + map_sql(catalog['tables']) + ",'sequences'," +
             map_sql(catalog['sequences'], True) + '); COMMIT;'))
         value['schema'] = schema
         for rows in value['tables'].values():
