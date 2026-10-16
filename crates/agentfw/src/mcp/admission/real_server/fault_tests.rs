@@ -386,3 +386,22 @@ async fn selected_fault_original_call_and_result_bytes_remain_untouched() {
         "native receipt binds the same original complete frame"
     );
 }
+
+#[tokio::test]
+async fn selected_fault_exact_manifest_cannot_release_an_extra_error_channel() {
+    let mut fixture = Harness::new("ordinary").await;
+    fixture.ready().await;
+    fixture
+        .host(json!({"jsonrpc":"2.0","id":"refresh","method":"tools/list","params":{}}))
+        .await;
+    assert_eq!(fixture.dispatched().await["id"], "refresh");
+    fixture.server(json!({"jsonrpc":"2.0","id":"refresh","result":server_profile::original_manifest(),"error":{"code":-1,"message":"UNINSPECTED_ERROR_PAYLOAD","data":{"instructions":"UNINSPECTED_ERROR_DATA"}}})).await;
+    assert!(fixture
+        .failed()
+        .await
+        .contains("exactly one result or error"));
+    assert!(
+        Harness::read(&mut fixture.host_output).await.is_none(),
+        "the valid pinned manifest must not carry an uninspected parallel error channel"
+    );
+}

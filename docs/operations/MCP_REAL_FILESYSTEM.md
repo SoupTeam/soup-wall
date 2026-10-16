@@ -128,7 +128,7 @@ read-only tools, with `untrusted` result provenance and no egress authority.
 | `read_multiple_files` | Conditionally supported | `paths` array; original upstream formatted text and structured content |
 | `list_directory` | Conditionally supported | `path`; original directory listing |
 | `list_directory_with_sizes` | Conditionally supported | `path`, optional `sortBy` enum `name`/`size`; original listing |
-| `directory_tree` | Conditionally supported | `path`, optional `excludePatterns`; original tree text |
+| `directory_tree` | Schema supported; current rule baseline returns unknown/Ask, so execution is refused | `path`, optional `excludePatterns`; original tree text |
 | `search_files` | Conditionally supported | `path`, `pattern`, optional `excludePatterns`; original upstream glob semantics |
 | `get_file_info` | Conditionally supported | `path`; original metadata text |
 | `list_allowed_directories` | Conditionally supported | Empty object; original allowed-directory text |
@@ -138,10 +138,16 @@ read-only tools, with `untrusted` result provenance and no egress authority.
 | `create_directory` | Explicitly unsupported; policy also denies side effects | No child dispatch |
 | `move_file` | Explicitly unsupported; policy also denies destructive actions | No child dispatch |
 
+The current shipped rule baseline permits ordinary calls for eight of those
+nine read-only tools. `directory_tree` has no recognized action verb, so its
+unknown classification produces Ask and correlated refusal; this profile does
+not bypass that decision. The real-server acceptance checks that refusal and a
+useful read afterward. A future reviewed classifier may resolve it independently.
+
 Every conditionally supported call must satisfy its pinned schema, workspace
 path rules, bounded classification and native call/result admission. The
-workspace is mounted read-only independently of those argument checks. Caller
-arguments are not coerced, defaulted or stripped. Although the original SDK
+workspace is mounted read-only independently of those argument checks. Selected `head`/`tail` values must be positive integers from 1 to 65536, and both
+cannot be supplied together. Caller arguments are not coerced, defaulted or stripped. Although the original SDK
 schemas omit `additionalProperties`, this selected validator deliberately
 refuses undeclared fields. Schema metadata (`title`, `description`, `default`,
 recognized `$schema`) remains inert. Enum/const, scalar types, required fields,
@@ -170,6 +176,7 @@ entire unchanged original JSON-RPC result envelope.
 | Parsing | JSON depth 20 / 16384 nodes; schema depth 8 / 1024 nodes; arguments depth 8 / 4096 nodes |
 | Values | At most 256 object properties/array elements; default per decoded string 16384 UTF-8 bytes |
 | Progress | Correlated bounded token, nonnegative finite monotonic counters, at most 128 per call; content is withheld |
+| Cleanup / stderr | Bounded 3-second process cleanup; server stderr is drained and suppressed with a 1 MiB quota |
 | Other channels | Server stderr suppressed; logging notifications withheld; callbacks/server requests are not released as content |
 
 Queued cancellation removes that call without execution. In-flight cancellation
@@ -189,6 +196,11 @@ runtime directories. User/PID/mount/network namespaces, no-new-privileges,
 capability removal and socket-denying seccomp contain the selected process.
 Network namespaces alone would not stop a host Unix socket in the workspace;
 seccomp additionally refuses socket/connect/send operations and io_uring setup.
+Read-only mounts do not themselves block FIFO/device IPC writes. The selected
+filter also denies write-intent `open`/`openat`, `openat2`, `creat` and `ioctl`;
+ordinary read-only directory and FIFO reads remain supported. The mandatory
+probe calibrates a host FIFO receiver and verifies that the child cannot open
+it for writing or deliver any extra bytes.
 Unrelated inherited descriptors and environment variables are removed. The
 fixed clean environment includes `UV_THREADPOOL_SIZE=16` for the selected
 bounded eight-call server workload.
@@ -226,7 +238,7 @@ Prerequisites missing, unsupported sandbox operation, zero matching native
 tests or a missing actual Claude process are failures with zero skipped cases.
 The positive native test is explicitly run even though ordinary cross-platform
 unit runs mark it ignored; it must report one passed test and the
-`SOU62_SANDBOX_POSITIVE` witness. It independently calibrates TCP and Unix socket
+`SOU62_SANDBOX_POSITIVE` witness. It independently calibrates TCP, Unix socket and FIFO
 receivers, then attempts allowed reads, outside reads/writes, workspace
 creation/replacement, inherited-secret/environment/descriptor access and egress
 from an adversarial Node program through the same sandbox construction.
@@ -235,7 +247,8 @@ filesystem entry point.
 
 The real-server driver independently calibrates original reads and an owned
 original mutator before protection. It then checks unchanged original discovery
-and useful result bytes, eight blocked real FIFO reads plus eight queued calls,
+and useful result bytes, all eight ordinary read-only tools, preserved
+`directory_tree` classifier Ask, eight blocked real FIFO reads plus eight queued calls,
 queued/in-flight/late/unknown cancellation, overload refusal, per-call ID/content correlation,
 unsupported tools, invalid enum/type/missing/extra arguments, typed IDs and
 useful same-session continuations and actual daemon-loss refusal before FIFO execution. Parent-side FIFO reader/writer handshakes,

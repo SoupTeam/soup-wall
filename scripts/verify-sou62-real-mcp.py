@@ -27,6 +27,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.request
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,6 +35,19 @@ TEXT = "SOU-62 useful read: café, қазақша, 日本語, 🥣.\n"
 FIFO_TEXT = "SOU-62 independent FIFO execution witness.\n"
 PROFILE = "sw-mcp/filesystem-readonly/1"
 TOOL = "read_text_file"
+READ_CASES = (
+    ("read_file", {"path": "/workspace/notes.txt"}, TEXT),
+    (TOOL, {"path": "/workspace/notes.txt"}, TEXT),
+    ("read_multiple_files", {"paths": ["/workspace/notes.txt"]}, TEXT),
+    ("list_directory", {"path": "/workspace"}, "notes.txt"),
+    ("list_directory_with_sizes", {"path": "/workspace", "sortBy": "size"}, "notes.txt"),
+    ("search_files", {"path": "/workspace", "pattern": "notes.txt"}, "/workspace/notes.txt"),
+    ("get_file_info", {"path": "/workspace/notes.txt"}, "isFile: true"),
+    ("list_allowed_directories", {}, "Allowed directories:\n/workspace"),
+)
+SANDBOX_WITNESSES = ("allowed_read", "workspace_write_denied", "outside_read_denied", "outside_write_denied",
+    "egress_witness_calibrated", "egress_denied", "pathname_unix_socket_denied", "fifo_witness_calibrated",
+    "fifo_write_denied", "inherited_env_absent", "host_descriptors_absent", "private_net_pid")
 
 
 def load(name, filename):
@@ -94,13 +108,68 @@ def key(identifier):
     return (type(identifier).__name__, identifier)
 
 
+class ProcessWitness:
+    """Observe only owned process IDs/start times through Linux procfs."""
+    def __init__(self, parent):
+        self.parent, self.observed, self.stopped, self.final = parent, {}, threading.Event(), None
+        self.sample()
+        def observe():
+            while not self.stopped.wait(0.01):
+                self.sample()
+        self.thread = threading.Thread(target=observe, daemon=True)
+        self.thread.start()
+
+    @staticmethod
+    def identity(pid):
+        try:
+            raw = Path(f"/proc/{pid}/stat").read_text()
+            fields = raw[raw.rfind(")") + 2:].split()
+            return int(fields[19])
+        except (OSError, ValueError, IndexError):
+            return None
+
+    def sample(self):
+        pending, visited = [self.parent], set()
+        while pending:
+            pid = pending.pop()
+            if pid in visited:
+                continue
+            visited.add(pid)
+            identity = self.identity(pid)
+            if identity is None:
+                continue
+            self.observed[(pid, identity)] = {"pid": pid, "start_time_ticks": identity, "parent_process": pid == self.parent}
+            try:
+                pending.extend(int(value) for value in Path(f"/proc/{pid}/task/{pid}/children").read_text().split())
+            except (OSError, ValueError):
+                pass
+
+    def finish(self):
+        if self.final is not None:
+            return self.final
+        self.stopped.set()
+        self.thread.join(timeout=2)
+        deadline = time.monotonic() + 5
+        while True:
+            alive = [row for (pid, start), row in self.observed.items() if self.identity(pid) == start]
+            if not alive or time.monotonic() >= deadline:
+                break
+            time.sleep(0.02)
+        rows = list(self.observed.values())
+        self.final = {"observed": rows, "descendant_count": sum(not row["parent_process"] for row in rows),
+                      "all_stopped": not alive and not self.thread.is_alive(), "remaining": alive}
+        return self.final
+
+
 class Client:
     """Independent client-side original byte transcript, drained continuously."""
     def __init__(self, command, env, cwd, stderr, label):
         self.label, self.sent, self.received, self.notifications = label, [], [], []
         self.lines = queue.Queue()
+        self.forced_cleanup = False
         self.process = subprocess.Popen(command, env=env, cwd=cwd, stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE, stderr=stderr, start_new_session=True)
+        self.process_witness = ProcessWitness(self.process.pid)
         def drain():
             while raw := self.process.stdout.readline(1024 * 1024 + 1):
                 self.lines.put(raw)
@@ -153,9 +222,11 @@ class Client:
         try:
             self.process.wait(timeout=8)
         except subprocess.TimeoutExpired:
+            self.forced_cleanup = True
             os.killpg(self.process.pid, 9)
             self.process.wait(timeout=8)
         self.reader.join(timeout=3)
+        self.process_witness.finish()
         return self.process.returncode
 
     def transcript(self):
@@ -163,7 +234,8 @@ class Client:
                 "received": [raw.decode("utf-8") for raw in self.received],
                 "sent_sha256": hashlib.sha256(b"".join(self.sent)).hexdigest(),
                 "received_sha256": hashlib.sha256(b"".join(self.received)).hexdigest(),
-                "pid": self.process.pid, "exit_code": self.process.returncode}
+                "pid": self.process.pid, "exit_code": self.process.returncode, "forced_cleanup": self.forced_cleanup,
+                "process_cleanup": self.process_witness.final}
 
 
 def call(identifier, arguments, tool=TOOL):
@@ -289,6 +361,25 @@ def run_stdio(stack, report):
             response, raw = client.exchange(call(10, {"path": "/workspace/notes.txt"}))
             require(result_text(response) == TEXT and raw == control_raw, "original useful result bytes changed")
             report["checks"].append({"case": "original-discovery-and-byte-exact-useful-read", "passed": True})
+            schemas = {tool["name"]: hashlib.sha256(INSTALL.canonical(tool["inputSchema"])).hexdigest()
+                       for tool in upstream["result"]["tools"]}
+            report["readonly_tool_matrix"] = []
+            for identifier, (tool, arguments, fragment) in enumerate(READ_CASES, 30):
+                response, _ = client.exchange(call(identifier, arguments, tool))
+                require(fragment in result_text(response), tool + " lost original useful output")
+                report["readonly_tool_matrix"].append({"tool": tool, "arguments": arguments,
+                    "schema_sha256": schemas[tool], "registry_sha256": sha(stack.install / "registry.json"),
+                    "arguments_sha256": hashlib.sha256(INSTALL.canonical(arguments)).hexdigest(),
+                    "response": response, "passed": True})
+                report["checks"].append({"case": "actual-tool-" + tool, "passed": True})
+            response, _ = client.exchange(call(38, {"path": "/workspace"}, "directory_tree"))
+            require(refused(response) and "classifier_ask" in json.dumps(response), "unknown directory_tree classification was bypassed")
+            report["directory_tree_classifier_refusal"] = {"response": response, "schema_sha256": schemas["directory_tree"],
+                "registry_sha256": sha(stack.install / "registry.json"), "passed": True}
+            report["checks"].append({"case": "directory-tree-classifier-ask-preserved", "passed": True})
+            response, _ = client.exchange(call(39, {"path": "/workspace/notes.txt"}))
+            require(result_text(response) == TEXT, "classifier Ask broke useful follow-up")
+            report["checks"].append({"case": "directory-tree-ask-useful-follow-up", "passed": True})
             fifo_paths = [stack.workspace / f"pending-{index}.fifo" for index in range(8)]
             fifo = FIFOWitness(fifo_paths)
             client.send(*[call(100 + index, {"path": "/workspace/" + path.name}) for index, path in enumerate(fifo_paths)])
@@ -363,6 +454,19 @@ def run_stdio(stack, report):
                 fifo.finish()
             client.close()
             report["protected_client"] = client.transcript()
+    require(client.process.returncode == 0 and not client.forced_cleanup, "protected collector did not finish normally")
+    require(client.process_witness.final["all_stopped"] and client.process_witness.final["descendant_count"] > 0,
+            "independent protected server process cleanup incomplete")
+    endings = []
+    for raw in log_path.read_bytes().splitlines():
+        try:
+            value = json.loads(raw)
+            if value.get("event") == "mcp_real_server_end":
+                endings.append(value)
+        except ValueError:
+            pass
+    require(len(endings) == 1 and endings[0].get("cleanup_verified") is True, "collector did not verify selected child cleanup")
+    report["protected_cleanup_audit"] = endings[0]
     require(snapshot(stack.workspace) == baseline, "protected real server changed the reviewed workspace")
     require(stack.receiver.bodies == [], "forbidden send reached independent receiver")
     report["workspace_unchanged"] = True
@@ -414,10 +518,22 @@ def host(stack, command, env, report):
                     HTTP_PROXY="http://127.0.0.1:9", HTTPS_PROXY="http://127.0.0.1:9", NO_PROXY="127.0.0.1,localhost")
     baseline = snapshot(stack.workspace)
     try:
-        result = subprocess.run([str(stack.claude), "--restricted", "-p", "Perform the owned MCP tool steps.", "--tools", "",
+        process = subprocess.Popen([str(stack.claude), "--restricted", "-p", "Perform the owned MCP tool steps.", "--tools", "",
             "--allowedTools", "mcp__demo__read_text_file,mcp__demo__write_file", "--strict-mcp-config", "--mcp-config", str(config),
             "--no-session-persistence", "--output-format", "stream-json", "--verbose", "--permission-mode", "dontAsk",
-            "--model", "claude-sonnet-4-20250514"], cwd=project, env=host_env, capture_output=True, timeout=120)
+            "--model", "claude-sonnet-4-20250514"], cwd=project, env=host_env,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+        process_witness = ProcessWitness(process.pid)
+        try:
+            stdout, stderr = process.communicate(timeout=120)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, 9)
+            process.communicate(timeout=10)
+            process_witness.finish()
+            raise
+        cleanup = process_witness.finish()
+        result = subprocess.CompletedProcess(process.args, process.returncode, stdout, stderr)
+        require(cleanup["all_stopped"] and cleanup["descendant_count"] > 0, "actual host/MCP descendants remain alive")
         messages = []
         for line in result.stdout.splitlines():
             try:
@@ -449,6 +565,7 @@ def host(stack, command, env, report):
             "claude_sha256": sha(stack.claude), "model_results": model.results, "host_tool_uses": uses,
             "provider_request_count": len(model.requests), "provider_requests_sha256": hashlib.sha256(b"".join(model.requests)).hexdigest(),
             "raw_output_sha256": hashlib.sha256(result.stdout).hexdigest(), "collector_log_sha256": sha(log),
+            "process_cleanup": cleanup, "mcp_shutdown_graceful": None,
             "real_host_executed": True, "scripted_owned_provider": True, "live_model_efficacy_measured": False}
     finally:
         model.close()
@@ -487,23 +604,50 @@ def daemon_loss(stack, command, env, report):
         finally:
             client.close()
             report.setdefault("daemon_loss", {"status": "fail"})["client"] = client.transcript()
+    require(client.process_witness.final["all_stopped"] and client.process_witness.final["descendant_count"] > 0,
+            "outage selected child cleanup incomplete")
     require(snapshot(stack.workspace) == baseline and stack.receiver.bodies == [], "outage caused unapproved effects")
 
 
 def policy_controls(stack, report):
     before = snapshot(stack.workspace)
     commands = [
-        ("clean-session-destructive-deny", ["guarded-delete", "--workspace", str(stack.workspace), "--path", "notes.txt"]),
+        ("clean-session-write-deny", ["guarded-delete", "--workspace", str(stack.workspace), "--path", "notes.txt"]),
         ("clean-session-network-deny", ["guarded-fetch", "--url", stack.receiver.url, "--proxy-url", stack.receiver.url.rsplit("/", 1)[0]])]
     rows = []
     for name, arguments in commands:
         result = subprocess.run([str(stack.binary), *arguments, "--session", "sou62-clean-" + name], env=stack.env,
                                 capture_output=True, text=True, timeout=20)
-        rule = "filesystem-profile-deny-destructive" if name == "clean-session-destructive-deny" else "filesystem-profile-deny-network"
+        rule = "filesystem-profile-deny-write" if name == "clean-session-write-deny" else "filesystem-profile-deny-network"
         require(result.returncode != 0 and "verdict=deny" in result.stderr and rule in result.stderr,
                 name + " shipped policy did not hard Deny: " + result.stderr[-500:])
         rows.append({"case": name, "exit_code": result.returncode, "rule": rule, "verdict": "deny", "passed": True})
     require(snapshot(stack.workspace) == before and stack.receiver.bodies == [], "policy probe caused an effect")
+    registry = json.loads((stack.install / "registry.json").read_text())
+    declaration = next(tool for tool in registry["tools"] if tool["name"] == "move_file")
+    token = (stack.home / ".agentfw/native-token").read_text().strip()
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    session = "sou62-clean-destructive-policy"
+    def native(event, **fields):
+        value = {"contract_version": "sw-native/1", "registry_sha256": sha(stack.install / "registry.json"),
+                 "session_id": session, "event": event, **fields}
+        request = urllib.request.Request(f"http://127.0.0.1:{stack.port}/native/v1", INSTALL.canonical(value),
+            {"Content-Type": "application/json", "Authorization": "Bearer " + token})
+        with opener.open(request, timeout=10) as response:
+            return json.loads(response.read(65537))
+    require(native("session_start").get("release") is True, "clean native policy session did not open")
+    try:
+        receipt = native("call", tool="move_file", args={"source": "/workspace/notes.txt", "destination": "/workspace/moved.txt"},
+                         schema_sha256=declaration["schema_sha256"])
+        require(receipt.get("verdict") == "deny" and receipt.get("release") is False
+                and "filesystem-profile-deny-destructive" in receipt.get("reason_codes", [])
+                and receipt.get("call_id") is None, "actual declared destructive clean-session native call was not hard denied")
+        rows.append({"case": "clean-session-destructive-deny", "verdict": "deny", "passed": True,
+                     "rule": "filesystem-profile-deny-destructive", "receipt": receipt,
+                     "schema_sha256": declaration["schema_sha256"], "registry_sha256": sha(stack.install / "registry.json")})
+    finally:
+        require(native("session_end").get("release") is True, "clean native policy session did not close")
+    require(snapshot(stack.workspace) == before and stack.receiver.bodies == [], "native policy probe caused an effect")
     report["shipped_policy_controls"] = rows
 
 
@@ -515,7 +659,19 @@ def grade(report):
     for name in ("binary_sha256", "sandbox_test_binary_sha256", "driver_sha256", "claude_sha256"):
         require(re.fullmatch(r"[a-f0-9]{64}", report[name]) is not None, "exact binary/source witness missing")
     require(report["required_positive_sandbox"]["status"] == "pass"
-            and report["required_positive_sandbox"]["exit_code"] == 0, "required positive sandbox missing")
+            and report["required_positive_sandbox"]["exit_code"] == 0
+            and all(report["required_positive_sandbox"]["witnesses"].get(name) is True for name in SANDBOX_WITNESSES),
+            "required positive sandbox missing")
+    matrix = report["readonly_tool_matrix"]
+    require(len(matrix) == len(READ_CASES), "actual read-only tool matrix incomplete")
+    for row, (tool, arguments, fragment) in zip(matrix, READ_CASES):
+        require(row["tool"] == tool and row["arguments"] == arguments and row["passed"] is True
+                and fragment in result_text(row["response"])
+                and row["registry_sha256"] == report["installed_profile"]["registry_sha256"]
+                and row["arguments_sha256"] == hashlib.sha256(INSTALL.canonical(arguments)).hexdigest(), "actual tool matrix binding changed")
+    tree_refusal = report["directory_tree_classifier_refusal"]
+    require(tree_refusal["passed"] is True and refused(tree_refusal["response"])
+            and "classifier_ask" in json.dumps(tree_refusal["response"]), "directory tree unknown Ask was bypassed")
     require(report["peak_active"] == 8 and report["peak_queued"] >= 8, "multiple pending execution not witnessed")
     witnesses = report["fifo_execution_witness"]
     require(len(witnesses) == 8 and all(item["reader_opened"] is True and item["bytes_written"] == len(FIFO_TEXT.encode())
@@ -538,12 +694,17 @@ def grade(report):
     require(report["workspace_unchanged"] is True and report["receiver_bodies"] == [], "unapproved effect witnessed")
     require(all(report[name] is True for name in ("daemon_stopped", "private_profile_removed", "installed_profile_unchanged", "runtime_unchanged")),
             "cleanup or immutable runtime identity incomplete")
+    cleanup = report["protected_client"]
+    require(cleanup["exit_code"] == 0 and cleanup["forced_cleanup"] is False
+            and cleanup["process_cleanup"]["all_stopped"] is True and cleanup["process_cleanup"]["descendant_count"] > 0
+            and report["protected_cleanup_audit"]["cleanup_verified"] is True, "normal selected server cleanup unverified")
     policy = report["shipped_policy_controls"]
-    require(len(policy) == 2 and all(row["verdict"] == "deny" and row["passed"] is True and row["exit_code"] != 0 for row in policy),
+    require(len(policy) == 3 and all(row["verdict"] == "deny" and row["passed"] is True for row in policy),
             "installed clean-session policy proof missing")
     host = report["actual_claude_host"]
     require(host["status"] == "pass" and host["exit_code"] == 0 and host["real_host_executed"] is True
             and host["scripted_owned_provider"] is True and host["live_model_efficacy_measured"] is False
+            and host["process_cleanup"]["all_stopped"] is True and host["process_cleanup"]["descendant_count"] > 0
             and host["claude_sha256"] == report["claude_sha256"] and host["claude_version"] == "2.1.251 (Claude Code)",
             "actual installed Claude host evidence missing")
 
@@ -582,7 +743,7 @@ def run(args):
             stack.env = environment(stack.home)
             subprocess.run([str(binary), "install"], env=stack.env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                            stderr=subprocess.PIPE, check=True, timeout=30)
-            port = DEMO.free_port()
+            port = stack.port = DEMO.free_port()
             config = {"port": port, "enforce": True, "max_record_bytes": 1048576, "policy": str(stack.install / "policy.yaml"),
                       "native": {"registry_path": str(stack.install / "registry.json"), "registry_sha256": sha(stack.install / "registry.json")}}
             write(stack.home / ".agentfw/config.yaml", config)
@@ -590,10 +751,12 @@ def run(args):
             positive = subprocess.run([str(tests), "selected_server_sandbox_isolates_real_node", "--ignored", "--nocapture"],
                                       env=positive_env, capture_output=True, timeout=90)
             (output / "sandbox-positive.log").write_bytes(positive.stdout + positive.stderr)
-            require(positive.returncode == 0 and b"SOU62_SANDBOX_POSITIVE" in positive.stdout + positive.stderr
+            marker = positive.stdout + positive.stderr
+            witnesses = {name: (name + "=true").encode() in marker for name in SANDBOX_WITNESSES}
+            require(positive.returncode == 0 and b"SOU62_SANDBOX_POSITIVE" in marker and all(witnesses.values())
                     and re.search(rb"1 passed; 0 failed", positive.stdout), "required positive sandbox acceptance failed")
             report["required_positive_sandbox"] = {"status": "pass", "exit_code": positive.returncode,
-                                                    "log_sha256": sha(output / "sandbox-positive.log")}
+                                                    "log_sha256": sha(output / "sandbox-positive.log"), "witnesses": witnesses}
             with (output / "daemon.log").open("wb") as log:
                 daemon = stack.daemon = subprocess.Popen([str(binary), "serve"], env=stack.env, stdout=log, stderr=log)
                 require(DEMO.wait_healthy(port, daemon), "owned enforcing daemon failed to start")

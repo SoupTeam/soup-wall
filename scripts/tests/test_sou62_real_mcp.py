@@ -27,7 +27,12 @@ def complete_report():
     return {"source_before": {"commit": "1" * 40, "dirty": False}, "source_after": {"commit": "1" * 40, "dirty": False},
             "skipped": 0, "failed": 0, **{name: "a" * 64 for name in
                 ["binary_sha256", "sandbox_test_binary_sha256", "driver_sha256", "claude_sha256"]},
-            "required_positive_sandbox": {"status": "pass", "exit_code": 0}, "peak_active": 8, "peak_queued": 8,
+            "required_positive_sandbox": {"status": "pass", "exit_code": 0, "witnesses": {name: True for name in VERIFY.SANDBOX_WITNESSES}},
+            "installed_profile": {"registry_sha256": "b" * 64},
+            "readonly_tool_matrix": [{"tool": tool, "arguments": args, "arguments_sha256": hashlib.sha256(INSTALL.canonical(args)).hexdigest(),
+                "registry_sha256": "b" * 64, "response": response(30 + index, fragment), "passed": True}
+                for index, (tool, args, fragment) in enumerate(VERIFY.READ_CASES)],
+            "directory_tree_classifier_refusal": {"passed": True, "response": {"error": {"message": "classifier_ask"}}}, "peak_active": 8, "peak_queued": 8,
             "fifo_execution_witness": [{"reader_opened": True, "bytes_written": len(VERIFY.FIFO_TEXT.encode()), "error": None} for _ in range(8)],
             "concurrent_responses": [{"jsonrpc": "2.0", "id": identifier, "error": {"code": -32800}} if identifier in (100, 115)
                 else response(identifier, VERIFY.FIFO_TEXT if identifier <= 107 else VERIFY.TEXT) for identifier in range(100, 116)],
@@ -36,8 +41,10 @@ def complete_report():
             "refusals": [{"case": str(identifier), "passed": True, "response": {"id": identifier, "error": {"code": -32602}}} for identifier in range(10)],
             "workspace_unchanged": True, "receiver_bodies": [], "daemon_stopped": True, "private_profile_removed": True,
             "installed_profile_unchanged": True, "runtime_unchanged": True,
-            "shipped_policy_controls": [{"verdict": "deny", "passed": True, "exit_code": 1} for _ in range(2)],
-            "actual_claude_host": {"status": "pass", "exit_code": 0, "real_host_executed": True, "scripted_owned_provider": True,
+            "protected_client": {"exit_code": 0, "forced_cleanup": False, "process_cleanup": {"all_stopped": True, "descendant_count": 2}},
+            "protected_cleanup_audit": {"cleanup_verified": True},
+            "shipped_policy_controls": [{"verdict": "deny", "passed": True, "exit_code": 1} for _ in range(3)],
+            "actual_claude_host": {"status": "pass", "process_cleanup": {"all_stopped": True, "descendant_count": 3}, "exit_code": 0, "real_host_executed": True, "scripted_owned_provider": True,
                 "live_model_efficacy_measured": False, "claude_sha256": "a" * 64, "claude_version": "2.1.251 (Claude Code)"}}
 
 
@@ -130,6 +137,12 @@ class EvidenceControls(unittest.TestCase):
         mutations = [lambda report: report.update(receiver_bodies=["leak"]), lambda report: report.update(workspace_unchanged=False),
             lambda report: report.update(private_profile_removed=False), lambda report: report.update(runtime_unchanged=False),
             lambda report: report.update(skipped=1),
+            lambda report: report["protected_client"].update(forced_cleanup=True),
+            lambda report: report["protected_client"]["process_cleanup"].update(all_stopped=False),
+            lambda report: report["actual_claude_host"]["process_cleanup"].update(descendant_count=0),
+            lambda report: report["required_positive_sandbox"]["witnesses"].update(fifo_write_denied=False),
+            lambda report: report["readonly_tool_matrix"][0].update(registry_sha256="c" * 64),
+            lambda report: report["directory_tree_classifier_refusal"].update(response=response(38, "bypassed")),
             lambda report: report["daemon_loss"].update(unadmitted_fifo_reader_absent=False),
             lambda report: report["overload_response"].update(error={"code": -32603}), lambda report: report["source_after"].update(dirty=True),
             lambda report: report["actual_claude_host"].update(real_host_executed=False),

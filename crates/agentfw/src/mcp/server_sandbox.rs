@@ -240,9 +240,41 @@ fn network_filter() -> anyhow::Result<File> {
         libc::SYS_sendmsg,
         libc::SYS_sendmmsg,
         libc::SYS_io_uring_setup,
+        libc::SYS_openat2,
+        libc::SYS_ioctl,
     ] {
         instructions.push((0x15, 0, 1, syscall as u32));
         instructions.push((0x06, 0, 0, deny));
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        instructions.push((0x15, 0, 1, libc::SYS_creat as u32));
+        instructions.push((0x06, 0, 0, deny));
+    }
+    // Read-only bind mounts do not prevent writing to an existing FIFO or all
+    // device effects. Deny writable opens independently of the mounted file
+    // type. openat2 takes an indirect flags structure, so it is denied above.
+    // O_TMPFILE also contains O_DIRECTORY: only its distinct high bit belongs
+    // in this mask, preserving ordinary read-only directory opens.
+    let write_flags = (libc::O_WRONLY
+        | libc::O_RDWR
+        | libc::O_CREAT
+        | libc::O_TRUNC
+        | libc::O_APPEND
+        | (libc::O_TMPFILE & !libc::O_DIRECTORY)) as u32;
+    let open_calls = [
+        (libc::SYS_openat, 32_u32),
+        #[cfg(target_arch = "x86_64")]
+        (libc::SYS_open, 24_u32),
+    ];
+    for (syscall, flags_offset) in open_calls {
+        instructions.extend([
+            (0x15, 0, 4, syscall as u32),
+            (0x20, 0, 0, flags_offset), // low word of this syscall's flags
+            (0x45, 0, 1, write_flags),  // JSET
+            (0x06, 0, 0, deny),
+            (0x06, 0, 0, 0x7fff_0000), // read-only open: ALLOW
+        ]);
     }
     instructions.push((0x06, 0, 0, 0x7fff_0000)); // ALLOW
     let fd = unsafe {
@@ -454,8 +486,11 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires SOU62_SANDBOX_TEST_PROFILE and real Linux namespaces"]
     async fn selected_server_sandbox_isolates_real_node() {
+        use std::io::{Read, Write};
         use std::net::{TcpListener, TcpStream};
         use std::os::fd::{AsRawFd, FromRawFd};
+        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::fs::OpenOptionsExt;
         use std::os::unix::net::{UnixListener, UnixStream};
         use std::time::Duration;
         use tokio::io::AsyncReadExt;
@@ -494,6 +529,24 @@ mod tests {
         let unix_calibrated = unix_receiver.accept().unwrap();
         drop(unix_calibration);
         drop(unix_calibrated);
+        let fifo_path = workspace.join("egress.fifo");
+        let fifo_name = std::ffi::CString::new(fifo_path.as_os_str().as_bytes()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(fifo_name.as_ptr(), 0o600) }, 0);
+        let mut fifo_receiver = std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NONBLOCK)
+            .open(&fifo_path)
+            .unwrap();
+        let mut fifo_calibration = std::fs::OpenOptions::new()
+            .write(true)
+            .custom_flags(libc::O_NONBLOCK)
+            .open(&fifo_path)
+            .unwrap();
+        fifo_calibration.write_all(b"calibrated").unwrap();
+        let mut calibrated_bytes = [0_u8; 10];
+        fifo_receiver.read_exact(&mut calibrated_bytes).unwrap();
+        assert_eq!(&calibrated_bytes, b"calibrated");
+        drop(fifo_calibration);
         // Deliberately supply one non-CLOEXEC host descriptor. The child-wide
         // close_range(CLOEXEC) must prevent this independent source from leaking.
         let host_file = File::open(&outside).unwrap();
@@ -511,6 +564,7 @@ const result = {{
   allowed: fs.readFileSync('/workspace/allowed.txt', 'utf8') === 'allowed read',
   workspaceWriteDenied: refused(() => fs.writeFileSync('/workspace/new.txt', 'denied')),
   workspaceReplaceDenied: refused(() => fs.writeFileSync('/workspace/allowed.txt', 'denied')),
+  fifoWriteDenied: refused(() => {{ const fd=fs.openSync('/workspace/egress.fifo', fs.constants.O_WRONLY|fs.constants.O_NONBLOCK); try {{ fs.writeSync(fd,'host FIFO write'); }} finally {{ fs.closeSync(fd); }} }}),
   outsideReadDenied: refused(() => fs.readFileSync({outside_json})),
   outsideWriteDenied: refused(() => fs.writeFileSync({outside_json}, 'denied')),
   outsideCreateDenied: refused(() => fs.writeFileSync({outside_new_json}, 'denied')),
@@ -575,6 +629,7 @@ Promise.all([probe({{host:'127.0.0.1',port:{port}}}), probe({{path:'/workspace/e
             "allowed",
             "workspaceWriteDenied",
             "workspaceReplaceDenied",
+            "fifoWriteDenied",
             "outsideReadDenied",
             "outsideWriteDenied",
             "outsideCreateDenied",
@@ -622,6 +677,12 @@ Promise.all([probe({{host:'127.0.0.1',port:{port}}}), probe({{path:'/workspace/e
             unix_receiver.accept().unwrap_err().kind(),
             std::io::ErrorKind::WouldBlock
         );
-        println!("SOU62_SANDBOX_POSITIVE profile={SANDBOX_PROFILE} allowed_read=true workspace_write_denied=true outside_read_denied=true outside_write_denied=true egress_witness_calibrated=true egress_denied=true pathname_unix_socket_denied=true inherited_env_absent=true host_descriptors_absent=true private_net_pid=true");
+        let mut unexpected_fifo_bytes = [0_u8; 64];
+        assert_eq!(
+            fifo_receiver.read(&mut unexpected_fifo_bytes).unwrap(),
+            0,
+            "host FIFO receiver observed a write"
+        );
+        println!("SOU62_SANDBOX_POSITIVE profile={SANDBOX_PROFILE} allowed_read=true workspace_write_denied=true outside_read_denied=true outside_write_denied=true egress_witness_calibrated=true egress_denied=true pathname_unix_socket_denied=true fifo_witness_calibrated=true fifo_write_denied=true inherited_env_absent=true host_descriptors_absent=true private_net_pid=true");
     }
 }

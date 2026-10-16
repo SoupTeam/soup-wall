@@ -822,6 +822,10 @@ where
                     continue;
                 }
                 keys(&value, &["jsonrpc", "id", "result", "error"])?;
+                ensure!(
+                    value.get("result").is_some() ^ value.get("error").is_some(),
+                    "MCP response must contain exactly one result or error"
+                );
                 let key = rpc_key(value.get("id").context("server response ID missing")?)?;
                 if control.as_ref().is_some_and(|item| item.id == value["id"]) {
                     let mut current = control.take().expect("checked control");
@@ -1071,6 +1075,7 @@ pub(super) async fn run(
         "{}",
         json!({"event":"mcp_real_server_start","profile":server_profile::FORMAT,
         "sandbox":server_sandbox::SANDBOX_PROFILE,"sandbox_workspace":server_sandbox::SANDBOX_WORKSPACE,
+        "sandbox_pid":process.id(),
         "active_limit":ACTIVE_LIMIT,"queued_limit":QUEUE_LIMIT,"wire_limit":WIRE_LIMIT,
         "forwarded_cancellation_limit":FORWARDED_CANCELLATIONS})
     );
