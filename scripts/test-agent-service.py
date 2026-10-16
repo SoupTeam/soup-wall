@@ -202,11 +202,14 @@ class Acceptance:
         started_at = time.time()
         self.service("start")
         starts = []
+        health = self.wait_ready()
         for index in range(3):
-            starts.append(self.wait_ready())
+            starts.append(health)
             self.systemctl("kill", "--kill-whom=main", "--signal=SIGKILL")
             if index < 2:
-                self.wait_ready(starts[-1])
+                # Reuse the fresh verified observation. A second full hash probe
+                # here can push debug-build starts outside the 60-second window.
+                health = self.wait_ready(health)
         deadline = time.monotonic()+40
         while time.monotonic() < deadline:
             state = self.inspect()
