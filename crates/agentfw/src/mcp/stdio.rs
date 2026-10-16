@@ -65,7 +65,7 @@ impl Pipe {
             return Err(io::Error::last_os_error());
         }
         Ok(Self {
-            inner: AsyncFd::register_with_interest(descriptor, interest)?,
+            inner: AsyncFd::with_interest(descriptor, interest)?,
         })
     }
 
