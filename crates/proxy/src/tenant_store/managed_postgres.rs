@@ -20,6 +20,7 @@ fn enrollment(row: Row) -> EnrolledAgent {
         agent_id: row.get(1),
         created_at_unix: row.get(2),
         revoked_at_unix: row.get(3),
+        credential_generation: row.get(4),
     }
 }
 fn deployment(row: Row) -> Result<ManagedDeployment> {
@@ -128,7 +129,7 @@ impl PostgresTenantStore {
         self.lock_managed_tenant(&tx, tenant).await?;
         let token = format!("sw_agent_{}", random_base64url(32));
         let hash = credential_hash(&token).context("invalid generated Agent credential")?;
-        let row = self.bounded(tx.query_one("INSERT INTO managed_agent_enrollments(tenant_id,agent_id,token_hash,created_at_unix) VALUES($1,$2,$3,$4) RETURNING tenant_id,agent_id,created_at_unix,revoked_at_unix", &[&tenant,&agent,&hash,&now_unix()])).await?;
+        let row = self.bounded(tx.query_one("INSERT INTO managed_agent_enrollments(tenant_id,agent_id,token_hash,created_at_unix) VALUES($1,$2,$3,$4) RETURNING tenant_id,agent_id,created_at_unix,revoked_at_unix,credential_generation", &[&tenant,&agent,&hash,&now_unix()])).await?;
         self.bounded(tx.commit()).await?;
         Ok(IssuedAgentCredential {
             agent: enrollment(row),
@@ -192,7 +193,7 @@ impl PostgresTenantStore {
             return Ok(None);
         };
         let client = self.checkout().await?;
-        Ok(self.bounded(client.query_opt("SELECT a.tenant_id,a.agent_id,a.created_at_unix,a.revoked_at_unix FROM managed_agent_enrollments a JOIN tenants t ON t.id=a.tenant_id WHERE a.token_hash=$1 AND a.revoked_at_unix IS NULL AND t.active=TRUE", &[&hash])).await?.map(enrollment))
+        Ok(self.bounded(client.query_opt("SELECT a.tenant_id,a.agent_id,a.created_at_unix,a.revoked_at_unix,a.credential_generation FROM managed_agent_enrollments a JOIN tenants t ON t.id=a.tenant_id WHERE a.token_hash=$1 AND a.revoked_at_unix IS NULL AND t.active=TRUE", &[&hash])).await?.map(enrollment))
     }
     pub(in crate::tenant_store) async fn revoke_managed_agent(
         &self,
@@ -209,7 +210,7 @@ impl PostgresTenantStore {
     ) -> Result<Vec<EnrolledAgent>> {
         ensure!(valid_id(tenant), "invalid tenant identity");
         let client = self.checkout().await?;
-        Ok(self.bounded(client.query("SELECT tenant_id,agent_id,created_at_unix,revoked_at_unix FROM managed_agent_enrollments WHERE tenant_id=$1 ORDER BY agent_id LIMIT 256", &[&tenant])).await?.into_iter().map(enrollment).collect())
+        Ok(self.bounded(client.query("SELECT tenant_id,agent_id,created_at_unix,revoked_at_unix,credential_generation FROM managed_agent_enrollments WHERE tenant_id=$1 ORDER BY agent_id LIMIT 256", &[&tenant])).await?.into_iter().map(enrollment).collect())
     }
     pub(in crate::tenant_store) async fn create_managed_revision(
         &self,
