@@ -6,7 +6,7 @@
 use anyhow::{ensure, Context, Result};
 use std::path::PathBuf;
 
-#[derive(Debug)]
+// Deliberately no Debug implementation: Environment contains a bearer secret.
 pub enum CredentialSource {
     Environment(String),
     File(PathBuf),
