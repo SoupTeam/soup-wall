@@ -1,0 +1,121 @@
+{
+  "format": "sw-mcp/filesystem-readonly-upstream/1",
+  "package": {
+    "name": "@modelcontextprotocol/server-filesystem",
+    "version": "2026.8.31",
+    "tarball": "https://registry.npmjs.org/@modelcontextprotocol/server-filesystem/-/server-filesystem-2026.8.31.tgz",
+    "integrity": "sha512-kKaFkyAh6oipvc9+EAbJ552JafnMnOq5nzmzWkp1jJdBhTAAGpmIpWihUG1+rfNhmEFM98gUZDdCHCDD4v6a7Q==",
+    "archiveSha256": "a239da270c403c42eb03e1ca7cca07c858085819797b74856ddbb91b50491b1a",
+    "originalEntrypointSha256": "729dc8511e779e5cd6640851a74b25283e3af1ca3a7106722f993e864a1d9935",
+    "sourceRevision": "a40bc270fb5ece62673f8a1196f57116d885c5eb",
+    "sourceUrl": "https://github.com/modelcontextprotocol/servers/tree/a40bc270fb5ece62673f8a1196f57116d885c5eb/src/filesystem"
+  },
+  "sdk": {
+    "version": "1.32.1",
+    "resolved": "https://registry.npmjs.org/@modelcontextprotocol/sdk/-/sdk-1.32.1.tgz",
+    "integrity": "sha512-2DdE+SJDtzLEEWzY1ZjY7Q+VcPhcV1KisD3zI4u0XZyktsjHum1mwbMI+JaulUBi2OZk+KJAi2uPXzxichPkdw==",
+    "sourceRevision": "ff07b001194fe60ee9deb2121cf119057565796d",
+    "sourceUrl": "https://github.com/modelcontextprotocol/typescript-sdk/commit/ff07b001194fe60ee9deb2121cf119057565796d"
+  },
+  "supportedProtocolVersions": [
+    "2025-11-25",
+    "2025-06-18",
+    "2025-03-26",
+    "2024-11-05",
+    "2024-10-07"
+  ],
+  "packageLockSha256": "98afd2e0fe566a9a9ca626953934c96b23411b8feb619ddeb1cadff341b6d693",
+  "discoveryResultSha256": "67425ee68375ed484c131989ea3adf3f07a91a04540c100fac0ce61f3ba09c37",
+  "tools": [
+    {
+      "name": "read_file",
+      "inputSchemaSha256": "d035cd0c9ce05f046ecb5eefa5c6c6c355c96b198cd00824c3a9e0dd91aa89b8",
+      "originalDefinitionSha256": "762744c16831e2becafdbaf9a15da2660e5670dfa1984a368403145b6e9ac3a9"
+    },
+    {
+      "name": "read_text_file",
+      "inputSchemaSha256": "d035cd0c9ce05f046ecb5eefa5c6c6c355c96b198cd00824c3a9e0dd91aa89b8",
+      "originalDefinitionSha256": "658bc8c7fed2aefe6102d5e87589689b4a286b83340ac1a3a456b37e6cf4f77a"
+    },
+    {
+      "name": "read_media_file",
+      "inputSchemaSha256": "fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720",
+      "originalDefinitionSha256": "efe5a84687d7780182276a3ae46d325c1c269116ad490fa9149e39bbe50c6777"
+    },
+    {
+      "name": "read_multiple_files",
+      "inputSchemaSha256": "725ce07791beba80842b7322c0bfece72ba66b4ff3c3dfecf74f3401ce9d125e",
+      "originalDefinitionSha256": "484710b0d97999f0c16d950c850c285a187ac4fbd4fdef5b0f13d0f3b483e164"
+    },
+    {
+      "name": "write_file",
+      "inputSchemaSha256": "ce17c85e8a5883552a11555f9b893de497fadab965a5c7935c0cb8f3c55b91d6",
+      "originalDefinitionSha256": "0074a16be22f98393479625ae28b74688c56985d581aa37e1ff61f7fbd37d11d"
+    },
+    {
+      "name": "edit_file",
+      "inputSchemaSha256": "88459ef670b139a12a3e0335ae0a4584dd892f60f45f565b545e1004d7565dd5",
+      "originalDefinitionSha256": "afd5a5de1972206d0e9762ff8ad7797ee8dd3e1b83f0428426c98d2d2520308e"
+    },
+    {
+      "name": "create_directory",
+      "inputSchemaSha256": "fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720",
+      "originalDefinitionSha256": "720d1604002b3c1a768bc811e8354aac162e946a53a998afc20a6d2e91e583d4"
+    },
+    {
+      "name": "list_directory",
+      "inputSchemaSha256": "fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720",
+      "originalDefinitionSha256": "0d2a2b301c6ec3cbea78b3546aede23781a81bd82000b34f4cbfb3d94bfc8db7"
+    },
+    {
+      "name": "list_directory_with_sizes",
+      "inputSchemaSha256": "8d6f5d6dcaa186f44c30e5d278419c2559f6032a3455fc3fdbe4865910b35941",
+      "originalDefinitionSha256": "8642b99b56eb227fd3ac37d3c43fc984be9b872d85e91874d0600fddbb53c4c3"
+    },
+    {
+      "name": "directory_tree",
+      "inputSchemaSha256": "99ea8d9c9e9241d82937687caaa04b622eff094f2ba194cd7c8ee3e43dc6ed9c",
+      "originalDefinitionSha256": "7645bc3877aa38908a5fc772d29ae7a3d3f05587a2e8826979c739cf40c57363"
+    },
+    {
+      "name": "move_file",
+      "inputSchemaSha256": "621218ed9bc38b6cde9c6dc003583fb5778e5076bb28e25634b9070b33264682",
+      "originalDefinitionSha256": "46d4d5c7da0e8553c69eb9b970927adc0b54bfdcc9876a01983cd9ab3f8d9430"
+    },
+    {
+      "name": "search_files",
+      "inputSchemaSha256": "5b5a1eaeb940a6cfdd01f018784754be5204da54959a26b19ee5d00231636cc1",
+      "originalDefinitionSha256": "6c46ed09491987b06c8c1511d8f6d42031eabaf852eb4d6e80185e317142120b"
+    },
+    {
+      "name": "get_file_info",
+      "inputSchemaSha256": "fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720",
+      "originalDefinitionSha256": "7f44dc48bac24a1e6b18b92d58d1669c80102fae3843e73579217972b67c80f6"
+    },
+    {
+      "name": "list_allowed_directories",
+      "inputSchemaSha256": "7a014b717a77aac971ea0ab5c0ff47bb13e6cae7ef9442d9dedb15ce36381b15",
+      "originalDefinitionSha256": "2b43c9bb5cde269e30b4e22b1dc38386f4fecf44dfa8a773a7fce9e38e2c0aa2"
+    }
+  ],
+  "upstreamNotices": [
+    {
+      "component": "server",
+      "path": "upstream-notices/servers-a40bc270-LICENSE",
+      "sourceUrl": "https://raw.githubusercontent.com/modelcontextprotocol/servers/a40bc270fb5ece62673f8a1196f57116d885c5eb/LICENSE",
+      "sha256": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a"
+    },
+    {
+      "component": "sdk",
+      "path": "upstream-notices/typescript-sdk-ff07b001-LICENSE",
+      "sourceUrl": "https://raw.githubusercontent.com/modelcontextprotocol/typescript-sdk/ff07b001194fe60ee9deb2121cf119057565796d/LICENSE",
+      "sha256": "5e13dbbc1d120fc2a03cecde7c91424ae2d7de11b63d58ded2f4431e261ee50d"
+    },
+    {
+      "component": "node",
+      "path": "upstream-notices/node-v22.22.0-LICENSE",
+      "sourceUrl": "https://raw.githubusercontent.com/nodejs/node/v22.22.0/LICENSE",
+      "sha256": "e991d81497a85bb24fc6bffae0a3637a6accd6c6bc5ce1f2c5698bd555cf9d49"
+    }
+  ]
+}

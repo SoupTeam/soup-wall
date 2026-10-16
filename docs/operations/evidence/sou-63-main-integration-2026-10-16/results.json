@@ -1,0 +1,418 @@
+{
+  "branch_head_before_merge": "1254366ecc527dd12c16eb9a076bf8dddccfbdfe",
+  "merged_main": "fb70696b87e6c35b0a5cedde0c6fba51c432419e",
+  "platform": "macOS ARM64",
+  "workspace": {
+    "passed": 1275,
+    "failed": 0,
+    "ignored": 10,
+    "completed_suites": 56
+  },
+  "clippy": "PASS: cargo clippy --offline --all-targets -- -D warnings",
+  "fmt": "PASS: cargo fmt --all --check",
+  "isolation": "Temporary source export, writes confined to /private/tmp/sou63-review, only loopback networking during tests; clippy/fmt without network",
+  "source_files_sha256": {
+    "crates/agentfw/src/native.rs": "bce5394ecde96738900efab8baa1d36787f97bfb645446ff44eac7d23d84ac2b",
+    "crates/agentfw/src/mcp/admission.rs": "37046820a700a3824b6d6844a700eb8f68ad93c7e8a63b5a1337d19f8a1223a4",
+    "crates/agentfw/src/mcp/admission/real_server/fault_tests.rs": "59fe9338cca3b54870a08dc3a3ffa77318c82be9195122025500c99426abdd5b",
+    "Cargo.lock": "3df097b7e344a4ae0922ba6078ee1a360278c0aefb3c0a49718d3439c907ad81"
+  },
+  "local_log_sha256": {
+    "merge-workspace.log": "3ba435ebfc01a2578f88b54a98310bc5e28454eb77256510469d275eea0ddd68",
+    "merge-clippy.log": "0c0322a33c03320f6d0416f4d4d8a75a66ccfcd3413ff76ca75624ca735d8795"
+  },
+  "suite_results": [
+    {
+      "suite": "Running unittests src/lib.rs",
+      "status": "ok",
+      "passed": 312,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running unittests src/main.rs",
+      "status": "ok",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/hook_endpoint.rs",
+      "status": "ok",
+      "passed": 13,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/judge_corpus.rs",
+      "status": "ok",
+      "passed": 0,
+      "failed": 0,
+      "ignored": 1
+    },
+    {
+      "suite": "Running tests/judge_endpoint.rs",
+      "status": "ok",
+      "passed": 9,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/lifecycle.rs",
+      "status": "ok",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/mcp_admission.rs",
+      "status": "ok",
+      "passed": 71,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/mcp_concurrency.rs",
+      "status": "ok",
+      "passed": 11,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/mcp_endpoint.rs",
+      "status": "ok",
+      "passed": 6,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/mcp_inputs.rs",
+      "status": "ok",
+      "passed": 7,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/mcp_proxy.rs",
+      "status": "ok",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/mcp_resources.rs",
+      "status": "ok",
+      "passed": 11,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/native_endpoint.rs",
+      "status": "ok",
+      "passed": 109,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/protection_status.rs",
+      "status": "ok",
+      "passed": 19,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/workspace_root_pinning.rs",
+      "status": "ok",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running unittests src/lib.rs",
+      "status": "ok",
+      "passed": 187,
+      "failed": 0,
+      "ignored": 6
+    },
+    {
+      "suite": "Running unittests src/main.rs",
+      "status": "ok",
+      "passed": 11,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/agent_inspection.rs",
+      "status": "ok",
+      "passed": 9,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/agent_streaming.rs",
+      "status": "ok",
+      "passed": 15,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/agent_streaming_shadow.rs",
+      "status": "ok",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/deployment_assets.rs",
+      "status": "ok",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/external_identity.rs",
+      "status": "ok",
+      "passed": 0,
+      "failed": 0,
+      "ignored": 2
+    },
+    {
+      "suite": "Running tests/managed_group_atomic.rs",
+      "status": "ok",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 1
+    },
+    {
+      "suite": "Running tests/managed_group_rollout.rs",
+      "status": "ok",
+      "passed": 21,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/output_moderation.rs",
+      "status": "ok",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/proxy_anthropic.rs",
+      "status": "ok",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/proxy_capabilities.rs",
+      "status": "ok",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/proxy_forwarding.rs",
+      "status": "ok",
+      "passed": 9,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/proxy_limits.rs",
+      "status": "ok",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/proxy_responses.rs",
+      "status": "ok",
+      "passed": 16,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/proxy_streaming.rs",
+      "status": "ok",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/proxy_tenants.rs",
+      "status": "ok",
+      "passed": 22,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/scim_network.rs",
+      "status": "ok",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running unittests examples/console-recovery-fixture.rs",
+      "status": "ok",
+      "passed": 10,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running unittests examples/keycloak-oidc-bootstrap.rs",
+      "status": "ok",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running unittests examples/keycloak-saml-bootstrap.rs",
+      "status": "ok",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running unittests examples/postgres-restore-fixture.rs",
+      "status": "ok",
+      "passed": 11,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running unittests src/lib.rs",
+      "status": "ok",
+      "passed": 23,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/attack_scenarios.rs",
+      "status": "ok",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/enforcement_pipeline.rs",
+      "status": "ok",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/latency_bench.rs",
+      "status": "ok",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/resilience_tests.rs",
+      "status": "ok",
+      "passed": 19,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/schema_validation.rs",
+      "status": "ok",
+      "passed": 13,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running unittests src/lib.rs",
+      "status": "ok",
+      "passed": 152,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/provenance_overflow.rs",
+      "status": "ok",
+      "passed": 7,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/scenarios.rs",
+      "status": "ok",
+      "passed": 7,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/spawn_resolution.rs",
+      "status": "ok",
+      "passed": 8,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running unittests src/main.rs",
+      "status": "ok",
+      "passed": 33,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running unittests src/lib.rs",
+      "status": "ok",
+      "passed": 84,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/detect_and_score.rs",
+      "status": "ok",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/shipped_policy.rs",
+      "status": "ok",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Doc-tests agentfw",
+      "status": "ok",
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Doc-tests llm_firewall",
+      "status": "ok",
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Doc-tests soup_wall_adapter",
+      "status": "ok",
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Doc-tests soup_wall_agent",
+      "status": "ok",
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Doc-tests soup_wall_core",
+      "status": "ok",
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    }
+  ]
+}

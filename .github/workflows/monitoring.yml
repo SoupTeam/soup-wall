@@ -48,6 +48,9 @@ jobs:
                          "passed_checks": sum(row.get("outcome") == "pass" for row in checks),
                          "failed_checks": sum(row.get("outcome") == "fail" for row in checks),
                          "error_type": evidence.get("error_type"),
+                         "error_reason": evidence.get("error_reason"), "error_phase": evidence.get("error_phase"),
+                         "failed_check_names": [row.get("check") for row in checks if row.get("outcome") == "fail"][:20],
+                         "endpoint_witnesses": evidence.get("endpoint_witnesses", [])[:4],
                          "command_failures": [{key: row.get(key) for key in fields}
                                               for row in evidence.get("command_failures", [])]}
               print(json.dumps(summary, sort_keys=True))

@@ -14,9 +14,9 @@ Model weights, benchmark datasets, container base images, and frontend assets ne
 
 ## Dependency and advisory review
 
-The locked workspace includes the Gateway's identity and storage dependencies. The SAML adapter uses [`saml-rs 0.5.3`](https://github.com/salasebas/saml-rs/releases/tag/v0.5.3) (MIT), `bergshamra 0.9.2` (BSD-2-Clause), and [`kryptering 0.6.0`](https://github.com/kushaldas/kryptering/releases/tag/v0.6.0) (BSD-2-Clause). Kryptering is a pinned local package with a narrowly scoped platform patch. [Its intake record](../vendor/kryptering/PATCH.md) records the original registry archive checksum, upstream revision, retained license and source, omitted development assets, exact delta and update procedure. The upstream source differs only in its platform guard and error message; cryptographic operations are unchanged. Other dependencies remain registry packages.
+The locked workspace includes the Gateway's identity and storage dependencies. The SAML adapter uses [`saml-rs 0.6.1`](https://github.com/salasebas/saml-rs/releases/tag/v0.6.1) (MIT), `bergshamra 0.9.2` (BSD-2-Clause), and [`kryptering 0.6.0`](https://github.com/kushaldas/kryptering/releases/tag/v0.6.0) (BSD-2-Clause). Kryptering is a pinned local package with a narrowly scoped platform patch. [Its intake record](../vendor/kryptering/PATCH.md) records the original registry archive checksum, upstream revision, retained license and source, omitted development assets, exact delta and update procedure. The upstream source differs only in its platform guard and error message; cryptographic operations are unchanged. Other dependencies remain registry packages. The 0.6 migration explicitly retains signed assertions, signed authentication requests, audience validation, and zero clock-skew tolerance; it does not adopt the new five-minute validation default. Metadata signature verification, replay protection, and the provider boundary remain required.
 
-All release targets select the AWS-LC document provider, using the workspace's existing `aws-lc-rs 1.18.1` dependency (Apache-2.0 OR ISC). The patch adds only non-FIPS Windows x86_64 MSVC to kryptering's existing Linux and non-FIPS macOS x86_64/aarch64 support. [AWS-LC itself supports Windows MSVC](https://aws.github.io/aws-lc-rs/platform_support.html). Windows ARM, Windows GNU and Windows FIPS are not admitted by this patch. Unsupported targets fail at the provider guard; there is no RustCrypto fallback. The complete application `Cargo.lock` and release graphs exclude `rsa`. Keep the vendored package excluded from the application workspace so upstream development dependencies do not enter that lock.
+All release targets select the AWS-LC document provider, using the workspace's existing `aws-lc-rs 1.18.2` dependency (Apache-2.0 OR ISC). The patch adds only non-FIPS Windows x86_64 MSVC to kryptering's existing Linux and non-FIPS macOS x86_64/aarch64 support. [AWS-LC itself supports Windows MSVC](https://aws.github.io/aws-lc-rs/platform_support.html). Windows ARM, Windows GNU and Windows FIPS are not admitted by this patch. Unsupported targets fail at the provider guard; there is no RustCrypto fallback. The complete application `Cargo.lock` and release graphs exclude `rsa`. Keep the vendored package excluded from the application workspace so upstream development dependencies do not enter that lock.
 
 [`RUSTSEC-2023-0071`](https://rustsec.org/advisories/RUSTSEC-2023-0071.html) concerns observable timing during RSA key-transport **decryption**. Soup Wall's SAML path does not configure an XML decryption key or advertise encrypted assertions; encrypted assertions fail closed, and regression tests protect that behavior. Provider selection does not enable encrypted assertions. The local, CI and release advisory checks run `cargo audit` without vulnerability exceptions. Informational maintenance and yanked-package warnings remain visible. Encrypted-assertion support still requires a separate threat review and new interoperability evidence.
 
@@ -80,6 +80,40 @@ The report's `license_gate_pass` concerns only the locked Rust workspace;
 Legal/redistribution approval still requires independent source terms, notices,
 immutable revisions and an authorized review for the actual redistributed assets.
 Do not publish percentages as license coverage for external models or datasets.
+
+## Selected filesystem MCP runtime (SOU-62)
+
+The optional [filesystem read-only profile](operations/MCP_REAL_FILESYSTEM.md)
+installs the original `@modelcontextprotocol/server-filesystem@2026.8.31`
+and TypeScript MCP SDK `1.32.1` (MIT) from npm. The server package metadata says
+`SEE LICENSE IN LICENSE`, but its published npm archive omits that file. Its
+pinned source license documents an Apache-2.0/MIT transition; retain that exact
+upstream notice separately with the profile rather than declaring a single
+license for all upstream contributions. The committed
+[upstream identity](../profiles/mcp/filesystem-readonly-v1/upstream-identity.json)
+records exact package archive integrity, source revisions, original entrypoint
+and discovery hashes; the adjacent npm lock pins the complete transitive graph.
+Original discovery JSON is retained as a behavioral fixture with its upstream
+identity. No server implementation is copied or rewritten into Agent.
+`npm ci --ignore-scripts` preserves the original package tree. The installer
+separately retains the pinned upstream notices outside that tree; the complete
+package tree digest is verified before sandbox execution.
+
+The acceptance runtime downloads official Node.js `22.22.0` and bubblewrap
+`0.13.1` archives by SHA-256. Node.js retains its upstream license/third-party
+notices; bubblewrap is a separate LGPL-2.0-or-later executable, built from its
+unmodified official release source. Neither executable is linked into or
+redistributed with the Apache-2.0 Rust binary by this change. The installer pins
+the exact Node binary and the operator-selected bubblewrap binary, libraries and
+complete npm tree in an explicit profile. Release redistribution still requires
+review of the actual artifacts and notices.
+
+The separate locked Claude Code `2.1.251` package is an acceptance-only host
+installed from Anthropic's official npm packages with lifecycle scripts disabled.
+Its vendor terms remain separate; it is not copied into this repository or
+bundled with Agent. The owned scripted provider measures actual host protocol
+interoperability, not live model efficacy. No paid model access or private data
+is needed. The Cargo dependency graph remains unchanged.
 
 ## Release evidence
 

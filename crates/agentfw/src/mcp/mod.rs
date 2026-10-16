@@ -14,6 +14,8 @@ pub mod jsonrpc;
 pub mod manifest;
 pub mod proxy;
 pub mod resources;
+pub mod server_profile;
+pub mod server_sandbox;
 #[cfg(unix)]
 mod stdio;
 pub mod store;

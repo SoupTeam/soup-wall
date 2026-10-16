@@ -54,7 +54,7 @@ webpki-roots = "1"
 # The pinned platform patch adds non-FIPS Windows x64 MSVC to kryptering's
 # existing Linux/macOS support. All release targets use the same provider;
 # unsupported targets fail at its guard instead of acquiring a RustCrypto fallback.
-saml-rs = { version = "0.5.3", default-features = false, features = ["crypto-aws-lc"] }
+saml-rs = { version = "0.6.1", default-features = false, features = ["crypto-aws-lc"] }
 
 [dev-dependencies]
 wiremock = "0.6"
