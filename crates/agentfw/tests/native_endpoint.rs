@@ -3942,3 +3942,18 @@ async fn review2c_unclosed_session_prefix_must_not_skip_active_host_loss_floor()
         "incomplete prefix directed loss marker away from possibly affected active host: host={host_incomplete}, unrelated={unrelated_incomplete}; call={r}");
     assert_eq!(r["release"], false);
 }
+
+#[tokio::test]
+async fn reviewcec_incomplete_tool_identity_must_not_make_known_pretooluse_safe() {
+    let f = Fixture::new(ALLOW);
+    let body = r#"{"session_id":"host","hook_event_name":"PreToolUse","tool_name":"Ba"#;
+    let scan = agentfw::handlers::RootJsonScan::scan(body);
+    assert_eq!(scan.get_root_string("hook_event_name"), Some("PreToolUse"));
+    assert!(scan.incomplete_keys.contains("tool_name"));
+    let (s, r) = review137_raw_hook(&f, Body::from(body)).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(
+        r["hookSpecificOutput"]["permissionDecision"], "deny",
+        "known enforce PreToolUse became no-opinion because tool identity was truncated: {r}"
+    );
+}

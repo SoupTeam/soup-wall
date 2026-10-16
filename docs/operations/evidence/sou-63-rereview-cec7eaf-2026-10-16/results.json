@@ -1,0 +1,25 @@
+{
+  "head": "cec7eafbfd14d8eb5a464b05bbf2778795887d66",
+  "verdict": "REQUEST_CHANGES",
+  "baseline": {
+    "native_endpoint_passed": 80,
+    "hook_endpoint_passed": 13,
+    "previous_lock_order_passed": 1,
+    "failed": 0
+  },
+  "additional_control": {
+    "passed": 0,
+    "failed": 1
+  },
+  "observed": "Root event PreToolUse proven, incomplete_keys contains tool_name, but has_protected_tool returns false because tools is empty; enforce handler returns HTTP 200 {} instead of deny.",
+  "patch_sha256": "8d70015463a5c60207f4d3e3dcd7e6b5968462acf2ab4a63349e5c19509123c2",
+  "source_sha256": {
+    "crates/agentfw/src/handlers.rs": "21062d302d21ca5d4f1a9c310f873413eaa9aa2861983641eb1bbaff88234bb5",
+    "crates/agentfw/src/native.rs": "e3aff692da3bab075a34e1bd8a1255d208be328d6553a99b851217c32e2ed046"
+  },
+  "isolation": "Exact source archive under /private/tmp/sou63-review/cec7eaf, no network, writes restricted to scratch, separate Cargo target; no product changes or tool execution.",
+  "limitations": [
+    "Focused router/lock-order review; no independent full workspace or Clippy rerun",
+    "Original broader identity/delegation/restart/revocation deliverables are not certified by this focused review"
+  ]
+}

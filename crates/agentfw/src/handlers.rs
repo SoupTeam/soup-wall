@@ -241,6 +241,20 @@ impl RootJsonScan {
     }
 
     pub fn has_protected_tool(&self, raw: &str) -> bool {
+        if self.duplicate_keys.contains("tool_name")
+            || self.duplicate_keys.contains("tool")
+            || self.incomplete_keys.contains("tool_name")
+            || self.incomplete_keys.contains("tool")
+            || self
+                .incomplete_keys
+                .iter()
+                .any(|k| k.starts_with("tool") || k == "<incomplete_key>")
+        {
+            return true;
+        }
+
+        let has_tool_key = self.root_keys.contains("tool_name") || self.root_keys.contains("tool");
+
         let mut tools = Vec::new();
         if let Some(t) = self
             .string_fields
@@ -274,16 +288,15 @@ impl RootJsonScan {
                 }
             }
         }
+
+        if has_tool_key && tools.is_empty() {
+            return true;
+        }
+
         if tools.is_empty() {
             return false;
         }
-        if self.duplicate_keys.contains("tool_name")
-            || self.duplicate_keys.contains("tool")
-            || self.incomplete_keys.contains("tool_name")
-            || self.incomplete_keys.contains("tool")
-        {
-            return true;
-        }
+
         const READ_ONLY: &[&str] = &[
             "Read",
             "Grep",
