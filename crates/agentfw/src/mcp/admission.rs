@@ -2645,6 +2645,8 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
             .current_dir(&workspace)
             .env_remove("AGENTFW_TOKEN")
             .env_remove("AGENTFW_NATIVE_TOKEN")
+            .env_remove("AGENTFW_CHILD_AUTHORITY")
+            .env_remove("AGENTFW_HOST_SESSION")
             .env_remove("AGENTFW_TEST_CLASSIFIER_READ")
             .env_remove("AGENTFW_TEST_CLASSIFIER")
             .stdin(Stdio::piped())

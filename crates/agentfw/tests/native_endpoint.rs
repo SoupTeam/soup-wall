@@ -4066,7 +4066,10 @@ async fn sou63_child_authority_binds_authenticated_agent_and_parent_identity() {
         &["read_document".into()],
         now,
         60_000,
-        "nonce-1".into(),
+        format!(
+            "{}.nonce-1",
+            fixture.state.native.as_ref().unwrap().instance_id()
+        ),
         Some("worker-1".into()),
         Some("orch-1".into()),
         None,
@@ -4083,6 +4086,41 @@ async fn sou63_child_authority_binds_authenticated_agent_and_parent_identity() {
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(reply["error_code"], "native_invalid_identity");
 
+    let parent_grant = child_authority::mint_scoped(
+        &key,
+        "host-1",
+        "docs-server",
+        &["read_document".into()],
+        now,
+        60_000,
+        format!(
+            "{}.root-parent",
+            fixture.state.native.as_ref().unwrap().instance_id()
+        ),
+        Some("orch-1".into()),
+        None,
+        None,
+    );
+    let mut parent_start = fixture.event("parent-root", "session_start");
+    parent_start["host_session"] = json!("host-1");
+    parent_start["server_id"] = json!("docs-server");
+    parent_start["child_authority"] = json!(child_authority::encode_token(&parent_grant));
+    let (status, reply) = fixture.post(&parent_start).await;
+    assert_allow(status, &reply);
+
+    let grant = child_authority::mint_scoped(
+        &key,
+        "host-1",
+        "docs-server",
+        &["read_document".into()],
+        now,
+        60_000,
+        scoped_fixture_nonce(&fixture, "host-1", Some("orch-1"), "bound-child"),
+        Some("worker-1".into()),
+        Some("orch-1".into()),
+        None,
+    );
+    let token = child_authority::encode_token(&grant);
     // 3. Valid authenticated agent and parent binds cleanly.
     let mut valid_start = fixture.event("child-valid", "session_start");
     valid_start["host_session"] = json!("host-1");
@@ -4122,7 +4160,7 @@ async fn sou63_child_authority_binds_authenticated_agent_and_parent_identity() {
     assert!(reply["hookSpecificOutput"]["permissionDecisionReason"]
         .as_str()
         .unwrap()
-        .contains("deny-subagent-escalation"));
+        .contains("native_hook_authority_required"));
 
     let audit_hook = fixture.audit();
     let hook_line = audit_hook
@@ -4149,6 +4187,28 @@ async fn sou63_child_authority_narrows_resources_and_destinations_relative_to_pa
         .as_millis() as u64;
     let key = child_authority::derive_key(NATIVE_TOKEN);
 
+    let parent_grant = child_authority::mint_scoped(
+        &key,
+        "host-parent",
+        "mail-server",
+        &["send_email".into(), "retrieve_page".into()],
+        now,
+        60_000,
+        format!(
+            "{}.parent-scope",
+            fixture.state.native.as_ref().unwrap().instance_id()
+        ),
+        Some("parent-agent".into()),
+        None,
+        Some(vec!["internal.corp".into()]),
+    );
+    let mut parent_start = fixture.event("parent-root", "session_start");
+    parent_start["host_session"] = json!("host-parent");
+    parent_start["server_id"] = json!("mail-server");
+    parent_start["child_authority"] = json!(child_authority::encode_token(&parent_grant));
+    let (status, reply) = fixture.post(&parent_start).await;
+    assert_allow(status, &reply);
+
     // 1. Grant narrowed destinations for send_email
     let grant = child_authority::mint_scoped(
         &key,
@@ -4157,7 +4217,7 @@ async fn sou63_child_authority_narrows_resources_and_destinations_relative_to_pa
         &["send_email".into()],
         now,
         60_000,
-        "nonce-res-1".into(),
+        scoped_fixture_nonce(&fixture, "host-parent", Some("parent-agent"), "nonce-res-1"),
         Some("emailer".into()),
         Some("parent-agent".into()),
         Some(vec!["internal.corp".into()]),
@@ -4200,7 +4260,7 @@ async fn sou63_child_authority_narrows_resources_and_destinations_relative_to_pa
         &["retrieve_page".into()],
         now,
         60_000,
-        "nonce-res-2".into(),
+        scoped_fixture_nonce(&fixture, "host-parent", Some("parent-agent"), "nonce-res-2"),
         Some("reader-2".into()),
         Some("parent-agent".into()),
         None, // No resources granted!
@@ -4226,6 +4286,27 @@ async fn sou63_child_authority_narrows_resources_and_destinations_relative_to_pa
     assert_eq!(reply["error_code"], "native_child_authority_escalation");
 }
 
+fn scoped_fixture_nonce(f: &Fixture, host: &str, parent: Option<&str>, suffix: &str) -> String {
+    let instance = f.state.native.as_ref().unwrap().instance_id();
+    match parent {
+        None => format!("{instance}.{suffix}"),
+        Some(parent) => {
+            let binding = f
+                .audit()
+                .iter()
+                .rev()
+                .find(|line| {
+                    line["event"] == "native_session_start"
+                        && line["host_session"] == host
+                        && line["agent_id"] == parent
+                })
+                .map(|line| sha(line["session"].as_str().unwrap().as_bytes()))
+                .unwrap_or_else(|| "0".repeat(64));
+            format!("{instance}.{binding}.{suffix}")
+        }
+    }
+}
+
 async fn review8dd_start(
     f: &Fixture,
     session: &str,
@@ -4234,6 +4315,43 @@ async fn review8dd_start(
     tools: &[&str],
     resources: Option<Vec<String>>,
 ) -> (StatusCode, Value) {
+    let (status, reply, _) =
+        scoped_start_with_ttl(f, session, agent, parent, tools, resources, 60_000).await;
+    (status, reply)
+}
+
+async fn post_with_proof(f: &Fixture, body: &Value, proof: &str) -> Value {
+    let response = app(f.state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/hook")
+                .header("content-type", "application/json")
+                .header("authorization", format!("Bearer {HOOK_TOKEN}"))
+                .header("x-agentfw-child-authority", proof)
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    serde_json::from_slice(
+        &to_bytes(response.into_body(), 2 * 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap()
+}
+
+async fn scoped_start_with_ttl(
+    f: &Fixture,
+    session: &str,
+    agent: &str,
+    parent: Option<&str>,
+    tools: &[&str],
+    resources: Option<Vec<String>>,
+    ttl: u64,
+) -> (StatusCode, Value, String) {
     use agentfw::native::child_authority as ca;
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -4245,8 +4363,8 @@ async fn review8dd_start(
         "resource-fixture",
         &tools.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
         now,
-        60_000,
-        session.into(),
+        ttl,
+        scoped_fixture_nonce(f, "review-host", parent, session),
         Some(agent.into()),
         parent.map(str::to_owned),
         resources,
@@ -4255,7 +4373,12 @@ async fn review8dd_start(
     start["host_session"] = json!("review-host");
     start["server_id"] = json!("resource-fixture");
     start["child_authority"] = json!(ca::encode_token(&grant));
-    f.post(&start).await
+    let (status, reply) = f.post(&start).await;
+    (
+        status,
+        reply,
+        start["child_authority"].as_str().unwrap().to_string(),
+    )
 }
 
 #[tokio::test]
@@ -4379,6 +4502,16 @@ async fn review8dd_child_path_grant_must_respect_component_boundary() {
 #[tokio::test]
 async fn review8dd_hook_must_not_drop_authenticated_parent_identity() {
     let f = Fixture::new(ALLOW);
+    let (ps, pr) = review8dd_start(
+        &f,
+        "parent-root",
+        "parent",
+        None,
+        &["read_document"],
+        Some(vec![]),
+    )
+    .await;
+    assert_allow(ps, &pr);
     let (s, r) = review8dd_start(
         &f,
         "bound-reader",
@@ -4433,4 +4566,707 @@ async fn review8dd_exact_granted_url_must_remain_usable() {
     let (s, r) = f.post(&body).await;
     assert_eq!(s, StatusCode::OK, "exact granted URL refused: {r}");
     assert_eq!(r["release"], true, "exact granted URL refused: {r}");
+}
+
+#[tokio::test]
+async fn review36_unknown_hook_agent_must_not_bypass_binding() {
+    let f = Fixture::new(ALLOW);
+    let (ps, pr) = review8dd_start(
+        &f,
+        "parent-root",
+        "parent",
+        None,
+        &["read_document"],
+        Some(vec![]),
+    )
+    .await;
+    assert_allow(ps, &pr);
+    let (s, r) = review8dd_start(
+        &f,
+        "reader-session",
+        "reader",
+        Some("parent"),
+        &["read_document"],
+        Some(vec![]),
+    )
+    .await;
+    assert_allow(s, &r);
+    let mut hook = json!({"session_id":"review-host","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo harmless"},"agent_id":"reader"});
+    let (_, r) = post(f.state.clone(), "/hook", &hook, Some(HOOK_TOKEN)).await;
+    assert_eq!(
+        r["hookSpecificOutput"]["permissionDecision"], "deny",
+        "control: {r}"
+    );
+    hook["agent_id"] = json!("unregistered-impostor");
+    let (_, r) = post(f.state.clone(), "/hook", &hook, Some(HOOK_TOKEN)).await;
+    assert_eq!(
+        r["hookSpecificOutput"]["permissionDecision"], "deny",
+        "changing only agent_id bypassed verified binding: {r}"
+    );
+}
+
+#[tokio::test]
+async fn review36_missing_parent_must_not_register_child_as_root() {
+    let f = Fixture::new(ALLOW);
+    let (s, r) = review8dd_start(
+        &f,
+        "orphan",
+        "worker",
+        Some("nonexistent-parent"),
+        &["delete_document"],
+        Some(vec![]),
+    )
+    .await;
+    if s != StatusCode::OK || r["release"] != true {
+        return;
+    }
+    let (s, r) = f
+        .post(&f.call("orphan", "delete_document", &json!({})))
+        .await;
+    assert!(
+        s != StatusCode::OK || r["release"] != true,
+        "unprovable parent granted destructive authority: {r}"
+    );
+}
+
+#[tokio::test]
+async fn review36_parent_end_must_not_drop_resource_constraints() {
+    let f = Fixture::new(ALLOW);
+    let (s, r) = review8dd_start(
+        &f,
+        "parent",
+        "parent-agent",
+        None,
+        &["send_email"],
+        Some(vec!["internal.corp".into()]),
+    )
+    .await;
+    assert_allow(s, &r);
+    let (s, r) = review8dd_start(
+        &f,
+        "blocked-child",
+        "worker",
+        Some("parent-agent"),
+        &["send_email"],
+        Some(vec!["attacker.invalid".into()]),
+    )
+    .await;
+    assert!(
+        s != StatusCode::OK || r["release"] != true,
+        "control must reject escalation: {r}"
+    );
+    let (s, r) = f.post(&f.event("parent", "session_end")).await;
+    assert_allow(s, &r);
+    let (s, r) = review8dd_start(
+        &f,
+        "after-end",
+        "worker",
+        Some("parent-agent"),
+        &["send_email"],
+        Some(vec!["attacker.invalid".into()]),
+    )
+    .await;
+    if s != StatusCode::OK || r["release"] != true {
+        return;
+    }
+    let (s, r) = f
+        .post(&f.call(
+            "after-end",
+            "send_email",
+            &json!({"to":"outside@attacker.invalid"}),
+        ))
+        .await;
+    assert!(
+        s != StatusCode::OK || r["release"] != true,
+        "ending parent erased destination narrowing but retained tool grant: {r}"
+    );
+}
+
+#[tokio::test]
+async fn review36_unknown_parent_scope_must_not_become_proven_child_scope() {
+    let f = Fixture::new(ALLOW);
+    let (s, r) = review8dd_start(&f, "parent", "parent-agent", None, &["send_email"], None).await;
+    assert_allow(s, &r);
+    let (s, r) = f
+        .post(&f.call(
+            "parent",
+            "send_email",
+            &json!({"to":"outside@attacker.invalid"}),
+        ))
+        .await;
+    assert!(
+        s != StatusCode::OK || r["release"] != true,
+        "control: parent destination authority is unprovable"
+    );
+    let (s, r) = review8dd_start(
+        &f,
+        "child",
+        "worker",
+        Some("parent-agent"),
+        &["send_email"],
+        Some(vec!["attacker.invalid".into()]),
+    )
+    .await;
+    if s != StatusCode::OK || r["release"] != true {
+        return;
+    }
+    let (s, r) = f
+        .post(&f.call(
+            "child",
+            "send_email",
+            &json!({"to":"outside@attacker.invalid"}),
+        ))
+        .await;
+    assert!(
+        s != StatusCode::OK || r["release"] != true,
+        "child obtained destination denied to its parent: {r}"
+    );
+}
+
+#[tokio::test]
+async fn review36_legitimate_mailbox_narrowing_must_be_usable() {
+    let f = Fixture::new(ALLOW);
+    let (s, r) = review8dd_start(
+        &f,
+        "parent",
+        "parent-agent",
+        None,
+        &["send_email"],
+        Some(vec!["internal.corp".into()]),
+    )
+    .await;
+    assert_allow(s, &r);
+    let (s, r) = review8dd_start(
+        &f,
+        "child",
+        "worker",
+        Some("parent-agent"),
+        &["send_email"],
+        Some(vec!["alice@internal.corp".into()]),
+    )
+    .await;
+    assert_allow(s, &r);
+    let (s, r) = f
+        .post(&f.call("child", "send_email", &json!({"to":"alice@internal.corp"})))
+        .await;
+    assert_allow(s, &r);
+}
+
+#[tokio::test]
+async fn review36_expired_child_authority_must_not_authorize_hooks() {
+    use agentfw::native::child_authority as ca;
+    let f = Fixture::new(ALLOW);
+    let (s, r) = review8dd_start(
+        &f,
+        "parent",
+        "parent-agent",
+        None,
+        &["read_document", "Bash"],
+        Some(vec![]),
+    )
+    .await;
+    assert_allow(s, &r);
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+    let grant = ca::mint_scoped(
+        &ca::derive_key(NATIVE_TOKEN),
+        "review-host",
+        "resource-fixture",
+        &["read_document".into(), "Bash".into()],
+        now,
+        500,
+        scoped_fixture_nonce(&f, "review-host", Some("parent-agent"), "short-lived"),
+        Some("worker".into()),
+        Some("parent-agent".into()),
+        Some(vec![]),
+    );
+    let mut start = f.event("short-child", "session_start");
+    start["host_session"] = json!("review-host");
+    start["server_id"] = json!("resource-fixture");
+    start["child_authority"] = json!(ca::encode_token(&grant));
+    let (s, r) = f.post(&start).await;
+    assert_allow(s, &r);
+    let hook = json!({"session_id":"review-host","hook_event_name":"PreToolUse","tool_name":"read_document","tool_input":{},"agent_id":"worker"});
+    let r = post_with_proof(&f, &hook, start["child_authority"].as_str().unwrap()).await;
+    assert_eq!(r, json!({}), "control: valid grant remains useful");
+    tokio::time::sleep(std::time::Duration::from_millis(550)).await;
+    let (_, r) = f
+        .post(&f.call("short-child", "read_document", &json!({})))
+        .await;
+    assert_eq!(
+        r["error_code"], "native_child_authority_expired",
+        "control: grant really expired"
+    );
+    let r = post_with_proof(&f, &hook, start["child_authority"].as_str().unwrap()).await;
+    assert_eq!(
+        r["hookSpecificOutput"]["permissionDecision"], "deny",
+        "expired native authority still authorizes hook: {r}"
+    );
+}
+
+#[tokio::test]
+async fn review36_conflicting_posttool_identity_must_mark_history_loss() {
+    let f = Fixture::new(ALLOW);
+    let (ps, pr) = review8dd_start(
+        &f,
+        "parent-root",
+        "parent",
+        None,
+        &["read_document", "delete_document"],
+        Some(vec![]),
+    )
+    .await;
+    assert_allow(ps, &pr);
+    let (s, r) = review8dd_start(
+        &f,
+        "reader",
+        "reader-agent",
+        Some("parent"),
+        &["read_document", "delete_document"],
+        Some(vec![]),
+    )
+    .await;
+    assert_allow(s, &r);
+    let hook = json!({"session_id":"review-host","hook_event_name":"PostToolUse","tool_name":"WebFetch","tool_input":{"url":"https://fixture.invalid"},"tool_response":INJECTION,"agent_id":"reader-agent","parent_id":"wrong-parent"});
+    let (s, _) = post(f.state.clone(), "/hook", &hook, Some(HOOK_TOKEN)).await;
+    assert_eq!(s, StatusCode::OK);
+    let fw = f.state.firewall.lock().unwrap();
+    assert!(fw.provenance_incomplete("review-host") || fw.taint_len("review-host") > 0,"identity conflict silently discarded consumed untrusted result without sticky incomplete history");
+}
+
+#[tokio::test]
+async fn scoped_hook_proof_authenticates_identity_and_rejects_claim_swaps() {
+    for change in [
+        "none",
+        "qualified",
+        "wrong-server",
+        "agent",
+        "parent",
+        "session",
+        "signature",
+        "missing",
+        "tool",
+    ] {
+        let f = Fixture::new(ALLOW);
+        let (s, r) = review8dd_start(
+            &f,
+            "parent-root",
+            "parent",
+            None,
+            &["read_document"],
+            Some(vec![]),
+        )
+        .await;
+        assert_allow(s, &r);
+        let (s, r, proof) = scoped_start_with_ttl(
+            &f,
+            "worker",
+            "worker",
+            Some("parent"),
+            &["read_document"],
+            Some(vec![]),
+            60_000,
+        )
+        .await;
+        assert_allow(s, &r);
+        let mut hook = json!({"session_id":"review-host","hook_event_name":"PreToolUse","tool_name":"read_document","tool_input":{}});
+        match change {
+            "qualified" => hook["tool_name"] = json!("mcp__resource-fixture__read_document"),
+            "wrong-server" => hook["tool_name"] = json!("mcp__wrong__read_document"),
+            "agent" => hook["agent_id"] = json!("parent"),
+            "parent" => hook["parent_id"] = json!("unknown"),
+            "session" => hook["session_id"] = json!("other-host"),
+            "tool" => hook["tool_name"] = json!("delete_document"),
+            _ => {}
+        }
+        let r = if change == "missing" {
+            post(f.state.clone(), "/hook", &hook, Some(HOOK_TOKEN))
+                .await
+                .1
+        } else {
+            post_with_proof(
+                &f,
+                &hook,
+                if change == "signature" {
+                    "forged-proof"
+                } else {
+                    &proof
+                },
+            )
+            .await
+        };
+        if change == "none" || change == "qualified" {
+            assert_eq!(r, json!({}), "valid signed hook remains useful");
+        } else {
+            assert_eq!(
+                r["hookSpecificOutput"]["permissionDecision"], "deny",
+                "{change}: {r}"
+            );
+        }
+        assert!(!std::fs::read_to_string(f.dir.path().join("audit.jsonl"))
+            .unwrap()
+            .contains(&proof));
+    }
+}
+
+#[tokio::test]
+async fn ending_or_replacing_parent_never_resurrects_existing_child() {
+    let f = Fixture::new(ALLOW);
+    let (s, r) = review8dd_start(
+        &f,
+        "parent-root",
+        "parent",
+        None,
+        &["read_document"],
+        Some(vec![]),
+    )
+    .await;
+    assert_allow(s, &r);
+    let (s, r, proof) = scoped_start_with_ttl(
+        &f,
+        "worker",
+        "worker",
+        Some("parent"),
+        &["read_document"],
+        Some(vec![]),
+        60_000,
+    )
+    .await;
+    assert_allow(s, &r);
+    let (s, r) = f.post(&f.call("worker", "read_document", &json!({}))).await;
+    assert_allow(s, &r);
+    let (s, r) = f.post(&f.event("parent-root", "session_end")).await;
+    assert_allow(s, &r);
+    assert_eq!(
+        f.state
+            .firewall
+            .lock()
+            .unwrap()
+            .agent_tools("review-host", "parent"),
+        None
+    );
+    assert_eq!(
+        f.state
+            .firewall
+            .lock()
+            .unwrap()
+            .agent_tools("review-host", "worker"),
+        Some(vec!["read_document".into()])
+    );
+    for restart in [false, true] {
+        if restart {
+            let (s, r) = review8dd_start(
+                &f,
+                "parent-new",
+                "parent",
+                None,
+                &["read_document"],
+                Some(vec![]),
+            )
+            .await;
+            assert_allow(s, &r);
+        }
+        let (_, r) = f.post(&f.call("worker", "read_document", &json!({}))).await;
+        assert_eq!(r["error_code"], "native_child_parent_unavailable");
+        let r = post_with_proof(&f,&json!({"session_id":"review-host","hook_event_name":"PreToolUse","tool_name":"read_document","tool_input":{}}),&proof).await;
+        assert_eq!(r["hookSpecificOutput"]["permissionDecision"], "deny");
+    }
+}
+
+#[tokio::test]
+async fn expired_parent_cannot_authorize_a_long_lived_descendant() {
+    let f = Fixture::new(ALLOW);
+    let (s, r, _) = scoped_start_with_ttl(
+        &f,
+        "parent-root",
+        "parent",
+        None,
+        &["read_document"],
+        Some(vec![]),
+        500,
+    )
+    .await;
+    assert_allow(s, &r);
+    let (s, r, proof) = scoped_start_with_ttl(
+        &f,
+        "worker",
+        "worker",
+        Some("parent"),
+        &["read_document"],
+        Some(vec![]),
+        60_000,
+    )
+    .await;
+    assert_allow(s, &r);
+    tokio::time::sleep(std::time::Duration::from_millis(550)).await;
+    let (_, r) = f.post(&f.call("worker", "read_document", &json!({}))).await;
+    assert_eq!(r["error_code"], "native_child_authority_expired");
+    let r = post_with_proof(&f,&json!({"session_id":"review-host","hook_event_name":"PreToolUse","tool_name":"read_document","tool_input":{}}),&proof).await;
+    assert_eq!(r["hookSpecificOutput"]["permissionDecision"], "deny");
+}
+
+#[tokio::test]
+async fn signed_hook_result_preserves_server_origin_and_conflicts_mark_loss_even_in_shadow() {
+    for enforce in [true, false] {
+        let mut f = Fixture::new(ALLOW);
+        let (s, r) = review8dd_start(
+            &f,
+            "parent-root",
+            "parent",
+            None,
+            &["read_document"],
+            Some(vec![]),
+        )
+        .await;
+        assert_allow(s, &r);
+        let (s, r, proof) = scoped_start_with_ttl(
+            &f,
+            "worker",
+            "worker",
+            Some("parent"),
+            &["read_document"],
+            Some(vec![]),
+            60_000,
+        )
+        .await;
+        assert_allow(s, &r);
+        Arc::get_mut(&mut f.state).unwrap().config.enforce = enforce;
+        let mut hook = json!({"session_id":"review-host","hook_event_name":"PostToolUse","tool_name":"read_document","tool_input":{},"tool_response":UNTRUSTED_TEXT});
+        assert_eq!(post_with_proof(&f, &hook, &proof).await, json!({}));
+        assert!(f.state.firewall.lock().unwrap().taint_len("review-host") > 0);
+        hook["parent_id"] = json!("wrong-parent");
+        assert_eq!(post_with_proof(&f, &hook, &proof).await, json!({}));
+        assert!(f
+            .state
+            .firewall
+            .lock()
+            .unwrap()
+            .provenance_incomplete("review-host"));
+        assert!(f
+            .audit()
+            .iter()
+            .any(|r| r["rule"] == "native_hook_identity_mismatch"));
+    }
+}
+
+#[tokio::test]
+async fn completed_scoped_host_never_falls_back_to_unsigned_hooks() {
+    let f = Fixture::new(ALLOW);
+    let (s, r) = review8dd_start(&f, "root", "root", None, &["read_document"], Some(vec![])).await;
+    assert_allow(s, &r);
+    let (s, r) = f.post(&f.event("root", "session_end")).await;
+    assert_allow(s, &r);
+    let (_,r) = post(f.state.clone(),"/hook",&json!({"session_id":"review-host","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo harmless"}}),Some(HOOK_TOKEN)).await;
+    assert_eq!(r["hookSpecificOutput"]["permissionDecision"], "deny");
+}
+
+#[tokio::test]
+async fn scoped_grant_cannot_replay_into_a_restarted_daemon() {
+    let mut f = Fixture::new(ALLOW);
+    let (s, r, proof) = scoped_start_with_ttl(
+        &f,
+        "root",
+        "root",
+        None,
+        &["read_document"],
+        Some(vec![]),
+        60_000,
+    )
+    .await;
+    assert_allow(s, &r);
+    let old_instance = f.state.native.as_ref().unwrap().instance_id().to_string();
+    let bytes = serde_json::to_vec(&registry()).unwrap();
+    f.state = make_state(
+        f.dir.path(),
+        Config {
+            enforce: true,
+            ..Config::default()
+        },
+        ALLOW,
+        &bytes,
+        &f.registry_sha256,
+    );
+    assert_ne!(old_instance, f.state.native.as_ref().unwrap().instance_id());
+    let mut start = f.event("replay", "session_start");
+    start["host_session"] = json!("review-host");
+    start["server_id"] = json!("resource-fixture");
+    start["child_authority"] = json!(proof);
+    let (_, r) = f.post(&start).await;
+    assert_eq!(r["error_code"], "native_child_authority_instance_mismatch");
+    let (s, r) = review8dd_start(&f, "fresh", "root", None, &["read_document"], Some(vec![])).await;
+    assert_allow(s, &r);
+}
+
+#[tokio::test]
+async fn instance_bootstrap_requires_the_native_issuer_bearer() {
+    let f = Fixture::new(ALLOW);
+    for token in [None, Some(HOOK_TOKEN), Some(NATIVE_TOKEN)] {
+        let mut builder = Request::builder().uri("/native/v1/instance");
+        if let Some(token) = token {
+            builder = builder.header("authorization", format!("Bearer {token}"));
+        }
+        let res = app(f.state.clone())
+            .oneshot(builder.body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(
+            res.status(),
+            if token == Some(NATIVE_TOKEN) {
+                StatusCode::OK
+            } else {
+                StatusCode::UNAUTHORIZED
+            }
+        );
+        if token == Some(NATIVE_TOKEN) {
+            let body: Value =
+                serde_json::from_slice(&to_bytes(res.into_body(), 1024).await.unwrap()).unwrap();
+            assert_eq!(
+                body["instance_id"],
+                f.state.native.as_ref().unwrap().instance_id()
+            );
+            assert_eq!(body["registry_sha256"], f.registry_sha256);
+        }
+    }
+}
+
+#[tokio::test]
+async fn duplicate_agent_bootstrap_never_overwrites_an_active_grant() {
+    let f = Fixture::new(ALLOW);
+    let (s, r) = review8dd_start(
+        &f,
+        "original",
+        "worker",
+        None,
+        &["read_document"],
+        Some(vec![]),
+    )
+    .await;
+    assert_allow(s, &r);
+    let (_, r) = review8dd_start(
+        &f,
+        "replacement",
+        "worker",
+        None,
+        &["read_document", "delete_document"],
+        Some(vec![]),
+    )
+    .await;
+    assert_eq!(r["error_code"], "native_agent_already_bound");
+    assert_eq!(
+        f.state
+            .firewall
+            .lock()
+            .unwrap()
+            .agent_tools("review-host", "worker"),
+        Some(vec!["read_document".into()])
+    );
+    let (s, r) = f
+        .post(&f.call("original", "read_document", &json!({})))
+        .await;
+    assert_allow(s, &r);
+}
+
+#[tokio::test]
+async fn scoped_host_capacity_never_evicts_completed_identity_tombstones() {
+    use agentfw::native::child_authority as ca;
+    let f = Fixture::new(ALLOW);
+    for n in 0..=64 {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        let host = format!("host-{n}");
+        let grant = ca::mint_scoped(
+            &ca::derive_key(NATIVE_TOKEN),
+            &host,
+            "resource-fixture",
+            &["read_document".into()],
+            now,
+            60_000,
+            format!(
+                "{}.nonce-{n}",
+                f.state.native.as_ref().unwrap().instance_id()
+            ),
+            Some("root".into()),
+            None,
+            Some(vec![]),
+        );
+        let mut start = f.event(&format!("root-{n}"), "session_start");
+        start["host_session"] = json!(host);
+        start["server_id"] = json!("resource-fixture");
+        start["child_authority"] = json!(ca::encode_token(&grant));
+        let (s, r) = f.post(&start).await;
+        if n == 64 {
+            assert_eq!(r["error_code"], "native_host_binding_cap");
+        } else {
+            assert_allow(s, &r);
+            let (s, r) = f.post(&f.event(&format!("root-{n}"), "session_end")).await;
+            assert_allow(s, &r);
+        }
+    }
+    let (_,r)=post(f.state.clone(),"/hook",&json!({"session_id":"host-0","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo harmless"}}),Some(HOOK_TOKEN)).await;
+    assert_eq!(r["hookSpecificOutput"]["permissionDecision"], "deny");
+}
+
+#[tokio::test]
+async fn a_child_grant_cannot_bootstrap_under_a_replacement_parent_epoch() {
+    let f = Fixture::new(ALLOW);
+    let (s, r) = review8dd_start(
+        &f,
+        "parent-first",
+        "parent",
+        None,
+        &["read_document"],
+        Some(vec![]),
+    )
+    .await;
+    assert_allow(s, &r);
+    let (s, r, proof) = scoped_start_with_ttl(
+        &f,
+        "child-first",
+        "worker",
+        Some("parent"),
+        &["read_document"],
+        Some(vec![]),
+        60_000,
+    )
+    .await;
+    assert_allow(s, &r);
+    let (s, r) = f.post(&f.event("child-first", "session_end")).await;
+    assert_allow(s, &r);
+    let mut start = f.event("child-retry", "session_start");
+    start["host_session"] = json!("review-host");
+    start["server_id"] = json!("resource-fixture");
+    start["child_authority"] = json!(proof);
+    let (s, r) = f.post(&start).await;
+    assert_allow(s, &r);
+    let (s, r) = f.post(&f.event("child-retry", "session_end")).await;
+    assert_allow(s, &r);
+    let (s, r) = f.post(&f.event("parent-first", "session_end")).await;
+    assert_allow(s, &r);
+    let (s, r) = review8dd_start(
+        &f,
+        "parent-replacement",
+        "parent",
+        None,
+        &["read_document"],
+        Some(vec![]),
+    )
+    .await;
+    assert_allow(s, &r);
+    start["session_id"] = json!("child-stale");
+    let (_, r) = f.post(&start).await;
+    assert_eq!(r["error_code"], "native_child_parent_binding_mismatch");
+    let (s, r) = review8dd_start(
+        &f,
+        "child-fresh",
+        "worker",
+        Some("parent"),
+        &["read_document"],
+        Some(vec![]),
+    )
+    .await;
+    assert_allow(s, &r);
 }

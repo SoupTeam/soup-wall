@@ -4,7 +4,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use axum::extract::State;
@@ -197,22 +197,59 @@ fn declared_hosts(tool: &Tool, args: &Value) -> Result<Vec<String>, &'static str
     Ok(hosts.into_iter().collect())
 }
 
+// Scope strings retain the wire format, but containment is typed: a host may
+// narrow to an exact URL/mailbox; URLs and mailboxes never widen to a host.
+fn scope_host(value: &str) -> Option<String> {
+    if let Ok(ip) = value.parse::<std::net::IpAddr>() {
+        return Some(ip.to_string());
+    }
+    if value.contains(['/', ':', '@', '?', '#']) {
+        return None;
+    }
+    crate::mcp::resources::canonical_url(&format!("http://{value}"))
+        .ok()
+        .map(|(_, host, _)| host)
+}
+
+fn scope_contains(parent: &str, child: &str) -> bool {
+    let cp = std::path::Path::new(child);
+    let pp = std::path::Path::new(parent);
+    if cp.is_absolute() || pp.is_absolute() {
+        let clean = |p: &std::path::Path| {
+            !p.components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
+        };
+        return cp.is_absolute()
+            && pp.is_absolute()
+            && clean(cp)
+            && clean(pp)
+            && cp.starts_with(pp);
+    }
+    if let Ok((canonical, host, _)) = crate::mcp::resources::canonical_url(child) {
+        return crate::mcp::resources::canonical_url(parent)
+            .map(|(p, _, _)| p == canonical)
+            .unwrap_or_else(|_| scope_host(parent).is_some_and(|p| p == host));
+    }
+    if let Ok((address, domain)) = crate::mcp::resources::canonical_recipient(child) {
+        return crate::mcp::resources::canonical_recipient(parent)
+            .map(|(p, _)| p == address)
+            .unwrap_or_else(|_| scope_host(parent).is_some_and(|p| p == domain));
+    }
+    scope_host(parent)
+        .zip(scope_host(child))
+        .is_some_and(|(p, c)| p == c)
+}
+
 enum EgressDestination {
-    Url { canonical: String, host: String },
-    Email { address: String, domain: String },
+    Url { canonical: String },
+    Email { address: String },
 }
 
 impl EgressDestination {
     fn matches_grant(&self, g: &str) -> bool {
         match self {
-            EgressDestination::Url { canonical, host } => {
-                g == canonical
-                    || g == host
-                    || crate::mcp::resources::canonical_url(g)
-                        .map(|(cg, _, _)| &cg == canonical)
-                        .unwrap_or(false)
-            }
-            EgressDestination::Email { address, domain } => g == address || g == domain,
+            EgressDestination::Url { canonical, .. } => scope_contains(g, canonical),
+            EgressDestination::Email { address, .. } => scope_contains(g, address),
         }
     }
 }
@@ -245,14 +282,14 @@ fn declared_destinations(
                 .ok_or("native_egress_type")?;
             match selector.kind {
                 EgressKind::UrlHost => {
-                    let (canonical, host, _port) = crate::mcp::resources::canonical_url(text)
+                    let (canonical, _, _) = crate::mcp::resources::canonical_url(text)
                         .map_err(|_| "native_egress_url")?;
-                    destinations.push(EgressDestination::Url { canonical, host });
+                    destinations.push(EgressDestination::Url { canonical });
                 }
                 EgressKind::EmailDomain => {
-                    let (address, domain) = crate::mcp::resources::canonical_recipient(text)
+                    let (address, _) = crate::mcp::resources::canonical_recipient(text)
                         .map_err(|_| "native_egress_email")?;
-                    destinations.push(EgressDestination::Email { address, domain });
+                    destinations.push(EgressDestination::Email { address });
                 }
             }
         }
@@ -277,28 +314,13 @@ fn child_resources_authorized(
             return false;
         };
         for ev in &admission.resources {
-            let matched = match &ev.resource {
-                crate::mcp::resources::Resource::Path { canonical } => granted.iter().any(|g| {
-                    let can_p = std::path::Path::new(canonical);
-                    let g_p = std::path::Path::new(g);
-                    can_p == g_p || can_p.starts_with(g_p)
-                }),
-                crate::mcp::resources::Resource::Url {
-                    canonical, host, ..
-                } => granted.iter().any(|g| {
-                    canonical == g
-                        || host == g
-                        || crate::mcp::resources::canonical_url(g)
-                            .map(|(cg, _, _)| &cg == canonical)
-                            .unwrap_or(false)
-                }),
-                crate::mcp::resources::Resource::Domain { host } => {
-                    granted.iter().any(|g| host == g)
-                }
-                crate::mcp::resources::Resource::Recipient { address, domain } => {
-                    granted.iter().any(|g| address == g || domain == g)
-                }
+            let target = match &ev.resource {
+                crate::mcp::resources::Resource::Path { canonical }
+                | crate::mcp::resources::Resource::Url { canonical, .. } => canonical,
+                crate::mcp::resources::Resource::Domain { host } => host,
+                crate::mcp::resources::Resource::Recipient { address, .. } => address,
             };
+            let matched = granted.iter().any(|g| scope_contains(g, target));
             if !matched {
                 return false;
             }
@@ -344,6 +366,8 @@ struct Session {
     pub granted_tools: Vec<String>,
     pub granted_resources: Option<Vec<String>>,
     pub authority_expires_at_ms: Option<u64>,
+    parent_epoch: Option<String>,
+    authority_digest: Option<String>,
     epoch: String,
     seq: u64,
     touched: Instant,
@@ -379,14 +403,123 @@ impl Session {
 #[derive(Default)]
 struct Sessions {
     entries: BTreeMap<String, Session>,
+    // Bounded tombstones prevent a completed scoped host from silently reverting
+    // to unsigned hooks. Reaching the cap refuses new host IDs until restart.
+    scoped_hosts: BTreeSet<String>,
+}
+
+fn wall_time_ms() -> Result<u64, &'static str> {
+    Ok(SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| "native_clock_unavailable")?
+        .as_millis() as u64)
+}
+
+fn validate_lineage(
+    state: &Sessions,
+    session: &Session,
+    now_ms: u64,
+    now: Instant,
+) -> Result<(), &'static str> {
+    let mut current = session;
+    for _ in 0..=MAX_SESSIONS {
+        if now.duration_since(current.touched) >= TTL
+            || current
+                .authority_expires_at_ms
+                .is_some_and(|expires| now_ms >= expires)
+        {
+            return Err("native_child_authority_expired");
+        }
+        let Some(parent) = &current.parent_id else {
+            return Ok(());
+        };
+        current = state
+            .entries
+            .values()
+            .find(|p| {
+                p.host_session == current.host_session
+                    && p.agent_id.as_ref() == Some(parent)
+                    && current.parent_epoch.as_ref() == Some(&p.epoch)
+            })
+            .ok_or("native_child_parent_unavailable")?;
+    }
+    Err("native_child_parent_unavailable")
 }
 
 pub struct NativeState {
     pub registry: Registry,
     pub registry_sha256: String,
     pub token: String,
+    instance_id: String,
     sessions: Mutex<Sessions>,
     pub(crate) approval: Option<approval::ApprovalState>,
+}
+
+/// Keeps authority and parent epochs stable through a synchronous hook decision.
+/// Always acquire before the firewall mutex, and never hold across an await.
+pub(crate) struct HookAuthorityGuard<'a> {
+    native: &'a NativeState,
+    sessions: MutexGuard<'a, Sessions>,
+}
+
+impl HookAuthorityGuard<'_> {
+    pub fn resolve(
+        &self,
+        session: &str,
+        agent: Option<&str>,
+        parent: Option<&str>,
+        proof: Option<&str>,
+        call: Option<(&str, &Value)>,
+    ) -> Result<(String, Option<String>, Option<String>), &'static str> {
+        self.native.resolve_hook_identity_locked(
+            &self.sessions,
+            session,
+            agent,
+            parent,
+            proof,
+            call,
+        )
+    }
+
+    pub fn inspect_call(
+        &self,
+        firewall: &mut soup_wall_agent::AgentFirewall,
+        event: &AgentEvent,
+    ) -> Outcome {
+        if let EventKind::ToolCall { tool: name, args } = &event.kind {
+            let tool = self
+                .sessions
+                .entries
+                .values()
+                .find(|s| {
+                    s.host_session.as_deref() == Some(&event.session)
+                        && s.agent_id.as_deref() == Some(&event.agent)
+                })
+                .and_then(|s| s.server_id.as_deref())
+                .and_then(|server| self.native.hook_tool(server, name));
+            if let Some(tool) = tool {
+                if let Ok(hosts) = declared_hosts(tool, args) {
+                    let mut canonical = event.clone();
+                    if let EventKind::ToolCall { tool: name, .. } = &mut canonical.kind {
+                        *name = tool.name.clone();
+                    }
+                    return firewall.inspect_native_call(&canonical, tool.action_class, &hosts);
+                }
+            }
+            let mut refused = Outcome::allow();
+            refused.verdict = Verdict::Deny;
+            refused.rule = Some("native_hook_tool_unsupported".into());
+            return refused;
+        }
+        firewall.inspect(event)
+    }
+
+    pub fn has_host(&self, host: &str) -> bool {
+        self.sessions
+            .entries
+            .values()
+            .any(|s| s.host_session.as_deref() == Some(host))
+    }
 }
 
 impl NativeState {
@@ -427,9 +560,16 @@ impl NativeState {
             registry,
             registry_sha256: expected.into(),
             token,
+            instance_id: crate::token::generate(),
             sessions: Mutex::default(),
             approval: None,
         })
+    }
+
+    /// Public runtime identifier, authenticated by the native transport endpoint.
+    /// Scoped grant nonces bind to it without changing the HMAC wire encoding.
+    pub fn instance_id(&self) -> &str {
+        &self.instance_id
     }
 
     /// Enable the opt-in pending-approval lifecycle (SOU-48). Absent = refusal.
@@ -473,37 +613,100 @@ impl NativeState {
         session_id: &str,
         agent_id: Option<&str>,
         parent_id: Option<&str>,
-    ) -> Result<(String, Option<String>), &'static str> {
-        let Ok(sessions) = self.sessions.lock() else {
-            return Ok((
-                agent_id.unwrap_or("main").to_string(),
-                parent_id.map(String::from),
-            ));
+        proof: Option<&str>,
+        call: Option<(&str, &Value)>,
+    ) -> Result<(String, Option<String>, Option<String>), &'static str> {
+        self.lock_hook_authority()?
+            .resolve(session_id, agent_id, parent_id, proof, call)
+    }
+
+    pub(crate) fn lock_hook_authority(&self) -> Result<HookAuthorityGuard<'_>, &'static str> {
+        Ok(HookAuthorityGuard {
+            native: self,
+            sessions: self
+                .sessions
+                .lock()
+                .map_err(|_| "native_state_unavailable")?,
+        })
+    }
+
+    fn hook_tool(&self, server: &str, name: &str) -> Option<&Tool> {
+        let qualified = format!("mcp__{server}__");
+        let name = if name.starts_with("mcp__") {
+            name.strip_prefix(&qualified)?
+        } else {
+            name
         };
-        for s in sessions.entries.values() {
-            if s.host_session.as_deref() == Some(session_id) {
-                if let Some(agent) = agent_id {
-                    if s.agent_id.as_deref() == Some(agent) {
-                        if let Some(ref bound_parent) = s.parent_id {
-                            if let Some(req_p) = parent_id {
-                                if req_p != bound_parent {
-                                    return Err("mismatched_parent_identity");
-                                }
-                            }
-                            return Ok((agent.to_string(), Some(bound_parent.clone())));
-                        }
-                        return Ok((agent.to_string(), parent_id.map(String::from)));
-                    }
-                } else if let Some(ref bound_parent) = s.parent_id {
-                    let agent = s.agent_id.clone().unwrap_or_else(|| "subagent".into());
-                    return Ok((agent, Some(bound_parent.clone())));
-                }
+        self.registry.tools.iter().find(|tool| tool.name == name)
+    }
+
+    fn resolve_hook_identity_locked(
+        &self,
+        sessions: &Sessions,
+        session_id: &str,
+        agent_id: Option<&str>,
+        parent_id: Option<&str>,
+        proof: Option<&str>,
+        call: Option<(&str, &Value)>,
+    ) -> Result<(String, Option<String>, Option<String>), &'static str> {
+        let Some(proof) = proof else {
+            if sessions.scoped_hosts.contains(session_id)
+                || agent_id.is_some()
+                || parent_id.is_some()
+            {
+                return Err("native_hook_authority_required");
+            }
+            return Ok(("main".into(), None, None));
+        };
+        let now_ms = wall_time_ms()?;
+        let decoded =
+            child_authority::decode_token(proof).map_err(|_| "native_hook_authority_invalid")?;
+        let grant = child_authority::verify_token(
+            &child_authority::derive_key(&self.token),
+            proof,
+            session_id,
+            &decoded.server_id,
+            now_ms,
+        )
+        .map_err(|_| "native_hook_authority_invalid")?;
+        let agent = grant
+            .agent_id
+            .as_deref()
+            .ok_or("native_hook_identity_unsupported")?;
+        if agent_id.is_some_and(|id| id != agent)
+            || parent_id.is_some_and(|id| Some(id) != grant.parent_id.as_deref())
+        {
+            return Err("native_hook_identity_mismatch");
+        }
+        let digest = hash(proof.as_bytes());
+        let session = sessions
+            .entries
+            .values()
+            .find(|s| {
+                s.host_session.as_deref() == Some(session_id)
+                    && s.agent_id.as_deref() == Some(agent)
+                    && s.authority_digest.as_ref() == Some(&digest)
+            })
+            .ok_or("native_hook_session_unknown")?;
+        validate_lineage(sessions, session, now_ms, Instant::now())?;
+        if let Some((name, args)) = call {
+            let tool = self
+                .hook_tool(&grant.server_id, name)
+                .ok_or("native_hook_tool_unsupported")?;
+            if !session.granted_tools.iter().any(|t| t == &tool.name)
+                || tool.resource_policy.is_some()
+                || !child_resources_authorized(
+                    session.granted_resources.as_deref().unwrap_or(&[]),
+                    None,
+                    tool,
+                    args,
+                    None,
+                )
+            {
+                return Err("native_child_authority_escalation");
             }
         }
-        Ok((
-            agent_id.unwrap_or("main").to_string(),
-            parent_id.map(String::from),
-        ))
+        Ok((agent.into(), grant.parent_id, Some(grant.server_id)))
     }
 
     pub fn load(config: &NativeCfg, token: String) -> anyhow::Result<Self> {
@@ -871,6 +1074,35 @@ fn failure(code: &'static str, status: StatusCode) -> (StatusCode, Json<Value>) 
     )
 }
 
+/// Trusted issuer bootstrap; the identifier itself conveys no authority.
+pub async fn instance(State(st): State<Shared>, headers: HeaderMap) -> (StatusCode, Json<Value>) {
+    let Some(native) = &st.native else {
+        return failure("native_not_configured", StatusCode::NOT_FOUND);
+    };
+    let auth = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    if !crate::token::verify(&native.token, auth) {
+        return failure("native_unauthorized", StatusCode::UNAUTHORIZED);
+    }
+    let Ok(sessions) = native.sessions.lock() else {
+        return failure("native_state_unavailable", StatusCode::SERVICE_UNAVAILABLE);
+    };
+    let Ok(now_ms) = wall_time_ms() else {
+        return failure("native_clock_unavailable", StatusCode::SERVICE_UNAVAILABLE);
+    };
+    let bindings: Vec<Value> = sessions.entries.values()
+        .filter(|s| s.host_session.is_some() && s.agent_id.is_some() && validate_lineage(&sessions, s, now_ms, Instant::now()).is_ok())
+        .map(|s| json!({"host_session":s.host_session,"agent_id":s.agent_id,"binding_sha256":hash(s.epoch.as_bytes())})).collect();
+    (
+        StatusCode::OK,
+        Json(
+            json!({"instance_id":native.instance_id(), "registry_sha256":native.registry_sha256,"bindings":bindings}),
+        ),
+    )
+}
+
 pub async fn handler(
     State(st): State<Shared>,
     headers: HeaderMap,
@@ -949,6 +1181,9 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         if let Some(old) = state.entries.remove(&id) {
             if let Some(approval) = &native.approval {
                 approval.close_session(&id, "session_expired");
+            }
+            if let (Some(host), Some(agent)) = (&old.host_session, &old.agent_id) {
+                firewall.end_agent(host, agent);
             }
             firewall.inspect(&old.event_at(old.seq + 1, EventKind::SessionEnd));
             st.spans.end_session(&old.epoch);
@@ -1031,42 +1266,72 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                         return Err("native_invalid_identity");
                     }
                 }
+                if (grant.agent_id.is_some()
+                    || grant.parent_id.is_some()
+                    || grant.granted_resources.is_some())
+                    && grant.nonce.split_once('.').map(|(instance, _)| instance)
+                        != Some(native.instance_id())
+                {
+                    return Err("native_child_authority_instance_mismatch");
+                }
                 let agent_id = grant.agent_id.or_else(|| request.agent_id.clone());
                 let parent_id = grant.parent_id.or_else(|| request.parent_id.clone());
+                if agent_id.as_deref().is_some_and(|id| !identifier(id))
+                    || parent_id.as_deref().is_some_and(|id| !identifier(id))
+                    || ((parent_id.is_some() || grant.granted_resources.is_some())
+                        && agent_id.is_none())
+                {
+                    return Err("native_invalid_identity");
+                }
+                if let Some(agent) = &agent_id {
+                    if state.entries.values().any(|s| {
+                        s.host_session.as_ref() == Some(host_session)
+                            && s.agent_id.as_ref() == Some(agent)
+                    }) {
+                        return Err("native_agent_already_bound");
+                    }
+                    if !state.scoped_hosts.contains(host_session)
+                        && state.scoped_hosts.len() >= MAX_SESSIONS
+                    {
+                        return Err("native_host_binding_cap");
+                    }
+                }
+                if grant
+                    .granted_resources
+                    .as_ref()
+                    .is_some_and(|rs| rs.iter().any(|r| !scope_contains(r, r)))
+                {
+                    return Err("native_child_authority_escalation");
+                }
                 if let Some(ref parent) = parent_id {
-                    let parent_session = state.entries.values().find(|s| {
-                        s.host_session.as_deref() == Some(host_session.as_str())
-                            && s.agent_id.as_deref() == Some(parent.as_str())
-                    });
-                    if let Some(ps) = parent_session {
-                        for tool in &grant.granted_tools {
-                            if !ps.granted_tools.contains(tool) {
-                                return Err("native_child_authority_escalation");
-                            }
-                        }
-                        if let Some(ref p_res) = ps.granted_resources {
-                            let Some(ref c_res) = grant.granted_resources else {
-                                return Err("native_child_authority_escalation");
-                            };
-                            for cr in c_res {
-                                let authorized = p_res.iter().any(|pr| {
-                                    let cp = std::path::Path::new(cr);
-                                    let pp = std::path::Path::new(pr);
-                                    cr == pr
-                                        || (cp.is_absolute()
-                                            && pp.is_absolute()
-                                            && cp.starts_with(pp))
-                                });
-                                if !authorized {
-                                    return Err("native_child_authority_escalation");
-                                }
-                            }
-                        }
-                    } else if let Some(parent_tools) = firewall.agent_tools(host_session, parent) {
-                        for tool in &grant.granted_tools {
-                            if !parent_tools.contains(tool) {
-                                return Err("native_child_authority_escalation");
-                            }
+                    let ps = state
+                        .entries
+                        .values()
+                        .find(|s| {
+                            s.host_session.as_ref() == Some(host_session)
+                                && s.agent_id.as_ref() == Some(parent)
+                        })
+                        .ok_or("native_child_parent_unavailable")?;
+                    if grant.nonce.split('.').nth(1) != Some(hash(ps.epoch.as_bytes()).as_str()) {
+                        return Err("native_child_parent_binding_mismatch");
+                    }
+                    validate_lineage(&state, ps, now_ms, now)?;
+                    if grant
+                        .granted_tools
+                        .iter()
+                        .any(|t| !ps.granted_tools.contains(t))
+                    {
+                        return Err("native_child_authority_escalation");
+                    }
+                    for cr in grant.granted_resources.as_deref().unwrap_or(&[]) {
+                        if !ps
+                            .granted_resources
+                            .as_deref()
+                            .unwrap_or(&[])
+                            .iter()
+                            .any(|pr| scope_contains(pr, cr))
+                        {
+                            return Err("native_child_authority_escalation");
                         }
                     }
                 }
@@ -1086,7 +1351,21 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                     None,
                 )
             };
+        let parent_epoch = parent_id.as_ref().and_then(|parent| {
+            state
+                .entries
+                .values()
+                .find(|s| {
+                    s.host_session == request.host_session && s.agent_id.as_ref() == Some(parent)
+                })
+                .map(|s| s.epoch.clone())
+        });
         let session = Session {
+            parent_epoch,
+            authority_digest: request
+                .child_authority
+                .as_ref()
+                .map(|proof| hash(proof.as_bytes())),
             epoch: format!("native:{}", crate::token::generate()),
             seq: 1,
             touched: now,
@@ -1099,33 +1378,6 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             granted_resources,
             authority_expires_at_ms,
         };
-        let agent_name = session.agent_id.as_deref().unwrap_or("native-runtime");
-        if session.host_session.is_some() {
-            firewall.set_root(&session.epoch, agent_name, &session.granted_tools);
-            if let Some(host) = &session.host_session {
-                if let Some(ref parent) = session.parent_id {
-                    if firewall.agent_tools(host, parent).is_some() {
-                        if let Some(_esc) =
-                            firewall.spawn(host, parent, agent_name, &session.granted_tools)
-                        {
-                            return Err("native_child_authority_escalation");
-                        }
-                    } else {
-                        firewall.set_root(host, agent_name, &session.granted_tools);
-                    }
-                } else {
-                    firewall.set_root(host, agent_name, &session.granted_tools);
-                }
-            }
-        } else {
-            let all_tools: Vec<String> = native
-                .registry
-                .tools
-                .iter()
-                .map(|t| t.name.clone())
-                .collect();
-            firewall.set_root(&session.epoch, agent_name, &all_tools);
-        }
         audit(
             st,
             &request,
@@ -1134,6 +1386,31 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             None,
             started.elapsed().as_micros(),
         )?;
+        let agent_name = session.agent_id.as_deref().unwrap_or("native-runtime");
+        if let (Some(host), Some(agent)) = (&session.host_session, &session.agent_id) {
+            if let Some(parent) = &session.parent_id {
+                if firewall
+                    .spawn(host, parent, agent, &session.granted_tools)
+                    .is_some()
+                {
+                    return Err("native_child_authority_escalation");
+                }
+            } else {
+                firewall.set_root(host, agent, &session.granted_tools);
+            }
+            state.scoped_hosts.insert(host.clone());
+        }
+        let tools = if session.host_session.is_some() {
+            session.granted_tools.clone()
+        } else {
+            native
+                .registry
+                .tools
+                .iter()
+                .map(|t| t.name.clone())
+                .collect()
+        };
+        firewall.set_root(&session.epoch, agent_name, &tools);
         state.entries.insert(request.session_id, session);
         return Ok(response);
     }
@@ -1144,6 +1421,9 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             .ok_or("native_session_unknown")?;
         if let Some(approval) = &native.approval {
             approval.close_session(&request.session_id, "session_ended");
+        }
+        if let (Some(host), Some(agent)) = (&session.host_session, &session.agent_id) {
+            firewall.end_agent(host, agent);
         }
         firewall.inspect(&session.event_at(session.seq + 1, EventKind::SessionEnd));
         st.spans.end_session(&session.epoch);
@@ -1163,17 +1443,13 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
     let total_calls: usize = state.entries.values().map(|s| s.calls.len()).sum();
     let session = state
         .entries
+        .get(&request.session_id)
+        .ok_or("native_session_unknown")?;
+    validate_lineage(&state, session, wall_time_ms()?, now)?;
+    let session = state
+        .entries
         .get_mut(&request.session_id)
         .ok_or("native_session_unknown")?;
-    if let Some(expires_at_ms) = session.authority_expires_at_ms {
-        let now_ms = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|_| "native_clock_unavailable")?
-            .as_millis() as u64;
-        if now_ms >= expires_at_ms {
-            return Err("native_child_authority_expired");
-        }
-    }
     session.touched = now;
     session.seq += 1;
     let name = request.tool.as_deref().ok_or("native_tool_missing")?;
@@ -1622,6 +1898,40 @@ mod tests {
     };
     use soup_wall_agent::AgentFirewall;
     use std::sync::Arc;
+
+    #[test]
+    fn delegated_scope_containment_is_typed_and_canonical() {
+        for (parent, child, allowed) in [
+            ("internal.corp", "alice@internal.corp", true),
+            ("INTERNAL.corp", "https://internal.corp/private", true),
+            ("internal.corp", "https://other.corp/private", false),
+            ("alice@internal.corp", "internal.corp", false),
+            ("alice@internal.corp", "bob@internal.corp", false),
+            ("https://internal.corp/a", "https://internal.corp/a", true),
+            ("https://internal.corp/a", "https://internal.corp/b", false),
+            ("https://internal.corp/a", "http://internal.corp/a", false),
+            ("https://internal.corp/a", "internal.corp", false),
+        ] {
+            assert_eq!(
+                scope_contains(parent, child),
+                allowed,
+                "{parent} -> {child}"
+            );
+        }
+        let root = std::env::temp_dir().join("scope-fixture");
+        let parent = root.join("allowed");
+        for (child, allowed) in [
+            (parent.join("file"), true),
+            (root.join("allowed-secret"), false),
+            (parent.join("..").join("secret"), false),
+            (std::path::PathBuf::from("relative-path"), false),
+        ] {
+            assert_eq!(
+                scope_contains(&parent.to_string_lossy(), &child.to_string_lossy()),
+                allowed
+            );
+        }
+    }
 
     fn fixture(dir: &std::path::Path) -> Shared {
         let bytes = json!({"contract_version": CONTRACT, "registry_id": "unit-suite", "tools": [{

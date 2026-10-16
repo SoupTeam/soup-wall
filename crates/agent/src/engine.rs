@@ -215,6 +215,11 @@ impl AgentFirewall {
         self.authority.tools(session, agent)
     }
 
+    /// Revoke one completed native runtime without erasing shared taint.
+    pub fn end_agent(&mut self, session: &str, agent: &str) {
+        self.authority.end_agent(session, agent);
+    }
+
     /// Fingerprints retained for a session. Exposed for tests and metrics.
     pub fn taint_len(&self, session: &str) -> usize {
         self.taint.len(session)

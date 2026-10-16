@@ -33,5 +33,6 @@
     "real_process_cross_collector_taint_witness": true,
     "real_process_hook_to_mcp_taint_witness": true,
     "support_matrix_and_boundaries_reconciled": true
-  }
+  },
+  "superseded_by": "../sou-63-final-hardening-2026-10-16/results.json"
 }

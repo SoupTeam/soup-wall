@@ -1,5 +1,7 @@
 # SOU-63 Acceptance and Final Verification (2026-10-16)
 
+> Historical verification. The final implementation and current checks are recorded in [sou-63-final-hardening-2026-10-16](../sou-63-final-hardening-2026-10-16/README.md). Scoped hooks now require signed proof and scoped grants require a current daemon instance; use the updated operator instructions.
+
 This document records the full verification and evidence for closing Linear ticket **SOU-63**:
 `feat/sou-63-mcp-hook-provenance-sessions` (PR #146).
 
@@ -33,7 +35,7 @@ This document records the full verification and evidence for closing Linear tick
      - Session termination cleans up active handles and resets sequence allocation without leaking cross-session state.
 
 4. **Truthful Support Matrix and Boundaries Documentation**:
-   - Reconciled [MCP_STDIO_ADMISSION.md](../MCP_STDIO_ADMISSION.md) with complete Identity & Transport Support Matrix, exact refusal reasons, authority delegation rules, and lifecycle boundaries.
+   - Reconciled [MCP_STDIO_ADMISSION.md](../../MCP_STDIO_ADMISSION.md) with complete Identity & Transport Support Matrix, exact refusal reasons, authority delegation rules, and lifecycle boundaries.
 
 ## Verification Suite Results
 

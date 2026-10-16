@@ -81,7 +81,7 @@ pub fn to_event(p: &HookPayload, seq: u64, at_ms: u64, max_bytes: usize) -> Opti
                 .clone()
                 .or_else(|| p.agent_type.clone())
                 .unwrap_or_else(|| "subagent".into());
-            let parent = p.parent_id.clone().or_else(|| Some("main".into()));
+            let parent = p.parent_id.clone();
             (agent, parent)
         }
         _ => {
@@ -169,7 +169,7 @@ mod tests {
         let m = to_event(&p, 1, 0, 262_144).unwrap();
         assert!(!m.truncated);
         assert_eq!(m.event.agent, "Explore");
-        assert_eq!(m.event.parent.as_deref(), Some("main"));
+        assert_eq!(m.event.parent, None);
         match m.event.kind {
             EventKind::SubagentReport { name, content } => {
                 assert_eq!(name, "Explore");

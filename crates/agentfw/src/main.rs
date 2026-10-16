@@ -56,6 +56,12 @@ enum ChildAuthorityCmd {
         parent_id: Option<String>,
         #[arg(long, value_delimiter = ',')]
         resources: Option<Vec<String>>,
+        /// Current /native/v1/instance identifier; required for scoped grants.
+        #[arg(long, allow_hyphen_values = true)]
+        instance_id: Option<String>,
+        /// Exact live parent binding from /native/v1/instance.
+        #[arg(long)]
+        parent_binding: Option<String>,
     },
     /// Authenticate a grant and print its verified claims.
     Verify {
@@ -600,7 +606,37 @@ fn main() -> anyhow::Result<()> {
                     agent_id,
                     parent_id,
                     resources,
+                    instance_id,
+                    parent_binding,
                 } => {
+                    let scoped = agent_id.is_some() || parent_id.is_some() || resources.is_some();
+                    anyhow::ensure!(!scoped || instance_id.as_ref().is_some_and(|id| !id.is_empty() && id.len() <= 128 && id.bytes().all(|b| b.is_ascii_alphanumeric() || b"_-".contains(&b))),
+                        "scoped child authority requires --instance-id from the running daemon's authenticated /native/v1/instance endpoint");
+                    anyhow::ensure!(
+                        agent_id.is_some() || (parent_id.is_none() && resources.is_none()),
+                        "scoped parent/resource authority requires --agent-id"
+                    );
+                    anyhow::ensure!(
+                        parent_id.is_some() == parent_binding.is_some(),
+                        "--parent-id and --parent-binding are required together"
+                    );
+                    anyhow::ensure!(
+                        parent_binding
+                            .as_deref()
+                            .is_none_or(agentfw::native::is_digest),
+                        "invalid parent binding digest"
+                    );
+                    let nonce = if scoped {
+                        let instance = instance_id.unwrap();
+                        match parent_binding {
+                            Some(binding) => {
+                                format!("{instance}.{binding}.{}", agentfw::token::generate())
+                            }
+                            None => format!("{instance}.{}", agentfw::token::generate()),
+                        }
+                    } else {
+                        agentfw::token::generate()
+                    };
                     let grant = child_authority::mint_scoped(
                         &key,
                         &session,
@@ -608,7 +644,7 @@ fn main() -> anyhow::Result<()> {
                         &tools,
                         now_ms(),
                         ttl_seconds.saturating_mul(1000),
-                        agentfw::token::generate(),
+                        nonce,
                         agent_id,
                         parent_id,
                         resources,

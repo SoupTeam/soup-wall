@@ -598,9 +598,55 @@ pub async fn health(State(st): State<Shared>) -> Json<serde_json::Value> {
     }))
 }
 
-/// Every hook event lands here. On ANY internal failure this returns 200 with an
-/// empty body, which Claude Code treats as "no opinion" — a security tool that
-/// wedges the agent loop gets uninstalled the same day.
+// Refused identity cannot silently discard retrospectively delivered content.
+fn hook_identity_refusal(
+    st: &AppState,
+    payload: &HookPayload,
+    body: &str,
+    reason: &str,
+    started: Instant,
+) -> (StatusCode, Json<serde_json::Value>) {
+    // PostToolUse already happened: a refusal cannot retract content.
+    // Preserve sticky history loss even in shadow mode and for lifecycle events.
+    mark_lossy_provenance(st, &RootJsonScan::scan(body));
+    let _ = st.audit.write(&AuditLine {
+        at_ms: now_ms(),
+        session: payload.session_id.clone(),
+        agent_id: payload.agent_id.clone(),
+        parent_id: payload.parent_id.clone(),
+        seq: 0,
+        event: payload.event.as_str().into(),
+        tool: payload.tool_name.clone(),
+        verdict: "deny".into(),
+        shadow: !st.config.enforce,
+        rule: Some(reason.into()),
+        risk_score: 0,
+        findings: vec![],
+        taint: None,
+        judge: None,
+        approval: None,
+        egress_hosts: vec![],
+        latency_us: started.elapsed().as_micros(),
+        truncated: false,
+        raw: None,
+    });
+    if payload.event == HookEvent::PreToolUse && st.config.enforce {
+        let out = decision::Decision {
+            permission_decision: "deny",
+            reason: Some(reason.into()),
+            shadow: false,
+            would_have_been: Verdict::Deny,
+        }
+        .to_hook_output();
+        return (
+            StatusCode::OK,
+            Json(serde_json::to_value(out).unwrap_or_default()),
+        );
+    }
+    (StatusCode::OK, Json(serde_json::json!({})))
+}
+
+/// Inspect authenticated hook traffic; unsupported protected requests receive an explicit disposition.
 pub async fn hook(
     State(st): State<Shared>,
     headers: HeaderMap,
@@ -683,33 +729,43 @@ pub async fn hook(
         }
     };
 
-    if let Some(ref native) = st.native {
-        match native.resolve_hook_identity(
+    let claimed_agent = payload.agent_id.clone();
+    let claimed_parent = payload.parent_id.clone();
+    // A shared hook bearer authenticates the transport, not an agent/parent.
+    // Scoped hooks must present the exact signed grant of an active collector.
+    let proof = headers
+        .get("x-agentfw-child-authority")
+        .map(|h| h.to_str().unwrap_or(""));
+    let identity = match &st.native {
+        Some(native) => native.resolve_hook_identity(
             &payload.session_id,
             payload.agent_id.as_deref(),
             payload.parent_id.as_deref(),
-        ) {
-            Ok((resolved_agent, resolved_parent)) => {
-                payload.agent_id = Some(resolved_agent);
-                payload.parent_id = resolved_parent;
-            }
-            Err(err) => {
-                if st.config.enforce {
-                    let out = decision::Decision {
-                        permission_decision: "deny",
-                        reason: Some(format!("delegated identity conflict: {err}")),
-                        shadow: false,
-                        would_have_been: Verdict::Deny,
-                    }
-                    .to_hook_output();
-                    return (
-                        StatusCode::OK,
-                        Json(serde_json::to_value(out).unwrap_or_default()),
-                    );
-                }
-            }
+            proof,
+            (payload.event == HookEvent::PreToolUse).then(|| {
+                (
+                    payload.tool_name.as_deref().unwrap_or(""),
+                    &payload.tool_input,
+                )
+            }),
+        ),
+        None if proof.is_some() || payload.agent_id.is_some() || payload.parent_id.is_some() => {
+            Err("native_hook_identity_unsupported")
         }
-    }
+        None => Ok((
+            payload.agent_id.clone().unwrap_or_else(|| "main".into()),
+            None,
+            None,
+        )),
+    };
+    let provenance_server = match identity {
+        Ok((agent, parent, server)) => {
+            payload.agent_id = Some(agent);
+            payload.parent_id = parent;
+            server
+        }
+        Err(reason) => return hook_identity_refusal(&st, &payload, &body, reason, started),
+    };
 
     let is_pre = payload.event == HookEvent::PreToolUse;
     let tool_opt = payload
@@ -890,21 +946,18 @@ pub async fn hook(
         });
         return (StatusCode::OK, Json(serde_json::json!({})));
     };
-    let event = mapped.event;
+    let mut event = mapped.event;
+    if let (Some(server), EventKind::ToolResult { source, .. }) =
+        (provenance_server, &mut event.kind)
+    {
+        *source = soup_wall_agent::Provenance::McpServer { name: server };
+    }
     if mapped.truncated {
         let mut fw = st.firewall.lock().expect("firewall mutex");
         fw.mark_provenance_incomplete(&payload.session_id);
     }
 
     let is_pre = payload.event == HookEvent::PreToolUse;
-    let has_active_bound_children = st
-        .native
-        .as_ref()
-        .is_some_and(|n| n.has_active_host_session(&payload.session_id));
-    if payload.event == HookEvent::SessionEnd && !has_active_bound_children {
-        st.sessions.end(&payload.session_id);
-        st.spans.end_session(&payload.session_id);
-    }
 
     // Retain untrusted content by the same sequence number the taint tracker
     // will fingerprint it under, so a later `Escalate` has something to hand the
@@ -930,9 +983,44 @@ pub async fn hook(
     // the call. Scoped in its own block so the `std::sync::Mutex` guard is dropped
     // before the function's first `.await` — nothing here awaits while it is held.
     let (outcome, inspected_deployment) = {
+        let authority = match st
+            .native
+            .as_ref()
+            .map(|n| n.lock_hook_authority())
+            .transpose()
+        {
+            Ok(guard) => guard,
+            Err(reason) => return hook_identity_refusal(&st, &payload, &body, reason, started),
+        };
+        if let Some(guard) = &authority {
+            if let Err(reason) = guard.resolve(
+                &payload.session_id,
+                claimed_agent.as_deref(),
+                claimed_parent.as_deref(),
+                proof,
+                is_pre.then(|| {
+                    (
+                        payload.tool_name.as_deref().unwrap_or(""),
+                        &payload.tool_input,
+                    )
+                }),
+            ) {
+                drop(authority);
+                return hook_identity_refusal(&st, &payload, &body, reason, started);
+            }
+        }
+        let has_active_bound_children = authority
+            .as_ref()
+            .is_some_and(|g| g.has_host(&payload.session_id));
+        if payload.event == HookEvent::SessionEnd && !has_active_bound_children {
+            st.sessions.end(&payload.session_id);
+            st.spans.end_session(&payload.session_id);
+        }
         let mut fw = st.firewall.lock().expect("firewall mutex");
         let outcome = if payload.event == HookEvent::SessionEnd && has_active_bound_children {
             Outcome::allow()
+        } else if let Some(guard) = authority.as_ref().filter(|_| proof.is_some()) {
+            guard.inspect_call(&mut fw, &event)
         } else {
             fw.inspect(&event)
         };
@@ -975,6 +1063,32 @@ pub async fn hook(
     // firewall mutex. Recheck the authoritative live deployment and serialize
     // approval redemption + final decision against activation; never emit an
     // old-policy Allow after a concurrent switch. No await is held under lock.
+    let final_authority = match st
+        .native
+        .as_ref()
+        .map(|n| n.lock_hook_authority())
+        .transpose()
+    {
+        Ok(guard) => guard,
+        Err(reason) => return hook_identity_refusal(&st, &payload, &body, reason, started),
+    };
+    if let Some(guard) = &final_authority {
+        if let Err(reason) = guard.resolve(
+            &payload.session_id,
+            claimed_agent.as_deref(),
+            claimed_parent.as_deref(),
+            proof,
+            is_pre.then(|| {
+                (
+                    payload.tool_name.as_deref().unwrap_or(""),
+                    &payload.tool_input,
+                )
+            }),
+        ) {
+            drop(final_authority);
+            return hook_identity_refusal(&st, &payload, &body, reason, started);
+        }
+    }
     let _final_policy_guard = st.firewall.lock().expect("firewall mutex");
     let changed_while_in_flight = is_pre
         && _final_policy_guard

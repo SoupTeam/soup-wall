@@ -73,6 +73,7 @@ pub fn app_with_diagnostics(
             "/native/v1",
             post(native::handler).layer(axum::extract::DefaultBodyLimit::max(native::MAX_BODY)),
         )
+        .route("/native/v1/instance", get(native::instance))
         .route("/health", get(handlers::health))
         .route(protection_status::ENDPOINT, get(protection_status::handler))
         .layer(axum::Extension(runtime.clone()))
