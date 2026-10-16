@@ -323,7 +323,7 @@ class RecoveryTests(unittest.TestCase):
     def test_populated_group_recovery_control(self):
         with local_database(self.source) as connection:
             connection.executescript(native_group_schema())
-            connection.execute("INSERT INTO managed_agent_enrollments VALUES ('tenant_a','agent_1',X'0102',100,NULL)")
+            connection.execute("INSERT INTO managed_agent_enrollments(tenant_id,agent_id,token_hash,created_at_unix,revoked_at_unix) VALUES ('tenant_a','agent_1',X'0102',100,NULL)")
             connection.execute("INSERT INTO managed_agent_groups VALUES ('tenant_a','grp_1','Group 1',100)")
             connection.execute("INSERT INTO managed_agent_group_members VALUES ('tenant_a','grp_1','agent_1',1,100)")
             connection.execute("INSERT INTO managed_group_revisions VALUES ('tenant_a','grp_1','v1','default: allow\\n','sha_v1',100)")
@@ -340,7 +340,7 @@ class RecoveryTests(unittest.TestCase):
     def test_postgres_alias_and_populated_guards_precede_restore_executor(self):
         # Genuine age archive decoding plus the actual production guard ordering.
         recipient = self.age_identity()
-        state = {'backend': 'postgres', 'schema_version':27,
+        state = {'backend': 'postgres', 'schema_version':28,
                  'schema':recovery.inventory().get('postgres_schema'),
                  'tables': {name: [] for name in recovery.inventory()['postgres_tables']},
                  'sequences': {name: {'last_value':1,'is_called':False}
