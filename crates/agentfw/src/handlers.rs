@@ -4,7 +4,7 @@
 //! HTTP surface: `POST /hook` for every hook event, `GET /health` for liveness.
 //! No detection logic lives here — verdicts come from `soup-wall-agent`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
@@ -23,119 +23,335 @@ use crate::judge::{Judge, Judgement};
 use crate::map;
 use crate::spans::SpanCache;
 
-fn extract_session_id_from_raw(body: &str) -> Option<String> {
-    #[derive(serde::Deserialize)]
-    struct PartialSession {
-        session_id: Option<String>,
-    }
-    if let Ok(partial) = serde_json::from_str::<PartialSession>(body) {
-        if let Some(s) = partial.session_id {
-            if !s.is_empty() {
-                return Some(s);
-            }
-        }
-    }
-    let key = "\"session_id\"";
-    let pos = body.find(key)?;
-    let after_key = &body[pos + key.len()..];
-    let colon = after_key.find(':')?;
-    let after_colon = after_key[colon + 1..].trim_start();
-    if let Some(rest) = after_colon.strip_prefix('"') {
-        let end_quote = rest.find('"')?;
-        let sid = &rest[..end_quote];
-        if !sid.is_empty() {
-            return Some(sid.to_string());
-        }
-    }
-    None
+/// Bounded structural scanner for root-level JSON fields (depth 1 only).
+/// Does not mistake nested fields, escaped quotes, or substrings for root fields.
+#[derive(Debug, Default)]
+pub struct RootJsonScan {
+    pub string_fields: HashMap<String, String>,
+    pub all_string_fields: HashMap<String, Vec<String>>,
+    pub duplicate_keys: HashSet<String>,
+    pub incomplete_keys: HashSet<String>,
+    pub root_keys: HashSet<String>,
+    pub opened_object: bool,
+    pub closed_object: bool,
 }
 
-fn extract_event_from_raw(body: &str) -> Option<String> {
-    #[derive(serde::Deserialize)]
-    struct PartialEvent {
-        hook_event_name: Option<String>,
-        event: Option<String>,
-    }
-    if let Ok(partial) = serde_json::from_str::<PartialEvent>(body) {
-        if let Some(e) = partial.hook_event_name.or(partial.event) {
-            return Some(e);
+impl RootJsonScan {
+    pub fn scan(raw: &str) -> Self {
+        let mut scan = Self::default();
+        let bytes = raw.as_bytes();
+        let n = bytes.len();
+        let mut i = 0;
+
+        while i < n && bytes[i].is_ascii_whitespace() {
+            i += 1;
         }
-    }
-    for key in ["\"hook_event_name\"", "\"event\""] {
-        if let Some(pos) = body.find(key) {
-            let after_key = &body[pos + key.len()..];
-            if let Some(colon) = after_key.find(':') {
-                let after_colon = after_key[colon + 1..].trim_start();
-                if let Some(rest) = after_colon.strip_prefix('"') {
-                    if let Some(end_quote) = rest.find('"') {
-                        return Some(rest[..end_quote].to_string());
+
+        if i >= n || bytes[i] != b'{' {
+            return scan;
+        }
+
+        scan.opened_object = true;
+        i += 1; // skip opening '{'
+
+        enum State {
+            Key,
+            Colon(String),
+            Value(String),
+            CommaOrEnd,
+        }
+
+        let mut state = State::Key;
+
+        while i < n {
+            match state {
+                State::Key => {
+                    while i < n && bytes[i].is_ascii_whitespace() {
+                        i += 1;
                     }
-                }
-            }
-        }
-    }
-    if body.contains("\"tool_input\"") && body.contains("\"tool_name\"") {
-        return Some("PreToolUse".to_string());
-    }
-    None
-}
-
-fn extract_tool_name_from_raw(body: &str) -> Option<String> {
-    #[derive(serde::Deserialize)]
-    struct PartialTool {
-        tool_name: Option<String>,
-        tool: Option<String>,
-    }
-    if let Ok(partial) = serde_json::from_str::<PartialTool>(body) {
-        if let Some(t) = partial.tool_name.or(partial.tool) {
-            if !t.is_empty() {
-                return Some(t);
-            }
-        }
-    }
-    for key in ["\"tool_name\"", "\"tool\""] {
-        if let Some(pos) = body.find(key) {
-            let after_key = &body[pos + key.len()..];
-            if let Some(colon) = after_key.find(':') {
-                let after_colon = after_key[colon + 1..].trim_start();
-                if let Some(rest) = after_colon.strip_prefix('"') {
-                    if let Some(end_quote) = rest.find('"') {
-                        let t = &rest[..end_quote];
-                        if !t.is_empty() {
-                            return Some(t.to_string());
+                    if i >= n {
+                        break;
+                    }
+                    if bytes[i] == b'}' {
+                        scan.closed_object = true;
+                        break;
+                    }
+                    if bytes[i] == b',' {
+                        i += 1;
+                        continue;
+                    }
+                    if bytes[i] == b'"' {
+                        let (key_opt, next_i) = parse_json_string(bytes, i);
+                        i = next_i;
+                        if let Some(key) = key_opt {
+                            if scan.root_keys.contains(&key) {
+                                scan.duplicate_keys.insert(key.clone());
+                            } else {
+                                scan.root_keys.insert(key.clone());
+                            }
+                            state = State::Colon(key);
+                        } else {
+                            scan.incomplete_keys.insert("<incomplete_key>".to_string());
+                            break;
                         }
+                    } else {
+                        break;
+                    }
+                }
+                State::Colon(key) => {
+                    while i < n && bytes[i].is_ascii_whitespace() {
+                        i += 1;
+                    }
+                    if i >= n {
+                        scan.incomplete_keys.insert(key);
+                        break;
+                    }
+                    if bytes[i] == b':' {
+                        i += 1;
+                        state = State::Value(key);
+                    } else {
+                        scan.incomplete_keys.insert(key);
+                        break;
+                    }
+                }
+                State::Value(key) => {
+                    while i < n && bytes[i].is_ascii_whitespace() {
+                        i += 1;
+                    }
+                    if i >= n {
+                        scan.incomplete_keys.insert(key);
+                        break;
+                    }
+                    let b = bytes[i];
+                    if b == b'"' {
+                        let (val_opt, next_i) = parse_json_string(bytes, i);
+                        i = next_i;
+                        if let Some(val) = val_opt {
+                            scan.all_string_fields
+                                .entry(key.clone())
+                                .or_default()
+                                .push(val.clone());
+                            scan.string_fields.insert(key, val);
+                            state = State::CommaOrEnd;
+                        } else {
+                            scan.incomplete_keys.insert(key);
+                            break;
+                        }
+                    } else if b == b'{' || b == b'[' {
+                        let (complete, next_i) = skip_composite(bytes, i);
+                        i = next_i;
+                        if complete {
+                            state = State::CommaOrEnd;
+                        } else {
+                            scan.incomplete_keys.insert(key);
+                            break;
+                        }
+                    } else if b == b',' || b == b'}' {
+                        scan.incomplete_keys.insert(key);
+                        if b == b'}' {
+                            scan.closed_object = true;
+                        }
+                        break;
+                    } else {
+                        let next_i = skip_primitive(bytes, i);
+                        i = next_i;
+                        state = State::CommaOrEnd;
+                    }
+                }
+                State::CommaOrEnd => {
+                    while i < n && bytes[i].is_ascii_whitespace() {
+                        i += 1;
+                    }
+                    if i >= n {
+                        break;
+                    }
+                    if bytes[i] == b',' {
+                        i += 1;
+                        state = State::Key;
+                    } else if bytes[i] == b'}' {
+                        scan.closed_object = true;
+                        break;
+                    } else {
+                        break;
                     }
                 }
             }
         }
+
+        scan
     }
-    None
+
+    pub fn get_root_string(&self, key: &str) -> Option<&str> {
+        if self.duplicate_keys.contains(key) || self.incomplete_keys.contains(key) {
+            return None;
+        }
+        self.string_fields.get(key).map(|s| s.as_str())
+    }
+
+    pub fn is_proven_non_pre(&self) -> bool {
+        if !self.opened_object {
+            return false;
+        }
+        if self.duplicate_keys.contains("hook_event_name")
+            || self.duplicate_keys.contains("event")
+            || self.incomplete_keys.contains("hook_event_name")
+            || self.incomplete_keys.contains("event")
+        {
+            return false;
+        }
+        let event = self
+            .string_fields
+            .get("hook_event_name")
+            .or_else(|| self.string_fields.get("event"));
+        matches!(
+            event.map(|s| s.as_str()),
+            Some("PostToolUse" | "SessionStart" | "SessionEnd")
+        )
+    }
+
+    pub fn is_protected_pretooluse(&self, raw: &str) -> bool {
+        if !self.opened_object {
+            return false;
+        }
+        let event = self
+            .get_root_string("hook_event_name")
+            .or_else(|| self.get_root_string("event"));
+        if event != Some("PreToolUse") {
+            return false;
+        }
+        let tool = self
+            .get_root_string("tool_name")
+            .or_else(|| self.get_root_string("tool"));
+        let Some(tool) = tool else {
+            return false;
+        };
+        const READ_ONLY: &[&str] = &[
+            "Read",
+            "Grep",
+            "Glob",
+            "NotebookRead",
+            "TodoRead",
+            "WebFetch",
+            "WebSearch",
+        ];
+        if READ_ONLY.contains(&tool) {
+            return false;
+        }
+        if tool == "Bash" {
+            return raw.contains("\"command\"");
+        }
+        true
+    }
 }
 
-fn is_protected_pretooluse(body: &str) -> bool {
-    let is_pre = extract_event_from_raw(body).as_deref() == Some("PreToolUse");
-    if !is_pre {
-        return false;
+fn parse_json_string(bytes: &[u8], start: usize) -> (Option<String>, usize) {
+    let n = bytes.len();
+    if start >= n || bytes[start] != b'"' {
+        return (None, start);
     }
-    let Some(tool) = extract_tool_name_from_raw(body) else {
-        return false;
-    };
-    const READ_ONLY: &[&str] = &[
-        "Read",
-        "Grep",
-        "Glob",
-        "NotebookRead",
-        "TodoRead",
-        "WebFetch",
-        "WebSearch",
-    ];
-    if READ_ONLY.contains(&tool.as_str()) {
-        return false;
+    let mut i = start + 1;
+    let mut has_escapes = false;
+    let content_start = i;
+    while i < n {
+        let b = bytes[i];
+        if b == b'"' {
+            let res = if has_escapes {
+                let slice = &bytes[start..=i];
+                if let Ok(s) = std::str::from_utf8(slice) {
+                    serde_json::from_str::<String>(s).ok()
+                } else {
+                    None
+                }
+            } else {
+                let slice = &bytes[content_start..i];
+                String::from_utf8(slice.to_vec()).ok()
+            };
+            return (res, i + 1);
+        } else if b == b'\\' {
+            has_escapes = true;
+            i += 1;
+            if i >= n {
+                return (None, n);
+            }
+            i += 1;
+        } else {
+            i += 1;
+        }
     }
-    if tool == "Bash" {
-        return body.contains("\"command\"");
+    (None, n)
+}
+
+fn skip_composite(bytes: &[u8], start: usize) -> (bool, usize) {
+    let n = bytes.len();
+    let mut depth: usize = 0;
+    let mut i = start;
+    let mut in_string = false;
+    let mut escape = false;
+
+    while i < n {
+        let b = bytes[i];
+        if in_string {
+            if escape {
+                escape = false;
+            } else if b == b'\\' {
+                escape = true;
+            } else if b == b'"' {
+                in_string = false;
+            }
+        } else if b == b'"' {
+            in_string = true;
+        } else if b == b'{' || b == b'[' {
+            depth += 1;
+        } else if b == b'}' || b == b']' {
+            depth = depth.saturating_sub(1);
+            if depth == 0 {
+                return (true, i + 1);
+            }
+        }
+        i += 1;
     }
-    true
+    (false, n)
+}
+
+fn skip_primitive(bytes: &[u8], start: usize) -> usize {
+    let n = bytes.len();
+    let mut i = start;
+    while i < n {
+        let b = bytes[i];
+        if b == b',' || b == b'}' || b == b']' || b.is_ascii_whitespace() {
+            break;
+        }
+        i += 1;
+    }
+    i
+}
+
+fn mark_lossy_provenance(st: &AppState, scan: &RootJsonScan) {
+    let mut marked = HashSet::new();
+    if let Some(session_id) = scan.get_root_string("session_id").filter(|s| !s.is_empty()) {
+        let mut fw = st.firewall.lock().expect("firewall mutex");
+        fw.mark_provenance_incomplete(session_id);
+        marked.insert(session_id.to_string());
+    } else {
+        if let Some(vals) = scan.all_string_fields.get("session_id") {
+            let mut fw = st.firewall.lock().expect("firewall mutex");
+            for sid in vals {
+                if !sid.is_empty() && !marked.contains(sid) {
+                    fw.mark_provenance_incomplete(sid);
+                    marked.insert(sid.clone());
+                }
+            }
+        }
+        if let Some(ref native) = st.native {
+            let mut fw = st.firewall.lock().expect("firewall mutex");
+            for host in native.active_host_sessions() {
+                if !marked.contains(&host) {
+                    fw.mark_provenance_incomplete(&host);
+                    marked.insert(host);
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -330,15 +546,9 @@ pub async fn hook(
                 }
             };
             let lossy_prefix = String::from_utf8_lossy(&prefix);
-            if let Some(session_id) = extract_session_id_from_raw(&lossy_prefix) {
-                let mut fw = st.firewall.lock().expect("firewall mutex");
-                fw.mark_provenance_incomplete(&session_id);
-            }
-            let event_name = extract_event_from_raw(&lossy_prefix);
-            let is_proven_non_pre = matches!(
-                event_name.as_deref(),
-                Some("PostToolUse" | "SessionStart" | "SessionEnd")
-            );
+            let scan = RootJsonScan::scan(&lossy_prefix);
+            mark_lossy_provenance(&st, &scan);
+            let is_proven_non_pre = scan.is_proven_non_pre();
             if st.config.enforce && !is_proven_non_pre {
                 let out = decision::Decision {
                     permission_decision: "deny",
@@ -362,11 +572,9 @@ pub async fn hook(
         Ok(p) => p,
         Err(e) => {
             tracing::warn!(error = %e, "unparsable hook payload; proceeding");
-            if let Some(session_id) = extract_session_id_from_raw(&body) {
-                let mut fw = st.firewall.lock().expect("firewall mutex");
-                fw.mark_provenance_incomplete(&session_id);
-            }
-            if st.config.enforce && is_protected_pretooluse(&body) {
+            let scan = RootJsonScan::scan(&body);
+            mark_lossy_provenance(&st, &scan);
+            if st.config.enforce && scan.is_protected_pretooluse(&body) {
                 let out = decision::Decision {
                     permission_decision: "deny",
                     reason: Some("unparsable hook payload; refused by policy".into()),
@@ -918,5 +1126,68 @@ mod tests {
         s.next("a");
         s.end("a");
         assert_eq!(s.next("a"), 1);
+    }
+
+    #[test]
+    fn root_json_scan_basic_and_proven_non_pre() {
+        let raw = r#"{"session_id": "s1", "hook_event_name": "PostToolUse"}"#;
+        let scan = RootJsonScan::scan(raw);
+        assert_eq!(scan.get_root_string("session_id"), Some("s1"));
+        assert_eq!(scan.get_root_string("hook_event_name"), Some("PostToolUse"));
+        assert!(scan.is_proven_non_pre());
+    }
+
+    #[test]
+    fn root_json_scan_ignores_nested_fields() {
+        let raw = r#"{"metadata": {"hook_event_name": "PostToolUse", "session_id": "nested"}, "session_id": "root"}"#;
+        let scan = RootJsonScan::scan(raw);
+        assert_eq!(scan.get_root_string("session_id"), Some("root"));
+        assert_eq!(scan.get_root_string("hook_event_name"), None);
+        assert!(!scan.is_proven_non_pre());
+    }
+
+    #[test]
+    fn root_json_scan_handles_escaped_quotes_in_strings() {
+        let raw = r#"{"note": "nested \"hook_event_name\":\"PostToolUse\"", "hook_event_name": "PreToolUse"}"#;
+        let scan = RootJsonScan::scan(raw);
+        assert_eq!(scan.get_root_string("hook_event_name"), Some("PreToolUse"));
+        assert_eq!(
+            scan.get_root_string("note"),
+            Some("nested \"hook_event_name\":\"PostToolUse\"")
+        );
+        assert!(!scan.is_proven_non_pre());
+    }
+
+    #[test]
+    fn root_json_scan_duplicate_keys_are_ambiguous() {
+        let raw = r#"{"hook_event_name": "PostToolUse", "session_id": "s1", "hook_event_name": "PreToolUse"}"#;
+        let scan = RootJsonScan::scan(raw);
+        assert!(scan.duplicate_keys.contains("hook_event_name"));
+        assert_eq!(scan.get_root_string("hook_event_name"), None);
+        assert_eq!(scan.get_root_string("session_id"), Some("s1"));
+        assert!(!scan.is_proven_non_pre());
+    }
+
+    #[test]
+    fn root_json_scan_incomplete_keys_and_values() {
+        let raw_val = r#"{"hook_event_name": "Post"#;
+        let scan_val = RootJsonScan::scan(raw_val);
+        assert!(scan_val.incomplete_keys.contains("hook_event_name"));
+        assert_eq!(scan_val.get_root_string("hook_event_name"), None);
+        assert!(!scan_val.is_proven_non_pre());
+
+        let raw_key = r#"{"hook_eve"#;
+        let scan_key = RootJsonScan::scan(raw_key);
+        assert!(!scan_key.incomplete_keys.is_empty());
+        assert!(!scan_key.is_proven_non_pre());
+    }
+
+    #[test]
+    fn root_json_scan_skips_arrays_and_objects() {
+        let raw = r#"{"items": [{"hook_event_name": "PostToolUse"}], "session_id": "s1"}"#;
+        let scan = RootJsonScan::scan(raw);
+        assert_eq!(scan.get_root_string("session_id"), Some("s1"));
+        assert_eq!(scan.get_root_string("hook_event_name"), None);
+        assert!(!scan.is_proven_non_pre());
     }
 }

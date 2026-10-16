@@ -3797,3 +3797,48 @@ async fn review137_invalid_utf8_must_not_be_silently_repaired_before_inspection(
         "malformed protected hook was silently transformed into valid input: {r}"
     );
 }
+
+#[tokio::test]
+async fn reviewb2_nested_event_must_not_prove_oversized_pretooluse_safe() {
+    let f = Fixture::configured(
+        ALLOW,
+        Config {
+            enforce: true,
+            max_body_bytes: 1024,
+            ..Config::default()
+        },
+    );
+    let body = format!("{{\"session_id\":\"host\",\"metadata\":{{\"hook_event_name\":\"PostToolUse\"}},\"padding\":\"{}\",\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{{\"command\":\"rm -rf /tmp/reviewer-no-execution\"}}}}", "x".repeat(6000));
+    let complete: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(complete["hook_event_name"], "PreToolUse");
+    let (s, r) = review137_raw_hook(&f, Body::from(body)).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(
+        r["hookSpecificOutput"]["permissionDecision"], "deny",
+        "nested metadata was trusted as proof of a safe top-level event: {r}"
+    );
+}
+
+#[tokio::test]
+async fn reviewb2_nested_session_must_not_redirect_incomplete_host_history() {
+    let f = Fixture::configured(
+        ALLOW,
+        Config {
+            enforce: true,
+            max_body_bytes: 1024,
+            ..Config::default()
+        },
+    );
+    let (s, r) = f
+        .post(&reviewer_start(&f, "a", &["read_document"], 60_000))
+        .await;
+    assert_allow(s, &r);
+    let body = format!("{{\"hook_event_name\":\"PostToolUse\",\"metadata\":{{\"session_id\":\"unrelated\"}},\"padding\":\"{}\",\"session_id\":\"host\",\"tool_name\":\"mcp__a__read_document\",\"tool_response\":\"discarded untrusted content\"}}", "x".repeat(6000));
+    let complete: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(complete["session_id"], "host");
+    let (s, _) = review137_raw_hook(&f, Body::from(body)).await;
+    assert_eq!(s, StatusCode::OK);
+    let fw = f.state.firewall.lock().unwrap();
+    assert!(fw.provenance_incomplete("host"),
+        "actual authenticated host stays complete while nested unrelated session is marked: unrelated={}",fw.provenance_incomplete("unrelated"));
+}

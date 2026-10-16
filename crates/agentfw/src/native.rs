@@ -302,6 +302,21 @@ impl NativeState {
             .any(|s| s.host_session.as_deref() == Some(host_session))
     }
 
+    pub fn active_host_sessions(&self) -> Vec<String> {
+        let Ok(sessions) = self.sessions.lock() else {
+            return Vec::new();
+        };
+        let mut hosts = Vec::new();
+        for s in sessions.entries.values() {
+            if let Some(ref h) = s.host_session {
+                if !hosts.contains(h) {
+                    hosts.push(h.clone());
+                }
+            }
+        }
+        hosts
+    }
+
     pub fn load(config: &NativeCfg, token: String) -> anyhow::Result<Self> {
         anyhow::ensure!(
             config.registry_path.is_absolute(),
