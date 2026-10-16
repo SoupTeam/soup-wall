@@ -197,8 +197,10 @@ capability removal and socket-denying seccomp contain the selected process.
 Network namespaces alone would not stop a host Unix socket in the workspace;
 seccomp additionally refuses socket/connect/send operations and io_uring setup.
 Read-only mounts do not themselves block FIFO/device IPC writes. The selected
-filter also denies write-intent `open`/`openat`, `openat2`, `creat` and `ioctl`;
-ordinary read-only directory and FIFO reads remain supported. The mandatory
+filter also denies write-intent `open`/`openat`, `openat2`, `creat` and device
+`ioctl` operations. Only `FIONBIO` on stdio descriptors 0–2 is allowed so the
+pinned Node/libuv runtime can make its transport pipes nonblocking; this grants
+no filesystem write access. Ordinary read-only directory and FIFO reads remain supported. The mandatory
 probe calibrates a host FIFO receiver and verifies that the child cannot open
 it for writing or deliver any extra bytes.
 Unrelated inherited descriptors and environment variables are removed. The
