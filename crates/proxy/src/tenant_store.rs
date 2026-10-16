@@ -1030,6 +1030,65 @@ pub struct ScimIdentity {
 /// A SCIM-provisioned person scoped to one customer organization. `external_id`
 /// is an opaque IdP correlation value, not an authentication key; a SCIM user
 /// receives no workspace membership or proxy credential at creation time.
+/// Supported directory lookup; identifiers are selected from this closed enum.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ScimEqualityFilter {
+    attribute: ScimFilterAttribute,
+    value: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum ScimFilterAttribute {
+    Id,
+    ExternalId,
+    UserName,
+    DisplayName,
+}
+
+impl ScimEqualityFilter {
+    pub fn parse(input: &str, groups: bool) -> anyhow::Result<Self> {
+        anyhow::ensure!(input.len() <= 2048, "SCIM filter exceeds limit");
+        let input = input.trim();
+        let split = input
+            .find(char::is_whitespace)
+            .context("SCIM filter needs operator")?;
+        let attribute = match input[..split].to_ascii_lowercase().as_str() {
+            "id" => ScimFilterAttribute::Id,
+            "externalid" => ScimFilterAttribute::ExternalId,
+            "username" if !groups => ScimFilterAttribute::UserName,
+            "displayname" if groups => ScimFilterAttribute::DisplayName,
+            _ => anyhow::bail!("Unsupported SCIM filter attribute"),
+        };
+        let rest = input[split..].trim_start();
+        let split = rest
+            .find(char::is_whitespace)
+            .context("SCIM filter needs value")?;
+        anyhow::ensure!(
+            rest[..split].eq_ignore_ascii_case("eq"),
+            "Only equality is supported"
+        );
+        let value: String = serde_json::from_str(rest[split..].trim())?;
+        anyhow::ensure!(
+            value.len() <= 512 && !value.chars().any(char::is_control),
+            "Invalid SCIM filter value"
+        );
+        Ok(Self { attribute, value })
+    }
+
+    pub fn value(&self) -> &str {
+        &self.value
+    }
+
+    fn column(&self) -> &'static str {
+        match self.attribute {
+            ScimFilterAttribute::Id => "id",
+            ScimFilterAttribute::ExternalId => "external_id",
+            ScimFilterAttribute::UserName => "user_name",
+            ScimFilterAttribute::DisplayName => "display_name",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ScimUser {
     pub id: String,
@@ -2503,9 +2562,24 @@ impl TenantStore {
         start_index: usize,
         count: usize,
     ) -> anyhow::Result<ScimUserPage> {
+        self.list_scim_users_filtered_async(identity, start_index, count, None)
+            .await
+    }
+
+    pub async fn list_scim_users_filtered_async(
+        &self,
+        identity: &ScimIdentity,
+        start_index: usize,
+        count: usize,
+        filter: Option<&ScimEqualityFilter>,
+    ) -> anyhow::Result<ScimUserPage> {
         match &self.postgres {
-            Some(postgres) => postgres.list_scim_users(identity, start_index, count).await,
-            None => self.list_scim_users(identity, start_index, count),
+            Some(postgres) => {
+                postgres
+                    .list_scim_users_filtered(identity, start_index, count, filter)
+                    .await
+            }
+            None => self.list_scim_users_filtered(identity, start_index, count, filter),
         }
     }
 
@@ -2557,13 +2631,24 @@ impl TenantStore {
         start_index: usize,
         count: usize,
     ) -> anyhow::Result<ScimGroupPage> {
+        self.list_scim_groups_filtered_async(identity, start_index, count, None)
+            .await
+    }
+
+    pub async fn list_scim_groups_filtered_async(
+        &self,
+        identity: &ScimIdentity,
+        start_index: usize,
+        count: usize,
+        filter: Option<&ScimEqualityFilter>,
+    ) -> anyhow::Result<ScimGroupPage> {
         match &self.postgres {
             Some(postgres) => {
                 postgres
-                    .list_scim_groups(identity, start_index, count)
+                    .list_scim_groups_filtered(identity, start_index, count, filter)
                     .await
             }
-            None => self.list_scim_groups(identity, start_index, count),
+            None => self.list_scim_groups_filtered(identity, start_index, count, filter),
         }
     }
 
@@ -4376,6 +4461,20 @@ impl TenantStore {
         start_index: usize,
         count: usize,
     ) -> anyhow::Result<ScimUserPage> {
+        self.list_scim_users_filtered(identity, start_index, count, None)
+    }
+
+    pub fn list_scim_users_filtered(
+        &self,
+        identity: &ScimIdentity,
+        start_index: usize,
+        count: usize,
+        filter: Option<&ScimEqualityFilter>,
+    ) -> anyhow::Result<ScimUserPage> {
+        let (column, value) = filter
+            .map(|f| (f.column(), Some(f.value.as_str())))
+            .unwrap_or(("id", None));
+        let predicate = format!(" AND (?4 IS NULL OR {column} = ?4 COLLATE BINARY)");
         validate_scim_page(start_index, count)?;
         let offset = i64::try_from(start_index - 1)
             .context("SCIM start index exceeds SQLite integer range")?;
@@ -4383,24 +4482,25 @@ impl TenantStore {
         let connection = self.connection()?;
         let total_results: i64 = connection
             .query_row(
-                "SELECT COUNT(*) FROM scim_users WHERE organization_id = ?1",
-                [&identity.organization_id],
+                &format!("SELECT COUNT(*) FROM scim_users WHERE organization_id = ?1 AND (?2 IS NULL OR {column} = ?2 COLLATE BINARY)"),
+                params![&identity.organization_id, value],
                 |row| row.get(0),
             )
             .context("failed to count SCIM users")?;
         let mut statement = connection
-            .prepare(
+            .prepare(&format!(
                 "SELECT id, organization_id, external_id, user_name, display_name, active,
                         created_at_unix, updated_at_unix
                  FROM scim_users
                  WHERE organization_id = ?1
+                 {predicate}
                  ORDER BY id ASC
-                 LIMIT ?2 OFFSET ?3",
-            )
+                 LIMIT ?2 OFFSET ?3"
+            ))
             .context("failed to prepare SCIM user list")?;
         let resources = statement
             .query_map(
-                params![&identity.organization_id, limit, offset],
+                params![&identity.organization_id, limit, offset, value],
                 scim_user_from_sqlite_row,
             )
             .context("failed to query SCIM users")?
@@ -4631,6 +4731,20 @@ impl TenantStore {
         start_index: usize,
         count: usize,
     ) -> anyhow::Result<ScimGroupPage> {
+        self.list_scim_groups_filtered(identity, start_index, count, None)
+    }
+
+    pub fn list_scim_groups_filtered(
+        &self,
+        identity: &ScimIdentity,
+        start_index: usize,
+        count: usize,
+        filter: Option<&ScimEqualityFilter>,
+    ) -> anyhow::Result<ScimGroupPage> {
+        let (column, value) = filter
+            .map(|f| (f.column(), Some(f.value.as_str())))
+            .unwrap_or(("id", None));
+        let predicate = format!(" AND (?4 IS NULL OR {column} = ?4 COLLATE BINARY)");
         validate_scim_page(start_index, count)?;
         let offset = i64::try_from(start_index - 1)
             .context("SCIM start index exceeds SQLite integer range")?;
@@ -4638,24 +4752,25 @@ impl TenantStore {
         let connection = self.connection()?;
         let total_results: i64 = connection
             .query_row(
-                "SELECT COUNT(*) FROM scim_groups WHERE organization_id = ?1 AND active = 1",
-                [&identity.organization_id],
+                &format!("SELECT COUNT(*) FROM scim_groups WHERE organization_id = ?1 AND active = 1 AND (?2 IS NULL OR {column} = ?2 COLLATE BINARY)"),
+                params![&identity.organization_id, value],
                 |row| row.get(0),
             )
             .context("failed to count SCIM groups")?;
         let mut statement = connection
-            .prepare(
+            .prepare(&format!(
                 "SELECT id, organization_id, external_id, display_name, active,
                         created_at_unix, updated_at_unix
                  FROM scim_groups
                  WHERE organization_id = ?1 AND active = 1
+                 {predicate}
                  ORDER BY id ASC
-                 LIMIT ?2 OFFSET ?3",
-            )
+                 LIMIT ?2 OFFSET ?3"
+            ))
             .context("failed to prepare SCIM group list")?;
         let mut resources = statement
             .query_map(
-                params![&identity.organization_id, limit, offset],
+                params![&identity.organization_id, limit, offset, value],
                 scim_group_from_sqlite_row,
             )
             .context("failed to query SCIM groups")?

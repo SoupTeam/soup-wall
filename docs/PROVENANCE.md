@@ -118,3 +118,16 @@ is needed. The Cargo dependency graph remains unchanged.
 ## Release evidence
 
 Review and retain the locked dependency graph, an SBOM, third-party license and notice inventory, model and dataset records, the upstream attribution, and security-scan findings for the **complete** workspace. Document any unresolved advisory or deployment limitation in the release notes.
+
+## Optional SCIM interoperability client
+
+The directory acceptance driver installs `scim2-client` 0.13.1 and
+`scim2-models` 0.12.2 from [python-scim](https://github.com/python-scim), both
+Apache-2.0 (Yaal Coop), with their packaged license notices retained by pip.
+Their independent synchronous httpx2 engine drives the real local HTTP API;
+no upstream library source is copied into this repository. This optional test
+client is not bundled into the Gateway executable. Exact direct versions live
+in [the fixture requirements](../scripts/scim-directory-requirements.txt);
+run reports record the installed client/model/HTTP engine versions and source
+hashes. PostgreSQL uses the existing digest-pinned disposable TLS fixture.
+The pinned httpx2 2.13.1 transport is BSD-3-Clause (Pydantic Services / Tom Christie); its packaged license is retained in the isolated environment.
