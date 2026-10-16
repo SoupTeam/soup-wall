@@ -8,7 +8,7 @@
 //! read-only. Unsupported systems and missing bubblewrap features fail closed.
 
 use std::fs::File;
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", all(test, unix)))]
 use std::path::Component;
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
@@ -98,7 +98,7 @@ pub(crate) async fn terminate(child: &mut Child) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", all(test, unix)))]
 fn normalized_absolute(path: &Path) -> bool {
     path.is_absolute()
         && path.parent().is_some()
@@ -107,7 +107,7 @@ fn normalized_absolute(path: &Path) -> bool {
             .all(|component| matches!(component, Component::RootDir | Component::Normal(_)))
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", all(test, unix)))]
 fn valid_library_destination(path: &Path) -> bool {
     normalized_absolute(path)
         && ["/lib", "/lib64", "/usr/lib", "/usr/lib64"]
@@ -207,10 +207,7 @@ fn descriptor_path(file: &File) -> PathBuf {
 /// sockets that may exist in the read-only workspace. Network namespaces alone
 /// do not isolate such filesystem sockets. Anonymous socketpair IPC stays usable.
 #[cfg(target_os = "linux")]
-fn network_filter() -> anyhow::Result<File> {
-    use std::io::{Seek, SeekFrom, Write};
-    use std::os::fd::FromRawFd;
-
+fn filter_instructions() -> anyhow::Result<Vec<(u16, u8, u8, u32)>> {
     #[cfg(target_arch = "x86_64")]
     let architecture = 0xc000_003e_u32;
     #[cfg(target_arch = "aarch64")]
@@ -241,7 +238,6 @@ fn network_filter() -> anyhow::Result<File> {
         libc::SYS_sendmmsg,
         libc::SYS_io_uring_setup,
         libc::SYS_openat2,
-        libc::SYS_ioctl,
     ] {
         instructions.push((0x15, 0, 1, syscall as u32));
         instructions.push((0x06, 0, 0, deny));
@@ -251,6 +247,19 @@ fn network_filter() -> anyhow::Result<File> {
         instructions.push((0x15, 0, 1, libc::SYS_creat as u32));
         instructions.push((0x06, 0, 0, deny));
     }
+    // The pinned Node/libuv opens its explicitly piped stdio with FIONBIO.
+    // Permit that local nonblocking flag only on descriptors 0, 1 and 2.
+    // No ioctl is admitted for workspace/device descriptors or another request.
+    instructions.extend([
+        (0x15, 0, 7, libc::SYS_ioctl as u32),
+        (0x20, 0, 0, 16), // ioctl fd
+        (0x25, 0, 1, 2),  // JGT: only explicit stdio descriptors
+        (0x06, 0, 0, deny),
+        (0x20, 0, 0, 24), // ioctl request
+        (0x15, 0, 1, libc::FIONBIO as u32),
+        (0x06, 0, 0, 0x7fff_0000),
+        (0x06, 0, 0, deny),
+    ]);
     // Read-only bind mounts do not prevent writing to an existing FIFO or all
     // device effects. Deny writable opens independently of the mounted file
     // type. openat2 takes an indirect flags structure, so it is denied above.
@@ -277,6 +286,15 @@ fn network_filter() -> anyhow::Result<File> {
         ]);
     }
     instructions.push((0x06, 0, 0, 0x7fff_0000)); // ALLOW
+    Ok(instructions)
+}
+
+#[cfg(target_os = "linux")]
+fn network_filter() -> anyhow::Result<File> {
+    use std::io::{Seek, SeekFrom, Write};
+    use std::os::fd::FromRawFd;
+
+    let instructions = filter_instructions()?;
     let fd = unsafe {
         libc::memfd_create(
             c"sou62-network-filter".as_ptr(),
@@ -454,10 +472,11 @@ fn prepare_linux_command(
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 
+    #[cfg(unix)]
     #[test]
     fn accepts_only_exact_library_file_destinations() {
         assert!(valid_library_destination(Path::new(
@@ -478,6 +497,92 @@ mod tests {
         ] {
             assert!(!valid_library_destination(Path::new(path)), "{path}");
         }
+    }
+
+    // Interpret the emitted classic-BPF instructions against actual seccomp
+    // argument offsets. This checks branch targets and masks independently of
+    // the kernel-backed real Node positive test below.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn syscall_filter_preserves_read_opens_and_only_stdio_fionbio() {
+        let instructions = filter_instructions().unwrap();
+        let evaluate = |syscall: i64, first: u32, second: u32, third: u32| {
+            let mut data = [0_u8; 64];
+            let architecture = instructions[1].3;
+            for (offset, value) in [
+                (0, syscall as u32),
+                (4, architecture),
+                (16, first),
+                (24, second),
+                (32, third),
+            ] {
+                data[offset..offset + 4].copy_from_slice(&value.to_ne_bytes());
+            }
+            let mut accumulator = 0;
+            let mut index = 0;
+            loop {
+                assert!(index < instructions.len(), "filter branch escaped program");
+                let (code, yes, no, value) = instructions[index];
+                let jump = match code {
+                    0x20 => {
+                        accumulator = u32::from_ne_bytes(
+                            data[value as usize..value as usize + 4].try_into().unwrap(),
+                        );
+                        None
+                    }
+                    0x15 => Some(accumulator == value),
+                    0x25 => Some(accumulator > value),
+                    0x35 => Some(accumulator >= value),
+                    0x45 => Some(accumulator & value != 0),
+                    0x06 => return value,
+                    _ => panic!("unsupported classic-BPF instruction"),
+                };
+                index += 1 + jump.map_or(0, |taken| if taken { yes } else { no }) as usize;
+            }
+        };
+        let allow = 0x7fff_0000;
+        let deny = 0x0005_0000 | libc::EACCES as u32;
+        for fd in [0, 1, 2] {
+            assert_eq!(
+                evaluate(libc::SYS_ioctl, fd, libc::FIONBIO as u32, 0),
+                allow
+            );
+            assert_eq!(
+                evaluate(libc::SYS_ioctl, fd, libc::FIONREAD as u32, 0),
+                deny
+            );
+        }
+        for fd in [3, 127, u32::MAX] {
+            assert_eq!(evaluate(libc::SYS_ioctl, fd, libc::FIONBIO as u32, 0), deny);
+        }
+        for flags in [
+            libc::O_RDONLY,
+            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
+        ] {
+            assert_eq!(evaluate(libc::SYS_openat, u32::MAX, 0, flags as u32), allow);
+        }
+        for flags in [
+            libc::O_WRONLY,
+            libc::O_RDWR,
+            libc::O_CREAT,
+            libc::O_TRUNC,
+            libc::O_APPEND,
+            libc::O_TMPFILE,
+        ] {
+            assert_eq!(evaluate(libc::SYS_openat, u32::MAX, 0, flags as u32), deny);
+            #[cfg(target_arch = "x86_64")]
+            assert_eq!(evaluate(libc::SYS_open, 0, flags as u32, 0), deny);
+        }
+        for syscall in [
+            libc::SYS_openat2,
+            libc::SYS_socket,
+            libc::SYS_connect,
+            libc::SYS_io_uring_setup,
+        ] {
+            assert_eq!(evaluate(syscall, 0, 0, 0), deny);
+        }
+        assert_eq!(evaluate(libc::SYS_read, 0, 0, 0), allow);
+        assert_eq!(evaluate(libc::SYS_read | 0x4000_0000, 0, 0, 0), 0x8000_0000);
     }
 
     /// An explicitly invoked positive acceptance test. A missing runtime,

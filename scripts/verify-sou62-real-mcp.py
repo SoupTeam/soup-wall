@@ -748,13 +748,29 @@ def run(args):
                       "native": {"registry_path": str(stack.install / "registry.json"), "registry_sha256": sha(stack.install / "registry.json")}}
             write(stack.home / ".agentfw/config.yaml", config)
             positive_env = dict(stack.env, SOU62_SANDBOX_TEST_PROFILE=str(stack.install / "profile.json"))
-            positive = subprocess.run([str(tests), "selected_server_sandbox_isolates_real_node", "--ignored", "--nocapture"],
-                                      env=positive_env, capture_output=True, timeout=90)
+            try:
+                positive = subprocess.run([str(tests), "selected_server_sandbox_isolates_real_node", "--ignored", "--nocapture"],
+                                          env=positive_env, capture_output=True, timeout=90)
+            except subprocess.TimeoutExpired as error:
+                partial = (error.stdout or b"") + (error.stderr or b"")
+                (output / "sandbox-positive.log").write_bytes(partial)
+                print(json.dumps({"event": "sou62_required_sandbox_timeout", "timeout_seconds": 90,
+                                  "owned_probe_output_tail": partial[-6000:].decode("utf-8", "replace")}), flush=True)
+                raise
             (output / "sandbox-positive.log").write_bytes(positive.stdout + positive.stderr)
             marker = positive.stdout + positive.stderr
             witnesses = {name: (name + "=true").encode() in marker for name in SANDBOX_WITNESSES}
-            require(positive.returncode == 0 and b"SOU62_SANDBOX_POSITIVE" in marker and all(witnesses.values())
-                    and re.search(rb"1 passed; 0 failed", positive.stdout), "required positive sandbox acceptance failed")
+            positive_passed = (positive.returncode == 0 and b"SOU62_SANDBOX_POSITIVE" in marker and all(witnesses.values())
+                               and re.search(rb"1 passed; 0 failed", positive.stdout))
+            if not positive_passed:
+                # Only the owned Rust/Node sandbox probe runs here. Keep its
+                # bounded failure visible even if artifact download is unavailable.
+                diagnostic = {"event": "sou62_required_sandbox_failure", "exit_code": positive.returncode,
+                              "witnesses": witnesses, "owned_probe_output_tail": marker[-6000:].decode("utf-8", "replace")}
+                print(json.dumps(diagnostic, ensure_ascii=False), flush=True)
+            require(positive_passed, "required positive sandbox acceptance failed; exit=" + str(positive.returncode)
+                    + "; missing=" + ",".join(name for name, passed in witnesses.items() if not passed)
+                    + "; owned probe tail=" + marker[-6000:].decode("utf-8", "replace"))
             report["required_positive_sandbox"] = {"status": "pass", "exit_code": positive.returncode,
                                                     "log_sha256": sha(output / "sandbox-positive.log"), "witnesses": witnesses}
             with (output / "daemon.log").open("wb") as log:

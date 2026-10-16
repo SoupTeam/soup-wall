@@ -156,9 +156,12 @@ fn normal_absolute(path: &Path) -> bool {
         && path
             .to_str()
             .is_some_and(|s| s.len() <= 4096 && !s.chars().any(char::is_control))
-        && path
-            .components()
-            .all(|c| matches!(c, Component::RootDir | Component::Normal(_)))
+        && path.components().all(|c| {
+            matches!(
+                c,
+                Component::Prefix(_) | Component::RootDir | Component::Normal(_)
+            )
+        })
 }
 
 pub fn original_manifest() -> Value {
@@ -290,14 +293,22 @@ fn validate_workspace_path(value: &Value) -> anyhow::Result<()> {
         !text.is_empty() && text.len() <= 4096 && !text.chars().any(char::is_control),
         "invalid MCP workspace path"
     );
-    let path = Path::new(text);
+    // These are paths inside the Linux sandbox, even when this parser or its
+    // tests are hosted on Windows. Host Path semantics would treat `/etc` as a
+    // relative Windows path and accept drive/backslash spellings incorrectly.
     ensure!(
-        path.components()
-            .all(|c| matches!(c, Component::RootDir | Component::Normal(_))),
+        !text.contains(['\\', ':']) && !text.starts_with('~'),
+        "unsupported MCP workspace path spelling"
+    );
+    let relative = text.strip_prefix('/').unwrap_or(text);
+    ensure!(
+        relative
+            .split('/')
+            .all(|part| !part.is_empty() && part != "." && part != ".."),
         "unsupported MCP path traversal"
     );
     ensure!(
-        !path.is_absolute() || path.starts_with("/workspace"),
+        !text.starts_with('/') || text == "/workspace" || text.starts_with("/workspace/"),
         "MCP path is outside selected workspace"
     );
     Ok(())
@@ -632,20 +643,29 @@ mod tests {
 
     #[test]
     fn explicit_profile_is_strict_and_binds_the_actual_command() {
-        let value = json!({"format":FORMAT,"workspace":"/approved","runtimePath":"/runtime/node","runtimeSha256":"a".repeat(64),"packageRoot":"/installed/server","packageTreeSha256":"b".repeat(64),"bwrapPath":"/usr/bin/bwrap","bwrapSha256":"c".repeat(64),"libraries":[]});
+        // Physical operator paths use the host filesystem's absolute syntax;
+        // the child argument remains the fixed virtual POSIX `/workspace`.
+        let owned = tempfile::tempdir().unwrap();
+        let root = owned.path().canonicalize().unwrap();
+        let workspace = root.join("approved");
+        let runtime = root.join("runtime").join("node");
+        let package = root.join("installed").join("server");
+        let bwrap = root.join("runtime").join("bwrap");
+        let other = root.join("other");
+        let value = json!({"format":FORMAT,"workspace":workspace,"runtimePath":runtime,"runtimeSha256":"a".repeat(64),"packageRoot":package,"packageTreeSha256":"b".repeat(64),"bwrapPath":bwrap,"bwrapSha256":"c".repeat(64),"libraries":[]});
         let profile = ProfileConfig::read(value.to_string().as_bytes()).unwrap();
         let args = vec![
-            format!("/installed/server/{SERVER_ENTRYPOINT}"),
+            package.join(SERVER_ENTRYPOINT).to_str().unwrap().to_owned(),
             "/workspace".to_owned(),
         ];
         assert!(profile
-            .validate_command("/runtime/node", &args, Path::new("/approved"))
+            .validate_command(runtime.to_str().unwrap(), &args, &workspace)
             .is_ok());
         assert!(profile
-            .validate_command("/other/node", &args, Path::new("/approved"))
+            .validate_command(other.to_str().unwrap(), &args, &workspace)
             .is_err());
         assert!(profile
-            .validate_command("/runtime/node", &args, Path::new("/other"))
+            .validate_command(runtime.to_str().unwrap(), &args, &other)
             .is_err());
         let mut changed = value.clone();
         changed["allowNetwork"] = json!(true);
@@ -653,5 +673,47 @@ mod tests {
         let mut changed = value;
         changed["format"] = json!("unknown");
         assert!(ProfileConfig::read(changed.to_string().as_bytes()).is_err());
+        #[cfg(not(target_os = "linux"))]
+        assert!(
+            super::super::server_sandbox::prepare(&profile)
+                .unwrap_err()
+                .to_string()
+                .contains("requires Linux bubblewrap"),
+            "a valid physical configuration must not enable an unsupported host"
+        );
+    }
+
+    #[test]
+    fn virtual_workspace_paths_have_posix_semantics_on_every_host() {
+        for path in [
+            "/workspace",
+            "/workspace/file.txt",
+            "/workspace/sub/file.txt",
+            "file.txt",
+            "sub/file.txt",
+            "café.txt",
+        ] {
+            assert!(validate_workspace_path(&json!(path)).is_ok(), "{path}");
+        }
+        for path in [
+            "",
+            "/",
+            "/etc/passwd",
+            "/workspaces/file.txt",
+            "../file",
+            "sub/../file",
+            "./file",
+            "sub/./file",
+            "sub//file",
+            "/workspace/",
+            "//workspace/file",
+            "C:/workspace/file",
+            "C:\\workspace\\file",
+            "\\workspace\\file",
+            "file:stream",
+            "~/file",
+        ] {
+            assert!(validate_workspace_path(&json!(path)).is_err(), "{path}");
+        }
     }
 }
