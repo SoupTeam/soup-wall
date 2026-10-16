@@ -3079,7 +3079,7 @@ fn child_start(fixture: &Fixture, session: &str, host: &str, server: Option<&str
         &["read_document".into()],
         now,
         60_000,
-        "fixture-child-nonce".into(),
+        agentfw::token::generate(),
     );
     let mut request = fixture.event(session, "session_start");
     request["host_session"] = json!(host);
@@ -3198,7 +3198,7 @@ async fn child_authority_refuses_missing_expired_forged_and_mismatched_grants() 
                         &grant.granted_tools,
                         issued,
                         60_000,
-                        "fixture-time".into(),
+                        agentfw::token::generate(),
                     );
                 }
                 request["child_authority"] = json!(child_authority::encode_token(&grant));
@@ -3387,7 +3387,7 @@ async fn bound_trusted_result_keeps_registry_provenance() {
         &["delete_document".into()],
         original.issued_at_ms,
         60_000,
-        "fixture-bound".into(),
+        agentfw::token::generate(),
     );
     start["child_authority"] = json!(child_authority::encode_token(&grant));
     let (status, reply) = fixture.post(&start).await;
@@ -3430,7 +3430,7 @@ fn reviewer_start(f: &Fixture, collector: &str, tools: &[&str], ttl: u64) -> Val
         &tools.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
         now,
         ttl,
-        "reviewer".into(),
+        agentfw::token::generate(),
     );
     let mut v = child_start(f, collector, "host", Some(collector));
     v["child_authority"] = json!(ca::encode_token(&grant));
@@ -4067,8 +4067,9 @@ async fn sou63_child_authority_binds_authenticated_agent_and_parent_identity() {
         now,
         60_000,
         format!(
-            "{}.nonce-1",
-            fixture.state.native.as_ref().unwrap().instance_id()
+            "{}.{}",
+            fixture.state.native.as_ref().unwrap().instance_id(),
+            agentfw::token::generate()
         ),
         Some("worker-1".into()),
         Some("orch-1".into()),
@@ -4094,8 +4095,9 @@ async fn sou63_child_authority_binds_authenticated_agent_and_parent_identity() {
         now,
         60_000,
         format!(
-            "{}.root-parent",
-            fixture.state.native.as_ref().unwrap().instance_id()
+            "{}.{}",
+            fixture.state.native.as_ref().unwrap().instance_id(),
+            agentfw::token::generate()
         ),
         Some("orch-1".into()),
         None,
@@ -4115,7 +4117,7 @@ async fn sou63_child_authority_binds_authenticated_agent_and_parent_identity() {
         &["read_document".into()],
         now,
         60_000,
-        scoped_fixture_nonce(&fixture, "host-1", Some("orch-1"), "bound-child"),
+        scoped_fixture_nonce(&fixture, "host-1", Some("orch-1")),
         Some("worker-1".into()),
         Some("orch-1".into()),
         None,
@@ -4195,8 +4197,9 @@ async fn sou63_child_authority_narrows_resources_and_destinations_relative_to_pa
         now,
         60_000,
         format!(
-            "{}.parent-scope",
-            fixture.state.native.as_ref().unwrap().instance_id()
+            "{}.{}",
+            fixture.state.native.as_ref().unwrap().instance_id(),
+            agentfw::token::generate()
         ),
         Some("parent-agent".into()),
         None,
@@ -4217,7 +4220,7 @@ async fn sou63_child_authority_narrows_resources_and_destinations_relative_to_pa
         &["send_email".into()],
         now,
         60_000,
-        scoped_fixture_nonce(&fixture, "host-parent", Some("parent-agent"), "nonce-res-1"),
+        scoped_fixture_nonce(&fixture, "host-parent", Some("parent-agent")),
         Some("emailer".into()),
         Some("parent-agent".into()),
         Some(vec!["internal.corp".into()]),
@@ -4260,7 +4263,7 @@ async fn sou63_child_authority_narrows_resources_and_destinations_relative_to_pa
         &["retrieve_page".into()],
         now,
         60_000,
-        scoped_fixture_nonce(&fixture, "host-parent", Some("parent-agent"), "nonce-res-2"),
+        scoped_fixture_nonce(&fixture, "host-parent", Some("parent-agent")),
         Some("reader-2".into()),
         Some("parent-agent".into()),
         None, // No resources granted!
@@ -4286,7 +4289,8 @@ async fn sou63_child_authority_narrows_resources_and_destinations_relative_to_pa
     assert_eq!(reply["error_code"], "native_child_authority_escalation");
 }
 
-fn scoped_fixture_nonce(f: &Fixture, host: &str, parent: Option<&str>, suffix: &str) -> String {
+fn scoped_fixture_nonce(f: &Fixture, host: &str, parent: Option<&str>) -> String {
+    let suffix = agentfw::token::generate();
     let instance = f.state.native.as_ref().unwrap().instance_id();
     match parent {
         None => format!("{instance}.{suffix}"),
@@ -4364,7 +4368,7 @@ async fn scoped_start_with_ttl(
         &tools.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
         now,
         ttl,
-        scoped_fixture_nonce(f, "review-host", parent, session),
+        scoped_fixture_nonce(f, "review-host", parent),
         Some(agent.into()),
         parent.map(str::to_owned),
         resources,
@@ -4777,7 +4781,7 @@ async fn review36_expired_child_authority_must_not_authorize_hooks() {
         &["read_document".into(), "Bash".into()],
         now,
         500,
-        scoped_fixture_nonce(&f, "review-host", Some("parent-agent"), "short-lived"),
+        scoped_fixture_nonce(&f, "review-host", Some("parent-agent")),
         Some("worker".into()),
         Some("parent-agent".into()),
         Some(vec![]),
@@ -5186,8 +5190,9 @@ async fn scoped_host_capacity_never_evicts_completed_identity_tombstones() {
             now,
             60_000,
             format!(
-                "{}.nonce-{n}",
-                f.state.native.as_ref().unwrap().instance_id()
+                "{}.{}",
+                f.state.native.as_ref().unwrap().instance_id(),
+                agentfw::token::generate()
             ),
             Some("root".into()),
             None,

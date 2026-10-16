@@ -258,7 +258,7 @@ mod tests {
             &["read".into(), "search".into()],
             10_000,
             20_000,
-            "test-nonce".into(),
+            crate::token::generate(),
         );
         (key, grant)
     }
@@ -310,12 +310,28 @@ mod tests {
             verify(&key, &grant, "host", "server", 4_999),
             Err(ChildAuthorityError::NotYetValid)
         );
-        let zero = mint(&key, "host", "server", &[], 10_000, 0, "n".into());
+        let zero = mint(
+            &key,
+            "host",
+            "server",
+            &[],
+            10_000,
+            0,
+            crate::token::generate(),
+        );
         assert_eq!(
             verify(&key, &zero, "host", "server", 10_000),
             Err(ChildAuthorityError::Expired)
         );
-        let overflow = mint(&key, "host", "server", &[], u64::MAX - 1, 10, "n".into());
+        let overflow = mint(
+            &key,
+            "host",
+            "server",
+            &[],
+            u64::MAX - 1,
+            10,
+            crate::token::generate(),
+        );
         assert_eq!(overflow.expires_at_ms, u64::MAX);
         assert_eq!(
             verify(&key, &overflow, "host", "server", u64::MAX - 1),
@@ -356,7 +372,7 @@ mod tests {
             ("granted_tools", serde_json::json!(["admin"])),
             ("issued_at_ms", serde_json::json!(11_000)),
             ("expires_at_ms", serde_json::json!(40_000)),
-            ("nonce", serde_json::json!("other")),
+            ("nonce", serde_json::json!(crate::token::generate())),
             ("agent_id", serde_json::json!("injected-agent")),
             ("parent_id", serde_json::json!("injected-parent")),
             ("granted_resources", serde_json::json!(["/etc/passwd"])),
@@ -383,7 +399,7 @@ mod tests {
             &["read".into()],
             10_000,
             20_000,
-            "scoped-nonce".into(),
+            crate::token::generate(),
             Some("sub-agent-1".into()),
             Some("main-agent".into()),
             Some(vec!["workspace/docs".into(), "127.0.0.1".into()]),
@@ -460,15 +476,15 @@ mod tests {
     fn signing_boundaries_cannot_be_shifted() {
         let (key, grant) = fixture();
         let mut signatures = std::collections::BTreeSet::new();
-        for (host, server, tools, nonce) in [
-            ("ab", "c", vec!["read".into()], "n"),
-            ("a", "bc", vec!["read".into()], "n"),
-            ("host", "server", vec!["ab".into(), "c".into()], "n"),
-            ("host", "server", vec!["a".into(), "bc".into()], "n"),
-            ("host", "server", vec![], "n"),
-            ("host", "server", vec!["".into()], "n"),
-            ("host", "server", vec!["read\0search".into()], "n"),
-            ("host", "server", vec!["read".into(), "search".into()], "n"),
+        for (host, server, tools) in [
+            ("ab", "c", vec!["read".into()]),
+            ("a", "bc", vec!["read".into()]),
+            ("host", "server", vec!["ab".into(), "c".into()]),
+            ("host", "server", vec!["a".into(), "bc".into()]),
+            ("host", "server", vec![]),
+            ("host", "server", vec!["".into()]),
+            ("host", "server", vec!["read\0search".into()]),
+            ("host", "server", vec!["read".into(), "search".into()]),
         ] {
             let candidate = mint(
                 &key,
@@ -477,13 +493,22 @@ mod tests {
                 &tools,
                 grant.issued_at_ms,
                 20_000,
-                nonce.into(),
+                grant.nonce.clone(),
             );
             assert!(signatures.insert(candidate.signature));
         }
         let tools = |items: &[&str]| items.iter().map(|s| (*s).into()).collect::<Vec<String>>();
         let issue = |host, server, items: Vec<String>| {
-            mint(&key, host, server, &items, 10_000, 20_000, "n".into()).signature
+            mint(
+                &key,
+                host,
+                server,
+                &items,
+                10_000,
+                20_000,
+                grant.nonce.clone(),
+            )
+            .signature
         };
         assert_ne!(issue("ab", "c", tools(&[])), issue("a", "bc", tools(&[])));
         assert_ne!(
