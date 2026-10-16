@@ -256,8 +256,12 @@ unsupported tools, invalid enum/type/missing/extra arguments, typed IDs and
 useful same-session continuations and actual daemon-loss refusal before FIFO execution. Parent-side FIFO reader/writer handshakes,
 workspace inode/content snapshots, client raw bytes and an owned receiver are
 independent witnesses. It also checks the actual installed policy hard Denies a
-destructive operation and network retrieval in clean sessions with no prior
-taint. These are concrete synthetic files and local receivers only.
+declared destructive native operation, a file mutation and an owned HTTP POST
+proposal in clean sessions with no prior taint. The POST proposal uses guarded
+`curl --data`, which the existing classifier treats as outbound `network` data;
+plain `WebFetch` is classified as read-only retrieval and is not mislabeled a
+policy Network Deny. The independent receiver is calibrated before the denied
+proposal, then must receive zero bytes from protected attempts. These are concrete synthetic files and local receivers only.
 
 The actual Claude Code run connects to that installed server, receives a useful
 read, observes a refused write and completes another useful read. An owned

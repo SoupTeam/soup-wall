@@ -611,17 +611,30 @@ def daemon_loss(stack, command, env, report):
 
 def policy_controls(stack, report):
     before = snapshot(stack.workspace)
+    calibration_body = b"sou62-owned-receiver-calibration"
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(urllib.request.Request(stack.receiver.url, calibration_body, method="POST"), timeout=5) as response:
+        require(response.status == 200, "owned receiver calibration did not succeed")
+    require(stack.receiver.bodies == [calibration_body.decode()], "independent receiver calibration missing")
+    report["receiver_calibration"] = {"passed": True, "delivered_bytes": len(calibration_body),
+                                      "body_sha256": hashlib.sha256(calibration_body).hexdigest()}
+    stack.receiver.bodies.clear()
     commands = [
         ("clean-session-write-deny", ["guarded-delete", "--workspace", str(stack.workspace), "--path", "notes.txt"]),
-        ("clean-session-network-deny", ["guarded-fetch", "--url", stack.receiver.url, "--proxy-url", stack.receiver.url.rsplit("/", 1)[0]])]
+        ("clean-session-network-deny", ["guarded-shell", "--workspace", str(stack.workspace),
+            "--session", "sou62-clean-owned-post", "--", "curl", "--data", "sou62-owned-send-attempt", stack.receiver.url])]
     rows = []
     for name, arguments in commands:
-        result = subprocess.run([str(stack.binary), *arguments, "--session", "sou62-clean-" + name], env=stack.env,
+        command = [str(stack.binary), *arguments]
+        if name == "clean-session-write-deny":
+            command.extend(["--session", "sou62-clean-" + name])
+        result = subprocess.run(command, env=stack.env,
                                 capture_output=True, text=True, timeout=20)
         rule = "filesystem-profile-deny-write" if name == "clean-session-write-deny" else "filesystem-profile-deny-network"
         require(result.returncode != 0 and "verdict=deny" in result.stderr and rule in result.stderr,
                 name + " shipped policy did not hard Deny: " + result.stderr[-500:])
-        rows.append({"case": name, "exit_code": result.returncode, "rule": rule, "verdict": "deny", "passed": True})
+        rows.append({"case": name, "exit_code": result.returncode, "rule": rule, "verdict": "deny", "passed": True,
+                     "proposal": "owned_http_post" if name == "clean-session-network-deny" else "guarded_file_delete"})
     require(snapshot(stack.workspace) == before and stack.receiver.bodies == [], "policy probe caused an effect")
     registry = json.loads((stack.install / "registry.json").read_text())
     declaration = next(tool for tool in registry["tools"] if tool["name"] == "move_file")
@@ -698,6 +711,8 @@ def grade(report):
     require(cleanup["exit_code"] == 0 and cleanup["forced_cleanup"] is False
             and cleanup["process_cleanup"]["all_stopped"] is True and cleanup["process_cleanup"]["descendant_count"] > 0
             and report["protected_cleanup_audit"]["cleanup_verified"] is True, "normal selected server cleanup unverified")
+    require(report["receiver_calibration"]["passed"] is True and report["receiver_calibration"]["delivered_bytes"] > 0,
+            "independent receiver was not calibrated")
     policy = report["shipped_policy_controls"]
     require(len(policy) == 3 and all(row["verdict"] == "deny" and row["passed"] is True for row in policy),
             "installed clean-session policy proof missing")

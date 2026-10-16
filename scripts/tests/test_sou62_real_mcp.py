@@ -39,7 +39,7 @@ def complete_report():
             "overload_response": {"id": 999, "error": {"code": -32003}},
             "daemon_loss": {"status": "pass", "native_daemon_stopped_first": True, "unadmitted_fifo_reader_absent": True},
             "refusals": [{"case": str(identifier), "passed": True, "response": {"id": identifier, "error": {"code": -32602}}} for identifier in range(10)],
-            "workspace_unchanged": True, "receiver_bodies": [], "daemon_stopped": True, "private_profile_removed": True,
+            "workspace_unchanged": True, "receiver_bodies": [], "receiver_calibration": {"passed": True, "delivered_bytes": 32}, "daemon_stopped": True, "private_profile_removed": True,
             "installed_profile_unchanged": True, "runtime_unchanged": True,
             "protected_client": {"exit_code": 0, "forced_cleanup": False, "process_cleanup": {"all_stopped": True, "descendant_count": 2}},
             "protected_cleanup_audit": {"cleanup_verified": True},
@@ -134,7 +134,8 @@ class EvidenceControls(unittest.TestCase):
                 VERIFY.grade(report)
 
     def test_effect_cleanup_runtime_and_live_model_claim_mismatches_fail(self):
-        mutations = [lambda report: report.update(receiver_bodies=["leak"]), lambda report: report.update(workspace_unchanged=False),
+        mutations = [lambda report: report.update(receiver_bodies=["leak"]),
+            lambda report: report["receiver_calibration"].update(passed=False), lambda report: report.update(workspace_unchanged=False),
             lambda report: report.update(private_profile_removed=False), lambda report: report.update(runtime_unchanged=False),
             lambda report: report.update(skipped=1),
             lambda report: report["protected_client"].update(forced_cleanup=True),

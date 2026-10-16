@@ -78,6 +78,30 @@ class SourceArchiveExtraction(unittest.TestCase):
             if os.name == "posix":
                 self.assertEqual((Path(temporary) / "deploy/run.sh").stat().st_mode & 0o7777, 0o755)
 
+    @unittest.skipUnless(os.name == "posix", "Docker source permissions require Unix modes")
+    def test_private_umask_preserves_public_source_modes_and_private_parent(self):
+        with tempfile.TemporaryDirectory() as temporary, self.archive([
+                ("policies/", tarfile.DIRTYPE, b""),
+                ("policies/default.yaml", tarfile.REGTYPE, b"owned public policy"),
+                ("scripts/receiver.py", tarfile.REGTYPE, b"owned public helper")]) as bundle:
+            parent = Path(temporary)
+            parent.chmod(0o700)
+            destination = parent / "source"
+            destination.mkdir(mode=0o700)
+            bundle.getmember("policies/default.yaml").mode = 0o644
+            original = os.umask(0o077)
+            try:
+                DRILL.extract_source_archive(bundle, destination)
+                observed = os.umask(0o077)
+            finally:
+                os.umask(original)
+            self.assertEqual(observed, 0o077)
+            self.assertEqual(parent.stat().st_mode & 0o7777, 0o700)
+            for directory in [destination, destination / "policies", destination / "scripts"]:
+                self.assertEqual(directory.stat().st_mode & 0o7777, 0o755)
+            self.assertEqual((destination / "policies/default.yaml").stat().st_mode & 0o7777, 0o644)
+            self.assertEqual((destination / "scripts/receiver.py").stat().st_mode & 0o7777, 0o755)
+
     def test_rejects_paths_links_devices_duplicates_and_file_parents_before_writing(self):
         for members in [
                 [(name, tarfile.REGTYPE, b"bad")] for name in

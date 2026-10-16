@@ -75,17 +75,24 @@ def extract_source_archive(bundle, destination):
             raise DrillError("source archive exceeds byte limit")
         kinds[key] = "file" if member.isfile() else "directory"
         entries.append((member, parts))
+    directories = {destination}
     for member, parts in entries:
         target = destination.joinpath(*parts)
+        parent = target.parent
+        while parent != destination:
+            directories.add(parent)
+            parent = parent.parent
         target.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
         if member.isdir():
             target.mkdir(mode=0o755, exist_ok=True)
+            directories.add(target)
             continue
         stream = bundle.extractfile(member)
         if stream is None:
             raise DrillError("source archive regular file has no data")
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
-        descriptor = os.open(target, flags, 0o755 if member.mode & 0o111 else 0o644)
+        safe_mode = 0o755 if member.mode & 0o111 else 0o644
+        descriptor = os.open(target, flags, safe_mode)
         with stream, os.fdopen(descriptor, "wb") as output:
             remaining = member.size
             while remaining:
@@ -94,6 +101,14 @@ def extract_source_archive(bundle, destination):
                     raise DrillError("truncated source archive member")
                 output.write(chunk)
                 remaining -= len(chunk)
+            # Docker COPY retains these public source modes and root ownership.
+            # The drill's secret-protecting umask must not hide runtime code.
+            if hasattr(os, "fchmod"):
+                os.fchmod(output.fileno(), safe_mode)
+            else:
+                os.chmod(target, safe_mode)
+    for directory in directories:
+        directory.chmod(0o755)
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
