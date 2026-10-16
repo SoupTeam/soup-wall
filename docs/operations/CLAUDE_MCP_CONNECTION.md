@@ -2,8 +2,9 @@
 
 The connection commands manage one explicitly selected server in a Claude Code
 JSON file. The supported transaction platform is Linux, including a Linux
-profile inside WSL2. Native Windows, macOS, project aliases, remote transports
-and nonempty server environments are refused.
+profile inside WSL2. The [native Windows backend](WINDOWS_MCP_CONNECTION.md)
+has a separate NTFS, ownership and recovery contract. macOS, project aliases,
+remote transports and nonempty server environments are refused.
 
 ## Operator flow
 

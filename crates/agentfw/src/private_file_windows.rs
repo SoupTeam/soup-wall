@@ -202,7 +202,7 @@ impl PrivateAcl {
         Ok(Self { descriptor, dacl })
     }
 
-    fn attributes(&self) -> SECURITY_ATTRIBUTES {
+    pub(crate) fn attributes(&self) -> SECURITY_ATTRIBUTES {
         SECURITY_ATTRIBUTES {
             nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
             lpSecurityDescriptor: self.descriptor.0,
@@ -231,7 +231,7 @@ impl PrivateAcl {
     }
 }
 
-fn current_user_sid() -> io::Result<String> {
+pub(crate) fn current_user_sid() -> io::Result<String> {
     let mut raw_token: HANDLE = null_mut();
     // SAFETY: The process pseudo-handle is valid and `raw_token` is writable.
     if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut raw_token) } == 0 {
@@ -266,7 +266,7 @@ fn current_user_sid() -> io::Result<String> {
     sid_to_string(user.User.Sid)
 }
 
-fn sid_to_string(sid: PSID) -> io::Result<String> {
+pub(crate) fn sid_to_string(sid: PSID) -> io::Result<String> {
     if sid.is_null() {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "missing SID"));
     }
