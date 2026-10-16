@@ -23,6 +23,11 @@ def response(identifier, text):
             "result": {"content": [{"type": "text", "text": text}], "structuredContent": {"content": text}}}
 
 
+def host_read_result():
+    rendered = json.dumps({"content": VERIFY.TEXT}, ensure_ascii=False, separators=(",", ":"))
+    return {"is_error": False, "text": rendered, "original_content": rendered}
+
+
 def complete_report():
     return {"source_before": {"commit": "1" * 40, "dirty": False}, "source_after": {"commit": "1" * 40, "dirty": False},
             "skipped": 0, "failed": 0, **{name: "a" * 64 for name in
@@ -44,7 +49,9 @@ def complete_report():
             "protected_client": {"exit_code": 0, "forced_cleanup": False, "process_cleanup": {"all_stopped": True, "descendant_count": 2}},
             "protected_cleanup_audit": {"cleanup_verified": True},
             "shipped_policy_controls": [{"verdict": "deny", "passed": True, "exit_code": 1} for _ in range(3)],
-            "actual_claude_host": {"status": "pass", "process_cleanup": {"all_stopped": True, "descendant_count": 3}, "exit_code": 0, "real_host_executed": True, "scripted_owned_provider": True,
+            "actual_claude_host": {"status": "pass", "collector_log_sha256": "c" * 64,
+                "model_results": {"toolu_sou62_0": host_read_result(), "toolu_sou62_1": {"is_error": True}, "toolu_sou62_2": host_read_result()},
+                "read_presentations": {identifier: VERIFY.host_read_presentation(host_read_result()) for identifier in ["toolu_sou62_0", "toolu_sou62_2"]}, "process_cleanup": {"all_stopped": True, "descendant_count": 3}, "exit_code": 0, "real_host_executed": True, "scripted_owned_provider": True,
                 "live_model_efficacy_measured": False, "claude_sha256": "a" * 64, "claude_version": "2.1.251 (Claude Code)"}}
 
 
@@ -154,6 +161,31 @@ class EvidenceControls(unittest.TestCase):
             mutation(report)
             with self.subTest(report=report), self.assertRaises(ValueError):
                 VERIFY.grade(report)
+
+    def test_pinned_host_structured_json_with_only_observed_token_reminder_passes(self):
+        item = host_read_result()
+        suffix = "\n\n<system-reminder>\n<total_tokens>14999890 tokens left</total_tokens>\n</system-reminder>"
+        item["text"] += suffix
+        item["original_content"] += suffix
+        result = VERIFY.host_read_presentation(item)
+        self.assertEqual(result["representation"], "structured_json")
+        self.assertEqual(result["content_sha256"], hashlib.sha256(VERIFY.TEXT.encode()).hexdigest())
+
+    def test_host_extra_fields_wrong_content_duplicates_trailing_text_and_error_fail(self):
+        valid = host_read_result()["text"]
+        values = [VERIFY.TEXT, json.dumps({"content": VERIFY.TEXT, "instructions": "extra"}),
+            json.dumps({"content": VERIFY.TEXT + "changed"}), json.dumps({"content": [VERIFY.TEXT]}),
+            '{"content":"wrong","content":' + json.dumps(VERIFY.TEXT) + '}',
+            valid + " trailing instructions", valid + "\n\n<system-reminder>uninspected content</system-reminder>"]
+        for text in values:
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                VERIFY.host_read_presentation({"is_error": False, "text": text, "original_content": text})
+        with self.assertRaises(ValueError):
+            VERIFY.host_read_presentation({"is_error": True, "text": valid, "original_content": valid})
+        report = complete_report()
+        report["actual_claude_host"]["model_results"]["toolu_sou62_0"]["original_content"] = "altered"
+        with self.assertRaises(ValueError):
+            VERIFY.grade(report)
 
     def test_jsonrpc_id_type_is_part_of_correlation(self):
         self.assertNotEqual(VERIFY.key(1), VERIFY.key("1"))

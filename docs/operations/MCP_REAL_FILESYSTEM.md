@@ -266,7 +266,15 @@ proposal, then must receive zero bytes from protected attempts. These are concre
 The actual Claude Code run connects to that installed server, receives a useful
 read, observes a refused write and completes another useful read. An owned
 scripted local Messages provider records the host's original tool proposals and
-returned tool results. This proves host interoperability separately; no live
+returned tool results. Pinned Claude Code 2.1.251 presents the original
+`structuredContent` as a JSON string to the provider, rather than repeating the
+plain MCP text block. The host check strictly parses that string as exactly
+`{"content": <exact owned UTF-8 text>}`; it rejects duplicate/extra fields,
+changed content and trailing instructions. It strips only the observed host
+`total_tokens` reminder, preserves the full original provider result and records
+`structured_json` plus exact content/rendering hashes. The MCP wire result
+remains byte-for-byte unchanged and separately verified. This proves host
+interoperability separately; no live
 model efficacy, paid provider or held-out/private dataset is measured.
 
 `report.json` records exact source/tree, Agent/test/Claude/runtime/package/profile

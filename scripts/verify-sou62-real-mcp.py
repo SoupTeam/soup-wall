@@ -480,6 +480,27 @@ def run_stdio(stack, report):
     return command, env
 
 
+def host_read_presentation(observed):
+    """Validate the pinned Claude renderer's structured JSON, never a substring."""
+    require(observed.get("is_error") is False, "actual host read was an error")
+    original = observed.get("original_content")
+    require(isinstance(original, str) and original == observed.get("text"), "unsupported actual host result presentation")
+    rendered = re.sub(r"\n\n<system-reminder>\n<total_tokens>[0-9]+ tokens left</total_tokens>\n</system-reminder>$", "", original)
+    def pairs(items):
+        result = {}
+        for key, value in items:
+            require(key not in result, "duplicate actual host structured key")
+            result[key] = value
+        return result
+    def constant(_):
+        raise ValueError("nonfinite actual host JSON")
+    value = json.loads(rendered, object_pairs_hook=pairs, parse_constant=constant)
+    require(type(value) is dict and set(value) == {"content"} and value["content"] == TEXT,
+            "actual host structured read differs from exact owned content")
+    return {"representation": "structured_json", "content_sha256": hashlib.sha256(TEXT.encode("utf-8")).hexdigest(),
+            "rendered_sha256": hashlib.sha256(original.encode("utf-8")).hexdigest()}
+
+
 def host(stack, command, env, report):
     model = DEMO.ScriptedModel([])
     steps = [(TOOL, {"path": "/workspace/notes.txt"}),
@@ -494,7 +515,8 @@ def host(stack, command, env, report):
                     content = block.get("content")
                     text = content if isinstance(content, str) else "".join(
                         part.get("text", "") for part in content or [] if isinstance(part, dict))
-                    model.results[block.get("tool_use_id")] = {"is_error": bool(block.get("is_error")), "text": text}
+                    model.results[block.get("tool_use_id")] = {"is_error": bool(block.get("is_error")), "text": text,
+                        "original_content": content, "original_tool_result": block}
         index = len([identifier for identifier in model.results if str(identifier).startswith("toolu_sou62_")])
         if index < len(steps):
             tool, arguments = steps[index]
@@ -546,27 +568,50 @@ def host(stack, command, env, report):
                 for block in item.get("message", {}).get("content", []) if block.get("type") == "tool_use"]
         write(stack.root / "claude-host-raw.json", {"messages": messages, "stderr": result.stderr.decode("utf-8", "replace"),
                                                   "provider_requests": [raw.decode("utf-8") for raw in model.requests]})
-        require(result.returncode == 0 and len(final) == 1 and not final[0].get("is_error"), "actual Claude Code did not finish")
-        require(initialized and any(server.get("name") == "demo" and server.get("status") == "connected"
-                                   for server in initialized[0].get("mcp_servers", [])), "actual host did not connect installed real server")
-        require(uses == [{"type": "tool_use", "id": f"toolu_sou62_{index}", "name": "mcp__demo__" + tool, "input": args}
-                         for index, (tool, args) in enumerate(steps)], "actual host did not propose exact owned read/write/follow-up")
-        strip = lambda text: re.sub(r"\n\n?<system-reminder>\n<total_tokens>[0-9]+ tokens left</total_tokens>\n</system-reminder>$", "", text)
-        for index in (0, 2):
-            observed = model.results.get(f"toolu_sou62_{index}", {})
-            require(observed.get("is_error") is False and strip(observed.get("text", "")) == TEXT,
-                    "actual host/provider lacked useful read/follow-up bytes")
-        require(model.results.get("toolu_sou62_1", {}).get("is_error") is True, "actual host forbidden write was not refused")
-        require(snapshot(stack.workspace) == baseline and stack.receiver.bodies == [], "actual host caused unapproved effects")
         version = subprocess.check_output([str(stack.claude), "--version"], text=True, timeout=15).strip()
-        require(version == "2.1.251 (Claude Code)", "actual Claude Code version differs from selected host pin")
-        report["actual_claude_host"] = {"status": "pass", "exit_code": result.returncode,
-            "claude_version": version,
-            "claude_sha256": sha(stack.claude), "model_results": model.results, "host_tool_uses": uses,
+        report["actual_claude_host"] = {"status": "incomplete", "exit_code": result.returncode,
+            "claude_version": version, "claude_sha256": sha(stack.claude), "model_results": model.results, "host_tool_uses": uses,
             "provider_request_count": len(model.requests), "provider_requests_sha256": hashlib.sha256(b"".join(model.requests)).hexdigest(),
-            "raw_output_sha256": hashlib.sha256(result.stdout).hexdigest(), "collector_log_sha256": sha(log),
+            "raw_output_sha256": hashlib.sha256(result.stdout).hexdigest(), "collector_log_sha256": sha(log) if log.is_file() else None,
             "process_cleanup": cleanup, "mcp_shutdown_graceful": None,
             "real_host_executed": True, "scripted_owned_provider": True, "live_model_efficacy_measured": False}
+        protected_values = [host_env["ANTHROPIC_API_KEY"]]
+        for name in ("token", "native-token"):
+            protected = stack.home / ".agentfw" / name
+            if protected.is_file():
+                protected_values.append(protected.read_text(encoding="utf-8").strip())
+        def sanitized(value):
+            text = value.decode("utf-8", "replace") if isinstance(value, bytes) else str(value)
+            for secret in protected_values:
+                if secret:
+                    text = text.replace(secret, "<redacted-owned-credential>")
+            return text
+        def host_check(condition, reason):
+            if not condition:
+                diagnostic = {"event": "sou62_actual_host_failure", "reason": reason,
+                    "exit_code": result.returncode, "claude_version": version,
+                    "owned_model_results": sanitized(json.dumps(model.results, ensure_ascii=False))[:6000],
+                    "host_tool_uses": uses, "stdout_tail": sanitized(result.stdout)[-3000:],
+                    "stderr_tail": sanitized(result.stderr)[-3000:]}
+                print(json.dumps(diagnostic, ensure_ascii=False), flush=True)
+                raise ValueError(reason + "; owned model results=" + diagnostic["owned_model_results"])
+        host_check(result.returncode == 0 and len(final) == 1 and not final[0].get("is_error"), "actual Claude Code did not finish")
+        host_check(initialized and any(server.get("name") == "demo" and server.get("status") == "connected"
+                                   for server in initialized[0].get("mcp_servers", [])), "actual host did not connect installed real server")
+        host_check(uses == [{"type": "tool_use", "id": f"toolu_sou62_{index}", "name": "mcp__demo__" + tool, "input": args}
+                         for index, (tool, args) in enumerate(steps)], "actual host did not propose exact owned read/write/follow-up")
+        presentations = {}
+        for index in (0, 2):
+            identifier = f"toolu_sou62_{index}"
+            try:
+                presentations[identifier] = host_read_presentation(model.results.get(identifier, {}))
+            except (ValueError, TypeError, KeyError) as error:
+                host_check(False, "actual host/provider lacked exact structured read/follow-up: " + str(error))
+        report["actual_claude_host"]["read_presentations"] = presentations
+        host_check(model.results.get("toolu_sou62_1", {}).get("is_error") is True, "actual host forbidden write was not refused")
+        host_check(snapshot(stack.workspace) == baseline and stack.receiver.bodies == [], "actual host caused unapproved effects")
+        host_check(version == "2.1.251 (Claude Code)", "actual Claude Code version differs from selected host pin")
+        report["actual_claude_host"]["status"] = "pass"
     finally:
         model.close()
 
@@ -717,6 +762,13 @@ def grade(report):
     require(len(policy) == 3 and all(row["verdict"] == "deny" and row["passed"] is True for row in policy),
             "installed clean-session policy proof missing")
     host = report["actual_claude_host"]
+    for index in (0, 2):
+        identifier = f"toolu_sou62_{index}"
+        require(host_read_presentation(host["model_results"][identifier]) == host["read_presentations"][identifier],
+                "actual host read presentation receipt differs")
+    require(host["model_results"]["toolu_sou62_1"]["is_error"] is True, "actual host write refusal missing")
+    require(isinstance(host.get("collector_log_sha256"), str) and re.fullmatch(r"[a-f0-9]{64}", host["collector_log_sha256"]) is not None,
+            "actual host collector log identity missing")
     require(host["status"] == "pass" and host["exit_code"] == 0 and host["real_host_executed"] is True
             and host["scripted_owned_provider"] is True and host["live_model_efficacy_measured"] is False
             and host["process_cleanup"]["all_stopped"] is True and host["process_cleanup"]["descendant_count"] > 0
