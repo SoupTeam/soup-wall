@@ -56,6 +56,8 @@ pub(super) fn validated_rotation(input: &RotationRequest) -> Result<Vec<u8>> {
     credential_hash(&input.replacement_token).context("invalid replacement credential")
 }
 
+type RotationRow = (Vec<u8>, i64, Option<String>, Option<i64>, Option<Vec<u8>>);
+
 pub(super) fn valid_id(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
@@ -199,7 +201,7 @@ impl TenantStore {
             "SELECT active FROM tenants WHERE id=?1", [tenant_id], |r| r.get(0)
         ).optional()?;
         ensure!(active == Some(1), "tenant absent or inactive");
-        let current: Option<(Vec<u8>, i64, Option<String>, Option<i64>, Option<Vec<u8>>)> =
+        let current: Option<RotationRow> =
             tx.query_row(
                 "SELECT token_hash,credential_generation,last_rotation_id,last_rotation_expected_generation,last_rotation_digest
                  FROM managed_agent_enrollments
