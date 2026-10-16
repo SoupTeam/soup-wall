@@ -215,8 +215,20 @@ def main():
                 data = call("GET", agent + "/health")[1]
                 return data if (data.get("managed_transport") or {}).get("state") == "auth_unavailable"                     and (data.get("managed_policy") or {}).get("deployment_sequence") == seq else None
             return await_result("Agent authentication gap", read, timeout=15)
+        hook_token = await_result(
+            "Agent local hook bearer", lambda: (home / ".agentfw/token").read_text().strip()
+            if (home / ".agentfw/token").exists() else None)
+        def verdict(label):
+            _, response = call("POST", agent + "/hook", {
+                "session_id": "sou55-" + label,
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "echo harmless"},
+            }, {"Authorization": "Bearer " + hook_token})
+            return "defer" if response == {} else response["hookSpecificOutput"]["permissionDecision"]
         active(1)
         applied(1)
+        check("initial-runtime-decision-deny", verdict("initial") == "deny")
         check("initial-same-daemon", agent_proc.pid == daemon_pid)
 
         next_token = token()
@@ -264,11 +276,13 @@ def main():
         check("post-rotation-deployment-sequence", second["deployment_sequence"] == 2)
         active(2)
         applied(2)
+        check("post-rotation-runtime-decision-defer", verdict("after-rotation") == "defer")
         rollback = expect(201, "POST", base + "/revisions/deny/deploy",
                           {"rollback": True}, admin_headers)
         check("monotonic-rollback", rollback["deployment_sequence"] == 3)
         active(3)
         applied(3)
+        check("post-rotation-monotonic-rollback-deny", verdict("rollback") == "deny")
         check("live-reload-no-daemon-restart", agent_proc.pid == daemon_pid)
 
         # Separate Agent to prove competing generation-1 operations serialize.
@@ -302,7 +316,7 @@ def main():
         expect(401, "GET", console + "/agent/v1/policy", headers=new_headers)
         check("revoked-enrollment-cannot-rotate-or-authenticate", True)
         auth_gap(3)
-        check("active-policy-preserved-after-revocation", True)
+        check("active-policy-preserved-after-revocation", verdict("revoked") == "deny")
         stop(agent_proc)
         # A restart with the last accepted signed bundle still restores policy.
         restarted = run_process(stack, [str(agent_binary), "serve"], temp,
