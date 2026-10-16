@@ -231,7 +231,9 @@ Inventory parameters: `limit` (1–100, default 25), `after` (exclusive Agent ID
 cursor), `prefix` (literal, case-sensitive ID prefix), `enrollment`
 (`all`, `active`, `revoked`) and `delivery` (`all`, `issued`, `delivered`,
 `applied`, `rejected`, `no_history`). Follow `next_after` until null.
-History parameters: `limit` and exclusive `before_sequence`; follow
+Sequence identities and `next_before_sequence` are decimal strings in responses
+to preserve exact 64-bit values in browsers. History parameters: `limit` and
+exclusive `before_sequence`; follow
 `next_before_sequence`. New pages are fresh snapshots, not a frozen traversal.
 Refresh starts again from the newest records. Each individual page is internally
 consistent: SQLite read transaction or PostgreSQL read-only repeatable read.

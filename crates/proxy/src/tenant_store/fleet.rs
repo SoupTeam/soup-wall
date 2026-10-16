@@ -30,12 +30,13 @@ impl FleetQuery {
         ensure!(["all", "issued", "delivered", "applied", "rejected", "no_history"].contains(&self.delivery.as_str()), "invalid delivery filter");
         ensure!(self.before_sequence.is_none_or(|n| n > 0), "invalid sequence cursor");
         ensure!(agent.is_some() || self.before_sequence.is_none(), "sequence cursor requires Agent");
+        ensure!(agent.is_none() || (self.after.is_empty() && self.prefix.is_empty() && self.enrollment == "all" && self.delivery == "all"), "inventory filter is not a history cursor");
         Ok(())
     }
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DeploymentRecord {
-    pub sequence: i64,
+    pub sequence: String,
     pub revision: String,
     pub policy_sha256: String,
     pub action: String,
@@ -72,7 +73,7 @@ pub struct FleetDetail {
     pub observed_at_unix: i64,
     pub agent: FleetAgent,
     pub deployments: Vec<DeploymentRecord>,
-    pub next_before_sequence: Option<i64>,
+    pub next_before_sequence: Option<String>,
 }
 // Every join includes BOTH identifiers. No query selects token_hash, bundle_json,
 // policy_yaml, credential generation, signing keys or filesystem paths.
@@ -93,8 +94,8 @@ pub(super) fn summary_sql(with_deployments: bool, detail: bool) -> String {
 }
 pub(super) const HISTORY_SQL: &str = "SELECT deployment_sequence,revision,policy_sha256,action,status,issued_at_unix,applied_at_unix FROM managed_agent_deployments WHERE tenant_id=$1 AND agent_id=$2 AND ($3::BIGINT IS NULL OR deployment_sequence<$3) ORDER BY deployment_sequence DESC LIMIT $4";
 fn sqlite_record(r: &rusqlite::Row<'_>, i: usize) -> rusqlite::Result<Option<DeploymentRecord>> {
-    let Some(sequence) = r.get(i)? else { return Ok(None); };
-    Ok(Some(DeploymentRecord { sequence, revision:r.get(i+1)?, policy_sha256:r.get(i+2)?, action:r.get(i+3)?, recorded_state:r.get(i+4)?, issued_at_unix:r.get(i+5)?, reported_applied_at_unix:r.get(i+6)?, delivered_at_unix:None, rejected_at_unix:None }))
+    let Some(sequence) = r.get::<_, Option<i64>>(i)? else { return Ok(None); };
+    Ok(Some(DeploymentRecord { sequence: sequence.to_string(), revision:r.get(i+1)?, policy_sha256:r.get(i+2)?, action:r.get(i+3)?, recorded_state:r.get(i+4)?, issued_at_unix:r.get(i+5)?, reported_applied_at_unix:r.get(i+6)?, delivered_at_unix:None, rejected_at_unix:None }))
 }
 fn sqlite_agent(r: &rusqlite::Row<'_>) -> rusqlite::Result<FleetAgent> {
     Ok(FleetAgent { tenant_id:r.get(0)?, agent_id:r.get(1)?, enrolled_at_unix:r.get(2)?, revoked_at_unix:r.get(3)?, latest_issued:sqlite_record(r,4)?, last_reported_applied:sqlite_record(r,11)?, current_liveness:"unknown".into(), runtime_coverage:"unknown".into(), registry_identity:None })
@@ -104,7 +105,7 @@ pub(super) fn page(tenant: &str, mut agents: Vec<FleetAgent>, limit: u32, observ
     FleetPage { contract_version:VERSION.into(), tenant_id:tenant.into(), observed_at_unix:observed, agents, next_after }
 }
 pub(super) fn detail(agent: FleetAgent, mut deployments: Vec<DeploymentRecord>, limit:u32, observed:i64) -> FleetDetail {
-    let next_before_sequence = if deployments.len() > limit as usize { deployments.truncate(limit as usize); deployments.last().map(|d| d.sequence) } else { None };
+    let next_before_sequence = if deployments.len() > limit as usize { deployments.truncate(limit as usize); deployments.last().map(|d| d.sequence.clone()) } else { None };
     FleetDetail { contract_version:VERSION.into(), observed_at_unix:observed, agent, deployments, next_before_sequence }
 }
 fn table_exists(db: &rusqlite::Connection, name:&str) -> Result<bool> {

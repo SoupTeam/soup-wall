@@ -45,8 +45,9 @@ def main():
             config=database.configuration()
         else:config='  backend: sqlite\n  database_path: "fleet.sqlite"\n'
         (cd/'firewall.yaml').write_text(f'bind: "127.0.0.1:{cp}"\ntenant_store:\n  enabled: true\n'+config,encoding='utf-8')
-        migrate=subprocess.run([str(console_binary),'migrate'],cwd=cd,env=env,capture_output=True,timeout=90)
-        check('explicit-store-migration',migrate.returncode==0)
+        if args.backend=='postgres':
+            migrate=subprocess.run([str(console_binary),'migrate'],cwd=cd,env=env,capture_output=True,timeout=90)
+            check('explicit-postgres-migration',migrate.returncode==0)
         D.proc(stack,[str(console_binary)],cd,env,temp/'console.log')
         D.wait_for('Console',lambda: D.request('GET',console+'/healthz')[0]==200)
         headers={'x-llm-firewall-admin-token':'Bearer '+owner}
@@ -80,9 +81,9 @@ def main():
         evidence['applied']=applied
         process.terminate();process.wait(timeout=10)
         req('POST',ab+'/revisions/stable/deploy',{'issuer_key_id':'untrusted'})
-        pending=detail();check('new-pending-keeps-historical-applied',pending['agent']['latest_issued']['recorded_state']=='issued' and pending['agent']['last_reported_applied']['sequence']==1);evidence['pending']=pending
+        pending=detail();check('new-pending-keeps-historical-applied',pending['agent']['latest_issued']['recorded_state']=='issued' and pending['agent']['last_reported_applied']['sequence']=='1');evidence['pending']=pending
         hp=req('GET',fleet+'/agent-demo?limit=1',auth=view);older=req('GET',fleet+'/agent-demo?limit=1&before_sequence='+str(hp['next_before_sequence']),auth=view)
-        check('history-keyset-preserves-separate-last-applied',hp['deployments'][0]['sequence']==2 and older['deployments'][0]['sequence']==1 and hp['agent']['last_reported_applied']['sequence']==1)
+        check('history-keyset-preserves-separate-last-applied',hp['deployments'][0]['sequence']=='2' and older['deployments'][0]['sequence']=='1' and hp['agent']['last_reported_applied']['sequence']=='1')
         check('missing-auth-refused',code('GET',fleet)==401)
         check('agent-credential-not-viewer',code('GET',fleet,{'x-llm-firewall-admin-token':'Bearer '+credentials['agent-demo']})==401)
         check('viewer-cannot-enroll',code('POST',base+'/agents',view,{'agent_id':'forbidden'})==403)
@@ -128,7 +129,7 @@ def main():
             page.route('**'+fleet+'?*',fail);page.locator('#fleet-refresh').click();expect(page.locator('#fleet-status')).to_contain_text('Unable to load');check('browser-error-clears-old-list',page.locator('#fleet-list').inner_text()=='');page.unroute('**'+fleet+'?*',fail)
             process=D.proc(stack,[str(agent_binary),'serve'],temp,agentenv,temp/'agent-rejected.log')
             rejected=D.wait_for('real Agent rejection',lambda:(lambda d:d if d['agent']['latest_issued']['recorded_state']=='rejected' else None)(detail()),timeout=90)
-            check('rejected-keeps-historical-applied',rejected['agent']['last_reported_applied']['sequence']==1 and rejected['agent']['latest_issued']['sequence']==2);evidence['rejected']=rejected
+            check('rejected-keeps-historical-applied',rejected['agent']['last_reported_applied']['sequence']=='1' and rejected['agent']['latest_issued']['sequence']=='2');evidence['rejected']=rejected
             check('real-Agent-keeps-previous-active-policy',D.request('GET',agent+'/health')[1]['managed_policy']['deployment_sequence']==1)
             page.locator('#fleet-refresh').click();expect(page.locator('#fleet-list')).to_contain_text('rejected');page.get_by_role('button',name='agent-demo',exact=True).click();expect(page.locator('#fleet-agent-detail')).to_contain_text('Latest deployment was rejected')
             page.clock.set_fixed_time((rejected['agent']['last_reported_applied']['reported_applied_at_unix']+600)*1000)

@@ -96,8 +96,8 @@ async fn fleet_last_applied_survives_newer_pending_rejected_and_history_paging()
     assert!(db.acknowledge_managed_bundle(&t.id,"agent",&AppliedReport{deployment_sequence:first.deployment_sequence,revision:first.revision,policy_sha256:first.policy_sha256,status:"applied".into()}).unwrap());
     let second=db.deploy_managed_revision(&t.id,"agent","r1",false,&issuer).unwrap();
     assert!(db.acknowledge_managed_bundle(&t.id,"agent",&AppliedReport{deployment_sequence:second.deployment_sequence,revision:second.revision,policy_sha256:second.policy_sha256,status:"rejected".into()}).unwrap());
-    let d=db.fleet_detail(&t.id,"agent",FleetQuery::default()).await.unwrap().unwrap();assert_eq!(d.agent.latest_issued.unwrap().recorded_state,"rejected");assert_eq!(d.agent.last_reported_applied.unwrap().sequence,1);
+    let d=db.fleet_detail(&t.id,"agent",FleetQuery::default()).await.unwrap().unwrap();assert_eq!(d.agent.latest_issued.unwrap().recorded_state,"rejected");assert_eq!(d.agent.last_reported_applied.unwrap().sequence,"1");
     for _ in 0..55 {db.deploy_managed_revision(&t.id,"agent","r1",false,&issuer).unwrap();}
-    let d=db.fleet_detail(&t.id,"agent",FleetQuery{limit:2,..Default::default()}).await.unwrap().unwrap();assert_eq!(d.agent.latest_issued.unwrap().sequence,57);assert_eq!(d.agent.last_reported_applied.unwrap().sequence,1);assert_eq!(d.next_before_sequence,Some(56));
-    let d=db.fleet_detail(&t.id,"agent",FleetQuery{limit:2,before_sequence:Some(56),..Default::default()}).await.unwrap().unwrap();assert_eq!(d.deployments[0].sequence,55);assert_eq!(d.agent.last_reported_applied.unwrap().sequence,1);
+    let d=db.fleet_detail(&t.id,"agent",FleetQuery{limit:2,..Default::default()}).await.unwrap().unwrap();assert_eq!(d.agent.latest_issued.unwrap().sequence,"57");assert_eq!(d.agent.last_reported_applied.unwrap().sequence,"1");assert_eq!(d.next_before_sequence,Some("56".into()));
+    let d=db.fleet_detail(&t.id,"agent",FleetQuery{limit:2,before_sequence:Some(56),..Default::default()}).await.unwrap().unwrap();assert_eq!(d.deployments[0].sequence,"55");assert_eq!(d.agent.last_reported_applied.unwrap().sequence,"1");
 }

@@ -6,7 +6,7 @@ use anyhow::Result;
 use tokio_postgres::{IsolationLevel, Row};
 fn record(r:&Row,i:usize) -> Option<DeploymentRecord> {
     let sequence=r.get::<_,Option<i64>>(i)?;
-    Some(DeploymentRecord { sequence,revision:r.get(i+1),policy_sha256:r.get(i+2),action:r.get(i+3),recorded_state:r.get(i+4),issued_at_unix:r.get(i+5),reported_applied_at_unix:r.get(i+6),delivered_at_unix:None,rejected_at_unix:None })
+    Some(DeploymentRecord { sequence: sequence.to_string(),revision:r.get(i+1),policy_sha256:r.get(i+2),action:r.get(i+3),recorded_state:r.get(i+4),issued_at_unix:r.get(i+5),reported_applied_at_unix:r.get(i+6),delivered_at_unix:None,rejected_at_unix:None })
 }
 fn agent(r:Row) -> FleetAgent {
     FleetAgent { tenant_id:r.get(0),agent_id:r.get(1),enrolled_at_unix:r.get(2),revoked_at_unix:r.get(3),latest_issued:record(&r,4),last_reported_applied:record(&r,11),current_liveness:"unknown".into(),runtime_coverage:"unknown".into(),registry_identity:None }
