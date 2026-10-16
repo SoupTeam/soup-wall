@@ -13,7 +13,7 @@ SPEC.loader.exec_module(MODULE)
 
 class ServiceAcceptanceGraderTests(unittest.TestCase):
     def complete(self):
-        return {"manager_verified": True, "cases": [{"name": name, "status": "passed"} for name in MODULE.CORE_CASES]}
+        return {"suite": "core", "manager_verified": True, "cases": [{"name": name, "status": "passed"} for name in MODULE.CORE_CASES]}
 
     def test_only_complete_executed_success_passes(self):
         self.assertTrue(MODULE.grade(self.complete()))
@@ -28,6 +28,20 @@ class ServiceAcceptanceGraderTests(unittest.TestCase):
                        lambda r: r.update(cleanup_error="incomplete")):
             report = self.complete()
             change(report)
+            self.assertFalse(MODULE.grade(report))
+
+    def test_full_acceptance_requires_every_failure_scenario(self):
+        report = self.complete()
+        report["suite"] = "full"
+        self.assertFalse(MODULE.grade(report))
+        report["cases"] = [{"name": name, "status": "passed"} for name in MODULE.FULL_CASES]
+        self.assertTrue(MODULE.grade(report))
+        for status in ("not_run", "skipped", "failed"):
+            changed = copy.deepcopy(report)
+            changed["cases"][-1]["status"] = status
+            self.assertFalse(MODULE.grade(changed))
+        for suite in (None, "unknown", "FULL"):
+            report["suite"] = suite
             self.assertFalse(MODULE.grade(report))
 
     def test_opt_in_is_required_before_creating_output(self):
