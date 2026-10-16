@@ -35,7 +35,9 @@ def run(args):
               "source_sha256": {name: digest(ROOT / name) for name in
                     ("scripts/scim-directory-acceptance.py", "crates/proxy/src/scim.rs",
                      "crates/proxy/src/tenant_store.rs", "crates/proxy/src/tenant_store/postgres.rs",
-                     "crates/proxy/src/lib.rs", "crates/proxy/examples/scim-directory-fixture.rs", "Cargo.lock")},
+                     "crates/proxy/src/lib.rs", "crates/proxy/examples/scim-directory-fixture.rs", "Cargo.lock",
+                     "scripts/scim-directory-requirements.txt", ".github/workflows/scim-directory.yml",
+                     "scripts/keycloak-oidc-acceptance.py", "scripts/keycloak-saml-acceptance.py")},
               "limitations": ["Synthetic directory only; no customer IdP certification",
                               "Owned loopback HTTP client/server; PostgreSQL uses verified fixture TLS",
                               "User DELETE retains the existing deactivation/tombstone contract",
@@ -68,6 +70,7 @@ def run(args):
                 ca, (cert, key), _ = helpers.vendor.certificate_files(directory)
                 env["LLM_FW_POSTGRES_CA_CERT_FILE"] = str(ca)
                 database = helpers.FixtureDatabase(directory, env, stack, postgres=True, cert=cert, key=key)
+                check("fresh-postgres-has-no-tables", database.sql("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'") == "0")
                 target = database.bootstrap_target()
                 report["postgres_image"] = helpers.POSTGRES_IMAGE
             log = stack.enter_context((directory / "fixture.log").open("wb"))
@@ -95,6 +98,8 @@ def run(args):
             if startup is None:
                 raise RuntimeError("fixture exited before readiness")
             credentials = json.loads(startup)
+            if args.backend == "postgres":
+                check("explicit-migrations-and-verified-postgres-tls", database.sql("SELECT COUNT(*) FROM pg_stat_ssl WHERE ssl AND pid IN (SELECT pid FROM pg_stat_activity WHERE application_name = 'llm-firewall-control-plane')") != "0")
             check("owned-loopback-listener", credentials["base_url"].startswith("http://127.0.0.1:"))
             http = stack.enter_context(Client(base_url=credentials["base_url"],
                 headers={"Authorization": "Bearer " + credentials["token"]}, timeout=10, trust_env=False, follow_redirects=False))

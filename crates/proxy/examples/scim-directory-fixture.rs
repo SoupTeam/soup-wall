@@ -136,6 +136,17 @@ async fn open_store(database: &str) -> anyhow::Result<TenantStore> {
         let expected = std::env::var("SOUP_OIDC_FIXTURE_DATABASE_NAME")?;
         validate_postgres_fixture(&url, &expected)?;
         let ca = std::env::var("LLM_FW_POSTGRES_CA_CERT_FILE")?;
+        // The driver owns a freshly created empty database. Apply the normal
+        // production migrations explicitly before opening the runtime store.
+        TenantStore::migrate_postgres_with_ca(
+            &url,
+            1000,
+            std::time::Duration::from_secs(5),
+            2,
+            std::time::Duration::from_secs(5),
+            Some(&ca),
+        )
+        .await?;
         TenantStore::open_postgres_with_ca(
             &url,
             1000,
