@@ -105,8 +105,10 @@ arbitrary tool under resource policy is refused fail-closed with
 
 The separate [Windows document-read profile](MCP_WINDOWS_READ.md) adds
 `read_document` under `sw-native/resources/4`, with handle-bound workspace/file
-authority and native standard-user acceptance. Windows v1 resource reads and
-unsupported profiles retain their refusal behavior.
+authority and native standard-user acceptance. The separate [Windows create-only
+profile](MCP_WINDOWS_CREATE.md) adds one new root-child `create_file` under
+`sw-native/resources/5`, without overwriting a competing creator. Windows v1
+resource reads and unsupported profiles retain their refusal behavior.
 
 ## Unix host transport
 

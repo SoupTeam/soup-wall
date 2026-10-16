@@ -23,6 +23,22 @@ struct Cli {
 }
 
 #[derive(Subcommand)]
+enum NativeApprovalCmd {
+    /// List outstanding requests (digests only, no raw arguments).
+    List,
+    /// Show one request in full, including the exact arguments.
+    Inspect { id: String },
+    /// Approve exactly this call; --binding must be the digest shown by inspect.
+    Approve {
+        id: String,
+        #[arg(long)]
+        binding: String,
+    },
+    /// Reject this call.
+    Reject { id: String },
+}
+
+#[derive(Subcommand)]
 enum Cmd {
     /// Run the daemon.
     Serve,
@@ -93,9 +109,20 @@ enum Cmd {
         /// This opt-in path fails closed; result release is to the MCP host, not model context.
         #[arg(long)]
         native_admission: bool,
+        /// With --native-admission: hold one Ask call up to N seconds for a
+        /// single-use operator approval (needs `native.approval` in the daemon
+        /// config). 0 or absent keeps the default correlated refusal.
+        #[arg(long, default_value_t = 0)]
+        native_approval_wait_seconds: u64,
         /// The real server command and its args, after `--`.
         #[arg(last = true, required = true)]
         command: Vec<String>,
+    },
+    /// Operator commands for pending native MCP Ask approvals (SOU-48).
+    /// Approval is explicit single-use authorization, not proof of human presence.
+    NativeApproval {
+        #[command(subcommand)]
+        action: NativeApprovalCmd,
     },
     /// Inspect a selected Claude-style MCP JSON config without starting servers.
     /// Only server names and supported transport flags are printed.
@@ -471,6 +498,37 @@ fn main() -> anyhow::Result<()> {
             );
             Ok(())
         }
+        Cmd::NativeApproval { action } => {
+            let home = Config::home()?;
+            match action {
+                NativeApprovalCmd::List => {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&agentfw::native::approval::operator_list(
+                            &home
+                        ))?
+                    );
+                }
+                NativeApprovalCmd::Inspect { id } => {
+                    let v = agentfw::native::approval::operator_inspect(&home, &id)?;
+                    println!("{}", serde_json::to_string_pretty(&v)?);
+                    println!(
+                        "To approve exactly this call:\n  agentfw native-approval approve {id} --binding {}",
+                        v["binding_sha256"].as_str().unwrap_or("")
+                    );
+                }
+                NativeApprovalCmd::Approve { id, binding } => {
+                    let token = agentfw::token::load_or_create(&home.join("token"))?;
+                    agentfw::native::approval::operator_approve(&home, &token, &id, &binding)?;
+                    println!("Approved {id}. Single use, bound to the exact original call digest.");
+                }
+                NativeApprovalCmd::Reject { id } => {
+                    agentfw::native::approval::operator_reject(&home, &id)?;
+                    println!("Rejected {id}.");
+                }
+            }
+            Ok(())
+        }
         Cmd::McpInspectConfig { path } => {
             use std::io::Read;
             let mut bytes = Vec::new();
@@ -485,6 +543,7 @@ fn main() -> anyhow::Result<()> {
         Cmd::Mcp {
             id,
             native_admission,
+            native_approval_wait_seconds,
             command,
         } => {
             let (cmd, args) = command
@@ -528,6 +587,12 @@ fn main() -> anyhow::Result<()> {
                     args: args.to_vec(),
                     classifier: agentfw::mcp::admission::classifier_from_env()?,
                     resource_profiles: agentfw::mcp::admission::resource_profiles_from_env()?,
+                    approval: (native_approval_wait_seconds > 0).then(|| {
+                        agentfw::mcp::admission::ApprovalWait {
+                            url: cfg.endpoint_url("/native/approval/v1"),
+                            wait: Duration::from_secs(native_approval_wait_seconds.min(300)),
+                        }
+                    }),
                 };
                 let runtime = tokio::runtime::Builder::new_multi_thread()
                     .enable_all()
@@ -899,7 +964,18 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
             .as_ref()
             .map(|native| {
                 let native_token = agentfw::token::load_or_create(&home.join("native-token"))?;
-                agentfw::native::NativeState::load(native, native_token)
+                let state = agentfw::native::NativeState::load(native, native_token)?;
+                match &native.approval {
+                    Some(approval) => {
+                        let hook_token = agentfw::token::load_or_create(&home.join("token"))?;
+                        state.with_approval(
+                            &home,
+                            &agentfw::grant::derive_key(&hook_token),
+                            approval.ttl_seconds,
+                        )
+                    }
+                    None => Ok(state),
+                }
             })
             .transpose()?,
         firewall: Mutex::new(firewall),

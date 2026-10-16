@@ -31,6 +31,8 @@ pub mod service;
 pub mod spans;
 pub mod token;
 #[cfg(windows)]
+pub(crate) mod windows_create;
+#[cfg(windows)]
 pub(crate) mod windows_read;
 
 use axum::routing::{get, post};
@@ -53,6 +55,11 @@ pub fn app_with_diagnostics(
     Router::new()
         .route("/hook", post(handlers::hook))
         .route("/mcp", post(handlers::mcp))
+        .route(
+            "/native/approval/v1",
+            post(native::approval::handler)
+                .layer(axum::extract::DefaultBodyLimit::max(native::MAX_BODY)),
+        )
         .route(
             "/native/v1",
             post(native::handler).layer(axum::extract::DefaultBodyLimit::max(native::MAX_BODY)),

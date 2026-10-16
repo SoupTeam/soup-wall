@@ -210,6 +210,53 @@ pub fn app(state: Shared) -> Router {
                 get(managed_agent_api::deployments),
             )
             .route(
+                "/admin/v1/tenants/:tenant_id/groups",
+                post(managed_agent_api::create_group).get(managed_agent_api::list_groups),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/groups/:group_id",
+                get(managed_agent_api::get_group).delete(managed_agent_api::delete_group),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/groups/:group_id/members",
+                post(managed_agent_api::add_group_member)
+                    .get(managed_agent_api::list_group_members),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/groups/:group_id/members/:agent_id",
+                delete(managed_agent_api::remove_group_member),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/groups/:group_id/revisions",
+                post(managed_agent_api::create_group_revision)
+                    .get(managed_agent_api::list_group_revisions),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/groups/:group_id/revisions/:revision/approve",
+                post(managed_agent_api::approve_group_revision),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout",
+                post(managed_agent_api::start_group_rollout)
+                    .get(managed_agent_api::get_group_rollout),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/advance",
+                post(managed_agent_api::advance_group_rollout),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/rollback",
+                post(managed_agent_api::rollback_group_rollout),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/pause",
+                post(managed_agent_api::pause_group_rollout),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/resume",
+                post(managed_agent_api::resume_group_rollout),
+            )
+            .route(
                 "/admin/v1/managed-issuer",
                 get(managed_agent_api::issuer_public_key),
             )
