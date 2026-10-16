@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+import hashlib
 import http.client
 import http.server
 import importlib.util
@@ -465,6 +466,24 @@ def validate_notifications(witness):
     return records
 
 
+def native_binding(registry_sha256, epoch, request):
+    """Independently reproduce the native call/1 length-prefixed binding.
+
+    The daemon deliberately uses a server epoch, separate from the client's
+    session_id. A matching receipt binds that epoch to the full original call.
+    """
+    digest = hashlib.sha256(b"sw-native/call/1\0")
+    for value in (registry_sha256, epoch, request["tool"], request["schema_sha256"], canonical(request["args"]).decode()):
+        raw = value.encode()
+        digest.update(struct.pack(">Q", len(raw)))
+        digest.update(raw)
+    digest.update(request["contract_version"].encode() + b"\0")
+    admission = canonical(request["resource_admission"])
+    digest.update(struct.pack(">Q", len(admission)))
+    digest.update(admission)
+    return digest.hexdigest()
+
+
 def grade(row):
     """Independent original-frame, native-receipt, OS-effect and child grading."""
     failures = []
@@ -617,6 +636,29 @@ def grade(row):
                   and item["forwarded_sha256"] == sha(item["forwarded_raw"].encode()), "native request witness digest changed")
             if "reply_raw" in item:
                 check(item["reply_sha256"] == sha(item["reply_raw"].encode()), "native reply witness digest changed")
+        wire_starts = [item for item in relay if strict_json(item["original_raw"]).get("event") == "session_start"]
+        check(len(wire_starts) == len(starts) == len(sessions), "native epoch/session-start mapping missing")
+        epoch_by_session = {}
+        for wire_start, audit_start in zip(wire_starts, starts):
+            start_request, start_receipt = strict_json(wire_start["original_raw"]), strict_json(wire_start["reply_raw"])
+            epoch = audit_start["session"]
+            check(start_request["contract_version"] == "sw-native/1" and start_receipt["contract_version"] == "sw-native/1"
+                  and start_receipt["event"] == "session_start"
+                  and start_receipt["session_id"] == start_request["session_id"]
+                  and start_receipt["registry_sha256"] == config["registry_sha256"]
+                  and start_receipt["release"] is True and start_receipt["enforced"] is True
+                  and start_receipt["verdict"] == "allow" and audit_start.get("released") is True
+                  and audit_start.get("shadow") is False and audit_start.get("seq") == 1
+                  and audit_start.get("registry_sha256") == config["registry_sha256"]
+                  and isinstance(epoch, str) and epoch.startswith("native:") and epoch != start_request["session_id"]
+                  and start_request["session_id"] not in epoch_by_session,
+                  "native server epoch is not a distinct authenticated session start")
+            epoch_by_session[start_request["session_id"]] = epoch
+        check(len(set(epoch_by_session.values())) == len(sessions), "native server epochs reused across sessions")
+        for epoch in epoch_by_session.values():
+            sequences = [item["seq"] for item in native if item.get("session") == epoch and item.get("event", "").startswith("native_")]
+            check(all(type(number) is int and number >= 1 for number in sequences)
+                  and sequences == sorted(set(sequences)), "native epoch sequence duplicated or reordered")
         calls = [item for item in relay if strict_json(item["original_raw"]).get("event") == "call"]
         def correlated(call_id, arguments, contract, released, expected_content):
             candidates = [item for item in calls if strict_json(item["original_raw"]).get("resource_admission", {}).get("host_call_id") == call_id]
@@ -629,6 +671,9 @@ def grade(row):
                   and grant["contract_version"] == contract and grant["event"] == "call"
                   and re.fullmatch(r"[0-9a-f]{64}", grant["binding_sha256"]) is not None,
                   "native original arguments/contract/enforcing grant mismatch: " + call_id)
+            epoch = epoch_by_session[request["session_id"]]
+            check(grant["binding_sha256"] == native_binding(config["registry_sha256"], epoch, request),
+                  "native receipt does not bind server epoch and exact original call")
             declaration = declarations[0 if call_id == "probe" else 1]["resource_policy"]
             admission = request["resource_admission"]
             expected_resources = [{"pointer": "/path", "source": "argument", "resource": declaration["allowed_resources"][0]}]
@@ -660,15 +705,17 @@ def grade(row):
             audits = [item for item in native if item.get("event") in {"native_call", "native_result"} and item.get("call_id") == grant["call_id"]]
             check([item.get("event") for item in audits] == ["native_call", "native_result"]
                   and audits[0].get("released") is True and audits[1].get("released") is released
-                  and all(item.get("shadow") is False and item.get("session") == request["session_id"] for item in audits)
-                  and audits[-1].get("binding_sha256") == grant["binding_sha256"]
+                  and all(item.get("shadow") is False and item.get("session") == epoch
+                          and item.get("registry_sha256") == config["registry_sha256"]
+                          and item.get("binding_sha256") == grant["binding_sha256"] for item in audits)
+                  and audits[0].get("seq", 0) < audits[-1].get("seq", 0)
                   and audits[-1].get("content_sha256") == sha(completion_request["content"].encode()),
                   "correlated enforcing audit mismatch: " + call_id)
             return candidates[0], completion_request
         _, _ = correlated("useful-followup", {"path": "inventory.txt"}, READ_CONTRACT, True, row["followup_raw"])
         executed = SUCCESS | {"competing-creator"}
         completions_audit = H.classify_rows(row["collector_raw"].encode(), event="mcp_create_file_execution")
-        publications_audit = H.classify_rows(row["collector_raw"].encode(), event="mcp_create_file_publication")
+        publications_audit = H.classify_rows(row["collector_raw"].encode(), event="mcp_create_file_publication_intent")
         if name in executed:
             check(len(completions_audit) == 1 and completions_audit[0].get("host_call_id") == "probe"
                   and completions_audit[0].get("committed") is (name in SUCCESS)

@@ -120,6 +120,8 @@ def passing_row(name="native-deny"):
     listing = line({"jsonrpc": "2.0", "id": "list", "result": {"tools": D.F.TOOLS}})
     labels = ["primary", "fresh-after-refusal"] if name in D.ABNORMAL else ["primary"]
     native = []
+    epoch_for = {"session-" + label: "native:controlled-epoch-" + label for label in labels}
+    next_sequence = {epoch: 1 for epoch in epoch_for.values()}
     for index, label in enumerate(labels):
         session_id = "session-" + label
         primary_abnormal = name in D.ABNORMAL and label == "primary"
@@ -135,9 +137,8 @@ def passing_row(name="native-deny"):
             "child_ledger_present": True, "child_ledger_raw": "", "child_started_raw": "started\n", "child_closed_raw": "closed\n",
             "child_input_raw": line({"method": "initialize"}) + line({"method": "notifications/initialized"}) + line({"method": "tools/list"}),
             "child_output_raw": initialization + listing})
-        native.append({"event": "native_session_start", "session": session_id})
-        if name != "daemon-loss" or label != "primary":
-            native.append({"event": "native_session_end", "session": session_id})
+        native.append({"event": "native_session_start", "session": epoch_for[session_id], "seq": 1,
+                       "registry_sha256": row["configuration"]["registry_sha256"], "released": True, "shadow": False})
     def relay(original, forwarded=None, response=None, **extra):
         raw, forwarded_raw = D.canonical(original).decode(), D.canonical(forwarded or original).decode()
         row["relay"].append(dict(original_raw=raw, forwarded_raw=forwarded_raw,
@@ -146,9 +147,16 @@ def passing_row(name="native-deny"):
             raw_reply = D.canonical(response).decode()
             row["relay"][-1].update(reply_raw=raw_reply, reply_sha256=D.sha(raw_reply.encode()))
         return row["relay"][-1]
+    for label in labels:
+        client_session = "session-" + label
+        relay({"event": "session_start", "contract_version": "sw-native/1", "session_id": client_session}, response={
+            "event": "session_start", "contract_version": "sw-native/1", "session_id": client_session,
+            "registry_sha256": row["configuration"]["registry_sha256"], "release": True, "enforced": True, "verdict": "allow"})
     def boundary(host, arguments, contract, content_raw, released=True, grant=True):
         session = "session-" + ("fresh-after-refusal" if host == "useful-followup" and name in D.ABNORMAL else "primary")
         request = {"event": "call", "contract_version": contract, "args": arguments, "session_id": session,
+                   "tool": "read_document" if host == "useful-followup" else "create_file",
+                   "schema_sha256": D.sha(D.canonical(D.F.READ_SCHEMA if host == "useful-followup" else D.F.CREATE_SCHEMA)),
                    "resource_admission": {"host_call_id": host}}
         policy = configuration["tools"][1 if host == "useful-followup" else 0]["resource_policy"]
         resources = [{"pointer": "/path", "source": "argument", "resource": policy["allowed_resources"][0]}]
@@ -160,7 +168,7 @@ def passing_row(name="native-deny"):
                 workspace_sha256=D.sha(D.canonical(dict(workspace=policy["workspace"], cwd=policy["cwd"], **row["workspace_identity"]))))
         grant_value = {"session_id": session, "contract_version": contract, "event": "call", "resources_sha256": D.sha(D.canonical(resources)), "call_id": host + "-native", "enforced": True, "release": grant,
                        "verdict": "allow" if grant else "deny", "registry_sha256": row["configuration"]["registry_sha256"],
-                       "binding_sha256": ("a" if host == "probe" else "b") * 64}
+                       "binding_sha256": D.native_binding(row["configuration"]["registry_sha256"], epoch_for[session], request)}
         forwarded = copy.deepcopy(request)
         if host == "probe":
             if name == "native-args-mismatch":
@@ -174,14 +182,19 @@ def passing_row(name="native-deny"):
             call.update(held_allow=True, released_unchanged=True)
         if host == "probe" and name == "daemon-loss":
             call["owned_daemon_stopped"] = True
-        native.append({"event": "native_call", "call_id": grant_value["call_id"], "session": session,
-                       "released": grant, "shadow": False, "verdict": "allow" if grant else "deny"})
+        next_sequence[epoch_for[session]] += 1
+        native.append({"event": "native_call", "call_id": grant_value["call_id"], "session": epoch_for[session],
+                       "seq": next_sequence[epoch_for[session]], "registry_sha256": row["configuration"]["registry_sha256"],
+                       "binding_sha256": grant_value["binding_sha256"], "released": grant, "shadow": False,
+                       "verdict": "allow" if grant else "deny"})
         if grant and content_raw is not None:
             completion = {"event": "result", "contract_version": contract, "args": arguments, "session_id": session,
                           "call_id": grant_value["call_id"], "content": content_raw}
             completion_reply = dict(grant_value, event="result", release=released, content_sha256=D.sha(content_raw.encode()))
             relay(completion, response=completion_reply)
-            native.append({"event": "native_result", "call_id": grant_value["call_id"], "session": session,
+            next_sequence[epoch_for[session]] += 1
+            native.append({"event": "native_result", "call_id": grant_value["call_id"], "session": epoch_for[session],
+                           "seq": next_sequence[epoch_for[session]], "registry_sha256": row["configuration"]["registry_sha256"],
                            "released": released, "shadow": False, "verdict": "allow" if released else "deny",
                            "binding_sha256": grant_value["binding_sha256"], "content_sha256": D.sha(content_raw.encode())})
     if name in D.SUCCESS | {"competing-creator"}:
@@ -189,6 +202,10 @@ def passing_row(name="native-deny"):
     elif name in {"native-deny", "native-ask", "native-args-mismatch", "native-content-mismatch"} | D.ABNORMAL:
         boundary("probe", args, D.CONTRACT, None, grant=name == "queued-cancellation")
     boundary("useful-followup", {"path": "inventory.txt"}, D.READ_CONTRACT, row["followup_raw"])
+    for label in labels:
+        if name != "daemon-loss" or label != "primary":
+            epoch = epoch_for["session-" + label]
+            native.append({"event": "native_session_end", "session": epoch, "seq": next_sequence[epoch] + 1})
     row["native_audit_raw"] = "".join(line(item) for item in native)
     for host in (["probe"] if name not in D.EARLY_REFUSALS else []) + ["useful-followup"]:
         useful = host == "useful-followup"
@@ -202,7 +219,7 @@ def passing_row(name="native-deny"):
             "classification": {"actions": ["read"] if useful else ["delete"] if name == "classifier-deny" else ["write"]}})
     if name in D.SUCCESS | {"competing-creator"}:
         if name in D.SUCCESS:
-            row["collector_raw"] += line({"event": "mcp_create_file_publication", "host_call_id": "probe",
+            row["collector_raw"] += line({"event": "mcp_create_file_publication_intent", "host_call_id": "probe",
                 "publication_attempted": True, "staged_bytes": len(content.encode()), "outcome": "indeterminate_until_completion"})
         row["collector_raw"] += line({"event": "mcp_create_file_execution", "host_call_id": "probe",
             "committed": name in D.SUCCESS, "committed_bytes": len(content.encode()) if name in D.SUCCESS else 0,
@@ -291,7 +308,7 @@ class WindowsCreateGradingControls(unittest.TestCase):
     def test_missing_or_fake_publication_intent_cannot_claim_known_rollback(self):
         row = passing_row("utf8-relative")
         records = D.json_lines(row["collector_raw"].encode())
-        intent = next(item for item in records if item["event"] == "mcp_create_file_publication")
+        intent = next(item for item in records if item["event"] == "mcp_create_file_publication_intent")
         intent["outcome"] = "no_effect_guaranteed"
         row["collector_raw"] = "".join(line(item) for item in records)
         self.assertFails(row)
@@ -379,10 +396,56 @@ class WindowsCreateGradingControls(unittest.TestCase):
             row["native_audit_raw"] = "".join(line(item) for item in records)
             self.assertFails(row)
 
+    def test_real_server_epoch_differs_from_client_id_and_is_bound_by_receipt(self):
+        row = passing_row("utf8-relative")
+        audits = D.json_lines(row["native_audit_raw"].encode())
+        call = next(D.strict_json(item["original_raw"]) for item in row["relay"]
+                    if D.strict_json(item["original_raw"]).get("event") == "call")
+        self.assertNotEqual(audits[0]["session"], call["session_id"])
+        self.assertEqual(D.grade(row)["status"], "pass", D.grade(row))
+
+    def test_rewriting_complete_audit_epoch_still_fails_original_receipt_binding(self):
+        row = passing_row("utf8-relative")
+        records = D.json_lines(row["native_audit_raw"].encode())
+        old_epoch = records[0]["session"]
+        for item in records:
+            if item.get("session") == old_epoch:
+                item["session"] = "native:substituted-valid-looking-epoch"
+        row["native_audit_raw"] = "".join(line(item) for item in records)
+        result = D.grade(row)
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("native receipt does not bind server epoch and exact original call", result["check_failures"])
+
+    def test_authenticated_native_epoch_start_is_required(self):
+        for field, value in (("enforced", False), ("contract_version", "sw-native/resources/5")):
+            with self.subTest(field=field):
+                row = passing_row("utf8-relative")
+                item = next(item for item in row["relay"] if D.strict_json(item["original_raw"]).get("event") == "session_start")
+                receipt = D.strict_json(item["reply_raw"])
+                receipt[field] = value
+                item.update(reply_raw=D.canonical(receipt).decode(), reply_sha256=D.sha(D.canonical(receipt)))
+                self.assertFails(row)
+
+    def test_native_epoch_sequence_cannot_repeat_or_reorder(self):
+        row = passing_row("utf8-relative")
+        records = D.json_lines(row["native_audit_raw"].encode())
+        calls = [item for item in records if item.get("event") == "native_call"]
+        calls[-1]["seq"] = calls[0]["seq"]
+        row["native_audit_raw"] = "".join(line(item) for item in records)
+        self.assertFails(row)
+
+    def test_actual_publication_intent_event_is_required(self):
+        row = passing_row("utf8-relative")
+        records = D.json_lines(row["collector_raw"].encode())
+        intent = next(item for item in records if item["event"] == "mcp_create_file_publication_intent")
+        intent["event"] = "mcp_create_file_publication"
+        row["collector_raw"] = "".join(line(item) for item in records)
+        self.assertFails(row)
+
     def test_allow_must_be_genuinely_held_and_enforced(self):
         for field, value in (("held_allow", False), ("released_unchanged", False)):
             row = passing_row("utf8-relative")
-            row["relay"][0][field] = value
+            next(item for item in row["relay"] if item.get("held_allow"))[field] = value
             self.assertFails(row)
 
     def test_result_withholding_does_not_undo_committed_file(self):

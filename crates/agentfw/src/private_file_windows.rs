@@ -13,7 +13,7 @@ use std::io;
 use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::FromRawHandle;
 use std::path::Path;
-use std::ptr::{null, null_mut};
+use std::ptr::{null, null_mut, NonNull};
 
 use windows_sys::Win32::Foundation::{
     CloseHandle, LocalFree, ERROR_ALREADY_EXISTS, ERROR_FILE_EXISTS, HANDLE, INVALID_HANDLE_VALUE,
@@ -23,7 +23,8 @@ use windows_sys::Win32::Security::Authorization::{
     SetSecurityInfo, SDDL_REVISION_1, SE_FILE_OBJECT,
 };
 use windows_sys::Win32::Security::{
-    GetSecurityDescriptorControl, GetSecurityDescriptorDacl, GetTokenInformation, TokenUser, ACL,
+    AclSizeInformation, GetAclInformation, GetSecurityDescriptorControl, GetSecurityDescriptorDacl,
+    GetTokenInformation, IsValidAcl, TokenUser, ACL, ACL_SIZE_INFORMATION,
     DACL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION,
     PSECURITY_DESCRIPTOR, PSID, SECURITY_ATTRIBUTES, SE_DACL_PROTECTED, TOKEN_QUERY, TOKEN_USER,
 };
@@ -103,11 +104,42 @@ impl PrivateAcl {
             return Err(io::Error::from_raw_os_error(code as i32));
         }
         let descriptor = LocalMemory(descriptor);
-        if descriptor.0.is_null() || dacl.is_null() || owner.is_null() {
+        if descriptor.0.is_null() || owner.is_null() {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
                 "stage security descriptor is incomplete",
             ));
+        }
+        let dacl = NonNull::new(dacl).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "stage security descriptor has no DACL",
+            )
+        })?;
+        // GetSecurityInfo owns the ACL storage inside descriptor until this
+        // function returns. Validate it through the supported ACL APIs instead
+        // of dereferencing a returned FFI structure in Rust.
+        if unsafe { IsValidAcl(dacl.as_ptr()) } == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "stage security descriptor has an invalid DACL",
+            ));
+        }
+        let mut acl_information = ACL_SIZE_INFORMATION {
+            AceCount: 0,
+            AclBytesInUse: 0,
+            AclBytesFree: 0,
+        };
+        if unsafe {
+            GetAclInformation(
+                dacl.as_ptr(),
+                (&mut acl_information as *mut ACL_SIZE_INFORMATION).cast(),
+                std::mem::size_of::<ACL_SIZE_INFORMATION>() as u32,
+                AclSizeInformation,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
         }
         let mut control = 0u16;
         let mut revision = 0u32;
@@ -115,7 +147,7 @@ impl PrivateAcl {
             return Err(io::Error::last_os_error());
         }
         if control & SE_DACL_PROTECTED == 0
-            || unsafe { (*dacl).AceCount } != 0
+            || acl_information.AceCount != 0
             || sid_to_string(owner)? != current_user_sid()?
         {
             return Err(io::Error::new(
