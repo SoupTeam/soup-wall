@@ -410,6 +410,11 @@ impl ManagedSync {
             .send()
             .await
             .context("managed policy acknowledgement unavailable")?;
+        if response.status() == reqwest::StatusCode::UNAUTHORIZED
+            || response.status() == reqwest::StatusCode::FORBIDDEN
+        {
+            return Err(CredentialUnavailable.into());
+        }
         ensure!(
             response.status().is_success(),
             "Console rejected applied policy acknowledgement"
@@ -449,6 +454,11 @@ impl ManagedSync {
             .context("managed Console unavailable")?;
         if response.status() == reqwest::StatusCode::NO_CONTENT {
             return Ok(());
+        }
+        if response.status() == reqwest::StatusCode::UNAUTHORIZED
+            || response.status() == reqwest::StatusCode::FORBIDDEN
+        {
+            return Err(CredentialUnavailable.into());
         }
         if response.status().is_server_error() {
             // A reachable TLS edge does not imply its upstream Console is
