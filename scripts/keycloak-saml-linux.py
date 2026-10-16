@@ -318,7 +318,7 @@ def run(args):
             browser = pw.chromium.launch(headless=True, env=environment)
             resources.callback(browser.close)
             report["browser_version"] = browser.version
-            report["crypto_provider"] = "saml-rs 0.5.3 crypto-aws-lc, non-FIPS; Keycloak RSA_SHA256"
+            report["crypto_provider"] = "saml-rs 0.6.1 crypto-aws-lc, non-FIPS; Keycloak RSA_SHA256"
 
             def context():
                 ctx = browser.new_context()
