@@ -188,7 +188,10 @@ def run(args):
         # Never emit request/response exception strings: they may contain credentials or directory data.
         report["failure_type"] = type(error).__name__
         report["failure_frames"] = [{"file": Path(frame.filename).name, "line": frame.lineno, "function": frame.name} for frame in traceback.extract_tb(error.__traceback__)[-6:]]
-        report["cleanup_passed"] = bool(directory and not directory.exists() and (child is None or child.poll() is not None))
+        # A failing ExitStack may include a failed Docker cleanup. Filesystem
+        # absence alone cannot prove that every owned resource was removed.
+        report["cleanup_passed"] = False
+        report["cleanup_status"] = "not fully verified after failure"
     publish()
     return 0 if report["passed"] else 1
 
