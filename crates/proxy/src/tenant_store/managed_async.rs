@@ -90,6 +90,22 @@ impl TenantStore {
             None => self.deploy_managed_revision(tenant, agent, revision, rollback, issuer),
         }
     }
+    pub async fn deliver_authorized_managed_bundle_async(
+        &self, tenant: &str, agent: &str, bearer: &str
+    ) -> anyhow::Result<Option<SignedManagedBundle>> {
+        match &self.postgres {
+            Some(pg) => pg.deliver_authorized_managed_bundle(tenant,agent,bearer).await,
+            None => self.deliver_authorized_managed_bundle(tenant,agent,bearer),
+        }
+    }
+    pub async fn acknowledge_authorized_managed_bundle_async(
+        &self, tenant: &str, agent: &str, bearer: &str, report: &AppliedReport
+    ) -> anyhow::Result<bool> {
+        match &self.postgres {
+            Some(pg) => pg.acknowledge_authorized_managed_bundle(tenant,agent,bearer,report).await,
+            None => self.acknowledge_authorized_managed_bundle(tenant,agent,bearer,report),
+        }
+    }
     pub async fn deliver_managed_bundle_async(
         &self,
         tenant: &str,
