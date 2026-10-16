@@ -197,6 +197,52 @@ fn declared_hosts(tool: &Tool, args: &Value) -> Result<Vec<String>, &'static str
     Ok(hosts.into_iter().collect())
 }
 
+fn child_resources_authorized(
+    granted: &[String],
+    policy: Option<&resource::Policy>,
+    tool: &Tool,
+    args: &Value,
+    admission: Option<&resource::Admission>,
+) -> bool {
+    if policy.is_some() {
+        let Some(admission) = admission else {
+            return false;
+        };
+        for ev in &admission.resources {
+            let matched = match &ev.resource {
+                crate::mcp::resources::Resource::Path { canonical } => granted
+                    .iter()
+                    .any(|g| canonical == g || canonical.starts_with(g)),
+                crate::mcp::resources::Resource::Url {
+                    canonical, host, ..
+                } => granted.iter().any(|g| canonical == g || host == g),
+                crate::mcp::resources::Resource::Domain { host } => {
+                    granted.iter().any(|g| host == g)
+                }
+                crate::mcp::resources::Resource::Recipient { address, domain } => {
+                    granted.iter().any(|g| address == g || domain == g)
+                }
+            };
+            if !matched {
+                return false;
+            }
+        }
+    }
+    if !tool.egress.is_empty() || tool.action_class == ActionClass::Network {
+        match declared_hosts(tool, args) {
+            Ok(hosts) => {
+                for host in hosts {
+                    if !granted.iter().any(|g| &host == g) {
+                        return false;
+                    }
+                }
+            }
+            Err(_) => return false,
+        }
+    }
+    true
+}
+
 #[derive(Clone, Copy, PartialEq)]
 enum Stage {
     Result,
@@ -217,12 +263,41 @@ struct Call {
 struct Session {
     pub host_session: Option<String>,
     pub server_id: Option<String>,
+    pub agent_id: Option<String>,
+    pub parent_id: Option<String>,
     pub granted_tools: Vec<String>,
+    pub granted_resources: Option<Vec<String>>,
     pub authority_expires_at_ms: Option<u64>,
     epoch: String,
     seq: u64,
     touched: Instant,
     calls: BTreeMap<String, Call>,
+}
+
+impl Session {
+    fn event_at(&self, seq: u64, kind: EventKind) -> AgentEvent {
+        event_scoped(
+            &self.epoch,
+            self.agent_id.as_deref().unwrap_or("native-runtime"),
+            self.parent_id.as_deref(),
+            seq,
+            kind,
+        )
+    }
+
+    fn event(&self, kind: EventKind) -> AgentEvent {
+        self.event_at(self.seq, kind)
+    }
+
+    fn host_event(&self, host_session: &str, seq: u64, kind: EventKind) -> AgentEvent {
+        event_scoped(
+            host_session,
+            self.agent_id.as_deref().unwrap_or("native-runtime"),
+            self.parent_id.as_deref(),
+            seq,
+            kind,
+        )
+    }
 }
 
 #[derive(Default)]
@@ -364,6 +439,8 @@ struct Request {
     pub host_session: Option<String>,
     pub child_authority: Option<String>,
     pub server_id: Option<String>,
+    pub agent_id: Option<String>,
+    pub parent_id: Option<String>,
 }
 
 fn parse(body: &str) -> Result<Request, &'static str> {
@@ -382,7 +459,13 @@ fn parse(body: &str) -> Result<Request, &'static str> {
     let object = value.as_object().ok_or("native_invalid_json")?;
     match event {
         "session_start" => {
-            for key in ["host_session", "child_authority", "server_id"] {
+            for key in [
+                "host_session",
+                "child_authority",
+                "server_id",
+                "agent_id",
+                "parent_id",
+            ] {
                 if object.contains_key(key) {
                     keys.insert(key);
                 }
@@ -424,7 +507,12 @@ fn parse(body: &str) -> Result<Request, &'static str> {
         .as_ref()
         .is_some_and(|id| !identifier(id))
         || request.server_id.as_ref().is_some_and(|id| !identifier(id))
+        || request.agent_id.as_ref().is_some_and(|id| !identifier(id))
+        || request.parent_id.as_ref().is_some_and(|id| !identifier(id))
     {
+        return Err("native_invalid_identity");
+    }
+    if request.parent_id.is_some() && request.child_authority.is_none() {
         return Err("native_invalid_identity");
     }
     if !identifier(&request.session_id)
@@ -746,7 +834,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             if let Some(approval) = &native.approval {
                 approval.close_session(&id, "session_expired");
             }
-            firewall.inspect(&event(&old.epoch, old.seq + 1, EventKind::SessionEnd));
+            firewall.inspect(&old.event_at(old.seq + 1, EventKind::SessionEnd));
             st.spans.end_session(&old.epoch);
         }
     }
@@ -781,7 +869,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         if state.entries.len() >= MAX_SESSIONS {
             return Err("native_session_cap");
         }
-        let (granted_tools, authority_expires_at_ms) =
+        let (granted_tools, granted_resources, agent_id, parent_id, authority_expires_at_ms) =
             if let Some(host_session) = &request.host_session {
                 let token = request
                     .child_authority
@@ -817,9 +905,31 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                         ChildAuthorityError::MalformedToken => "native_child_authority_malformed",
                     }
                 })?;
-                (grant.granted_tools, Some(grant.expires_at_ms))
+                if let Some(req_agent) = &request.agent_id {
+                    if grant.agent_id.as_ref() != Some(req_agent) {
+                        return Err("native_invalid_identity");
+                    }
+                }
+                if let Some(req_parent) = &request.parent_id {
+                    if grant.parent_id.as_ref() != Some(req_parent) {
+                        return Err("native_invalid_identity");
+                    }
+                }
+                (
+                    grant.granted_tools,
+                    grant.granted_resources,
+                    grant.agent_id.or_else(|| request.agent_id.clone()),
+                    grant.parent_id.or_else(|| request.parent_id.clone()),
+                    Some(grant.expires_at_ms),
+                )
             } else {
-                (Vec::new(), None)
+                (
+                    Vec::new(),
+                    None,
+                    request.agent_id.clone(),
+                    request.parent_id.clone(),
+                    None,
+                )
             };
         let session = Session {
             epoch: format!("native:{}", crate::token::generate()),
@@ -828,9 +938,27 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             calls: BTreeMap::new(),
             host_session: request.host_session.clone(),
             server_id: request.server_id.clone(),
+            agent_id,
+            parent_id,
             granted_tools,
+            granted_resources,
             authority_expires_at_ms,
         };
+        let agent_name = session.agent_id.as_deref().unwrap_or("native-runtime");
+        if session.host_session.is_some() {
+            firewall.set_root(&session.epoch, agent_name, &session.granted_tools);
+            if let Some(host) = &session.host_session {
+                firewall.set_root(host, agent_name, &session.granted_tools);
+            }
+        } else {
+            let all_tools: Vec<String> = native
+                .registry
+                .tools
+                .iter()
+                .map(|t| t.name.clone())
+                .collect();
+            firewall.set_root(&session.epoch, agent_name, &all_tools);
+        }
         audit(
             st,
             &request,
@@ -850,11 +978,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         if let Some(approval) = &native.approval {
             approval.close_session(&request.session_id, "session_ended");
         }
-        firewall.inspect(&event(
-            &session.epoch,
-            session.seq + 1,
-            EventKind::SessionEnd,
-        ));
+        firewall.inspect(&session.event_at(session.seq + 1, EventKind::SessionEnd));
         st.spans.end_session(&session.epoch);
         audit(
             st,
@@ -894,9 +1018,23 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         .ok_or("native_tool_unknown")?;
     let args = request.args.as_ref().ok_or("native_args_missing")?;
     if request.event == "call" {
-        if session.host_session.is_some() && !session.granted_tools.iter().any(|tool| tool == name)
-        {
-            return Err("native_child_authority_escalation");
+        if session.host_session.is_some() {
+            if !session.granted_tools.iter().any(|tool| tool == name) {
+                return Err("native_child_authority_escalation");
+            }
+            if let Some(ref granted_res) = session.granted_resources {
+                if !child_resources_authorized(
+                    granted_res,
+                    tool.resource_policy.as_ref(),
+                    tool,
+                    args,
+                    request.resource_admission.as_ref(),
+                ) {
+                    return Err("native_child_authority_escalation");
+                }
+            } else if tool.resource_policy.is_some() {
+                return Err("native_child_authority_escalation");
+            }
         }
         if request.schema_sha256.as_deref() != Some(tool.schema_sha256.as_str()) {
             return Err("native_schema_mismatch");
@@ -931,17 +1069,13 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             return Err("native_call_cap");
         }
         let hosts = declared_hosts(tool, args)?;
-        let ev = event(
-            &session.epoch,
-            session.seq,
-            EventKind::ToolCall {
-                tool: name.into(),
-                args: args.clone(),
-            },
-        );
+        let ev = session.event(EventKind::ToolCall {
+            tool: name.into(),
+            args: args.clone(),
+        });
         let mut outcome = firewall.inspect_native_call(&ev, tool.action_class, &hosts);
         if let Some(host) = &session.host_session {
-            let ev_host = event(
+            let ev_host = session.host_event(
                 host,
                 session.seq,
                 EventKind::ToolCall {
@@ -1147,15 +1281,11 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
     let mut max_block_risk = 0;
     for text in texts {
         session.seq += 1;
-        let ev = event(
-            &session.epoch,
-            session.seq,
-            EventKind::ToolResult {
-                tool: name.into(),
-                content: text,
-                source: provenance.clone(),
-            },
-        );
+        let ev = session.event(EventKind::ToolResult {
+            tool: name.into(),
+            content: text,
+            source: provenance.clone(),
+        });
         let outcome = firewall.preview_native_result(&ev);
         max_block_risk = max_block_risk.max(outcome.risk_score);
         for (facet, finding) in &outcome.findings {
@@ -1223,7 +1353,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                                 Some(server) => format!("mcp__{server}__{name}"),
                                 None => name.to_string(),
                             };
-                            let ev_host = event(
+                            let ev_host = session.host_event(
                                 host_session,
                                 host_seq,
                                 EventKind::ToolResult {
@@ -1250,11 +1380,17 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
     Ok(response)
 }
 
-fn event(session: &str, seq: u64, kind: EventKind) -> AgentEvent {
+fn event_scoped(
+    session: &str,
+    agent: &str,
+    parent: Option<&str>,
+    seq: u64,
+    kind: EventKind,
+) -> AgentEvent {
     AgentEvent {
         session: session.into(),
-        agent: "native-runtime".into(),
-        parent: None,
+        agent: agent.into(),
+        parent: parent.map(Into::into),
         seq,
         at_ms: SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -1262,6 +1398,10 @@ fn event(session: &str, seq: u64, kind: EventKind) -> AgentEvent {
             .unwrap_or(0),
         kind,
     }
+}
+
+fn event(session: &str, seq: u64, kind: EventKind) -> AgentEvent {
+    event_scoped(session, "native-runtime", None, seq, kind)
 }
 
 fn audit(
@@ -1290,6 +1430,12 @@ fn audit(
         "content_sha256": response.content_sha256, "reason_codes": response.reason_codes});
     if let Some(host_session) = &session.host_session {
         record["host_session"] = json!(host_session);
+    }
+    if let Some(agent_id) = &session.agent_id {
+        record["agent_id"] = json!(agent_id);
+    }
+    if let Some(parent_id) = &session.parent_id {
+        record["parent_id"] = json!(parent_id);
     }
     st.audit
         .write_native(&record)

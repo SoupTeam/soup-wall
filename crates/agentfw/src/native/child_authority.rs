@@ -27,6 +27,12 @@ pub struct ChildAuthorityGrant {
     pub issued_at_ms: u64,
     pub expires_at_ms: u64,
     pub nonce: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub granted_resources: Option<Vec<String>>,
     /// Unpadded base64url HMAC-SHA256 over all preceding fields.
     pub signature: String,
 }
@@ -85,7 +91,61 @@ fn sign(key: &[u8], grant: &ChildAuthorityGrant) -> String {
     field(&mut mac, &grant.issued_at_ms.to_be_bytes());
     field(&mut mac, &grant.expires_at_ms.to_be_bytes());
     field(&mut mac, grant.nonce.as_bytes());
+    if grant.agent_id.is_some() || grant.parent_id.is_some() || grant.granted_resources.is_some() {
+        if let Some(ref agent_id) = grant.agent_id {
+            mac.update(b"\x01");
+            field(&mut mac, agent_id.as_bytes());
+        } else {
+            mac.update(b"\x00");
+        }
+        if let Some(ref parent_id) = grant.parent_id {
+            mac.update(b"\x01");
+            field(&mut mac, parent_id.as_bytes());
+        } else {
+            mac.update(b"\x00");
+        }
+        if let Some(ref resources) = grant.granted_resources {
+            mac.update(b"\x01");
+            mac.update(&(resources.len() as u64).to_be_bytes());
+            for r in resources {
+                field(&mut mac, r.as_bytes());
+            }
+        } else {
+            mac.update(b"\x00");
+        }
+    }
     URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes())
+}
+
+/// Mint a scoped grant with explicit agent identity, parent identity, and narrowed resources.
+#[allow(clippy::too_many_arguments)]
+pub fn mint_scoped(
+    key: &[u8],
+    host_session: &str,
+    server_id: &str,
+    granted_tools: &[String],
+    issued_at_ms: u64,
+    ttl_ms: u64,
+    nonce: String,
+    agent_id: Option<String>,
+    parent_id: Option<String>,
+    granted_resources: Option<Vec<String>>,
+) -> ChildAuthorityGrant {
+    let mut grant = ChildAuthorityGrant {
+        contract_version: CHILD_AUTHORITY_CONTRACT.into(),
+        host_session: host_session.into(),
+        server_id: server_id.into(),
+        granted_tools: granted_tools.to_vec(),
+        issued_at_ms,
+        expires_at_ms: issued_at_ms.saturating_add(ttl_ms),
+        nonce,
+        agent_id,
+        parent_id,
+        granted_resources,
+        signature: String::new(),
+    };
+    grant.signature = sign(key, &grant);
+    grant
 }
 
 /// Mint a grant with an exclusive expiry. Overflow saturates at `u64::MAX`.
@@ -98,18 +158,18 @@ pub fn mint(
     ttl_ms: u64,
     nonce: String,
 ) -> ChildAuthorityGrant {
-    let mut grant = ChildAuthorityGrant {
-        contract_version: CHILD_AUTHORITY_CONTRACT.into(),
-        host_session: host_session.into(),
-        server_id: server_id.into(),
-        granted_tools: granted_tools.to_vec(),
+    mint_scoped(
+        key,
+        host_session,
+        server_id,
+        granted_tools,
         issued_at_ms,
-        expires_at_ms: issued_at_ms.saturating_add(ttl_ms),
+        ttl_ms,
         nonce,
-        signature: String::new(),
-    };
-    grant.signature = sign(key, &grant);
-    grant
+        None,
+        None,
+        None,
+    )
 }
 
 /// Authenticate before checking claims. Issuance tolerates at most five seconds
@@ -142,6 +202,21 @@ pub fn verify(
     }
     if grant.server_id != server_id {
         return Err(ChildAuthorityError::ServerIdMismatch);
+    }
+    if let Some(ref agent_id) = grant.agent_id {
+        if agent_id.is_empty() || agent_id.len() > 128 {
+            return Err(ChildAuthorityError::MalformedToken);
+        }
+    }
+    if let Some(ref parent_id) = grant.parent_id {
+        if parent_id.is_empty() || parent_id.len() > 128 {
+            return Err(ChildAuthorityError::MalformedToken);
+        }
+    }
+    if let Some(ref resources) = grant.granted_resources {
+        if resources.len() > 256 || resources.iter().any(|r| r.is_empty() || r.len() > 4096) {
+            return Err(ChildAuthorityError::MalformedToken);
+        }
     }
     Ok(())
 }
@@ -282,6 +357,9 @@ mod tests {
             ("issued_at_ms", serde_json::json!(11_000)),
             ("expires_at_ms", serde_json::json!(40_000)),
             ("nonce", serde_json::json!("other")),
+            ("agent_id", serde_json::json!("injected-agent")),
+            ("parent_id", serde_json::json!("injected-parent")),
+            ("granted_resources", serde_json::json!(["/etc/passwd"])),
             ("signature", serde_json::json!("")),
             (
                 "signature",
@@ -295,6 +373,40 @@ mod tests {
                 verify(&key, &changed, "host", "server", 10_000),
                 Err(ChildAuthorityError::BadSignature),
                 "{field}"
+            );
+        }
+
+        let scoped = mint_scoped(
+            &key,
+            "host",
+            "server",
+            &["read".into()],
+            10_000,
+            20_000,
+            "scoped-nonce".into(),
+            Some("sub-agent-1".into()),
+            Some("main-agent".into()),
+            Some(vec!["workspace/docs".into(), "127.0.0.1".into()]),
+        );
+        let token = encode_token(&scoped);
+        assert_eq!(
+            verify_token(&key, &token, "host", "server", 10_000),
+            Ok(scoped.clone())
+        );
+
+        let scoped_val = serde_json::to_value(&scoped).unwrap();
+        for (field, value) in [
+            ("agent_id", serde_json::json!("other-agent")),
+            ("parent_id", serde_json::json!("other-parent")),
+            ("granted_resources", serde_json::json!(["/other/path"])),
+        ] {
+            let mut changed = scoped_val.clone();
+            changed[field] = value;
+            let changed: ChildAuthorityGrant = serde_json::from_value(changed).unwrap();
+            assert_eq!(
+                verify(&key, &changed, "host", "server", 10_000),
+                Err(ChildAuthorityError::BadSignature),
+                "scoped {field}"
             );
         }
     }

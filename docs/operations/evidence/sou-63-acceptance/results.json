@@ -1,0 +1,37 @@
+{
+  "timestamp": "2026-10-16T14:41:00Z",
+  "ticket": "SOU-63",
+  "branch": "feat/sou-63-mcp-hook-provenance-sessions",
+  "verification": {
+    "native_endpoint": {
+      "passed": 86,
+      "failed": 0
+    },
+    "mcp_admission": {
+      "passed": 69,
+      "failed": 0
+    },
+    "hook_endpoint": {
+      "passed": 13,
+      "failed": 0
+    },
+    "protection_status": {
+      "passed": 19,
+      "failed": 0
+    },
+    "lib": {
+      "passed": 280,
+      "failed": 0
+    },
+    "clippy_warnings": 0,
+    "fmt_clean": true
+  },
+  "deliverables": {
+    "authenticated_agent_and_parent_binding": true,
+    "child_authority_and_resource_narrowing": true,
+    "refusal_of_unprovable_delegations": true,
+    "real_process_cross_collector_taint_witness": true,
+    "real_process_hook_to_mcp_taint_witness": true,
+    "support_matrix_and_boundaries_reconciled": true
+  }
+}

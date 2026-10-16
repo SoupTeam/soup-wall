@@ -50,6 +50,12 @@ enum ChildAuthorityCmd {
         ttl_seconds: u64,
         #[arg(long, value_delimiter = ',')]
         tools: Vec<String>,
+        #[arg(long)]
+        agent_id: Option<String>,
+        #[arg(long)]
+        parent_id: Option<String>,
+        #[arg(long, value_delimiter = ',')]
+        resources: Option<Vec<String>>,
     },
     /// Authenticate a grant and print its verified claims.
     Verify {
@@ -591,8 +597,11 @@ fn main() -> anyhow::Result<()> {
                     server,
                     ttl_seconds,
                     tools,
+                    agent_id,
+                    parent_id,
+                    resources,
                 } => {
-                    let grant = child_authority::mint(
+                    let grant = child_authority::mint_scoped(
                         &key,
                         &session,
                         &server,
@@ -600,6 +609,9 @@ fn main() -> anyhow::Result<()> {
                         now_ms(),
                         ttl_seconds.saturating_mul(1000),
                         agentfw::token::generate(),
+                        agent_id,
+                        parent_id,
+                        resources,
                     );
                     println!("{}", child_authority::encode_token(&grant));
                 }

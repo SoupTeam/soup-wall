@@ -728,6 +728,8 @@ pub async fn hook(
             let _ = st.audit.write(&AuditLine {
                 at_ms: now_ms(),
                 session: payload.session_id.clone(),
+                agent_id: payload.agent_id.clone(),
+                parent_id: payload.parent_id.clone(),
                 seq: 0,
                 event: payload.event.as_str().to_string(),
                 tool: payload.tool_name.clone(),
@@ -767,6 +769,8 @@ pub async fn hook(
             let _ = st.audit.write(&AuditLine {
                 at_ms: now_ms(),
                 session: String::new(),
+                agent_id: payload.agent_id.clone(),
+                parent_id: payload.parent_id.clone(),
                 seq: 0,
                 event: payload.event.as_str().to_string(),
                 tool: payload.tool_name.clone(),
@@ -812,6 +816,8 @@ pub async fn hook(
             let _ = st.audit.write(&AuditLine {
                 at_ms: now_ms(),
                 session: payload.session_id.clone(),
+                agent_id: payload.agent_id.clone(),
+                parent_id: payload.parent_id.clone(),
                 seq,
                 event: "unknown".into(),
                 tool: payload.tool_name.clone(),
@@ -836,6 +842,8 @@ pub async fn hook(
         let _ = st.audit.write(&AuditLine {
             at_ms: now_ms(),
             session: payload.session_id.clone(),
+            agent_id: payload.agent_id.clone(),
+            parent_id: payload.parent_id.clone(),
             seq,
             event: "unknown".into(),
             tool: payload.tool_name.clone(),
@@ -1004,6 +1012,8 @@ pub async fn hook(
     let _ = st.audit.write(&AuditLine {
         at_ms: event.at_ms,
         session: payload.session_id.clone(),
+        agent_id: Some(event.agent.clone()),
+        parent_id: event.parent.clone(),
         seq,
         event: payload.event.as_str().to_string(),
         tool: payload.tool_name.clone(),
@@ -1158,6 +1168,8 @@ pub async fn mcp(
     let _ = st.audit.write(&AuditLine {
         at_ms: now_ms(),
         session: req.server.clone(),
+        agent_id: None,
+        parent_id: None,
         seq: 0,
         event: "mcp_handshake".into(),
         tool: None,

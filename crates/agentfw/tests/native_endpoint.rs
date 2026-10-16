@@ -4001,3 +4001,227 @@ async fn reviewe311_unsupported_pretooluse_shapes_must_not_be_no_opinion() {
     }
     assert!(gaps.is_empty(),"authenticated enforce PreToolUse with invalid/missing identity or unsupported Bash args returned no opinion: {gaps:?}");
 }
+
+#[tokio::test]
+async fn review65_shadow_unsupported_shapes_stay_nonblocking_without_sequence_allocation() {
+    let f = Fixture::configured(
+        ALLOW,
+        Config {
+            enforce: false,
+            ..Config::default()
+        },
+    );
+    let cases = [
+        json!({"session_id":"host","hook_event_name":"PreToolUse","tool_input":{"command":"synthetic"}}),
+        json!({"session_id":"host","hook_event_name":"PreToolUse","tool_name":null}),
+        json!({"session_id":"host","hook_event_name":"PreToolUse","tool_name":""}),
+        json!({"session_id":"host","hook_event_name":"PreToolUse","tool_name":"Bash"}),
+        json!({"session_id":"host","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{}}),
+        json!({"session_id":"host","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":42}}),
+    ];
+    for body in cases {
+        let (s, r) = post(f.state.clone(), "/hook", &body, Some(HOOK_TOKEN)).await;
+        assert_eq!(s, StatusCode::OK);
+        assert_eq!(r, json!({}));
+    }
+    assert_eq!(f.state.sessions.next("host"), 1);
+}
+
+#[tokio::test]
+async fn review65_supported_benign_read_and_bash_remain_usable() {
+    let f = Fixture::new(ALLOW);
+    for (tool, args) in [
+        ("Read", json!({"file_path":"/tmp/reviewer-example.txt"})),
+        ("Bash", json!({"command":"printf hello"})),
+    ] {
+        let body = json!({"session_id":"host","hook_event_name":"PreToolUse","tool_name":tool,"tool_input":args});
+        let (s, r) = post(f.state.clone(), "/hook", &body, Some(HOOK_TOKEN)).await;
+        assert_eq!(s, StatusCode::OK);
+        assert_eq!(r, json!({}), "valid benign {tool} should remain allowed");
+    }
+}
+
+#[tokio::test]
+async fn sou63_child_authority_binds_authenticated_agent_and_parent_identity() {
+    use agentfw::native::child_authority;
+    let fixture = Fixture::new(ALLOW);
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+    let key = child_authority::derive_key(NATIVE_TOKEN);
+
+    // 1. Unauthenticated parent claim is rejected.
+    let mut unauth = fixture.event("unauth-session", "session_start");
+    unauth["parent_id"] = json!("orchestrator");
+    let (status, reply) = fixture.post(&unauth).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(reply["error_code"], "native_invalid_identity");
+
+    // 2. Mismatched agent_id or parent_id against signed grant is rejected.
+    let grant = child_authority::mint_scoped(
+        &key,
+        "host-1",
+        "docs-server",
+        &["read_document".into()],
+        now,
+        60_000,
+        "nonce-1".into(),
+        Some("worker-1".into()),
+        Some("orch-1".into()),
+        None,
+    );
+    let token = child_authority::encode_token(&grant);
+
+    let mut mismatch_agent = fixture.event("mismatch-agent", "session_start");
+    mismatch_agent["host_session"] = json!("host-1");
+    mismatch_agent["server_id"] = json!("docs-server");
+    mismatch_agent["child_authority"] = json!(token);
+    mismatch_agent["agent_id"] = json!("impostor");
+    mismatch_agent["parent_id"] = json!("orch-1");
+    let (status, reply) = fixture.post(&mismatch_agent).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(reply["error_code"], "native_invalid_identity");
+
+    // 3. Valid authenticated agent and parent binds cleanly.
+    let mut valid_start = fixture.event("child-valid", "session_start");
+    valid_start["host_session"] = json!("host-1");
+    valid_start["server_id"] = json!("docs-server");
+    valid_start["child_authority"] = json!(token);
+    valid_start["agent_id"] = json!("worker-1");
+    valid_start["parent_id"] = json!("orch-1");
+    let (status, reply) = fixture.post(&valid_start).await;
+    assert_allow(status, &reply);
+
+    let call = fixture.call("child-valid", "read_document", &json!({}));
+    let (status, reply) = fixture.post(&call).await;
+    assert_allow(status, &reply);
+
+    let audit = fixture.audit();
+    let call_line = audit
+        .iter()
+        .find(|line| line["event"] == "native_call")
+        .expect("native_call audit line");
+    assert_eq!(call_line["agent_id"], "worker-1");
+    assert_eq!(call_line["parent_id"], "orch-1");
+    assert_eq!(call_line["host_session"], "host-1");
+
+    // 4. Hook endpoint also records agent_id and parent_id when present.
+    // Unauthenticated subagent delegation via hook is blocked by subagent escalation policy.
+    let hook_body = json!({
+        "session_id": "host-1",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "echo test"},
+        "agent_id": "hook-worker",
+        "parent_id": "hook-orch"
+    });
+    let (status, reply) = post(fixture.state.clone(), "/hook", &hook_body, Some(HOOK_TOKEN)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(reply["hookSpecificOutput"]["permissionDecision"], "deny");
+    assert!(reply["hookSpecificOutput"]["permissionDecisionReason"]
+        .as_str()
+        .unwrap()
+        .contains("deny-subagent-escalation"));
+
+    let audit_hook = fixture.audit();
+    let hook_line = audit_hook
+        .iter()
+        .find(|line| line["agent_id"] == "hook-worker")
+        .expect("hook audit line with agent_id");
+    assert_eq!(hook_line["agent_id"], "hook-worker");
+    assert_eq!(hook_line["parent_id"], "hook-orch");
+}
+
+#[tokio::test]
+async fn sou63_child_authority_narrows_resources_and_destinations_relative_to_parent() {
+    use agentfw::native::child_authority;
+    let permitted = url_resource("http://127.0.0.1:8000/allowed");
+    let (fixture, profile) = resource_fixture(
+        "retrieve_page",
+        "/url",
+        "url",
+        json!([permitted["resource"]]),
+    );
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+    let key = child_authority::derive_key(NATIVE_TOKEN);
+
+    // 1. Grant narrowed destinations for send_email
+    let grant = child_authority::mint_scoped(
+        &key,
+        "host-parent",
+        "mail-server",
+        &["send_email".into()],
+        now,
+        60_000,
+        "nonce-res-1".into(),
+        Some("emailer".into()),
+        Some("parent-agent".into()),
+        Some(vec!["internal.corp".into()]),
+    );
+    let token = child_authority::encode_token(&grant);
+
+    let mut start = fixture.event("child-narrow", "session_start");
+    start["host_session"] = json!("host-parent");
+    start["server_id"] = json!("mail-server");
+    start["child_authority"] = json!(token);
+    start["agent_id"] = json!("emailer");
+    start["parent_id"] = json!("parent-agent");
+    let (status, reply) = fixture.post(&start).await;
+    assert_allow(status, &reply);
+
+    // Call with permitted destination internal.corp -> Allowed
+    let allowed_call = fixture.call(
+        "child-narrow",
+        "send_email",
+        &json!({"to": "alice@internal.corp"}),
+    );
+    let (status, reply) = fixture.post(&allowed_call).await;
+    assert_allow(status, &reply);
+
+    // Call with destination outside parent narrowing -> Escalation refusal
+    let denied_call = fixture.call(
+        "child-narrow",
+        "send_email",
+        &json!({"to": "mallory@external-attacker.com"}),
+    );
+    let (status, reply) = fixture.post(&denied_call).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(reply["error_code"], "native_child_authority_escalation");
+
+    // 2. Unprovable delegation: tool with resource_policy called by child without granted_resources
+    let unprovable_grant = child_authority::mint_scoped(
+        &key,
+        "host-parent",
+        "docs-server",
+        &["retrieve_page".into()],
+        now,
+        60_000,
+        "nonce-res-2".into(),
+        Some("reader-2".into()),
+        Some("parent-agent".into()),
+        None, // No resources granted!
+    );
+    let unprovable_token = child_authority::encode_token(&unprovable_grant);
+
+    let mut start2 = fixture.event("child-unprovable", "session_start");
+    start2["host_session"] = json!("host-parent");
+    start2["server_id"] = json!("docs-server");
+    start2["child_authority"] = json!(unprovable_token);
+    let (status, reply) = fixture.post(&start2).await;
+    assert_allow(status, &reply);
+
+    let mut unprovable_call = fixture.call(
+        "child-unprovable",
+        "retrieve_page",
+        &json!({"url": "http://127.0.0.1:8000/allowed"}),
+    );
+    unprovable_call["contract_version"] = json!(agentfw::native::resource::CONTRACT);
+    unprovable_call["resource_admission"] = resource_context(&profile, json!([permitted]));
+    let (status, reply) = fixture.post(&unprovable_call).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(reply["error_code"], "native_child_authority_escalation");
+}

@@ -549,24 +549,42 @@ The scripted baseline demonstration passes all 16 checks using actual loopback s
 
 ## Authenticated child authority and host session binding (SOU-63)
 
-When an agent runtime delegates tasks to a child MCP process or external tool collector, the child must not act as an unauthenticated or unbound session. SOU-63 establishes authenticated child authority and explicit host session binding across MCP collectors and hooks.
+When an agent runtime delegates tasks to a child MCP process or external tool collector, the child must not act as an unauthenticated or unbound session. SOU-63 establishes authenticated child authority, resource and destination narrowing, and explicit host session binding across MCP collectors and hooks.
+
+### Identity & Transport Support Matrix
+
+| Transport / Channel | Bearer Token / Auth | Session Identity | Agent Identity | Parent Identity | Authority & Scope Delegation | Taint & Provenance Tracking |
+| --- | --- | --- | --- | --- | --- | --- |
+| **MCP stdio collector** (`agentfw mcp --native-admission`) | `native-token` (`sw-native/1`) | `--session-id` (child epoch) + `--host-session` (parent) | Configured `agent_id` or `native-runtime` | Configured `parent_id` (from grant) | Scoped `granted_tools`, `granted_resources` via `ChildAuthorityGrant` | Inbound `Provenance::McpServer { name }` commits to child & host session; cross-collector policy enforcement |
+| **HTTP Native Endpoint** (`/native/v1`) | `native-token` | Request `session_id`, `epoch` | Request `agent_id` (defaults to session / `native-runtime`) | Request `parent_id` (defaults to `None` or child grant) | Validated against registry & child grant authority | Tracks taint per session; evaluates against both child and `host_session` |
+| **HTTP Hook Endpoint** (`/hook`) | `hook-token` (`fixture-hook-token`) | Payload `session_id` | Payload `agent_id` (defaults to `"main"`) | Payload `parent_id` (links child hook calls to parent) | Claude Code PreToolUse / PostToolUse hook interface | Taint recorded from untrusted tool results; shared host sessions enforce across transports |
 
 ### Child authority token contract
 
 The child authority token uses domain-separated HMAC-SHA256 signing (`sw-child-authority/1`):
 - Key derivation: `agentfw/child-authority-key/v1\0` over the native daemon token.
-- Payload parameters: `host_session`, `server_id`, `granted_tools`, `issued_at_ms`, `expires_at_ms`.
-- Signature: Constant-time verified HMAC (`subtle::ConstantTimeEq`) over length-prefixed contract, host session, server ID, granted tools, and timestamps.
+- Payload parameters: `host_session`, `server_id`, `granted_tools`, `issued_at_ms`, `expires_at_ms`, plus optional `agent_id`, `parent_id`, and `granted_resources`.
+- Signature: Constant-time verified HMAC (`subtle::ConstantTimeEq`) over length-prefixed domain-separated fields.
 - Encoding: Base64url without padding.
 
-### Host session and provenance admission
+### Authority narrowing and explicit refusal of unprovable delegations
 
 1. **Session binding**: Collectors pass `--host-session <SESSION>` and `--child-authority <TOKEN>` (or via `AGENTFW_HOST_SESSION` and `AGENTFW_CHILD_AUTHORITY` environment variables). CLI flags strictly override environment values.
-2. **Preflight verification**: The daemon verifies signature, expiration (`native_child_authority_expired`), clock validity (`native_child_authority_not_yet_valid`), host session match (`native_child_authority_host_mismatch`), and server ID match (`native_child_authority_server_mismatch`) before admitting the session.
+2. **Preflight verification**: The daemon verifies signature, expiration (`native_child_authority_expired`), clock validity (`native_child_authority_not_yet_valid`), host session match (`native_child_authority_host_mismatch`), and server ID match (`native_child_authority_server_mismatch`) before admitting the session. Mismatched or forged grants never spawn child servers or execute tools.
 3. **Tool containment**: If a child attempts to invoke any tool not explicitly listed in its granted tool list, the daemon refuses the call with `native_child_authority_escalation`.
-4. **Attribution and taint propagation**: For `mcp_host` delivery of untrusted tool results, provenance is attributed as `Provenance::McpServer { name: server_id }`. Upon release, the daemon records taint marks and span cache entries for both the child collector session and the parent `host_session`. Subsequent destructive or exfiltration actions by the host session match policy rules against the originating MCP server taint.
-5. **CLI utilities**:
-   - `agentfw child-authority mint --session <ID> --server <NAME> --tools <T1,T2> --ttl-seconds <SEC>`
+4. **Resource and destination narrowing**:
+   - For tools with resource policies (e.g. `read_document`, `create_file`) or declared egress (`send_http`), child authority grants can specify `granted_resources` (canonical filesystem paths or destination hosts/URLs).
+   - If a child session attempts to access resources outside its `granted_resources`, the call is explicitly refused fail-closed with `native_child_authority_escalation`.
+   - Unprovable delegations (missing child authority for restricted resources or tools) are never permitted.
+5. **Attribution and cross-transport taint propagation**:
+   - Untrusted tool results released via `mcp_host` commit taint to both the child collector session and the parent `host_session`.
+   - Results received via HTTP `/hook` commit taint to the corresponding `host_session`.
+   - Subsequent calls from any other collector bound to the same `host_session` (e.g., Server A -> Server B) or from MCP following a hook are immediately evaluated against the accumulated taint.
+6. **Real-process witnesses**:
+   - `sou63_real_process_cross_collector_taint_server_a_to_server_b`: Verifies that Server A stdio process emits taint into `host_session`; Server B stdio process bound to `host_session` attempting destructive action is refused before execution; Server B ledger is unchanged; separate unbound session executes cleanly.
+   - `sou63_real_process_hook_to_mcp_taint_and_lifecycle`: Verifies that HTTP `/hook` taint commits to `host_session`; subsequent stdio MCP collector call attempting destructive action is withheld; session lifecycle cleanups free resources without leaking cross-session authority.
+7. **CLI utilities**:
+   - `agentfw child-authority mint --session <ID> --server <NAME> --tools <T1,T2> --ttl-seconds <SEC> [--agent <ID>] [--parent <ID>] [--resources <R1,R2>]`
    - `agentfw child-authority verify --session <ID> --server <NAME> --token <TOKEN>`
 
 ## Local demonstration

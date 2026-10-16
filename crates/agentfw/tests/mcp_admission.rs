@@ -4394,3 +4394,271 @@ async fn sou63_bound_cancellation_and_concurrent_call_withhold_host_provenance()
         assert!(record["taint"].is_null());
     }
 }
+
+fn mint_scoped_token(directory: &Path, server: &str, host: &str, tools: &str) -> String {
+    let output = authority_cli(
+        directory,
+        &[
+            "mint",
+            "--session",
+            host,
+            "--server",
+            server,
+            "--tools",
+            tools,
+            "--ttl-seconds",
+            "60",
+        ],
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).unwrap().trim().to_owned()
+}
+
+async fn gateway_ready(input: &mut ChildStdin, output: &mut GatewayOutput) {
+    let init = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}"#;
+    let _ = input.write_all(format!("{init}\n").as_bytes()).await;
+    let _ = input.flush().await;
+    let res = tokio::time::timeout(Duration::from_secs(10), output.next_line())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(res.is_some(), "gateway failed to initialize");
+    let list = r#"{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}"#;
+    let _ = input.write_all(format!("{list}\n").as_bytes()).await;
+    let _ = input.flush().await;
+    let res = tokio::time::timeout(Duration::from_secs(10), output.next_line())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(res.is_some(), "tools/list failed");
+}
+
+#[tokio::test]
+async fn sou63_real_process_cross_collector_taint_server_a_to_server_b() {
+    let mut fixture = Fixture::new("provenance", true).await;
+    fixture.ready().await;
+
+    // 1. Server A: stdio process bound to host session "host"
+    let token_a = mint_scoped_token(fixture._dir.path(), "fixture", "host", "read_document");
+    bind_gateway(&mut fixture, &token_a, false, "provenance").await;
+    fixture.ready().await;
+
+    // Server A executes read_document, returning untrusted text and committing taint into host session
+    let reply_a = fixture
+        .exchange(r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_document","arguments":{}}}"#)
+        .await
+        .unwrap();
+    assert_eq!(serde_json::from_str::<Value>(&reply_a).unwrap()["id"], 3);
+    assert_eq!(executed(&fixture.ledger).len(), 1);
+
+    // 2. Server B: separate stdio process bound to the same host session "host"
+    let ledger_b = fixture._dir.path().join("executed_b.jsonl");
+    let stderr_b = fixture._dir.path().join("gateway_b-stderr.log");
+    let token_b = mint_scoped_token(
+        fixture._dir.path(),
+        "fixture",
+        "host",
+        "read_document,delete_note",
+    );
+    let (mut child_b, mut input_b, mut output_b) = spawn_gateway_full(
+        fixture._dir.path(),
+        &ledger_b,
+        "provenance",
+        &stderr_b,
+        None,
+        None,
+        false,
+        None,
+        Some(("host", &token_b, false)),
+    );
+    gateway_ready(&mut input_b, &mut output_b).await;
+
+    // Server B attempts destructive delete_note reusing tainted data from Server A.
+    // Host has taint: [mcp] from Server A; policy "fixture-mcp-reuse" denies call before execution!
+    let delete_call = json!({
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "tools/call",
+        "params": {
+            "name": "delete_note",
+            "arguments": {
+                "name": format!("victim_{PROVENANCE_TEXT}")
+            }
+        }
+    })
+    .to_string();
+    let _ = input_b
+        .write_all(format!("{delete_call}\n").as_bytes())
+        .await;
+    let _ = input_b.flush().await;
+    let reply_b_raw = tokio::time::timeout(Duration::from_secs(10), output_b.next_line())
+        .await
+        .unwrap()
+        .unwrap()
+        .expect("Server B receives withheld error reply");
+    let reply_b: Value = serde_json::from_str(&reply_b_raw).unwrap();
+    assert_eq!(reply_b["id"], 4);
+    assert_eq!(reply_b["result"]["isError"], true);
+    assert!(
+        reply_b["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("fixture-mcp-reuse"),
+        "Server B must be withheld by policy: {reply_b}"
+    );
+
+    // Crucial guarantee: Server B backend never executed!
+    assert!(
+        executed(&ledger_b).is_empty(),
+        "Server B backend must not execute when denied"
+    );
+
+    // Verify audit entry for denied call
+    let audit = std::fs::read_to_string(&fixture.audit).unwrap();
+    let records: Vec<Value> = audit
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert!(records.iter().any(|r| r["event"] == "native_call"
+        && r["host_session"] == "host"
+        && r["released"] == false
+        && r["rule"] == "fixture-mcp-reuse"));
+
+    // 3. Independent session: Server C bound to untainted host session succeeds
+    let ledger_c = fixture._dir.path().join("executed_c.jsonl");
+    let stderr_c = fixture._dir.path().join("gateway_c-stderr.log");
+    let token_c = mint_scoped_token(
+        fixture._dir.path(),
+        "fixture",
+        "untainted-host",
+        "read_document,delete_note",
+    );
+    let (mut child_c, mut input_c, mut output_c) = spawn_gateway_full(
+        fixture._dir.path(),
+        &ledger_c,
+        "provenance",
+        &stderr_c,
+        None,
+        None,
+        false,
+        None,
+        Some(("untainted-host", &token_c, false)),
+    );
+    gateway_ready(&mut input_c, &mut output_c).await;
+    let read_c = r#"{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"read_document","arguments":{}}}"#;
+    let _ = input_c.write_all(format!("{read_c}\n").as_bytes()).await;
+    let _ = input_c.flush().await;
+    let reply_c_raw = tokio::time::timeout(Duration::from_secs(10), output_c.next_line())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let reply_c: Value = serde_json::from_str(&reply_c_raw).unwrap();
+    assert_eq!(reply_c["id"], 5);
+    assert!(reply_c.get("result").is_some());
+    assert_eq!(executed(&ledger_c).len(), 1);
+
+    child_b.kill().await.unwrap();
+    child_c.kill().await.unwrap();
+}
+
+#[tokio::test]
+async fn sou63_real_process_hook_to_mcp_taint_and_lifecycle() {
+    let mut fixture = Fixture::new("read", true).await;
+    fixture.ready().await;
+
+    // 1. Hook endpoint injects untrusted MCP result into host session "host-hook"
+    let hook_payload = json!({
+        "session_id": "host-hook",
+        "hook_event_name": "PostToolUse",
+        "tool_name": "mcp__fixture__read_document",
+        "tool_response": PROVENANCE_TEXT,
+    });
+    let client = reqwest::Client::new();
+    let res = client
+        .post(format!("http://127.0.0.1:{}/hook", fixture.port))
+        .bearer_auth("fixture-hook-token")
+        .json(&hook_payload)
+        .send()
+        .await
+        .unwrap();
+    assert!(res.status().is_success());
+
+    // 2. Real stdio MCP collector process bound to "host-hook"
+    let ledger_mcp = fixture._dir.path().join("executed_mcp.jsonl");
+    let stderr_mcp = fixture._dir.path().join("gateway_mcp-stderr.log");
+    let token_mcp = mint_scoped_token(
+        fixture._dir.path(),
+        "fixture",
+        "host-hook",
+        "read_document,delete_note",
+    );
+    let (mut child_mcp, mut input_mcp, mut output_mcp) = spawn_gateway_full(
+        fixture._dir.path(),
+        &ledger_mcp,
+        "read",
+        &stderr_mcp,
+        None,
+        None,
+        false,
+        None,
+        Some(("host-hook", &token_mcp, false)),
+    );
+    gateway_ready(&mut input_mcp, &mut output_mcp).await;
+
+    // 3. MCP collector attempts destructive delete_note reusing tainted data from hook
+    let delete_call = json!({
+        "jsonrpc": "2.0",
+        "id": 10,
+        "method": "tools/call",
+        "params": {
+            "name": "delete_note",
+            "arguments": {
+                "name": format!("doc_{PROVENANCE_TEXT}")
+            }
+        }
+    })
+    .to_string();
+    let _ = input_mcp
+        .write_all(format!("{delete_call}\n").as_bytes())
+        .await;
+    let _ = input_mcp.flush().await;
+    let reply_raw = tokio::time::timeout(Duration::from_secs(10), output_mcp.next_line())
+        .await
+        .unwrap()
+        .unwrap()
+        .expect("MCP collector receives response");
+    let reply: Value = serde_json::from_str(&reply_raw).unwrap();
+    assert_eq!(reply["id"], 10);
+    assert_eq!(reply["result"]["isError"], true);
+    assert!(
+        reply["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("fixture-mcp-reuse"),
+        "Hook-tainted host session must deny destructive MCP action: {reply}"
+    );
+
+    // MCP backend was not executed
+    assert!(
+        executed(&ledger_mcp).is_empty(),
+        "MCP backend must not execute when denied"
+    );
+
+    // 4. Lifecycle: kill child and verify audit
+    child_mcp.kill().await.unwrap();
+
+    let audit = std::fs::read_to_string(&fixture.audit).unwrap();
+    let records: Vec<Value> = audit
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert!(records.iter().any(|r| r["host_session"] == "host-hook"
+        && r["event"] == "native_call"
+        && r["released"] == false
+        && r["rule"] == "fixture-mcp-reuse"));
+}
