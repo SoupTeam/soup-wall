@@ -3374,7 +3374,7 @@ async fn ending_bound_collector_cancels_pending_result_without_host_admission() 
 }
 
 #[tokio::test]
-async fn bound_trusted_result_keeps_registry_provenance_and_empty_grant_semantics() {
+async fn bound_trusted_result_keeps_registry_provenance() {
     use agentfw::native::child_authority;
     let fixture = Fixture::new(ALLOW);
     let mut start = child_start(&fixture, "collector", "host", Some("documents"));
@@ -3384,10 +3384,10 @@ async fn bound_trusted_result_keeps_registry_provenance_and_empty_grant_semantic
         &child_authority::derive_key(NATIVE_TOKEN),
         "host",
         "documents",
-        &[],
+        &["delete_document".into()],
         original.issued_at_ms,
         60_000,
-        "fixture-unrestricted".into(),
+        "fixture-bound".into(),
     );
     start["child_authority"] = json!(child_authority::encode_token(&grant));
     let (status, reply) = fixture.post(&start).await;
@@ -3415,4 +3415,145 @@ async fn bound_trusted_result_keeps_registry_provenance_and_empty_grant_semantic
     assert_eq!(fixture.state.firewall.lock().unwrap().taint_len("host"), 0);
     assert!(fixture.state.spans.get("host", 1).is_none());
     assert_eq!(fixture.state.sessions.next("host"), 2);
+}
+
+fn reviewer_start(f: &Fixture, collector: &str, tools: &[&str], ttl: u64) -> Value {
+    use agentfw::native::child_authority as ca;
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+    let grant = ca::mint(
+        &ca::derive_key(NATIVE_TOKEN),
+        "host",
+        collector,
+        &tools.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+        now,
+        ttl,
+        "reviewer".into(),
+    );
+    let mut v = child_start(f, collector, "host", Some(collector));
+    v["child_authority"] = json!(ca::encode_token(&grant));
+    v
+}
+
+#[tokio::test]
+async fn reviewer_cross_collector_must_enforce_shared_host_taint() {
+    let f = Fixture::new("agent_policies:\n  - name: shared-mcp-deny\n    when: { taint: [mcp], action_class: destructive }\n    action: deny\ndefault: allow\n");
+    for (collector, tools) in [("a", vec!["read_document"]), ("b", vec!["delete_document"])] {
+        let (s, r) = f.post(&reviewer_start(&f, collector, &tools, 60_000)).await;
+        assert_allow(s, &r);
+    }
+    let result = child_result(&f, "a", UNTRUSTED_TEXT).await;
+    let (s, r) = f.post(&result).await;
+    assert_allow(s, &r);
+    assert!(f.state.firewall.lock().unwrap().taint_len("host") > 0);
+    let (s, r) = f
+        .post(&f.call("b", "delete_document", &json!({"text":UNTRUSTED_TEXT})))
+        .await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(r["verdict"], "deny", "cross-collector result: {r}");
+}
+
+#[tokio::test]
+async fn reviewer_empty_scope_must_not_grant_destructive_tool() {
+    let f = Fixture::new(ALLOW);
+    let (s, r) = f.post(&reviewer_start(&f, "empty", &[], 60_000)).await;
+    assert_allow(s, &r);
+    let (s, r) = f
+        .post(&f.call("empty", "delete_document", &json!({})))
+        .await;
+    assert_eq!(s, StatusCode::CONFLICT, "empty scope: {r}");
+    assert_eq!(r["error_code"], "native_child_authority_escalation");
+}
+
+#[tokio::test]
+async fn reviewer_expired_grant_must_not_authorize_new_calls() {
+    let f = Fixture::new(ALLOW);
+    let (s, r) = f
+        .post(&reviewer_start(&f, "short", &["delete_document"], 100))
+        .await;
+    assert_allow(s, &r);
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    let (s, r) = f
+        .post(&f.call("short", "delete_document", &json!({})))
+        .await;
+    assert_eq!(s, StatusCode::CONFLICT, "expired scope: {r}");
+}
+
+#[tokio::test]
+async fn reviewer_hook_session_end_must_not_erase_active_child_history() {
+    let f = Fixture::new(ALLOW);
+    let (s, r) = f
+        .post(&reviewer_start(&f, "a", &["read_document"], 60_000))
+        .await;
+    assert_allow(s, &r);
+    let result = child_result(&f, "a", UNTRUSTED_TEXT).await;
+    let (s, r) = f.post(&result).await;
+    assert_allow(s, &r);
+    assert!(f.state.firewall.lock().unwrap().taint_len("host") > 0);
+    let hook = json!({"session_id":"host","hook_event_name":"SessionEnd"});
+    let _ = post(f.state.clone(), "/hook", &hook, Some(HOOK_TOKEN)).await;
+    assert!(
+        f.state.firewall.lock().unwrap().taint_len("host") > 0,
+        "unbound hook SessionEnd cleared history of active authenticated child"
+    );
+}
+
+#[tokio::test]
+async fn reviewer_oversized_hook_must_mark_shared_history_incomplete() {
+    let f = Fixture::configured(
+        ALLOW,
+        Config {
+            enforce: true,
+            max_body_bytes: 1024,
+            ..Config::default()
+        },
+    );
+    let (s, r) = f
+        .post(&reviewer_start(&f, "a", &["read_document"], 60_000))
+        .await;
+    assert_allow(s, &r);
+    let hook = json!({"session_id":"host","hook_event_name":"PostToolUse",
+        "tool_name":"mcp__documents__read_document","tool_response":"x".repeat(2048)});
+    let (s, _) = post(f.state.clone(), "/hook", &hook, Some(HOOK_TOKEN)).await;
+    assert_eq!(s, StatusCode::OK);
+    assert!(
+        f.state
+            .firewall
+            .lock()
+            .unwrap()
+            .provenance_incomplete("host"),
+        "oversized hook lost without incomplete-history floor"
+    );
+}
+
+#[tokio::test]
+async fn reviewer_hook_extractor_must_return_explicit_enforce_disposition() {
+    let f = Fixture::new(ALLOW);
+    let (s, r) = f
+        .post(&reviewer_start(&f, "a", &["read_document"], 60_000))
+        .await;
+    assert_allow(s, &r);
+    let body = json!({"session_id":"host","hook_event_name":"PreToolUse",
+        "tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/reviewer-no-execution"},
+        "padding":"x".repeat(2*1024*1024)})
+    .to_string();
+    let response = app(f.state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/hook")
+                .header("authorization", format!("Bearer {HOOK_TOKEN}"))
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_ne!(
+        response.status(),
+        StatusCode::PAYLOAD_TOO_LARGE,
+        "Axum extractor emitted accidental 413 instead of documented hook disposition"
+    );
 }

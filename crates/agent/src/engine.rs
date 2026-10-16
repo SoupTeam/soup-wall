@@ -42,6 +42,21 @@ pub struct Outcome {
 }
 
 impl Outcome {
+    pub fn allow() -> Self {
+        Self {
+            verdict: Verdict::Allow,
+            rule: None,
+            message: None,
+            findings: Vec::new(),
+            taint: None,
+            provenance_incomplete: false,
+            risk_score: 0,
+            egress_hosts: Vec::new(),
+            fallback: None,
+            authority_pending: false,
+        }
+    }
+
     /// Project the local decision onto the provider-neutral adapter contract.
     ///
     /// This projection is intentionally local: it carries no raw content and no
@@ -191,6 +206,10 @@ impl AgentFirewall {
 
     pub fn provenance_incomplete(&self, session: &str) -> bool {
         self.taint.is_incomplete(session)
+    }
+
+    pub fn mark_provenance_incomplete(&mut self, session: &str) {
+        self.taint.mark_incomplete(session);
     }
 
     /// Return whether every extracted destination is explicitly present in the

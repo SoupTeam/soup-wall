@@ -218,6 +218,7 @@ struct Session {
     pub host_session: Option<String>,
     pub server_id: Option<String>,
     pub granted_tools: Vec<String>,
+    pub authority_expires_at_ms: Option<u64>,
     epoch: String,
     seq: u64,
     touched: Instant,
@@ -289,6 +290,16 @@ impl NativeState {
     ) -> anyhow::Result<Self> {
         self.approval = Some(approval::ApprovalState::new(home, grant_key, ttl_seconds)?);
         Ok(self)
+    }
+
+    pub fn has_active_host_session(&self, host_session: &str) -> bool {
+        let Ok(sessions) = self.sessions.lock() else {
+            return false;
+        };
+        sessions
+            .entries
+            .values()
+            .any(|s| s.host_session.as_deref() == Some(host_session))
     }
 
     pub fn load(config: &NativeCfg, token: String) -> anyhow::Result<Self> {
@@ -755,45 +766,46 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         if state.entries.len() >= MAX_SESSIONS {
             return Err("native_session_cap");
         }
-        let granted_tools = if let Some(host_session) = &request.host_session {
-            let token = request
-                .child_authority
-                .as_deref()
-                .ok_or("native_child_authority_missing")?;
-            let key = child_authority::derive_key(&native.token);
-            let now_ms = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map_err(|_| "native_clock_unavailable")?
-                .as_millis() as u64;
-            let grant = child_authority::verify_token(
-                &key,
-                token,
-                host_session,
-                request.server_id.as_deref().unwrap_or(""),
-                now_ms,
-            )
-            .map_err(|error| {
-                use child_authority::ChildAuthorityError;
-                match error {
-                    ChildAuthorityError::BadSignature => "native_child_authority_bad_signature",
-                    ChildAuthorityError::Expired => "native_child_authority_expired",
-                    ChildAuthorityError::NotYetValid => "native_child_authority_not_yet_valid",
-                    ChildAuthorityError::HostSessionMismatch => {
-                        "native_child_authority_host_mismatch"
+        let (granted_tools, authority_expires_at_ms) =
+            if let Some(host_session) = &request.host_session {
+                let token = request
+                    .child_authority
+                    .as_deref()
+                    .ok_or("native_child_authority_missing")?;
+                let key = child_authority::derive_key(&native.token);
+                let now_ms = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map_err(|_| "native_clock_unavailable")?
+                    .as_millis() as u64;
+                let grant = child_authority::verify_token(
+                    &key,
+                    token,
+                    host_session,
+                    request.server_id.as_deref().unwrap_or(""),
+                    now_ms,
+                )
+                .map_err(|error| {
+                    use child_authority::ChildAuthorityError;
+                    match error {
+                        ChildAuthorityError::BadSignature => "native_child_authority_bad_signature",
+                        ChildAuthorityError::Expired => "native_child_authority_expired",
+                        ChildAuthorityError::NotYetValid => "native_child_authority_not_yet_valid",
+                        ChildAuthorityError::HostSessionMismatch => {
+                            "native_child_authority_host_mismatch"
+                        }
+                        ChildAuthorityError::ServerIdMismatch => {
+                            "native_child_authority_server_mismatch"
+                        }
+                        ChildAuthorityError::InvalidContract => {
+                            "native_child_authority_invalid_contract"
+                        }
+                        ChildAuthorityError::MalformedToken => "native_child_authority_malformed",
                     }
-                    ChildAuthorityError::ServerIdMismatch => {
-                        "native_child_authority_server_mismatch"
-                    }
-                    ChildAuthorityError::InvalidContract => {
-                        "native_child_authority_invalid_contract"
-                    }
-                    ChildAuthorityError::MalformedToken => "native_child_authority_malformed",
-                }
-            })?;
-            grant.granted_tools
-        } else {
-            Vec::new()
-        };
+                })?;
+                (grant.granted_tools, Some(grant.expires_at_ms))
+            } else {
+                (Vec::new(), None)
+            };
         let session = Session {
             epoch: format!("native:{}", crate::token::generate()),
             seq: 1,
@@ -802,6 +814,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             host_session: request.host_session.clone(),
             server_id: request.server_id.clone(),
             granted_tools,
+            authority_expires_at_ms,
         };
         audit(
             st,
@@ -846,6 +859,15 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         .entries
         .get_mut(&request.session_id)
         .ok_or("native_session_unknown")?;
+    if let Some(expires_at_ms) = session.authority_expires_at_ms {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| "native_clock_unavailable")?
+            .as_millis() as u64;
+        if now_ms >= expires_at_ms {
+            return Err("native_child_authority_expired");
+        }
+    }
     session.touched = now;
     session.seq += 1;
     let name = request.tool.as_deref().ok_or("native_tool_missing")?;
@@ -857,9 +879,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         .ok_or("native_tool_unknown")?;
     let args = request.args.as_ref().ok_or("native_args_missing")?;
     if request.event == "call" {
-        if session.host_session.is_some()
-            && !session.granted_tools.is_empty()
-            && !session.granted_tools.iter().any(|tool| tool == name)
+        if session.host_session.is_some() && !session.granted_tools.iter().any(|tool| tool == name)
         {
             return Err("native_child_authority_escalation");
         }
@@ -904,7 +924,36 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                 args: args.clone(),
             },
         );
-        let outcome = firewall.inspect_native_call(&ev, tool.action_class, &hosts);
+        let mut outcome = firewall.inspect_native_call(&ev, tool.action_class, &hosts);
+        if let Some(host) = &session.host_session {
+            let ev_host = event(
+                host,
+                session.seq,
+                EventKind::ToolCall {
+                    tool: name.into(),
+                    args: args.clone(),
+                },
+            );
+            let outcome_host = firewall.inspect_native_call(&ev_host, tool.action_class, &hosts);
+            if outcome_host.provenance_incomplete {
+                outcome.provenance_incomplete = true;
+            }
+            if outcome_host.taint.is_some() && outcome.taint.is_none() {
+                outcome.taint = outcome_host.taint.clone();
+            }
+            if outcome.rule.is_none() && outcome_host.rule.is_some() {
+                outcome.rule = outcome_host.rule.clone();
+            }
+            match outcome_host.verdict {
+                Verdict::Deny => {
+                    outcome = outcome_host;
+                }
+                Verdict::Escalate if outcome.verdict == Verdict::Allow => {
+                    outcome = outcome_host;
+                }
+                _ => {}
+            }
+        }
         let verdict = resolved(&outcome);
         response.verdict = verdict_label(verdict);
         response.release = verdict == Verdict::Allow;

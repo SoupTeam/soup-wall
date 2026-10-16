@@ -54,8 +54,14 @@ pub fn app_with_diagnostics(
     runtime: std::sync::Arc<protection_status::Runtime>,
 ) -> Router {
     Router::new()
-        .route("/hook", post(handlers::hook))
-        .route("/mcp", post(handlers::mcp))
+        .route(
+            "/hook",
+            post(handlers::hook).layer(axum::extract::DefaultBodyLimit::disable()),
+        )
+        .route(
+            "/mcp",
+            post(handlers::mcp).layer(axum::extract::DefaultBodyLimit::disable()),
+        )
         .route(
             "/native/approval/v1",
             post(native::approval::handler)

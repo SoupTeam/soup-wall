@@ -11,7 +11,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
 use axum::Json;
-use soup_wall_agent::{AgentFirewall, EventKind, Trust, Verdict};
+use soup_wall_agent::{AgentFirewall, EventKind, Outcome, Trust, Verdict};
 
 use crate::audit::{AuditFinding, AuditLine, AuditSink, AuditTaint};
 use crate::config::Config;
@@ -20,6 +20,33 @@ use crate::hook::{HookEvent, HookPayload};
 use crate::judge::{Judge, Judgement};
 use crate::map;
 use crate::spans::SpanCache;
+
+fn extract_session_id_from_raw(body: &str) -> Option<String> {
+    #[derive(serde::Deserialize)]
+    struct PartialSession {
+        session_id: Option<String>,
+    }
+    if let Ok(partial) = serde_json::from_str::<PartialSession>(body) {
+        if let Some(s) = partial.session_id {
+            if !s.is_empty() {
+                return Some(s);
+            }
+        }
+    }
+    let key = "\"session_id\"";
+    let pos = body.find(key)?;
+    let after_key = &body[pos + key.len()..];
+    let colon = after_key.find(':')?;
+    let after_colon = after_key[colon + 1..].trim_start();
+    if let Some(rest) = after_colon.strip_prefix('"') {
+        let end_quote = rest.find('"')?;
+        let sid = &rest[..end_quote];
+        if !sid.is_empty() {
+            return Some(sid.to_string());
+        }
+    }
+    None
+}
 
 /// Turn a judgement plus the rule's declared fallback into a final verdict.
 ///
@@ -152,6 +179,10 @@ pub async fn hook(
             len = body.len(),
             "hook body over cap; proceeding without inspection"
         );
+        if let Some(session_id) = extract_session_id_from_raw(&body) {
+            let mut fw = st.firewall.lock().expect("firewall mutex");
+            fw.mark_provenance_incomplete(&session_id);
+        }
         return (StatusCode::OK, Json(serde_json::json!({})));
     }
 
@@ -161,6 +192,10 @@ pub async fn hook(
         Ok(p) => p,
         Err(e) => {
             tracing::warn!(error = %e, "unparsable hook payload; proceeding");
+            if let Some(session_id) = extract_session_id_from_raw(&body) {
+                let mut fw = st.firewall.lock().expect("firewall mutex");
+                fw.mark_provenance_incomplete(&session_id);
+            }
             return (StatusCode::OK, Json(serde_json::json!({})));
         }
     };
@@ -171,6 +206,10 @@ pub async fn hook(
     let seq = st.sessions.next(&payload.session_id);
     let Some(mapped) = map::to_event(&payload, seq, now_ms(), st.config.max_record_bytes) else {
         tracing::warn!(session = %payload.session_id, "unrecognized hook event");
+        {
+            let mut fw = st.firewall.lock().expect("firewall mutex");
+            fw.mark_provenance_incomplete(&payload.session_id);
+        }
         let _ = st.audit.write(&AuditLine {
             at_ms: now_ms(),
             session: payload.session_id.clone(),
@@ -195,7 +234,11 @@ pub async fn hook(
     let event = mapped.event;
 
     let is_pre = payload.event == HookEvent::PreToolUse;
-    if payload.event == HookEvent::SessionEnd {
+    let has_active_bound_children = st
+        .native
+        .as_ref()
+        .is_some_and(|n| n.has_active_host_session(&payload.session_id));
+    if payload.event == HookEvent::SessionEnd && !has_active_bound_children {
         st.sessions.end(&payload.session_id);
         st.spans.end_session(&payload.session_id);
     }
@@ -225,7 +268,11 @@ pub async fn hook(
     // before the function's first `.await` — nothing here awaits while it is held.
     let (outcome, inspected_deployment) = {
         let mut fw = st.firewall.lock().expect("firewall mutex");
-        let outcome = fw.inspect(&event);
+        let outcome = if payload.event == HookEvent::SessionEnd && has_active_bound_children {
+            Outcome::allow()
+        } else {
+            fw.inspect(&event)
+        };
         let deployment = fw.active_managed_policy().map(|p| p.deployment_sequence);
         (outcome, deployment)
     };

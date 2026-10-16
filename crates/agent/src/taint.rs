@@ -316,6 +316,12 @@ impl TaintTracker {
         self.sessions.get(session).is_some_and(|s| s.incomplete)
     }
 
+    /// Explicitly mark history as incomplete for this session.
+    pub fn mark_incomplete(&mut self, session: &str) {
+        let entry = self.sessions.entry(session.to_string()).or_default();
+        entry.incomplete = true;
+    }
+
     /// No retained evidence and no sticky loss marker.
     pub fn is_empty(&self, session: &str) -> bool {
         self.sessions

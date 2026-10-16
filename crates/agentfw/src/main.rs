@@ -627,6 +627,14 @@ fn main() -> anyhow::Result<()> {
             let host_session = host_session.or_else(|| std::env::var("AGENTFW_HOST_SESSION").ok());
             let child_authority =
                 child_authority.or_else(|| std::env::var("AGENTFW_CHILD_AUTHORITY").ok());
+            if !native_admission && (host_session.is_some() || child_authority.is_some()) {
+                anyhow::bail!("--host-session and --child-authority require --native-admission");
+            }
+            if host_session.is_some() != child_authority.is_some() {
+                anyhow::bail!(
+                    "both --host-session and --child-authority must be provided together for authenticated binding"
+                );
+            }
             let (cmd, args) = command
                 .split_first()
                 .ok_or_else(|| anyhow::anyhow!("no server command given after --"))?;

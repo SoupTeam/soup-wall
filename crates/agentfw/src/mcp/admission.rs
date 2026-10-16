@@ -864,6 +864,11 @@ struct Collector<'a> {
 
 impl<'a> Collector<'a> {
     fn new(config: &'a AdmissionCfg) -> anyhow::Result<Self> {
+        if config.host_session.is_some() != config.child_authority.is_some() {
+            anyhow::bail!(
+                "both host_session and child_authority must be provided together for authenticated binding"
+            );
+        }
         Ok(Self {
             config,
             host_session: config.host_session.clone(),
