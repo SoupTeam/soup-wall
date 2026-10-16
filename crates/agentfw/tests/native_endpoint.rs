@@ -3957,3 +3957,47 @@ async fn reviewcec_incomplete_tool_identity_must_not_make_known_pretooluse_safe(
         "known enforce PreToolUse became no-opinion because tool identity was truncated: {r}"
     );
 }
+
+#[tokio::test]
+async fn reviewe311_unsupported_pretooluse_shapes_must_not_be_no_opinion() {
+    let f = Fixture::new(ALLOW);
+    let command = json!({"command":"rm -rf /tmp/reviewer-no-execution"});
+    let cases = [
+        (
+            "missing_tool",
+            json!({"session_id":"host","hook_event_name":"PreToolUse","tool_input":command}),
+        ),
+        (
+            "null_tool",
+            json!({"session_id":"host","hook_event_name":"PreToolUse","tool_name":null,"tool_input":command}),
+        ),
+        (
+            "empty_tool",
+            json!({"session_id":"host","hook_event_name":"PreToolUse","tool_name":"","tool_input":command}),
+        ),
+        (
+            "missing_bash_input",
+            json!({"session_id":"host","hook_event_name":"PreToolUse","tool_name":"Bash"}),
+        ),
+        (
+            "missing_bash_command",
+            json!({"session_id":"host","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{}}),
+        ),
+        (
+            "nonstring_bash_command",
+            json!({"session_id":"host","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":42}}),
+        ),
+    ];
+    let mut gaps = Vec::new();
+    for (name, body) in cases {
+        let (s, r) = post(f.state.clone(), "/hook", &body, Some(HOOK_TOKEN)).await;
+        eprintln!("{name}: status={s} response={r}");
+        if !matches!(
+            r["hookSpecificOutput"]["permissionDecision"].as_str(),
+            Some("deny" | "ask")
+        ) {
+            gaps.push(name);
+        }
+    }
+    assert!(gaps.is_empty(),"authenticated enforce PreToolUse with invalid/missing identity or unsupported Bash args returned no opinion: {gaps:?}");
+}

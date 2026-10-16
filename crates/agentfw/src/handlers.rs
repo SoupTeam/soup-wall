@@ -684,25 +684,75 @@ pub async fn hook(
     };
 
     let is_pre = payload.event == HookEvent::PreToolUse;
-    let is_protected = is_pre
-        && payload.tool_name.as_ref().is_some_and(|tool| {
-            const READ_ONLY: &[&str] = &[
-                "Read",
-                "Grep",
-                "Glob",
-                "NotebookRead",
-                "TodoRead",
-                "WebFetch",
-                "WebSearch",
-            ];
-            if READ_ONLY.contains(&tool.as_str()) {
-                false
-            } else if tool == "Bash" {
-                payload.tool_input.get("command").is_some()
-            } else {
-                true
+    let tool_opt = payload
+        .tool_name
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+    let is_read_only = tool_opt.is_some_and(|tool| {
+        const READ_ONLY: &[&str] = &[
+            "Read",
+            "Grep",
+            "Glob",
+            "NotebookRead",
+            "TodoRead",
+            "WebFetch",
+            "WebSearch",
+        ];
+        READ_ONLY.contains(&tool)
+    });
+    let valid_bash_command = tool_opt == Some("Bash")
+        && payload
+            .tool_input
+            .as_object()
+            .and_then(|obj| obj.get("command"))
+            .and_then(|c| c.as_str())
+            .is_some();
+    let is_supported_pre =
+        is_read_only || valid_bash_command || (tool_opt.is_some() && tool_opt != Some("Bash"));
+
+    if is_pre && !is_supported_pre {
+        tracing::warn!(
+            session = %payload.session_id,
+            tool = ?payload.tool_name,
+            "unsupported or malformed PreToolUse shape"
+        );
+        if st.config.enforce {
+            let out = decision::Decision {
+                permission_decision: "deny",
+                reason: Some("unsupported PreToolUse shape; refused by policy".into()),
+                shadow: false,
+                would_have_been: Verdict::Deny,
             }
-        });
+            .to_hook_output();
+            let _ = st.audit.write(&AuditLine {
+                at_ms: now_ms(),
+                session: payload.session_id.clone(),
+                seq: 0,
+                event: payload.event.as_str().to_string(),
+                tool: payload.tool_name.clone(),
+                verdict: "deny".into(),
+                shadow: false,
+                rule: Some("unsupported-pre-tool-use-shape".into()),
+                risk_score: 0,
+                findings: vec![],
+                taint: None,
+                judge: None,
+                approval: None,
+                egress_hosts: vec![],
+                latency_us: started.elapsed().as_micros(),
+                truncated: false,
+                raw: st.config.capture_unknown_raw.then_some(body),
+            });
+            return (
+                StatusCode::OK,
+                Json(serde_json::to_value(out).unwrap_or_default()),
+            );
+        }
+        return (StatusCode::OK, Json(serde_json::json!({})));
+    }
+
+    let is_protected = is_pre && !is_read_only;
 
     if payload.session_id.is_empty() {
         tracing::warn!("hook payload missing or empty session_id");
