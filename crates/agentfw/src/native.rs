@@ -18,6 +18,7 @@ use soup_wall_agent::{ActionClass, AgentEvent, EventKind, Outcome, Provenance, T
 use crate::config::NativeCfg;
 use crate::handlers::Shared;
 
+pub mod approval;
 pub mod resource;
 
 pub const CONTRACT: &str = "sw-native/1";
@@ -229,6 +230,7 @@ pub struct NativeState {
     pub registry_sha256: String,
     pub token: String,
     sessions: Mutex<Sessions>,
+    pub(crate) approval: Option<approval::ApprovalState>,
 }
 
 impl NativeState {
@@ -270,7 +272,19 @@ impl NativeState {
             registry_sha256: expected.into(),
             token,
             sessions: Mutex::default(),
+            approval: None,
         })
+    }
+
+    /// Enable the opt-in pending-approval lifecycle (SOU-48). Absent = refusal.
+    pub fn with_approval(
+        mut self,
+        home: &std::path::Path,
+        grant_key: &[u8],
+        ttl_seconds: u64,
+    ) -> anyhow::Result<Self> {
+        self.approval = Some(approval::ApprovalState::new(home, grant_key, ttl_seconds)?);
+        Ok(self)
     }
 
     pub fn load(config: &NativeCfg, token: String) -> anyhow::Result<Self> {
@@ -316,6 +330,7 @@ struct Request {
     result_kind: Option<String>,
     delivery: Option<String>,
     resource_admission: Option<resource::Admission>,
+    approval_id: Option<String>,
 }
 
 fn parse(body: &str) -> Result<Request, &'static str> {
@@ -336,6 +351,9 @@ fn parse(body: &str) -> Result<Request, &'static str> {
         "session_start" | "session_end" => {}
         "call" => {
             keys.extend(["tool", "args", "schema_sha256"]);
+            if object.contains_key("approval_id") {
+                keys.insert("approval_id");
+            }
             if matches!(
                 request.contract_version.as_str(),
                 resource::CONTRACT
@@ -396,6 +414,14 @@ fn parse(body: &str) -> Result<Request, &'static str> {
         }
     } else if request.resource_admission.is_some() {
         return Err("native_invalid_fields");
+    }
+    if let Some(id) = &request.approval_id {
+        if !identifier(id)
+            || request.contract_version != CONTRACT
+            || request.resource_admission.is_some()
+        {
+            return Err("native_invalid_fields");
+        }
     }
     if let Some(args) = &request.args {
         if !args.is_object() || args.to_string().len() > MAX_CONTENT {
@@ -663,6 +689,9 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         .collect();
     for id in expired {
         if let Some(old) = state.entries.remove(&id) {
+            if let Some(approval) = &native.approval {
+                approval.close_session(&id, "session_expired");
+            }
             firewall.inspect(&event(&old.epoch, old.seq + 1, EventKind::SessionEnd));
             st.spans.end_session(&old.epoch);
         }
@@ -723,6 +752,9 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             .entries
             .remove(&request.session_id)
             .ok_or("native_session_unknown")?;
+        if let Some(approval) = &native.approval {
+            approval.close_session(&request.session_id, "session_ended");
+        }
         firewall.inspect(&event(
             &session.epoch,
             session.seq + 1,
@@ -823,6 +855,35 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             args,
             request.resource_admission.as_ref(),
         );
+        if let Some(approval_id) = &request.approval_id {
+            // Exact single-use operator approval, rechecked against the policy
+            // verdict computed just now. A hard Deny can never be rescued.
+            let approval = native.approval.as_ref().ok_or("native_approval_disabled")?;
+            match approval.redeem(
+                approval_id,
+                &request.session_id,
+                &session.epoch,
+                name,
+                &tool.schema_sha256,
+                &bound,
+                verdict,
+            ) {
+                Ok(()) => {
+                    response.verdict = "allow";
+                    response.release = true;
+                    response
+                        .reason_codes
+                        .push(format!("native_approval_redeemed:{approval_id}"));
+                }
+                Err(code) => {
+                    response.release = false;
+                    if verdict != Verdict::Deny {
+                        response.verdict = "ask";
+                    }
+                    response.reason_codes.push(code.into());
+                }
+            }
+        }
         if response.release {
             response.binding_sha256 = Some(bound.clone());
             response.call_id = Some(crate::token::generate());

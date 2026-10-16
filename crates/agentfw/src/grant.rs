@@ -425,7 +425,12 @@ impl GrantStore {
         Ok((grant, path))
     }
 
-    fn home(&self) -> &Path {
+    /// Current durable approval-policy generation (read under the OS lock).
+    pub fn policy_epoch(&self) -> io::Result<u64> {
+        Ok(PolicyEpochLock::acquire(self.home())?.epoch)
+    }
+
+    pub fn home(&self) -> &Path {
         self.dir.parent().unwrap_or_else(|| Path::new("."))
     }
 
