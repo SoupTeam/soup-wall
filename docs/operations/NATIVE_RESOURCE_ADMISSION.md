@@ -11,6 +11,12 @@ start/end contract remain `sw-native/1`; earlier daemons refuse v3.
 `sw-native/resources/4` with a separate `windows_read` authority and binding.
 It cannot coexist with create or network authority and does not broaden v1.
 
+[Constrained Windows file creation](MCP_WINDOWS_CREATE.md) adds
+`sw-native/resources/5`. It uses the existing `execution` binding with the distinct
+`sw-native/create-file/windows-handles/1` profile, exact original arguments and
+content digest, and a handle-derived workspace identity. It preserves the Linux
+v2 profile and cannot coexist with read or network authority.
+
 ## Operator configuration
 
 The registry remains `sw-native/1`. Each tool can optionally carry a closed `resource_policy` object with:
@@ -19,7 +25,7 @@ The registry remains `sw-native/1`. Each tool can optionally carry a closed `res
 - `workspace` and `cwd`: existing absolute directories, with canonical cwd inside workspace.
 - `executor_sha256` and `classifier_sha256`: operator-reviewed revision digests.
 - `allowed_resources`: 1–256 complete normalized Resource values.
-- `execution` for the explicit v2 create profile, `network` for the explicit
+- `execution` for the explicit v2 Linux or v5 Windows create profile, `network` for the explicit
   v3 HTTPS GET profile, or `windows_read` for the explicit v4 Windows read
   profile; all are absent from legacy reads and are mutually exclusive.
 
@@ -68,6 +74,7 @@ policies or confine file/network access. Therefore:
 - The separately configured [Linux `create_file` executor](MCP_CREATE_FILE.md) supports one new direct workspace child under `sw-native/resources/2`. Its explicit operation/action/content/workspace authority cannot be downgraded to the read contract.
 - The separately configured [Linux `https_get` executor](MCP_HTTPS_GET.md) supports one exact HTTPS URL and reviewed socket address under `sw-native/resources/3`, with verified TLS and bounded reads. It requires actual native Allow and inspects the original response text before release.
 - The separately configured [Windows `read_document` executor](MCP_WINDOWS_READ.md) uses `sw-native/resources/4`, pinned local filesystem handles and volume/file identities. It preserves the bounded UTF-8 result contract and refuses path aliases, linked-file escapes and replacement attempts.
+- The separately configured [Windows `create_file` executor](MCP_WINDOWS_CREATE.md) uses `sw-native/resources/5`, one exact new workspace-root child, complete UTF-8 of at most 4,096 bytes, retained native parent handles and atomic no-overwrite publication. An execution effect survives a withheld result and is accounted for separately.
 - All other unsupported resource-policy operations remain refused with `resource_executor_unsupported`, preventing unconfined server execution.
 
 ## Verification and remaining work
