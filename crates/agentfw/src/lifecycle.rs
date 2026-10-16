@@ -54,9 +54,9 @@ impl ProcessRecord {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Operation {
-    from: Record,
-    to: Record,
-    was_running: bool,
+    pub(crate) from: Record,
+    pub(crate) to: Record,
+    pub(crate) was_running: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -136,6 +136,14 @@ impl Manager {
         candidate: &Path,
         expected_sha256: &str,
     ) -> Result<Record> {
+        #[cfg(target_os = "linux")]
+        if crate::service::registered(&self.home) {
+            return crate::service::Service::new(&self.home)?.upgrade(
+                version,
+                candidate,
+                expected_sha256,
+            );
+        }
         let _lock = self.lock()?;
         #[cfg(target_os = "linux")]
         crate::service::require_unregistered(&self.home)?;
@@ -746,13 +754,81 @@ impl Manager {
     }
 
     #[cfg(target_os = "linux")]
+    pub(crate) fn service_prepare_upgrade(
+        &self,
+        version: &str,
+        candidate: &Path,
+        digest: &str,
+        was_running: bool,
+    ) -> Result<Record> {
+        let _lock = self.lock()?;
+        let mut state = self.load()?;
+        ensure!(
+            state.operation.is_none() && state.pending_stage.is_none(),
+            "recover the interrupted operation first"
+        );
+        let from = state.active.clone().context("Agent is not installed")?;
+        self.verify(&from)?;
+        let to = self.stage(&mut state, version, candidate, digest)?;
+        state.owned.push(to.clone());
+        state.operation = Some(Operation {
+            from,
+            to: to.clone(),
+            was_running,
+        });
+        state.pending_stage = None;
+        self.save(&state)?;
+        Ok(to)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn service_select(&self, selected: &Record) -> Result<()> {
+        let _lock = self.lock()?;
+        let mut state = self.load()?;
+        ensure!(
+            state.process.is_none(),
+            "stop the service before switching versions"
+        );
+        let operation = state.operation.as_ref().context("no service transaction")?;
+        ensure!(
+            selected == &operation.from || selected == &operation.to,
+            "selected version is outside the recorded transaction"
+        );
+        self.verify(selected)?;
+        state.previous = Some(if selected == &operation.from {
+            operation.to.clone()
+        } else {
+            operation.from.clone()
+        });
+        state.active = Some(selected.clone());
+        self.save(&state)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn service_finish(&self) -> Result<()> {
+        let _lock = self.lock()?;
+        let mut state = self.load()?;
+        ensure!(
+            state.operation.is_some(),
+            "no service transaction to finish"
+        );
+        state.operation = None;
+        self.save(&state)
+    }
+
+    #[cfg(target_os = "linux")]
     pub(crate) fn service_launch(&self) -> Result<(PathBuf, ProcessRecord)> {
         let _lock = self.lock()?;
         let mut state = self.load()?;
         ensure!(
-            state.pending_stage.is_none() && state.operation.is_none(),
-            "recover lifecycle transaction before service startup"
+            state.operation.as_ref().is_none_or(|operation| {
+                state.active.as_ref() == Some(&operation.from)
+                    || state.active.as_ref() == Some(&operation.to)
+            }),
+            "active service version is outside the recorded transaction"
         );
+        // A staged candidate never changes the running version. During a switch,
+        // only the two journaled versions may boot; recovery restores `from`.
         // systemd has reaped the old main process before invoking a new launcher.
         // A reused/live PID is never cleared solely because the endpoint is down.
         self.clear_dead_record(&mut state)?;
@@ -906,6 +982,8 @@ impl Manager {
             ensure_regular(&target)?;
         }
         fs::rename(&temp, target)?;
+        #[cfg(unix)]
+        File::open(&self.root)?.sync_all()?;
         Ok(())
     }
 }
@@ -1057,6 +1135,50 @@ pub(crate) fn pid_alive(pid: u32) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn service_switch_is_journaled_and_staging_failure_keeps_active_version() {
+        let temp = tempfile::tempdir().unwrap();
+        let manager = Manager::new(temp.path());
+        let binary = temp.path().join("candidate");
+        fs::write(&binary, b"synthetic executable").unwrap();
+        let digest = sha256_file(&binary).unwrap();
+        let original = manager.install("one", &binary, &digest).unwrap();
+        assert!(manager
+            .service_prepare_upgrade("bad", &binary, &"0".repeat(64), true)
+            .is_err());
+        let (state, _) = manager.service_snapshot().unwrap();
+        assert_eq!(state.active, Some(original.clone()));
+        assert!(state.pending_stage.is_none() && state.operation.is_none());
+        let target = manager
+            .service_prepare_upgrade("two", &binary, &digest, true)
+            .unwrap();
+        let (state, _) = manager.service_snapshot().unwrap();
+        assert_eq!(state.active, Some(original.clone()));
+        let operation = state.operation.unwrap();
+        assert_eq!(operation.from, original);
+        assert_eq!(operation.to, target);
+        assert!(operation.was_running);
+        // The coordinator releases the state lock before starting systemd.
+        drop(manager.lock().unwrap());
+        assert!(manager
+            .service_prepare_upgrade("three", &binary, &digest, false)
+            .is_err());
+        let foreign = Record {
+            version: "foreign".into(),
+            binary: "agentfw-foreign".into(),
+            digest,
+        };
+        assert!(manager.service_select(&foreign).is_err());
+        manager.service_select(&target).unwrap();
+        manager.service_select(&original).unwrap();
+        manager.service_finish().unwrap();
+        let (state, _) = manager.service_snapshot().unwrap();
+        assert_eq!(state.active, Some(original));
+        assert_eq!(state.previous, Some(target));
+        assert!(state.operation.is_none());
+    }
 
     #[test]
     fn managed_identity_requires_every_field() {

@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use crate::lifecycle::{sha256_file, Manager};
+use crate::lifecycle::{sha256_file, Manager, Record};
 
 const STATE: &str = "ownership.json";
 const SYSTEMCTL: &str = "/usr/bin/systemctl";
@@ -57,6 +57,7 @@ pub struct Preview {
     pub launcher: PathBuf,
     pub unit: String,
     pub starts_automatically: bool,
+    pub transaction_protocol: u32,
 }
 
 pub struct Service {
@@ -117,6 +118,7 @@ impl Service {
             launcher: self.launcher(),
             unit,
             starts_automatically: false,
+            transaction_protocol: 1,
         })
     }
 
@@ -242,8 +244,96 @@ impl Service {
         Ok(())
     }
 
+    fn require_transaction_launcher(&self) -> Result<()> {
+        self.installed()?;
+        let home = self.home.to_str().context("profile path is not UTF-8")?;
+        let mut command = Command::new(self.launcher());
+        command.args(["service", "--home", home, "preview"]);
+        let output = command_output(command, false)
+            .context("installed launcher predates service transactions; stop, uninstall and reinstall the service with this CLI first")?;
+        let preview: serde_json::Value = serde_json::from_str(&output)?;
+        ensure!(preview["transaction_protocol"] == 1,
+            "installed launcher predates service transactions; stop, uninstall and reinstall the service with this CLI first");
+        Ok(())
+    }
+
+    fn idle(&self) -> Result<()> {
+        let (state, _) = self.manager().service_snapshot()?;
+        ensure!(
+            state.operation.is_none() && state.pending_stage.is_none(),
+            "recover the interrupted operation first"
+        );
+        Ok(())
+    }
+
+    fn running_intent(&self) -> Result<bool> {
+        self.installed()?;
+        let shown = self.verify_loaded()?;
+        if self.verified_health()?.is_some() {
+            return Ok(true);
+        }
+        ensure!(
+            property(&shown, "MainPID") == "0" && property(&shown, "ActiveState") == "inactive",
+            "service is not verified running or explicitly stopped; recover it first"
+        );
+        self.manager().service_clear_dead()?;
+        Ok(false)
+    }
+
+    pub fn upgrade(&self, version: &str, candidate: &Path, digest: &str) -> Result<Record> {
+        let _operation = self.operation_lock()?;
+        self.idle()?;
+        self.require_transaction_launcher()?;
+        let running = self.running_intent()?;
+        // Verify and stage before stopping the healthy service.
+        let target = self
+            .manager()
+            .service_prepare_upgrade(version, candidate, digest, running)?;
+        self.switch_transaction(&target)?;
+        Ok(target)
+    }
+
+    fn switch_transaction(&self, target: &Record) -> Result<()> {
+        let (state, _) = self.manager().service_snapshot()?;
+        let operation = state.operation.context("no service transaction")?;
+        let changed = (|| -> Result<()> {
+            self.stop_locked()?;
+            self.manager().service_select(target)?;
+            if operation.was_running {
+                self.start_locked()?;
+            }
+            Ok(())
+        })();
+        if let Err(error) = changed {
+            self.restore_transaction().context(
+                "service update failed and recovery is incomplete; run lifecycle recover",
+            )?;
+            bail!("service update failed and the original version was restored: {error:#}");
+        }
+        self.manager().service_finish()
+    }
+
+    fn restore_transaction(&self) -> Result<()> {
+        let (state, _) = self.manager().service_snapshot()?;
+        let operation = state
+            .operation
+            .context("no interrupted service transaction")?;
+        // Stop also cancels a queued automatic restart after a failed candidate.
+        self.stop_locked()?;
+        self.manager().service_select(&operation.from)?;
+        if operation.was_running {
+            let shown = self.verify_loaded()?;
+            if property(&shown, "ActiveState") == "failed" {
+                control(&["reset-failed", &self.name])?;
+            }
+            self.start_locked()?;
+        }
+        self.manager().service_finish()
+    }
+
     pub fn start(&self) -> Result<()> {
         let _operation = self.operation_lock()?;
+        self.idle()?;
         self.start_locked()
     }
 
@@ -275,6 +365,7 @@ impl Service {
 
     pub fn stop(&self) -> Result<()> {
         let _operation = self.operation_lock()?;
+        self.idle()?;
         self.stop_locked()
     }
 
@@ -301,6 +392,7 @@ impl Service {
 
     pub fn restart(&self) -> Result<()> {
         let _operation = self.operation_lock()?;
+        self.idle()?;
         self.stop_locked()?;
         self.start_locked()
     }
@@ -730,9 +822,15 @@ fn control(args: &[&str]) -> Result<()> {
 }
 
 fn systemctl(args: &[&str], allow_missing: bool) -> Result<String> {
-    let mut child = Command::new(SYSTEMCTL)
+    let mut command = Command::new(SYSTEMCTL);
+    command
         .args(["--user", "--no-pager", "--no-ask-password"])
-        .args(args)
+        .args(args);
+    command_output(command, allow_missing)
+}
+
+fn command_output(mut command: Command, allow_missing: bool) -> Result<String> {
+    let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
