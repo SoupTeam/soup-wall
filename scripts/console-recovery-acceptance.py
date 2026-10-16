@@ -36,7 +36,7 @@ OBJECTIVE = {
     "recovery_time_objective_start": "valid current archive restore begins after isolated negative controls",
     "recovery_time_objective_end": "both restored Agents acknowledge a higher signed sequence and live hooks match",
     "recovery_point": "complete quiesced snapshot; zero accepted Console writes after snapshot",
-    "deployment_limits": "owned Unix, literal-loopback Console/Agents, one issuer, schema 27",
+    "deployment_limits": "owned Unix, literal-loopback Console/Agents, one issuer, schema 28",
     "excluded": ["remote HTTPS", "fleet reconciliation", "new signing epoch", "exactly-once delivery"],
 }
 
@@ -224,7 +224,7 @@ def source_metadata(args):
                 ["git", "diff", "--binary", "HEAD"], cwd=ROOT)).hexdigest(),
             "runtime_input_sha256": inputs,
             "runtime_inputs_sha256": hashlib.sha256(canonical(inputs).encode()).hexdigest(),
-            "schema_version": 27,
+            "schema_version": 28,
             "configuration": "owned loopback, webhook source dispatcher disabled"}
 
 
@@ -249,7 +249,7 @@ class Run:
         self.current_database = None
         self.postgres = None
         self.agents = []
-        self.schema_version = 27
+        self.schema_version = 28
 
     def check(self, name, passed, **observations):
         self.checks.append({"name": name, "passed": bool(passed), **observations})
