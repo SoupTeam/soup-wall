@@ -264,26 +264,23 @@ pub fn normalize_responses(
 
     if let Some(items) = response.get("output").and_then(Value::as_array) {
         for item in items {
-            match item.get("type").and_then(Value::as_str) {
-                Some("message") => {
-                    if let Some(parts) = item.get("content").and_then(Value::as_array) {
-                        for part in parts {
-                            if part.get("type").and_then(Value::as_str) == Some("output_text") {
-                                if let Some(content) = part.get("text").and_then(Value::as_str) {
-                                    if !content.is_empty() {
-                                        events.push(text(
-                                            Provider::OpenAiResponses,
-                                            EventDirection::Output,
-                                            item.get("role").and_then(Value::as_str),
-                                            content,
-                                        ));
-                                    }
+            if let Some("message") = item.get("type").and_then(Value::as_str) {
+                if let Some(parts) = item.get("content").and_then(Value::as_array) {
+                    for part in parts {
+                        if part.get("type").and_then(Value::as_str) == Some("output_text") {
+                            if let Some(content) = part.get("text").and_then(Value::as_str) {
+                                if !content.is_empty() {
+                                    events.push(text(
+                                        Provider::OpenAiResponses,
+                                        EventDirection::Output,
+                                        item.get("role").and_then(Value::as_str),
+                                        content,
+                                    ));
                                 }
                             }
                         }
                     }
                 }
-                _ => {}
             }
         }
     }
@@ -323,27 +320,17 @@ fn anthropic_texts(
         }
         Value::Array(blocks) => {
             for block in blocks {
-                match block.get("type").and_then(Value::as_str) {
-                    Some("text") => {
-                        if let Some(content) = block.get("text").and_then(Value::as_str) {
-                            if !content.is_empty() {
-                                events.push(text(
-                                    Provider::Anthropic,
-                                    if output {
-                                        EventDirection::Output
-                                    } else {
-                                        EventDirection::Input
-                                    },
-                                    role,
-                                    content,
-                                ));
-                            }
+                if let Some("text") = block.get("type").and_then(Value::as_str) {
+                    if let Some(content) = block.get("text").and_then(Value::as_str) {
+                        if !content.is_empty() {
+                            events.push(text(
+                                Provider::Anthropic,
+                                EventDirection::Output,
+                                Some("assistant"),
+                                content,
+                            ));
                         }
                     }
-                    Some("image") | Some("document") => {
-                        return Err("unsupported multimodal block in text array");
-                    }
-                    _ => {} // Ignore harmless non-text blocks outside of tool contexts if any
                 }
             }
         }
