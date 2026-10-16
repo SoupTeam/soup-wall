@@ -1,4 +1,4 @@
-﻿# SCIM directory client interoperability
+# SCIM directory client interoperability
 
 SOU-57, roadmap Phase 6. This is an internal synthetic interoperability fixture,
 not certification of a customer identity provider or a product release.
@@ -78,3 +78,8 @@ versions, individual checks and cleanup outcome. They exclude credentials,
 request/response bodies and exception strings. A failure report remains failed;
 there is no hidden automatic retry. Inspect private local logs while the run is
 active if diagnosis is needed, and rerun using a new evidence path.
+
+## Retained results
+
+[2026-10-16 acceptance report](evidence/SCIM_DIRECTORY_2026-10-16.md) records
+the exact source, successful client cycles, earlier failures and verification limits.
