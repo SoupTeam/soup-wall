@@ -19,6 +19,7 @@ pub mod managed_sync;
 pub mod map;
 pub mod mcp;
 pub mod native;
+pub use native::child_authority;
 pub mod preflight;
 #[cfg(windows)]
 mod private_file_windows;

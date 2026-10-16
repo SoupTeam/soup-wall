@@ -19,6 +19,7 @@ use crate::config::NativeCfg;
 use crate::handlers::Shared;
 
 pub mod approval;
+pub mod child_authority;
 pub mod resource;
 
 pub const CONTRACT: &str = "sw-native/1";
@@ -214,6 +215,9 @@ struct Call {
 }
 
 struct Session {
+    pub host_session: Option<String>,
+    pub server_id: Option<String>,
+    pub granted_tools: Vec<String>,
     epoch: String,
     seq: u64,
     touched: Instant,
@@ -331,6 +335,9 @@ struct Request {
     delivery: Option<String>,
     resource_admission: Option<resource::Admission>,
     approval_id: Option<String>,
+    pub host_session: Option<String>,
+    pub child_authority: Option<String>,
+    pub server_id: Option<String>,
 }
 
 fn parse(body: &str) -> Result<Request, &'static str> {
@@ -348,7 +355,14 @@ fn parse(body: &str) -> Result<Request, &'static str> {
     let mut keys = BTreeSet::from(["contract_version", "registry_sha256", "session_id", "event"]);
     let object = value.as_object().ok_or("native_invalid_json")?;
     match event {
-        "session_start" | "session_end" => {}
+        "session_start" => {
+            for key in ["host_session", "child_authority", "server_id"] {
+                if object.contains_key(key) {
+                    keys.insert(key);
+                }
+            }
+        }
+        "session_end" => {}
         "call" => {
             keys.extend(["tool", "args", "schema_sha256"]);
             if object.contains_key("approval_id") {
@@ -378,6 +392,14 @@ fn parse(body: &str) -> Result<Request, &'static str> {
     }
     if object.keys().map(String::as_str).collect::<BTreeSet<_>>() != keys {
         return Err("native_invalid_fields");
+    }
+    if request
+        .host_session
+        .as_ref()
+        .is_some_and(|id| !identifier(id))
+        || request.server_id.as_ref().is_some_and(|id| !identifier(id))
+    {
+        return Err("native_invalid_identity");
     }
     if !identifier(&request.session_id)
         || !matches!(
@@ -733,25 +755,63 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         if state.entries.len() >= MAX_SESSIONS {
             return Err("native_session_cap");
         }
-        let epoch = format!("native:{}", crate::token::generate());
+        let granted_tools = if let Some(host_session) = &request.host_session {
+            let token = request
+                .child_authority
+                .as_deref()
+                .ok_or("native_child_authority_missing")?;
+            let key = child_authority::derive_key(&native.token);
+            let now_ms = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_err(|_| "native_clock_unavailable")?
+                .as_millis() as u64;
+            let grant = child_authority::verify_token(
+                &key,
+                token,
+                host_session,
+                request.server_id.as_deref().unwrap_or(""),
+                now_ms,
+            )
+            .map_err(|error| {
+                use child_authority::ChildAuthorityError;
+                match error {
+                    ChildAuthorityError::BadSignature => "native_child_authority_bad_signature",
+                    ChildAuthorityError::Expired => "native_child_authority_expired",
+                    ChildAuthorityError::NotYetValid => "native_child_authority_not_yet_valid",
+                    ChildAuthorityError::HostSessionMismatch => {
+                        "native_child_authority_host_mismatch"
+                    }
+                    ChildAuthorityError::ServerIdMismatch => {
+                        "native_child_authority_server_mismatch"
+                    }
+                    ChildAuthorityError::InvalidContract => {
+                        "native_child_authority_invalid_contract"
+                    }
+                    ChildAuthorityError::MalformedToken => "native_child_authority_malformed",
+                }
+            })?;
+            grant.granted_tools
+        } else {
+            Vec::new()
+        };
+        let session = Session {
+            epoch: format!("native:{}", crate::token::generate()),
+            seq: 1,
+            touched: now,
+            calls: BTreeMap::new(),
+            host_session: request.host_session.clone(),
+            server_id: request.server_id.clone(),
+            granted_tools,
+        };
         audit(
             st,
             &request,
-            &epoch,
-            1,
+            &session,
             &response,
             None,
             started.elapsed().as_micros(),
         )?;
-        state.entries.insert(
-            request.session_id,
-            Session {
-                epoch,
-                seq: 1,
-                touched: now,
-                calls: BTreeMap::new(),
-            },
-        );
+        state.entries.insert(request.session_id, session);
         return Ok(response);
     }
     if request.event == "session_end" {
@@ -771,8 +831,10 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         audit(
             st,
             &request,
-            &session.epoch,
-            session.seq + 1,
+            &Session {
+                seq: session.seq + 1,
+                ..session
+            },
             &response,
             None,
             started.elapsed().as_micros(),
@@ -795,6 +857,12 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         .ok_or("native_tool_unknown")?;
     let args = request.args.as_ref().ok_or("native_args_missing")?;
     if request.event == "call" {
+        if session.host_session.is_some()
+            && !session.granted_tools.is_empty()
+            && !session.granted_tools.iter().any(|tool| tool == name)
+        {
+            return Err("native_child_authority_escalation");
+        }
         if request.schema_sha256.as_deref() != Some(tool.schema_sha256.as_str()) {
             return Err("native_schema_mismatch");
         }
@@ -814,8 +882,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                 audit(
                     st,
                     &request,
-                    &session.epoch,
-                    session.seq,
+                    session,
                     &response,
                     None,
                     started.elapsed().as_micros(),
@@ -901,8 +968,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         audit(
             st,
             &request,
-            &session.epoch,
-            session.seq,
+            session,
             &response,
             Some(&outcome),
             started.elapsed().as_micros(),
@@ -985,7 +1051,16 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         }
         context_text(content, name)?
     };
-    let provenance = source(&native.registry, tool);
+    let provenance = match (
+        request.delivery.as_deref(),
+        &tool.result_provenance,
+        &session.server_id,
+    ) {
+        (Some("mcp_host"), ResultProvenance::Untrusted, Some(server)) => Provenance::McpServer {
+            name: server.clone(),
+        },
+        _ => source(&native.registry, tool),
+    };
     let mut events = Vec::new();
     let mut strongest = Verdict::Allow;
     let mut representative = None;
@@ -1040,8 +1115,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
     audit(
         st,
         &request,
-        &session.epoch,
-        session.seq,
+        session,
         &response,
         representative.as_ref(),
         started.elapsed().as_micros(),
@@ -1061,6 +1135,29 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                 {
                     if source.trust() == Trust::Untrusted {
                         st.spans.put(&session.epoch, ev.seq, content);
+                    }
+                    if request.event == "result" && request.delivery.as_deref() == Some("mcp_host")
+                    {
+                        if let Some(host_session) = &session.host_session {
+                            let host_seq = st.sessions.next(host_session);
+                            let tool_name = match &session.server_id {
+                                Some(server) => format!("mcp__{server}__{name}"),
+                                None => name.to_string(),
+                            };
+                            let ev_host = event(
+                                host_session,
+                                host_seq,
+                                EventKind::ToolResult {
+                                    tool: tool_name,
+                                    content: content.clone(),
+                                    source: source.clone(),
+                                },
+                            );
+                            firewall.admit_native_result(&ev_host);
+                            if source.trust() == Trust::Untrusted {
+                                st.spans.put(host_session, host_seq, content);
+                            }
+                        }
                     }
                 }
             }
@@ -1091,13 +1188,14 @@ fn event(session: &str, seq: u64, kind: EventKind) -> AgentEvent {
 fn audit(
     st: &Shared,
     request: &Request,
-    epoch: &str,
-    seq: u64,
+    session: &Session,
     response: &Response,
     outcome: Option<&Outcome>,
     latency_us: u128,
 ) -> Result<(), &'static str> {
-    let record = json!({"at_ms": event(epoch, seq, EventKind::Unknown).at_ms, "session": epoch,
+    let epoch = &session.epoch;
+    let seq = session.seq;
+    let mut record = json!({"at_ms": event(epoch, seq, EventKind::Unknown).at_ms, "session": epoch,
         "seq": seq, "event": format!("native_{}", request.event), "tool": request.tool,
         "verdict": response.verdict, "shadow": false, "released": response.release,
         "rule": outcome.and_then(|o| o.rule.as_ref()),
@@ -1111,6 +1209,9 @@ fn audit(
         "delivery": request.delivery,
         "call_id": response.call_id, "binding_sha256": response.binding_sha256,
         "content_sha256": response.content_sha256, "reason_codes": response.reason_codes});
+    if let Some(host_session) = &session.host_session {
+        record["host_session"] = json!(host_session);
+    }
     st.audit
         .write_native(&record)
         .map_err(|_| "native_audit_unavailable")

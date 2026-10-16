@@ -547,6 +547,28 @@ Environment: Linux in an isolated Docker container, Rust 1.98.0, Python 3.11. Re
 
 The scripted baseline demonstration passes all 16 checks using actual loopback sender/receiver witnesses. Actual Claude Code is unavailable in the container, so that host check is **skipped**. This is source preparation evidence, not full SOU-15 acceptance or arbitrary-server sandboxing. Use the current discovered counts from `scripts/verify-sou17.py` rather than the earlier 91-case candidate total.
 
+## Authenticated child authority and host session binding (SOU-63)
+
+When an agent runtime delegates tasks to a child MCP process or external tool collector, the child must not act as an unauthenticated or unbound session. SOU-63 establishes authenticated child authority and explicit host session binding across MCP collectors and hooks.
+
+### Child authority token contract
+
+The child authority token uses domain-separated HMAC-SHA256 signing (`sw-child-authority/1`):
+- Key derivation: `agentfw/child-authority-key/v1\0` over the native daemon token.
+- Payload parameters: `host_session`, `server_id`, `granted_tools`, `issued_at_ms`, `expires_at_ms`.
+- Signature: Constant-time verified HMAC (`subtle::ConstantTimeEq`) over length-prefixed contract, host session, server ID, granted tools, and timestamps.
+- Encoding: Base64url without padding.
+
+### Host session and provenance admission
+
+1. **Session binding**: Collectors pass `--host-session <SESSION>` and `--child-authority <TOKEN>` (or via `AGENTFW_HOST_SESSION` and `AGENTFW_CHILD_AUTHORITY` environment variables). CLI flags strictly override environment values.
+2. **Preflight verification**: The daemon verifies signature, expiration (`native_child_authority_expired`), clock validity (`native_child_authority_not_yet_valid`), host session match (`native_child_authority_host_mismatch`), and server ID match (`native_child_authority_server_mismatch`) before admitting the session.
+3. **Tool containment**: If a child attempts to invoke any tool not explicitly listed in its granted tool list, the daemon refuses the call with `native_child_authority_escalation`.
+4. **Attribution and taint propagation**: For `mcp_host` delivery of untrusted tool results, provenance is attributed as `Provenance::McpServer { name: server_id }`. Upon release, the daemon records taint marks and span cache entries for both the child collector session and the parent `host_session`. Subsequent destructive or exfiltration actions by the host session match policy rules against the originating MCP server taint.
+5. **CLI utilities**:
+   - `agentfw child-authority mint --session <ID> --server <NAME> --tools <T1,T2> --ttl-seconds <SEC>`
+   - `agentfw child-authority verify --session <ID> --server <NAME> --token <TOKEN>`
+
 ## Local demonstration
 
 The demonstration runs on Linux, macOS and Windows without a model, provider or

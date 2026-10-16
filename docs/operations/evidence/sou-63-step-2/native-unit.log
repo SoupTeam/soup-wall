@@ -1,0 +1,47 @@
+   Compiling agentfw v0.3.0 (/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/crates/agentfw)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.63s
+     Running unittests src/lib.rs (target/debug/deps/agentfw-51d72a1a25ec0b5b)
+
+running 39 tests
+test native::child_authority::tests::expiry_and_future_skew_boundaries ... ok
+test native::child_authority::tests::every_claim_is_authenticated ... ok
+test native::child_authority::tests::key_derivation_known_vector_and_separation ... ok
+test native::child_authority::tests::concurrent_verification_keeps_session_bindings_isolated ... ok
+test native::child_authority::tests::reasons_are_distinct_and_nonempty ... ok
+test native::child_authority::tests::rejects_authenticated_invalid_contract_and_interval ... ok
+test native::child_authority::tests::rejects_malformed_wire_data ... ok
+test native::child_authority::tests::rejects_mismatched_authority_and_wrong_key ... ok
+test native::child_authority::tests::token_round_trip_and_verification ... ok
+test native::child_authority::tests::signing_boundaries_cannot_be_shifted ... ok
+test native::resource::tests::create_authority_refuses_existing_nested_and_linked_destinations ... ok
+test native::resource::tests::create_authority_rejects_normalized_path_spellings_before_execution ... ok
+test native::resource::tests::create_authority_requires_reviewed_schema_action_profile_and_executor ... ok
+test native::resource::tests::create_authority_rejects_args_content_destination_and_workspace_substitution ... ok
+test native::resource::windows_create_contract_tests::windows_create_v5_arguments_enforce_original_fields_and_utf8_byte_cap ... ok
+test native::resource::windows_create_contract_tests::windows_create_v5_binding_refuses_other_platforms_without_filesystem_effects ... ok
+test native::resource::windows_create_contract_tests::windows_create_v5_binding_shape_keeps_linux_contract_distinct ... ok
+test native::resource::windows_create_contract_tests::windows_create_v5_policy_requires_explicit_closed_write_semantics ... ok
+test native::resource::tests::create_binding_detects_replaced_workspace_inode_at_the_same_path ... ok
+test native::resource::windows_read_contract_tests::windows_read_authority_requires_explicit_reviewed_semantics ... ok
+test native::resource::windows_read_contract_tests::windows_read_v4_binding_shape_preserves_distinct_contracts ... ok
+test native::resource::tests::create_binding_is_v2_exact_and_uses_utf8_byte_bounds ... ok
+test native::tests::expired_native_session_clears_taint_and_invalidates_pending_calls ... ok
+test native::tests::audit_write_failure_withholds_result_and_does_not_commit_taint_or_spans ... ok
+test native::tests::mcp_host_result_admits_original_decoded_text_and_spends_invocation ... ok
+test native::tests::mcp_host_error_kind_matches_both_rpc_and_tool_errors ... ok
+test native::tests::mcp_host_unicode_escaped_injection_is_withheld_before_admission ... ok
+test native::tests::registry_rejects_invalid_pointer_escapes_and_semantic_caller_claims ... ok
+test native::tests::mcp_host_rejects_uninspected_fields_and_content_without_spending_again ... ok
+test native::approval::tests::default_config_keeps_the_refusal_and_has_no_approval_route ... ok
+test native::tests::pending_call_cap_rejects_new_invocation_without_eviction ... ok
+test native::approval::tests::exact_approval_releases_the_original_call_exactly_once ... ok
+test native::approval::tests::policy_switch_hard_deny_and_unsupported_cannot_be_rescued ... ok
+test native::approval::tests::hook_key_and_hook_grants_cannot_authorize_native_calls ... ok
+test native::approval::tests::changed_arguments_and_other_sessions_get_no_release ... ok
+test native::approval::tests::restart_session_end_and_second_pending_close_or_refuse ... ok
+test native::approval::tests::classifier_source_requires_the_same_exact_approval ... ok
+test native::approval::tests::concurrent_redemption_releases_exactly_one ... ok
+test native::approval::tests::reject_and_expiry_cannot_be_rescued ... ok
+
+test result: ok. 39 passed; 0 failed; 0 ignored; 0 measured; 231 filtered out; finished in 1.28s
+

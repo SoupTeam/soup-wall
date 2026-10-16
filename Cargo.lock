@@ -50,6 +50,7 @@ dependencies = [
  "anyhow",
  "aws-lc-rs",
  "axum",
+ "base64 0.22.1",
  "clap",
  "futures-util",
  "hmac 0.12.1",
