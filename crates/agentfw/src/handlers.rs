@@ -138,17 +138,29 @@ fn is_protected_pretooluse(body: &str) -> bool {
     true
 }
 
+#[derive(Debug)]
+pub enum BodyReadError {
+    Oversized { prefix: Vec<u8>, total_len: usize },
+    Io { prefix: Vec<u8>, error: String },
+    InvalidUtf8 { prefix: Vec<u8> },
+}
+
 async fn read_bounded_string(
     body: axum::body::Body,
     max_bytes: usize,
-) -> Result<String, (String, usize)> {
+) -> Result<String, BodyReadError> {
     let mut stream = body.into_data_stream();
     let mut buf = Vec::new();
     let mut total_len = 0;
     while let Some(chunk_res) = stream.next().await {
         let chunk = match chunk_res {
             Ok(c) => c,
-            Err(_) => break,
+            Err(e) => {
+                return Err(BodyReadError::Io {
+                    prefix: buf,
+                    error: e.to_string(),
+                });
+            }
         };
         total_len += chunk.len();
         if buf.len() < max_bytes + 4096 {
@@ -157,12 +169,18 @@ async fn read_bounded_string(
         }
         if total_len > max_bytes {
             drop(stream);
-            let prefix = String::from_utf8_lossy(&buf).into_owned();
-            return Err((prefix, total_len));
+            return Err(BodyReadError::Oversized {
+                prefix: buf,
+                total_len,
+            });
         }
     }
-    let s = String::from_utf8_lossy(&buf).into_owned();
-    Ok(s)
+    match String::from_utf8(buf) {
+        Ok(s) => Ok(s),
+        Err(e) => Err(BodyReadError::InvalidUtf8 {
+            prefix: e.into_bytes(),
+        }),
+    }
 }
 
 /// Turn a judgement plus the rule's declared fallback into a final verdict.
@@ -293,19 +311,38 @@ pub async fn hook(
 
     let body = match read_bounded_string(body, st.config.max_body_bytes).await {
         Ok(s) => s,
-        Err((prefix, len)) => {
-            tracing::warn!(
-                len = len,
-                "hook body over cap; proceeding without inspection"
-            );
-            if let Some(session_id) = extract_session_id_from_raw(&prefix) {
+        Err(err) => {
+            let (prefix, reason_msg) = match err {
+                BodyReadError::Oversized { prefix, total_len } => {
+                    tracing::warn!(
+                        len = total_len,
+                        "hook body over cap; proceeding without inspection"
+                    );
+                    (prefix, "hook body exceeds configured max_body_bytes")
+                }
+                BodyReadError::Io { prefix, error } => {
+                    tracing::warn!(error = %error, "hook body stream error");
+                    (prefix, "hook body stream read error; refused by policy")
+                }
+                BodyReadError::InvalidUtf8 { prefix } => {
+                    tracing::warn!("hook body contains invalid UTF-8");
+                    (prefix, "invalid UTF-8 in hook body; refused by policy")
+                }
+            };
+            let lossy_prefix = String::from_utf8_lossy(&prefix);
+            if let Some(session_id) = extract_session_id_from_raw(&lossy_prefix) {
                 let mut fw = st.firewall.lock().expect("firewall mutex");
                 fw.mark_provenance_incomplete(&session_id);
             }
-            if st.config.enforce && is_protected_pretooluse(&prefix) {
+            let event_name = extract_event_from_raw(&lossy_prefix);
+            let is_proven_non_pre = matches!(
+                event_name.as_deref(),
+                Some("PostToolUse" | "SessionStart" | "SessionEnd")
+            );
+            if st.config.enforce && !is_proven_non_pre {
                 let out = decision::Decision {
                     permission_decision: "deny",
-                    reason: Some("hook body exceeds configured max_body_bytes".into()),
+                    reason: Some(reason_msg.into()),
                     shadow: false,
                     would_have_been: Verdict::Deny,
                 }
@@ -346,6 +383,64 @@ pub async fn hook(
         }
     };
 
+    let is_pre = payload.event == HookEvent::PreToolUse;
+    let is_protected = is_pre
+        && payload.tool_name.as_ref().is_some_and(|tool| {
+            const READ_ONLY: &[&str] = &[
+                "Read",
+                "Grep",
+                "Glob",
+                "NotebookRead",
+                "TodoRead",
+                "WebFetch",
+                "WebSearch",
+            ];
+            if READ_ONLY.contains(&tool.as_str()) {
+                false
+            } else if tool == "Bash" {
+                payload.tool_input.get("command").is_some()
+            } else {
+                true
+            }
+        });
+
+    if payload.session_id.is_empty() {
+        tracing::warn!("hook payload missing or empty session_id");
+        if st.config.enforce && is_protected {
+            let out = decision::Decision {
+                permission_decision: "deny",
+                reason: Some("protected PreToolUse missing valid session_id".into()),
+                shadow: false,
+                would_have_been: Verdict::Deny,
+            }
+            .to_hook_output();
+            let _ = st.audit.write(&AuditLine {
+                at_ms: now_ms(),
+                session: String::new(),
+                seq: 0,
+                event: payload.event.as_str().to_string(),
+                tool: payload.tool_name.clone(),
+                verdict: "deny".into(),
+                shadow: false,
+                rule: Some("invalid-session".into()),
+                risk_score: 0,
+                findings: vec![],
+                taint: None,
+                judge: None,
+                approval: None,
+                egress_hosts: vec![],
+                latency_us: started.elapsed().as_micros(),
+                truncated: false,
+                raw: st.config.capture_unknown_raw.then_some(body),
+            });
+            return (
+                StatusCode::OK,
+                Json(serde_json::to_value(out).unwrap_or_default()),
+            );
+        }
+        return (StatusCode::OK, Json(serde_json::json!({})));
+    }
+
     // An event kind this build does not know about, or a session id too degenerate
     // to key taint by (see `map::to_event`): proceed without blocking. Raw bodies
     // are omitted unless the operator explicitly opted into sensitive forensic capture.
@@ -355,6 +450,38 @@ pub async fn hook(
         {
             let mut fw = st.firewall.lock().expect("firewall mutex");
             fw.mark_provenance_incomplete(&payload.session_id);
+        }
+        if st.config.enforce && is_protected {
+            let out = decision::Decision {
+                permission_decision: "deny",
+                reason: Some("unrecognized protected hook event; refused by policy".into()),
+                shadow: false,
+                would_have_been: Verdict::Deny,
+            }
+            .to_hook_output();
+            let _ = st.audit.write(&AuditLine {
+                at_ms: now_ms(),
+                session: payload.session_id.clone(),
+                seq,
+                event: "unknown".into(),
+                tool: payload.tool_name.clone(),
+                verdict: "deny".into(),
+                shadow: false,
+                rule: Some("unrecognized-protected-event".into()),
+                risk_score: 0,
+                findings: vec![],
+                taint: None,
+                judge: None,
+                approval: None,
+                egress_hosts: vec![],
+                latency_us: started.elapsed().as_micros(),
+                truncated: false,
+                raw: st.config.capture_unknown_raw.then_some(body),
+            });
+            return (
+                StatusCode::OK,
+                Json(serde_json::to_value(out).unwrap_or_default()),
+            );
         }
         let _ = st.audit.write(&AuditLine {
             at_ms: now_ms(),
@@ -594,11 +721,25 @@ pub async fn mcp(
     }
     let body = match read_bounded_string(body, st.config.max_body_bytes).await {
         Ok(s) => s,
-        Err((_prefix, _len)) => {
+        Err(BodyReadError::Oversized { .. }) => {
             tracing::warn!("mcp body over cap; rejecting");
             return (
                 StatusCode::PAYLOAD_TOO_LARGE,
                 Json(serde_json::json!({ "verdict": "deny", "error": "mcp_body_over_cap" })),
+            );
+        }
+        Err(BodyReadError::Io { error, .. }) => {
+            tracing::warn!(error = %error, "mcp stream error; rejecting");
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "verdict": "deny", "error": "mcp_read_error" })),
+            );
+        }
+        Err(BodyReadError::InvalidUtf8 { .. }) => {
+            tracing::warn!("mcp invalid utf8; rejecting");
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "verdict": "deny", "error": "invalid_utf8" })),
             );
         }
     };
