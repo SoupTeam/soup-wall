@@ -49,6 +49,7 @@ impl Fixture {
             native: native.then(|| agentfw::config::NativeCfg {
                 registry_path,
                 registry_sha256: sha.clone(),
+                approval: None,
             }),
             ..Config::default()
         };

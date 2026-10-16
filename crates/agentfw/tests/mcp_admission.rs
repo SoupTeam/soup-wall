@@ -318,11 +318,22 @@ async fn delay_call_admission(
     }
 }
 
-fn fixture_state(home: &Path, port: u16, enforce: bool) -> Arc<AppState> {
+fn fixture_state(
+    home: &Path,
+    port: u16,
+    enforce: bool,
+    approval_ttl: Option<u64>,
+) -> Arc<AppState> {
     let bytes = std::fs::read(home.parent().unwrap().join("registry.json")).unwrap();
     let digest = sha(&bytes);
+    let mut native = NativeState::from_bytes(&bytes, &digest, TOKEN.into()).unwrap();
+    if let Some(ttl) = approval_ttl {
+        native = native
+            .with_approval(home, &agentfw::grant::derive_key("fixture-hook-token"), ttl)
+            .unwrap();
+    }
     Arc::new(AppState {
-        native: Some(NativeState::from_bytes(&bytes, &digest, TOKEN.into()).unwrap()),
+        native: Some(native),
         firewall: Mutex::new(AgentFirewall::new(
             AgentPolicySet::from_yaml(POLICY).unwrap(),
             DEFAULT_TAINT_CAP,
@@ -384,13 +395,38 @@ fn spawn_gateway_with_profiles(
     profiles: Option<&str>,
     fixed_destinations: bool,
 ) -> (Child, ChildStdin, GatewayOutput) {
+    spawn_gateway_full(
+        directory,
+        ledger,
+        mode,
+        stderr,
+        classifier,
+        profiles,
+        fixed_destinations,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn spawn_gateway_full(
+    directory: &Path,
+    ledger: &Path,
+    mode: &str,
+    stderr: &Path,
+    classifier: Option<&str>,
+    profiles: Option<&str>,
+    fixed_destinations: bool,
+    approval_wait: Option<u64>,
+) -> (Child, ChildStdin, GatewayOutput) {
     let python = if cfg!(windows) { "python" } else { "python3" };
     let server_py = directory.join("server.py");
     std::fs::write(&server_py, SERVER).unwrap();
     let mut command = Command::new(env!("CARGO_BIN_EXE_agentfw"));
+    command.args(["mcp", "--native-admission"]);
+    if let Some(wait) = approval_wait {
+        command.args(["--native-approval-wait-seconds", &wait.to_string()]);
+    }
     command.args([
-        "mcp",
-        "--native-admission",
         "--id",
         "fixture",
         "--",
@@ -523,6 +559,7 @@ struct Fixture {
     daemon: tokio::task::JoinHandle<()>,
     daemon_shutdown: Option<oneshot::Sender<()>>,
     daemon_faults: Arc<DaemonFaults>,
+    approval_ttl: Option<u64>,
     child: Child,
     input: ChildStdin,
     output: tokio::io::Lines<BufReader<ChildStdout>>,
@@ -592,6 +629,30 @@ impl Fixture {
         profiles: Option<&str>,
         fixed_destinations: bool,
     ) -> Self {
+        Self::build(
+            mode,
+            enforce,
+            classifier,
+            profiles,
+            fixed_destinations,
+            None,
+        )
+        .await
+    }
+
+    /// Native Ask approval enabled: daemon `ttl` seconds, collector waits `wait` seconds.
+    async fn with_approval(mode: &str, classifier: Option<&str>, ttl: u64, wait: u64) -> Self {
+        Self::build(mode, true, classifier, None, false, Some((ttl, wait))).await
+    }
+
+    async fn build(
+        mode: &str,
+        enforce: bool,
+        classifier: Option<&str>,
+        profiles: Option<&str>,
+        fixed_destinations: bool,
+        approval: Option<(u64, u64)>,
+    ) -> Self {
         let classified_read = classifier == Some("read");
         // macOS places the default temp directory under the /var -> /private/var
         // symlink, which the native registry guard correctly refuses.
@@ -649,7 +710,7 @@ impl Fixture {
         let daemon_faults = Arc::new(DaemonFaults::default());
         let (daemon, daemon_shutdown) = start_daemon(
             listener,
-            fixture_state(&home, port, enforce),
+            fixture_state(&home, port, enforce, approval.map(|a| a.0)),
             daemon_faults.clone(),
         );
         let path = registry_path.to_string_lossy().replace('\'', "''");
@@ -660,7 +721,7 @@ impl Fixture {
         let private_before_launch = [home.clone(), home.join("token"), home.join("native-token")]
             .iter()
             .all(|path| protected_dacl(path));
-        let (child, input, output) = spawn_gateway_with_profiles(
+        let (child, input, output) = spawn_gateway_full(
             dir.path(),
             &ledger,
             mode,
@@ -668,6 +729,7 @@ impl Fixture {
             classifier,
             profiles,
             fixed_destinations,
+            approval.map(|a| a.1),
         );
         Self {
             _dir: dir,
@@ -676,6 +738,7 @@ impl Fixture {
             daemon,
             daemon_shutdown: Some(daemon_shutdown),
             daemon_faults,
+            approval_ttl: approval.map(|a| a.0),
             child,
             input,
             output,
@@ -738,7 +801,7 @@ impl Fixture {
         let daemon_faults = Arc::new(DaemonFaults::default());
         let (daemon, daemon_shutdown) = start_daemon(
             listener,
-            fixture_state(&home, port, enforce),
+            fixture_state(&home, port, enforce, None),
             daemon_faults.clone(),
         );
         let path = registry_path.to_string_lossy().replace('\'', "''");
@@ -758,6 +821,7 @@ impl Fixture {
             daemon,
             daemon_shutdown: Some(daemon_shutdown),
             daemon_faults,
+            approval_ttl: None,
             child,
             input,
             output,
@@ -813,7 +877,12 @@ impl Fixture {
         self.daemon_faults = Arc::new(DaemonFaults::default());
         let (daemon, shutdown) = start_daemon(
             listener,
-            fixture_state(&self._dir.path().join(".agentfw"), self.port, self.enforce),
+            fixture_state(
+                &self._dir.path().join(".agentfw"),
+                self.port,
+                self.enforce,
+                self.approval_ttl,
+            ),
             self.daemon_faults.clone(),
         );
         self.daemon = daemon;
@@ -3836,4 +3905,200 @@ async fn sou17_resource_overlap_during_classifier_refused_before_native_call() {
         "child_executor_entries":0,"file_bytes_unchanged":true,"ended_native_session":true,
         "protected_contents_released":false,"broker_output_produced":false})
     );
+}
+
+// ---- SOU-48: exact single-use operator approval for native Ask calls ----
+
+const HOOK_TOKEN: &str = "fixture-hook-token";
+const DELETE_FRAME: &str = r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"delete_note","arguments":{"name":"inventory"},"_meta":{"claudecode/toolUseId":"toolu_mcp_delete","progressToken":0}}}"#;
+const READ_FRAME: &str = r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"read_document","arguments":{}}}"#;
+
+impl Fixture {
+    fn agent_home(&self) -> std::path::PathBuf {
+        self._dir.path().join(".agentfw")
+    }
+
+    async fn send_only(&mut self, raw: &str) {
+        self.input
+            .write_all(format!("{raw}\n").as_bytes())
+            .await
+            .unwrap();
+        self.input.flush().await.unwrap();
+    }
+
+    /// The single outstanding request, as the operator would list it.
+    async fn wait_pending(&self) -> Value {
+        let home = self.agent_home();
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                let rows = agentfw::native::approval::operator_list(&home);
+                if let Some(row) = rows.first() {
+                    assert_eq!(rows.len(), 1, "exactly one outstanding approval");
+                    return row.clone();
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| {
+            panic!(
+                "a pending approval must appear; gateway stderr: {}",
+                std::fs::read_to_string(&self.stderr).unwrap_or_default()
+            )
+        })
+    }
+}
+
+fn operator_approve(fixture: &Fixture, row: &Value) -> anyhow::Result<()> {
+    agentfw::native::approval::operator_approve(
+        &fixture.agent_home(),
+        HOOK_TOKEN,
+        row["pending_id"].as_str().unwrap(),
+        row["binding_sha256"].as_str().unwrap(),
+    )
+}
+
+#[tokio::test]
+async fn sou48_one_correct_approval_runs_the_original_call_once_then_work_continues() {
+    let mut fixture = Fixture::with_approval("normal", None, 60, 30).await;
+    fixture.ready().await;
+    fixture.send_only(DELETE_FRAME).await;
+    let row = fixture.wait_pending().await;
+    assert_eq!(row["tool"], "delete_note");
+    assert!(
+        executed(&fixture.ledger).is_empty(),
+        "zero child calls before approval"
+    );
+    let inspected = agentfw::native::approval::operator_inspect(
+        &fixture.agent_home(),
+        row["pending_id"].as_str().unwrap(),
+    )
+    .unwrap();
+    assert_eq!(inspected["args"], json!({"name": "inventory"}));
+    operator_approve(&fixture, &row).unwrap();
+    let reply: Value = serde_json::from_str(&fixture.receive().await.unwrap()).unwrap();
+    assert_eq!(reply["id"], 3, "the original correlation id is kept");
+    assert!(reply["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap()
+        .contains("7 red widgets"));
+    assert_eq!(
+        std::fs::read_to_string(&fixture.ledger).unwrap(),
+        format!("{DELETE_FRAME}\n"),
+        "the child received the original request bytes exactly once"
+    );
+    assert!(agentfw::native::approval::operator_list(&fixture.agent_home()).is_empty());
+    // A completed approved call does not leave the session broken.
+    assert!(fixture
+        .exchange(READ_FRAME)
+        .await
+        .unwrap()
+        .contains("7 red widgets"));
+    assert_eq!(executed(&fixture.ledger).len(), 2);
+    // Audit carries approval id and digests but never the raw arguments.
+    let audit = std::fs::read_to_string(&fixture.audit).unwrap();
+    assert!(
+        audit.contains("native_approval_requested")
+            && audit.contains(row["binding_sha256"].as_str().unwrap())
+    );
+    assert!(!audit.contains("\"args\""));
+}
+
+#[tokio::test]
+async fn sou48_reject_and_timeout_run_nothing_and_work_continues() {
+    let mut fixture = Fixture::with_approval("normal", None, 60, 30).await;
+    fixture.ready().await;
+    fixture.send_only(DELETE_FRAME).await;
+    let row = fixture.wait_pending().await;
+    agentfw::native::approval::operator_reject(
+        &fixture.agent_home(),
+        row["pending_id"].as_str().unwrap(),
+    )
+    .unwrap();
+    let reply = fixture.receive().await.unwrap();
+    assert!(reply.contains("native_approval_rejected"), "{reply}");
+    assert!(executed(&fixture.ledger).is_empty());
+    assert!(operator_approve(&fixture, &row).is_err(), "decided once");
+    assert!(fixture
+        .exchange(READ_FRAME)
+        .await
+        .unwrap()
+        .contains("7 red widgets"));
+
+    let mut waiting = Fixture::with_approval("normal", None, 60, 1).await;
+    waiting.ready().await;
+    let reply = waiting.exchange(DELETE_FRAME).await.unwrap();
+    assert!(reply.contains("native_approval_timeout"), "{reply}");
+    assert!(executed(&waiting.ledger).is_empty());
+    assert!(agentfw::native::approval::operator_list(&waiting.agent_home()).is_empty());
+}
+
+#[tokio::test]
+async fn sou48_concurrent_input_and_restart_close_the_pending_call() {
+    let mut fixture = Fixture::with_approval("normal", None, 60, 30).await;
+    fixture.ready().await;
+    fixture.send_only(DELETE_FRAME).await;
+    let row = fixture.wait_pending().await;
+    fixture.send_only(READ_FRAME).await;
+    fixture.assert_gateway_failed().await;
+    assert!(executed(&fixture.ledger).is_empty());
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(
+        operator_approve(&fixture, &row).is_err(),
+        "cancelled request cannot be approved"
+    );
+    assert!(executed(&fixture.ledger).is_empty());
+
+    let mut restarted = Fixture::with_approval("normal", None, 60, 30).await;
+    restarted.ready().await;
+    restarted.send_only(DELETE_FRAME).await;
+    let row = restarted.wait_pending().await;
+    restarted.restart_daemon().await;
+    assert!(
+        operator_approve(&restarted, &row).is_err(),
+        "a restart cannot be rescued"
+    );
+    let reply = restarted.receive().await.unwrap();
+    assert!(reply.contains("native_approval_unknown"), "{reply}");
+    assert!(executed(&restarted.ledger).is_empty());
+    // The restarted daemon has no such session: the next call cannot proceed either.
+    assert!(restarted.exchange(READ_FRAME).await.is_none());
+    restarted.assert_gateway_failed().await;
+    assert!(executed(&restarted.ledger).is_empty());
+}
+
+#[tokio::test]
+async fn sou48_classifier_ask_waits_for_the_same_exact_approval() {
+    let root = std::env::temp_dir().canonicalize().unwrap();
+    let temp = tempfile::tempdir_in(root).unwrap();
+    let script = temp.path().join("ask.py");
+    std::fs::write(
+        &script,
+        r#"import json,sys
+request=json.loads(sys.stdin.readline())
+print(json.dumps({'status':'ok','actions':['read'],'unknown':False,'confidence':0.95,'uncertainty':0.9,'reason':'synthetic'}))
+"#,
+    )
+    .unwrap();
+    let selection = format!("script:{}", script.display());
+    let mut fixture = Fixture::with_approval("normal", Some(&selection), 60, 30).await;
+    fixture.ready().await;
+    fixture.send_only(READ_FRAME).await;
+    let row = fixture.wait_pending().await;
+    assert_eq!(row["source"], "classifier");
+    assert!(executed(&fixture.ledger).is_empty());
+    operator_approve(&fixture, &row).unwrap();
+    let reply = fixture.receive().await.unwrap();
+    assert!(reply.contains("7 red widgets"), "{reply}");
+    assert_eq!(
+        std::fs::read_to_string(&fixture.ledger).unwrap(),
+        format!("{READ_FRAME}\n")
+    );
+    // The next uncertain call needs its own approval: nothing carried over.
+    fixture
+        .send_only(&READ_FRAME.replace("\"id\":4", "\"id\":5"))
+        .await;
+    let again = fixture.wait_pending().await;
+    assert_ne!(again["pending_id"], row["pending_id"]);
+    assert_eq!(executed(&fixture.ledger).len(), 1);
 }

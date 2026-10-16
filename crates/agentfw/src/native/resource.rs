@@ -16,8 +16,10 @@ pub const CONTRACT: &str = "sw-native/resources/1";
 pub const CREATE_CONTRACT: &str = "sw-native/resources/2";
 pub const NETWORK_CONTRACT: &str = "sw-native/resources/3";
 pub const WINDOWS_READ_CONTRACT: &str = "sw-native/resources/4";
+pub const WINDOWS_CREATE_CONTRACT: &str = "sw-native/resources/5";
 pub const CREATE_FILE_EXECUTOR_PROFILE: &str = "sw-native/create-file/linux-root-child/1";
 pub const WINDOWS_READ_EXECUTOR_PROFILE: &str = "sw-native/read-document/windows-handles/1";
+pub const WINDOWS_CREATE_EXECUTOR_PROFILE: &str = "sw-native/create-file/windows-handles/1";
 pub const WINDOWS_READ_MAX_CONTENT: usize = super::MAX_CONTENT;
 // Keep the complete original content within the selected rule classifier's
 // reviewed leaf bound; a truncated/unknown prediction must remain blocked.
@@ -31,6 +33,11 @@ pub fn create_file_executor_sha256() -> String {
 /// A separate semantic revision preserves the existing Unix read contract.
 pub fn windows_read_executor_sha256() -> String {
     super::hash(WINDOWS_READ_EXECUTOR_PROFILE.as_bytes())
+}
+
+/// A separate semantic revision preserves the existing Linux create contract.
+pub fn windows_create_executor_sha256() -> String {
+    super::hash(WINDOWS_CREATE_EXECUTOR_PROFILE.as_bytes())
 }
 
 /// The only read operation installed by the Windows handle-bound profile.
@@ -172,14 +179,20 @@ pub struct ExecutionBinding {
 impl ExecutionPolicy {
     fn supported(&self) -> bool {
         self.max_content_bytes == CREATE_FILE_MAX_CONTENT
-            && self.executor_profile == CREATE_FILE_EXECUTOR_PROFILE
+            && matches!(
+                self.executor_profile.as_str(),
+                CREATE_FILE_EXECUTOR_PROFILE | WINDOWS_CREATE_EXECUTOR_PROFILE
+            )
     }
 }
 
 impl ExecutionBinding {
     fn valid(&self) -> bool {
         self.max_content_bytes == CREATE_FILE_MAX_CONTENT
-            && self.executor_profile == CREATE_FILE_EXECUTOR_PROFILE
+            && matches!(
+                self.executor_profile.as_str(),
+                CREATE_FILE_EXECUTOR_PROFILE | WINDOWS_CREATE_EXECUTOR_PROFILE
+            )
             && [
                 &self.policy_sha256,
                 &self.args_sha256,
@@ -235,6 +248,12 @@ impl Admission {
             WINDOWS_READ_CONTRACT
         } else if self.network.is_some() {
             NETWORK_CONTRACT
+        } else if self
+            .execution
+            .as_ref()
+            .is_some_and(|execution| execution.executor_profile == WINDOWS_CREATE_EXECUTOR_PROFILE)
+        {
+            WINDOWS_CREATE_CONTRACT
         } else if self.execution.is_some() {
             CREATE_CONTRACT
         } else {
@@ -303,6 +322,12 @@ impl Policy {
             WINDOWS_READ_CONTRACT
         } else if self.network.is_some() {
             NETWORK_CONTRACT
+        } else if self
+            .execution
+            .as_ref()
+            .is_some_and(|execution| execution.executor_profile == WINDOWS_CREATE_EXECUTOR_PROFILE)
+        {
+            WINDOWS_CREATE_CONTRACT
         } else if self.execution.is_some() {
             CREATE_CONTRACT
         } else {
@@ -320,6 +345,16 @@ impl Policy {
 
     pub fn is_windows_read(&self) -> bool {
         self.windows_read.is_some()
+    }
+
+    pub fn is_windows_create(&self) -> bool {
+        self.execution
+            .as_ref()
+            .is_some_and(|execution| execution.executor_profile == WINDOWS_CREATE_EXECUTOR_PROFILE)
+    }
+
+    pub fn is_windows_handles(&self) -> bool {
+        self.is_windows_read() || self.is_windows_create()
     }
 
     pub fn validate(&self, tool: &super::Tool) -> anyhow::Result<()> {
@@ -375,6 +410,51 @@ impl Policy {
                     && matches!(&self.allowed_resources[0], Resource::Path { .. }),
                 "invalid operator Windows read policy"
             );
+        }
+        if self.is_windows_create() {
+            anyhow::ensure!(
+                cfg!(windows),
+                "Windows create authority is unsupported on this platform"
+            );
+            let execution = self
+                .execution
+                .as_ref()
+                .expect("Windows create policy selected");
+            let selector = &self.profile.selectors[0];
+            anyhow::ensure!(
+                execution.supported()
+                    && tool.name == "create_file"
+                    && tool.action_class == soup_wall_agent::ActionClass::SideEffecting
+                    && matches!(tool.result_provenance, super::ResultProvenance::Untrusted)
+                    && tool.egress.is_empty()
+                    && tool.schema_sha256 == super::canonical_digest(&create_file_schema())
+                    && self.executor_sha256 == windows_create_executor_sha256()
+                    && self.workspace == self.cwd
+                    && self.profile.selectors.len() == 1
+                    && selector.pointer == "/path"
+                    && selector.kind == crate::mcp::resources::ResourceKind::Path
+                    && selector.aliases.is_empty()
+                    && !selector.optional
+                    && selector.default.is_none()
+                    && selector.allow_missing_leaf
+                    && self.allowed_resources.len() == 1,
+                "invalid operator Windows create policy"
+            );
+            let [Resource::Path { canonical }] = self.allowed_resources.as_slice() else {
+                anyhow::bail!("Windows create authority must select an exact path");
+            };
+            #[cfg(windows)]
+            let _pin = crate::windows_read::CreateParent::prepare(
+                &self.workspace,
+                &self.cwd,
+                canonical.strip_prefix("\\\\?\\").unwrap_or(canonical),
+                canonical,
+            )?;
+            #[cfg(not(windows))]
+            let _ = canonical;
+            // V5 authority comes only from retained NT handles, without any
+            // later generic DOS path resolution or filesystem mutation.
+            return Ok(());
         }
         // V4 validates and locks each component through the native executor.
         // Ordinary DOS path APIs are not used afterward: directory handles do
@@ -590,6 +670,112 @@ pub(crate) fn windows_read_evidence(
     }])
 }
 
+/// Validate the exact v5 arguments before any filesystem access. The executor
+/// checks raw spelling and the absent direct child relative to pinned handles.
+fn windows_create_arguments<'a>(
+    policy: &'a Policy,
+    args: &'a Value,
+) -> Result<(&'a str, &'a str, &'a str), &'static str> {
+    let execution = policy
+        .execution
+        .as_ref()
+        .ok_or("native_windows_create_authority_missing")?;
+    if !policy.is_windows_create()
+        || !execution.supported()
+        || policy.windows_read.is_some()
+        || policy.network.is_some()
+        || policy.executor_sha256 != windows_create_executor_sha256()
+        || policy.workspace != policy.cwd
+    {
+        return Err("native_windows_create_executor_revision_mismatch");
+    }
+    let object = args
+        .as_object()
+        .ok_or("native_windows_create_arguments_invalid")?;
+    let original = args["path"]
+        .as_str()
+        .ok_or("native_windows_create_arguments_invalid")?;
+    let content = args["content"]
+        .as_str()
+        .ok_or("native_windows_create_arguments_invalid")?;
+    if object.len() != 2
+        || original.is_empty()
+        || original.len() > 4096
+        || original.chars().any(char::is_control)
+        || content.len() > CREATE_FILE_MAX_CONTENT
+    {
+        return Err("native_windows_create_arguments_invalid");
+    }
+    let [Resource::Path { canonical }] = policy.allowed_resources.as_slice() else {
+        return Err("native_windows_create_authority_invalid");
+    };
+    Ok((original, canonical, content))
+}
+
+/// Independently derive v5 authority without creating a file or asking for
+/// write access. The collector retains equivalent parent pins through Allow.
+pub fn windows_create_binding(
+    policy: &Policy,
+    args: &Value,
+) -> Result<ExecutionBinding, &'static str> {
+    let (original, canonical, content) = windows_create_arguments(policy, args)?;
+    #[cfg(windows)]
+    {
+        let prepared = crate::windows_create::PreparedCreate::prepare(
+            &policy.workspace,
+            &policy.cwd,
+            original,
+            canonical,
+            content,
+        )
+        .map_err(|_| "native_windows_create_target_invalid")?;
+        windows_create_binding_with_identity(policy, args, prepared.identity())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (original, canonical, content);
+        Err("native_windows_create_platform_unsupported")
+    }
+}
+
+#[cfg(windows)]
+pub(crate) fn windows_create_binding_with_identity(
+    policy: &Policy,
+    args: &Value,
+    identity: &crate::windows_create::CreateIdentity,
+) -> Result<ExecutionBinding, &'static str> {
+    let (_, _, content) = windows_create_arguments(policy, args)?;
+    Ok(ExecutionBinding {
+        operation: ExecutionOperation::CreateFile,
+        action: ExecutionAction::Write,
+        max_content_bytes: CREATE_FILE_MAX_CONTENT,
+        executor_profile: WINDOWS_CREATE_EXECUTOR_PROFILE.into(),
+        policy_sha256: super::canonical_digest(
+            &serde_json::to_value(policy).expect("policy serializes"),
+        ),
+        args_sha256: super::canonical_digest(args),
+        content_sha256: super::hash(content.as_bytes()),
+        workspace_sha256: super::canonical_digest(&json!({
+            "workspace":policy.workspace,"cwd":policy.cwd,
+            "volume_serial":identity.root_volume_serial,"file_id":identity.root_file_id,
+        })),
+    })
+}
+
+#[cfg(windows)]
+pub(crate) fn windows_create_evidence(
+    policy: &Policy,
+    args: &Value,
+    identity: &crate::windows_create::CreateIdentity,
+) -> Result<Vec<ResourceEvidence>, &'static str> {
+    windows_create_binding_with_identity(policy, args, identity)?;
+    Ok(vec![ResourceEvidence {
+        pointer: "/path".into(),
+        source: crate::mcp::resources::EvidenceSource::Argument,
+        resource: policy.allowed_resources[0].clone(),
+    }])
+}
+
 /// No DNS lookup or request is performed here. The constrained executor checks
 /// and pins the current resolved addresses against this immutable authority.
 pub fn https_get_binding(policy: &Policy, args: &Value) -> Result<NetworkBinding, &'static str> {
@@ -668,6 +854,9 @@ pub fn create_file_binding(
     policy: &Policy,
     args: &Value,
 ) -> Result<ExecutionBinding, &'static str> {
+    if policy.is_windows_create() {
+        return windows_create_binding(policy, args);
+    }
     let execution = policy
         .execution
         .as_ref()
@@ -771,8 +960,34 @@ pub fn authorize(
     if policy.contract() != admission.contract() {
         return Err("native_resource_contract_mismatch");
     }
+    // Keep the independently opened v5 parent alive throughout authorization.
+    // No generic DOS path API is used for this contract.
+    #[cfg(windows)]
+    let windows_create_pin = if policy.is_windows_create() {
+        let (original, canonical, content) = windows_create_arguments(policy, args)?;
+        Some(
+            crate::windows_create::PreparedCreate::prepare(
+                &policy.workspace,
+                &policy.cwd,
+                original,
+                canonical,
+                content,
+            )
+            .map_err(|_| "native_windows_create_target_invalid")?,
+        )
+    } else {
+        None
+    };
     if let Some(bound) = &admission.execution {
-        if &create_file_binding(policy, args)? != bound {
+        #[cfg(windows)]
+        let derived = if let Some(prepared) = windows_create_pin.as_ref() {
+            windows_create_binding_with_identity(policy, args, prepared.identity())?
+        } else {
+            create_file_binding(policy, args)?
+        };
+        #[cfg(not(windows))]
+        let derived = create_file_binding(policy, args)?;
+        if &derived != bound {
             return Err("native_create_binding_mismatch");
         }
     }
@@ -823,6 +1038,20 @@ pub fn authorize(
         || admission.classifier_sha256 != policy.classifier_sha256
     {
         return Err("native_resource_revision_mismatch");
+    }
+    #[cfg(windows)]
+    if let Some(prepared) = windows_create_pin.as_ref() {
+        let resources = windows_create_evidence(policy, args, prepared.identity())?;
+        if resources != admission.resources {
+            return Err("native_resource_argument_mismatch");
+        }
+        if resources
+            .iter()
+            .any(|evidence| !policy.allowed_resources.contains(&evidence.resource))
+        {
+            return Err("native_resource_not_allowed");
+        }
+        return Ok(());
     }
     #[cfg(windows)]
     if let Some(prepared) = windows_read_pin.as_ref() {
@@ -1298,5 +1527,214 @@ mod tests {
         let replaced = create_file_binding(&policy, &args).unwrap();
         assert_ne!(original.workspace_sha256, replaced.workspace_sha256);
         std::fs::remove_dir_all(&moved).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod windows_create_contract_tests {
+    use super::*;
+
+    fn fixture() -> (tempfile::TempDir, super::super::Tool, Policy) {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().canonicalize().unwrap();
+        let schema = super::super::canonical_digest(&create_file_schema());
+        let tool = serde_json::from_value(json!({
+            "name":"create_file", "schema_sha256":schema,
+            "action_class":"side_effecting", "result_provenance":"untrusted", "egress":[]
+        }))
+        .unwrap();
+        let policy = serde_json::from_value(json!({
+            "profile":{"server_id":"windows-create-fixture","tool_name":"create_file",
+                "schema_sha256":schema,"selectors":[{"pointer":"/path","kind":"path","allow_missing_leaf":true}]},
+            "workspace":root,"cwd":root,"executor_sha256":windows_create_executor_sha256(),
+            "classifier_sha256":"c".repeat(64),
+            "allowed_resources":[{"kind":"path","canonical":root.join("approved.txt")}],
+            "execution":{"operation":"create_file","action":"write",
+                "executor_profile":WINDOWS_CREATE_EXECUTOR_PROFILE,"max_content_bytes":CREATE_FILE_MAX_CONTENT}
+        })).unwrap();
+        (directory, tool, policy)
+    }
+
+    #[test]
+    fn windows_create_v5_binding_shape_keeps_linux_contract_distinct() {
+        let mut admission: Admission = serde_json::from_value(json!({
+            "server_id":"windows-create-fixture","host_call_id":1,
+            "profile_sha256":"a".repeat(64),"executor_sha256":"b".repeat(64),
+            "classifier_sha256":"c".repeat(64),"snapshot_sha256":"d".repeat(64),
+            "definition_sha256":"e".repeat(64),"input_sha256":"f".repeat(64),
+            "resources":[{"pointer":"/path","source":"argument",
+                "resource":{"kind":"path","canonical":"approved.txt"}}],
+            "execution":{"operation":"create_file","action":"write",
+                "max_content_bytes":CREATE_FILE_MAX_CONTENT,
+                "executor_profile":WINDOWS_CREATE_EXECUTOR_PROFILE,
+                "policy_sha256":"a".repeat(64),"args_sha256":"b".repeat(64),
+                "content_sha256":"c".repeat(64),"workspace_sha256":"d".repeat(64)}
+        }))
+        .unwrap();
+        assert_eq!(admission.contract(), WINDOWS_CREATE_CONTRACT);
+        assert_eq!(admission.validate_shape(), Ok(()));
+        for field in [
+            "executor_profile",
+            "max_content_bytes",
+            "policy_sha256",
+            "args_sha256",
+            "content_sha256",
+            "workspace_sha256",
+        ] {
+            let mut changed = serde_json::to_value(&admission).unwrap();
+            changed["execution"][field] = if field == "max_content_bytes" {
+                json!(CREATE_FILE_MAX_CONTENT + 1)
+            } else {
+                json!("unsupported")
+            };
+            assert_eq!(
+                serde_json::from_value::<Admission>(changed)
+                    .unwrap()
+                    .validate_shape(),
+                Err("native_resource_invalid"),
+                "{field}"
+            );
+        }
+        admission.execution.as_mut().unwrap().executor_profile =
+            CREATE_FILE_EXECUTOR_PROFILE.into();
+        assert_eq!(admission.contract(), CREATE_CONTRACT);
+        assert_eq!(admission.validate_shape(), Ok(()));
+        admission.execution = None;
+        assert_eq!(admission.contract(), CONTRACT);
+    }
+
+    #[test]
+    fn windows_create_v5_policy_requires_explicit_closed_write_semantics() {
+        let (_directory, tool, policy) = fixture();
+        assert_eq!(policy.contract(), WINDOWS_CREATE_CONTRACT);
+        assert!(policy.is_windows_create());
+        assert!(policy.is_create_file());
+        assert!(policy.is_windows_handles());
+        assert_eq!(policy.validate(&tool).is_ok(), cfg!(windows));
+        for (field, value) in [
+            ("name", json!("other_create")),
+            ("schema_sha256", json!("a".repeat(64))),
+            ("action_class", json!("read_only")),
+            ("result_provenance", json!("local_system")),
+            (
+                "egress",
+                json!([{"pointer":"/path","kind":"url_host","optional":false}]),
+            ),
+        ] {
+            let mut changed = json!({"name":"create_file","schema_sha256":tool.schema_sha256,
+                "action_class":"side_effecting","result_provenance":"untrusted","egress":[]});
+            changed[field] = value;
+            assert!(
+                policy
+                    .validate(&serde_json::from_value(changed).unwrap())
+                    .is_err(),
+                "{field}"
+            );
+        }
+        for changed in [
+            json!({"max_content_bytes":CREATE_FILE_MAX_CONTENT + 1}),
+            json!({"executor_profile":"sw-native/create-file/windows-handles/unknown"}),
+        ] {
+            let mut value = serde_json::to_value(&policy).unwrap();
+            for (key, item) in changed.as_object().unwrap() {
+                value["execution"][key] = item.clone();
+            }
+            assert!(serde_json::from_value::<Policy>(value)
+                .unwrap()
+                .validate(&tool)
+                .is_err());
+        }
+        for (key, item) in [
+            ("allow_missing_leaf", json!(false)),
+            ("optional", json!(true)),
+            ("aliases", json!(["/filename"])),
+            ("default", json!("approved.txt")),
+        ] {
+            let mut changed = serde_json::to_value(&policy).unwrap();
+            changed["profile"]["selectors"][0][key] = item;
+            assert!(
+                serde_json::from_value::<Policy>(changed)
+                    .unwrap()
+                    .validate(&tool)
+                    .is_err(),
+                "{key}"
+            );
+        }
+        assert_ne!(
+            create_file_executor_sha256(),
+            windows_create_executor_sha256()
+        );
+    }
+
+    #[test]
+    fn windows_create_v5_arguments_enforce_original_fields_and_utf8_byte_cap() {
+        let (_directory, _tool, policy) = fixture();
+        let args = json!({"path":"approved.txt","content":"é".repeat(2048)});
+        assert!(windows_create_arguments(&policy, &args).is_ok());
+        for args in [
+            json!({"path":"approved.txt","content":"é".repeat(2049)}),
+            json!({"path":"approved.txt"}),
+            json!({"path":"approved.txt","content":1}),
+            json!({"path":"approved.txt","content":"ok","overwrite":true}),
+            json!({"path":"","content":"ok"}),
+            json!({"path":"a\n","content":"ok"}),
+        ] {
+            assert!(windows_create_arguments(&policy, &args).is_err(), "{args}");
+        }
+        let mut conflicting = policy;
+        conflicting.windows_read = Some(WindowsReadPolicy {
+            executor_profile: WINDOWS_READ_EXECUTOR_PROFILE.into(),
+            max_content_bytes: WINDOWS_READ_MAX_CONTENT,
+        });
+        assert!(windows_create_arguments(&conflicting, &args).is_err());
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn windows_create_v5_binding_refuses_other_platforms_without_filesystem_effects() {
+        let (directory, _tool, policy) = fixture();
+        assert_eq!(
+            create_file_binding(&policy, &json!({"path":"approved.txt","content":"ok"})),
+            Err("native_windows_create_platform_unsupported")
+        );
+        assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 0);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_create_v5_binding_covers_original_arguments_content_and_root_identity() {
+        let (_directory, tool, policy) = fixture();
+        let args = json!({"path":"approved.txt","content":"original"});
+        let first = create_file_binding(&policy, &args).unwrap();
+        let absolute = create_file_binding(
+            &policy,
+            &json!({"path":policy.workspace.join("approved.txt"),"content":"original"}),
+        )
+        .unwrap_err();
+        assert_eq!(absolute, "native_windows_create_target_invalid");
+        let root_text = policy.workspace.to_string_lossy();
+        let original_absolute = root_text.strip_prefix("\\\\?\\").unwrap_or(&root_text);
+        let absolute = create_file_binding(
+            &policy,
+            &json!({"path":format!("{original_absolute}\\approved.txt"),"content":"original"}),
+        )
+        .unwrap();
+        assert_ne!(first.args_sha256, absolute.args_sha256);
+        assert_eq!(first.workspace_sha256, absolute.workspace_sha256);
+        let changed =
+            create_file_binding(&policy, &json!({"path":"approved.txt","content":"changed"}))
+                .unwrap();
+        assert_ne!(first.content_sha256, changed.content_sha256);
+        assert_ne!(first.args_sha256, changed.args_sha256);
+        assert_eq!(first.workspace_sha256, changed.workspace_sha256);
+        std::fs::write(policy.workspace.join("approved.txt"), "existing").unwrap();
+        assert!(
+            policy.validate(&tool).is_ok(),
+            "existing destinations may be configured, never executed"
+        );
+        assert_eq!(
+            create_file_binding(&policy, &args),
+            Err("native_windows_create_target_invalid")
+        );
     }
 }
