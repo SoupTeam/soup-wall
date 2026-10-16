@@ -298,14 +298,42 @@ impl PostgresTenantStore {
         self.bounded(tx.commit()).await?;
         deployment(row)
     }
+    async fn assert_current_agent_credential(
+        &self, tx: &Transaction<'_>, tenant: &str, agent: &str, bearer: &str,
+    ) -> Result<()> {
+        let token = bearer.strip_prefix("Bearer ").context("invalid Agent authorization")?;
+        let digest = credential_hash(token).context("invalid Agent credential")?;
+        let authorized = self.bounded(tx.query_opt(
+            "SELECT 1 FROM managed_agent_enrollments
+             WHERE tenant_id=$1 AND agent_id=$2 AND token_hash=$3 AND revoked_at_unix IS NULL",
+            &[&tenant,&agent,&digest],
+        )).await?;
+        ensure!(authorized.is_some(), "Agent credential retired or revoked");
+        Ok(())
+    }
+
+    pub(in crate::tenant_store) async fn deliver_authorized_managed_bundle(
+        &self, tenant: &str, agent: &str, bearer: &str,
+    ) -> Result<Option<SignedManagedBundle>> {
+        self.deliver_managed_bundle_inner(tenant,agent,Some(bearer)).await
+    }
+
     pub(in crate::tenant_store) async fn deliver_managed_bundle(
         &self,
         tenant: &str,
         agent: &str,
     ) -> Result<Option<SignedManagedBundle>> {
+        self.deliver_managed_bundle_inner(tenant,agent,None).await
+    }
+    async fn deliver_managed_bundle_inner(
+        &self, tenant: &str, agent: &str, credential: Option<&str>
+    ) -> Result<Option<SignedManagedBundle>> {
         let mut client = self.checkout().await?;
         let tx = self.bounded(client.transaction()).await?;
         self.lock_managed_agent(&tx, tenant, agent).await?;
+        if let Some(bearer) = credential {
+            self.assert_current_agent_credential(&tx,tenant,agent,bearer).await?;
+        }
         let row = self.bounded(tx.query_opt("SELECT deployment_sequence,bundle_json,status FROM managed_agent_deployments WHERE tenant_id=$1 AND agent_id=$2 ORDER BY deployment_sequence DESC LIMIT 1", &[&tenant,&agent])).await?;
         let Some(row) = row else { return Ok(None) };
         let status: String = row.get(2);
@@ -320,11 +348,21 @@ impl PostgresTenantStore {
         self.bounded(tx.commit()).await?;
         Ok(Some(bundle))
     }
+    pub(in crate::tenant_store) async fn acknowledge_authorized_managed_bundle(
+        &self, tenant: &str, agent: &str, bearer: &str, report: &AppliedReport
+    ) -> Result<bool> {
+        self.acknowledge_managed_bundle_inner(tenant,agent,Some(bearer),report).await
+    }
     pub(in crate::tenant_store) async fn acknowledge_managed_bundle(
         &self,
         tenant: &str,
         agent: &str,
         report: &AppliedReport,
+    ) -> Result<bool> {
+        self.acknowledge_managed_bundle_inner(tenant,agent,None,report).await
+    }
+    async fn acknowledge_managed_bundle_inner(
+        &self, tenant: &str, agent: &str, credential: Option<&str>, report: &AppliedReport
     ) -> Result<bool> {
         ensure!(
             report.status == "applied" || report.status == "rejected",
@@ -334,6 +372,9 @@ impl PostgresTenantStore {
         let mut client = self.checkout().await?;
         let tx = self.bounded(client.transaction()).await?;
         self.lock_managed_agent(&tx, tenant, agent).await?;
+        if let Some(bearer) = credential {
+            self.assert_current_agent_credential(&tx,tenant,agent,bearer).await?;
+        }
         let row = self.bounded(tx.query_opt("SELECT deployment_sequence,revision,policy_sha256,status FROM managed_agent_deployments WHERE tenant_id=$1 AND agent_id=$2 ORDER BY deployment_sequence DESC LIMIT 1", &[&tenant,&agent])).await?;
         let Some(row) = row else { return Ok(false) };
         if row.get::<_, i64>(0) != seq
