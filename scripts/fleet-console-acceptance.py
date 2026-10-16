@@ -5,6 +5,7 @@ Synthetic isolated tenants only. Credentials/logs remain in the temporary direct
 """
 import argparse
 from contextlib import ExitStack
+from datetime import datetime, timezone
 import hashlib
 import importlib.util
 import json
@@ -146,8 +147,8 @@ def main():
             check('rejected-keeps-historical-applied',rejected['agent']['last_reported_applied']['sequence']=='1' and rejected['agent']['latest_issued']['sequence']=='2');evidence['rejected']=rejected
             check('real-Agent-keeps-previous-active-policy',D.wait_for('restarted Agent health listener',lambda: D.request('GET',agent+'/health')[1].get('managed_policy'),timeout=90)['deployment_sequence']==1)
             page.locator('#fleet-refresh').click();expect(page.locator('#fleet-list')).to_contain_text('rejected');page.get_by_role('button',name='agent-demo',exact=True).click();expect(page.locator('#fleet-agent-detail')).to_contain_text('Latest deployment was rejected')
-            page.clock.set_fixed_time((rejected['agent']['last_reported_applied']['reported_applied_at_unix']+600)*1000)
-            page.get_by_role('button',name='agent-demo',exact=True).click();expect(page.locator('#fleet-agent-detail')).to_contain_text('historical evidence (5+ min)')
+            page.clock.set_fixed_time(datetime.fromtimestamp(rejected['agent']['last_reported_applied']['reported_applied_at_unix']+600, tz=timezone.utc))
+            page.get_by_role('button',name='agent-demo',exact=True).click();expect(page.locator('#fleet-agent-detail')).to_contain_text('10 min old — historical evidence (5+ min)')
             page.locator('#fleet-panel').screenshot(path=str(args.output/'rejected-historical.png'))
             check('browser-loading-empty-error-pending-rejected-and-stale-walkthrough',True)
         for item in evidence.values():
