@@ -179,10 +179,14 @@ impl Service {
         self.save(&record)?;
         drop(state_lock);
         let mut launcher = create_private(&record.launcher)?;
+        record.launcher_identity = Some(identity(&record.launcher)?);
+        self.save(&record)?;
         std::io::copy(&mut File::open(source)?, &mut launcher)?;
         launcher.set_permissions(fs::Permissions::from_mode(0o700))?;
         launcher.sync_all()?;
         let mut unit = create_private(&record.unit)?;
+        record.unit_identity = Some(identity(&record.unit)?);
+        self.save(&record)?;
         unit.write_all(preview.unit.as_bytes())?;
         unit.sync_all()?;
         record.launcher_identity = Some(identity(&record.launcher)?);
@@ -204,23 +208,30 @@ impl Service {
         manager_available()?;
         self.verify_remaining(&record)?;
         let shown = self.show()?;
-        if property(&shown, "LoadState") != "not-found" {
+        if record.phase == Phase::Installed {
+            self.idle()?;
             self.verify_loaded()?;
-            if record.phase == Phase::Installed {
-                self.stop_locked()?;
-            }
-            let shown = self.show()?;
-            ensure!(
-                property(&shown, "MainPID") == "0"
-                    && matches!(property(&shown, "ActiveState"), "inactive" | "failed"),
-                "stop the service before uninstalling it"
-            );
+            self.stop_locked()?;
+        } else {
+            // Interrupted installation/removal may leave an invalid fragment or
+            // a stale cached definition. Never stop an unidentified live unit.
+            ensure!(property(&shown, "MainPID") == "0"
+                && matches!(property(&shown, "ActiveState"), "inactive" | "failed")
+                && property(&shown, "DropInPaths").is_empty()
+                && property(&shown, "Transient") == "no"
+                && (property(&shown, "FragmentPath").is_empty()
+                    || property(&shown, "FragmentPath") == record.unit.to_str().context("unit path is not UTF-8")?),
+                "incomplete service has a live process or foreign configuration; inspect before removal");
         }
         // Stop may wait for the Agent. Revalidate ownership after that wait,
         // then again immediately before unlinking each recorded artifact.
         self.verify_remaining(&record)?;
-        record.phase = Phase::Removing;
-        self.save(&record)?;
+        // Keep Installing while deleting a partial copy: its recorded inode is
+        // the cleanup authority even when the content never reached its hash.
+        if record.phase != Phase::Installing {
+            record.phase = Phase::Removing;
+            self.save(&record)?;
+        }
         for (path, hash, expected) in [
             (
                 &record.unit,
@@ -234,7 +245,7 @@ impl Service {
             ),
         ] {
             if exists(path)? {
-                verify_file(path, hash, expected)?;
+                verify_removable(record.phase, path, hash, expected)?;
                 fs::remove_file(path)?;
             }
         }
@@ -549,9 +560,37 @@ impl Service {
             .service_shutdown(property(&shown, "MainPID").parse()?)
     }
 
+    pub fn status(&self) -> Result<crate::lifecycle::Status> {
+        let (state, _) = self.manager().service_snapshot()?;
+        let observation = self.inspect();
+        let running = observation["ready"] == true;
+        let interrupted = state.operation.is_some() || state.pending_stage.is_some();
+        let detail = if interrupted {
+            "interrupted operation; run lifecycle recover".into()
+        } else if let Some(error) = observation["error"].as_str() {
+            error.to_owned()
+        } else if running {
+            "running and verified by systemd".into()
+        } else {
+            "service is not verified ready; inspect service status".into()
+        };
+        Ok(crate::lifecycle::Status {
+            active: state.active,
+            previous: state.previous,
+            process: state.process,
+            running,
+            interrupted,
+            detail,
+        })
+    }
+
     pub fn inspect(&self) -> serde_json::Value {
         let mut report = serde_json::json!({"format_version":1, "home":self.home, "unit_name":self.name, "registered":registered(&self.home), "ready":false});
         let observed = (|| -> Result<()> {
+            let (state, _) = self.manager().service_snapshot()?;
+            report["interrupted"] =
+                serde_json::json!(state.operation.is_some() || state.pending_stage.is_some());
+            report["transaction"] = serde_json::to_value(&state.operation)?;
             let record = self.load()?;
             report["phase"] = serde_json::to_value(record.phase)?;
             self.verify(&record)?;
@@ -649,7 +688,7 @@ impl Service {
             ),
         ] {
             if exists(path)? {
-                verify_file(path, hash, id)?;
+                verify_removable(record.phase, path, hash, id)?;
             } else {
                 ensure!(
                     record.phase != Phase::Installed,
@@ -847,6 +886,24 @@ fn verify_file(path: &Path, hash: &str, expected: Option<&Identity>) -> Result<(
     Ok(())
 }
 
+fn verify_removable(
+    phase: Phase,
+    path: &Path,
+    hash: &str,
+    expected: Option<&Identity>,
+) -> Result<()> {
+    if let (Phase::Installing, Some(expected)) = (phase, expected) {
+        let actual = identity(path)?;
+        ensure!(
+            actual.device == expected.device && actual.inode == expected.inode,
+            "partially installed service file was replaced; refusing cleanup"
+        );
+        Ok(())
+    } else {
+        verify_file(path, hash, expected)
+    }
+}
+
 fn manager_available() -> Result<()> {
     systemctl(&["show", "--property=Version"], false)
         .context("user systemd manager is unavailable; run in a Linux user session")?;
@@ -954,6 +1011,23 @@ mod tests {
             .to_string()
             .contains("registered service"));
         assert!(manager.recover().is_err());
+    }
+
+    #[test]
+    fn incomplete_copy_cleanup_requires_the_recorded_inode() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("partial");
+        fs::write(&path, b"").unwrap();
+        let id = identity(&path).unwrap();
+        fs::write(&path, b"partial copy").unwrap();
+        let expected_hash = digest(b"complete copy");
+        assert!(verify_removable(Phase::Installed, &path, &expected_hash, Some(&id)).is_err());
+        assert!(verify_removable(Phase::Installing, &path, &expected_hash, Some(&id)).is_ok());
+        fs::rename(&path, temp.path().join("original")).unwrap();
+        fs::write(&path, b"partial copy").unwrap();
+        assert!(verify_removable(Phase::Installing, &path, &expected_hash, Some(&id)).is_err());
+        // Old incomplete records without an inode only authorize a full hash match.
+        assert!(verify_removable(Phase::Installing, &path, &expected_hash, None).is_err());
     }
 
     #[test]

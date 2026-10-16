@@ -248,6 +248,10 @@ impl Manager {
     }
 
     pub fn status(&self) -> Result<Status> {
+        #[cfg(target_os = "linux")]
+        if crate::service::registered(&self.home) {
+            return crate::service::Service::new(&self.home)?.status();
+        }
         let _lock = self.lock()?;
         let state = self.load()?;
         let health = self.running(&state)?;
