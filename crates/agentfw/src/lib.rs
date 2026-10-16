@@ -13,6 +13,7 @@ pub mod hook;
 pub mod install;
 pub mod judge;
 pub mod lifecycle;
+pub mod managed_credential;
 pub mod managed_policy;
 pub mod managed_sync;
 pub mod map;
@@ -29,6 +30,8 @@ pub mod sandbox;
 pub mod service;
 pub mod spans;
 pub mod token;
+#[cfg(windows)]
+pub(crate) mod windows_create;
 #[cfg(windows)]
 pub(crate) mod windows_read;
 
@@ -52,6 +55,11 @@ pub fn app_with_diagnostics(
     Router::new()
         .route("/hook", post(handlers::hook))
         .route("/mcp", post(handlers::mcp))
+        .route(
+            "/native/approval/v1",
+            post(native::approval::handler)
+                .layer(axum::extract::DefaultBodyLimit::max(native::MAX_BODY)),
+        )
         .route(
             "/native/v1",
             post(native::handler).layer(axum::extract::DefaultBodyLimit::max(native::MAX_BODY)),
