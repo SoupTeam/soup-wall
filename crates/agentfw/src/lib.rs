@@ -13,6 +13,7 @@ pub mod hook;
 pub mod install;
 pub mod judge;
 pub mod lifecycle;
+pub mod managed_credential;
 pub mod managed_policy;
 pub mod managed_sync;
 pub mod map;
