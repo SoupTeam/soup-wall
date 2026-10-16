@@ -44,6 +44,31 @@ stop_child = shared.stop_child
 imported_credential = shared.imported_credential
 import xml.etree.ElementTree as ET
 
+def navigation_location(url, gateway_base, vendor_base):
+    """Return fixed labels only; never retain paths, query parameters or tokens."""
+    parsed = urllib.parse.urlsplit(url)
+    origin = parsed.scheme + "://" + parsed.netloc
+    if origin == gateway_base:
+        return {"/auth/saml/start": "gateway_start", "/auth/saml/acs": "gateway_acs",
+                "/customer": "gateway_console"}.get(parsed.path, "gateway_other")
+    if origin == vendor_base:
+        return "vendor"
+    if parsed.scheme in ("about", "chrome-error"):
+        return "browser_error"
+    return "other"
+
+
+def network_failure_category(failure):
+    known = {"net::ERR_EMPTY_RESPONSE", "net::ERR_CONNECTION_CLOSED", "net::ERR_CONNECTION_RESET",
+             "net::ERR_CONNECTION_REFUSED", "net::ERR_CERT_AUTHORITY_INVALID",
+             "net::ERR_CERT_COMMON_NAME_INVALID", "net::ERR_ABORTED", "net::ERR_FAILED",
+             "net::ERR_BLOCKED_BY_CLIENT", "net::ERR_HTTP_RESPONSE_CODE_FAILURE",
+             "net::ERR_HTTP2_PROTOCOL_ERROR", "net::ERR_TIMED_OUT", "net::ERR_INTERNET_DISCONNECTED",
+             "net::ERR_NAME_NOT_RESOLVED", "net::ERR_NETWORK_CHANGED", "net::ERR_CONNECTION_TIMED_OUT",
+             "net::ERR_CACHE_MISS"}
+    return failure if failure in known else "other"
+
+
 def tls_handshake(port, hostname, ca):
     context = ssl.create_default_context(cafile=str(ca))
     context.minimum_version = ssl.TLSVersion.TLSv1_2
@@ -336,14 +361,24 @@ def run(args):
                 page = ctx.new_page()
                 page.set_default_timeout(45000)
                 log_offset = (directory / "gateway.log").stat().st_size
-                observation = {"subject": user["username"]}
+                observation = {"subject": user["username"], "navigation_statuses": [], "network_failures": []}
                 def observe(response):
+                    if response.request.is_navigation_request() and len(observation["navigation_statuses"]) < 12:
+                        observation["navigation_statuses"].append({
+                            "location": navigation_location(response.url, gateway_base, vendor_base),
+                            "status": response.status})
                     if response.url == callback:
                         observation["acs_status"] = response.status
                         observation["browser_binding_sent"] = "__Host-llm-fw-saml-flow=" in response.request.all_headers().get("cookie", "")
                     elif response.request.is_navigation_request() and response.url.startswith(vendor_base + "/"):
                         observation["vendor_status"] = response.status
                 page.on("response", observe)
+                def failed(request):
+                    if request.is_navigation_request() and len(observation["network_failures"]) < 8:
+                        observation["network_failures"].append({
+                            "location": navigation_location(request.url, gateway_base, vendor_base),
+                            "category": network_failure_category(request.failure)})
+                page.on("requestfailed", failed)
                 if capture is not None:
                     def hold(route):
                         capture["fields"] = dict(urllib.parse.parse_qsl(route.request.post_data))
@@ -373,6 +408,7 @@ def run(args):
                     except Exception:
                         # Keep bounded diagnostics, never cookies, assertions,
                         # raw error text or private runtime logs in evidence.
+                        observation["final_location"] = navigation_location(page.url, gateway_base, vendor_base)
                         observation["at_acs"] = page.url == callback
                         observation["at_console"] = page.url == gateway_base + "/customer"
                         observation["at_vendor"] = page.url.startswith(vendor_base + "/")

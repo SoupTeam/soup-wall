@@ -20,6 +20,26 @@ DRIVER = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(DRIVER)
 
 
+class SamlNavigationDiagnosticsTests(unittest.TestCase):
+    def test_navigation_diagnostics_never_retain_untrusted_urls_or_failures(self):
+        spec = importlib.util.spec_from_file_location(
+            "saml_linux_driver", Path(__file__).resolve().parents[1] / "keycloak-saml-linux.py")
+        driver = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(driver)
+        gateway, vendor = "https://127.0.0.1:443", "https://localhost:8443"
+        self.assertEqual(driver.navigation_location(
+            gateway + "/auth/saml/acs?SAMLResponse=synthetic-secret", gateway, vendor), "gateway_acs")
+        self.assertEqual(driver.navigation_location(
+            gateway + "/private-secret?token=synthetic-secret", gateway, vendor), "gateway_other")
+        self.assertEqual(driver.navigation_location(
+            "https://unknown.test/private-secret", gateway, vendor), "other")
+        self.assertEqual(driver.navigation_location("chrome-error://chromewebdata/", gateway, vendor),
+                         "browser_error")
+        self.assertEqual(driver.network_failure_category("net::ERR_CONNECTION_RESET"),
+                         "net::ERR_CONNECTION_RESET")
+        self.assertEqual(driver.network_failure_category("untrusted secret"), "other")
+
+
 class ImportedCredentialTests(unittest.TestCase):
     def test_realm_import_contains_salted_verifier_instead_of_cleartext(self):
         secret = "generated-only-for-this-unit-test"
