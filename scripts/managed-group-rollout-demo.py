@@ -95,7 +95,7 @@ def main():
         'binary_sha256': {'llm-firewall': digest(console_bin), 'agentfw': digest(agent_bin)},
         'checks': {}, 'passed': False, 'cleanup_passed': False,
         'configuration': {'transport': 'literal loopback HTTP', 'agents': 4, 'pilots': 1,
-                          'external_provider_calls': 0, 'recovery_schema': 27},
+                          'external_provider_calls': 0, 'recovery_schema': 28},
         'limitations': ['Disposable local processes; no production multi-host or remote-attestation claim']}
     def check(label, value):
         report['checks'][label] = bool(value)

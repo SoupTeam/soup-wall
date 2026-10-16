@@ -190,6 +190,10 @@ pub fn app(state: Shared) -> Router {
                 post(managed_agent_api::revoke),
             )
             .route(
+                "/admin/v1/tenants/:tenant_id/agents/:agent_id/credential-rotations",
+                post(managed_agent_api::rotate_credential),
+            )
+            .route(
                 "/admin/v1/tenants/:tenant_id/agents/:agent_id/revisions",
                 post(managed_agent_api::create_revision),
             )

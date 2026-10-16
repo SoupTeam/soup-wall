@@ -716,15 +716,59 @@ impl TenantStore {
             applied_at_unix: None,
         })
     }
+    fn require_managed_credential(
+        db: &rusqlite::Connection,
+        tenant: &str,
+        agent: &str,
+        bearer: &str,
+    ) -> Result<()> {
+        let token = bearer
+            .strip_prefix("Bearer ")
+            .context("invalid Agent authorization")?;
+        let hash =
+            super::agent_enrollment::credential_hash(token).context("invalid Agent credential")?;
+        let authorized: Option<i64> = db
+            .query_row(
+                "SELECT 1 FROM managed_agent_enrollments
+             WHERE tenant_id=?1 AND agent_id=?2 AND token_hash=?3 AND revoked_at_unix IS NULL",
+                params![tenant, agent, hash],
+                |r| r.get(0),
+            )
+            .optional()?;
+        ensure!(authorized.is_some(), "Agent credential retired or revoked");
+        Ok(())
+    }
+
+    pub fn deliver_authorized_managed_bundle(
+        &self,
+        tenant: &str,
+        agent: &str,
+        bearer: &str,
+    ) -> Result<Option<SignedManagedBundle>> {
+        self.deliver_managed_bundle_inner(tenant, agent, Some(bearer))
+    }
+
     pub fn deliver_managed_bundle(
         &self,
         tenant: &str,
         agent: &str,
     ) -> Result<Option<SignedManagedBundle>> {
-        let db = self.connection()?;
+        self.deliver_managed_bundle_inner(tenant, agent, None)
+    }
+    fn deliver_managed_bundle_inner(
+        &self,
+        tenant: &str,
+        agent: &str,
+        credential: Option<&str>,
+    ) -> Result<Option<SignedManagedBundle>> {
+        let mut db = self.connection()?;
         schema(&db)?;
-        eligible(&db, tenant, agent)?;
-        let latest: Option<(i64, String, String)> = db
+        let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        eligible(&tx, tenant, agent)?;
+        if let Some(bearer) = credential {
+            Self::require_managed_credential(&tx, tenant, agent, bearer)?;
+        }
+        let latest: Option<(i64, String, String)> = tx
             .query_row(
                 "SELECT deployment_sequence,bundle_json,status
              FROM managed_agent_deployments WHERE tenant_id=?1 AND agent_id=?2
@@ -743,12 +787,22 @@ impl TenantStore {
         if now_unix() >= bundle.expires_at_unix {
             return Ok(None);
         }
-        db.execute(
+        tx.execute(
             "UPDATE managed_agent_deployments SET status='delivered'
              WHERE tenant_id=?1 AND agent_id=?2 AND deployment_sequence=?3 AND status='issued'",
             params![tenant, agent, sequence],
         )?;
+        tx.commit()?;
         Ok(Some(bundle))
+    }
+    pub fn acknowledge_authorized_managed_bundle(
+        &self,
+        tenant: &str,
+        agent: &str,
+        bearer: &str,
+        report: &AppliedReport,
+    ) -> Result<bool> {
+        self.acknowledge_managed_bundle_inner(tenant, agent, Some(bearer), report)
     }
     pub fn acknowledge_managed_bundle(
         &self,
@@ -756,17 +810,30 @@ impl TenantStore {
         agent: &str,
         report: &AppliedReport,
     ) -> Result<bool> {
+        self.acknowledge_managed_bundle_inner(tenant, agent, None, report)
+    }
+    fn acknowledge_managed_bundle_inner(
+        &self,
+        tenant: &str,
+        agent: &str,
+        credential: Option<&str>,
+        report: &AppliedReport,
+    ) -> Result<bool> {
         ensure!(
             report.status == "applied" || report.status == "rejected",
             "invalid acknowledgement"
         );
-        let db = self.connection()?;
+        let mut db = self.connection()?;
         schema(&db)?;
-        eligible(&db, tenant, agent)?;
+        let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        eligible(&tx, tenant, agent)?;
+        if let Some(bearer) = credential {
+            Self::require_managed_credential(&tx, tenant, agent, bearer)?;
+        }
         let seq: i64 = report.deployment_sequence.try_into()?;
         // A stale/unknown ack, including an ack for a superseded deployment,
         // may never mark the Console's current revision applied.
-        let changed = db.execute(
+        let changed = tx.execute(
             "UPDATE managed_agent_deployments SET status=?4, applied_at_unix=
                CASE WHEN ?4='applied' THEN ?5 ELSE NULL END
              WHERE tenant_id=?1 AND agent_id=?2 AND deployment_sequence=?3
@@ -787,11 +854,14 @@ impl TenantStore {
             ],
         )?;
         if changed == 1 {
+            tx.commit()?;
             drop(db);
+            // Groups can advance only after the exact authenticated ACK
+            // is committed and the write transaction has released its lock.
             let _ = self.check_and_advance_active_rollouts_for_agent(tenant, agent);
             return Ok(true);
         }
-        let repeated: Option<i64> = db
+        let repeated: Option<i64> = tx
             .query_row(
                 "SELECT 1 FROM managed_agent_deployments WHERE tenant_id=?1 AND agent_id=?2
              AND deployment_sequence=?3 AND revision=?4 AND policy_sha256=?5 AND status=?6
@@ -808,6 +878,7 @@ impl TenantStore {
                 |r| r.get(0),
             )
             .optional()?;
+        tx.commit()?;
         Ok(repeated.is_some())
     }
     pub fn list_managed_deployments(

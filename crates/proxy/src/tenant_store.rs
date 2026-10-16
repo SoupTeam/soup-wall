@@ -31,7 +31,9 @@ pub use managed_policy::{
     SignedManagedBundle,
 };
 mod postgres;
-pub use agent_enrollment::{EnrolledAgent, IssuedAgentCredential};
+pub use agent_enrollment::{
+    EnrolledAgent, IssuedAgentCredential, RotationOutcome, RotationRequest,
+};
 
 #[cfg(test)]
 mod webhook_recovery_tests;

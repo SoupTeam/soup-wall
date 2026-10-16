@@ -3,13 +3,14 @@
 //! delivery, acknowledgement and revocation for one tenant/Agent audience.
 use super::PostgresTenantStore;
 use crate::tenant_store::{
-    agent_enrollment::{credential_hash, valid_id},
+    agent_enrollment::{credential_hash, valid_id, validated_rotation},
     managed_policy::{
         acknowledgement_overdue, exact_id, hex, rollout_agent_status, DeploymentMode, MAX_YAML,
     },
     now_unix, random_base64url, AppliedReport, EnrolledAgent, IssuedAgentCredential,
     ManagedAgentGroup, ManagedDeployment, ManagedGroupMember, ManagedGroupRevision,
-    ManagedGroupRollout, ManagedIssuer, ManagedRevision, RolloutPhase, SignedManagedBundle,
+    ManagedGroupRollout, ManagedIssuer, ManagedRevision, RolloutPhase, RotationOutcome,
+    RotationRequest, SignedManagedBundle,
 };
 use anyhow::{bail, ensure, Context, Result};
 use sha2::{Digest, Sha256};
@@ -22,6 +23,7 @@ fn enrollment(row: Row) -> EnrolledAgent {
         agent_id: row.get(1),
         created_at_unix: row.get(2),
         revoked_at_unix: row.get(3),
+        credential_generation: row.get(4),
     }
 }
 fn deployment(row: Row) -> Result<ManagedDeployment> {
@@ -99,6 +101,32 @@ impl PostgresTenantStore {
             }
             self.bounded(tx.execute(
                 "INSERT INTO llm_firewall_schema_migrations(version,applied_at_unix) VALUES(27,$1)",
+                &[&now_unix()],
+            ))
+            .await?;
+        }
+        // SOU-55: explicit version 28 follows accepted group rollout version 27.
+        // Advisory transaction lock above serializes simultaneous schema upgrades.
+        if self
+            .bounded(tx.query_opt(
+                "SELECT version FROM llm_firewall_schema_migrations WHERE version=28",
+                &[],
+            ))
+            .await?
+            .is_none()
+        {
+            self.bounded(tx.batch_execute(
+                "ALTER TABLE managed_agent_enrollments
+                     ADD COLUMN IF NOT EXISTS credential_generation BIGINT NOT NULL DEFAULT 1 CHECK(credential_generation > 0);
+                 ALTER TABLE managed_agent_enrollments
+                     ADD COLUMN IF NOT EXISTS last_rotation_id TEXT;
+                 ALTER TABLE managed_agent_enrollments
+                     ADD COLUMN IF NOT EXISTS last_rotation_expected_generation BIGINT;
+                 ALTER TABLE managed_agent_enrollments
+                     ADD COLUMN IF NOT EXISTS last_rotation_digest BYTEA;"
+            )).await?;
+            self.bounded(tx.execute(
+                "INSERT INTO llm_firewall_schema_migrations(version,applied_at_unix) VALUES(28,$1)",
                 &[&now_unix()],
             ))
             .await?;
@@ -182,13 +210,89 @@ impl PostgresTenantStore {
         self.lock_managed_tenant(&tx, tenant).await?;
         let token = format!("sw_agent_{}", random_base64url(32));
         let hash = credential_hash(&token).context("invalid generated Agent credential")?;
-        let row = self.bounded(tx.query_one("INSERT INTO managed_agent_enrollments(tenant_id,agent_id,token_hash,created_at_unix) VALUES($1,$2,$3,$4) RETURNING tenant_id,agent_id,created_at_unix,revoked_at_unix", &[&tenant,&agent,&hash,&now_unix()])).await?;
+        let row = self.bounded(tx.query_one("INSERT INTO managed_agent_enrollments(tenant_id,agent_id,token_hash,created_at_unix) VALUES($1,$2,$3,$4) RETURNING tenant_id,agent_id,created_at_unix,revoked_at_unix,credential_generation", &[&tenant,&agent,&hash,&now_unix()])).await?;
         self.bounded(tx.commit()).await?;
         Ok(IssuedAgentCredential {
             agent: enrollment(row),
             token,
         })
     }
+    pub(in crate::tenant_store) async fn rotate_managed_agent(
+        &self,
+        tenant: &str,
+        agent: &str,
+        input: &RotationRequest,
+    ) -> Result<RotationOutcome> {
+        let new_hash = validated_rotation(input)?;
+        let mut client = self.checkout().await?;
+        let tx = self.bounded(client.transaction()).await?;
+        self.lock_managed_agent(&tx, tenant, agent).await?;
+        let row = self
+            .bounded(tx.query_one(
+                "SELECT token_hash,credential_generation,last_rotation_id,
+                    last_rotation_expected_generation,last_rotation_digest
+             FROM managed_agent_enrollments WHERE tenant_id=$1 AND agent_id=$2 FOR UPDATE",
+                &[&tenant, &agent],
+            ))
+            .await?;
+        let old_hash: Vec<u8> = row.get(0);
+        let generation: i64 = row.get(1);
+        let last_id: Option<String> = row.get(2);
+        let last_generation: Option<i64> = row.get(3);
+        let last_digest: Option<Vec<u8>> = row.get(4);
+        if last_id.as_deref() == Some(&input.operation_id)
+            && last_generation == Some(input.expected_generation)
+            && last_digest.as_deref() == Some(new_hash.as_slice())
+        {
+            return Ok(RotationOutcome {
+                tenant_id: tenant.into(),
+                agent_id: agent.into(),
+                generation,
+                operation_id: input.operation_id.clone(),
+                already_applied: true,
+            });
+        }
+        ensure!(
+            last_id.as_deref() != Some(&input.operation_id),
+            "operation identifier reused with different parameters"
+        );
+        ensure!(
+            generation == input.expected_generation,
+            "stale credential generation"
+        );
+        ensure!(
+            old_hash != new_hash,
+            "replacement must differ from current credential"
+        );
+        let next = generation
+            .checked_add(1)
+            .context("credential generation exhausted")?;
+        self.bounded(tx.execute(
+            "UPDATE managed_agent_enrollments
+             SET token_hash=$3,credential_generation=$4,last_rotation_id=$5,
+                 last_rotation_expected_generation=$6,last_rotation_digest=$7
+             WHERE tenant_id=$1 AND agent_id=$2 AND revoked_at_unix IS NULL",
+            &[
+                &tenant,
+                &agent,
+                &new_hash,
+                &next,
+                &input.operation_id,
+                &input.expected_generation,
+                &new_hash,
+            ],
+        ))
+        .await?;
+        self.bounded(tx.commit()).await?;
+        Ok(RotationOutcome {
+            tenant_id: tenant.into(),
+            agent_id: agent.into(),
+            generation: next,
+            operation_id: input.operation_id.clone(),
+            already_applied: false,
+        })
+    }
+
     pub(in crate::tenant_store) async fn authenticate_managed_agent(
         &self,
         authorization: Option<&str>,
@@ -200,7 +304,7 @@ impl PostgresTenantStore {
             return Ok(None);
         };
         let client = self.checkout().await?;
-        Ok(self.bounded(client.query_opt("SELECT a.tenant_id,a.agent_id,a.created_at_unix,a.revoked_at_unix FROM managed_agent_enrollments a JOIN tenants t ON t.id=a.tenant_id WHERE a.token_hash=$1 AND a.revoked_at_unix IS NULL AND t.active=TRUE", &[&hash])).await?.map(enrollment))
+        Ok(self.bounded(client.query_opt("SELECT a.tenant_id,a.agent_id,a.created_at_unix,a.revoked_at_unix,a.credential_generation FROM managed_agent_enrollments a JOIN tenants t ON t.id=a.tenant_id WHERE a.token_hash=$1 AND a.revoked_at_unix IS NULL AND t.active=TRUE", &[&hash])).await?.map(enrollment))
     }
     pub(in crate::tenant_store) async fn revoke_managed_agent(
         &self,
@@ -221,7 +325,7 @@ impl PostgresTenantStore {
     ) -> Result<Vec<EnrolledAgent>> {
         ensure!(valid_id(tenant), "invalid tenant identity");
         let client = self.checkout().await?;
-        Ok(self.bounded(client.query("SELECT tenant_id,agent_id,created_at_unix,revoked_at_unix FROM managed_agent_enrollments WHERE tenant_id=$1 ORDER BY agent_id LIMIT 256", &[&tenant])).await?.into_iter().map(enrollment).collect())
+        Ok(self.bounded(client.query("SELECT tenant_id,agent_id,created_at_unix,revoked_at_unix,credential_generation FROM managed_agent_enrollments WHERE tenant_id=$1 ORDER BY agent_id LIMIT 256", &[&tenant])).await?.into_iter().map(enrollment).collect())
     }
     pub(in crate::tenant_store) async fn create_managed_revision(
         &self,
@@ -337,14 +441,58 @@ impl PostgresTenantStore {
         let row = self.bounded(tx.query_one("INSERT INTO managed_agent_deployments(tenant_id,agent_id,deployment_sequence,revision,policy_sha256,action,bundle_json,status,issued_at_unix) VALUES($1,$2,$3,$4,$5,$6,$7,'issued',$8) RETURNING tenant_id,agent_id,deployment_sequence,revision,policy_sha256,action,status,issued_at_unix,applied_at_unix", &[&tenant,&agent,&seq,&revision,&bundle.policy_sha256,&action,&serde_json::to_string(&bundle)?,&issued])).await?;
         deployment(row)
     }
+    async fn assert_current_agent_credential(
+        &self,
+        tx: &Transaction<'_>,
+        tenant: &str,
+        agent: &str,
+        bearer: &str,
+    ) -> Result<()> {
+        let token = bearer
+            .strip_prefix("Bearer ")
+            .context("invalid Agent authorization")?;
+        let digest = credential_hash(token).context("invalid Agent credential")?;
+        let authorized = self
+            .bounded(tx.query_opt(
+                "SELECT 1 FROM managed_agent_enrollments
+             WHERE tenant_id=$1 AND agent_id=$2 AND token_hash=$3 AND revoked_at_unix IS NULL",
+                &[&tenant, &agent, &digest],
+            ))
+            .await?;
+        ensure!(authorized.is_some(), "Agent credential retired or revoked");
+        Ok(())
+    }
+
+    pub(in crate::tenant_store) async fn deliver_authorized_managed_bundle(
+        &self,
+        tenant: &str,
+        agent: &str,
+        bearer: &str,
+    ) -> Result<Option<SignedManagedBundle>> {
+        self.deliver_managed_bundle_inner(tenant, agent, Some(bearer))
+            .await
+    }
+
     pub(in crate::tenant_store) async fn deliver_managed_bundle(
         &self,
         tenant: &str,
         agent: &str,
     ) -> Result<Option<SignedManagedBundle>> {
+        self.deliver_managed_bundle_inner(tenant, agent, None).await
+    }
+    async fn deliver_managed_bundle_inner(
+        &self,
+        tenant: &str,
+        agent: &str,
+        credential: Option<&str>,
+    ) -> Result<Option<SignedManagedBundle>> {
         let mut client = self.checkout().await?;
         let tx = self.bounded(client.transaction()).await?;
         self.lock_managed_agent(&tx, tenant, agent).await?;
+        if let Some(bearer) = credential {
+            self.assert_current_agent_credential(&tx, tenant, agent, bearer)
+                .await?;
+        }
         let row = self.bounded(tx.query_opt("SELECT deployment_sequence,bundle_json,status FROM managed_agent_deployments WHERE tenant_id=$1 AND agent_id=$2 ORDER BY deployment_sequence DESC LIMIT 1", &[&tenant,&agent])).await?;
         let Some(row) = row else { return Ok(None) };
         let status: String = row.get(2);
@@ -359,10 +507,30 @@ impl PostgresTenantStore {
         self.bounded(tx.commit()).await?;
         Ok(Some(bundle))
     }
+    pub(in crate::tenant_store) async fn acknowledge_authorized_managed_bundle(
+        &self,
+        tenant: &str,
+        agent: &str,
+        bearer: &str,
+        report: &AppliedReport,
+    ) -> Result<bool> {
+        self.acknowledge_managed_bundle_inner(tenant, agent, Some(bearer), report)
+            .await
+    }
     pub(in crate::tenant_store) async fn acknowledge_managed_bundle(
         &self,
         tenant: &str,
         agent: &str,
+        report: &AppliedReport,
+    ) -> Result<bool> {
+        self.acknowledge_managed_bundle_inner(tenant, agent, None, report)
+            .await
+    }
+    async fn acknowledge_managed_bundle_inner(
+        &self,
+        tenant: &str,
+        agent: &str,
+        credential: Option<&str>,
         report: &AppliedReport,
     ) -> Result<bool> {
         ensure!(
@@ -373,6 +541,10 @@ impl PostgresTenantStore {
         let mut client = self.checkout().await?;
         let tx = self.bounded(client.transaction()).await?;
         self.lock_managed_agent(&tx, tenant, agent).await?;
+        if let Some(bearer) = credential {
+            self.assert_current_agent_credential(&tx, tenant, agent, bearer)
+                .await?;
+        }
         let row = self.bounded(tx.query_opt("SELECT deployment_sequence,revision,policy_sha256,status FROM managed_agent_deployments WHERE tenant_id=$1 AND agent_id=$2 ORDER BY deployment_sequence DESC LIMIT 1", &[&tenant,&agent])).await?;
         let Some(row) = row else { return Ok(false) };
         if row.get::<_, i64>(0) != seq
@@ -389,6 +561,8 @@ impl PostgresTenantStore {
         self.bounded(tx.execute("UPDATE managed_agent_deployments SET status=$4,applied_at_unix=$5 WHERE tenant_id=$1 AND agent_id=$2 AND deployment_sequence=$3", &[&tenant,&agent,&seq,&report.status,&applied])).await?;
         self.bounded(tx.commit()).await?;
         drop(client);
+        // Preserve accepted group gate progression after the exact authorized ACK,
+        // outside the enrollment row lock and after returning the pool connection.
         let _ = self
             .check_and_advance_active_rollouts_for_agent(tenant, agent)
             .await;
