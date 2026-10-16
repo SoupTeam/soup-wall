@@ -329,30 +329,31 @@ pub async fn deployments(
     }
 }
 
-async fn principal(state: &Shared, headers: &HeaderMap) -> Option<(TenantStore, EnrolledAgent)> {
+async fn principal(state: &Shared, headers: &HeaderMap) -> Option<(TenantStore, EnrolledAgent, String)> {
     let db = store(state)?;
     let bearer = headers
         .get(axum::http::header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())?
         .to_owned();
     let lookup = db.clone();
+    let lookup_bearer = bearer.clone();
     let identity =
         tokio::task::spawn(
-            async move { lookup.authenticate_managed_agent_async(Some(&bearer)).await },
+            async move { lookup.authenticate_managed_agent_async(Some(&lookup_bearer)).await },
         )
         .await
         .ok()?
         .ok()??;
-    Some((db, identity))
+    Some((db, identity, bearer))
 }
 
 /// Only an enrolled Agent may fetch its own latest pending deployment.
 pub async fn fetch_policy(State(state): State<Shared>, headers: HeaderMap) -> Response {
-    let Some((db, who)) = principal(&state, &headers).await else {
+    let Some((db, who, bearer)) = principal(&state, &headers).await else {
         return failure(StatusCode::UNAUTHORIZED, "Agent authentication required");
     };
     match tokio::task::spawn(async move {
-        db.deliver_managed_bundle_async(&who.tenant_id, &who.agent_id)
+        db.deliver_authorized_managed_bundle_async(&who.tenant_id, &who.agent_id, &bearer)
             .await
     })
     .await
@@ -381,11 +382,11 @@ pub async fn acknowledge_policy(
     headers: HeaderMap,
     Json(report): Json<AppliedReport>,
 ) -> Response {
-    let Some((db, who)) = principal(&state, &headers).await else {
+    let Some((db, who, bearer)) = principal(&state, &headers).await else {
         return failure(StatusCode::UNAUTHORIZED, "Agent authentication required");
     };
     match tokio::task::spawn(async move {
-        db.acknowledge_managed_bundle_async(&who.tenant_id, &who.agent_id, &report)
+        db.acknowledge_authorized_managed_bundle_async(&who.tenant_id, &who.agent_id, &bearer, &report)
             .await
     })
     .await
