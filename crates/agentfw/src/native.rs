@@ -197,6 +197,74 @@ fn declared_hosts(tool: &Tool, args: &Value) -> Result<Vec<String>, &'static str
     Ok(hosts.into_iter().collect())
 }
 
+enum EgressDestination {
+    Url { canonical: String, host: String },
+    Email { address: String, domain: String },
+}
+
+impl EgressDestination {
+    fn matches_grant(&self, g: &str) -> bool {
+        match self {
+            EgressDestination::Url { canonical, host } => {
+                g == canonical
+                    || g == host
+                    || crate::mcp::resources::canonical_url(g)
+                        .map(|(cg, _, _)| &cg == canonical)
+                        .unwrap_or(false)
+            }
+            EgressDestination::Email { address, domain } => g == address || g == domain,
+        }
+    }
+}
+
+fn declared_destinations(
+    tool: &Tool,
+    args: &Value,
+) -> Result<Vec<EgressDestination>, &'static str> {
+    let mut destinations = Vec::new();
+    for selector in &tool.egress {
+        let selected = match crate::mcp::resources::selected(args, &selector.pointer)
+            .map_err(|_| "native_egress_type")?
+        {
+            None | Some(Value::Null) if selector.optional => continue,
+            Some(value) => value,
+            None => return Err("native_egress_missing"),
+        };
+        let values: Vec<&Value> = match selected {
+            Value::Array(items) if items.len() <= 256 => items.iter().collect(),
+            Value::String(_) => vec![selected],
+            _ => return Err("native_egress_type"),
+        };
+        if values.is_empty() && !selector.optional {
+            return Err("native_egress_missing");
+        }
+        for value in values {
+            let text = value
+                .as_str()
+                .filter(|s| !s.is_empty() && s.len() <= 4096 && !s.chars().any(char::is_control))
+                .ok_or("native_egress_type")?;
+            match selector.kind {
+                EgressKind::UrlHost => {
+                    let (canonical, host, _port) = crate::mcp::resources::canonical_url(text)
+                        .map_err(|_| "native_egress_url")?;
+                    destinations.push(EgressDestination::Url { canonical, host });
+                }
+                EgressKind::EmailDomain => {
+                    let (address, domain) = crate::mcp::resources::canonical_recipient(text)
+                        .map_err(|_| "native_egress_email")?;
+                    destinations.push(EgressDestination::Email { address, domain });
+                }
+            }
+        }
+    }
+    if destinations.is_empty()
+        && (tool.action_class == ActionClass::Network || !tool.egress.is_empty())
+    {
+        return Err("native_egress_missing");
+    }
+    Ok(destinations)
+}
+
 fn child_resources_authorized(
     granted: &[String],
     policy: Option<&resource::Policy>,
@@ -210,12 +278,20 @@ fn child_resources_authorized(
         };
         for ev in &admission.resources {
             let matched = match &ev.resource {
-                crate::mcp::resources::Resource::Path { canonical } => granted
-                    .iter()
-                    .any(|g| canonical == g || canonical.starts_with(g)),
+                crate::mcp::resources::Resource::Path { canonical } => granted.iter().any(|g| {
+                    let can_p = std::path::Path::new(canonical);
+                    let g_p = std::path::Path::new(g);
+                    can_p == g_p || can_p.starts_with(g_p)
+                }),
                 crate::mcp::resources::Resource::Url {
                     canonical, host, ..
-                } => granted.iter().any(|g| canonical == g || host == g),
+                } => granted.iter().any(|g| {
+                    canonical == g
+                        || host == g
+                        || crate::mcp::resources::canonical_url(g)
+                            .map(|(cg, _, _)| &cg == canonical)
+                            .unwrap_or(false)
+                }),
                 crate::mcp::resources::Resource::Domain { host } => {
                     granted.iter().any(|g| host == g)
                 }
@@ -229,10 +305,10 @@ fn child_resources_authorized(
         }
     }
     if !tool.egress.is_empty() || tool.action_class == ActionClass::Network {
-        match declared_hosts(tool, args) {
-            Ok(hosts) => {
-                for host in hosts {
-                    if !granted.iter().any(|g| &host == g) {
+        match declared_destinations(tool, args) {
+            Ok(destinations) => {
+                for dest in destinations {
+                    if !granted.iter().any(|g| dest.matches_grant(g)) {
                         return false;
                     }
                 }
@@ -392,6 +468,44 @@ impl NativeState {
         hosts
     }
 
+    pub fn resolve_hook_identity(
+        &self,
+        session_id: &str,
+        agent_id: Option<&str>,
+        parent_id: Option<&str>,
+    ) -> Result<(String, Option<String>), &'static str> {
+        let Ok(sessions) = self.sessions.lock() else {
+            return Ok((
+                agent_id.unwrap_or("main").to_string(),
+                parent_id.map(String::from),
+            ));
+        };
+        for s in sessions.entries.values() {
+            if s.host_session.as_deref() == Some(session_id) {
+                if let Some(agent) = agent_id {
+                    if s.agent_id.as_deref() == Some(agent) {
+                        if let Some(ref bound_parent) = s.parent_id {
+                            if let Some(req_p) = parent_id {
+                                if req_p != bound_parent {
+                                    return Err("mismatched_parent_identity");
+                                }
+                            }
+                            return Ok((agent.to_string(), Some(bound_parent.clone())));
+                        }
+                        return Ok((agent.to_string(), parent_id.map(String::from)));
+                    }
+                } else if let Some(ref bound_parent) = s.parent_id {
+                    let agent = s.agent_id.clone().unwrap_or_else(|| "subagent".into());
+                    return Ok((agent, Some(bound_parent.clone())));
+                }
+            }
+        }
+        Ok((
+            agent_id.unwrap_or("main").to_string(),
+            parent_id.map(String::from),
+        ))
+    }
+
     pub fn load(config: &NativeCfg, token: String) -> anyhow::Result<Self> {
         anyhow::ensure!(
             config.registry_path.is_absolute(),
@@ -512,7 +626,9 @@ fn parse(body: &str) -> Result<Request, &'static str> {
     {
         return Err("native_invalid_identity");
     }
-    if request.parent_id.is_some() && request.child_authority.is_none() {
+    if (request.parent_id.is_some() || request.child_authority.is_some())
+        && (request.host_session.is_none() || request.child_authority.is_none())
+    {
         return Err("native_invalid_identity");
     }
     if !identifier(&request.session_id)
@@ -915,11 +1031,50 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                         return Err("native_invalid_identity");
                     }
                 }
+                let agent_id = grant.agent_id.or_else(|| request.agent_id.clone());
+                let parent_id = grant.parent_id.or_else(|| request.parent_id.clone());
+                if let Some(ref parent) = parent_id {
+                    let parent_session = state.entries.values().find(|s| {
+                        s.host_session.as_deref() == Some(host_session.as_str())
+                            && s.agent_id.as_deref() == Some(parent.as_str())
+                    });
+                    if let Some(ps) = parent_session {
+                        for tool in &grant.granted_tools {
+                            if !ps.granted_tools.contains(tool) {
+                                return Err("native_child_authority_escalation");
+                            }
+                        }
+                        if let Some(ref p_res) = ps.granted_resources {
+                            let Some(ref c_res) = grant.granted_resources else {
+                                return Err("native_child_authority_escalation");
+                            };
+                            for cr in c_res {
+                                let authorized = p_res.iter().any(|pr| {
+                                    let cp = std::path::Path::new(cr);
+                                    let pp = std::path::Path::new(pr);
+                                    cr == pr
+                                        || (cp.is_absolute()
+                                            && pp.is_absolute()
+                                            && cp.starts_with(pp))
+                                });
+                                if !authorized {
+                                    return Err("native_child_authority_escalation");
+                                }
+                            }
+                        }
+                    } else if let Some(parent_tools) = firewall.agent_tools(host_session, parent) {
+                        for tool in &grant.granted_tools {
+                            if !parent_tools.contains(tool) {
+                                return Err("native_child_authority_escalation");
+                            }
+                        }
+                    }
+                }
                 (
                     grant.granted_tools,
                     grant.granted_resources,
-                    grant.agent_id.or_else(|| request.agent_id.clone()),
-                    grant.parent_id.or_else(|| request.parent_id.clone()),
+                    agent_id,
+                    parent_id,
                     Some(grant.expires_at_ms),
                 )
             } else {
@@ -948,7 +1103,19 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         if session.host_session.is_some() {
             firewall.set_root(&session.epoch, agent_name, &session.granted_tools);
             if let Some(host) = &session.host_session {
-                firewall.set_root(host, agent_name, &session.granted_tools);
+                if let Some(ref parent) = session.parent_id {
+                    if firewall.agent_tools(host, parent).is_some() {
+                        if let Some(_esc) =
+                            firewall.spawn(host, parent, agent_name, &session.granted_tools)
+                        {
+                            return Err("native_child_authority_escalation");
+                        }
+                    } else {
+                        firewall.set_root(host, agent_name, &session.granted_tools);
+                    }
+                } else {
+                    firewall.set_root(host, agent_name, &session.granted_tools);
+                }
             }
         } else {
             let all_tools: Vec<String> = native
@@ -1032,7 +1199,10 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                 ) {
                     return Err("native_child_authority_escalation");
                 }
-            } else if tool.resource_policy.is_some() {
+            } else if tool.resource_policy.is_some()
+                || ((session.agent_id.is_some() || session.parent_id.is_some())
+                    && (!tool.egress.is_empty() || tool.action_class == ActionClass::Network))
+            {
                 return Err("native_child_authority_escalation");
             }
         }

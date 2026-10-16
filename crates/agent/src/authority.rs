@@ -80,6 +80,13 @@ impl Authority {
             .is_some_and(|t| t.contains(tool))
     }
 
+    pub fn tools(&self, session: &str, agent: &str) -> Option<Vec<String>> {
+        self.grants
+            .get(session)
+            .and_then(|s| s.get(agent))
+            .map(|tools| tools.iter().cloned().collect())
+    }
+
     pub fn end_session(&mut self, session: &str) {
         self.grants.remove(session);
     }

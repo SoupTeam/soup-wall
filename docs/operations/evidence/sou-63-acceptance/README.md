@@ -39,7 +39,7 @@ This document records the full verification and evidence for closing Linear tick
 
 | Test Target / Suite | Passed | Failed | Status |
 | --- | --- | --- | --- |
-| `cargo test --offline -p agentfw --test native_endpoint` | 86 | 0 | PASS |
+| `cargo test --offline -p agentfw --test native_endpoint` | 92 | 0 | PASS |
 | `cargo test --offline -p agentfw --test mcp_admission` | 69 | 0 | PASS |
 | `cargo test --offline -p agentfw --test hook_endpoint` | 13 | 0 | PASS |
 | `cargo test --offline -p agentfw --test protection_status` | 19 | 0 | PASS |

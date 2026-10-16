@@ -199,6 +199,22 @@ impl AgentFirewall {
         self.authority.set_root(session, agent, tools);
     }
 
+    /// Register a delegated child agent's tool grant under a parent agent.
+    pub fn spawn(
+        &mut self,
+        session: &str,
+        parent: &str,
+        child: &str,
+        tools: &[String],
+    ) -> Option<crate::authority::Escalation> {
+        self.authority.spawn(session, parent, child, tools)
+    }
+
+    /// Look up granted tools for an agent in a session.
+    pub fn agent_tools(&self, session: &str, agent: &str) -> Option<Vec<String>> {
+        self.authority.tools(session, agent)
+    }
+
     /// Fingerprints retained for a session. Exposed for tests and metrics.
     pub fn taint_len(&self, session: &str) -> usize {
         self.taint.len(session)

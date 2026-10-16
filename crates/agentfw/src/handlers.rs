@@ -658,7 +658,7 @@ pub async fn hook(
 
     let started = Instant::now();
 
-    let payload: HookPayload = match serde_json::from_str(&body) {
+    let mut payload: HookPayload = match serde_json::from_str(&body) {
         Ok(p) => p,
         Err(e) => {
             tracing::warn!(error = %e, "unparsable hook payload; proceeding");
@@ -682,6 +682,34 @@ pub async fn hook(
             return (StatusCode::OK, Json(serde_json::json!({})));
         }
     };
+
+    if let Some(ref native) = st.native {
+        match native.resolve_hook_identity(
+            &payload.session_id,
+            payload.agent_id.as_deref(),
+            payload.parent_id.as_deref(),
+        ) {
+            Ok((resolved_agent, resolved_parent)) => {
+                payload.agent_id = Some(resolved_agent);
+                payload.parent_id = resolved_parent;
+            }
+            Err(err) => {
+                if st.config.enforce {
+                    let out = decision::Decision {
+                        permission_decision: "deny",
+                        reason: Some(format!("delegated identity conflict: {err}")),
+                        shadow: false,
+                        would_have_been: Verdict::Deny,
+                    }
+                    .to_hook_output();
+                    return (
+                        StatusCode::OK,
+                        Json(serde_json::to_value(out).unwrap_or_default()),
+                    );
+                }
+            }
+        }
+    }
 
     let is_pre = payload.event == HookEvent::PreToolUse;
     let tool_opt = payload

@@ -1,0 +1,22 @@
+{
+  "commit": "8dd0ee2513d748731da1509a1602b798b64ddecd",
+  "verdict": "REQUEST CHANGES",
+  "baseline": {
+    "native_endpoint": 86,
+    "hook_endpoint": 13,
+    "real_process_witnesses": 2,
+    "agentfw_lib": 280,
+    "cargo_clippy_all_targets_D_warnings": "PASS",
+    "cargo_fmt_all_check": "PASS"
+  },
+  "independent_witnesses": {
+    "review8dd_parent_claim_without_host_must_verify_signature": "FAILED: unsigned identity accepted",
+    "review8dd_child_must_not_exceed_registered_parent": "FAILED: destructive child exceeds read-only parent",
+    "review8dd_missing_resources_must_not_allow_network": "FAILED: missing destination scope permits network",
+    "review8dd_child_path_grant_must_respect_component_boundary": "FAILED: allowed directory grant permits allowed-secret.txt sibling",
+    "review8dd_hook_must_not_drop_authenticated_parent_identity": "FAILED: removal of parent_id turns deny into no-opinion",
+    "review8dd_exact_granted_url_must_remain_usable": "FAILED: exact granted URL refused with escalation"
+  },
+  "isolation": "Exported tracked commit; write access only /private/tmp/sou63-review; no external network; real-process tests loopback only",
+  "limitations": "Full workspace tests and remaining 67 mcp_admission tests not independently rerun. Initial no-network lib run: 276 passed, 4 socket-dependent fixture failures; loopback-only rerun: 280 passed."
+}

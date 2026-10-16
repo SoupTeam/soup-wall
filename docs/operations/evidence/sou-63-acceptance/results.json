@@ -4,7 +4,7 @@
   "branch": "feat/sou-63-mcp-hook-provenance-sessions",
   "verification": {
     "native_endpoint": {
-      "passed": 86,
+      "passed": 92,
       "failed": 0
     },
     "mcp_admission": {
