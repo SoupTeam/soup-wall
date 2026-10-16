@@ -17,6 +17,8 @@ use crate::audit::{AuditFinding, AuditLine, AuditSink, AuditTaint};
 use crate::config::Config;
 use crate::decision;
 use crate::hook::{HookEvent, HookPayload};
+use futures_util::StreamExt;
+
 use crate::judge::{Judge, Judgement};
 use crate::map;
 use crate::spans::SpanCache;
@@ -46,6 +48,121 @@ fn extract_session_id_from_raw(body: &str) -> Option<String> {
         }
     }
     None
+}
+
+fn extract_event_from_raw(body: &str) -> Option<String> {
+    #[derive(serde::Deserialize)]
+    struct PartialEvent {
+        hook_event_name: Option<String>,
+        event: Option<String>,
+    }
+    if let Ok(partial) = serde_json::from_str::<PartialEvent>(body) {
+        if let Some(e) = partial.hook_event_name.or(partial.event) {
+            return Some(e);
+        }
+    }
+    for key in ["\"hook_event_name\"", "\"event\""] {
+        if let Some(pos) = body.find(key) {
+            let after_key = &body[pos + key.len()..];
+            if let Some(colon) = after_key.find(':') {
+                let after_colon = after_key[colon + 1..].trim_start();
+                if let Some(rest) = after_colon.strip_prefix('"') {
+                    if let Some(end_quote) = rest.find('"') {
+                        return Some(rest[..end_quote].to_string());
+                    }
+                }
+            }
+        }
+    }
+    if body.contains("\"tool_input\"") && body.contains("\"tool_name\"") {
+        return Some("PreToolUse".to_string());
+    }
+    None
+}
+
+fn extract_tool_name_from_raw(body: &str) -> Option<String> {
+    #[derive(serde::Deserialize)]
+    struct PartialTool {
+        tool_name: Option<String>,
+        tool: Option<String>,
+    }
+    if let Ok(partial) = serde_json::from_str::<PartialTool>(body) {
+        if let Some(t) = partial.tool_name.or(partial.tool) {
+            if !t.is_empty() {
+                return Some(t);
+            }
+        }
+    }
+    for key in ["\"tool_name\"", "\"tool\""] {
+        if let Some(pos) = body.find(key) {
+            let after_key = &body[pos + key.len()..];
+            if let Some(colon) = after_key.find(':') {
+                let after_colon = after_key[colon + 1..].trim_start();
+                if let Some(rest) = after_colon.strip_prefix('"') {
+                    if let Some(end_quote) = rest.find('"') {
+                        let t = &rest[..end_quote];
+                        if !t.is_empty() {
+                            return Some(t.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn is_protected_pretooluse(body: &str) -> bool {
+    let is_pre = extract_event_from_raw(body).as_deref() == Some("PreToolUse");
+    if !is_pre {
+        return false;
+    }
+    let Some(tool) = extract_tool_name_from_raw(body) else {
+        return false;
+    };
+    const READ_ONLY: &[&str] = &[
+        "Read",
+        "Grep",
+        "Glob",
+        "NotebookRead",
+        "TodoRead",
+        "WebFetch",
+        "WebSearch",
+    ];
+    if READ_ONLY.contains(&tool.as_str()) {
+        return false;
+    }
+    if tool == "Bash" {
+        return body.contains("\"command\"");
+    }
+    true
+}
+
+async fn read_bounded_string(
+    body: axum::body::Body,
+    max_bytes: usize,
+) -> Result<String, (String, usize)> {
+    let mut stream = body.into_data_stream();
+    let mut buf = Vec::new();
+    let mut total_len = 0;
+    while let Some(chunk_res) = stream.next().await {
+        let chunk = match chunk_res {
+            Ok(c) => c,
+            Err(_) => break,
+        };
+        total_len += chunk.len();
+        if buf.len() < max_bytes + 4096 {
+            let to_take = chunk.len().min((max_bytes + 4096) - buf.len());
+            buf.extend_from_slice(&chunk[..to_take]);
+        }
+        if total_len > max_bytes {
+            drop(stream);
+            let prefix = String::from_utf8_lossy(&buf).into_owned();
+            return Err((prefix, total_len));
+        }
+    }
+    let s = String::from_utf8_lossy(&buf).into_owned();
+    Ok(s)
 }
 
 /// Turn a judgement plus the rule's declared fallback into a final verdict.
@@ -163,7 +280,7 @@ pub async fn health(State(st): State<Shared>) -> Json<serde_json::Value> {
 pub async fn hook(
     State(st): State<Shared>,
     headers: HeaderMap,
-    body: String,
+    body: axum::body::Body,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let auth = headers
         .get("authorization")
@@ -174,17 +291,33 @@ pub async fn hook(
         return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({})));
     }
 
-    if body.len() > st.config.max_body_bytes {
-        tracing::warn!(
-            len = body.len(),
-            "hook body over cap; proceeding without inspection"
-        );
-        if let Some(session_id) = extract_session_id_from_raw(&body) {
-            let mut fw = st.firewall.lock().expect("firewall mutex");
-            fw.mark_provenance_incomplete(&session_id);
+    let body = match read_bounded_string(body, st.config.max_body_bytes).await {
+        Ok(s) => s,
+        Err((prefix, len)) => {
+            tracing::warn!(
+                len = len,
+                "hook body over cap; proceeding without inspection"
+            );
+            if let Some(session_id) = extract_session_id_from_raw(&prefix) {
+                let mut fw = st.firewall.lock().expect("firewall mutex");
+                fw.mark_provenance_incomplete(&session_id);
+            }
+            if st.config.enforce && is_protected_pretooluse(&prefix) {
+                let out = decision::Decision {
+                    permission_decision: "deny",
+                    reason: Some("hook body exceeds configured max_body_bytes".into()),
+                    shadow: false,
+                    would_have_been: Verdict::Deny,
+                }
+                .to_hook_output();
+                return (
+                    StatusCode::OK,
+                    Json(serde_json::to_value(out).unwrap_or_default()),
+                );
+            }
+            return (StatusCode::OK, Json(serde_json::json!({})));
         }
-        return (StatusCode::OK, Json(serde_json::json!({})));
-    }
+    };
 
     let started = Instant::now();
 
@@ -195,6 +328,19 @@ pub async fn hook(
             if let Some(session_id) = extract_session_id_from_raw(&body) {
                 let mut fw = st.firewall.lock().expect("firewall mutex");
                 fw.mark_provenance_incomplete(&session_id);
+            }
+            if st.config.enforce && is_protected_pretooluse(&body) {
+                let out = decision::Decision {
+                    permission_decision: "deny",
+                    reason: Some("unparsable hook payload; refused by policy".into()),
+                    shadow: false,
+                    would_have_been: Verdict::Deny,
+                }
+                .to_hook_output();
+                return (
+                    StatusCode::OK,
+                    Json(serde_json::to_value(out).unwrap_or_default()),
+                );
             }
             return (StatusCode::OK, Json(serde_json::json!({})));
         }
@@ -232,6 +378,10 @@ pub async fn hook(
         return (StatusCode::OK, Json(serde_json::json!({})));
     };
     let event = mapped.event;
+    if mapped.truncated {
+        let mut fw = st.firewall.lock().expect("firewall mutex");
+        fw.mark_provenance_incomplete(&payload.session_id);
+    }
 
     let is_pre = payload.event == HookEvent::PreToolUse;
     let has_active_bound_children = st
@@ -433,7 +583,7 @@ pub struct McpHandshakeReq {
 pub async fn mcp(
     State(st): State<Shared>,
     headers: HeaderMap,
-    body: String,
+    body: axum::body::Body,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let auth = headers
         .get("authorization")
@@ -442,6 +592,16 @@ pub async fn mcp(
     if !crate::token::verify(&st.token, auth) {
         return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({})));
     }
+    let body = match read_bounded_string(body, st.config.max_body_bytes).await {
+        Ok(s) => s,
+        Err((_prefix, _len)) => {
+            tracing::warn!("mcp body over cap; rejecting");
+            return (
+                StatusCode::PAYLOAD_TOO_LARGE,
+                Json(serde_json::json!({ "verdict": "deny", "error": "mcp_body_over_cap" })),
+            );
+        }
+    };
     let req: McpHandshakeReq = match serde_json::from_str(&body) {
         Ok(r) => r,
         Err(e) => {

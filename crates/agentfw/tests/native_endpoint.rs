@@ -3557,3 +3557,144 @@ async fn reviewer_hook_extractor_must_return_explicit_enforce_disposition() {
         "Axum extractor emitted accidental 413 instead of documented hook disposition"
     );
 }
+
+#[tokio::test]
+async fn rereview_host_ask_must_survive_collector_merge() {
+    let f = Fixture::new("agent_policies:\n  - name: shared-mcp-ask\n    when: { taint: [mcp], action_class: network }\n    action: ask\ndefault: allow\n");
+    for (collector, tools) in [("a", vec!["read_document"]), ("b", vec!["send_email"])] {
+        let (s, r) = f.post(&reviewer_start(&f, collector, &tools, 60_000)).await;
+        assert_allow(s, &r);
+    }
+    let result = child_result(&f, "a", UNTRUSTED_TEXT).await;
+    let (s, r) = f.post(&result).await;
+    assert_allow(s, &r);
+    let (s, r) = f
+        .post(&f.call(
+            "b",
+            "send_email",
+            &json!({"to":"review@allowed.test","text":UNTRUSTED_TEXT}),
+        ))
+        .await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(r["verdict"], "ask", "host Ask lost: {r}");
+    assert_eq!(r["release"], false);
+    assert!(r["call_id"].is_null());
+}
+
+#[tokio::test]
+async fn rereview_host_incomplete_floor_must_block_collector_execution() {
+    let f = Fixture::configured(
+        ALLOW,
+        Config {
+            enforce: true,
+            max_body_bytes: 1024,
+            ..Config::default()
+        },
+    );
+    let (s, r) = f
+        .post(&reviewer_start(&f, "b", &["delete_document"], 60_000))
+        .await;
+    assert_allow(s, &r);
+    let hook = json!({"session_id":"host","hook_event_name":"PostToolUse",
+        "tool_name":"mcp__documents__read_document","tool_response":"x".repeat(2048)});
+    let _ = post(f.state.clone(), "/hook", &hook, Some(HOOK_TOKEN)).await;
+    assert!(f
+        .state
+        .firewall
+        .lock()
+        .unwrap()
+        .provenance_incomplete("host"));
+    let (s, r) = f.post(&f.call("b", "delete_document", &json!({}))).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(r["verdict"], "ask", "host incomplete floor lost: {r}");
+    assert_eq!(r["release"], false);
+}
+
+#[tokio::test]
+async fn rereview_hook_reader_must_be_bounded_before_authentication() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let f = Fixture::configured(
+        ALLOW,
+        Config {
+            enforce: true,
+            max_body_bytes: 1024,
+            ..Config::default()
+        },
+    );
+    let pulled = Arc::new(AtomicUsize::new(0));
+    let seen = pulled.clone();
+    let chunks = futures_util::stream::iter((0..8).map(move |_| {
+        seen.fetch_add(1, Ordering::SeqCst);
+        Ok::<_, std::io::Error>(vec![b'x'; 1024])
+    }));
+    let response = app(f.state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/hook")
+                .header("content-type", "application/json")
+                .body(Body::from_stream(chunks))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert!(
+        pulled.load(Ordering::SeqCst) <= 2,
+        "unauthenticated reader consumed {} KiB despite a 1 KiB configured cap",
+        pulled.load(Ordering::SeqCst)
+    );
+}
+
+#[tokio::test]
+async fn rereview_oversized_pretooluse_must_return_explicit_refusal() {
+    let f = Fixture::configured(
+        ALLOW,
+        Config {
+            enforce: true,
+            max_body_bytes: 1024,
+            ..Config::default()
+        },
+    );
+    let hook = json!({"session_id":"host","hook_event_name":"PreToolUse",
+        "tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/reviewer-no-execution"},
+        "padding":"x".repeat(2048)});
+    let (s, r) = post(f.state.clone(), "/hook", &hook, Some(HOOK_TOKEN)).await;
+    assert_eq!(s, StatusCode::OK);
+    assert!(
+        matches!(
+            r["hookSpecificOutput"]["permissionDecision"].as_str(),
+            Some("ask" | "deny")
+        ),
+        "protected enforce request received no explicit refusal: {r}"
+    );
+}
+
+#[tokio::test]
+async fn rereview_truncated_posttooluse_must_mark_incomplete_history() {
+    let f = Fixture::configured(
+        ALLOW,
+        Config {
+            enforce: true,
+            max_record_bytes: 64,
+            ..Config::default()
+        },
+    );
+    let (s, r) = f
+        .post(&reviewer_start(&f, "a", &["read_document"], 60_000))
+        .await;
+    assert_allow(s, &r);
+    let hook = json!({"session_id":"host","hook_event_name":"PostToolUse",
+        "tool_name":"mcp__documents__read_document","tool_response":"x".repeat(2048)});
+    let (s, _) = post(f.state.clone(), "/hook", &hook, Some(HOOK_TOKEN)).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(f.audit().last().unwrap()["truncated"], true);
+    assert!(
+        f.state
+            .firewall
+            .lock()
+            .unwrap()
+            .provenance_incomplete("host"),
+        "PostToolUse was truncated but loss of history was not recorded"
+    );
+}

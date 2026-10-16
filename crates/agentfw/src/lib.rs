@@ -48,6 +48,8 @@ pub fn app(state: Shared) -> Router {
     app_with_diagnostics(state, runtime)
 }
 
+pub const MAX_ROUTE_BODY: usize = 16 * 1024 * 1024;
+
 /// Attach immutable startup identity and bounded read-only transport observations.
 pub fn app_with_diagnostics(
     state: Shared,
@@ -56,11 +58,11 @@ pub fn app_with_diagnostics(
     Router::new()
         .route(
             "/hook",
-            post(handlers::hook).layer(axum::extract::DefaultBodyLimit::disable()),
+            post(handlers::hook).layer(axum::extract::DefaultBodyLimit::max(MAX_ROUTE_BODY)),
         )
         .route(
             "/mcp",
-            post(handlers::mcp).layer(axum::extract::DefaultBodyLimit::disable()),
+            post(handlers::mcp).layer(axum::extract::DefaultBodyLimit::max(MAX_ROUTE_BODY)),
         )
         .route(
             "/native/approval/v1",

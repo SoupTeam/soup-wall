@@ -935,23 +935,38 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                 },
             );
             let outcome_host = firewall.inspect_native_call(&ev_host, tool.action_class, &hosts);
-            if outcome_host.provenance_incomplete {
-                outcome.provenance_incomplete = true;
-            }
-            if outcome_host.taint.is_some() && outcome.taint.is_none() {
-                outcome.taint = outcome_host.taint.clone();
-            }
-            if outcome.rule.is_none() && outcome_host.rule.is_some() {
-                outcome.rule = outcome_host.rule.clone();
-            }
-            match outcome_host.verdict {
-                Verdict::Deny => {
-                    outcome = outcome_host;
+            fn verdict_rank(v: Verdict) -> u8 {
+                match v {
+                    Verdict::Deny => 3,
+                    Verdict::Ask => 2,
+                    Verdict::Escalate => 1,
+                    Verdict::Allow => 0,
                 }
-                Verdict::Escalate if outcome.verdict == Verdict::Allow => {
-                    outcome = outcome_host;
+            }
+            let host_rank = verdict_rank(resolved(&outcome_host));
+            let local_rank = verdict_rank(resolved(&outcome));
+            if host_rank > local_rank {
+                let mut merged = outcome_host;
+                if outcome.provenance_incomplete {
+                    merged.provenance_incomplete = true;
                 }
-                _ => {}
+                if outcome.taint.is_some() && merged.taint.is_none() {
+                    merged.taint = outcome.taint;
+                }
+                if merged.rule.is_none() && outcome.rule.is_some() {
+                    merged.rule = outcome.rule;
+                }
+                outcome = merged;
+            } else {
+                if outcome_host.provenance_incomplete {
+                    outcome.provenance_incomplete = true;
+                }
+                if outcome_host.taint.is_some() && outcome.taint.is_none() {
+                    outcome.taint = outcome_host.taint.clone();
+                }
+                if outcome.rule.is_none() && outcome_host.rule.is_some() {
+                    outcome.rule = outcome_host.rule.clone();
+                }
             }
         }
         let verdict = resolved(&outcome);
