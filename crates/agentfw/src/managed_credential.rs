@@ -49,7 +49,7 @@ fn load_private_token(path: &std::path::Path) -> Result<String> {
     ensure!(path.is_absolute() && path.file_name().is_some(), "invalid token file path");
     // O_NOFOLLOW refuses final-component symlinks; O_NONBLOCK avoids FIFOs
     // stalling on open even if path type changes between checks.
-    let mut fd = OpenOptions::new()
+    let fd = OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC)
         .open(path).context("cannot open managed token file")?;
