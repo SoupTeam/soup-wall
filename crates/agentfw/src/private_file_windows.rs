@@ -23,9 +23,9 @@ use windows_sys::Win32::Security::Authorization::{
     SetSecurityInfo, SDDL_REVISION_1, SE_FILE_OBJECT,
 };
 use windows_sys::Win32::Security::{
-    GetSecurityDescriptorDacl, GetTokenInformation, TokenUser, ACL, DACL_SECURITY_INFORMATION,
-    OWNER_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID,
-    SECURITY_ATTRIBUTES, TOKEN_QUERY, TOKEN_USER,
+    GetSecurityDescriptorControl, GetSecurityDescriptorDacl, GetTokenInformation, TokenUser, ACL,
+    DACL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION,
+    PSECURITY_DESCRIPTOR, PSID, SECURITY_ATTRIBUTES, SE_DACL_PROTECTED, TOKEN_QUERY, TOKEN_USER,
 };
 use windows_sys::Win32::Storage::FileSystem::{
     CreateDirectoryW, CreateFileW, GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
@@ -69,8 +69,9 @@ impl PrivateAcl {
     }
 
     /// A protected empty DACL for a new create stage. It grants no future
-    /// content/attributes opens; the originally created handle retains its
-    /// granted rights. This is not a process sandbox against the file owner.
+    /// content or write-attributes access; Windows may still grant metadata
+    /// access. The original handle retains its creation rights. This is not a
+    /// process sandbox against the file owner.
     pub(crate) fn empty() -> io::Result<Self> {
         let sid = current_user_sid()?;
         Self::from_sddl(&format!("O:{sid}D:P"))
@@ -78,6 +79,51 @@ impl PrivateAcl {
 
     pub(crate) fn descriptor(&self) -> *mut c_void {
         self.descriptor.0
+    }
+
+    /// Verify the kernel-assigned stage security before its first content write.
+    /// Outputs only booleans; account identifiers and ACL bytes stay private.
+    pub(crate) fn verify_empty(handle: HANDLE) -> io::Result<()> {
+        let mut owner: PSID = null_mut();
+        let mut dacl: *mut ACL = null_mut();
+        let mut descriptor: PSECURITY_DESCRIPTOR = null_mut();
+        let code = unsafe {
+            GetSecurityInfo(
+                handle,
+                SE_FILE_OBJECT,
+                OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+                &mut owner,
+                null_mut(),
+                &mut dacl,
+                null_mut(),
+                &mut descriptor,
+            )
+        };
+        if code != 0 {
+            return Err(io::Error::from_raw_os_error(code as i32));
+        }
+        let descriptor = LocalMemory(descriptor);
+        if descriptor.0.is_null() || dacl.is_null() || owner.is_null() {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "stage security descriptor is incomplete",
+            ));
+        }
+        let mut control = 0u16;
+        let mut revision = 0u32;
+        if unsafe { GetSecurityDescriptorControl(descriptor.0, &mut control, &mut revision) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if control & SE_DACL_PROTECTED == 0
+            || unsafe { (*dacl).AceCount } != 0
+            || sid_to_string(owner)? != current_user_sid()?
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "stage is not protected with its creator's empty DACL",
+            ));
+        }
+        Ok(())
     }
 
     fn for_directory() -> io::Result<Self> {

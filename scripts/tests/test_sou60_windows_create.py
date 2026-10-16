@@ -427,6 +427,7 @@ class WindowsCreateGradingControls(unittest.TestCase):
             self.assertEqual(D.json_lines(result.stdout)[1]["result"]["tools"], D.F.TOOLS)
             self.assertFalse((Path(temporary) / "no-create.txt").exists())
             self.assertIn("UNEXPECTED-CHILD-EXECUTION", result.stdout.decode())
+            self.assertEqual(ledger.with_suffix(".started").read_bytes(), b"started\n")
             self.assertEqual(ledger.with_suffix(".closed").read_bytes(), b"closed\n")
 
     def test_dry_run_has_no_process_effect(self):
@@ -443,13 +444,13 @@ class WindowsCreateGradingControls(unittest.TestCase):
                 "standard_user": {"sid": "DO-NOT-PUBLISH", "is_administrator": False},
                 "binary_sha256": "b" * 64, "collector_raw": "DO-NOT-PUBLISH", "cases": []}
             original = json.dumps(report)
-            (output / "acceptance.json").write_text(original)
+            (output / "acceptance.json").write_text(original, encoding="utf-8")
             text = DIAGNOSTICS.diagnostics(root)
             self.assertIn("a" * 40, text)
             self.assertIn("b" * 64, text)
             self.assertNotIn("DO-NOT-PUBLISH", text)
-            self.assertEqual((output / "acceptance.json").read_text(), original)
-            (root / "sou60-router.log").write_text('Bearer private-secret\n~~~\n' + "🥣" * 100000)
+            self.assertEqual((output / "acceptance.json").read_text(encoding="utf-8"), original)
+            (root / "sou60-router.log").write_text('Bearer private-secret\n~~~\n' + "🥣" * 100000, encoding="utf-8")
             text = DIAGNOSTICS.diagnostics(root)
             self.assertNotIn("private-secret", text)
             self.assertIn("[REDACTED]", text)

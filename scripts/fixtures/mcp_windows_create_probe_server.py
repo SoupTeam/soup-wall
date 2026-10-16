@@ -24,7 +24,7 @@ def main():
     args = parser.parse_args()
     args.ledger.touch(exist_ok=False)
     args.ledger.with_suffix(".responses").touch(exist_ok=False)
-    args.ledger.with_suffix(".started").write_text("started\n", encoding="utf-8")
+    args.ledger.with_suffix(".started").write_bytes(b"started\n")
     args.ledger.with_suffix(".pid").write_text(str(os.getpid()), encoding="ascii")
     try:
         for raw in sys.stdin.buffer:
@@ -50,7 +50,7 @@ def main():
             sys.stdout.buffer.write(line)
             sys.stdout.buffer.flush()
     finally:
-        args.ledger.with_suffix(".closed").write_text("closed\n", encoding="utf-8")
+        args.ledger.with_suffix(".closed").write_bytes(b"closed\n")
 
 
 if __name__ == "__main__":

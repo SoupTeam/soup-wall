@@ -395,8 +395,17 @@ impl CreateParent {
     }
 }
 
-pub(crate) fn checked_create_stage(file: &File, expected: &str) -> anyhow::Result<(u64, [u8; 16])> {
+pub(crate) fn checked_create_stage(
+    file: &File,
+    expected: &str,
+    expected_length: usize,
+) -> anyhow::Result<(u64, [u8; 16])> {
     let identity = check_regular_file(file)?;
+    let standard: FILE_STANDARD_INFO = query_info(file, FileStandardInfo)?;
+    ensure!(
+        standard.EndOfFile >= 0 && standard.EndOfFile as u64 == expected_length as u64,
+        "Windows create stage length changed"
+    );
     exact_name(file, expected)?;
     Ok((identity.volume, identity.id))
 }

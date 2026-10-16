@@ -63,7 +63,7 @@ NATIVE_TESTS = ("preparation_has_no_effects_and_binds_exact_root", "publishes_co
     "partial_write_failure_accounts_real_bytes_and_removes_only_owned_stage", "flush_and_publication_failures_leave_no_target_and_account_staging",
     "post_publication_failure_keeps_complete_effect_and_true_accounting", "canceled_stage_is_exclusive_then_cleaned_and_continuation_is_useful",
     "process_interruption_cleans_stage_and_preserves_published_link",
-    "partial_stage_acl_denies_metadata_data_and_zero_access_link")
+    "partial_stage_acl_denies_data_and_foreign_link")
 
 
 def load(path, name):

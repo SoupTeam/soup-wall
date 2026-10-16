@@ -69,8 +69,16 @@ separate traverse/execute permission requirements.
 
 After the correlated native Allow is delivered, the executor creates an
 exclusive unpredictable temporary file relative to the same pinned parent,
-using `FILE_DELETE_ON_CLOSE`. It writes complete bounded content and flushes
-file data. Publication uses handle-relative
+using `FILE_DELETE_ON_CLOSE`. Its protected empty DACL is verified against the
+actual kernel object and creator identity before any content write. Windows may
+still permit metadata-only opens; the native tests separately exercise data
+access and foreign-link refusal. It writes complete bounded content, flushes
+file data, and rechecks the original file identity, single-link state and exact
+length before installing a protected owner/SYSTEM DACL. No content write follows
+that ACL change. The final file remains private to its owner and SYSTEM, rather
+than inheriting broader workspace access. A deliberate file-owner permission
+rewrite is outside the process-sandbox boundary of this executor.
+Publication uses handle-relative
 [`FileLinkInformation`](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_link_information)
 with `ReplaceIfExists = FALSE` and one same-parent leaf. Another creator winning
 the destination race is preserved with its original identity and bytes.
@@ -88,9 +96,14 @@ are distinct; see
 
 Ordinary execution failures retain `committed`, `staged_bytes` and
 `committed_bytes`. A failure before publication may have created and written its
-own temporary object; after closing that object no destination remains. A
-failure after publication reports `committed: true` and preserves the complete
-published file. Withholding an untrusted result cannot undo that effect.
+own temporary object; no destination is published by this operation, and a
+competing creator's file remains intact. A failure after publication reports
+`committed: true` and preserves the complete published file. If closing the exact
+owned staging handle does not establish that its temporary name is absent,
+publication returns an explicit cleanup-unverified error with the committed
+byte count. A retained metadata handle or a foreign recreation can make cleanup
+unverified; the executor never falls back to deleting that pathname.
+Withholding an untrusted result cannot undo a committed effect.
 
 Cancellation before Allow performs no creation. During staging, dropping or
 canceling the worker cannot publish: only the returned staged owner has the
@@ -153,7 +166,9 @@ Fourteen separately mandatory native executor tests exercise the actual Windows
 APIs: parent/ancestor exclusion, root identity, exact content/bounds, competing
 and concurrent creators, real partial writes, flush/publication failures,
 post-publication accounting, cancellation cleanup and real killed processes
-before/after publication. Test-only fault points exercise executor accounting;
+before/after publication, metadata-only and true zero-access source handles,
+and unverified cleanup after an actual committed link. Test-only fault points
+exercise executor accounting;
 synthetic discovery-child failures are not native write-fault evidence.
 
 Portable negative grader controls are not Windows proof. WSL, Linux or mocked

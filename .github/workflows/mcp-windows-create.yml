@@ -59,7 +59,10 @@ jobs:
               Format-List | Out-File "$env:RUNNER_TEMP/sou60-binaries.txt"
       - name: Evidence grading controls
         shell: pwsh
-        run: python -B -m unittest discover -s scripts/tests -p 'test_sou60_windows_create.py' -v
+        run: |
+          & python -B -m unittest discover -s scripts/tests -p 'test_sou60_windows_create.py' -v 2>&1 |
+              Tee-Object -FilePath "$env:RUNNER_TEMP/sou60-grading-controls.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows evidence grading controls failed' }
       - name: Native router authority and compatibility regressions
         shell: pwsh
         run: |

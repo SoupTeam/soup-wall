@@ -38,7 +38,7 @@ use std::ptr::{null, null_mut};
 use serde::{Deserialize, Serialize};
 use windows_sys::Win32::Foundation::{HANDLE, INVALID_HANDLE_VALUE};
 use windows_sys::Win32::Storage::FileSystem::{
-    FILE_READ_ATTRIBUTES, FILE_WRITE_DATA, SYNCHRONIZE, WRITE_DAC,
+    FILE_READ_ATTRIBUTES, FILE_WRITE_DATA, READ_CONTROL, SYNCHRONIZE, WRITE_DAC,
 };
 
 use crate::mcp::create_file::{CreateFileCommit, CreateFileError, MAX_CREATE_BYTES};
@@ -140,6 +140,8 @@ pub(crate) struct StagedCreate {
     stage_name: String,
     staged_bytes: usize,
     committed: bool,
+    stage_identity: Option<(u64, [u8; 16])>,
+    cleanup_verified: Option<bool>,
 }
 
 impl fmt::Debug for PreparedCreate {
@@ -274,6 +276,8 @@ impl PreparedCreate {
             stage_name,
             staged_bytes: 0,
             committed: false,
+            stage_identity: None,
+            cleanup_verified: None,
         };
         eprintln!(
             "{}",
@@ -285,11 +289,25 @@ impl PreparedCreate {
             staged.prepared.parent.canonical(),
             staged.stage_name
         );
-        let (volume, _) = checked_create_stage(staged.file(), &path)
+        let identity = checked_create_stage(staged.file(), &path, 0)
             .map_err(|_| staged.effects(error("windows_create_stage_identity_refused")))?;
-        if volume != staged.prepared.identity.root_volume_serial {
+        if identity.0 != staged.prepared.identity.root_volume_serial {
             return Err(staged.effects(error("windows_create_stage_volume_changed")));
         }
+        staged.stage_identity = Some(identity);
+        PrivateAcl::verify_empty(staged.file().as_raw_handle()).map_err(|cause| {
+            let mut result = error("windows_create_stage_acl_unverified");
+            result.errno = cause.raw_os_error();
+            staged.effects(result)
+        })?;
+        eprintln!(
+            "{}",
+            serde_json::json!({
+                "event":"mcp_windows_create_stage_security",
+                "stage_dacl_empty":true,"stage_dacl_protected":true,
+                "stage_owner_matches":true,"staged_bytes":0
+            })
+        );
         while staged.staged_bytes < staged.prepared.content.len() {
             #[cfg(test)]
             if matches!(fault, Fault::ProbePrivacy) && staged.staged_bytes >= 3 {
@@ -338,8 +356,9 @@ impl PreparedCreate {
             result.errno = cause.raw_os_error();
             staged.effects(result)
         })?;
-        // No content write follows the DACL restoration. A passive observer
-        // can gain owner access only to already-complete, flushed bytes.
+        staged.check_stage()?;
+        // No content write follows the DACL restoration. Data access granted
+        // by the final owner DACL reaches only complete, flushed bytes.
         final_acl
             .apply(staged.file().as_raw_handle())
             .map_err(|cause| {
@@ -365,6 +384,47 @@ impl StagedCreate {
         result.committed = self.committed;
         result.committed_bytes = if self.committed { self.staged_bytes } else { 0 };
         result
+    }
+
+    fn check_stage(&self) -> Result<(), CreateFileError> {
+        let path = format!("{}\\{}", self.prepared.parent.canonical(), self.stage_name);
+        let identity = checked_create_stage(self.file(), &path, self.staged_bytes)
+            .map_err(|_| self.effects(error("windows_create_stage_changed")))?;
+        if self.stage_identity != Some(identity)
+            || identity.0 != self.prepared.identity.root_volume_serial
+            || self.staged_bytes != self.prepared.content.len()
+        {
+            return Err(self.effects(error("windows_create_stage_changed")));
+        }
+        Ok(())
+    }
+
+    fn close_owned_stage(&mut self) -> Result<(), CreateFileError> {
+        let verified = if let Some(verified) = self.cleanup_verified {
+            verified
+        } else {
+            // Close only the exact owned FILE_CREATE handle. A later lookup is
+            // observation only; neither a final leaf nor a foreign recreation
+            // is ever submitted to a deletion API.
+            drop(self.file.take());
+            let verified = self.prepared.require_absent(&self.stage_name).is_ok();
+            self.cleanup_verified = Some(verified);
+            eprintln!(
+                "{}",
+                serde_json::json!({
+                    "event":"mcp_windows_create_stage_cleanup","stage_created":true,
+                    "staged_bytes":self.staged_bytes,"committed":self.committed,
+                    "committed_bytes":if self.committed { self.staged_bytes } else { 0 },
+                    "cleanup_verified":verified
+                })
+            );
+            verified
+        };
+        if verified {
+            Ok(())
+        } else {
+            Err(self.effects(error("windows_create_stage_cleanup_unverified")))
+        }
     }
 
     pub(crate) fn publish(self) -> Result<CreateFileCommit, CreateFileError> {
@@ -436,6 +496,7 @@ impl StagedCreate {
         }
         #[cfg(not(test))]
         let _ = fault;
+        self.check_stage()?;
         self.link()?;
         #[cfg(test)]
         if matches!(fault, Fault::AfterPublish) {
@@ -447,9 +508,9 @@ impl StagedCreate {
             self.effects(result)
         })?;
         let bytes_written = self.staged_bytes;
-        // Drop closes only the exact owned source, verifies its name absent,
-        // and emits cleanup accounting. A foreign final leaf is never removed.
-        drop(self);
+        // Publication already happened. Unverified cleanup is an error with
+        // committed=true, never a false success or a rollback claim.
+        self.close_owned_stage()?;
         Ok(CreateFileCommit {
             committed: true,
             bytes_written,
@@ -461,18 +522,9 @@ impl StagedCreate {
 
 impl Drop for StagedCreate {
     fn drop(&mut self) {
-        // This is the original exclusive FILE_CREATE handle. No path is ever
-        // passed to a deletion API, even if the namespace changes after close.
-        drop(self.file.take());
-        let cleanup_verified = self.prepared.require_absent(&self.stage_name).is_ok();
-        eprintln!(
-            "{}",
-            serde_json::json!({"event":"mcp_windows_create_stage_cleanup",
-                "stage_created":true,"staged_bytes":self.staged_bytes,
-                "committed":self.committed,
-                "committed_bytes":if self.committed { self.staged_bytes } else { 0 },
-                "cleanup_verified":cleanup_verified})
-        );
+        // Cancellation/error fallback cannot return a result, so it retains the
+        // explicit audit. Normal success closes and verifies through Result.
+        let _ = self.close_owned_stage();
     }
 }
 
@@ -506,7 +558,7 @@ fn open_relative_with_descriptor(
     let access = FILE_READ_ATTRIBUTES
         | SYNCHRONIZE
         | if create_stage {
-            FILE_WRITE_DATA | DELETE | WRITE_DAC
+            FILE_WRITE_DATA | DELETE | READ_CONTROL | WRITE_DAC
         } else {
             0
         };
@@ -785,13 +837,14 @@ mod tests {
         for (access, leaf) in [
             (FILE_READ_ATTRIBUTES, "ForeignAttributes.txt"),
             (0, "ForeignZero.txt"),
+            (0x100, "ForeignWriteAttributes.txt"),
         ] {
             match open_stage_with_access(staged, access) {
                 Ok(file) => {
                     assert_no_data_or_link(&file, &outside, access, leaf);
-                    assert_eq!(
-                        access, 0,
-                        "empty stage DACL admitted pure FILE_READ_ATTRIBUTES"
+                    assert_ne!(
+                        access, 0x100,
+                        "private partial stage granted FILE_WRITE_ATTRIBUTES"
                     );
                 }
                 Err(status) => {
@@ -806,7 +859,7 @@ mod tests {
     }
 
     #[test]
-    fn partial_stage_acl_denies_metadata_data_and_zero_access_link() {
+    fn partial_stage_acl_denies_data_and_foreign_link() {
         let (_temporary, root) = fixture();
         let foreign = root.parent().unwrap().join("ForeignDirectory");
         fs::create_dir(&foreign).unwrap();
@@ -821,6 +874,7 @@ mod tests {
         assert!(entries(&root).is_empty());
         assert!(!foreign.join("ForeignAttributes.txt").exists());
         assert!(!foreign.join("ForeignZero.txt").exists());
+        assert!(!foreign.join("ForeignWriteAttributes.txt").exists());
     }
 
     #[test]
@@ -1146,6 +1200,27 @@ mod tests {
         assert_eq!(
             fs::read(root.join(temporary_name)).unwrap(),
             b"foreign reuse"
+        );
+        // A real metadata-only handle can delay original-link DOC cleanup.
+        // Publication still happened: the error must retain committed bytes.
+        let staged = prepare(&root, "Cleanup.txt", "committed despite held metadata")
+            .unwrap()
+            .stage()
+            .unwrap();
+        let owned_name = staged.stage_name.clone();
+        let held = open_stage_with_access(&staged, 0).unwrap();
+        let result = staged.publish().unwrap_err();
+        assert_eq!(result.code, "windows_create_stage_cleanup_unverified");
+        assert!(result.committed);
+        assert_eq!(
+            result.committed_bytes,
+            "committed despite held metadata".len()
+        );
+        drop(held);
+        assert!(!root.join(owned_name).exists());
+        assert_eq!(
+            fs::read(root.join("Cleanup.txt")).unwrap(),
+            b"committed despite held metadata"
         );
     }
 

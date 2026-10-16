@@ -38,6 +38,8 @@ def read_text(path):
 
 def diagnostics(root):
     sections = []
+    controls = root / "sou60-grading-controls.log"
+    sections.append(("Portable grading control log", read_text(controls) if controls.is_file() else "Grading controls log unavailable.", 18000))
     router = root / "sou60-router.log"
     sections.append(("Native router regression log", read_text(router) if router.is_file() else "Router log unavailable.", 45000))
     output = root / "sou60-standard-user"
