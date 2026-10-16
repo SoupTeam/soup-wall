@@ -69,6 +69,20 @@ def network_failure_category(failure):
     return failure if failure in known else "other"
 
 
+def retryable_login_transport(observation):
+    # Restarting the owned PostgreSQL Docker container can briefly change the
+    # runner's network interfaces. Only retry a browser transport failure before
+    # any ACS response; authorization/signature failures must remain failures.
+    return (observation.get("final_location") == "browser_error"
+            and "acs_status" not in observation
+            and not observation.get("local_authorization_error")
+            and not observation.get("validation_error_categories")
+            and not observation.get("vendor_error_categories")
+            and bool(observation.get("network_failures"))
+            and all(item.get("category") == "net::ERR_NETWORK_CHANGED"
+                    for item in observation.get("network_failures", [])))
+
+
 def tls_handshake(port, hostname, ca):
     context = ssl.create_default_context(cafile=str(ca))
     context.minimum_version = ssl.TLSVersion.TLSv1_2
@@ -357,11 +371,12 @@ def run(args):
                 ctx.route("**/*", bounded)
                 return ctx
 
-            def login(ctx, user, organization=None, workspace=None, success=True, capture=None):
+            def login(ctx, user, organization=None, workspace=None, success=True, capture=None, network_retry=0):
                 page = ctx.new_page()
                 page.set_default_timeout(45000)
                 log_offset = (directory / "gateway.log").stat().st_size
-                observation = {"subject": user["username"], "navigation_statuses": [], "network_failures": []}
+                observation = {"subject": user["username"], "transport_attempt": network_retry + 1,
+                               "navigation_statuses": [], "network_failures": []}
                 def observe(response):
                     if response.request.is_navigation_request() and len(observation["navigation_statuses"]) < 12:
                         observation["navigation_statuses"].append({
@@ -423,6 +438,11 @@ def run(args):
                             ("expired", "signature", "audience", "issuer", "destination", "recipient", "request", "replay", "notbefore", "not yet valid")
                             if len(last) == 2 and word in last[-1]]
                         observation["local_authorization_error"] = "failed to authorize saml identity" in log_text
+                        if network_retry == 0 and retryable_login_transport(observation):
+                            report.setdefault("browser_transport_retries", []).append(observation)
+                            output.publish(report)
+                            page.close()
+                            return login(ctx, user, organization, workspace, success, capture, network_retry=1)
                         report["failed_login"] = observation
                         raise
                 else:

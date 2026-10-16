@@ -1,0 +1,33 @@
+{
+  "passed": false,
+  "phase": "saml-browser-login-analyst",
+  "failed_login": {
+    "subject": "analyst",
+    "navigation_statuses": [
+      {
+        "location": "gateway_start",
+        "status": 303
+      },
+      {
+        "location": "vendor",
+        "status": 200
+      }
+    ],
+    "network_failures": [
+      {
+        "location": "vendor",
+        "category": "net::ERR_NETWORK_CHANGED"
+      }
+    ],
+    "vendor_status": 200,
+    "final_location": "browser_error",
+    "at_acs": false,
+    "at_console": false,
+    "at_vendor": false,
+    "vendor_error_categories": [],
+    "validation_error_categories": [],
+    "local_authorization_error": false
+  },
+  "error_type": "TimeoutError",
+  "job_url": "https://github.com/SoupTeam/soup-wall/actions/runs/38934568734/job/117086686403"
+}

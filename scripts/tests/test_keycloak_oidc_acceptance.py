@@ -38,6 +38,15 @@ class SamlNavigationDiagnosticsTests(unittest.TestCase):
         self.assertEqual(driver.network_failure_category("net::ERR_CONNECTION_RESET"),
                          "net::ERR_CONNECTION_RESET")
         self.assertEqual(driver.network_failure_category("untrusted secret"), "other")
+        transient = {"final_location": "browser_error", "network_failures": [
+            {"category": "net::ERR_NETWORK_CHANGED"}]}
+        self.assertTrue(driver.retryable_login_transport(transient))
+        for extra in ({"acs_status": 400}, {"acs_status": 303}, {"local_authorization_error": True},
+                      {"validation_error_categories": ["signature"]},
+                      {"vendor_error_categories": ["invalid username or password"]},
+                      {"final_location": "gateway_acs"},
+                      {"network_failures": [{"category": "net::ERR_CONNECTION_REFUSED"}]}):
+            self.assertFalse(driver.retryable_login_transport(dict(transient, **extra)))
 
 
 class ImportedCredentialTests(unittest.TestCase):
