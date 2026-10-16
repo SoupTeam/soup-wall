@@ -81,6 +81,40 @@ Legal/redistribution approval still requires independent source terms, notices,
 immutable revisions and an authorized review for the actual redistributed assets.
 Do not publish percentages as license coverage for external models or datasets.
 
+## Selected filesystem MCP runtime (SOU-62)
+
+The optional [filesystem read-only profile](operations/MCP_REAL_FILESYSTEM.md)
+installs the original `@modelcontextprotocol/server-filesystem@2026.8.31`
+and TypeScript MCP SDK `1.32.1` (MIT) from npm. The server package metadata says
+`SEE LICENSE IN LICENSE`, but its published npm archive omits that file. Its
+pinned source license documents an Apache-2.0/MIT transition; retain that exact
+upstream notice separately with the profile rather than declaring a single
+license for all upstream contributions. The committed
+[upstream identity](../profiles/mcp/filesystem-readonly-v1/upstream-identity.json)
+records exact package archive integrity, source revisions, original entrypoint
+and discovery hashes; the adjacent npm lock pins the complete transitive graph.
+Original discovery JSON is retained as a behavioral fixture with its upstream
+identity. No server implementation is copied or rewritten into Agent.
+`npm ci --ignore-scripts` preserves the original package tree. The installer
+separately retains the pinned upstream notices outside that tree; the complete
+package tree digest is verified before sandbox execution.
+
+The acceptance runtime downloads official Node.js `22.22.0` and bubblewrap
+`0.13.1` archives by SHA-256. Node.js retains its upstream license/third-party
+notices; bubblewrap is a separate LGPL-2.0-or-later executable, built from its
+unmodified official release source. Neither executable is linked into or
+redistributed with the Apache-2.0 Rust binary by this change. The installer pins
+the exact Node binary and the operator-selected bubblewrap binary, libraries and
+complete npm tree in an explicit profile. Release redistribution still requires
+review of the actual artifacts and notices.
+
+The separate locked Claude Code `2.1.251` package is an acceptance-only host
+installed from Anthropic's official npm packages with lifecycle scripts disabled.
+Its vendor terms remain separate; it is not copied into this repository or
+bundled with Agent. The owned scripted provider measures actual host protocol
+interoperability, not live model efficacy. No paid model access or private data
+is needed. The Cargo dependency graph remains unchanged.
+
 ## Release evidence
 
 Review and retain the locked dependency graph, an SBOM, third-party license and notice inventory, model and dataset records, the upstream attribution, and security-scan findings for the **complete** workspace. Document any unresolved advisory or deployment limitation in the release notes.

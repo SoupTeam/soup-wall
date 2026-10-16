@@ -23,6 +23,8 @@ use soup_wall_adapter::runner::evaluate_baseline_policy;
 use soup_wall_adapter::{ToolActionCategory, ToolClassification, Verdict as AdapterVerdict};
 use soup_wall_agent::ActionClass;
 
+mod real_server;
+
 const MAX_REQUESTS: usize = 1024;
 const IO_TIMEOUT: Duration = Duration::from_secs(30);
 const CLASSIFICATION_CONTRACT: &str = "sw-classification/candidate-1";
@@ -2555,6 +2557,9 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
         let workspace = std::env::var_os("AGENTFW_WORKSPACE")
             .map(std::path::PathBuf::from)
             .unwrap_or(cwd);
+        if let Some(profile) = super::server_profile::ProfileConfig::load_from_env()? {
+            return real_server::run(&collector, &profile, &workspace).await;
+        }
         #[cfg(windows)]
         let windows_spawn_pins = {
             let normal = |path: &std::path::Path| {

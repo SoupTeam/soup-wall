@@ -8,7 +8,7 @@ import http.client
 import json
 import math
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import secrets
 import shutil
@@ -43,6 +43,57 @@ def now():
 
 class DrillError(RuntimeError):
     pass
+
+
+def extract_source_archive(bundle, destination):
+    """Extract an owned Git snapshot on Python 3.10+ without tarfile filters.
+
+    Validate the complete table first. Git source archives need only regular
+    files and directories; links, devices, sparse files and ambiguous paths are
+    refused. No archive-supplied owner, permissions or executable code is used.
+    """
+    destination = Path(destination)
+    if destination.is_symlink() or not destination.is_dir() or any(destination.iterdir()):
+        raise DrillError("source extraction requires a fresh empty directory")
+    entries, kinds, total = [], {}, 0
+    for member in bundle:
+        name = member.name
+        parts = PurePosixPath(name).parts
+        if (not name or name.startswith("/") or "\\" in name or "\x00" in name
+                or any(part in {"", ".", ".."} for part in name.rstrip("/").split("/"))
+                or not parts or ":" in parts[0] or member.issparse() or not (member.isfile() or member.isdir())):
+            raise DrillError("unsafe source archive member")
+        key = "/".join(parts)
+        if key in kinds or len(entries) >= 100000 or member.size < 0:
+            raise DrillError("ambiguous or oversized source archive")
+        if any(kinds.get("/".join(parts[:index])) == "file" for index in range(1, len(parts))):
+            raise DrillError("source archive parent is not a directory")
+        if member.isfile() and any(path.startswith(key + "/") for path in kinds):
+            raise DrillError("source archive file shadows a directory")
+        total += member.size
+        if total > 1024 * 1024 * 1024:
+            raise DrillError("source archive exceeds byte limit")
+        kinds[key] = "file" if member.isfile() else "directory"
+        entries.append((member, parts))
+    for member, parts in entries:
+        target = destination.joinpath(*parts)
+        target.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
+        if member.isdir():
+            target.mkdir(mode=0o755, exist_ok=True)
+            continue
+        stream = bundle.extractfile(member)
+        if stream is None:
+            raise DrillError("source archive regular file has no data")
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(target, flags, 0o755 if member.mode & 0o111 else 0o644)
+        with stream, os.fdopen(descriptor, "wb") as output:
+            remaining = member.size
+            while remaining:
+                chunk = stream.read(min(remaining, 1024 * 1024))
+                if not chunk:
+                    raise DrillError("truncated source archive member")
+                output.write(chunk)
+                remaining -= len(chunk)
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -380,7 +431,7 @@ class Runtime:
         with archive.open("wb") as target:
             subprocess.run(["git", "archive", self.report["source"]["commit"]], cwd=REPO, stdout=target, check=True)
         with tarfile.open(archive) as bundle:
-            bundle.extractall(snapshot, filter="data")
+            extract_source_archive(bundle, snapshot)
         self.image = "soup-wall-monitoring:" + self.report["source"]["commit"][:16]
         if not skip_build:
             print(json.dumps({"check": "current_gateway_linux_build", "outcome": "running"}), flush=True)

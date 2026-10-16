@@ -5,6 +5,11 @@ execution boundary for a deliberately small stdio MCP contract. The legacy
 `agentfw mcp -- ...` command remains the manifest collector described in the
 existing architecture; its manifest decision does not gate individual calls.
 
+The separately installed [real filesystem server profile](MCP_REAL_FILESYSTEM.md)
+adds a Linux sandbox and a bounded concurrent transport for one pinned original
+server. Select it explicitly with `AGENTFW_MCP_SERVER_PROFILE`; it does not widen
+the legacy contract described below or the built-in resource executors.
+
 ## Operator configuration
 
 Start the Agent with enforcement enabled, the optional judge disabled, and an
@@ -29,11 +34,13 @@ the tool into a fabricated Bash command.
 The guarded collector uses `/native/v1` and the separate private `native-token`.
 It requires the same registry digest as the running daemon. Missing native
 configuration, unavailable inspection, malformed replies and shadow posture
-never authorize a guarded action. The collector is trusted and the server
-executable still runs as the operator; this command is not an OS sandbox.
-Admission covers the JSON-RPC stdin/stdout transport. Server stderr remains
-the runtime's diagnostic stream; arbitrary server logging and other process
-I/O are outside that admission guarantee.
+never authorize a guarded action. The collector is trusted. Without the explicitly selected
+[Linux filesystem server profile](MCP_REAL_FILESYSTEM.md), the child retains the
+operator's host permissions and server stderr remains its diagnostic stream.
+Admission alone covers the JSON-RPC stdin/stdout transport. The selected Linux
+profile additionally enforces a read-only process sandbox, suppresses stderr
+and withholds server logging/progress content; it is not a generic arbitrary
+MCP command sandbox.
 
 ## Boundaries
 
@@ -57,8 +64,11 @@ tool's result cannot undo its effects; preventing a send requires call admission
 
 ## Supported initial contract
 
-The initial contract is synchronous stdio with one outstanding request and
-text-only tool results. The SOU-11 input profile accepts closed top-level objects,
+The legacy guarded contract is synchronous stdio with one outstanding request
+and text-only tool results. The separate explicit
+[Linux filesystem server profile](MCP_REAL_FILESYSTEM.md) supports the pinned
+original server's nine read-only tools, eight active/eight queued calls,
+per-call cancellation and inspected original structured output. The SOU-11 input profile accepts closed top-level objects,
 bounded nested objects/arrays and explicitly typed scalar fields. The collector
 checks actual arguments before admission; the supported keywords and limits are
 listed below. Defaults are inert metadata, never inserted into arguments;
@@ -85,14 +95,14 @@ manifest is admitted, the collector answers these probes locally with JSON-RPC
 bounded discovery parameters, forwards no resource request or content, and
 keeps the tool connection available. Resource reads remain unsupported.
 
-Batched calls, tool-call notifications, duplicate/replayed identifiers,
+For the legacy guarded contract, batched calls, tool-call notifications, duplicate/replayed identifiers,
 unrecognized content paths, server-initiated requests, multimedia, embedded
 resources, structured content and result/server metadata are unsupported. This is a bounded
 integration, not a general MCP transport, concurrent executor, child-authority
 system or human approval channel. Ask and Deny must prevent the affected call
 or result; a correlated refusal lets a supported client continue ordinary work.
 Transport uncertainty ends the collector rather than silently switching to
-the legacy relay. Explicitly inspect the retained evidence and refusal behavior
+the legacy relay. The selected filesystem profile has its own bounded support matrix. Explicitly inspect the retained evidence and refusal behavior
 before attaching another server or runtime.
 
 For tools carrying an installed `resource_policy` (SOU-15), operation-level

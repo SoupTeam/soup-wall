@@ -1,0 +1,16 @@
+{
+  "result": {
+    "protocolVersion": "2025-06-18",
+    "capabilities": {
+      "tools": {
+        "listChanged": true
+      }
+    },
+    "serverInfo": {
+      "name": "secure-filesystem-server",
+      "version": "0.2.0"
+    }
+  },
+  "jsonrpc": "2.0",
+  "id": 1
+}
