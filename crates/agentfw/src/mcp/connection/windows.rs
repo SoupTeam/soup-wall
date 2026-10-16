@@ -163,7 +163,7 @@ fn verify_acl(file: &File) -> Result<()> {
         let trustee = sid_to_string(std::ptr::addr_of!(ace.SidStart).cast_mut().cast())?;
         ensure!(
             trustee == sid || trustee == "S-1-5-18",
-            "DACL grants another account access"
+            "DACL grants another account access: {trustee}"
         );
         offset += header.AceSize as usize;
     }
