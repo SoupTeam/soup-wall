@@ -294,6 +294,122 @@ impl PreparedRead {
     }
 }
 
+/// Narrow create-only reuse of the accepted read traversal. This retains the
+/// original metadata/traverse handles and never requests create, write, delete,
+/// data-read, mapping, or execute operations. Read preparation is unchanged.
+#[derive(Debug)]
+pub(crate) struct CreateParent {
+    directories: Vec<PinnedDirectory>,
+}
+
+impl CreateParent {
+    pub(crate) fn prepare_workspace(workspace: &Path, cwd: &Path) -> anyhow::Result<Self> {
+        let workspace = trusted_absolute(workspace)?;
+        let cwd = trusted_absolute(cwd)?;
+        ensure!(workspace == cwd, "Windows create cwd must equal workspace");
+        let drive = &workspace[..3];
+        let file = open_drive(drive)?;
+        check_local_ntfs(&file)?;
+        let mut directories = vec![pin_directory(file, drive)?];
+        for name in workspace[3..].split('\\') {
+            let parent = directories.last().expect("drive pinned");
+            let path = append_component(&parent.path, name);
+            let file = open_child(&parent.file, name, true, false)?;
+            let pinned = pin_directory(file, &path)?;
+            ensure!(
+                pinned.identity.volume == directories[0].identity.volume,
+                "Windows create workspace volume changed"
+            );
+            directories.push(pinned);
+        }
+        let parent = Self { directories };
+        parent.check_case_insensitive()?;
+        Ok(parent)
+    }
+
+    fn check_case_insensitive(&self) -> anyhow::Result<()> {
+        // FileCaseSensitiveInfo (23), FILE_CASE_SENSITIVE_INFO { ULONG Flags }.
+        // Creating a case alias must remain impossible even if an operator
+        // enabled per-directory NTFS case-sensitive behavior. Older kernels
+        // without this query are unsupported; there is no path-only fallback.
+        let flags: u32 = query_info(self.root(), 23)?;
+        ensure!(
+            flags == 0,
+            "Windows create case-sensitive workspace refused"
+        );
+        Ok(())
+    }
+
+    pub(crate) fn prepare(
+        workspace: &Path,
+        cwd: &Path,
+        original: &str,
+        expected_canonical: &str,
+    ) -> anyhow::Result<(Self, String)> {
+        // Reject raw namespace aliases before the first filesystem operation.
+        let workspace_text = trusted_absolute(workspace)?;
+        let cwd_text = trusted_absolute(cwd)?;
+        ensure!(
+            workspace_text == cwd_text,
+            "Windows create cwd must equal workspace"
+        );
+        let requested = original_target(&cwd_text, original)?;
+        let expected = trusted_absolute(Path::new(expected_canonical))?;
+        ensure!(requested == expected, "Windows create path alias refused");
+        let leaf = requested
+            .strip_prefix(&format!("{workspace_text}\\"))
+            .filter(|leaf| !leaf.contains('\\'))
+            .context("Windows create requires one direct workspace child")?;
+        ensure!(
+            leaf.encode_utf16().count() <= 255,
+            "Windows create leaf is oversized"
+        );
+        validate_components(leaf)?;
+        let parent = Self::prepare_workspace(workspace, cwd)?;
+        Ok((parent, leaf.to_owned()))
+    }
+
+    pub(crate) fn canonical(&self) -> &str {
+        &self.directories.last().expect("workspace pinned").path
+    }
+
+    pub(crate) fn root(&self) -> &File {
+        &self.directories.last().expect("workspace pinned").file
+    }
+
+    pub(crate) fn identity(&self) -> (u64, [u8; 16]) {
+        let identity = &self.directories.last().expect("workspace pinned").identity;
+        (identity.volume, identity.id)
+    }
+
+    pub(crate) fn revalidate(&self) -> anyhow::Result<()> {
+        self.check_case_insensitive()?;
+        for directory in &self.directories {
+            ensure!(
+                check_directory(&directory.file)? == directory.identity,
+                "Windows create parent identity changed"
+            );
+            exact_name(&directory.file, &directory.path)?;
+        }
+        Ok(())
+    }
+}
+
+pub(crate) fn checked_create_stage(
+    file: &File,
+    expected: &str,
+    expected_length: usize,
+) -> anyhow::Result<(u64, [u8; 16])> {
+    let identity = check_regular_file(file)?;
+    let standard: FILE_STANDARD_INFO = query_info(file, FileStandardInfo)?;
+    ensure!(
+        standard.EndOfFile >= 0 && standard.EndOfFile as u64 == expected_length as u64,
+        "Windows create stage length changed"
+    );
+    exact_name(file, expected)?;
+    Ok((identity.volume, identity.id))
+}
+
 fn trusted_absolute(path: &Path) -> anyhow::Result<String> {
     let text = path.to_str().context("Windows read path is not Unicode")?;
     // canonicalize() produces this prefix. It is admitted only for trusted

@@ -7,6 +7,7 @@ on:
       - 'crates/agentfw/**'
       - 'crates/proxy/**'
       - 'scripts/managed-policy-demo.py'
+      - 'scripts/managed-credential-rotation-demo.py'
       - '.github/workflows/managed-policy-demo.yml'
   workflow_dispatch:
 
@@ -21,12 +22,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Verify Rust source formatting
+        run: cargo fmt --all -- --check
       - name: Check standalone demonstration syntax
         run: python3 -m py_compile scripts/managed-policy-demo.py
       - name: Build the real Console and Agent
         run: cargo build --locked -p llm-firewall -p agentfw
       - name: Verify signed delivery and runtime rollback
         run: python3 scripts/managed-policy-demo.py --no-build
+      - name: Verify live token rotation using actual Console and Agent
+        run: |
+          python3 -m py_compile scripts/managed-credential-rotation-demo.py
+          python3 scripts/managed-credential-rotation-demo.py --backend sqlite --no-build
+      - name: Archive non-secret SOU-55 credential witness
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sou55-sqlite-credential-rotation
+          path: target/sou55-managed-credential-rotation.json
+          if-no-files-found: warn
       - name: Archive non-secret witness
         if: always()
         uses: actions/upload-artifact@v4

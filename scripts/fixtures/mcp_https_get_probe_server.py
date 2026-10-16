@@ -40,6 +40,14 @@ def append(path, raw):
         handle.flush()
 
 
+def publish_ready(path, value):
+    # Readers use existence as the readiness signal. Publish only complete JSON.
+    pending = path.with_name(path.name + ".pending")
+    with pending.open("xb") as handle:
+        handle.write(canonical(value) + b"\n")
+    pending.replace(path)
+
+
 def discovery(ledger):
     for path in (ledger, ledger.with_suffix(".input"), ledger.with_suffix(".responses")):
         path.touch(exist_ok=False)
@@ -177,8 +185,8 @@ def receive(args):
         threading.Thread(target=server.shutdown, daemon=True).start()
     signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
-    args.ready.write_bytes(canonical({"port": server.server_address[1], "pid": __import__("os").getpid(),
-                                     "tls": context is not None}) + b"\n")
+    publish_ready(args.ready, {"port": server.server_address[1], "pid": __import__("os").getpid(),
+                              "tls": context is not None})
     record("receiver_started", mode=args.mode, tls=context is not None)
     try:
         server.serve_forever(poll_interval=.05)
