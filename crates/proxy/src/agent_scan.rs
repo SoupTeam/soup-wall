@@ -132,13 +132,24 @@ pub fn openai_tool_calls_strict(response: &serde_json::Value) -> ContentStatus<V
 
                 if let Some(func) = tc.get("function") {
                     let id = tc.get("id").and_then(|v| v.as_str()).map(String::from);
-                    let name = func.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-                    let args_str = func.get("arguments").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-                    
-                    if name.is_empty() { return ContentStatus::Malformed("tool_call missing name"); }
-                    let args = serde_json::from_str(&args_str).unwrap_or(serde_json::Value::String(args_str));
+                    let name = func
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    let args_str = func
+                        .get("arguments")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+
+                    if name.is_empty() {
+                        return ContentStatus::Malformed("tool_call missing name");
+                    }
+                    let args = serde_json::from_str(&args_str)
+                        .unwrap_or(serde_json::Value::String(args_str));
                     calls.push(ToolCall { id, name, args });
-                }else {
+                } else {
                     return ContentStatus::Malformed("tool_call missing function block");
                 }
             }
@@ -221,17 +232,33 @@ pub fn responses_tool_calls_strict(response: &serde_json::Value) -> ContentStatu
     for item in outputs {
         let t = item.get("type").and_then(|v| v.as_str()).unwrap_or("");
         if t == "function_call" {
-            let id = item.get("call_id").and_then(|v| v.as_str()).map(String::from);
-            let name = item.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-            let args_str = item.get("arguments").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+            let id = item
+                .get("call_id")
+                .and_then(|v| v.as_str())
+                .map(String::from);
+            let name = item
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
+            let args_str = item
+                .get("arguments")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
 
             if name.is_empty() {
                 return ContentStatus::Malformed("Responses function_call missing name");
             }
-            
-            let args = serde_json::from_str(&args_str).unwrap_or(serde_json::Value::String(args_str));
+
+            let args =
+                serde_json::from_str(&args_str).unwrap_or(serde_json::Value::String(args_str));
             calls.push(ToolCall { id, name, args });
-        } else if matches!(t, "custom_tool_call" | "local_shell_call" | "computer_call" | "mcp_call") || t.ends_with("_call") {
+        } else if matches!(
+            t,
+            "custom_tool_call" | "local_shell_call" | "computer_call" | "mcp_call"
+        ) || t.ends_with("_call")
+        {
             return ContentStatus::Unsupported("unsupported tool-bearing type in Responses");
         }
     }
@@ -248,14 +275,25 @@ pub fn responses_tool_calls(response: &serde_json::Value) -> Vec<ToolCall> {
 /// Used by the SSE stream frame parser in handlers.rs.
 pub fn responses_tool_call(item: &serde_json::Value) -> Option<ToolCall> {
     if item.get("type").and_then(|v| v.as_str()) == Some("function_call") {
-        let id = item.get("call_id").and_then(|v| v.as_str()).map(String::from);
-        let name = item.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-        let args_str = item.get("arguments").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+        let id = item
+            .get("call_id")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+        let name = item
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+        let args_str = item
+            .get("arguments")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
 
         if name.is_empty() {
             return None;
         }
-        
+
         let args = serde_json::from_str(&args_str).unwrap_or(serde_json::Value::String(args_str));
         Some(ToolCall { id, name, args })
     } else {
@@ -263,20 +301,37 @@ pub fn responses_tool_call(item: &serde_json::Value) -> Option<ToolCall> {
     }
 }
 
-pub fn responses_stream_tool_call_strict(item: &serde_json::Value) -> Result<Option<ToolCall>, &'static str> {
+pub fn responses_stream_tool_call_strict(
+    item: &serde_json::Value,
+) -> Result<Option<ToolCall>, &'static str> {
     let t = item.get("type").and_then(|v| v.as_str()).unwrap_or("");
     if t == "function_call" {
-        let id = item.get("call_id").and_then(|v| v.as_str()).map(String::from);
-        let name = item.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-        let args_str = item.get("arguments").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+        let id = item
+            .get("call_id")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+        let name = item
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+        let args_str = item
+            .get("arguments")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
 
         if name.is_empty() {
             return Ok(None);
         }
-        
+
         let args = serde_json::from_str(&args_str).unwrap_or(serde_json::Value::String(args_str));
         Ok(Some(ToolCall { id, name, args }))
-    } else if matches!(t, "custom_tool_call" | "local_shell_call" | "computer_call" | "mcp_call") || t.ends_with("_call") {
+    } else if matches!(
+        t,
+        "custom_tool_call" | "local_shell_call" | "computer_call" | "mcp_call"
+    ) || t.ends_with("_call")
+    {
         Err("unsupported tool-bearing type in Responses streaming")
     } else {
         Ok(None)
@@ -361,13 +416,18 @@ pub fn inspect_normalized_cycle(
     let calls = events
         .iter()
         .filter_map(|event| match (&event.direction, &event.kind) {
-            (EventDirection::Output, SecurityEventKind::ToolCall { call_id, name, args }) => {
-                Some(ToolCall {
-                    id: call_id.clone(),
-                    name: name.clone(),
-                    args: args.clone(),
-                })
-            }
+            (
+                EventDirection::Output,
+                SecurityEventKind::ToolCall {
+                    call_id,
+                    name,
+                    args,
+                },
+            ) => Some(ToolCall {
+                id: call_id.clone(),
+                name: name.clone(),
+                args: args.clone(),
+            }),
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -467,7 +527,9 @@ pub fn anthropic_tool_calls_strict(response: &serde_json::Value) -> ContentStatu
                 name: name.to_string(),
                 args,
             });
-        } else if matches!(t, "server_tool_use" | "mcp_tool_use" | "computer_use") || t.contains("tool_use") {
+        } else if matches!(t, "server_tool_use" | "mcp_tool_use" | "computer_use")
+            || t.contains("tool_use")
+        {
             return ContentStatus::Unsupported("unsupported Anthropic tool_use type");
         }
     }
@@ -510,7 +572,11 @@ impl PartialToolCall {
         } else {
             serde_json::from_str(&self.args).unwrap_or(serde_json::Value::String(self.args))
         };
-        Some(ToolCall { id: self.id, name, args })
+        Some(ToolCall {
+            id: self.id,
+            name,
+            args,
+        })
     }
 }
 
@@ -584,17 +650,34 @@ impl StreamingToolCalls {
                         }
                     }
 
-                    let index = call.get("index").and_then(serde_json::Value::as_u64).unwrap_or(0);
-                    let id = call.get("id").and_then(serde_json::Value::as_str).map(String::from);
-                    let name = call.pointer("/function/name").and_then(serde_json::Value::as_str).filter(|name| !name.is_empty()).map(str::to_string);
-                    let fragment = call.pointer("/function/arguments").and_then(serde_json::Value::as_str).unwrap_or_default();
-                    
+                    let index = call
+                        .get("index")
+                        .and_then(serde_json::Value::as_u64)
+                        .unwrap_or(0);
+                    let id = call
+                        .get("id")
+                        .and_then(serde_json::Value::as_str)
+                        .map(String::from);
+                    let name = call
+                        .pointer("/function/name")
+                        .and_then(serde_json::Value::as_str)
+                        .filter(|name| !name.is_empty())
+                        .map(str::to_string);
+                    let fragment = call
+                        .pointer("/function/arguments")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default();
+
                     if !fragment.is_empty() {
                         self.charge(fragment.len())?;
                     }
                     let entry = self.partial.entry(index).or_default();
-                    if id.is_some() { entry.id = id; }
-                    if let Some(name) = name { entry.name = Some(name); }
+                    if id.is_some() {
+                        entry.id = id;
+                    }
+                    if let Some(name) = name {
+                        entry.name = Some(name);
+                    }
                     entry.args.push_str(fragment);
                 }
             }
@@ -613,15 +696,24 @@ impl StreamingToolCalls {
     }
 
     fn push_anthropic(&mut self, event: &serde_json::Value) -> Result<Vec<ToolCall>, &'static str> {
-        let index = event.get("index").and_then(serde_json::Value::as_u64).unwrap_or(0);
+        let index = event
+            .get("index")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0);
         match event.get("type").and_then(serde_json::Value::as_str) {
             Some("content_block_start") => {
                 let Some(block) = event.get("content_block") else {
                     return Ok(Vec::new());
                 };
-                let t = block.get("type").and_then(serde_json::Value::as_str).unwrap_or("");
+                let t = block
+                    .get("type")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("");
                 if t == "tool_use" {
-                    let id = block.get("id").and_then(serde_json::Value::as_str).map(String::from);
+                    let id = block
+                        .get("id")
+                        .and_then(serde_json::Value::as_str)
+                        .map(String::from);
                     let Some(name) = block.get("name").and_then(serde_json::Value::as_str) else {
                         return Ok(Vec::new());
                     };
@@ -635,7 +727,9 @@ impl StreamingToolCalls {
                         },
                     );
                     Ok(Vec::new())
-                } else if matches!(t, "server_tool_use" | "mcp_tool_use" | "computer_use") || t.contains("tool_use") {
+                } else if matches!(t, "server_tool_use" | "mcp_tool_use" | "computer_use")
+                    || t.contains("tool_use")
+                {
                     Err("unsupported Anthropic tool type in stream")
                 } else {
                     Ok(Vec::new())
