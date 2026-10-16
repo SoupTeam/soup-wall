@@ -4833,7 +4833,23 @@ async fn scoped_server_never_inherits_authority_or_host_session_environment() {
 fn scoped_mint_accepts_hyphen_prefixed_instance_ids() {
     let dir = tempfile::tempdir().unwrap();
     let home = dir.path().join(".agentfw");
-    std::fs::create_dir_all(&home).unwrap();
+    // Elevated Windows runners otherwise create an Administrators-owned home.
+    // Use the real bootstrap so the owner and DACL match a supported profile.
+    let bootstrap = std::process::Command::new(env!("CARGO_BIN_EXE_agentfw"))
+        .arg("install")
+        .env(
+            if cfg!(windows) { "USERPROFILE" } else { "HOME" },
+            dir.path(),
+        )
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .unwrap();
+    assert!(
+        bootstrap.success(),
+        "fixture private Agent bootstrap failed"
+    );
     agentfw::token::load_or_create(&home.join("native-token")).unwrap();
     let output = authority_cli(
         dir.path(),
