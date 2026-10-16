@@ -58,7 +58,7 @@ def run(args):
             directory = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="soup-scim-")))
             os.chmod(directory, 0o700)
             env = {key: value for key, value in os.environ.items()
-                   if key in ("PATH", "SystemRoot", "WINDIR", "TEMP", "TMP", "HOME", "LANG")}
+                   if key.upper() in ("PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "HOME", "LANG")}
             env["RUST_LOG"] = "off"
             target = str(directory / "gateway.sqlite")
             if args.backend == "postgres":
@@ -88,9 +88,13 @@ def run(args):
             def read_lines():
                 for line in child.stdout:
                     lines.put(line)
+                lines.put(None)
             reader = threading.Thread(target=read_lines, daemon=True)
             reader.start()
-            credentials = json.loads(lines.get(timeout=45))
+            startup = lines.get(timeout=45)
+            if startup is None:
+                raise RuntimeError("fixture exited before readiness")
+            credentials = json.loads(startup)
             check("owned-loopback-listener", credentials["base_url"].startswith("http://127.0.0.1:"))
             http = stack.enter_context(Client(base_url=credentials["base_url"],
                 headers={"Authorization": "Bearer " + credentials["token"]}, timeout=10, trust_env=False, follow_redirects=False))
