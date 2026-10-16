@@ -7,6 +7,7 @@ on:
       - 'crates/agentfw/**'
       - 'crates/proxy/**'
       - 'scripts/managed-policy-demo.py'
+      - 'scripts/managed-credential-rotation-demo.py'
       - '.github/workflows/managed-policy-demo.yml'
   workflow_dispatch:
 
@@ -27,6 +28,17 @@ jobs:
         run: cargo build --locked -p llm-firewall -p agentfw
       - name: Verify signed delivery and runtime rollback
         run: python3 scripts/managed-policy-demo.py --no-build
+      - name: Verify live token rotation using actual Console and Agent
+        run: |
+          python3 -m py_compile scripts/managed-credential-rotation-demo.py
+          python3 scripts/managed-credential-rotation-demo.py --backend sqlite --no-build
+      - name: Archive non-secret SOU-55 credential witness
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sou55-sqlite-credential-rotation
+          path: target/sou55-managed-credential-rotation.json
+          if-no-files-found: warn
       - name: Archive non-secret witness
         if: always()
         uses: actions/upload-artifact@v4
