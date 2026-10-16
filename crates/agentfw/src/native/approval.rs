@@ -1117,7 +1117,7 @@ mod tests {
                 &hook_style,
                 now_ms(),
                 60_000,
-                "hook-nonce".into(),
+                crate::token::generate(),
             )
             .unwrap();
         assert!(!env.call("s1", "delete_note", args, None).unwrap().release);
