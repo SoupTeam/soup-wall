@@ -154,6 +154,22 @@ pub struct Config {
 pub struct NativeCfg {
     pub registry_path: PathBuf,
     pub registry_sha256: String,
+    /// Opt-in single-use operator approval for native Ask calls. Absent = refusal.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval: Option<NativeApprovalCfg>,
+}
+
+/// Bounded pending-approval lifecycle for native MCP Ask calls (SOU-48).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct NativeApprovalCfg {
+    /// Lifetime of one pending approval, 1..=300 seconds.
+    #[serde(default = "default_native_approval_ttl")]
+    pub ttl_seconds: u64,
+}
+
+fn default_native_approval_ttl() -> u64 {
+    120
 }
 
 impl Default for Config {
@@ -208,6 +224,12 @@ impl Config {
                     && crate::native::is_digest(&native.registry_sha256),
                 "native registry requires an absolute operator path and lowercase SHA-256"
             );
+            if let Some(approval) = &native.approval {
+                anyhow::ensure!(
+                    (1..=300).contains(&approval.ttl_seconds),
+                    "native approval ttl_seconds must be 1..=300"
+                );
+            }
         }
         let ok = self.bind == "127.0.0.1" || self.bind == "::1" || self.bind == "localhost";
         anyhow::ensure!(
