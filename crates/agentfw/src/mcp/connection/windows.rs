@@ -159,8 +159,8 @@ fn verify_acl(file: &File) -> Result<()> {
                 && header.AceSize as usize <= size.AclBytesInUse as usize - offset,
             "unsupported DACL entry"
         );
-        let ace = unsafe { std::ptr::read_unaligned(raw.cast::<ACCESS_ALLOWED_ACE>()) };
-        let trustee = sid_to_string((&ace.SidStart as *const u32).cast_mut().cast())?;
+        let ace = unsafe { &*raw.cast::<ACCESS_ALLOWED_ACE>() };
+        let trustee = sid_to_string(std::ptr::addr_of!(ace.SidStart).cast_mut().cast())?;
         ensure!(
             trustee == sid || trustee == "S-1-5-18",
             "DACL grants another account access"
@@ -208,6 +208,11 @@ fn open(path: &Path, create: bool, exclusive: bool) -> Result<File> {
     let access = FILE_READ_DATA
         | FILE_READ_ATTRIBUTES
         | READ_CONTROL
+        | if create {
+            windows_sys::Win32::Storage::FileSystem::WRITE_DAC
+        } else {
+            0
+        }
         | if create || exclusive {
             FILE_WRITE_DATA
         } else {
@@ -234,6 +239,9 @@ fn open(path: &Path, create: bool, exclusive: bool) -> Result<File> {
         std::io::Error::last_os_error()
     );
     let file = unsafe { File::from_raw_handle(handle) };
+    if create {
+        acl.apply(file.as_raw_handle())?;
+    }
     identity(&file, false)?;
     checked_create_stage(
         &file,
@@ -1144,8 +1152,14 @@ mod tests {
 
     fn fixture() -> (tempfile::TempDir, PathBuf) {
         let root = tempfile::tempdir().unwrap();
-        let profile = root.path().join("owned profile");
-        crate::private_file_windows::ensure_private_directory(&profile).unwrap();
+        let profile = if crate::private_file_windows::ensure_private_directory(root.path()).is_ok()
+        {
+            root.path().to_path_buf()
+        } else {
+            let profile = root.path().join("owned profile");
+            crate::private_file_windows::ensure_private_directory(&profile).unwrap();
+            profile
+        };
         let path = profile.join("profile with spaces.json");
         let value = json!({"mcpServers":{"notes":{"type":"stdio","command":r"C:\Fixture\server.exe","args":["a b","\u{65e5}\u{672c}\u{8a9e}"]},"other":{"command":"untouched","env":{"TOKEN":"fixture-only"}}},"settings":{"theme":"light"}});
         write_new(&path, &serde_json::to_vec(&value).unwrap()).unwrap();
