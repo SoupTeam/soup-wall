@@ -800,13 +800,14 @@ pub async fn chat_completions(
     }
 
     // [P1 FIX]: Strict validation BEFORE sending upstream or reserving spend.
-    let tool_results = match crate::agent_scan::openai_tool_results_strict(&decision.request).into_result() {
-        Ok(res) => res,
-        Err(reason) => {
-            audit_block(&request_id, 0, vec![reason.into()], vec![], vec![], started);
-            return (StatusCode::BAD_REQUEST, Json(error_body(reason))).into_response();
-        }
-    };
+    let tool_results =
+        match crate::agent_scan::openai_tool_results_strict(&decision.request).into_result() {
+            Ok(res) => res,
+            Err(reason) => {
+                audit_block(&request_id, 0, vec![reason.into()], vec![], vec![], started);
+                return (StatusCode::BAD_REQUEST, Json(error_body(reason))).into_response();
+            }
+        };
 
     let spend_reservation = match reserve_spend(
         &state,
@@ -896,7 +897,7 @@ pub async fn chat_completions(
         return (StatusCode::BAD_GATEWAY, Json(error_body(&reason))).into_response();
     }
     let assistant = crate::events::output_text(&events);
-    
+
     // Output policy is correctly placed here for non-streaming
     if let Some(reason) = decide_output(&state.firewall, &assistant) {
         audit_output_block(&request_id, &reason, started);
@@ -1064,7 +1065,7 @@ pub async fn responses(
         return (StatusCode::BAD_GATEWAY, Json(error_body(&reason))).into_response();
     }
     let assistant = crate::events::output_text(&events);
-    
+
     // Output policy is correctly placed here for non-streaming
     if let Some(reason) = decide_output(&state.firewall, &assistant) {
         audit_output_block(&request_id, &reason, started);
@@ -1136,13 +1137,16 @@ pub async fn messages(
     // [P1 FIX]: Validate protected request content BEFORE sending it upstream or reserving spend.
     // This strictly parses tool results for both streaming and non-streaming paths.
     let tool_results = match serde_json::to_value(&decision.request) {
-        Ok(req_val) => match crate::agent_scan::anthropic_tool_results_strict(&req_val).into_result() {
-            Ok(res) => res,
-            Err(reason) => {
-                audit_block(&request_id, 0, vec![reason.into()], vec![], vec![], started);
-                return (StatusCode::BAD_REQUEST, Json(anthropic_error_body(reason))).into_response();
+        Ok(req_val) => {
+            match crate::agent_scan::anthropic_tool_results_strict(&req_val).into_result() {
+                Ok(res) => res,
+                Err(reason) => {
+                    audit_block(&request_id, 0, vec![reason.into()], vec![], vec![], started);
+                    return (StatusCode::BAD_REQUEST, Json(anthropic_error_body(reason)))
+                        .into_response();
+                }
             }
-        },
+        }
         Err(_) => Vec::new(),
     };
 
@@ -1235,7 +1239,7 @@ pub async fn messages(
             return (StatusCode::BAD_GATEWAY, Json(anthropic_error_body(reason))).into_response();
         }
     };
-    
+
     if let Some(reason) = capability_refuse_events(&state, &request_id, &events) {
         audit_output_block(&request_id, &reason, started);
         return (StatusCode::BAD_GATEWAY, Json(anthropic_error_body(&reason))).into_response();
@@ -1642,13 +1646,15 @@ async fn proxy_responses_stream(
                         }
                         Some("response.output_item.done") => {
                             if let Some(item) = event.get("item") {
-                                if item.get("type").and_then(serde_json::Value::as_str)
-                                    == Some("function_call")
-                                {
-                                    in_flight_function_calls =
-                                        in_flight_function_calls.saturating_sub(1);
-                                    
-                                    if let Some(call) = crate::agent_scan::responses_tool_call(item) {
+                                let item_type = item
+                                    .get("type")
+                                    .and_then(serde_json::Value::as_str)
+                                    .unwrap_or("");
+                                match crate::agent_scan::responses_stream_tool_call_strict(item) {
+                                    Ok(Some(call)) => {
+                                        in_flight_function_calls =
+                                            in_flight_function_calls.saturating_sub(1);
+
                                         if let Some(reason) = capability_refuse_calls(
                                             &task_state,
                                             &request_id,
@@ -1671,8 +1677,16 @@ async fn proxy_responses_stream(
                                                 break;
                                             }
                                         }
-                                    } else {
-                                        block_reason = Some("malformed function_call item".to_string());
+                                    }
+                                    Ok(None) => {
+                                        if item_type == "function_call" {
+                                            block_reason =
+                                                Some("malformed function_call item".to_string());
+                                            break;
+                                        }
+                                    }
+                                    Err(reason) => {
+                                        block_reason = Some(reason.to_string());
                                         break;
                                     }
                                 }

@@ -82,7 +82,9 @@ impl<T> ContentStatus<T> {
 }
 
 /// Tool outputs in an OpenAI request: `role:"tool"` messages' string content.
-pub fn openai_tool_results_strict(request: &crate::openai::ChatRequest) -> ContentStatus<Vec<String>> {
+pub fn openai_tool_results_strict(
+    request: &crate::openai::ChatRequest,
+) -> ContentStatus<Vec<String>> {
     let mut results = Vec::new();
     for msg in &request.messages {
         if msg.role == "tool" {
@@ -97,14 +99,16 @@ pub fn openai_tool_results_strict(request: &crate::openai::ChatRequest) -> Conte
 }
 
 pub fn openai_tool_results(request: &crate::openai::ChatRequest) -> Vec<String> {
-    openai_tool_results_strict(request).into_result().unwrap_or_default()
+    openai_tool_results_strict(request)
+        .into_result()
+        .unwrap_or_default()
 }
 
 pub fn openai_tool_calls_strict(response: &serde_json::Value) -> ContentStatus<Vec<ToolCall>> {
     let mut calls = Vec::new();
     let choices = match response.get("choices").and_then(|v| v.as_array()) {
         Some(c) => c,
-        None => return ContentStatus::Supported(calls), 
+        None => return ContentStatus::Supported(calls),
     };
 
     for choice in choices {
@@ -112,23 +116,37 @@ pub fn openai_tool_calls_strict(response: &serde_json::Value) -> ContentStatus<V
             Some(m) => m,
             None => continue,
         };
-        
+
         if let Some(tool_calls) = msg.get("tool_calls").and_then(|v| v.as_array()) {
             for tc in tool_calls {
-                let tool_type = tc.get("type").and_then(|v| v.as_str()).unwrap_or("function");
+                let tool_type = tc
+                    .get("type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("function");
                 if tool_type != "function" {
-                    return ContentStatus::Unsupported("unsupported tool type in OpenAI response (only 'function' allowed)");
+                    return ContentStatus::Unsupported(
+                        "unsupported tool type in OpenAI response (only 'function' allowed)",
+                    );
                 }
-                
+
                 if let Some(func) = tc.get("function") {
-                    let name = func.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-                    let args_str = func.get("arguments").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-                    
+                    let name = func
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    let args_str = func
+                        .get("arguments")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+
                     if name.is_empty() {
                         return ContentStatus::Malformed("tool_call missing function name");
                     }
-                    
-                    let args = serde_json::from_str(&args_str).unwrap_or(serde_json::Value::String(args_str));
+
+                    let args = serde_json::from_str(&args_str)
+                        .unwrap_or(serde_json::Value::String(args_str));
                     calls.push(ToolCall { name, args });
                 } else {
                     return ContentStatus::Malformed("tool_call missing function block");
@@ -140,11 +158,14 @@ pub fn openai_tool_calls_strict(response: &serde_json::Value) -> ContentStatus<V
 }
 
 pub fn openai_tool_calls(response: &serde_json::Value) -> Vec<ToolCall> {
-    openai_tool_calls_strict(response).into_result().unwrap_or_default()
+    openai_tool_calls_strict(response)
+        .into_result()
+        .unwrap_or_default()
 }
 
-
-pub fn responses_tool_results_strict(request: &crate::responses::ResponsesRequest) -> ContentStatus<Vec<String>> {
+pub fn responses_tool_results_strict(
+    request: &crate::responses::ResponsesRequest,
+) -> ContentStatus<Vec<String>> {
     let mut results = Vec::new();
     let items = match request.input.as_ref().and_then(|v| v.as_array()) {
         Some(arr) => arr,
@@ -152,7 +173,8 @@ pub fn responses_tool_results_strict(request: &crate::responses::ResponsesReques
     };
 
     for item in items {
-        if item.get("type").and_then(|v| v.as_str()) == Some("function_call_output") {
+        let t = item.get("type").and_then(|v| v.as_str()).unwrap_or("");
+        if t == "function_call_output" {
             match item.get("output") {
                 Some(serde_json::Value::String(text)) => results.push(text.clone()),
                 Some(serde_json::Value::Array(arr)) => {
@@ -161,23 +183,42 @@ pub fn responses_tool_results_strict(request: &crate::responses::ResponsesReques
                             if let Some(text) = block.get("text").and_then(|v| v.as_str()) {
                                 results.push(text.to_string());
                             } else {
-                                return ContentStatus::Malformed("input_text block missing text field");
+                                return ContentStatus::Malformed(
+                                    "input_text block missing text field",
+                                );
                             }
                         } else {
                             return ContentStatus::Unsupported("multimedia or non-string tool results are not supported in Responses");
                         }
                     }
                 }
-                Some(_) => return ContentStatus::Unsupported("multimedia or non-string tool results are not supported in Responses"),
-                None => return ContentStatus::Malformed("function_call_output missing output field"),
+                Some(_) => {
+                    return ContentStatus::Unsupported(
+                        "multimedia or non-string tool results are not supported in Responses",
+                    )
+                }
+                None => {
+                    return ContentStatus::Malformed("function_call_output missing output field")
+                }
             }
+        } else if matches!(
+            t,
+            "custom_tool_call_output"
+                | "local_shell_call_output"
+                | "computer_call_output"
+                | "mcp_call_output"
+        ) || t.contains("tool")
+        {
+            return ContentStatus::Unsupported("unsupported tool-result type in Responses");
         }
     }
     ContentStatus::Supported(results)
 }
 
 pub fn responses_tool_results(request: &crate::responses::ResponsesRequest) -> Vec<String> {
-    responses_tool_results_strict(request).into_result().unwrap_or_default()
+    responses_tool_results_strict(request)
+        .into_result()
+        .unwrap_or_default()
 }
 
 pub fn responses_tool_calls_strict(response: &serde_json::Value) -> ContentStatus<Vec<ToolCall>> {
@@ -188,23 +229,41 @@ pub fn responses_tool_calls_strict(response: &serde_json::Value) -> ContentStatu
     };
 
     for item in outputs {
-        if item.get("type").and_then(|v| v.as_str()) == Some("function_call") {
-            let name = item.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-            let args_str = item.get("arguments").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+        let t = item.get("type").and_then(|v| v.as_str()).unwrap_or("");
+        if t == "function_call" {
+            let name = item
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
+            let args_str = item
+                .get("arguments")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
 
             if name.is_empty() {
                 return ContentStatus::Malformed("Responses function_call missing name");
             }
-            
-            let args = serde_json::from_str(&args_str).unwrap_or(serde_json::Value::String(args_str));
+
+            let args =
+                serde_json::from_str(&args_str).unwrap_or(serde_json::Value::String(args_str));
             calls.push(ToolCall { name, args });
+        } else if matches!(
+            t,
+            "custom_tool_call" | "local_shell_call" | "computer_call" | "mcp_call"
+        ) || t.ends_with("_call")
+        {
+            return ContentStatus::Unsupported("unsupported tool-bearing type in Responses");
         }
     }
     ContentStatus::Supported(calls)
 }
 
 pub fn responses_tool_calls(response: &serde_json::Value) -> Vec<ToolCall> {
-    responses_tool_calls_strict(response).into_result().unwrap_or_default()
+    responses_tool_calls_strict(response)
+        .into_result()
+        .unwrap_or_default()
 }
 
 /// Convert a single Responses output item into a ToolCall if it is a function_call.
@@ -222,6 +281,25 @@ pub fn responses_tool_call(item: &serde_json::Value) -> Option<ToolCall> {
         Some(ToolCall { name, args })
     } else {
         None
+    }
+}
+
+pub fn responses_stream_tool_call_strict(item: &serde_json::Value) -> Result<Option<ToolCall>, &'static str> {
+    let t = item.get("type").and_then(|v| v.as_str()).unwrap_or("");
+    if t == "function_call" {
+        let name = item.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+        let args_str = item.get("arguments").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+
+        if name.is_empty() {
+            return Ok(None);
+        }
+        
+        let args = serde_json::from_str(&args_str).unwrap_or(serde_json::Value::String(args_str));
+        Ok(Some(ToolCall { name, args }))
+    } else if matches!(t, "custom_tool_call" | "local_shell_call" | "computer_call" | "mcp_call") || t.ends_with("_call") {
+        Err("unsupported tool-bearing type in Responses streaming")
+    } else {
+        Ok(None)
     }
 }
 
@@ -323,40 +401,65 @@ pub fn anthropic_tool_results_strict(request: &serde_json::Value) -> ContentStat
     let Some(msgs) = request.get("messages").and_then(|m| m.as_array()) else {
         return ContentStatus::Supported(out);
     };
-    
+
     for m in msgs {
         let Some(blocks) = m.get("content").and_then(|c| c.as_array()) else {
             continue;
         };
         for b in blocks {
-            if b.get("type").and_then(|t| t.as_str()) != Some("tool_result") {
-                continue;
-            }
-            match b.get("content") {
-                Some(serde_json::Value::String(s)) => {
-                    if !s.is_empty() { out.push(s.clone()); }
-                }
-                Some(serde_json::Value::Array(inner)) => {
-                    if inner.is_empty() {
-                        return ContentStatus::Malformed("empty array in tool_result is not valid");
-                    }
-                    for ib in inner {
-                        match ib.get("type").and_then(|t| t.as_str()) {
-                            Some("text") => {
-                                if let Some(t) = ib.get("text").and_then(|t| t.as_str()) {
-                                    if !t.is_empty() { out.push(t.to_string()); }
-                                } else {
-                                    return ContentStatus::Malformed("missing text field in text block");
-                                }
-                            }
-                            Some("image") | Some("document") => {
-                                return ContentStatus::Unsupported("multimodal tool results are strictly prohibited");
-                            }
-                            _ => return ContentStatus::Unsupported("unrecognized block type inside tool_result"),
+            let t = b.get("type").and_then(|t| t.as_str()).unwrap_or("");
+            if t == "tool_result" {
+                // ... (оставь внутреннюю обработку tool_result без изменений, начиная с match b.get("content"))
+                match b.get("content") {
+                    Some(serde_json::Value::String(s)) => {
+                        if !s.is_empty() {
+                            out.push(s.clone());
                         }
                     }
+                    Some(serde_json::Value::Array(inner)) => {
+                        if inner.is_empty() {
+                            return ContentStatus::Malformed(
+                                "empty array in tool_result is not valid",
+                            );
+                        }
+                        for ib in inner {
+                            match ib.get("type").and_then(|t| t.as_str()) {
+                                Some("text") => {
+                                    if let Some(t) = ib.get("text").and_then(|t| t.as_str()) {
+                                        if !t.is_empty() {
+                                            out.push(t.to_string());
+                                        }
+                                    } else {
+                                        return ContentStatus::Malformed(
+                                            "missing text field in text block",
+                                        );
+                                    }
+                                }
+                                Some("image") | Some("document") => {
+                                    return ContentStatus::Unsupported(
+                                        "multimodal tool results are strictly prohibited",
+                                    );
+                                }
+                                _ => {
+                                    return ContentStatus::Unsupported(
+                                        "unrecognized block type inside tool_result",
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        return ContentStatus::Malformed(
+                            "tool_result content must be a string or typed array",
+                        )
+                    }
                 }
-                _ => return ContentStatus::Malformed("tool_result content must be a string or typed array"),
+            } else if matches!(
+                t,
+                "server_tool_result" | "mcp_tool_result" | "computer_result"
+            ) || t.contains("tool_result")
+            {
+                return ContentStatus::Unsupported("unsupported Anthropic tool_result type");
             }
         }
     }
@@ -371,17 +474,21 @@ pub fn anthropic_tool_calls_strict(response: &serde_json::Value) -> ContentStatu
         return ContentStatus::Supported(out);
     };
     for b in blocks {
-        if b.get("type").and_then(|t| t.as_str()) != Some("tool_use") {
-            continue;
+        let t = b.get("type").and_then(|t| t.as_str()).unwrap_or("");
+        if t == "tool_use" {
+            let Some(name) = b.get("name").and_then(|n| n.as_str()) else {
+                return ContentStatus::Malformed("tool_use block missing 'name' field");
+            };
+            let args = b.get("input").cloned().unwrap_or(serde_json::Value::Null);
+            out.push(ToolCall {
+                name: name.to_string(),
+                args,
+            });
+        } else if matches!(t, "server_tool_use" | "mcp_tool_use" | "computer_use")
+            || t.contains("tool_use")
+        {
+            return ContentStatus::Unsupported("unsupported Anthropic tool_use type");
         }
-        let Some(name) = b.get("name").and_then(|n| n.as_str()) else {
-            return ContentStatus::Malformed("tool_use block missing 'name' field");
-        };
-        let args = b.get("input").cloned().unwrap_or(serde_json::Value::Null);
-        out.push(ToolCall {
-            name: name.to_string(),
-            args,
-        });
     }
     ContentStatus::Supported(out)
 }
@@ -542,21 +649,30 @@ impl StreamingToolCalls {
                 let Some(block) = event.get("content_block") else {
                     return Ok(Vec::new());
                 };
-                if block.get("type").and_then(serde_json::Value::as_str) != Some("tool_use") {
-                    return Ok(Vec::new());
+                let t = block
+                    .get("type")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("");
+                if t == "tool_use" {
+                    let Some(name) = block.get("name").and_then(serde_json::Value::as_str) else {
+                        return Ok(Vec::new());
+                    };
+                    self.partial.insert(
+                        index,
+                        PartialToolCall {
+                            name: Some(name.to_string()),
+                            args: String::new(),
+                            initial_input: block.get("input").cloned(),
+                        },
+                    );
+                    Ok(Vec::new())
+                } else if matches!(t, "server_tool_use" | "mcp_tool_use" | "computer_use")
+                    || t.contains("tool_use")
+                {
+                    Err("unsupported Anthropic tool type in stream")
+                } else {
+                    Ok(Vec::new())
                 }
-                let Some(name) = block.get("name").and_then(serde_json::Value::as_str) else {
-                    return Ok(Vec::new());
-                };
-                self.partial.insert(
-                    index,
-                    PartialToolCall {
-                        name: Some(name.to_string()),
-                        args: String::new(),
-                        initial_input: block.get("input").cloned(),
-                    },
-                );
-                Ok(Vec::new())
             }
             Some("content_block_delta") => {
                 if event
@@ -608,11 +724,15 @@ fn verdict_rank(v: Verdict) -> u8 {
 
 // Wrappers to satisfy existing tests and internal calls
 pub fn anthropic_tool_results(request: &serde_json::Value) -> Vec<String> {
-    anthropic_tool_results_strict(request).into_result().unwrap_or_default()
+    anthropic_tool_results_strict(request)
+        .into_result()
+        .unwrap_or_default()
 }
 
 pub fn anthropic_tool_calls(response: &serde_json::Value) -> Vec<ToolCall> {
-    anthropic_tool_calls_strict(response).into_result().unwrap_or_default()
+    anthropic_tool_calls_strict(response)
+        .into_result()
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -949,11 +1069,11 @@ mod tests {
         });
 
         let result = anthropic_tool_results_strict(&malicious_payload);
-        
+
         match result {
             ContentStatus::Unsupported(reason) => {
                 assert!(reason.contains("multimodal"));
-            },
+            }
             _ => panic!("Expected Unsupported multimedia error, got: {:?}", result),
         }
     }

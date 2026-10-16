@@ -361,4 +361,3 @@ fn execution_evidence_rejects_effects_after_deny_or_unapproved_ask() {
         }
     }
 }
-
