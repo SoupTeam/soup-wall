@@ -400,7 +400,7 @@ impl ManagedSync {
             .context("no applied runtime policy")?;
         let response = client
             .post(self.endpoint("agent/v1/policy/ack")?)
-            .bearer_auth(&token)
+            .bearer_auth(token)
             .json(&json!({
                 "deployment_sequence": current.deployment_sequence,
                 "revision": current.revision,
@@ -425,7 +425,7 @@ impl ManagedSync {
                 Ok(url) => url,
                 Err(_) => return,
             })
-            .bearer_auth(&token)
+            .bearer_auth(token)
             .json(&json!({
                 "deployment_sequence": bundle.deployment_sequence,
                 "revision": bundle.revision,
@@ -443,7 +443,7 @@ impl ManagedSync {
         let token = self.credential_source.load().map_err(|_| CredentialUnavailable)?;
         let mut response = client
             .get(self.endpoint("agent/v1/policy")?)
-            .bearer_auth(&token)
+            .bearer_auth(token.as_str())
             .send()
             .await
             .context("managed Console unavailable")?;
