@@ -209,7 +209,7 @@ impl RootJsonScan {
         )
     }
 
-    pub fn is_protected_pretooluse(&self, raw: &str) -> bool {
+    pub fn is_protected_pretooluse(&self, _raw: &str) -> bool {
         if !self.opened_object {
             return false;
         }
@@ -237,9 +237,6 @@ impl RootJsonScan {
         if READ_ONLY.contains(&tool) {
             return false;
         }
-        if tool == "Bash" {
-            return raw.contains("\"command\"");
-        }
         true
     }
 
@@ -250,20 +247,42 @@ impl RootJsonScan {
             .get("tool_name")
             .or_else(|| self.string_fields.get("tool"))
         {
-            tools.push(t.as_str());
+            tools.push(t.clone());
         }
         if let Some(all_t) = self.all_string_fields.get("tool_name") {
             for t in all_t {
-                tools.push(t.as_str());
+                if !tools.contains(t) {
+                    tools.push(t.clone());
+                }
             }
         }
         if let Some(all_t) = self.all_string_fields.get("tool") {
             for t in all_t {
-                tools.push(t.as_str());
+                if !tools.contains(t) {
+                    tools.push(t.clone());
+                }
+            }
+        }
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(raw) {
+            if let Some(t) = v
+                .get("tool_name")
+                .or_else(|| v.get("tool"))
+                .and_then(|t| t.as_str())
+            {
+                if !tools.iter().any(|x| x == t) {
+                    tools.push(t.to_string());
+                }
             }
         }
         if tools.is_empty() {
             return false;
+        }
+        if self.duplicate_keys.contains("tool_name")
+            || self.duplicate_keys.contains("tool")
+            || self.incomplete_keys.contains("tool_name")
+            || self.incomplete_keys.contains("tool")
+        {
+            return true;
         }
         const READ_ONLY: &[&str] = &[
             "Read",
@@ -274,15 +293,9 @@ impl RootJsonScan {
             "WebFetch",
             "WebSearch",
         ];
-        for tool in tools {
-            if !READ_ONLY.contains(&tool) {
-                if tool == "Bash" {
-                    if raw.contains("\"command\"") {
-                        return true;
-                    }
-                } else {
-                    return true;
-                }
+        for tool in &tools {
+            if !READ_ONLY.contains(&tool.as_str()) {
+                return true;
             }
         }
         false
@@ -372,15 +385,30 @@ fn skip_primitive(bytes: &[u8], start: usize) -> usize {
 }
 
 fn mark_lossy_provenance(st: &AppState, scan: &RootJsonScan) {
+    let is_unambiguous = scan.opened_object
+        && scan.closed_object
+        && scan.duplicate_keys.is_empty()
+        && scan.incomplete_keys.is_empty();
+
     let mut sessions_to_mark = Vec::new();
-    if let Some(session_id) = scan.get_root_string("session_id").filter(|s| !s.is_empty()) {
-        sessions_to_mark.push(session_id.to_string());
-    } else {
+
+    if is_unambiguous {
+        if let Some(session_id) = scan.get_root_string("session_id").filter(|s| !s.is_empty()) {
+            sessions_to_mark.push(session_id.to_string());
+        }
+    }
+
+    if !is_unambiguous || sessions_to_mark.is_empty() {
         if let Some(vals) = scan.all_string_fields.get("session_id") {
             for sid in vals {
                 if !sid.is_empty() && !sessions_to_mark.contains(sid) {
                     sessions_to_mark.push(sid.clone());
                 }
+            }
+        }
+        if let Some(sid) = scan.string_fields.get("session_id") {
+            if !sid.is_empty() && !sessions_to_mark.contains(sid) {
+                sessions_to_mark.push(sid.clone());
             }
         }
         // Snapshot active hosts before acquiring firewall lock to prevent deadlock

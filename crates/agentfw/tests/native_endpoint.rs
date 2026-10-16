@@ -3884,3 +3884,61 @@ async fn reviewe358_unseen_duplicate_must_not_make_partial_root_proven_safe() {
         "unclosed root prefix was accepted as proof before duplicate tail: {r}"
     );
 }
+
+#[tokio::test]
+async fn review2c_escaped_command_key_must_not_disable_malformed_refusal() {
+    let f = Fixture::new(ALLOW);
+    for key in [r#"command"#, r#"\u0063ommand"#] {
+        let body=format!("{{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{{\"{key}\":\"rm -rf /tmp/reviewer-no-execution\"}}}}");
+        let decoded: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(
+            decoded["tool_input"]["command"],
+            "rm -rf /tmp/reviewer-no-execution"
+        );
+        assert!(
+            serde_json::from_str::<agentfw::hook::HookPayload>(&body).is_err(),
+            "session is deliberately missing"
+        );
+        let (s, r) = review137_raw_hook(&f, Body::from(body)).await;
+        assert_eq!(s, StatusCode::OK);
+        assert_eq!(
+            r["hookSpecificOutput"]["permissionDecision"], "deny",
+            "equivalent command-key spelling {key} bypassed protected refusal: {r}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn review2c_unclosed_session_prefix_must_not_skip_active_host_loss_floor() {
+    let f = Fixture::configured(
+        ALLOW,
+        Config {
+            enforce: true,
+            max_body_bytes: 1024,
+            ..Config::default()
+        },
+    );
+    let (s, r) = f
+        .post(&reviewer_start(&f, "b", &["delete_document"], 60_000))
+        .await;
+    assert_allow(s, &r);
+    let body=format!("{{\"session_id\":\"unrelated\",\"hook_event_name\":\"PostToolUse\",\"padding\":\"{}\",\"session_id\":\"host\",\"tool_name\":\"mcp__a__read_document\",\"tool_response\":\"discarded untrusted content\"}}","x".repeat(6000));
+    assert!(
+        serde_json::from_str::<agentfw::hook::HookPayload>(&body).is_err(),
+        "duplicate root session is deliberately ambiguous"
+    );
+    let (s, _) = review137_raw_hook(&f, Body::from(body)).await;
+    assert_eq!(s, StatusCode::OK);
+    let (host_incomplete, unrelated_incomplete) = {
+        let fw = f.state.firewall.lock().unwrap();
+        (
+            fw.provenance_incomplete("host"),
+            fw.provenance_incomplete("unrelated"),
+        )
+    };
+    let (s, r) = f.post(&f.call("b", "delete_document", &json!({}))).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(r["verdict"],"ask",
+        "incomplete prefix directed loss marker away from possibly affected active host: host={host_incomplete}, unrelated={unrelated_incomplete}; call={r}");
+    assert_eq!(r["release"], false);
+}
