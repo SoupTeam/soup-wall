@@ -1152,7 +1152,8 @@ mod tests {
 
     fn fixture() -> (tempfile::TempDir, PathBuf) {
         let root = tempfile::tempdir().unwrap();
-        let profile = root.path().join("owned profile");
+        let profile = root.path().to_path_buf();
+        fs::remove_dir(&profile).unwrap();
         crate::private_file_windows::ensure_private_directory(&profile).unwrap();
         let path = profile.join("profile with spaces.json");
         let value = json!({"mcpServers":{"notes":{"type":"stdio","command":r"C:\Fixture\server.exe","args":["a b","\u{65e5}\u{672c}\u{8a9e}"]},"other":{"command":"untouched","env":{"TOKEN":"fixture-only"}}},"settings":{"theme":"light"}});
