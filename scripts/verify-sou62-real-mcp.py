@@ -65,7 +65,7 @@ def source():
     def git(*args):
         return subprocess.check_output(["git", *args], cwd=ROOT, text=True, timeout=15).strip()
     return {"commit": git("rev-parse", "HEAD"), "tree": git("rev-parse", "HEAD^{tree}"),
-            "dirty": bool(git("status", "--porcelain", "--untracked-files=no"))}
+            "dirty": bool(git("status", "--porcelain"))}
 
 
 def environment(home):
@@ -301,6 +301,10 @@ def run_stdio(stack, report):
             client.send(*[call(108 + index, {"path": "/workspace/notes.txt"}) for index in range(8)])
             wait_event(log_path, lambda rows: any(row.get("host_call_id") == 115 and row.get("state") == "queued" for row in rows),
                        "selected queued cancellation target never queued")
+            overloaded, _ = client.exchange(call(999, {"path": "/workspace/notes.txt"}))
+            require(overloaded.get("error", {}).get("code") == -32003, "overload did not yield a correlated capacity refusal")
+            report["overload_response"] = overloaded
+            report["checks"].append({"case": "bounded-overload-refusal", "passed": True})
             client.send(cancel(100), cancel(115))
             replies = {}
             for _ in range(2):
@@ -450,6 +454,42 @@ def host(stack, command, env, report):
         model.close()
 
 
+def daemon_loss(stack, command, env, report):
+    """A fresh actual session must not dispatch a FIFO read after daemon loss."""
+    baseline = snapshot(stack.workspace)
+    with (stack.root / "daemon-loss-collector.log").open("wb") as log:
+        client = Client(command, env, stack.workspace, log, "daemon-loss real server")
+        try:
+            client.initialize()
+            response, _ = client.exchange(call(700, {"path": "/workspace/notes.txt"}))
+            require(result_text(response) == TEXT, "outage control read failed")
+            DEMO.stop(stack.daemon)
+            require(stack.daemon.poll() is not None, "owned daemon did not stop before outage call")
+            client.send(call(701, {"path": "/workspace/pending-0.fifo"}))
+            observed = None
+            try:
+                observed, _ = client.receive(timeout=8)
+            except ValueError as error:
+                require("closed before correlated response" in str(error), "unexpected outage parse failure")
+            if observed is not None:
+                require(key(observed["id"]) == key(701) and refused(observed), "daemon loss released unadmitted data")
+            # No reader can open the FIFO if call admission refused before dispatch.
+            try:
+                descriptor = os.open(stack.workspace / "pending-0.fifo", os.O_WRONLY | os.O_NONBLOCK)
+            except OSError as error:
+                require(error.errno == errno.ENXIO, "outage FIFO probe failed unexpectedly")
+            else:
+                os.close(descriptor)
+                raise ValueError("server opened the unadmitted outage FIFO")
+            report["daemon_loss"] = {"status": "pass", "native_daemon_stopped_first": True,
+                "unadmitted_fifo_reader_absent": True, "response": observed}
+            report["checks"].append({"case": "daemon-loss-refuses-without-execution", "passed": True})
+        finally:
+            client.close()
+            report.setdefault("daemon_loss", {"status": "fail"})["client"] = client.transcript()
+    require(snapshot(stack.workspace) == baseline and stack.receiver.bodies == [], "outage caused unapproved effects")
+
+
 def policy_controls(stack, report):
     before = snapshot(stack.workspace)
     commands = [
@@ -489,6 +529,9 @@ def grade(report):
             require(item.get("error", {}).get("code") == -32800, "cancellation was not correlated")
         else:
             require(result_text(item) == (FIFO_TEXT if identifier <= 107 else TEXT), "cross-call release changed")
+    require(report["overload_response"].get("error", {}).get("code") == -32003, "capacity refusal missing")
+    require(report["daemon_loss"]["status"] == "pass" and report["daemon_loss"]["native_daemon_stopped_first"] is True
+            and report["daemon_loss"]["unadmitted_fifo_reader_absent"] is True, "daemon loss containment proof missing")
     refusals = report["refusals"]
     require(len(refusals) == 10 and len({row["case"] for row in refusals}) == 10
             and all(row["passed"] is True and refused(row["response"]) for row in refusals), "unsupported/schema refusal missing")
@@ -552,18 +595,19 @@ def run(args):
             report["required_positive_sandbox"] = {"status": "pass", "exit_code": positive.returncode,
                                                     "log_sha256": sha(output / "sandbox-positive.log")}
             with (output / "daemon.log").open("wb") as log:
-                daemon = subprocess.Popen([str(binary), "serve"], env=stack.env, stdout=log, stderr=log)
+                daemon = stack.daemon = subprocess.Popen([str(binary), "serve"], env=stack.env, stdout=log, stderr=log)
                 require(DEMO.wait_healthy(port, daemon), "owned enforcing daemon failed to start")
                 policy_controls(stack, report)
                 command, env = run_stdio(stack, report)
                 host(stack, command, env, report)
-                DEMO.stop(daemon)
+                daemon_loss(stack, command, env, report)
             report["daemon_stopped"] = daemon.poll() is not None
             report["installed_profile_unchanged"] = (
                 sha(stack.install / "profile.json") == report["installed_profile"]["profile_sha256"]
                 and sha(stack.install / "policy.yaml") == report["installed_profile"]["policy_sha256"]
                 and sha(stack.install / "registry.json") == report["installed_profile"]["registry_sha256"]
-                and INSTALL.tree_sha(stack.install / "package") == report["installed_profile"]["profile"]["packageTreeSha256"])
+                and INSTALL.tree_sha(stack.install / "package") == report["installed_profile"]["profile"]["packageTreeSha256"]
+                and all(sha(stack.install / notice["path"]) == notice["sha256"] for notice in report["installed_profile"]["upstream_notices"]))
             report["runtime_unchanged"] = (sha(node) == report["installed_profile"]["profile"]["runtimeSha256"]
                 and sha(bwrap) == report["installed_profile"]["profile"]["bwrapSha256"]
                 and sha(claude) == report["claude_sha256"] and sha(tests) == report["sandbox_test_binary_sha256"])

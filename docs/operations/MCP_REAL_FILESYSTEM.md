@@ -91,6 +91,19 @@ startup. Native receipts retain existing session, schema, original arguments,
 policy, exact binding and single-use grant checks. This task does not install a
 shared cross-server/hook context; that is SOU-63.
 
+The context-construction seam remains the common `Collector::new` and
+`Collector::event` methods in
+[`admission.rs`](../../crates/agentfw/src/mcp/admission.rs). Both transport loops
+use those methods; the selected loop owns only discovery and per-call state.
+The new `mcp_host_call_id` native field binds the original typed host ID to one
+selected-profile call receipt; it is neither a shared-session credential nor a
+source of provenance. Legacy registries refuse that field. The selected relay
+[fault fixtures](../../crates/agentfw/src/mcp/admission/real_server/fault_tests.rs)
+exercise the existing event boundary without introducing host context claims.
+SOU-63 owns authenticated host-session construction, hook sharing and context
+serialization. A combined host smoke test must follow acceptance of both
+increments; the current acceptance proves an isolated collector session.
+
 The shipped [scenario policy](../../profiles/mcp/filesystem-readonly-v1/policy.yaml)
 hard-denies destructive, side-effecting, network and privilege-changing actions,
 including clean sessions without prior taint. It permits benign reads and
@@ -223,9 +236,9 @@ filesystem entry point.
 The real-server driver independently calibrates original reads and an owned
 original mutator before protection. It then checks unchanged original discovery
 and useful result bytes, eight blocked real FIFO reads plus eight queued calls,
-queued/in-flight/late/unknown cancellation, per-call ID/content correlation,
+queued/in-flight/late/unknown cancellation, overload refusal, per-call ID/content correlation,
 unsupported tools, invalid enum/type/missing/extra arguments, typed IDs and
-useful same-session continuations. Parent-side FIFO reader/writer handshakes,
+useful same-session continuations and actual daemon-loss refusal before FIFO execution. Parent-side FIFO reader/writer handshakes,
 workspace inode/content snapshots, client raw bytes and an owned receiver are
 independent witnesses. It also checks the actual installed policy hard Denies a
 destructive operation and network retrieval in clean sessions with no prior

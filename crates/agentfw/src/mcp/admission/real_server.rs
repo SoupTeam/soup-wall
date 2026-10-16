@@ -398,232 +398,640 @@ where
         tokio::select! {
             biased;
             raw=line(client,&mut client_partial),if !client_closed=>{
-                let Some(raw)=raw? else {client_closed=true;continue;};
-                let value=parse(&raw)?;bounded(&value,0,&mut 0)?;
-                keys(&value,&["jsonrpc","id","method","params"])?;
-                messages+=1;ensure!(messages<=MAX_MESSAGES,"selected MCP message count limit");
-                let method=value["method"].as_str().context("selected MCP client method missing")?;
-                let params=value.get("params").cloned().unwrap_or_else(||json!({}));
-                if method=="notifications/initialized" {
-                    ensure!(initialized&&!notified&&control.is_none()&&value.get("id").is_none(),"invalid initialized notification");
-                    keys(&params,&[])?;notified=true;write(child,&raw).await?;continue;
+                let Some(raw) = raw? else {
+                    client_closed = true;
+                    continue;
+                };
+                let value = parse(&raw)?;
+                bounded(&value, 0, &mut 0)?;
+                keys(&value, &["jsonrpc", "id", "method", "params"])?;
+                messages += 1;
+                ensure!(messages <= MAX_MESSAGES, "selected MCP message count limit");
+                let method = value["method"]
+                    .as_str()
+                    .context("selected MCP client method missing")?;
+                let params = value.get("params").cloned().unwrap_or_else(|| json!({}));
+                if method == "notifications/initialized" {
+                    ensure!(
+                        initialized && !notified && control.is_none() && value.get("id").is_none(),
+                        "invalid initialized notification"
+                    );
+                    keys(&params, &[])?;
+                    notified = true;
+                    write(child, &raw).await?;
+                    continue;
                 }
-                if method=="notifications/cancelled" {
-                    ensure!(value.get("id").is_none(),"cancellation must be a notification");
-                    keys(&params,&["requestId","reason"])?;
-                    let key=rpc_key(params.get("requestId").context("cancellation ID missing")?)?;
-                    ensure!(params.get("reason").is_none_or(|reason|reason.as_str().is_some_and(|text|text.len()<=1024)),"invalid cancellation reason");
-                    if let Some(call)=calls.get_mut(&key) {
-                        if call.cancelled{continue;}
-                        call.cancelled=true;
-                        write(host,&error(&call.id,-32800,"MCP request cancelled; dispatched execution may have occurred")).await?;
-                        let phase=std::mem::replace(&mut call.phase,Phase::Reclaiming);
+                if method == "notifications/cancelled" {
+                    ensure!(
+                        value.get("id").is_none(),
+                        "cancellation must be a notification"
+                    );
+                    keys(&params, &["requestId", "reason"])?;
+                    let key = rpc_key(params.get("requestId").context("cancellation ID missing")?)?;
+                    ensure!(
+                        params
+                            .get("reason")
+                            .is_none_or(|reason| reason.as_str().is_some_and(|text| text.len() <= 1024)),
+                        "invalid cancellation reason"
+                    );
+                    if let Some(call) = calls.get_mut(&key) {
+                        if call.cancelled {
+                            continue;
+                        }
+                        call.cancelled = true;
+                        write(
+                            host,
+                            &error(
+                                &call.id,
+                                -32800,
+                                "MCP request cancelled; dispatched execution may have occurred",
+                            ),
+                        )
+                        .await?;
+                        let phase = std::mem::replace(&mut call.phase, Phase::Reclaiming);
                         match phase {
-                            Phase::Queued=>{calls.remove(&key);},
-                            Phase::Running(grant)=>{
-                                if forwarded_cancellations<FORWARDED_CANCELLATIONS {
-                                    forwarded_cancellations+=1;
-                                    if let Some(item)=wire.get_mut(&key){item.1=true;}
+                            Phase::Queued => {
+                                calls.remove(&key);
+                            }
+                            Phase::Running(grant) => {
+                                if forwarded_cancellations < FORWARDED_CANCELLATIONS {
+                                    forwarded_cancellations += 1;
+                                    if let Some(item) = wire.get_mut(&key) {
+                                        item.1 = true;
+                                    }
                                     write(child,&frame(&json!({"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":call.id}}))).await?;
                                 }
-                                let input=detached(call);let worker_key=key.clone();
-                                workers.push(Box::pin(async move {WorkEvent::Reclaimed(worker_key,reclaim(collector,&input,grant).await)}));
-                            },
-                            Phase::Admitting=>call.phase=Phase::Admitting,
-                            Phase::Inspecting=>call.phase=Phase::Inspecting,
-                            Phase::Reclaiming=>{}
+                                let input = detached(call);
+                                let worker_key = key.clone();
+                                workers.push(Box::pin(async move {
+                                    WorkEvent::Reclaimed(worker_key, reclaim(collector, &input, grant).await)
+                                }));
+                            }
+                            Phase::Admitting => call.phase = Phase::Admitting,
+                            Phase::Inspecting => call.phase = Phase::Inspecting,
+                            Phase::Reclaiming => {}
                         }
-                        if let Some(call)=calls.get(&key){let(active,queued)=counts(&calls);audit(call,"cancelled",active,queued);}
+                        if let Some(call) = calls.get(&key) {
+                            let (active, queued) = counts(&calls);
+                            audit(call, "cancelled", active, queued);
+                        }
                     } else {
-                        eprintln!("{}",json!({"event":"mcp_real_cancel","state":if used.contains(&key){"late"}else{"unknown"}}));
+                        eprintln!(
+                            "{}",
+                            json!({"event":"mcp_real_cancel","state":if used.contains(&key){"late"}else{"unknown"}})
+                        );
                     }
                     continue;
                 }
-                if value.get("id").is_none(){bail!("unsupported selected MCP client notification");}
-                let request_id=&value["id"];let key=rpc_key(request_id)?;
-                ensure!(used.len()<super::MAX_REQUESTS&&used.insert(key.clone()),"duplicate MCP ID or request-count limit");
-                if !params.is_object(){write(host,&error(request_id,-32602,"MCP params must be an object")).await?;continue;}
+                if value.get("id").is_none() {
+                    bail!("unsupported selected MCP client notification");
+                }
+                let request_id = &value["id"];
+                let key = rpc_key(request_id)?;
+                ensure!(
+                    used.len() < super::MAX_REQUESTS && used.insert(key.clone()),
+                    "duplicate MCP ID or request-count limit"
+                );
+                if !params.is_object() {
+                    write(
+                        host,
+                        &error(request_id, -32602, "MCP params must be an object"),
+                    )
+                    .await?;
+                    continue;
+                }
                 match method {
-                    "initialize"=>{
-                        ensure!(!initialized&&control.is_none(),"MCP session already initialized");
-                        keys(&params,&["protocolVersion","capabilities","clientInfo"])?;
-                        ensure!(params["protocolVersion"].is_string()&&params["capabilities"].is_object()&&params["clientInfo"].is_object(),"invalid client initialization");
-                        control=Some(Control{id:request_id.clone(),method:method.into(),deadline:Instant::now()+super::IO_TIMEOUT,
-                            host_id:request_id.clone(),tools:Vec::new(),cursors:BTreeSet::new(),pages:0});
-                        write(child,&raw).await?;
-                    },
-                    "tools/list"|"ping"=>{
-                        if !initialized||!notified||control.is_some()||!calls.is_empty(){write(host,&error(request_id,-32002,"MCP control request is busy or not initialized")).await?;continue;}
-                        let valid=if method=="tools/list"{keys(&params,&["_meta"]).and_then(|_|metadata(&params).map(|_|()))}else{keys(&params,&[])};
-                        if valid.is_err(){write(host,&error(request_id,-32602,"Unsupported MCP discovery parameters")).await?;continue;}
-                        if method=="tools/list"{ready=false;}
-                        control=Some(Control{id:request_id.clone(),method:method.into(),deadline:Instant::now()+super::IO_TIMEOUT,
-                            host_id:request_id.clone(),tools:Vec::new(),cursors:BTreeSet::new(),pages:0});
-                        write(child,&raw).await?;
-                    },
-                    "tools/call"=>{
-                        if !ready||control.is_some(){write(host,&error(request_id,-32002,"Operator-pinned MCP discovery is required")).await?;continue;}
-                        if keys(&params,&["name","arguments","_meta"]).is_err(){write(host,&error(request_id,-32602,"Unsupported MCP call parameters")).await?;continue;}
-                        let Some(name)=params["name"].as_str() else {write(host,&error(request_id,-32602,"MCP tool name is required")).await?;continue;};
-                        let Some(profile)=profiles.get(name) else {write(host,&error(request_id,-32601,"MCP tool is not installed in this profile")).await?;continue;};
-                        if profile.unsupported_reason.is_some(){write(host,&error(request_id,-32601,"MCP tool is explicitly unsupported in the read-only profile")).await?;continue;}
-                        let args=params.get("arguments").cloned().unwrap_or_else(||json!({}));
-                        let progress=match metadata(&params).and_then(|progress|{profile.validate_arguments(&args)?;Ok(progress)}){
-                            Ok(progress)=>progress,Err(_)=>{write(host,&error(request_id,-32602,"MCP arguments violate the selected input profile")).await?;continue;}
+                    "initialize" => {
+                        ensure!(
+                            !initialized && control.is_none(),
+                            "MCP session already initialized"
+                        );
+                        keys(&params, &["protocolVersion", "capabilities", "clientInfo"])?;
+                        ensure!(
+                            params["protocolVersion"].is_string()
+                                && params["capabilities"].is_object()
+                                && params["clientInfo"].is_object(),
+                            "invalid client initialization"
+                        );
+                        control = Some(Control {
+                            id: request_id.clone(),
+                            method: method.into(),
+                            deadline: Instant::now() + super::IO_TIMEOUT,
+                            host_id: request_id.clone(),
+                            tools: Vec::new(),
+                            cursors: BTreeSet::new(),
+                            pages: 0,
+                        });
+                        write(child, &raw).await?;
+                    }
+                    "tools/list" | "ping" => {
+                        if !initialized || !notified || control.is_some() || !calls.is_empty() {
+                            write(
+                                host,
+                                &error(
+                                    request_id,
+                                    -32002,
+                                    "MCP control request is busy or not initialized",
+                                ),
+                            )
+                            .await?;
+                            continue;
+                        }
+                        let valid = if method == "tools/list" {
+                            keys(&params, &["_meta"]).and_then(|_| metadata(&params).map(|_| ()))
+                        } else {
+                            keys(&params, &[])
                         };
-                        let(active,queued)=counts(&calls);
-                        if active>=ACTIVE_LIMIT&&queued>=QUEUE_LIMIT {write(host,&error(request_id,-32003,"MCP pending-call limit reached")).await?;continue;}
-                        let call=Call{id:request_id.clone(),tool:name.into(),args,raw,phase:Phase::Queued,cancelled:false,dispatched:false,
-                            deadline:Instant::now()+super::IO_TIMEOUT,progress,progress_count:0,last_progress:0.0};
-                        audit(&call,"queued",active,queued+1);calls.insert(key.clone(),call);queue.push_back(key);
-                    },
-                    _=>write(host,&error(request_id,-32601,"MCP method is unsupported by the selected profile")).await?
+                        if valid.is_err() {
+                            write(
+                                host,
+                                &error(request_id, -32602, "Unsupported MCP discovery parameters"),
+                            )
+                            .await?;
+                            continue;
+                        }
+                        if method == "tools/list" {
+                            ready = false;
+                        }
+                        control = Some(Control {
+                            id: request_id.clone(),
+                            method: method.into(),
+                            deadline: Instant::now() + super::IO_TIMEOUT,
+                            host_id: request_id.clone(),
+                            tools: Vec::new(),
+                            cursors: BTreeSet::new(),
+                            pages: 0,
+                        });
+                        write(child, &raw).await?;
+                    }
+                    "tools/call" => {
+                        if !ready || control.is_some() {
+                            write(
+                                host,
+                                &error(
+                                    request_id,
+                                    -32002,
+                                    "Operator-pinned MCP discovery is required",
+                                ),
+                            )
+                            .await?;
+                            continue;
+                        }
+                        if keys(&params, &["name", "arguments", "_meta"]).is_err() {
+                            write(
+                                host,
+                                &error(request_id, -32602, "Unsupported MCP call parameters"),
+                            )
+                            .await?;
+                            continue;
+                        }
+                        let Some(name) = params["name"].as_str() else {
+                            write(
+                                host,
+                                &error(request_id, -32602, "MCP tool name is required"),
+                            )
+                            .await?;
+                            continue;
+                        };
+                        let Some(profile) = profiles.get(name) else {
+                            write(
+                                host,
+                                &error(
+                                    request_id,
+                                    -32601,
+                                    "MCP tool is not installed in this profile",
+                                ),
+                            )
+                            .await?;
+                            continue;
+                        };
+                        if profile.unsupported_reason.is_some() {
+                            write(
+                                host,
+                                &error(
+                                    request_id,
+                                    -32601,
+                                    "MCP tool is explicitly unsupported in the read-only profile",
+                                ),
+                            )
+                            .await?;
+                            continue;
+                        }
+                        let args = params
+                            .get("arguments")
+                            .cloned()
+                            .unwrap_or_else(|| json!({}));
+                        let progress = match metadata(&params).and_then(|progress| {
+                            profile.validate_arguments(&args)?;
+                            Ok(progress)
+                        }) {
+                            Ok(progress) => progress,
+                            Err(_) => {
+                                write(
+                                    host,
+                                    &error(
+                                        request_id,
+                                        -32602,
+                                        "MCP arguments violate the selected input profile",
+                                    ),
+                                )
+                                .await?;
+                                continue;
+                            }
+                        };
+                        let (active, queued) = counts(&calls);
+                        if active >= ACTIVE_LIMIT && queued >= QUEUE_LIMIT {
+                            write(
+                                host,
+                                &error(request_id, -32003, "MCP pending-call limit reached"),
+                            )
+                            .await?;
+                            continue;
+                        }
+                        let call = Call {
+                            id: request_id.clone(),
+                            tool: name.into(),
+                            args,
+                            raw,
+                            phase: Phase::Queued,
+                            cancelled: false,
+                            dispatched: false,
+                            deadline: Instant::now() + super::IO_TIMEOUT,
+                            progress,
+                            progress_count: 0,
+                            last_progress: 0.0,
+                        };
+                        audit(&call, "queued", active, queued + 1);
+                        calls.insert(key.clone(), call);
+                        queue.push_back(key);
+                    }
+                    _ => {
+                        write(
+                            host,
+                            &error(
+                                request_id,
+                                -32601,
+                                "MCP method is unsupported by the selected profile",
+                            ),
+                        )
+                        .await?
+                    }
                 }
             },
             event=workers.next(),if !workers.is_empty()=>{
                 match event.context("selected MCP worker stream ended")? {
-                    WorkEvent::Admitted(key,result)=>{
-                        let Some(call)=calls.get_mut(&key) else {bail!("unbound native admission completion");};
+                    WorkEvent::Admitted(key, result) => {
+                        let Some(call) = calls.get_mut(&key) else {
+                            bail!("unbound native admission completion");
+                        };
                         match result? {
-                            Decision::Refused(raw)=>{if !call.cancelled{write(host,&raw).await?;}calls.remove(&key);},
-                            Decision::Allowed(grant)=>{
-                                ensure!(grants.insert(id(&grant.call_id)?),"native receipt call ID was reused");
-                                if call.cancelled||wire.len()>=WIRE_LIMIT {
-                                    if !call.cancelled{write(host,&error(&call.id,-32003,"MCP physical pending-call limit reached")).await?;call.cancelled=true;}
-                                    call.phase=Phase::Reclaiming;let input=detached(call);let worker_key=key.clone();
-                                    workers.push(Box::pin(async move {WorkEvent::Reclaimed(worker_key,reclaim(collector,&input,grant).await)}));
-                                }else{
-                                    write(child,&call.raw).await?;call.dispatched=true;call.phase=Phase::Running(grant);
-                                    wire.insert(key.clone(),(call.deadline,false));
-                                    let(active,queued)=counts(&calls);audit(&calls[&key],"inflight",active,queued);
+                            Decision::Refused(raw) => {
+                                if !call.cancelled {
+                                    write(host, &raw).await?;
+                                }
+                                calls.remove(&key);
+                            }
+                            Decision::Allowed(grant) => {
+                                ensure!(
+                                    grants.insert(id(&grant.call_id)?),
+                                    "native receipt call ID was reused"
+                                );
+                                if call.cancelled || wire.len() >= WIRE_LIMIT {
+                                    if !call.cancelled {
+                                        write(
+                                            host,
+                                            &error(&call.id, -32003, "MCP physical pending-call limit reached"),
+                                        )
+                                        .await?;
+                                        call.cancelled = true;
+                                    }
+                                    call.phase = Phase::Reclaiming;
+                                    let input = detached(call);
+                                    let worker_key = key.clone();
+                                    workers.push(Box::pin(async move {
+                                        WorkEvent::Reclaimed(
+                                            worker_key,
+                                            reclaim(collector, &input, grant).await,
+                                        )
+                                    }));
+                                } else {
+                                    write(child, &call.raw).await?;
+                                    call.dispatched = true;
+                                    call.phase = Phase::Running(grant);
+                                    wire.insert(key.clone(), (call.deadline, false));
+                                    let (active, queued) = counts(&calls);
+                                    audit(&calls[&key], "inflight", active, queued);
                                 }
                             }
                         }
-                    },
-                    WorkEvent::Inspected(key,result)=>{
-                        let call=calls.remove(&key).context("unbound native result completion")?;
-                        let result=result?;
-                        if !call.cancelled{if let Some(raw)=result{write(host,&raw).await?;}}
-                        let(active,queued)=counts(&calls);audit(&call,"finished",active,queued);
-                    },
-                    WorkEvent::Reclaimed(key,result)=>{result?;calls.remove(&key).context("unbound native cleanup completion")?;}
+                    }
+                    WorkEvent::Inspected(key, result) => {
+                        let call = calls
+                            .remove(&key)
+                            .context("unbound native result completion")?;
+                        let result = result?;
+                        if !call.cancelled {
+                            if let Some(raw) = result {
+                                write(host, &raw).await?;
+                            }
+                        }
+                        let (active, queued) = counts(&calls);
+                        audit(&call, "finished", active, queued);
+                    }
+                    WorkEvent::Reclaimed(key, result) => {
+                        result?;
+                        calls
+                            .remove(&key)
+                            .context("unbound native cleanup completion")?;
+                    }
                 }
             },
             raw=line(server,&mut server_partial)=>{
-                let raw=raw?.context("selected MCP server closed with incomplete state")?;
-                let value=parse(&raw)?;bounded(&value,0,&mut 0)?;
-                messages+=1;ensure!(messages<=MAX_MESSAGES,"selected MCP message count limit");
-                if let Some(method)=value.get("method").and_then(Value::as_str) {
-                    keys(&value,&["jsonrpc","id","method","params"])?;
-                    if let Some(request_id)=value.get("id") {
+                let raw = raw?.context("selected MCP server closed with incomplete state")?;
+                let value = parse(&raw)?;
+                bounded(&value, 0, &mut 0)?;
+                messages += 1;
+                ensure!(messages <= MAX_MESSAGES, "selected MCP message count limit");
+                if let Some(method) = value.get("method").and_then(Value::as_str) {
+                    keys(&value, &["jsonrpc", "id", "method", "params"])?;
+                    if let Some(request_id) = value.get("id") {
                         rpc_key(request_id)?;
-                        write(child,&error(request_id,-32601,"Server callbacks are unsupported by this operator profile")).await?;
-                    }else if method=="notifications/tools/list_changed" {
-                        if let Some(params)=value.get("params"){keys(params,&[])?;}
-                        ready=false;write(host,&raw).await?;
-                    }else if method=="notifications/progress" {
-                        let params=&value["params"];keys(params,&["progressToken","progress","total","message"])?;
+                        write(
+                            child,
+                            &error(
+                                request_id,
+                                -32601,
+                                "Server callbacks are unsupported by this operator profile",
+                            ),
+                        )
+                        .await?;
+                    } else if method == "notifications/tools/list_changed" {
+                        if let Some(params) = value.get("params") {
+                            keys(params, &[])?;
+                        }
+                        ready = false;
+                        write(host, &raw).await?;
+                    } else if method == "notifications/progress" {
+                        let params = &value["params"];
+                        keys(params, &["progressToken", "progress", "total", "message"])?;
                         rpc_key(&params["progressToken"])?;
-                        let progress=params["progress"].as_f64().filter(|p|p.is_finite()&&*p>=0.0).context("invalid MCP progress")?;
-                        ensure!(params.get("total").is_none_or(|total|total.as_f64().is_some_and(|t|t.is_finite()&&t>=progress)),"invalid MCP progress total");
-                        ensure!(params.get("message").is_none_or(|message|message.as_str().is_some_and(|m|m.len()<=4096)),"invalid MCP progress message");
-                        let matching=calls.values_mut().filter(|call|call.progress.as_ref()==Some(&params["progressToken"])&&!call.cancelled).collect::<Vec<_>>();
-                        if matching.len()==1 {for call in matching {call.progress_count+=1;ensure!(call.progress_count<=MAX_PROGRESS&&progress>=call.last_progress,"MCP progress limit/order");call.last_progress=progress;}}
+                        let progress = params["progress"]
+                            .as_f64()
+                            .filter(|p| p.is_finite() && *p >= 0.0)
+                            .context("invalid MCP progress")?;
+                        ensure!(
+                            params.get("total").is_none_or(|total| total
+                                .as_f64()
+                                .is_some_and(|t| t.is_finite() && t >= progress)),
+                            "invalid MCP progress total"
+                        );
+                        ensure!(
+                            params
+                                .get("message")
+                                .is_none_or(|message| message.as_str().is_some_and(|m| m.len() <= 4096)),
+                            "invalid MCP progress message"
+                        );
+                        let matching = calls
+                            .values_mut()
+                            .filter(|call| {
+                                call.progress.as_ref() == Some(&params["progressToken"]) && !call.cancelled
+                            })
+                            .collect::<Vec<_>>();
+                        if matching.len() == 1 {
+                            for call in matching {
+                                call.progress_count += 1;
+                                ensure!(
+                                    call.progress_count <= MAX_PROGRESS && progress >= call.last_progress,
+                                    "MCP progress limit/order"
+                                );
+                                call.last_progress = progress;
+                            }
+                        }
                         // Progress/logging text has no independently admitted data
                         // channel. Consume it; never forward even a message field.
-                        eprintln!("{}",json!({"event":"mcp_real_notification","kind":"progress","released":false}));
-                    }else{
-                        eprintln!("{}",json!({"event":"mcp_real_notification","kind":"unsupported_or_logging","released":false}));
+                        eprintln!(
+                            "{}",
+                            json!({"event":"mcp_real_notification","kind":"progress","released":false})
+                        );
+                    } else {
+                        eprintln!(
+                            "{}",
+                            json!({"event":"mcp_real_notification","kind":"unsupported_or_logging","released":false})
+                        );
                     }
                     continue;
                 }
-                keys(&value,&["jsonrpc","id","result","error"])?;
-                let key=rpc_key(value.get("id").context("server response ID missing")?)?;
-                if control.as_ref().is_some_and(|item|item.id==value["id"]) {
-                    let mut current=control.take().expect("checked control");
+                keys(&value, &["jsonrpc", "id", "result", "error"])?;
+                let key = rpc_key(value.get("id").context("server response ID missing")?)?;
+                if control.as_ref().is_some_and(|item| item.id == value["id"]) {
+                    let mut current = control.take().expect("checked control");
                     match current.method.as_str() {
-                        "initialize"=>{
-                            ensure!(value.get("error").is_none(),"selected server initialization failed");
-                            server_profile::validate_initialization(&value["result"])?;server_info=value["result"]["serverInfo"].clone();
-                            initialized=true;write(host,&raw).await?;
-                        },
-                        "ping"=>{ensure!(value.get("error").is_none(),"selected server ping failed");keys(&value["result"],&[])?;write(host,&raw).await?;},
-                        "tools/list"=>{
-                            let result=&value["result"];keys(result,&["tools","nextCursor"])?;
-                            let page=result["tools"].as_array().context("selected manifest tools absent")?;
-                            current.pages+=1;current.tools.extend(page.iter().cloned());
-                            ensure!(serde_json::to_vec(&current.tools)?.len() <= server_profile::MAX_DISCOVERY_BYTES,"selected manifest aggregate byte limit");
-                            ensure!(current.pages<=server_profile::MAX_PAGES&&current.tools.len()<=server_profile::MAX_TOOLS,"selected manifest page/count limit");
-                            if let Some(cursor)=result.get("nextCursor") {
-                                let cursor=cursor.as_str().filter(|s|!s.is_empty()&&s.len()<=1024).context("invalid MCP manifest cursor")?;
-                                ensure!(current.pages<server_profile::MAX_PAGES&&current.cursors.insert(cursor.into()),"MCP manifest pagination repeated or over limit");
-                                current.id=json!(format!("sw-page:{}",crate::token::generate()));
+                        "initialize" => {
+                            ensure!(
+                                value.get("error").is_none(),
+                                "selected server initialization failed"
+                            );
+                            server_profile::validate_initialization(&value["result"])?;
+                            server_info = value["result"]["serverInfo"].clone();
+                            initialized = true;
+                            write(host, &raw).await?;
+                        }
+                        "ping" => {
+                            ensure!(value.get("error").is_none(), "selected server ping failed");
+                            keys(&value["result"], &[])?;
+                            write(host, &raw).await?;
+                        }
+                        "tools/list" => {
+                            let result = &value["result"];
+                            keys(result, &["tools", "nextCursor"])?;
+                            let page = result["tools"]
+                                .as_array()
+                                .context("selected manifest tools absent")?;
+                            current.pages += 1;
+                            current.tools.extend(page.iter().cloned());
+                            ensure!(
+                                serde_json::to_vec(&current.tools)?.len()
+                                    <= server_profile::MAX_DISCOVERY_BYTES,
+                                "selected manifest aggregate byte limit"
+                            );
+                            ensure!(
+                                current.pages <= server_profile::MAX_PAGES
+                                    && current.tools.len() <= server_profile::MAX_TOOLS,
+                                "selected manifest page/count limit"
+                            );
+                            if let Some(cursor) = result.get("nextCursor") {
+                                let cursor = cursor
+                                    .as_str()
+                                    .filter(|s| !s.is_empty() && s.len() <= 1024)
+                                    .context("invalid MCP manifest cursor")?;
+                                ensure!(
+                                    current.pages < server_profile::MAX_PAGES
+                                        && current.cursors.insert(cursor.into()),
+                                    "MCP manifest pagination repeated or over limit"
+                                );
+                                current.id = json!(format!("sw-page:{}", crate::token::generate()));
                                 write(child,&frame(&json!({"jsonrpc":"2.0","id":current.id,"method":"tools/list","params":{"cursor":cursor}}))).await?;
-                                control=Some(current);continue;
+                                control = Some(current);
+                                continue;
                             }
-                            let aggregate=json!({"tools":current.tools});
-                            let validated=server_profile::classify_manifest(&aggregate);
-                            match validated.and_then(|profiles|{validate_registry(collector,&profiles,aggregate["tools"].as_array().expect("tools"))?;Ok(profiles)}) {
-                                Err(_)=>{write(host,&error(&current.host_id,-32603,"MCP manifest differs from the installed selected-server profile")).await?;},
-                                Ok(validated)=>{
+                            let aggregate = json!({"tools":current.tools});
+                            let validated = server_profile::classify_manifest(&aggregate);
+                            match validated.and_then(|profiles| {
+                                validate_registry(
+                                    collector,
+                                    &profiles,
+                                    aggregate["tools"].as_array().expect("tools"),
+                                )?;
+                                Ok(profiles)
+                            }) {
+                                Err(_) => {
+                                    write(
+                                        host,
+                                        &error(
+                                            &current.host_id,
+                                            -32603,
+                                            "MCP manifest differs from the installed selected-server profile",
+                                        ),
+                                    )
+                                    .await?;
+                                }
+                                Ok(validated) => {
                                     collector.inspect_manifest(&aggregate).await?;
-                                    let mut admitted=BTreeMap::new();
+                                    let mut admitted = BTreeMap::new();
                                     for tool in aggregate["tools"].as_array().expect("tools") {
-                                        let name=tool["name"].as_str().context("manifest tool name missing")?;
-                                        admitted.insert(name.into(),AdmittedTool{description:tool["description"].as_str().unwrap_or("").into(),schema:tool["inputSchema"].clone(),
-                                            schema_sha256:sha(canonical(&tool["inputSchema"]).to_string().as_bytes()),definition:tool.clone(),definition_sha256:sha(canonical(tool).to_string().as_bytes())});
+                                        let name = tool["name"]
+                                            .as_str()
+                                            .context("manifest tool name missing")?;
+                                        admitted.insert(
+                                            name.into(),
+                                            AdmittedTool {
+                                                description: tool["description"].as_str().unwrap_or("").into(),
+                                                schema: tool["inputSchema"].clone(),
+                                                schema_sha256: sha(canonical(&tool["inputSchema"])
+                                                    .to_string()
+                                                    .as_bytes()),
+                                                definition: tool.clone(),
+                                                definition_sha256: sha(canonical(tool).to_string().as_bytes()),
+                                            },
+                                        );
                                     }
-                                    snapshot=Some(Arc::new(Snapshot{sha256:sha(canonical(&aggregate).to_string().as_bytes()),tools:admitted,server_info:server_info.clone()}));
-                                    profiles=validated;ready=true;
-                                    if current.pages==1 {write(host,&raw).await?;}else{write(host,&frame(&json!({"jsonrpc":"2.0","id":current.host_id,"result":aggregate}))).await?;}
+                                    snapshot = Some(Arc::new(Snapshot {
+                                        sha256: sha(canonical(&aggregate).to_string().as_bytes()),
+                                        tools: admitted,
+                                        server_info: server_info.clone(),
+                                    }));
+                                    profiles = validated;
+                                    ready = true;
+                                    if current.pages == 1 {
+                                        write(host, &raw).await?;
+                                    } else {
+                                        write(host,&frame(&json!({"jsonrpc":"2.0","id":current.host_id,"result":aggregate}))).await?;
+                                    }
                                 }
                             }
-                        },
-                        _=>unreachable!()
+                        }
+                        _ => unreachable!(),
                     }
                     continue;
                 }
-                ensure!(wire.remove(&key).is_some(),"unknown or duplicate MCP response ID");
-                let Some(call)=calls.get_mut(&key) else {continue;};
-                let phase=std::mem::replace(&mut call.phase,Phase::Inspecting);
-                let Phase::Running(grant)=phase else {
-                    ensure!(call.cancelled,"MCP response arrived in an invalid call phase");continue;
+                ensure!(
+                    wire.remove(&key).is_some(),
+                    "unknown or duplicate MCP response ID"
+                );
+                let Some(call) = calls.get_mut(&key) else {
+                    continue;
                 };
-                let input=detached(call);let worker_key=key.clone();
-                let validated=profiles[&call.tool].validate_result(&value).map(str::to_owned);
+                let phase = std::mem::replace(&mut call.phase, Phase::Inspecting);
+                let Phase::Running(grant) = phase else {
+                    ensure!(
+                        call.cancelled,
+                        "MCP response arrived in an invalid call phase"
+                    );
+                    continue;
+                };
+                let input = detached(call);
+                let worker_key = key.clone();
+                let validated = profiles[&call.tool]
+                    .validate_result(&value)
+                    .map(str::to_owned);
                 match validated {
-                    Ok(kind)=>workers.push(Box::pin(async move {WorkEvent::Inspected(worker_key,inspect(collector,&input,grant,raw,&kind).await)})),
-                    Err(_)=>{
+                    Ok(kind) => workers.push(Box::pin(async move {
+                        WorkEvent::Inspected(
+                            worker_key,
+                            inspect(collector, &input, grant, raw, &kind).await,
+                        )
+                    })),
+                    Err(_) => {
                         // Unsupported output is never partially released. A local
                         // error completes this reservation and leaves other calls usable.
-                        let replacement=error(&call.id,-32603,"Unsupported MCP result withheld by the selected output profile");
-                        workers.push(Box::pin(async move {WorkEvent::Inspected(worker_key,inspect(collector,&input,grant,replacement,"error").await)}));
+                        let replacement = error(
+                            &call.id,
+                            -32603,
+                            "Unsupported MCP result withheld by the selected output profile",
+                        );
+                        workers.push(Box::pin(async move {
+                            WorkEvent::Inspected(
+                                worker_key,
+                                inspect(collector, &input, grant, replacement, "error").await,
+                            )
+                        }));
                     }
                 }
             },
             _=tokio::time::sleep_until(deadline),if control.is_some()||!calls.is_empty()||wire.values().any(|(_,abandoned)|!*abandoned)=>{
-                ensure!(control.as_ref().is_none_or(|item|item.deadline>Instant::now()),"MCP control request timed out");
-                let expired=calls.iter().filter(|(_,call)|!call.cancelled&&call.deadline<=Instant::now()).map(|(key,_)|key.clone()).collect::<Vec<_>>();
+                ensure!(
+                    control
+                        .as_ref()
+                        .is_none_or(|item| item.deadline > Instant::now()),
+                    "MCP control request timed out"
+                );
+                let expired = calls
+                    .iter()
+                    .filter(|(_, call)| !call.cancelled && call.deadline <= Instant::now())
+                    .map(|(key, _)| key.clone())
+                    .collect::<Vec<_>>();
                 for key in expired {
-                    let call=calls.get_mut(&key).expect("expired call");call.cancelled=true;
-                    write(host,&error(&call.id,-32001,"MCP call timed out; dispatched execution may have occurred")).await?;
-                    let phase=std::mem::replace(&mut call.phase,Phase::Reclaiming);
+                    let call = calls.get_mut(&key).expect("expired call");
+                    call.cancelled = true;
+                    write(
+                        host,
+                        &error(
+                            &call.id,
+                            -32001,
+                            "MCP call timed out; dispatched execution may have occurred",
+                        ),
+                    )
+                    .await?;
+                    let phase = std::mem::replace(&mut call.phase, Phase::Reclaiming);
                     match phase {
-                        Phase::Queued=>{calls.remove(&key);},
-                        Phase::Running(grant)=>{
-                            if forwarded_cancellations<FORWARDED_CANCELLATIONS {
-                                forwarded_cancellations+=1;if let Some(item)=wire.get_mut(&key){item.1=true;}
+                        Phase::Queued => {
+                            calls.remove(&key);
+                        }
+                        Phase::Running(grant) => {
+                            if forwarded_cancellations < FORWARDED_CANCELLATIONS {
+                                forwarded_cancellations += 1;
+                                if let Some(item) = wire.get_mut(&key) {
+                                    item.1 = true;
+                                }
                                 write(child,&frame(&json!({"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":call.id}}))).await?;
                             }
-                            let input=detached(call);let worker_key=key.clone();
-                            workers.push(Box::pin(async move {WorkEvent::Reclaimed(worker_key,reclaim(collector,&input,grant).await)}));
-                        },
-                        Phase::Admitting=>call.phase=Phase::Admitting,
-                        Phase::Inspecting=>call.phase=Phase::Inspecting,
-                        Phase::Reclaiming=>{}
+                            let input = detached(call);
+                            let worker_key = key.clone();
+                            workers.push(Box::pin(async move {
+                                WorkEvent::Reclaimed(worker_key, reclaim(collector, &input, grant).await)
+                            }));
+                        }
+                        Phase::Admitting => call.phase = Phase::Admitting,
+                        Phase::Inspecting => call.phase = Phase::Inspecting,
+                        Phase::Reclaiming => {}
                     }
                 }
-                ensure!(wire.iter().all(|(key,(deadline,abandoned))|*abandoned||*deadline>Instant::now()||calls.contains_key(key)),"MCP server did not finish a withdrawn request within its bound");
+                ensure!(
+                    wire.iter().all(|(key, (deadline, abandoned))| *abandoned
+                        || *deadline > Instant::now()
+                        || calls.contains_key(key)),
+                    "MCP server did not finish a withdrawn request within its bound"
+                );
             }
         }
     }
@@ -770,3 +1178,6 @@ mod tests {
         assert_eq!(value["error"]["code"], -32800);
     }
 }
+
+#[cfg(test)]
+mod fault_tests;

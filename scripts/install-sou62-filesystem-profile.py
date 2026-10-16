@@ -13,7 +13,7 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import platform
 import re
 import shutil
@@ -112,8 +112,20 @@ def install(destination, workspace, node, bwrap, npm):
     identity = json.loads((ASSETS / "upstream-identity.json").read_text(encoding="utf-8"))
     if sha(ASSETS / "package-lock.json") != identity["packageLockSha256"]:
         raise ValueError("shipped npm lock identity mismatch")
+    notices = identity.get("upstreamNotices", [])
+    if {notice.get("component") for notice in notices} != {"server", "sdk", "node"} or len(notices) != 3:
+        raise ValueError("complete original upstream license notices are required")
+    for notice in notices:
+        parts = PurePosixPath(notice["path"]).parts
+        if len(parts) != 2 or parts[0] != "upstream-notices" or parts[1] in {".", ".."}:
+            raise ValueError("unsafe original upstream notice path")
+        if sha(ASSETS / notice["path"]) != notice["sha256"]:
+            raise ValueError("original upstream notice identity mismatch")
     dependencies = libraries(node)
     destination.mkdir(mode=0o700)
+    (destination / "upstream-notices").mkdir(mode=0o700)
+    for notice in notices:
+        shutil.copyfile(ASSETS / notice["path"], destination / notice["path"])
     # Keep a failed partial install for diagnosis. Never run a partially installed profile.
     package = destination / "package"
     package.mkdir(mode=0o700)
@@ -139,11 +151,12 @@ def install(destination, workspace, node, bwrap, npm):
     os.chmod(destination / "policy.yaml", 0o600)
     private_json(destination / "installation.json", {
         "format": "sou62-profile-installation/1", "profile": profile,
+        "upstream_identity": identity, "upstream_identity_sha256": sha(ASSETS / "upstream-identity.json"),
         "profile_sha256": sha(destination / "profile.json"),
         "registry_sha256": sha(destination / "registry.json"), "policy_sha256": sha(destination / "policy.yaml"),
         "package_lock_sha256": sha(package / "package-lock.json"),
         "server_package": "@modelcontextprotocol/server-filesystem@2026.8.31",
-        "node_version": NODE_VERSION,
+        "node_version": NODE_VERSION, "upstream_notices": notices,
         "node_archive_url": "https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz",
         "node_archive_sha256": "9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37",
         "bwrap_version": subprocess.check_output([str(bwrap), "--version"], text=True, timeout=10).strip()})

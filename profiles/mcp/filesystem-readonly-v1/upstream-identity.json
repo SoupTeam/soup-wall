@@ -97,5 +97,25 @@
       "inputSchemaSha256": "7a014b717a77aac971ea0ab5c0ff47bb13e6cae7ef9442d9dedb15ce36381b15",
       "originalDefinitionSha256": "2b43c9bb5cde269e30b4e22b1dc38386f4fecf44dfa8a773a7fce9e38e2c0aa2"
     }
+  ],
+  "upstreamNotices": [
+    {
+      "component": "server",
+      "path": "upstream-notices/servers-a40bc270-LICENSE",
+      "sourceUrl": "https://raw.githubusercontent.com/modelcontextprotocol/servers/a40bc270fb5ece62673f8a1196f57116d885c5eb/LICENSE",
+      "sha256": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a"
+    },
+    {
+      "component": "sdk",
+      "path": "upstream-notices/typescript-sdk-ff07b001-LICENSE",
+      "sourceUrl": "https://raw.githubusercontent.com/modelcontextprotocol/typescript-sdk/ff07b001194fe60ee9deb2121cf119057565796d/LICENSE",
+      "sha256": "5e13dbbc1d120fc2a03cecde7c91424ae2d7de11b63d58ded2f4431e261ee50d"
+    },
+    {
+      "component": "node",
+      "path": "upstream-notices/node-v22.22.0-LICENSE",
+      "sourceUrl": "https://raw.githubusercontent.com/nodejs/node/v22.22.0/LICENSE",
+      "sha256": "e991d81497a85bb24fc6bffae0a3637a6accd6c6bc5ce1f2c5698bd555cf9d49"
+    }
   ]
 }

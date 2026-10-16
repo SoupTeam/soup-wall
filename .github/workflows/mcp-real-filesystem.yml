@@ -29,6 +29,8 @@ jobs:
     # This selected runtime is Linux x86-64. No host sysctl/AppArmor relaxation.
     runs-on: ubuntu-22.04
     timeout-minutes: 40
+    env:
+      RUSTUP_TOOLCHAIN: '1.94.1'
     steps:
       - uses: actions/checkout@v7
         with:
@@ -43,7 +45,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends meson ninja-build libcap-dev pkg-config
+          sudo apt-get install -y --no-install-recommends meson ninja-build libcap-dev pkg-config ripgrep
           mkdir -p "$RUNNER_TEMP/sou62-runtime" "$RUNNER_TEMP/sou62-bwrap-source"
           curl --fail --location --retry 3 https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz --output "$RUNNER_TEMP/sou62-node.tar.xz"
           printf '%s  %s\n' 9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37 "$RUNNER_TEMP/sou62-node.tar.xz" | sha256sum --check

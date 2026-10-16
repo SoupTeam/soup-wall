@@ -31,6 +31,8 @@ def complete_report():
             "fifo_execution_witness": [{"reader_opened": True, "bytes_written": len(VERIFY.FIFO_TEXT.encode()), "error": None} for _ in range(8)],
             "concurrent_responses": [{"jsonrpc": "2.0", "id": identifier, "error": {"code": -32800}} if identifier in (100, 115)
                 else response(identifier, VERIFY.FIFO_TEXT if identifier <= 107 else VERIFY.TEXT) for identifier in range(100, 116)],
+            "overload_response": {"id": 999, "error": {"code": -32003}},
+            "daemon_loss": {"status": "pass", "native_daemon_stopped_first": True, "unadmitted_fifo_reader_absent": True},
             "refusals": [{"case": str(identifier), "passed": True, "response": {"id": identifier, "error": {"code": -32602}}} for identifier in range(10)],
             "workspace_unchanged": True, "receiver_bodies": [], "daemon_stopped": True, "private_profile_removed": True,
             "installed_profile_unchanged": True, "runtime_unchanged": True,
@@ -44,6 +46,9 @@ class ProfileIdentities(unittest.TestCase):
         identity = json.loads((INSTALL.ASSETS / "upstream-identity.json").read_text())
         manifest = json.loads((INSTALL.ASSETS / "upstream-tools-list.json").read_text())
         self.assertEqual(INSTALL.sha(INSTALL.ASSETS / "package-lock.json"), identity["packageLockSha256"])
+        self.assertEqual({notice["component"] for notice in identity["upstreamNotices"]}, {"server", "sdk", "node"})
+        for notice in identity["upstreamNotices"]:
+            self.assertEqual(INSTALL.sha(INSTALL.ASSETS / notice["path"]), notice["sha256"])
         self.assertEqual(hashlib.sha256(INSTALL.canonical(manifest["result"])).hexdigest(), identity["discoveryResultSha256"])
         declarations = INSTALL.registry(manifest)["tools"]
         self.assertEqual(len(declarations), 14)
@@ -124,7 +129,9 @@ class EvidenceControls(unittest.TestCase):
     def test_effect_cleanup_runtime_and_live_model_claim_mismatches_fail(self):
         mutations = [lambda report: report.update(receiver_bodies=["leak"]), lambda report: report.update(workspace_unchanged=False),
             lambda report: report.update(private_profile_removed=False), lambda report: report.update(runtime_unchanged=False),
-            lambda report: report.update(skipped=1), lambda report: report["source_after"].update(dirty=True),
+            lambda report: report.update(skipped=1),
+            lambda report: report["daemon_loss"].update(unadmitted_fifo_reader_absent=False),
+            lambda report: report["overload_response"].update(error={"code": -32603}), lambda report: report["source_after"].update(dirty=True),
             lambda report: report["actual_claude_host"].update(real_host_executed=False),
             lambda report: report["actual_claude_host"].update(live_model_efficacy_measured=True),
             lambda report: report["shipped_policy_controls"][0].update(verdict="allow")]
