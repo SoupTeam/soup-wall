@@ -1433,7 +1433,7 @@ impl PostgresTenantStore {
     }
 
     async fn ensure_schema_current(&self) -> anyhow::Result<()> {
-        const VERSION: i64 = 26;
+        const VERSION: i64 = 27;
         let client = self.checkout().await?;
         let applied = self
             .bounded(client.query_opt(
