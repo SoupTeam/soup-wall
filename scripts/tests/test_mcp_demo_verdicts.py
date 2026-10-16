@@ -3,6 +3,9 @@
 import importlib.util
 from pathlib import Path
 import unittest
+import tempfile
+import json
+from unittest.mock import Mock
 
 SPEC = importlib.util.spec_from_file_location(
     "mcp_demo_verdicts", Path(__file__).resolve().parents[1] / "mcp-admission-demo.py")
@@ -11,6 +14,22 @@ SPEC.loader.exec_module(DEMO)
 
 
 class DemoVerdicts(unittest.TestCase):
+    def test_startup_failure_retains_bounded_escaped_redacted_diagnostics(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            (workspace / ".agentfw").mkdir()
+            (workspace / ".agentfw" / "token").write_text("fixture-private-token")
+            (workspace / "daemon.log").write_bytes(
+                b"x" * 9000 + b"\n::error::untrusted\nfixture-private-token\nstartup failed")
+            message = DEMO.startup_failure(workspace, Mock(poll=lambda: 1))
+            self.assertNotIn("fixture-private-token", message)
+            self.assertNotIn("\n", message)
+            diagnostic = json.loads(message.split(": ", 1)[1])
+            self.assertEqual(diagnostic["exit_code"], 1)
+            self.assertIn("startup failed", diagnostic["daemon_log_tail"])
+            self.assertIn("[REDACTED]", diagnostic["daemon_log_tail"])
+            self.assertLessEqual(len(diagnostic["daemon_log_tail"]), 8192)
+
     def test_composed_policy_refusals_are_distinct(self):
         for reason, verdict in [("policy_denied", "deny"), ("policy_unconfirmed_ask", "ask")]:
             with self.subTest(reason=reason):

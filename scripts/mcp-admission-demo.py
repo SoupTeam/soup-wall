@@ -257,6 +257,25 @@ def stop(process):
             process.kill()
 
 
+def startup_failure(workspace, daemon):
+    """Keep bounded diagnostics before the owned temporary profile is removed."""
+    path = workspace / "daemon.log"
+    with path.open("rb") as source:
+        source.seek(0, os.SEEK_END)
+        source.seek(max(0, source.tell() - 8192))
+        log = source.read(8192).decode("utf-8", "replace")
+    for name in ("token", "native-token"):
+        token_path = workspace / ".agentfw" / name
+        if token_path.is_file():
+            token = token_path.read_text(encoding="utf-8").strip()
+            if token:
+                log = log.replace(token, "[REDACTED]")
+    # JSON escaping prevents child output from injecting CI workflow commands.
+    return "Agent daemon did not become healthy: " + json.dumps({
+        "exit_code": daemon.poll(), "daemon_log_tail": log,
+    })
+
+
 @contextmanager
 def agent_stack(agentfw: Path, workspace: Path):
     """Enforcing daemon with the demonstration registry and policy, notes and the loopback receiver."""
@@ -285,7 +304,7 @@ def agent_stack(agentfw: Path, workspace: Path):
                                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         try:
             if not wait_healthy(port, daemon):
-                raise RuntimeError("Agent daemon did not become healthy; see daemon.log")
+                raise RuntimeError(startup_failure(workspace, daemon))
             yield SimpleNamespace(
                 workspace=workspace, env=dict(env, **classifier_environment()), tools=fixture.TOOLS,
                 notes=notes, ledger=ledger, responses=ledger.with_suffix(".responses"), receiver=receiver,
