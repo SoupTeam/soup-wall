@@ -19,6 +19,8 @@ pub struct EnrolledAgent {
     pub agent_id: String,
     pub created_at_unix: i64,
     pub revoked_at_unix: Option<i64>,
+    /// Non-secret compare-and-swap generation, visible in admin inventory.
+    pub credential_generation: i64,
 }
 
 /// Token is sent to the operator at enrollment ONLY. It must not be persisted
@@ -182,6 +184,7 @@ impl TenantStore {
                 agent_id: agent_id.to_owned(),
                 created_at_unix,
                 revoked_at_unix: None,
+                credential_generation: 1,
             },
             token,
         })
@@ -254,7 +257,7 @@ impl TenantStore {
         let conn = self.connection()?;
         ensure_schema(&conn)?;
         conn.query_row(
-            "SELECT a.tenant_id, a.agent_id, a.created_at_unix, a.revoked_at_unix
+            "SELECT a.tenant_id, a.agent_id, a.created_at_unix, a.revoked_at_unix, a.credential_generation
              FROM managed_agent_enrollments a
              JOIN tenants t ON t.id = a.tenant_id
              WHERE a.token_hash = ?1 AND a.revoked_at_unix IS NULL AND t.active = 1",
@@ -265,6 +268,7 @@ impl TenantStore {
                     agent_id: r.get(1)?,
                     created_at_unix: r.get(2)?,
                     revoked_at_unix: r.get(3)?,
+                    credential_generation: r.get(4)?,
                 })
             },
         )
@@ -294,7 +298,7 @@ impl TenantStore {
         let conn = self.connection()?;
         ensure_schema(&conn)?;
         let mut stmt = conn.prepare(
-            "SELECT tenant_id, agent_id, created_at_unix, revoked_at_unix
+            "SELECT tenant_id, agent_id, created_at_unix, revoked_at_unix, credential_generation
              FROM managed_agent_enrollments WHERE tenant_id = ?1
              ORDER BY agent_id ASC LIMIT 256",
         )?;
@@ -304,6 +308,7 @@ impl TenantStore {
                 agent_id: r.get(1)?,
                 created_at_unix: r.get(2)?,
                 revoked_at_unix: r.get(3)?,
+                credential_generation: r.get(4)?,
             })
         })?;
         rows.collect::<rusqlite::Result<Vec<_>>>()
