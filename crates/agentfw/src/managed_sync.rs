@@ -391,7 +391,12 @@ impl ManagedSync {
         Ok(())
     }
 
-    async fn acknowledge(&self, client: &reqwest::Client, state: &Shared, token: &str) -> Result<()> {
+    async fn acknowledge(
+        &self,
+        client: &reqwest::Client,
+        state: &Shared,
+        token: &str,
+    ) -> Result<()> {
         let current = state
             .firewall
             .lock()
@@ -424,7 +429,12 @@ impl ManagedSync {
 
     /// A negative assertion is separate from applied and never claims that the
     /// running policy changed. Console validates identity + exact sequence/hash.
-    async fn report_rejection(&self, client: &reqwest::Client, bundle: &SignedAgentPolicy, token: &str) {
+    async fn report_rejection(
+        &self,
+        client: &reqwest::Client,
+        bundle: &SignedAgentPolicy,
+        token: &str,
+    ) {
         let result = client
             .post(match self.endpoint("agent/v1/policy/ack") {
                 Ok(url) => url,
@@ -445,7 +455,10 @@ impl ManagedSync {
     }
 
     async fn poll_once(&self, client: &reqwest::Client, state: &Shared) -> Result<()> {
-        let token = self.credential_source.load().map_err(|_| CredentialUnavailable)?;
+        let token = self
+            .credential_source
+            .load()
+            .map_err(|_| CredentialUnavailable)?;
         let mut response = client
             .get(self.endpoint("agent/v1/policy")?)
             .bearer_auth(token.as_str())
@@ -551,7 +564,12 @@ impl ManagedSync {
             let result = self.poll_once(&client, &state).await;
             let transport_state = match &result {
                 Ok(()) => "online",
-                Err(e) if e.chain().any(|cause| cause.downcast_ref::<CredentialUnavailable>().is_some()) => "auth_unavailable",
+                Err(e)
+                    if e.chain()
+                        .any(|cause| cause.downcast_ref::<CredentialUnavailable>().is_some()) =>
+                {
+                    "auth_unavailable"
+                }
                 Err(e)
                     if e.chain().any(|cause| {
                         cause.downcast_ref::<reqwest::Error>().is_some()
