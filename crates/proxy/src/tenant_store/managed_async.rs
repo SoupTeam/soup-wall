@@ -12,6 +12,17 @@ impl TenantStore {
             None => self.enroll_managed_agent(tenant_id, agent_id),
         }
     }
+    pub async fn rotate_managed_agent_async(
+        &self,
+        tenant_id: &str,
+        agent_id: &str,
+        input: &RotationRequest,
+    ) -> anyhow::Result<RotationOutcome> {
+        match &self.postgres {
+            Some(pg) => pg.rotate_managed_agent(tenant_id, agent_id, input).await,
+            None => self.rotate_managed_agent(tenant_id, agent_id, input),
+        }
+    }
     pub async fn authenticate_managed_agent_async(
         &self,
         authorization: Option<&str>,
@@ -80,6 +91,35 @@ impl TenantStore {
                     .await
             }
             None => self.deploy_managed_revision(tenant, agent, revision, rollback, issuer),
+        }
+    }
+    pub async fn deliver_authorized_managed_bundle_async(
+        &self,
+        tenant: &str,
+        agent: &str,
+        bearer: &str,
+    ) -> anyhow::Result<Option<SignedManagedBundle>> {
+        match &self.postgres {
+            Some(pg) => {
+                pg.deliver_authorized_managed_bundle(tenant, agent, bearer)
+                    .await
+            }
+            None => self.deliver_authorized_managed_bundle(tenant, agent, bearer),
+        }
+    }
+    pub async fn acknowledge_authorized_managed_bundle_async(
+        &self,
+        tenant: &str,
+        agent: &str,
+        bearer: &str,
+        report: &AppliedReport,
+    ) -> anyhow::Result<bool> {
+        match &self.postgres {
+            Some(pg) => {
+                pg.acknowledge_authorized_managed_bundle(tenant, agent, bearer, report)
+                    .await
+            }
+            None => self.acknowledge_authorized_managed_bundle(tenant, agent, bearer, report),
         }
     }
     pub async fn deliver_managed_bundle_async(
