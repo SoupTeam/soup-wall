@@ -380,24 +380,35 @@ impl TenantStore {
         })
     }
     fn require_managed_credential(
-        db: &rusqlite::Connection, tenant: &str, agent: &str, bearer: &str,
+        db: &rusqlite::Connection,
+        tenant: &str,
+        agent: &str,
+        bearer: &str,
     ) -> Result<()> {
-        let token = bearer.strip_prefix("Bearer ").context("invalid Agent authorization")?;
-        let hash = super::agent_enrollment::credential_hash(token)
-            .context("invalid Agent credential")?;
-        let authorized: Option<i64> = db.query_row(
-            "SELECT 1 FROM managed_agent_enrollments
+        let token = bearer
+            .strip_prefix("Bearer ")
+            .context("invalid Agent authorization")?;
+        let hash =
+            super::agent_enrollment::credential_hash(token).context("invalid Agent credential")?;
+        let authorized: Option<i64> = db
+            .query_row(
+                "SELECT 1 FROM managed_agent_enrollments
              WHERE tenant_id=?1 AND agent_id=?2 AND token_hash=?3 AND revoked_at_unix IS NULL",
-            params![tenant,agent,hash], |r| r.get(0),
-        ).optional()?;
+                params![tenant, agent, hash],
+                |r| r.get(0),
+            )
+            .optional()?;
         ensure!(authorized.is_some(), "Agent credential retired or revoked");
         Ok(())
     }
 
     pub fn deliver_authorized_managed_bundle(
-        &self, tenant: &str, agent: &str, bearer: &str,
+        &self,
+        tenant: &str,
+        agent: &str,
+        bearer: &str,
     ) -> Result<Option<SignedManagedBundle>> {
-        self.deliver_managed_bundle_inner(tenant,agent,Some(bearer))
+        self.deliver_managed_bundle_inner(tenant, agent, Some(bearer))
     }
 
     pub fn deliver_managed_bundle(
@@ -408,7 +419,10 @@ impl TenantStore {
         self.deliver_managed_bundle_inner(tenant, agent, None)
     }
     fn deliver_managed_bundle_inner(
-        &self, tenant: &str, agent: &str, credential: Option<&str>,
+        &self,
+        tenant: &str,
+        agent: &str,
+        credential: Option<&str>,
     ) -> Result<Option<SignedManagedBundle>> {
         let mut db = self.connection()?;
         schema(&db)?;
@@ -445,9 +459,13 @@ impl TenantStore {
         Ok(Some(bundle))
     }
     pub fn acknowledge_authorized_managed_bundle(
-        &self, tenant: &str, agent: &str, bearer: &str, report: &AppliedReport,
+        &self,
+        tenant: &str,
+        agent: &str,
+        bearer: &str,
+        report: &AppliedReport,
     ) -> Result<bool> {
-        self.acknowledge_managed_bundle_inner(tenant,agent,Some(bearer),report)
+        self.acknowledge_managed_bundle_inner(tenant, agent, Some(bearer), report)
     }
     pub fn acknowledge_managed_bundle(
         &self,
@@ -455,10 +473,14 @@ impl TenantStore {
         agent: &str,
         report: &AppliedReport,
     ) -> Result<bool> {
-        self.acknowledge_managed_bundle_inner(tenant,agent,None,report)
+        self.acknowledge_managed_bundle_inner(tenant, agent, None, report)
     }
     fn acknowledge_managed_bundle_inner(
-        &self, tenant: &str, agent: &str, credential: Option<&str>, report: &AppliedReport,
+        &self,
+        tenant: &str,
+        agent: &str,
+        credential: Option<&str>,
+        report: &AppliedReport,
     ) -> Result<bool> {
         ensure!(
             report.status == "applied" || report.status == "rejected",
