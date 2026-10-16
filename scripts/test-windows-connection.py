@@ -108,7 +108,7 @@ def native_tests(binary, directory):
     text = (output.stdout + output.stderr).decode("utf-8", errors="replace")
     (directory / "native-tests.log").write_text(text, encoding="utf-8")
     require(native_tests_passed(text, output.returncode),
-            "native Windows connection tests failed or did not execute")
+            "native Windows connection tests failed or did not execute\n" + text[-8192:])
     return {"sha256": digest(binary), "passed": int(re.search(r"test result: ok\. ([0-9]+) passed;", text)[1])}
 
 def host_run(claude, config, workspace, profile, steps):
