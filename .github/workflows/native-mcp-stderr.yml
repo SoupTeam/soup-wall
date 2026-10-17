@@ -1,0 +1,118 @@
+name: Native MCP diagnostic output
+
+on:
+  pull_request:
+    paths:
+      - 'crates/agentfw/**'
+      - 'crates/agent/**'
+      - 'scripts/verify-sou76-native-stderr.py'
+      - 'scripts/tests/test_sou76_native_stderr.py'
+      - 'scripts/verify-sou62-real-mcp.py'
+      - 'scripts/mcp-admission-demo.py'
+      - 'docs/operations/NATIVE_MCP_STDERR.md'
+      - '.github/workflows/native-mcp-stderr.yml'
+      - 'Cargo.lock'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-mcp-stderr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  required-linux-native-stderr:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    env:
+      RUSTUP_TOOLCHAIN: '1.94.1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@1.94.1
+      - uses: Swatinem/rust-cache@v2
+      - name: Build exact production runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD > "$RUNNER_TEMP/sou76-source.txt"
+          rustc --version > "$RUNNER_TEMP/sou76-rust.txt"
+          python3 --version > "$RUNNER_TEMP/sou76-python.txt"
+          cargo build --locked -p agentfw --bin agentfw --message-format=json > "$RUNNER_TEMP/sou76-build.jsonl"
+          sha256sum target/debug/agentfw > "$RUNNER_TEMP/sou76-binary.txt"
+      - name: Require nonempty observer and evidence controls
+        run: |
+          python3 -B - <<'PY'
+          import unittest
+          suite=unittest.defaultTestLoader.discover('scripts/tests',pattern='test_sou76_native_stderr.py')
+          if not suite.countTestCases(): raise SystemExit('required observer controls are missing')
+          result=unittest.TextTestRunner(verbosity=2).run(suite)
+          raise SystemExit(0 if result.wasSuccessful() else 1)
+          PY
+      - name: Required real daemon and native MCP output-boundary evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/verify-sou76-native-stderr.py --run --agentfw "$PWD/target/debug/agentfw" \
+            --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou76-acceptance" \
+            2>&1 | tee "$RUNNER_TEMP/sou76-summary.log"
+      - name: Publish bounded sanitized outcome
+        if: always()
+        run: |
+          python3 -B - <<'PY'
+          import importlib.util,json,os
+          from pathlib import Path
+          spec=importlib.util.spec_from_file_location('sou76','scripts/verify-sou76-native-stderr.py')
+          driver=importlib.util.module_from_spec(spec); spec.loader.exec_module(driver)
+          path=Path(os.environ['RUNNER_TEMP'])/'sou76-acceptance/report.json'
+          report=json.loads(path.read_text()) if path.exists() else {'status':'incomplete','error':'required_report_missing'}
+          rendered=json.dumps(driver.summary(report),indent=2)
+          print(rendered)
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as stream: stream.write('```json\n'+rendered+'\n```\n')
+          PY
+      - name: Retain sanitized hashes counters and owned cleanup witnesses
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou76-native-mcp-stderr-evidence
+          path: |
+            ${{ runner.temp }}/sou76-*.txt
+            ${{ runner.temp }}/sou76-build.jsonl
+            ${{ runner.temp }}/sou76-summary.log
+            ${{ runner.temp }}/sou76-acceptance/report.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  native-platform-launch:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-15, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@1.94.1
+      - uses: Swatinem/rust-cache@v2
+      - name: Actual supported native launch and diagnostic regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked -p agentfw --test mcp_stderr -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou76-native-platform.log"
+          python - <<'PY'
+          import os,re
+          from pathlib import Path
+          log=(Path(os.environ['RUNNER_TEMP'])/'sou76-native-platform.log').read_text(errors='replace')
+          matches=re.findall(r'test result: ok\. (\d+) passed; (\d+) failed;',log)
+          assert matches and any(int(p)>0 and int(f)==0 for p,f in matches),'nonempty actual native launch tests required'
+          PY
