@@ -7,6 +7,8 @@ on:
       - 'crates/agentfw/src/mcp/mod.rs'
       - 'crates/agentfw/src/main.rs'
       - 'scripts/verify-sou65-profile.py'
+      - 'scripts/verify-sou65-live.py'
+      - 'scripts/fixtures/sou65_profile_server.py'
       - '.github/workflows/sou65-profile.yml'
   workflow_dispatch:
 
@@ -32,3 +34,12 @@ jobs:
           cargo build --locked -p agentfw
       - name: Exercise import, validation, difference and no-clobber
         run: python3 scripts/verify-sou65-profile.py
+      - name: Verify real Agent and MCP collector use the compiled profile
+        run: python3 scripts/verify-sou65-live.py
+      - name: Preserve sanitized exact-source evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sou65-real-collector
+          path: target/sou65-live.json
+          if-no-files-found: warn
