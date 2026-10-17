@@ -170,10 +170,35 @@ class ObserverControls(unittest.TestCase):
         Client.stderr.events = [{'host_call_id': 41, 'state': 'inflight', 'execution_dispatched': True}]
         with patch.object(V.time, 'monotonic', side_effect=[0, 11]), self.assertRaisesRegex(ValueError, 'pending_dispatched_work_not_observed'):
             V.wait_dispatched(Client(), 40)
-
         Client.stderr.events = [{'host_call_id': 40, 'state': 'inflight', 'execution_dispatched': False}]
         with patch.object(V.time, 'monotonic', side_effect=[0, 11]), self.assertRaisesRegex(ValueError, 'pending_dispatched_work_not_observed'):
             V.wait_dispatched(Client(), 40)
+
+    def test_static_refusal_is_captured_across_fragmented_reads(self):
+        value = self.capture([b'Err', b'or: mcp_budget_', b'delegation_invalid\n'])
+        self.assertEqual(value['refusals'], ['mcp_budget_delegation_invalid'])
+        self.assertFalse(value['marker_leak'])
+        value = self.capture([b'  MCP sandbox runtime asset digest mismatch  \n'])
+        self.assertEqual(value['refusals'], ['selected_sandbox_asset_digest_mismatch'])
+
+    def test_static_refusal_parser_never_copies_prefix_suffix_path_or_marker(self):
+        for raw in (b'Error: mcp_budget_new_unrecognized_code', b'Error: mcp_budget_setup_failed: /private/secret',
+                    b'prefix mcp_budget_setup_failed', b'/tmp/mcp_budget_setup_failed',
+                    b'Error: ' + V.MARKERS[0], b'\xffError: mcp_budget_setup_failed'):
+            self.assertIsNone(V.static_refusal(raw))
+        value = self.capture([b'Error: mcp_budget_setup_failed: ' + V.MARKERS[1] + b'\n'])
+        self.assertTrue(value['marker_leak'])
+        self.assertEqual(value['refusals'], [])
+        self.assertNotIn(V.MARKERS[1].decode(), json.dumps(value))
+
+    def test_capability_probe_reports_absence_without_claiming_runtime_and_removes_itself(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            capabilities = V.delegation_capabilities(root)
+            self.assertEqual(set(capabilities), {'cgroup.kill', 'memory.peak', 'memory.swap.max', 'memory.oom.group',
+                                                 'cpu.max', 'pids.max', 'pids.peak', 'cpu.max.burst'})
+            self.assertTrue(all(value is False for value in capabilities.values()))
+            self.assertEqual(list(root.iterdir()), [])
 
 
 if __name__ == '__main__':

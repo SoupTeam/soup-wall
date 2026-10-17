@@ -40,6 +40,37 @@ CASES = {'original-useful', 'original-concurrency-cancel', 'result-denied-follow
 FILES = ('memory.max', 'memory.swap.max', 'memory.oom.group', 'pids.max', 'cpu.max',
          'memory.current', 'memory.peak', 'pids.current', 'pids.events', 'cpu.stat',
          'memory.events', 'cgroup.events', 'cgroup.procs')
+# Only exact finite literals are retained from non-JSON diagnostics. Never copy
+# arbitrary error text, an mcp_budget_* prefix match, a path or an OS error body.
+STATIC_REFUSALS = {
+    'mcp_budget_attach_unverified', 'mcp_budget_boundary_failed', 'mcp_budget_child_identity_missing',
+    'mcp_budget_cleanup_unverified', 'mcp_budget_config_invalid', 'mcp_budget_controller_unavailable',
+    'mcp_budget_delegation_invalid', 'mcp_budget_enforced', 'mcp_budget_hugetlb_mount_unsupported',
+    'mcp_budget_limit_drift', 'mcp_budget_membership_unverified', 'mcp_budget_memory_exhausted',
+    'mcp_budget_monitor_stopped', 'mcp_budget_mount_observation_failed', 'mcp_budget_observation_failed',
+    'mcp_budget_pids_exhausted', 'mcp_budget_platform_unsupported', 'mcp_budget_setup_failed',
+    'mcp_budget_unsupported', 'mcp_budget_wall_expired',
+}
+PREPARATION_REFUSALS = {
+    'MCP sandbox directory must be a normalized absolute path': 'selected_sandbox_directory_invalid',
+    'MCP sandbox directory must not be a symlink': 'selected_sandbox_directory_symlink',
+    'MCP sandbox refuses the host filesystem root': 'selected_sandbox_host_root_refused',
+    'MCP sandbox directory identity changed while preparing': 'selected_sandbox_directory_identity_changed',
+    'MCP sandbox runtime asset exceeds its size limit': 'selected_sandbox_runtime_asset_limit',
+    'MCP sandbox asset must be a normalized absolute path': 'selected_sandbox_asset_path_invalid',
+    'MCP sandbox runtime asset has an invalid file type or mode': 'selected_sandbox_asset_mode_invalid',
+    'MCP sandbox runtime asset digest mismatch': 'selected_sandbox_asset_digest_mismatch',
+    'MCP sandbox runtime asset changed while hashing': 'selected_sandbox_asset_identity_changed',
+    'MCP server sandbox architecture is unsupported': 'selected_sandbox_architecture_unsupported',
+    'failed to create MCP syscall filter': 'selected_sandbox_filter_create_failed',
+    'failed to seal MCP syscall filter': 'selected_sandbox_filter_seal_failed',
+    'MCP server installed package tree digest mismatch': 'selected_sandbox_package_digest_mismatch',
+    'Git Landlock launcher is required': 'selected_sandbox_git_launcher_required',
+    'MCP sandbox requires a bounded, explicit library list': 'selected_sandbox_library_list_invalid',
+    'MCP sandbox library destination is invalid or duplicated': 'selected_sandbox_library_destination_invalid',
+    'failed to start the selected MCP server sandbox': 'selected_sandbox_spawn_failed',
+    'the selected MCP server profile requires Linux bubblewrap': 'selected_sandbox_linux_required',
+}
 FIXTURE = r'''// SOU-79 owned adversarial fixture; never the upstream server.
 const fs = require('fs'), readline = require('readline'), cp = require('child_process');
 const entry = __filename, mode = process.argv[2];
@@ -116,6 +147,19 @@ def budget(root, **changes):
             'cpuQuotaMicros': 100000, 'wallMillis': 120000} | changes
 
 
+def delegation_capabilities(root):
+    # Inspect one fresh empty leaf owned by this disposable acceptance. Missing
+    # features are diagnostic only: the actual runtime must perform its refusal.
+    probe = root / 'capability-probe'
+    probe.mkdir(mode=0o700)
+    try:
+        return {name: (probe / name).exists() for name in (
+            'cgroup.kill', 'memory.peak', 'memory.swap.max', 'memory.oom.group',
+            'cpu.max', 'pids.max', 'pids.peak', 'cpu.max.burst')}
+    finally:
+        probe.rmdir()
+
+
 def prepare_delegation(unit):
     """Explicit disposable-service setup, never a normal-runtime fallback."""
     require(platform.system() == 'Linux' and os.geteuid() != 0, 'unprivileged_linux_required')
@@ -142,7 +186,8 @@ def prepare_delegation(unit):
     require(str(os.getpid()) in (manager / 'cgroup.procs').read_text().split(), 'observer_pid_calibration_failed')
     require(BASE.ProcessWitness.identity(os.getpid()) is not None, 'observer_start_time_calibration_failed')
     return selected, {'unit': unit, 'manager_membership_verified': True,
-                      'controllers': ['cpu', 'memory', 'pids'], 'unprivileged': True}
+                      'controllers': ['cpu', 'memory', 'pids'], 'unprivileged': True,
+                      'capabilities': delegation_capabilities(selected)}
 
 
 def safe_budget(value):
@@ -171,6 +216,18 @@ def safe_budget(value):
     return result
 
 
+def static_refusal(raw):
+    try:
+        value = raw.decode('utf-8').strip()
+    except UnicodeError:
+        return None
+    if value.startswith('Error: '):
+        value = value[len('Error: '):]
+    if value in STATIC_REFUSALS:
+        return value
+    return PREPARATION_REFUSALS.get(value)
+
+
 def safe_event(value):
     if not isinstance(value, dict) or value.get('event') not in {
         'mcp_real_server_start', 'mcp_real_server_end', 'mcp_real_call',
@@ -196,6 +253,7 @@ class Capture:
     def __init__(self, stream, protocol=False):
         self.stream, self.protocol = stream, protocol
         self.frames, self.records, self.events = queue.Queue(maxsize=64), [], []
+        self.refusals = []
         self.count, self.hasher, self.leaked, self.error, self.peak = 0, hashlib.sha256(), False, None, 0
         self.thread = threading.Thread(target=self.drain, daemon=True)
         self.thread.start()
@@ -236,6 +294,9 @@ class Capture:
                             event = None
                         if event and len(self.events) < 128:
                             self.events.append(event)
+                        refusal = static_refusal(pending)
+                        if refusal and refusal not in self.refusals and len(self.refusals) < 16:
+                            self.refusals.append(refusal)
                     pending.clear()
         except OSError:
             self.error = 'stream_read_failed'
@@ -254,7 +315,8 @@ class Capture:
             self.stream.close()
         return {'bytes': self.count, 'sha256': self.hasher.hexdigest(), 'marker_leak': self.leaked,
                 'error': self.error, 'buffer_peak': self.peak, 'thread_stopped': not self.thread.is_alive(),
-                'records': copy.deepcopy(self.records), 'events': copy.deepcopy(self.events)}
+                'records': copy.deepcopy(self.records), 'events': copy.deepcopy(self.events),
+                'refusals': list(self.refusals)}
 
 
 def kernel_values(path):
@@ -827,12 +889,13 @@ def run(args):
 def summary(report):
     result = {k: report.get(k) for k in ('format', 'status', 'passed', 'failed', 'skipped', 'incomplete', 'required_cases', 'error', 'source_before', 'source_after',
               'binary_sha256', 'driver_sha256', 'fixture_sha256', 'fixture_package_tree_sha256', 'config_sha256', 'delegation_removed',
-              'original_unchanged', 'workspace_unchanged')}
+              'original_unchanged', 'workspace_unchanged', 'delegation')}
     result['checks'] = report.get('checks', [])
     result['resource_witnesses'] = [{
         'case': row['case'], 'exit_code': row['exit_code'], 'budget_sha256': row['budget_sha256'],
         'forced_cleanup': row['forced_cleanup'], 'kernel': row.get('kernel'),
         'budget_end': next((e for e in row['stderr']['events'] if e['event'] == 'mcp_real_budget_end'), None),
+        'refusals': row['stderr'].get('refusals', []),
         'processes_stopped': row['process']['all_stopped']}
         for row in report.get('cleanup', {}).get('clients', []) if row.get('kernel')]
     return result
