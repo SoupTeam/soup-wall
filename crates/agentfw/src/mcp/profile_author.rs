@@ -851,6 +851,7 @@ pub fn run(cmd: Command) -> Result<()> {
             );
         }
     }
+    Ok(())
 }
 
 #[cfg(test)]
