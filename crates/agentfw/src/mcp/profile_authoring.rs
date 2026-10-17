@@ -359,6 +359,24 @@ mod tests {
             discovery_sha256:discovery_hash(&example),registry_id:"owned".into(),tools:vec![]};
         assert!(verify_declaration(&d,&example).is_err());
     }
+    #[test] fn nested_and_array_recipient_shapes_remain_explicit() {
+        let schema = json!({"type":"object","properties":{
+            "message":{"type":"object","properties":{
+                "to":{"type":"array","items":{"type":"string"}},
+                "metadata":{"type":"object","properties":{
+                    "recipient":{"type":"string"}
+                },"additionalProperties":false}
+            },"additionalProperties":false}
+        },"additionalProperties":false});
+        assert!(selector_shape(&schema,"/message/to").is_ok());
+        assert!(selector_shape(&schema,"/message/metadata/recipient").is_ok());
+        assert!(selector_shape(&schema,"/message/to/0").is_ok());
+        assert!(selector_shape(&schema,"/message/to/-").is_err());
+        assert!(selector_shape(&schema,"/message/missing").is_err());
+        assert!(selector_shape(&schema,"/message/metadata").is_err());
+        assert!(selector_shape(&schema,"/message/~2recipient").is_err());
+    }
+
     #[test] fn drift_is_rejected() {
         let snap=Discovery{format:FORMAT.into(),server_id:"owned".into(),server_version:"1".into(),
             tools:vec![json!({"name":"read","inputSchema":{"type":"object","properties":{},
