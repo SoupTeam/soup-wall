@@ -136,10 +136,8 @@ fn no_owned_processes(work: &Path) -> bool {
 
 #[test]
 fn installed_agent_passes_every_scenario_after_a_port_collision() {
-    let Some(python) = python() else {
-        eprintln!("skipped: no Python 3 for the selected classifier");
-        return;
-    };
+    let python =
+        python().expect("native self-test acceptance requires a working Python 3 interpreter");
     let run = Run::new();
     // An unrelated listener holds the preferred port; it must be replaced, not touched.
     let busy = TcpListener::bind(("127.0.0.1", 0)).unwrap();
@@ -214,10 +212,8 @@ fn installed_agent_passes_every_scenario_after_a_port_collision() {
 
 #[test]
 fn interruption_stops_owned_processes_and_reports_incomplete() {
-    let Some(python) = python() else {
-        eprintln!("skipped: no Python 3 for the selected classifier");
-        return;
-    };
+    let python =
+        python().expect("native self-test acceptance requires a working Python 3 interpreter");
     let run = Run::new();
     let child = run
         .command(&python, &[])
@@ -264,10 +260,8 @@ fn interruption_stops_owned_processes_and_reports_incomplete() {
 
 #[test]
 fn missing_or_wrong_classifier_is_incomplete_before_anything_starts() {
-    let Some(python) = python() else {
-        eprintln!("skipped: no Python 3 for the selected classifier");
-        return;
-    };
+    let python =
+        python().expect("native self-test acceptance requires a working Python 3 interpreter");
     let run = Run::new();
     let output = Command::new(AGENT)
         .args([
@@ -334,10 +328,8 @@ fn missing_or_wrong_classifier_is_incomplete_before_anything_starts() {
 
 #[test]
 fn agent_without_a_working_daemon_is_incomplete_with_start_attempts() {
-    let Some(python) = python() else {
-        eprintln!("skipped: no Python 3 for the selected classifier");
-        return;
-    };
+    let python =
+        python().expect("native self-test acceptance requires a working Python 3 interpreter");
     let run = Run::new();
     // A stand-in executable that passes input validation and install, but whose daemon exits.
     let fake = run.dir.path().join("fake-agent");
@@ -418,9 +410,7 @@ fn fixture_server_refuses_destinations_other_than_its_receiver() {
 
 #[test]
 fn no_owned_processes_witness_detects_live_process_and_clears_on_exit() {
-    let Some(py) = python() else {
-        return;
-    };
+    let py = python().expect("native process witness requires a working Python 3 interpreter");
     let temp = tempfile::tempdir().unwrap();
     let work = temp.path().join("work");
     std::fs::create_dir(&work).unwrap();

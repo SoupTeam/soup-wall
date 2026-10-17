@@ -172,3 +172,7 @@ interruption, a missing and a wrong classifier revision, a daemon that cannot
 start, refusal to replace an existing report and the fixture server's
 destination check. See the [SOU-61 Linux evidence](evidence/SOU61_SELF_TEST_2026-10-16.md)
 and [SOU-77 macOS evidence](evidence/sou-77-evidence.md).
+
+### Native macOS acceptance scope
+
+The retained native macOS positive evidence covers ARM64. Intel x86-64 remains conditional until a native positive run is retained. The integration acceptance requires a working local Python 3 interpreter and fails if it is missing; it does not count unavailable prerequisites as a passing skip.

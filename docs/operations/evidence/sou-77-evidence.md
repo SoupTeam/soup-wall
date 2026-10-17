@@ -9,7 +9,7 @@ No live model, provider account, network destination, real credentials or sealed
 - Host: Apple Silicon (`arm64`), Darwin Kernel Version 25.3.0 (macOS Darwin 25)
 - Toolchain: rustc 1.99.0, cargo 1.99.0 (Homebrew)
 - Python: system Python 3.9.6 (`/usr/bin/python3`)
-- Base commit: `main` `b53620db9e0952d92d47fecefa25b50f75f91754` (SOU-67 merge)
+- Base commit: `main` `b53620db96209b3298fa11e3c399de5db6c83fe7` (SOU-67 merge)
 
 ## Source and binary assets
 
@@ -18,7 +18,7 @@ No live model, provider account, network destination, real credentials or sealed
 | `crates/agentfw/src/self_test/mod.rs` | `8b1170cb98cbe437fb33569cd03af9b762bb276ba7f3e5aaef7aa9e160196b95` |
 | `crates/agentfw/src/self_test/unix.rs` | `a8906f7086e6a79f2708caa5f2052d7986ad16f292ac3f6b18b2cd44322ccdb9` |
 | `crates/agentfw/src/self_test/fixture.rs` | `535431e670d9162b0755b6bd5bbaaed43bbef0cd26cd1e38c46535bf08dc71ec` |
-| `crates/agentfw/tests/self_test.rs` | `2f5de2fb8f996d9a56eef59637ae6447c84eebfdf682b662595e9b7472d40f40` |
+| `crates/agentfw/tests/self_test.rs` | `cc22bd836d04d0c7839ea65804dd1d72fd7f1f97623bb3970927ba32a6a1403d` |
 | Built binary `agentfw` (release) | `c070a10397203cf03f869f5ba7f89f8d274fa78ce3865dd4f768bcf281780461` |
 | Classifier script `rule_baseline.py` | `d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd` |
 
@@ -85,3 +85,7 @@ Running the same command with a mismatched `--classifier-sha256` stopped before 
 - Scripted client frames: not Claude Code, model context or live-model effectiveness.
 - Bundled fixture server with two tools; other servers require their own reviewed registry.
 - macOS and Linux profiles: other operating systems report `unsupported` (exit 5).
+
+## Reviewer follow-up
+
+The required native self-test integration suite now fails if Python is unavailable; missing prerequisites cannot become a successful early return. The retained native runtime evidence is macOS ARM64. Intel x86-64 remains conditional until a corresponding native positive acceptance is retained; compilation alone is insufficient. The runtime implementation and release binary above are unchanged by this test/documentation follow-up.
