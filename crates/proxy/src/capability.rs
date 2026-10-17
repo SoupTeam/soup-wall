@@ -53,7 +53,16 @@ pub fn violations(policy: &CapabilityPolicy, events: &[SecurityEvent]) -> Vec<Vi
     let calls = events
         .iter()
         .filter_map(|event| match (&event.direction, &event.kind) {
-            (EventDirection::Output, EventKind::ToolCall { name, args, .. }) => Some(ToolCall {
+            (
+                EventDirection::Output,
+                EventKind::ToolCall {
+                    call_id,
+                    name,
+                    args,
+                    ..
+                },
+            ) => Some(ToolCall {
+                id: call_id.clone(),
                 name: name.clone(),
                 args: args.clone(),
             }),
@@ -267,6 +276,7 @@ mod tests {
 
     fn call(name: &str, args: serde_json::Value) -> ToolCall {
         ToolCall {
+            id: None,
             name: name.into(),
             args,
         }
