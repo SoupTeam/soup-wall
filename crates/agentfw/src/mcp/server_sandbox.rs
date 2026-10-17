@@ -241,13 +241,29 @@ fn filter_instructions(git_landlock: bool) -> anyhow::Result<Vec<(u16, u8, u8, u
         libc::SYS_listen,
         libc::SYS_accept,
         libc::SYS_accept4,
-        libc::SYS_sendto,
         libc::SYS_sendmsg,
         libc::SYS_sendmmsg,
         libc::SYS_io_uring_setup,
         libc::SYS_openat2,
     ] {
         instructions.push((0x15, 0, 1, syscall as u32));
+        instructions.push((0x06, 0, 0, deny));
+    }
+    if git_landlock {
+        // asyncio wakes its loop from worker threads through an anonymous
+        // socketpair. No socket/connect/accept or inherited socket is available.
+        // Permit sendto only without a destination (both pointer words zero).
+        instructions.extend([
+            (0x15, 0, 6, libc::SYS_sendto as u32),
+            (0x20, 0, 0, 48),
+            (0x15, 0, 3, 0),
+            (0x20, 0, 0, 52),
+            (0x15, 0, 1, 0),
+            (0x06, 0, 0, 0x7fff_0000),
+            (0x06, 0, 0, deny),
+        ]);
+    } else {
+        instructions.push((0x15, 0, 1, libc::SYS_sendto as u32));
         instructions.push((0x06, 0, 0, deny));
     }
     #[cfg(target_arch = "x86_64")]
@@ -623,7 +639,7 @@ def null_open():
     return True
 git = subprocess.run(['/mcp-runtime/git', 'status', '--porcelain'], cwd='/workspace', capture_output=True, timeout=5)
 loop = asyncio.new_event_loop()
-loop.run_until_complete(asyncio.sleep(0))
+assert loop.run_until_complete(asyncio.wait_for(asyncio.to_thread(lambda: 42), 3)) == 42
 loop.close()
 result = {{
  'asyncio_ready': True,
@@ -784,42 +800,55 @@ print(json.dumps(result))
     fn syscall_filter_preserves_read_opens_and_only_stdio_fionbio() {
         for git_landlock in [false, true] {
             let instructions = filter_instructions(git_landlock).unwrap();
-            let evaluate = |syscall: i64, first: u32, second: u32, third: u32| {
-                let mut data = [0_u8; 64];
-                let architecture = instructions[1].3;
-                for (offset, value) in [
-                    (0, syscall as u32),
-                    (4, architecture),
-                    (16, first),
-                    (24, second),
-                    (32, third),
-                ] {
-                    data[offset..offset + 4].copy_from_slice(&value.to_ne_bytes());
-                }
-                let mut accumulator = 0;
-                let mut index = 0;
-                loop {
-                    assert!(index < instructions.len(), "filter branch escaped program");
-                    let (code, yes, no, value) = instructions[index];
-                    let jump = match code {
-                        0x20 => {
-                            accumulator = u32::from_ne_bytes(
-                                data[value as usize..value as usize + 4].try_into().unwrap(),
-                            );
-                            None
-                        }
-                        0x15 => Some(accumulator == value),
-                        0x25 => Some(accumulator > value),
-                        0x35 => Some(accumulator >= value),
-                        0x45 => Some(accumulator & value != 0),
-                        0x06 => return value,
-                        _ => panic!("unsupported classic-BPF instruction"),
-                    };
-                    index += 1 + jump.map_or(0, |taken| if taken { yes } else { no }) as usize;
-                }
-            };
+            let evaluate_full =
+                |syscall: i64, first: u32, second: u32, third: u32, address: u64| {
+                    let mut data = [0_u8; 64];
+                    let architecture = instructions[1].3;
+                    for (offset, value) in [
+                        (0, syscall as u32),
+                        (4, architecture),
+                        (16, first),
+                        (24, second),
+                        (32, third),
+                        (48, address as u32),
+                        (52, (address >> 32) as u32),
+                    ] {
+                        data[offset..offset + 4].copy_from_slice(&value.to_ne_bytes());
+                    }
+                    let mut accumulator = 0;
+                    let mut index = 0;
+                    loop {
+                        assert!(index < instructions.len(), "filter branch escaped program");
+                        let (code, yes, no, value) = instructions[index];
+                        let jump = match code {
+                            0x20 => {
+                                accumulator = u32::from_ne_bytes(
+                                    data[value as usize..value as usize + 4].try_into().unwrap(),
+                                );
+                                None
+                            }
+                            0x15 => Some(accumulator == value),
+                            0x25 => Some(accumulator > value),
+                            0x35 => Some(accumulator >= value),
+                            0x45 => Some(accumulator & value != 0),
+                            0x06 => return value,
+                            _ => panic!("unsupported classic-BPF instruction"),
+                        };
+                        index += 1 + jump.map_or(0, |taken| if taken { yes } else { no }) as usize;
+                    }
+                };
+            let evaluate =
+                |syscall, first, second, third| evaluate_full(syscall, first, second, third, 0);
             let allow = 0x7fff_0000;
             let deny = 0x0005_0000 | libc::EACCES as u32;
+            assert_eq!(
+                evaluate(libc::SYS_sendto, 5, 0, 1),
+                if git_landlock { allow } else { deny }
+            );
+            for address in [1, 1_u64 << 32, u64::MAX] {
+                assert_eq!(evaluate_full(libc::SYS_sendto, 5, 0, 1, address), deny);
+            }
+            assert_eq!(evaluate(libc::SYS_sendmsg, 5, 0, 0), deny);
             for fd in [0, 1, 2] {
                 assert_eq!(
                     evaluate(libc::SYS_ioctl, fd, libc::FIONBIO as u32, 0),
