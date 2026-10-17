@@ -37,6 +37,8 @@ const DEADLINE: Duration = Duration::from_secs(12);
 
 const SERVER: &str = r#"
 import json, os, sys, threading, time
+# This fixture owns UTF-8/LF protocol bytes, including on Windows text stdout.
+sys.stdout.reconfigure(encoding='utf-8', newline='\n', write_through=True)
 root, mode = sys.argv[1:]
 marker = b'SOU76-OWNED-STDERR-CANARY-4fa83c'
 stderr_closed = False
