@@ -533,15 +533,14 @@ fn prepare(snapshot_path: &Path, declaration_path: &Path) -> Result<Prepared> {
         );
         let (action, policy, egress) =
             policy_for(&snapshot.server_id, &d.name, &schema_hash, authority)?;
-        let policy_json = policy
-            .as_ref()
-            .map(serde_json::to_value)
-            .transpose()?;
+        let policy_json = policy.as_ref().map(serde_json::to_value).transpose()?;
         let entry = json!({"name":d.name,"schema_sha256":schema_hash,
             "action_class":action,"result_provenance":"untrusted","egress":egress,
             "resource_policy":policy_json});
         let workspace = policy.as_ref().map(|p| p.workspace.clone());
-        let scoped_resources = policy.as_ref().map_or_else(Vec::new, |p| p.allowed_resources.clone());
+        let scoped_resources = policy
+            .as_ref()
+            .map_or_else(Vec::new, |p| p.allowed_resources.clone());
         if let Some(p) = policy {
             policies.push(p);
         }
@@ -810,9 +809,18 @@ pub fn run(cmd: Command) -> Result<()> {
                             old_tool.authority_sha256 != new_tool.authority_sha256,
                         ),
                         ("workspace", old_tool.workspace != new_tool.workspace),
-                        ("resources", old_tool.scoped_resources != new_tool.scoped_resources),
-                        ("egress", old_tool.egress_selectors != new_tool.egress_selectors),
-                        ("operator_review", old_tool.review_sha256 != new_tool.review_sha256),
+                        (
+                            "resources",
+                            old_tool.scoped_resources != new_tool.scoped_resources,
+                        ),
+                        (
+                            "egress",
+                            old_tool.egress_selectors != new_tool.egress_selectors,
+                        ),
+                        (
+                            "operator_review",
+                            old_tool.review_sha256 != new_tool.review_sha256,
+                        ),
                     ]
                     .into_iter()
                     .filter_map(|(k, c)| c.then_some(k))
