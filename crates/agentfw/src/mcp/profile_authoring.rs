@@ -181,7 +181,7 @@ fn verify_declaration(d: &Declaration, snapshot: &Discovery) -> Result<Value> {
         ensure!(tool.egress.len() <= 32, "excessive egress declarations");
         // Only support exact currently enforcing registry actions. No semantic
         // widening is inferred from a text description or imported prediction.
-        ensure!(matches!(tool.action_class.as_str(), "read_only" | "file_write" | "network_send"),
+        ensure!(matches!(tool.action_class.as_str(), "read_only" | "side_effecting" | "network"),
             "unsupported action class");
         ensure!(matches!(tool.result_provenance.as_str(), "untrusted" | "local_system" | "local_project"),
             "unsupported result provenance");
