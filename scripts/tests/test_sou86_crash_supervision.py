@@ -266,6 +266,57 @@ class InventoryControls(unittest.TestCase):
 
 
 class AcceptanceControls(unittest.TestCase):
+    def test_failed_unappended_client_retains_only_bounded_static_terminal_diagnostics(self):
+        value = {'cleanup': {'clients': [{'case': 'peer-isolation', 'exit_code': 1, 'stderr': {
+            'refusals': ['mcp_budget_wall_expired', 'raw-private-error'],
+            'events': [{'event': 'mcp_real_budget_end', 'mode': 'enforced', 'source': 'raw-private-output'},
+                       {'event': 'mcp_real_server_end', 'cleanup_verified': True, 'path': '/private/secret'}]}}]}}
+        result = V.summary(value)['failure_clients']
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['case'], 'peer-isolation')
+        self.assertEqual(result[0]['refusals'], ['mcp_budget_wall_expired'])
+        self.assertEqual(result[0]['last_budget_end'], {'event': 'mcp_real_budget_end', 'mode': 'enforced'})
+        self.assertEqual(result[0]['last_server_end'], {'event': 'mcp_real_server_end', 'cleanup_verified': True})
+        self.assertNotIn('raw-private', json.dumps(result))
+        self.assertNotIn('/private/secret', json.dumps(result))
+        value['cleanup']['clients'] *= 100
+        self.assertEqual(len(V.summary(value)['failure_clients']), 32)
+
+    def test_only_long_lived_peer_gets_larger_finite_wall_budget(self):
+        root = Path('/sys/fs/cgroup/owned/budgets')
+        ordinary = V.RESOURCE.budget(root)
+        self.assertEqual(V.acceptance_budget(root, 'peer-isolation'), ordinary | {'wallMillis': 600000})
+        for label in (V.CASES - {'peer-isolation'}) | {'prearm-startup-inventory'}:
+            self.assertEqual(V.acceptance_budget(root, label), ordinary)
+        self.assertEqual(V.ACCEPTANCE_MILLIS, 10000)
+
+    def test_one_identity_read_keeps_liveness_and_presence_consistent_during_exit(self):
+        original = {'pid': 101, 'start_time_ticks': 5, 'state': 'R', 'fixture_role': 'detached'}
+        observed = {(101, 5): original}
+        with patch.object(V, 'identity', side_effect=[dict(original), None]) as read:
+            live, present = V.process_snapshot(observed)
+            self.assertEqual(read.call_count, 1)
+            self.assertEqual(live, present)
+            self.assertEqual(len(present), 1)
+            self.assertEqual(V.process_snapshot(observed), ([], []))
+            self.assertEqual(read.call_count, 2)
+
+    def test_single_snapshot_distinguishes_zombie_and_reused_process_without_role_loss(self):
+        original = {'pid': 101, 'start_time_ticks': 5, 'state': 'R', 'fixture_role': 'detached'}
+        with patch.object(V, 'identity', return_value=dict(original, state='Z', fixture_role=None)) as read:
+            live, present = V.process_snapshot({(101, 5): original})
+            self.assertEqual(live, [])
+            self.assertEqual(present, [dict(original, state='Z')])
+            self.assertEqual(read.call_count, 1)
+        with patch.object(V, 'identity', return_value=dict(original, start_time_ticks=6)):
+            self.assertEqual(V.process_snapshot({(101, 5): original}), ([], []))
+
+    def test_nested_bubblewrap_arguments_do_not_identify_outer_process_as_trusted_helper(self):
+        for role, flag in (('owner', b'--agentfw-mcp-owner-v1'), ('pid1', b'--agentfw-mcp-pid1-v1')):
+            self.assertEqual(V.trusted_command_role([b'/mcp-runtime/agentfw', flag, b'8']), role)
+            self.assertIsNone(V.trusted_command_role([b'/proc/self/fd/9', b'--die-with-parent',
+                b'--as-pid-1', b'--', b'/mcp-runtime/agentfw', flag, b'8']))
+
     def test_no_failed_skipped_or_empty_denominators_count_as_complete(self):
         for key, value in (('failed', 1), ('skipped', 1), ('required_cases', 0)):
             for builder, grader in ((complete_acceptance, V.grade_acceptance), (complete_inventory, V.grade_inventory)):

@@ -134,9 +134,9 @@ pub(crate) fn prepare(profile: &ProfileConfig) -> anyhow::Result<PreparedServerS
     }
 }
 
-/// Kill the outer process group and reap bubblewrap. Bubblewrap's strict PID
-/// namespace and `--die-with-parent` terminate descendants even if they create
-/// their own session/process group. Call this before dropping transport tasks.
+/// Kill and reap the outside owner's process group after attempting its private
+/// cleanup acknowledgement. The trusted PID 1 lease and bubblewrap parent-death
+/// chain stop descendants even if they create their own session/process group.
 pub(crate) async fn terminate(child: &mut Child) -> anyhow::Result<()> {
     #[cfg(target_os = "linux")]
     let group_error = if let Some(pid) = child.id() {

@@ -209,6 +209,10 @@ boundary. The five accepted-runtime baseline cases and separate pre-arm startup
 inventory do not inflate that protection denominator. Independent useful peer
 calls before and after failures establish that cleanup stays within its owner.
 
+The long-lived peer has an explicit 600000 ms test wall budget so its ordinary
+quota does not expire while the full fault matrix runs. Other selected limits
+and the independent 10000 ms crash observation deadline stay in effect.
+
 Only fixed safe metadata, identities, counts and independently witnessed effects
 belong in retained reports. Raw MCP stdout, child stderr, private control bytes,
 credentials and synthetic secret-marker payloads are not diagnostic artifacts.

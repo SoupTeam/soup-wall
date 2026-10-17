@@ -1112,7 +1112,7 @@ mod linux {
                     "mcp_owner_sandbox_identity_invalid"
                 );
                 bytes.push(byte[0]);
-                if byte[0] == b'\n' && bytes.iter().any(|byte| *byte == b'}') {
+                if byte[0] == b'\n' && bytes.contains(&b'}') {
                     break;
                 }
             }
@@ -1767,6 +1767,68 @@ mod linux {
                 process_ticks(std::process::id()).unwrap()
             );
             assert_eq!(decoded.collector_pidfd, collector.as_raw_fd());
+        }
+
+        #[tokio::test]
+        async fn verified_cleanup_does_not_erase_an_earlier_or_late_runtime_fault() {
+            for prior_event in [false, true] {
+                let (reader, mut writer) = UnixStream::pair().unwrap();
+                reader.set_nonblocking(true).unwrap();
+                let failed = Arc::new(AtomicBool::new(false));
+                let complete = Arc::new(AtomicBool::new(false));
+                let state = Arc::new(Mutex::new(ParentState {
+                    reason: "mcp_owner_active",
+                    report: None,
+                    finishing: true,
+                    quiesced: false,
+                }));
+                let changed = Arc::new(tokio::sync::Notify::new());
+                let instance = "b".repeat(32);
+                let task = tokio::spawn(parent_monitor(
+                    tokio::net::UnixStream::from_std(reader).unwrap(),
+                    pidfd(std::process::id()).unwrap(),
+                    instance.clone(),
+                    Arc::clone(&failed),
+                    Arc::clone(&complete),
+                    Arc::clone(&state),
+                    changed,
+                ));
+                if prior_event {
+                    writer
+                        .write_all(
+                            &encode(&RuntimeFailure {
+                                format: FORMAT.to_owned(),
+                                instance: instance.clone(),
+                                reason: "mcp_owner_sandbox_failed".to_owned(),
+                            })
+                            .unwrap(),
+                        )
+                        .unwrap();
+                }
+                writer
+                    .write_all(
+                        &encode(&CleanupReport {
+                            format: FORMAT.to_owned(),
+                            instance,
+                            process_reaped: true,
+                            namespace_terminated: true,
+                            owned_resources_removed: true,
+                            runtime_failure: true,
+                            reason: "mcp_owner_sandbox_failed".to_owned(),
+                        })
+                        .unwrap(),
+                    )
+                    .unwrap();
+                tokio::time::timeout(Duration::from_secs(1), task)
+                    .await
+                    .unwrap()
+                    .unwrap();
+                assert!(failed.load(Ordering::Acquire));
+                assert!(complete.load(Ordering::Acquire));
+                let state = state.lock().unwrap();
+                assert_eq!(state.reason, "mcp_owner_sandbox_failed");
+                assert!(state.report.as_ref().unwrap().owned_resources_removed);
+            }
         }
     }
 }

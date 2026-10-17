@@ -30,6 +30,7 @@ ACCEPTED = '2af2f35b326e0f70660b5c4cbde8134fe4ab9751'
 FORMAT = 'sou86-linux-crash-supervision/1'
 INVENTORY_MILLIS = 5000
 ACCEPTANCE_MILLIS = 10000
+PEER_WALL_MILLIS = 600000
 INVENTORY_CASES = {
     'original-filesystem-collector-kill', 'original-filesystem-wrapper-kill',
     'owned-descendants-collector-kill', 'owned-descendants-wrapper-kill',
@@ -196,8 +197,7 @@ def identity(pid):
         require(len(command) <= 4096, 'process_command_input_limit')
         argv = command.split(b'\0')
         role = next((name for name in ('direct', 'detached') if ('--sou86-' + name).encode() in argv), None)
-        trusted = next((name for name, flag in (('owner', b'--agentfw-mcp-owner-v1'), ('pid1', b'--agentfw-mcp-pid1-v1'))
-                        if flag in argv), None)
+        trusted = trusted_command_role(argv)
         return {'pid': pid, 'start_time_ticks': int(fields[19]), 'state': fields[0].decode('ascii'),
                 'parent_pid': int(fields[1]), 'process_group': int(fields[2]), 'session': int(fields[3]),
                 'fixture_role': role, 'trusted_role': trusted}
@@ -205,6 +205,27 @@ def identity(pid):
         if error.errno in (errno.ENOENT, errno.ESRCH):
             return None
         raise
+
+
+def trusted_command_role(argv):
+    # Bubblewrap's own argv contains the eventual PID 1 command as arguments.
+    # Only the executable's direct dispatch argument identifies a helper.
+    return next((name for name, flag in (('owner', b'--agentfw-mcp-owner-v1'), ('pid1', b'--agentfw-mcp-pid1-v1'))
+                 if len(argv) > 1 and argv[1] == flag), None)
+
+
+def process_snapshot(observed):
+    """One procfs identity read supplies both presence and runnable liveness."""
+    live, present = [], []
+    for row in observed.values():
+        current = identity(row['pid'])
+        if current is None or current['start_time_ticks'] != row['start_time_ticks']:
+            continue
+        witnessed = dict(row, state=current['state'])
+        present.append(witnessed)
+        if current['state'] not in ('Z', 'X', 'x'):
+            live.append(witnessed)
+    return live, present
 
 
 def same_process(row):
@@ -347,11 +368,11 @@ def inventory_crash(rig, label, fixture, target, bwrap):
     while True:
         merge_members(observed, members(client))
         client.process.poll()  # Reap only our own collector if it has exited.
+        live, present = process_snapshot(observed)
+        removed = leaf_removed(client)
         now = time.monotonic()
-        live = [row for row in observed.values() if alive(row)]
         if not live and stopped_at is None:
             stopped_at = now
-        removed = leaf_removed(client)
         if removed and removed_at is None:
             removed_at = now
         if (not live and removed) or now >= deadline:
@@ -363,7 +384,7 @@ def inventory_crash(rig, label, fixture, target, bwrap):
            'observation_bound_millis': INVENTORY_MILLIS,
            'observation_elapsed_millis': int((time.monotonic() - started) * 1000),
            'observed_processes': list(observed.values()), 'live_at_deadline': live,
-           'identities_present_at_deadline': [item for item in observed.values() if same_process(item)],
+           'identities_present_at_deadline': present,
            'protected_work_stopped_within_bound': stopped_at is not None,
            'process_stop_millis': int((stopped_at - started) * 1000) if stopped_at is not None else None,
            'leaf_removed_within_bound': removed,
@@ -422,6 +443,12 @@ class GitRig(RESOURCE.Rig):
             raise ValueError('owned_git_daemon_unavailable')
 
 
+def acceptance_budget(delegation, label):
+    # The peer spans the entire matrix. Every crashed subject retains the
+    # ordinary 120-second wall budget; the independent crash bound stays 10 s.
+    return RESOURCE.budget(delegation, wallMillis=PEER_WALL_MILLIS if label == 'peer-isolation' else 120000)
+
+
 class ProtectedClient(RESOURCE.Client):
     def __init__(self, rig, label, fixture=False, budgeted=True, direct=False):
         self.rig, self.label, self.forced, self.closed = rig, label, False, False
@@ -429,7 +456,7 @@ class ProtectedClient(RESOURCE.Client):
         selected = rig.fixture if fixture else rig.original
         self.profile_path = rig.private / (label + '-profile.json')
         write(self.profile_path, selected)
-        self.limits = RESOURCE.budget(rig.delegation) if budgeted and not direct else None
+        self.limits = acceptance_budget(rig.delegation, label) if budgeted and not direct else None
         self.budget_path = rig.private / (label + '-budget.json') if self.limits else None
         env = dict(rig.env, AGENTFW_MCP_SERVER_PROFILE=str(self.profile_path), AGENTFW_CLASSIFIER='rule-baseline',
                    AGENTFW_RULE_BASELINE=str(ROOT / ('rule_baseline/git_readonly_v1/rule_baseline.py'
@@ -596,10 +623,9 @@ def observe_crash(client, target, bwrap, fixture=False, startup=False, cleanup_r
     while True:
         merge_members(initial, members(client))
         client.process.poll()
-        now = time.monotonic()
-        live = [row for row in initial.values() if alive(row)]
-        present = [row for row in initial.values() if same_process(row)]
+        live, present = process_snapshot(initial)
         removed = client.kernel is None or leaf_removed(client)
+        now = time.monotonic()
         if not live and stopped_at is None:
             stopped_at = now
         if not present and gone_at is None:
@@ -813,6 +839,7 @@ def exercise_acceptance(args, fs, git, report):
     peer_after('prearm-startup-inventory', before_peer)
     report['acceptance'].append({'case': peer.label, 'client': peer.close(),
                                  'useful_followups': len(peer_hashes), 'followup_wire_hashes': peer_hashes,
+                                 'wall_budget_millis': PEER_WALL_MILLIS,
                                  'protection_acceptance': True})
 
 
@@ -1025,6 +1052,26 @@ def summary(report):
                 package_tree_sha256=installed.get('profile', {}).get('packageTreeSha256'),
                 runtime_sha256=installed.get('profile', {}).get('runtimeSha256'),
                 upstream_identity_sha256=digest(json.dumps(installed.get('upstream_identity'), sort_keys=True, separators=(',', ':')).encode()))
+    result['failure_clients'] = []
+    allowed_cases = CASES | INVENTORY_CASES | {'prearm-startup-inventory', 'direct-original-filesystem', 'direct-original-git'}
+    allowed_refusals = RESOURCE.STATIC_REFUSALS | set(RESOURCE.PREPARATION_REFUSALS.values())
+    for cleanup in (report.get('cleanup', {}), report.get('git_cleanup', {})):
+        for client in cleanup.get('clients', []):
+            if len(result['failure_clients']) >= 32:
+                break
+            code = client.get('exit_code')
+            if type(code) is not int or not -255 <= code <= 255 or code == 0:
+                continue
+            stderr = client.get('stderr', {})
+            item = {'case': client['case'] if client.get('case') in allowed_cases else 'unrecognized-owned-client',
+                    'exit_code': code,
+                    'refusals': [value for value in stderr.get('refusals', []) if value in allowed_refusals][:16]}
+            for key, event_name in (('last_budget_end', 'mcp_real_budget_end'),
+                                    ('last_owner_end', 'mcp_real_owner_end'),
+                                    ('last_server_end', 'mcp_real_server_end')):
+                item[key] = next((safe_event(event) for event in reversed(stderr.get('events', []))
+                                  if isinstance(event, dict) and event.get('event') == event_name), None)
+            result['failure_clients'].append(item)
     return result
 
 
