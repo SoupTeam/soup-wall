@@ -1,0 +1,18 @@
+{
+  "format": "sw-mcp/operator-declaration/1",
+  "server_id": "sou65-owned",
+  "server_version": "1.0",
+  "snapshot_sha256": "605cbc4776cd1ab1e85ba3ce14ac34d1ec9010c0bada8c1f27bfe742bef0b41a",
+  "registry_id": "sou65-owned",
+  "tools": [
+    {
+      "name": "read_document",
+      "schema_sha256": "5dc7ee60f351a1c09517603683276c627fb090f171841f053a801d717a610a48",
+      "reviewed": true,
+      "authority": {
+        "kind": "read_only"
+      },
+      "operator_review": "Owned fixture implementation scripts/fixtures/mcp_profile_author_server.py reviewed; not an attestation for other servers"
+    }
+  ]
+}

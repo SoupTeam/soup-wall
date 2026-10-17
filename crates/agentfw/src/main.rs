@@ -184,6 +184,11 @@ enum Cmd {
         #[arg(long)]
         path: PathBuf,
     },
+    /// Review and compile one operator-owned MCP admission profile (no installation).
+    McpProfile {
+        #[command(subcommand)]
+        command: agentfw::mcp::profile_author::Command,
+    },
     /// Manage one explicitly selected Claude Code stdio MCP entry.
     McpConnection {
         #[command(subcommand)]
@@ -596,6 +601,7 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Cmd::McpConnection { command } => agentfw::mcp::connection::run(command),
+        Cmd::McpProfile { command } => agentfw::mcp::profile_author::run(command),
         Cmd::ChildAuthority { action } => {
             use agentfw::native::child_authority;
             let home = Config::home()?;
