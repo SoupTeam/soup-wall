@@ -27,6 +27,7 @@ pub mod protection_status;
 pub mod provenance;
 pub mod replay;
 pub mod sandbox;
+pub mod self_test;
 #[cfg(target_os = "linux")]
 pub mod service;
 pub mod spans;
