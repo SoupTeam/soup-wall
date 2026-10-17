@@ -82,6 +82,13 @@ jobs:
                   'max_session_retained_bytes':max((sample.get('usage',{}).get('max_session_retained_bytes',0) for sample in samples),default=None),
                   'sampled_daemon_rss_bytes':rig.get('rss',{}).get('daemon',{}).get('max_rss_bytes'),
                   'cleanup':{key:rig.get('cleanup',{}).get(key) for key in ('all_stopped','daemon_stopped','private_profile_removed')}}
+          capacity = data.get('capacity') or {}
+          probe = capacity.get('capacity_probe') or {}
+          selected['capacity'] = {key:capacity.get(key) for key in ('refused_exit_code','refused_no_execution','replacement_useful','retirement_epoch')}
+          selected['capacity'].update(sessions_before=capacity.get('before',{}).get('usage',{}).get('sessions'),
+              sessions_after_end=capacity.get('after_end',{}).get('usage',{}).get('sessions'),
+              native_probe_status=probe.get('status'),native_probe_response=probe.get('response'),
+              probe_accounting_unchanged=probe.get('before_usage') == probe.get('after_usage') if probe else None)
           selected['checks'] = data.get('checks') or []
           rendered = json.dumps(selected,indent=2)
           print(rendered)

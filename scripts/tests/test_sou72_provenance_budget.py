@@ -40,7 +40,7 @@ def complete_report():
         "unrecordable":{"reply":reply(True),"reason_present":True,"original_marker_absent":True},"approved":ask(True),
         "approval_replay_refused":True,"after_approval_refusal":ask(),"continuation":{"useful":True},
         "peer":{"reply":reply(),"file":{"exists":True}},"hard_deny":{"reply":reply(True),"rule_present":True,"effect_absent":True,"pending_empty":True},
-        "global_pressure":{"admitted":48},"capacity":{"refused_exit_code":1,"refused_no_execution":True,"capacity_reason":True,"replacement_useful":True,
+        "global_pressure":{"admitted":48},"capacity":{"refused_exit_code":1,"refused_no_execution":True,"replacement_useful":True,
             "before":sample(sessions=2),"after_end":sample(sessions=1)},
         "shared":{name:{"reply":reply(True),"ask_reason":True,"effect_absent":True} for name in ("after_child_exit","after_reconnect")},
         "rpc_failure":{"original_error_delivered":True},"cancelled":{"call_was_dispatched":True,"collector_exit_code":1,"original_marker_absent":True},
@@ -82,6 +82,15 @@ def complete_report():
         rig['owned_native_audit']=copy.deepcopy(audit)
         rig['owned_native_audit_sha256']=VERIFY.digest(rig['owned_native_audit'])
         rig['cleanup'].update(daemon=copy.deepcopy(process),clients=[{'process_cleanup':copy.deepcopy(process)}])
+    report['capacity']['capacity_probe']={'request':{'contract_version':VERIFY.CONTRACT,'registry_sha256':'d'*64,'session_id':'owned-probe','event':'session_start'},
+        'instance_id':'owned-instance','registry_sha256':'d'*64,'status':409,'response':{'contract_version':VERIFY.CONTRACT,'release':False,'error_code':'native_provenance_context_capacity'},
+        'before_usage':copy.deepcopy(report['capacity']['before']['usage']),'after_usage':copy.deepcopy(report['capacity']['before']['usage']),
+        'audit_before_sha256':'e'*64,'audit_after_sha256':'e'*64}
+    retirement={'event':'native_session_end','session':'owned-retired-epoch','released':True}
+    report['capacity'].update(retirement_epoch=retirement['session'],retirement_receipt=retirement)
+    rig=report['rigs']['capacity']
+    rig['owned_native_audit'].append(retirement)
+    rig['owned_native_audit_sha256']=VERIFY.digest(rig['owned_native_audit'])
     return report
 
 
@@ -138,6 +147,15 @@ class EvidenceControls(unittest.TestCase):
     def test_capacity_recovery_requires_retirement_and_actual_replacement_work(self):
         for change in (lambda r:r['capacity'].update(replacement_useful=False),lambda r:r['capacity'].update(refused_exit_code=0),
                 lambda r:r['capacity'].update(refused_no_execution=False),lambda r:r['capacity']['after_end']['usage'].update(sessions=2)):
+            with self.subTest(change=change): self.fails(change)
+
+    def test_capacity_requires_typed_authenticated_failure_without_allocation(self):
+        for change in (lambda r:r['capacity']['capacity_probe'].update(status=200),
+                lambda r:r['capacity']['capacity_probe']['response'].pop('error_code'),
+                lambda r:r['capacity']['capacity_probe']['response'].update(error_code='native_invalid_fields'),
+                lambda r:r['capacity']['capacity_probe']['after_usage'].update(sessions=3),
+                lambda r:r['capacity']['capacity_probe'].update(audit_after_sha256='f'*64),
+                lambda r:r['capacity']['retirement_receipt'].update(session='another-epoch')):
             with self.subTest(change=change): self.fails(change)
 
     def test_reconnect_and_child_exit_cannot_clear_shared_history(self):

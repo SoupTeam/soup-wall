@@ -24,6 +24,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.error
 import urllib.request
 import uuid
 
@@ -291,6 +292,27 @@ class Rig:
         require(value["registry_sha256"] == self.registry_sha, "native diagnostics registry mismatch")
         return value
 
+    def capacity_probe(self, before):
+        instance = self.http()
+        body = {"contract_version":CONTRACT,"registry_sha256":self.registry_sha,
+            "session_id":"owned-capacity-probe-"+uuid.uuid4().hex,"event":"session_start"}
+        audit_before = digest(self.audit())
+        request = urllib.request.Request(f"http://127.0.0.1:{self.port}/native/v1", data=json.dumps(body).encode(),
+            headers={"Authorization":"Bearer "+self.native_token,"Content-Type":"application/json"})
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        try:
+            response = opener.open(request,timeout=10)
+        except urllib.error.HTTPError as error:
+            response = error
+        with response:
+            status,raw = response.status,response.read(16385)
+        require(len(raw) <= 16384, "unbounded native capacity receipt")
+        after = self.sample()
+        audit_after = digest(self.audit())
+        return {"request":body,"instance_id":instance["instance_id"],"registry_sha256":instance["registry_sha256"],
+            "status":status,"response":json.loads(raw),"before_usage":before["usage"],"after_usage":after["usage"],
+            "audit_before_sha256":audit_before,"audit_after_sha256":audit_after}
+
     def sample(self):
         sample = self.http()["provenance"]
         bounded_usage(sample, self.limits)
@@ -456,19 +478,35 @@ def primary(rig, report):
 
 
 def capacity(rig, report):
-    first,second = Client(rig,"capacity-a"),Client(rig,"capacity-b")
-    first.initialize(); second.initialize()
+    first = Client(rig,"capacity-a")
+    first.initialize()
+    starts = [row for row in rig.audit() if row.get("event") == "native_session_start" and row.get("released") is True]
+    require(len(starts) == 1, "first isolated native epoch missing/ambiguous")
+    retired_epoch = starts[0]["session"]
+    second = Client(rig,"capacity-b")
+    second.initialize()
     before = rig.sample()
+    probe = rig.capacity_probe(before)
     third = Client(rig,"capacity-refused")
     third.process.wait(timeout=10)
     refused_before_spawn = not (third.root/"executed.jsonl").exists()
     first.close()
-    after_end = rig.sample()
+    require(first.process.returncode == 0 and not first.forced_cleanup, "isolated collector did not close through its normal lifecycle")
+    deadline = time.monotonic()+5
+    while True:
+        after_end = rig.sample()
+        retirements = [row for row in rig.audit() if row.get("event") == "native_session_end"
+            and row.get("session") == retired_epoch and row.get("released") is True]
+        if retirements and after_end["usage"]["sessions"] < before["usage"]["sessions"]:
+            break
+        require(time.monotonic() < deadline, "authenticated isolated retirement did not recover accounting within the deadline")
+        time.sleep(0.025)
     replacement = Client(rig,"capacity-replacement")
     replacement.initialize()
     reply,raw = replacement.read()
     report["capacity"] = {"before":before,"after_end":after_end,"refused_exit_code":third.process.returncode,
-        "refused_no_execution":refused_before_spawn,"capacity_reason":"native_provenance_context_capacity" in (rig.output/"capacity-refused-collector.log").read_text(),"replacement_useful":result_text(reply) == USEFUL,"reply":evidence_reply(reply,raw)}
+        "refused_no_execution":refused_before_spawn,"capacity_probe":probe,"retirement_epoch":retired_epoch,
+        "retirement_receipt":retirements[0],"replacement_useful":result_text(reply) == USEFUL,"reply":evidence_reply(reply,raw)}
 
 
 def shared(rig, report):
@@ -579,7 +617,19 @@ def grade(report):
     require(all(report["hard_deny"][key] for key in ("rule_present","effect_absent","pending_empty")) and report["hard_deny"]["reply"]["refused"], "hard Deny was weakened")
     require(report["global_pressure"]["admitted"] >= 16 and len(report["rigs"]["global"]["samples"]) >= 8, "global stress evidence missing")
     c = report["capacity"]
-    require(c["refused_exit_code"] not in (None,0) and c["refused_no_execution"] and c["capacity_reason"] and c["replacement_useful"]
+    probe = c["capacity_probe"]
+    require(probe["status"] == 409 and probe["response"] == {"contract_version":CONTRACT,"release":False,"error_code":"native_provenance_context_capacity"},
+        "typed authenticated capacity refusal missing")
+    require(probe["request"]["contract_version"] == CONTRACT and probe["request"]["event"] == "session_start"
+        and probe["request"]["registry_sha256"] == probe["registry_sha256"] == report["rigs"]["capacity"]["registry_sha256"]
+        and probe["instance_id"] and probe["before_usage"] == probe["after_usage"] == c["before"]["usage"]
+        and probe["audit_before_sha256"] == probe["audit_after_sha256"]
+        and re.fullmatch(r"[0-9a-f]{64}",probe["audit_before_sha256"]), "failed capacity probe allocated or changed authenticated state")
+    retirement = c["retirement_receipt"]
+    require(retirement in report["rigs"]["capacity"]["owned_native_audit"] and retirement.get("event") == "native_session_end"
+        and retirement.get("session") == c["retirement_epoch"] and retirement.get("released") is True,
+        "original authenticated isolated retirement receipt missing")
+    require(c["refused_exit_code"] not in (None,0) and c["refused_no_execution"] and c["replacement_useful"]
         and c["after_end"]["usage"]["sessions"] < c["before"]["usage"]["sessions"], "legitimate end did not recover session capacity")
     for name in ("after_child_exit","after_reconnect"):
         row = report["shared"][name]
