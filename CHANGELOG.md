@@ -4,6 +4,15 @@ Changes to the public Soup Wall source distribution are recorded here. Release a
 
 ## Unreleased
 
+- Added `agentfw self-test` (Linux, SOU-61): one operator command that checks an
+  installed Agent with an explicitly selected local classifier in an owned
+  temporary workspace. It witnesses exact allowed reads, a withheld injected
+  result, a refused synthetic-key send that never reaches the MCP child or an
+  owned loopback receiver, and fail-closed daemon loss, then writes a versioned
+  privacy-safe JSON report. Exit codes separate passed (0), failed (3),
+  incomplete (4) and unsupported (5). Scripted client frames only: not Claude
+  Code, model-context or live-model evidence.
+
 - Added the AgentDojo matched evaluation protocol (SOU-36): versioned frozen
   plans with original tasks/attacks, development and fresh sets, repetitions,
   identities, budgets and separate proposed/approved limits; a live gate that
