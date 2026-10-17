@@ -1,0 +1,64 @@
+--- a/crates/agentfw/tests/native_endpoint.rs
++++ b/crates/agentfw/tests/native_endpoint.rs
+@@ -3698,3 +3698,61 @@
+         "PostToolUse was truncated but loss of history was not recorded"
+     );
+ }
++
++async fn review137_raw_hook(f: &Fixture, body: Body) -> (StatusCode, Value) {
++    let response = app(f.state.clone()).oneshot(Request::builder().method("POST").uri("/hook")
++        .header("authorization",format!("Bearer {HOOK_TOKEN}"))
++        .header("content-type","application/json").body(body).unwrap()).await.unwrap();
++    let status = response.status();
++    let bytes = to_bytes(response.into_body(),1024*1024).await.unwrap();
++    (status,serde_json::from_slice(&bytes).unwrap())
++}
++
++#[tokio::test]
++async fn review137_late_fields_must_not_bypass_oversized_pretooluse_refusal() {
++    let f = Fixture::configured(ALLOW,Config { enforce:true,max_body_bytes:1024,..Config::default() });
++    // JSON member order is immaterial; an ordinary unknown field precedes the event.
++    let body = format!("{{\"session_id\":\"host\",\"padding\":\"{}\",\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{{\"command\":\"rm -rf /tmp/reviewer-no-execution\"}}}}", "x".repeat(6000));
++    assert!(serde_json::from_str::<Value>(&body).is_ok());
++    let (s,r) = review137_raw_hook(&f,Body::from(body)).await;
++    assert_eq!(s,StatusCode::OK);
++    assert_eq!(r["hookSpecificOutput"]["permissionDecision"],"deny",
++        "valid protected oversized request got no enforce refusal when fields followed padding: {r}");
++}
++
++#[tokio::test]
++async fn review137_read_error_must_not_be_accepted_as_complete_history() {
++    let f = Fixture::new(ALLOW);
++    let (s,r) = f.post(&reviewer_start(&f,"a",&["read_document"],60_000)).await;
++    assert_allow(s,&r);
++    let prefix = serde_json::to_vec(&json!({"session_id":"host","hook_event_name":"PostToolUse",
++        "tool_name":"mcp__documents__read_document","tool_response":"benign prefix"})).unwrap();
++    let chunks = futures_util::stream::iter(vec![Ok(prefix),Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof,"owned synthetic transport error"))]);
++    let _ = review137_raw_hook(&f,Body::from_stream(chunks)).await;
++    assert!(f.state.firewall.lock().unwrap().provenance_incomplete("host"),
++        "body transport failure was swallowed as successful EOF, history remains complete");
++}
++
++#[tokio::test]
++async fn review137_empty_session_must_not_bypass_protected_enforce_disposition() {
++    let f = Fixture::new(ALLOW);
++    let hook = json!({"session_id":"","hook_event_name":"PreToolUse","tool_name":"Bash",
++        "tool_input":{"command":"rm -rf /tmp/reviewer-no-execution"}});
++    let (s,r) = post(f.state.clone(),"/hook",&hook,Some(HOOK_TOKEN)).await;
++    assert_eq!(s,StatusCode::OK);
++    assert_eq!(r["hookSpecificOutput"]["permissionDecision"],"deny",
++        "protected PreToolUse with invalid session silently allowed: {r}");
++}
++
++#[tokio::test]
++async fn review137_invalid_utf8_must_not_be_silently_repaired_before_inspection() {
++    let f = Fixture::new(ALLOW);
++    let mut body = b"{\"session_id\":\"host\",\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"printf ".to_vec();
++    body.push(255);
++    body.extend_from_slice(b"\"}}");
++    assert!(std::str::from_utf8(&body).is_err());
++    let (s,r) = review137_raw_hook(&f,Body::from(body)).await;
++    assert_eq!(s,StatusCode::OK);
++    assert_eq!(r["hookSpecificOutput"]["permissionDecision"],"deny",
++        "malformed protected hook was silently transformed into valid input: {r}");
++}

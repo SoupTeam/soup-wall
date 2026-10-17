@@ -1,0 +1,33 @@
+{
+  "base_commit": "36d02ae4eed49ed6fa9aa63524d3d9b4cfa182d4",
+  "status": "verified; ready for reviewer assessment",
+  "platform": {
+    "system": "Darwin",
+    "architecture": "arm64"
+  },
+  "workspace": {
+    "passed": 1244,
+    "failed": 0,
+    "ignored": 10,
+    "suite_results": 56
+  },
+  "agentfw": {
+    "native_endpoint": 109,
+    "mcp_admission": 71,
+    "hook_endpoint": 13,
+    "protection_status": 19,
+    "lib": 281
+  },
+  "clippy_all_targets_D_warnings": "PASS",
+  "fmt_all_check": "PASS",
+  "real_process_witnesses": {
+    "server_a_to_server_b": "PASS, child backend executions=0, separate session executions=1",
+    "signed_hook_to_mcp": "PASS, backend executions=0"
+  },
+  "execution": "Isolated tracked source export plus verified working-tree changes; write access restricted to /private/tmp/sou63-review, external networking denied, loopback allowed for fixtures. Source bytes compared against the tested export.",
+  "limits": "No live model calls; explicitly ignored tests were not run. Linux/Windows CI is separate from the local macOS run. Scoped hook executor/resource paths without verifiable native receipts are explicitly unsupported and refused.",
+  "final_follow_up": {
+    "agentfw_lib_passed": 281,
+    "reason": "Portable native path test fixture for Windows; production behavior unchanged from full workspace run."
+  }
+}

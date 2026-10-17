@@ -1,0 +1,554 @@
+   Compiling aws-lc-rs v1.18.2
+   Compiling rustls-webpki v0.103.15
+   Compiling crypto-common v0.2.2
+   Compiling sha2 v0.10.9
+   Compiling cpufeatures v0.3.0
+   Compiling whoami v2.1.3
+   Compiling libsqlite3-sys v0.30.1
+   Compiling core-foundation v0.10.1
+   Compiling security-framework-sys v2.17.0
+   Compiling deadpool-runtime v0.3.1
+   Compiling combine v4.6.8
+   Compiling uuid v1.26.1
+   Compiling deadpool v0.13.1
+   Compiling soup-wall-adapter v0.1.0 (/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/crates/adapter)
+   Compiling security-framework v3.7.0
+   Compiling soup-wall-bench v0.2.0 (/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/crates/bench)
+   Compiling rustls v0.23.46
+   Compiling cipher v0.5.2
+   Compiling kryptering v0.6.0 (/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/vendor/kryptering)
+   Compiling digest v0.11.3
+   Compiling universal-hash v0.6.1
+   Compiling aead v0.6.1
+   Compiling jsonwebtoken v11.1.0
+   Compiling aes v0.9.3
+   Compiling rustls-native-certs v0.8.4
+   Compiling tsp-ltv v0.5.0
+   Compiling bergshamra-crypto v0.9.2
+   Compiling bergshamra-pkcs12 v0.9.2
+   Compiling sha2 v0.11.0
+   Compiling md-5 v0.11.0
+   Compiling hmac v0.13.0
+   Compiling tokio-rustls v0.26.6
+   Compiling polyval v0.7.3
+   Compiling ctr v0.10.1
+   Compiling rusqlite v0.32.1
+   Compiling bergshamra-keys v0.9.2
+   Compiling soup-wall-agent v0.2.0 (/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/crates/agent)
+   Compiling soup-wall-core v0.2.0 (/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/crates/core)
+   Compiling postgres-protocol v0.6.12
+   Compiling hyper-rustls v0.27.9
+   Compiling ghash v0.6.0
+   Compiling redis v1.7.1
+   Compiling bergshamra-transforms v0.9.2
+   Compiling postgres-types v0.2.14
+   Compiling reqwest v0.12.28
+   Compiling aes-gcm v0.11.1
+   Compiling bergshamra-enc v0.9.2
+   Compiling bergshamra-dsig v0.9.2
+   Compiling tokio-postgres v0.7.18
+   Compiling agentfw v0.3.0 (/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/crates/agentfw)
+   Compiling bergshamra v0.9.2
+   Compiling saml-rs v0.6.1
+   Compiling tokio-postgres-rustls v0.14.0
+   Compiling deadpool-postgres v0.14.2
+   Compiling llm-firewall v0.2.0 (/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/crates/proxy)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 51.22s
+     Running unittests src/lib.rs (target/debug/deps/agentfw-4c1e42a8864f8bee)
+
+running 313 tests
+test audit::tests::the_audit_file_is_not_world_readable ... ok
+test audit::tests::requesting_0o600_is_not_an_umask_accident ... ok
+test audit::tests::an_unnamed_origin_omits_the_name_rather_than_emitting_an_empty_one ... ok
+test audit::tests::a_taint_record_carries_structured_origin_and_trust ... ok
+test config::tests::a_config_without_a_judge_block_still_parses ... ok
+test config::tests::a_disabled_judge_with_an_oversized_timeout_does_not_block_boot ... ok
+test config::tests::an_empty_file_is_all_defaults ... ok
+test config::tests::an_empty_file_still_equals_default_with_judge_added ... ok
+test config::tests::a_non_loopback_bind_is_rejected ... ok
+test config::tests::a_judge_timeout_that_would_outlast_the_hook_is_rejected ... ok
+test config::tests::defaults_are_safe ... ok
+test config::tests::a_judge_url_must_be_loopback_when_enabled ... ok
+test audit::tests::preserves_raw_bytes_when_explicitly_supplied ... ok
+test config::tests::a_lookalike_loopback_hostname_is_not_fooled_by_a_prefix_check ... ok
+test config::tests::an_unknown_key_inside_the_judge_block_is_rejected ... ok
+test config::tests::ipv6_formatting_does_not_expand_the_allowed_bind_list ... ok
+test audit::tests::writes_one_json_object_per_line ... ok
+test config::tests::parses_a_partial_file_and_keeps_defaults ... ok
+test audit::tests::appends_rather_than_truncating_on_reopen ... ok
+test config::tests::the_judge_is_disabled_by_default ... ok
+test config::tests::raw_unknown_capture_requires_explicit_opt_in ... ok
+test config::tests::loopback_urls_with_ports_and_ipv6_are_accepted ... ok
+test decision::tests::allow_maps_to_defer_never_to_allow ... ok
+test decision::tests::a_deferred_decision_omits_the_reason_field ... ok
+test decision::tests::ask_and_deny_map_directly_and_carry_a_reason ... ok
+test decision::tests::enforcing_mode_reports_shadow_false ... ok
+test decision::tests::escalate_must_be_resolved_before_reaching_a_decision ... ok
+test decision::tests::serializes_to_the_documented_hook_output_shape ... ok
+test config::tests::each_supported_bind_formats_a_valid_socket_and_endpoint_authority ... ok
+test decision::tests::shadow_mode_never_enforces_anything ... ok
+test grant::tests::a_grant_does_not_authorize_different_arguments ... ok
+test grant::tests::a_grant_from_a_different_key_is_refused ... ok
+test grant::tests::a_forged_and_expired_grant_reports_the_forgery_first ... ok
+test grant::tests::a_fresh_grant_verifies_for_the_action_it_was_issued_for ... ok
+test grant::tests::a_future_dated_grant_is_refused_beyond_clock_skew ... ok
+test grant::tests::a_grant_does_not_cross_sessions_or_tools ... ok
+test grant::tests::an_expired_grant_is_refused ... ok
+test grant::tests::a_grant_that_fails_verification_is_not_recorded_as_spent ... ok
+test grant::tests::argument_key_order_does_not_change_the_fingerprint ... ok
+test grant::tests::field_boundaries_cannot_be_shifted_between_session_and_tool ... ok
+test handlers::tests::a_judgement_of_documentation_takes_the_fallback ... ok
+test grant::tests::the_tool_is_part_of_the_fingerprint ... ok
+test handlers::tests::a_judgement_of_injection_becomes_ask ... ok
+test handlers::tests::a_missing_fallback_requires_review ... ok
+test handlers::tests::an_unavailable_judge_takes_the_fallback ... ok
+test grant::tests::tampering_with_any_field_breaks_the_signature ... ok
+test handlers::tests::ending_a_session_resets_its_sequence ... ok
+test handlers::tests::root_json_scan_basic_and_proven_non_pre ... ok
+test handlers::tests::root_json_scan_handles_escaped_quotes_in_strings ... ok
+test handlers::tests::root_json_scan_duplicate_keys_are_ambiguous ... ok
+test grant::tests::nonces_are_already_in_the_preserved_alphabet ... ok
+test handlers::tests::root_json_scan_ignores_nested_fields ... ok
+test grant::tests::a_grant_can_only_be_redeemed_once ... ok
+test grant::tests::a_spent_grant_stays_spent_across_a_restart ... ok
+test handlers::tests::root_json_scan_incomplete_keys_and_values ... ok
+test handlers::tests::root_json_scan_skips_arrays_and_objects ... ok
+test handlers::tests::the_judge_can_only_tighten_never_soften ... ok
+test handlers::tests::session_sequence_numbers_are_monotonic_and_per_session ... ok
+test hook::tests::a_missing_session_id_is_an_error ... ok
+test hook::tests::a_plain_string_tool_response_is_read_as_text ... ok
+test hook::tests::an_absent_tool_response_yields_empty_text ... ok
+test hook::tests::an_array_shaped_tool_response_stringifies_to_useful_text ... ok
+test hook::tests::an_empty_session_id_still_parses_but_is_not_a_valid_session ... ok
+test hook::tests::an_unknown_event_name_parses_as_other_rather_than_erroring ... ok
+test hook::tests::as_str_is_pinned_and_snake_case_for_every_variant ... ok
+test hook::tests::parses_post_tool_use_with_a_structured_response ... ok
+test hook::tests::parses_pre_tool_use ... ok
+test hook::tests::parses_subagent_stop ... ok
+test hook::tests::unexpected_extra_fields_are_ignored ... ok
+test install::tests::honours_a_custom_port ... ok
+test install::tests::emits_all_five_events_pointing_at_the_daemon ... ok
+test install::tests::instructions_carry_the_promotion_sequence_and_its_evidence_bar ... ok
+test install::tests::configured_installation_preserves_each_supported_bind_for_every_event ... ok
+test install::tests::instructions_disclaim_the_hook_and_point_at_preflight ... ok
+test install::tests::matches_all_tools ... ok
+test install::tests::instructions_mention_shadow_mode_and_the_timeout_cost ... ok
+test install::tests::sets_a_short_timeout_so_a_stalled_daemon_cannot_hang_the_loop ... ok
+test install::tests::instructions_never_print_a_literal_token ... ok
+test install::tests::token_command_quotes_paths_instead_of_evaluating_them ... ok
+test install::tests::passes_the_token_by_env_var_never_inline ... ok
+test judge::tests::a_huge_span_is_capped ... ok
+test judge::tests::the_prompt_does_not_include_the_tool_call ... ok
+test judge::tests::the_span_is_truncated_on_a_utf8_boundary ... ok
+test judge::tests::anything_else_is_unavailable_not_a_guess ... ok
+test judge::tests::parses_the_two_accepted_answers_case_insensitively ... ok
+test judge::tests::delimiters_appearing_in_content_are_neutralized ... ok
+test judge::tests::the_prompt_names_the_source_and_the_answer_contract ... ok
+test lifecycle::tests::managed_identity_requires_every_field ... ok
+test grant::tests::spent_entries_are_pruned_once_they_can_no_longer_matter ... ok
+test managed_policy::tests::keyring_parse_and_serialize_round_trip ... ok
+test managed_policy::tests::keyring_rejects_empty_or_invalid_entries ... ok
+test managed_policy::tests::keyring_versioned_format_supports_schema_version_and_denies_unknown_fields ... ok
+test managed_policy::tests::multi_key_verification_supports_rotation_and_revocation ... ok
+test managed_policy::tests::rejects_cross_tenant_or_agent ... ok
+test managed_policy::tests::rejects_expiry_and_excessive_ttl ... ok
+test managed_policy::tests::rejects_invalid_policy_yaml_even_with_valid_signature ... ok
+test managed_policy::tests::rejects_replay_and_stale_sequence ... ok
+test managed_policy::tests::rejects_policy_tampering ... ok
+test managed_policy::tests::rejects_invalid_signature ... ok
+test managed_policy::tests::rejects_signed_metadata_tampering ... ok
+test managed_policy::tests::rejects_unknown_or_revoked_signing_key ... ok
+test managed_policy::tests::rejects_unknown_fields_and_oversize_input ... ok
+test managed_sync::https_transport_tests::accepts_https_remote_and_existing_loopback_http ... ok
+test managed_policy::tests::valid_signed_agent_policy_is_verified ... ok
+test managed_credential::tests::fifo_does_not_block ... ok
+test map::tests::an_empty_session_id_maps_to_none_rather_than_a_shared_bucket ... ok
+test managed_sync::https_transport_tests::rejects_remote_plaintext_credentials_and_ambiguous_origins ... ok
+test grant::tests::corrupt_epoch_fails_closed_for_claims_and_issuance ... ok
+test map::tests::an_unknown_event_maps_to_none_so_the_daemon_can_skip_it ... ok
+test map::tests::bound_agent_and_parent_identity_are_mapped ... ok
+test map::tests::lifecycle_events_map_across ... ok
+test map::tests::oversized_content_is_truncated_at_the_cap ... ok
+test map::tests::pre_tool_use_becomes_a_tool_call ... ok
+test map::tests::post_tool_use_becomes_a_tool_result_with_provenance ... ok
+test map::tests::small_content_is_not_reported_as_truncated ... ok
+test map::tests::subagent_stop_becomes_a_subagent_report ... ok
+test map::tests::truncation_at_max_zero_one_and_full_length_never_panics ... ok
+test map::tests::truncation_handles_a_four_byte_character_at_the_cut_point ... ok
+test map::tests::truncation_respects_utf8_boundaries ... ok
+test managed_sync::https_transport_tests::private_ca_fifo_is_refused_without_waiting_for_a_writer ... ok
+test lifecycle::tests::operation_owner_release_is_not_prolonged_by_an_inherited_descriptor ... ok
+test mcp::admission::input_identity_tests::compose_production_policy_rules ... ok
+test mcp::admission::input_identity_tests::sou54_write_authority_preserves_hard_denials_and_unknown_refusal ... ok
+test mcp::admission::input_identity_tests::sou56_https_profile_requires_exact_read_prediction_and_retains_hard_denials ... ok
+test managed_policy::tests::read_keyring_file_enforces_bounds_and_regular_file ... ok
+test grant::tests::concurrent_issuer_observes_new_generation_after_switch_lock_releases ... ok
+test managed_sync::https_transport_tests::private_ca_file_validation_uses_the_real_loader ... ok
+test grant::tests::approvals_issued_under_current_policy_work_and_old_issuance_is_refused ... ok
+test mcp::admission::input_identity_tests::changed_schema_tool_list_and_unsupported_annotations_require_readmission ... ok
+test managed_credential::tests::secure_file_reload_and_failure_no_cache ... ok
+test grant::tests::cached_approval_cannot_be_redeemed_after_policy_switch_or_restart ... ok
+test mcp::admission::input_identity_tests::original_discovery_schema_and_annotations_are_retained ... ok
+test mcp::admission::real_server::tests::json_limits_and_cancellation_errors_are_explicit ... ok
+test mcp::admission::real_server::tests::metadata_does_not_supply_authority_and_accepts_optional_progress ... ok
+test mcp::admission::real_server::tests::ids_keep_json_type_and_refuse_unsafe_numbers ... ok
+test mcp::admission::resource_receipt_tests::canonical_resource_digest_is_independent_of_property_order_and_legacy_stays_closed ... ok
+test mcp::create_file::tests::unsupported_platform_refuses_without_creating_any_entry ... ok
+test mcp::admission::input_identity_tests::prediction_identity_binds_server_arguments_metadata_and_classifier_revision ... ok
+test mcp::https_get::tests::authority_is_closed_and_identity_binds_all_fields ... ok
+test mcp::create_file::tests::validates_content_and_exact_direct_leaf_before_any_effects ... ok
+test mcp::https_get::tests::current_dns_must_equal_the_frozen_set ... ok
+test mcp::https_get::tests::default_denies_private_reserved_and_embedded_addresses ... ok
+test mcp::https_get::tests::errors_do_not_disclose_endpoint_or_response ... ok
+test mcp::https_get::tests::literal_addresses_cannot_override_the_url ... ok
+test mcp::https_get::tests::metadata_and_special_ranges_cannot_use_private_fixture_exception ... ok
+test mcp::https_get::tests::exact_url_scope_rejects_parser_and_authority_aliases ... ok
+test mcp::https_get::tests::non_linux_never_dispatches ... ok
+test mcp::https_get::tests::private_exception_is_exact_and_never_a_global_switch ... ok
+test mcp::https_get::tests::response_scope_requires_one_explicit_utf8_text_or_json_type ... ok
+test mcp::https_get::tests::strict_response_framing_refuses_unsupported_or_ambiguous_material ... ok
+test mcp::input::tests::explicit_create_string_bound_accepts_4_kib_and_authority_checks_bytes ... ok
+test mcp::input::tests::malformed_inconsistent_or_unbounded_string_constraints_are_refused ... ok
+test mcp::input::tests::selected_schema_enforces_enum_array_bounds_without_defaults_or_coercion ... ok
+test mcp::input::tests::selected_schema_refuses_unimplemented_constraints_and_malformed_enum ... ok
+test mcp::jsonrpc::tests::a_non_tools_list_message_yields_none ... ok
+test mcp::jsonrpc::tests::extracts_the_tool_manifest_from_a_tools_list_response ... ok
+test mcp::manifest::tests::a_changed_description_changes_the_hash ... ok
+test mcp::manifest::tests::a_changed_schema_changes_the_hash ... ok
+test mcp::input::tests::string_lengths_count_unicode_scalars_without_changing_unbounded_profile ... ok
+test mcp::manifest::tests::a_wholesale_rewrite_is_capped_and_says_how_much_is_hidden ... ok
+test mcp::manifest::tests::a_widened_schema_is_reported_as_a_schema_change ... ok
+test mcp::manifest::tests::an_unchanged_manifest_diffs_to_nothing ... ok
+test mcp::manifest::tests::description_poisoning_shows_the_new_text_not_just_the_tool_name ... ok
+test mcp::manifest::tests::reordering_schema_keys_is_not_a_change ... ok
+test mcp::manifest::tests::reordering_tools_does_not_change_the_hash ... ok
+test mcp::manifest::tests::a_huge_or_multiline_description_cannot_flood_the_record ... ok
+test mcp::manifest::tests::the_diff_names_added_removed_and_changed_tools ... ok
+test mcp::proxy::tests::withholds_only_when_enforcing_and_not_allowed ... ok
+test mcp::server_profile::tests::explicit_profile_is_strict_and_binds_the_actual_command ... ok
+test mcp::admission::resource_receipt_tests::missing_or_changed_resource_hash_and_old_contract_are_refused_over_http ... ok
+test mcp::server_profile::tests::original_upstream_discovery_preserves_every_tool_and_classifies_support ... ok
+test mcp::server_profile::tests::selected_protocol_versions_are_the_frozen_original_sdk_allowlist ... ok
+test mcp::server_profile::tests::selected_original_result_requires_inspectable_structured_text ... ok
+test mcp::server_profile::tests::tree_hash_covers_internal_links_and_refuses_escape_links ... ok
+test mcp::server_profile::tests::tree_hash_refuses_escape_hidden_by_a_chained_link_before_parent_traversal ... ok
+test mcp::server_profile::tests::tree_hash_records_empty_directories_file_bytes_and_every_entry ... ok
+test mcp::server_profile::tests::virtual_workspace_paths_have_posix_semantics_on_every_host ... ok
+test mcp::server_sandbox::tests::accepts_only_exact_library_file_destinations ... ok
+test mcp::stdio::tests::no_io_drop_restores_entire_status_and_preserves_original_descriptor_flags ... ok
+test mcp::stdio::tests::non_pollable_stdio_is_explicitly_refused_without_flag_changes ... ok
+test mcp::store::tests::a_legacy_hash_only_pin_still_detects_drift ... ok
+test mcp::store::tests::a_long_id_is_bounded_and_still_unique ... ok
+test mcp::store::tests::a_pin_round_trips_through_disk ... ok
+test mcp::store::tests::a_record_written_before_the_discriminator_is_migrated_not_lost ... ok
+test mcp::store::tests::a_superseded_manifest_moves_into_bounded_history ... ok
+test mcp::store::tests::ids_differing_only_in_replaced_characters_do_not_share_a_record ... ok
+test mcp::stdio::tests::cancelled_read_keeps_immediate_sequential_reply_and_eof_useful ... ok
+test mcp::store::tests::re_pinning_an_identical_manifest_adds_no_history ... ok
+test mcp::store::tests::the_pinned_manifest_survives_a_restart_so_drift_can_be_diffed ... ok
+test mcp::store::tests::the_registry_flags_a_name_owned_by_another_server_or_a_builtin ... ok
+test mcp::server_profile::tests::selected_upstream_pins_cover_metadata_execution_and_output_schema ... ok
+test mcp::admission::real_server::fault_tests::selected_fault_exact_manifest_cannot_release_an_extra_error_channel ... ok
+test mcp::admission::real_server::fault_tests::selected_fault_daemon_loss_never_dispatches_the_call ... ok
+test mcp::admission::real_server::fault_tests::selected_fault_original_call_and_result_bytes_remain_untouched ... ok
+test mcp::admission::real_server::fault_tests::selected_fault_progress_logging_and_reverse_callbacks_have_no_release_channel ... ok
+test mcp::admission::real_server::fault_tests::selected_fault_unsupported_output_tool_and_native_refusal_preserve_useful_peer ... ok
+test mcp::admission::real_server::fault_tests::selected_fault_overload_and_queued_cancellation_are_correlated_without_execution ... ok
+test mcp::admission::real_server::fault_tests::selected_fault_unknown_and_duplicate_response_ids_never_release_payload ... ok
+test native::child_authority::tests::concurrent_verification_keeps_session_bindings_isolated ... ok
+test native::child_authority::tests::every_claim_is_authenticated ... ok
+test native::child_authority::tests::expiry_and_future_skew_boundaries ... ok
+test native::child_authority::tests::key_derivation_known_vector_and_separation ... ok
+test native::child_authority::tests::reasons_are_distinct_and_nonempty ... ok
+test native::child_authority::tests::rejects_authenticated_invalid_contract_and_interval ... ok
+test native::child_authority::tests::rejects_malformed_wire_data ... ok
+test native::child_authority::tests::rejects_mismatched_authority_and_wrong_key ... ok
+test native::child_authority::tests::signing_boundaries_cannot_be_shifted ... ok
+test native::child_authority::tests::token_round_trip_and_verification ... ok
+test native::resource::tests::create_authority_refuses_existing_nested_and_linked_destinations ... ok
+test native::resource::tests::create_authority_rejects_args_content_destination_and_workspace_substitution ... ok
+test native::resource::tests::create_authority_rejects_normalized_path_spellings_before_execution ... ok
+test native::resource::tests::create_authority_requires_reviewed_schema_action_profile_and_executor ... ok
+test native::resource::tests::create_binding_detects_replaced_workspace_inode_at_the_same_path ... ok
+test native::resource::tests::create_binding_is_v2_exact_and_uses_utf8_byte_bounds ... ok
+test native::approval::tests::default_config_keeps_the_refusal_and_has_no_approval_route ... ok
+test native::resource::windows_create_contract_tests::windows_create_v5_arguments_enforce_original_fields_and_utf8_byte_cap ... ok
+test native::resource::windows_create_contract_tests::windows_create_v5_binding_refuses_other_platforms_without_filesystem_effects ... ok
+test native::resource::windows_create_contract_tests::windows_create_v5_binding_shape_keeps_linux_contract_distinct ... ok
+test native::resource::windows_create_contract_tests::windows_create_v5_policy_requires_explicit_closed_write_semantics ... ok
+test native::resource::windows_read_contract_tests::windows_read_v4_binding_shape_preserves_distinct_contracts ... ok
+test native::resource::windows_read_contract_tests::windows_read_authority_requires_explicit_reviewed_semantics ... ok
+test native::tests::delegated_scope_containment_is_typed_and_canonical ... ok
+test native::approval::tests::restart_session_end_and_second_pending_close_or_refuse ... ok
+test native::approval::tests::hook_key_and_hook_grants_cannot_authorize_native_calls ... ok
+test native::approval::tests::classifier_source_requires_the_same_exact_approval ... ok
+test native::approval::tests::policy_switch_hard_deny_and_unsupported_cannot_be_rescued ... ok
+test native::approval::tests::exact_approval_releases_the_original_call_exactly_once ... ok
+test native::approval::tests::changed_arguments_and_other_sessions_get_no_release ... ok
+test native::tests::expired_native_session_clears_taint_and_invalidates_pending_calls ... ok
+test native::tests::audit_write_failure_withholds_result_and_does_not_commit_taint_or_spans ... ok
+test native::tests::registry_rejects_invalid_pointer_escapes_and_semantic_caller_claims ... ok
+test native::tests::mcp_host_result_admits_original_decoded_text_and_spends_invocation ... ok
+test native::tests::mcp_host_unicode_escaped_injection_is_withheld_before_admission ... ok
+test native::tests::legacy_native_parent_and_model_deliveries_remain_supported ... ok
+test native::tests::mcp_host_error_kind_matches_both_rpc_and_tool_errors ... ok
+test native::tests::selected_mcp_injection_only_in_structured_content_is_withheld ... ok
+test native::tests::mcp_host_rejects_uninspected_fields_and_content_without_spending_again ... ok
+test native::tests::selected_mcp_result_inspects_both_original_text_channels_and_keeps_raw_hash ... ok
+test preflight::tests::a_missing_enforcement_flag_is_unhealthy_rather_than_assumed_enforcing ... ok
+test preflight::tests::a_non_200_answer_is_unhealthy ... ok
+test preflight::tests::an_enforcing_daemon_passes_either_way ... ok
+test native::approval::tests::concurrent_redemption_releases_exactly_one ... ok
+test preflight::tests::an_unreachable_daemon_fails_and_says_the_hook_fails_open ... ok
+test preflight::tests::shadow_mode_warns_by_default_and_fails_only_when_enforcement_is_required ... ok
+test preflight::tests::something_else_on_the_port_is_unhealthy_not_healthy ... ok
+test provenance::tests::a_path_tool_with_no_cwd_falls_through_to_local_system ... ok
+test provenance::tests::a_read_inside_the_project_is_local_project ... ok
+test provenance::tests::a_read_outside_the_project_is_local_system ... ok
+test provenance::tests::a_relative_path_in_project_is_local_project ... ok
+test provenance::tests::a_relative_traversal_path_is_still_outside_the_project ... ok
+test provenance::tests::a_sibling_directory_sharing_a_prefix_is_outside ... ok
+test provenance::tests::a_traversal_path_is_not_treated_as_inside_the_project ... ok
+test provenance::tests::bash_and_unknown_tools_are_local_system_not_untrusted ... ok
+test provenance::tests::mcp_name_parsing_edge_cases ... ok
+test provenance::tests::host_of_handles_userinfo_port_case_and_missing_scheme ... ok
+test native::tests::selected_native_grants_bind_numeric_and_string_host_ids_independently ... ok
+test provenance::tests::mcp_tools_carry_their_server_name ... ok
+test provenance::tests::no_tool_result_is_ever_marked_user_prompt ... ok
+test provenance::tests::notebook_read_uses_the_notebook_path_key ... ok
+test native::tests::selected_mcp_registry_rejects_unknown_profile_or_broadened_authority ... ok
+test provenance::tests::relative_path_against_absolute_root_does_not_match_is_inside_directly ... ok
+test provenance::tests::root_itself_is_inside_root ... ok
+test provenance::tests::trailing_slashes_do_not_change_the_result ... ok
+test provenance::tests::web_fetch_is_network_with_the_host ... ok
+test provenance::tests::web_fetch_without_a_parsable_url_is_still_network ... ok
+test replay::tests::an_empty_log_has_a_zero_interruption_rate_and_does_not_divide_by_zero ... ok
+test replay::tests::an_unrecognized_verdict_string_counts_toward_total_but_no_bucket ... ok
+test replay::tests::a_thin_log_never_recommends_enforcing_however_clean_it_looks ... ok
+test replay::tests::counts_verdicts_and_sessions ... ok
+test replay::tests::denial_rate_is_reported_separately_from_asks ... ok
+test replay::tests::ranks_rules_by_how_often_they_fired ... ok
+test replay::tests::reports_latency_percentiles ... ok
+test replay::tests::reports_the_interruption_rate ... ok
+test replay::tests::round_trips_through_the_real_audit_line_serializer ... ok
+test replay::tests::the_observed_window_comes_from_recorded_timestamps ... ok
+test replay::tests::tolerates_blank_and_malformed_lines ... ok
+test native::tests::pending_call_cap_rejects_new_invocation_without_eviction ... ok
+test replay::tests::enough_quiet_traffic_supports_enforcing ... ok
+test sandbox::tests::guarded_file_mutations_fail_closed_when_policy_denies ... ok
+test sandbox::tests::guarded_network_fetch_refuses_unknown_hosts_before_proxy_io ... ok
+test replay::tests::one_interruption_in_a_large_window_demands_review_not_promotion ... ok
+test native::tests::selected_native_host_id_is_required_bounded_and_profile_specific ... ok
+test sandbox::tests::guarded_network_urls_fail_closed_on_insecure_or_ambiguous_inputs ... ok
+test sandbox::tests::guarded_network_fetch_requires_a_policy_egress_allowlist ... ok
+test sandbox::tests::guarded_network_fetch_uses_the_proxy_and_bounds_the_response ... ok
+test sandbox::tests::rejects_the_host_root_as_a_workspace ... ok
+test sandbox::tests::guarded_file_write_is_confined_to_the_workspace ... ok
+test spans::tests::an_absent_entry_is_none ... ok
+test sandbox::tests::guarded_file_write_rejects_traversal_and_symlink_targets ... ok
+test sandbox::tests::rejects_a_network_allowlist_instead_of_sharing_the_host_net ... ok
+test spans::tests::content_is_truncated_on_a_utf8_boundary ... ok
+test spans::tests::ending_a_session_drops_its_spans ... ok
+test spans::tests::putting_the_same_seq_twice_does_not_grow_the_eviction_queue_unboundedly ... ok
+test native::tests::selected_native_result_delivery_cannot_downgrade_to_parent_or_model ... ok
+test sandbox::tests::guarded_file_delete_and_rename_stay_inside_the_workspace ... ok
+test spans::tests::sessions_are_isolated ... ok
+test spans::tests::stores_and_retrieves_by_sequence_number ... ok
+test spans::tests::the_oldest_entry_is_evicted_at_capacity ... ok
+test token::tests::a_prefix_of_the_token_does_not_verify ... ok
+test sandbox::tests::test_guarded_file_open_refuses_fifo_without_blocking ... ok
+test token::tests::generated_tokens_are_long_and_unique ... ok
+test token::tests::matching_tokens_verify ... ok
+test token::tests::wrong_missing_and_malformed_headers_all_fail ... ok
+test token::tests::the_token_file_is_not_world_readable ... ok
+test token::tests::a_whitespace_only_existing_file_is_regenerated_not_returned_empty ... ok
+test token::tests::load_or_create_round_trips_and_is_stable ... ok
+test sandbox::tests::guarded_shell_refuses_before_process_creation ... ok
+test token::tests::an_existing_nonempty_token_is_restricted_before_reuse ... ok
+test native::tests::selected_mcp_parser_refuses_uninspected_meta_duplicates_and_missing_structured_values ... ok
+test native::tests::reviewe358_lossy_hook_must_not_take_firewall_before_native_mutex ... ok
+test mcp::admission::classifier_revision_tests::classifier_changed_between_parent_check_and_launch_never_executes ... ok
+test native::approval::tests::reject_and_expiry_cannot_be_rescued ... ok
+test mcp::admission::real_server::fault_tests::selected_fault_actual_call_deadline_reclaims_grant_and_discards_late_reply ... ok
+
+test result: ok. 313 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 30.15s
+
+     Running unittests src/main.rs (target/debug/deps/agentfw-04f06ff4b8dadd4b)
+
+running 1 test
+test cli_tests::managed_instance_preserves_leading_hyphens ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/hook_endpoint.rs (target/debug/deps/hook_endpoint-0336929f11994adc)
+
+running 13 tests
+test health_reports_the_enforcement_mode ... ok
+test a_request_with_the_wrong_token_is_rejected ... ok
+test a_request_without_a_token_is_rejected ... ok
+test raw_unknown_capture_is_an_explicit_forensic_opt_in ... ok
+test unknown_events_do_not_persist_raw_bodies_by_default ... ok
+test malformed_and_unknown_payloads_never_block_the_agent ... ok
+test post_tool_use_never_carries_a_decision_even_when_enforcing ... ok
+test a_benign_tool_call_yields_no_decision ... ok
+test the_indirect_injection_kill_chain_is_denied_when_enforcing ... ok
+test shadow_mode_computes_the_verdict_but_never_enforces_it ... ok
+test an_approval_does_not_authorize_a_different_command ... ok
+test post_tool_use_cannot_consume_a_pending_action_approval ... ok
+test a_human_approval_withdraws_the_objection_exactly_once ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/judge_corpus.rs (target/debug/deps/judge_corpus-5975edb8b18bca61)
+
+running 1 test
+test judge_corpus_evaluation ... ignored, requires a live local model (LM Studio); run with --ignored
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/judge_endpoint.rs (target/debug/deps/judge_endpoint-84491a8341b431b7)
+
+running 9 tests
+test a_disabled_judge_still_honours_an_ask_fallback ... ok
+test a_disabled_judge_makes_no_request_and_takes_the_fallback ... ok
+test known_secret_deny_bypasses_a_weaker_rule_and_the_judge ... ok
+test an_http_500_from_the_model_falls_back ... ok
+test a_verdict_of_documentation_takes_the_allow_fallback ... ok
+test prose_instead_of_a_verdict_is_unavailable_and_falls_back ... ok
+test a_verdict_of_injection_asks ... ok
+test an_injection_in_the_models_answer_cannot_steer_the_daemon ... ok
+test a_model_slower_than_the_timeout_falls_back_within_budget ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+
+     Running tests/lifecycle.rs (target/debug/deps/lifecycle-9191bcfa9bdcaffa)
+
+running 5 tests
+test an_unowned_listener_is_reported_and_never_stopped ... ok
+test managed_storage_rejects_unsafe_inputs_and_preserves_foreign_files ... ok
+test recovery_removes_only_the_recorded_incomplete_stage ... ok
+test recovery_restores_the_version_before_an_interrupted_upgrade ... ok
+test managed_lifecycle_restores_last_working_version has been running for over 60 seconds
+test managed_lifecycle_restores_last_working_version ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 67.39s
+
+     Running tests/mcp_admission.rs (target/debug/deps/mcp_admission-747702c491a7e4c2)
+
+running 73 tests
+test native_mcp_checks_codex_results_before_releasing_original_content ... ok
+test native_mcp_accepts_observed_claude_correlation_metadata_without_changing_call_bytes ... ok
+test native_mcp_concurrent_call_after_effect_never_reaches_second_executor ... ok
+test classified_read_keeps_original_call_and_result_bytes ... ok
+test native_mcp_cancellation_after_effect_withholds_result_without_undoing_execution ... ok
+test native_mcp_allows_real_read_but_denies_secret_send_before_server_execution ... ok
+test native_mcp_accepts_codex_discovery_and_calls_without_granting_authority ... ok
+test native_mcp_daemon_shadow_and_outage_never_spawn_server ... ok
+test native_mcp_does_not_give_server_daemon_token_environment ... ok
+test native_mcp_keeps_ask_calls_blocked_before_server_execution ... ok
+test native_mcp_refuses_codex_resource_probes_without_forwarding_or_closing ... ok
+test native_mcp_rejects_control_characters_in_ids_before_execution ... ok
+test native_mcp_never_releases_unbound_or_nontext_server_results ... ok
+test native_mcp_daemon_outage_after_execution_withholds_result ... ok
+test native_mcp_preserves_the_original_correlated_jsonrpc_error ... ok
+test native_mcp_daemon_outage_after_manifest_never_executes_call ... ok
+test native_mcp_rejects_prompt_instructions_and_extra_capabilities_in_initialization ... ok
+test native_mcp_rejects_uninspected_manifest_metadata_and_poisoned_descriptions ... ok
+test native_mcp_rejects_replayed_client_id_and_concurrent_calls ... ok
+test native_mcp_schema_drift_does_not_release_tools_or_execute ... ok
+test native_mcp_two_call_batch_never_executes_either_tool ... ok
+test native_mcp_rejects_unvalidated_arguments_before_server_defaults_can_apply ... ok
+test native_mcp_unsupported_cancellation_before_call_never_executes ... ok
+test native_mcp_withholds_actual_result_then_allows_benign_followup ... ok
+test path_profiles_also_refuse_missing_execution_time_confinement ... ok
+test native_mcp_denied_session_does_not_block_a_benign_peer_on_the_same_daemon ... ok
+test native_mcp_rejects_ambiguous_and_unsupported_client_messages_before_execution ... ok
+test native_mcp_replayed_id_with_changed_tool_and_arguments_adds_no_effect ... ok
+test native_mcp_restarted_daemon_rejects_old_completion_but_new_session_remains_useful ... ok
+test scoped_mint_accepts_hyphen_prefixed_instance_ids ... ok
+test sou11_annotation_text_is_untrusted_and_inspected ... ok
+test scoped_server_never_inherits_authority_or_host_session_environment ... ok
+test reviewc757_legacy_host_tokens_never_spawn_a_server_even_after_restart ... ok
+test native_mcp_rejects_unsupported_discovery_metadata_before_forwarding ... ok
+test sou11_list_change_invalidates_until_a_new_admitted_manifest ... ok
+test sou11_read_only_hint_cannot_grant_destructive_execution ... ok
+test sou11_metadata_refresh_changes_prediction_identity ... ok
+test sou11_unfamiliar_nested_input_preserves_bytes_and_annotations ... ok
+test sou15_leaf_symlink_and_oversized_content_bounds ... ok
+test sou15_generic_resource_executor_refuses_both_destinations ... ok
+test sou11_stale_manifest_and_changed_schema_cannot_forward_calls ... ok
+test real_baseline_preserves_frames_and_policy_enforcement ... ok
+test resource_profiles_cannot_promote_a_generic_executor_to_confined ... ok
+test sou11_invalid_nested_input_never_reaches_server ... ok
+test sou15_multi_action_and_unknown_classification_handling ... ok
+test sou15_parent_swap_symlink_traversal_refuses_outside_canary ... ok
+test sou15_operation_constrained_resource_executor_enforces_boundaries ... ok
+test sou15_root_directory_swap_refused_and_pinned_continuation ... ok
+test sou15_unexpected_resource_receipt_refused_before_server_effect ... ok
+test sou24_readonly_write_with_high_uncertainty_is_hard_denied ... ok
+test sou17_resource_overlap_during_classifier_refused_before_native_call ... ok
+test sou17_post_admission_fifo_refused_and_same_session_read_recovers ... ok
+test sou15_post_admission_read_failure_capacity_leak_prevented_and_continuation_succeeds ... ok
+test native_mcp_rejects_unknown_partial_and_unbounded_correlation_metadata ... ok
+test sou63_bound_cancellation_and_concurrent_call_withhold_host_provenance ... ok
+test sou48_one_correct_approval_runs_the_original_call_once_then_work_continues ... ok
+test sou63_child_authority_cli_round_trip_and_refusals ... ok
+test sou48_classifier_ask_waits_for_the_same_exact_approval ... ok
+test sou63_invalid_child_authority_and_server_mismatch_never_spawn_server ... ok
+test sou63_collector_binds_host_taint_and_provenance_via_cli_and_environment ... ok
+test sou48_concurrent_input_and_restart_close_the_pending_call ... ok
+test sou67_operator_owned_tool_bindings_allow_arbitrary_tool_name_under_constrained_file_execution ... ok
+test understated_classification_keeps_trusted_network_restrictions ... ok
+test classifier_failures_never_reach_policy_or_the_server ... ok
+test sou17_resource_overlap_during_native_gates_refused_with_useful_peer ... ok
+test sou48_reject_and_timeout_run_nothing_and_work_continues ... ok
+test python_classifier_failures_block_before_execution ... ok
+test sou63_real_process_cross_collector_taint_server_a_to_server_b ... ok
+test sou63_real_process_hook_to_mcp_taint_and_lifecycle ... ok
+test native_mcp_daemon_call_timeout_never_executes_call ... ok
+test native_mcp_cancellation_while_call_admission_is_stalled_is_fail_closed ... ok
+test sou15_refusal_capacity_leak_prevented_and_continuation_succeeds ... ok
+test composed_refusals_do_not_reserve_native_capacity_or_block_useful_followup ... ok
+
+test result: ok. 73 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.64s
+
+     Running tests/mcp_concurrency.rs (target/debug/deps/mcp_concurrency-f72f533708ccc26c)
+
+running 11 tests
+test partial_queued_resource_call_is_refused_before_native_execution ... ok
+test queued_resource_calls_are_refused_before_native_execution ... ok
+test resource_reply_backpressure_refuses_partial_call ... ok
+test large_resource_reply_finishes_once_after_client_eof ... ok
+test resource_reply_backpressure_refuses_queued_call ... ok
+test large_resource_replies_keep_sequential_calls_useful ... ok
+test resource_reply_backpressure_refuses_cancellation ... ok
+test immediate_resource_refusals_preserve_same_session_recovery_and_eof ... FAILED
+test immediate_next_resource_frame_after_lf_and_final_eof_remain_useful ... ok
+test sequential_resource_failures_keep_useful_same_session_continuation ... ok
+test immediate_resource_read_errors_recover_and_close_cleanly_after_final_lf ... ok
+
+failures:
+
+---- immediate_resource_refusals_preserve_same_session_recovery_and_eof stdout ----
+SOU17_EVIDENCE {"actual_broker_reads":33,"boundary":"production_mcp_resource_stdout","child_executor_entries":0,"client_output_sha256":"1846eddbc2bf2f8ce47191e827094d02625252e301984a28d7769f5bccfc7a70","client_tool_result_bytes":4168,"collector_exit":0,"error":null,"file_bytes_unchanged":true,"mode":"immediate-refusals","native_call_ids":["wHVN_1zTDmCuxE66EDWgOXTPRo3ayuNKnCHBLlkuVKA","g568DZKYhpNL8gwLOaqlVkebk9JsEahD1VA5R9qgVNc","25WFaET9xf6F3e1uCuAl5ZuBD4mrdEPWrGZU8-hWYZY","0ipIM8FSkPmnwt9vdYLzQjXpaMrvq57S0yTZ_qfg61A","aGZdImOnp44MjW-Dm9i73tqmd9twDx4BpsyM3X7aUZE","r1hV1OQp5dG74GlVkWx2LCwHmUICkkUUQsIAh2i5JEg","aXL7pIrSjrJNpRi_xeUIQOpVV21wGk0qmcU2-fezoOw","K52sJu63wQq-v7m0xTBv8vBXTf0cycdIcuR0ptmQ8xQ","8qe1mFtae3LeqM7iib69GJgmwHHfZkiy4BKGVooBqMc","_mdYfaebE8SaQo4JBR5iChVBh5bG5eDBoLAUWjsvHIk","XJU38JmjLsi3Gfb8JqxuEWfcmpnGFsjb7tlMnHJ5N4g","Zjs6VN2AzCqBvctjHJdFdMa1jX9ByDEamPstycoAgho","V1d9xnR-9QsliGVb6JDmeDVOC8V433EB1ejs7u9nH7E","YJJeDmWGdAUbAFJYz5NZuYDTF1AnKUBD3K12vwTq_QA","Flvlk0qHm9ZyXBV8zeisnlq5F_YOvxDEcBpwQjTO2YE","OunZmshErfZO7OVJhiBG1St4q_eVnSL-3H-z18pAsUc","ct308gFNm-lFO-NOXGwa7-amspVQ2HJmBKvCdl5dEtE","JiVbiqo-z6X_I7UXWwrPwwbyenyZuMe_kCjgwroUKKM","9ZLXKZ_WcMaUbiojDlB9KTqC4P4KHYCT3gAjQ9B9DDc","ArPshL4R8yTXr-sBZ5g6hrF33cJcz-dSnik29wEpaeE","5Qg2CBrTKQeyq_GuwkbSx1youYB4tU4ykuTuJtAeFV4","oNB1leKG0O9l2x3CSDSqQfgg1slBqKL9QwRizxtWd_Q","e8pEvZDo-lvaRq7Q7l9l8iEKxjq_R4yOygAECOdzfDA","q5eS3dcWY5p5CV2NgrKxEZYYXGYu8YDpeKB9KKZQ6ac","7uYGqRCjF6lkx8KZu3AkXURRRs5tS7BBzP5DnoLJwaQ","O6iuygODtjhp_pSuiR8jLDBFRWokxZVCdkrAatoeyck","RSNY2YV6Uysk-eGSc13F-uC-2rJSl8OGafFy3ce0kf4","jznSF1c4B2jXc860ZYp1DV3hap_p9sm6RPq6LIMcPf8","uzk2CdJznu8AgMnwI9b07F3k7RCNtQC3IZ8r4D1zFD8","mNhlnv9Wx750vAGZjNsikmAIdRzbN_LQygsF_P-b0o8","3dn-LfSZ2_lxaWlhU53WA8GCaynX1DkUxIJhU_JPDug","HVinvylKAYZWh1VubaxfaQ7WefuYhHb7t-V7Ajbvhv4","dOGgv7VgNHP_Dg2yPHYp1UuRuLFMKNa5qXFAR_sYHzw"],"native_gates":66,"owned_profile_removed":true,"receiver_deliveries":0,"stdout_eof_observed":true,"witness":{"clean_eof_sent_after_final_lf":true,"correlated_response_count":33,"error_response_count":0,"expected_outcomes":["allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow"],"next_frame_written_after_lf_before_json_validation":true,"prepared_frames":["{\"jsonrpc\":\"2.0\",\"id\":\"absolute-read\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou18_absolute-read\",\"progressToken\":1}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-1\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_1\",\"progressToken\":2}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-2\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_2\",\"progressToken\":3}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-3\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_3\",\"progressToken\":4}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-4\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_4\",\"progressToken\":5}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-5\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_5\",\"progressToken\":6}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-6\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_6\",\"progressToken\":7}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-7\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_7\",\"progressToken\":8}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-8\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_8\",\"progressToken\":9}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-9\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_9\",\"progressToken\":10}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-10\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_10\",\"progressToken\":11}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-11\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_11\",\"progressToken\":12}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-12\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_12\",\"progressToken\":13}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-13\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_13\",\"progressToken\":14}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-14\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_14\",\"progressToken\":15}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-15\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_15\",\"progressToken\":16}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-16\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_16\",\"progressToken\":17}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-17\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_17\",\"progressToken\":18}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-18\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_18\",\"progressToken\":19}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-19\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_19\",\"progressToken\":20}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-20\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_20\",\"progressToken\":21}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-21\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_21\",\"progressToken\":22}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-22\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_22\",\"progressToken\":23}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-23\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_23\",\"progressToken\":24}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-24\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_24\",\"progressToken\":25}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-25\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_25\",\"progressToken\":26}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-26\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_26\",\"progressToken\":27}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-27\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_27\",\"progressToken\":28}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-28\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_28\",\"progressToken\":29}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-29\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_29\",\"progressToken\":30}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-30\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_30\",\"progressToken\":31}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-31\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_31\",\"progressToken\":32}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-32\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_32\",\"progressToken\":33}}}"],"received_outcomes":[{"expected_refusal_present":false,"id":"absolute-read","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-1","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-2","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-3","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-4","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-5","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-6","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-7","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-8","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-9","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-10","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-11","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-12","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-13","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-14","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-15","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-16","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-17","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-18","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-19","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-20","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-21","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-22","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-23","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-24","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-25","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-26","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-27","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-28","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-29","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-30","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-31","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-32","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true}],"released_reply_ids":["absolute-read","rapid-immediate-refusals-1","rapid-immediate-refusals-2","rapid-immediate-refusals-3","rapid-immediate-refusals-4","rapid-immediate-refusals-5","rapid-immediate-refusals-6","rapid-immediate-refusals-7","rapid-immediate-refusals-8","rapid-immediate-refusals-9","rapid-immediate-refusals-10","rapid-immediate-refusals-11","rapid-immediate-refusals-12","rapid-immediate-refusals-13","rapid-immediate-refusals-14","rapid-immediate-refusals-15","rapid-immediate-refusals-16","rapid-immediate-refusals-17","rapid-immediate-refusals-18","rapid-immediate-refusals-19","rapid-immediate-refusals-20","rapid-immediate-refusals-21","rapid-immediate-refusals-22","rapid-immediate-refusals-23","rapid-immediate-refusals-24","rapid-immediate-refusals-25","rapid-immediate-refusals-26","rapid-immediate-refusals-27","rapid-immediate-refusals-28","rapid-immediate-refusals-29","rapid-immediate-refusals-30","rapid-immediate-refusals-31","rapid-immediate-refusals-32"],"released_response_sha256":["7579e5973b676863125e1d26343a76bf27f2480fdd1c112a564adb97767b4812","f4f1bea6dde8a06cebb317f23f7b0fe9ca27fb34b65e9fa81766a06dd5ff13d6","3da7257c88b6c356fd99496ea6c173a9e94d687ede32fd51d7692305be0bb1ef","71d6e5c05ef6d5c3bbeda5cc9c7820465485912b6ff46e65cb79b3707cdfdf8b","1c4607927a738aa0a7c9af304cfdff55b1ed701a31cd387b308fe53291c4ca4b","e2d8f91f8cce08ee5ccfa91da862fc2424dceb5937cf023fead1e9e776df6e90","4bba4b83441b43899f32ae83c7cd6b9757ddfc2edc9190d86d588867788f6705","399e6d244a3f2a770ec40a624ba5dd317ff480494498f78137c669975f65300e","bb3a3ba42adb9c220e4421b5d24a5363f07ba2d21a83c448027b0c0b1eafd0e6","49c0a376529e46a46f6a64811ebecd693a233fb5c20080bf4f2f30c34aa4a2f1","4003ed7929d85ae1eadc8ddbb4b57c5b325f4fc97a8a8eb1384796e32291b3a4","00afb068d7647422b507c9123387c68d4fc8b5222cf06a6d043aa479fcd02d2d","1e4f77236628360704910c1ec5eb411e5898da564556a7ba0a75b8d62fbac4c6","174536079ed91db17ede6e9c20d58dddab0fb314ac1a6cf8436127bd3d2c482f","4ad648a9efc4e07bda7e956fff50a82393dd648c629226d4c4142498fdd6a4c0","ca4d1abd4922b496d0ae3e05ec127690efb1eaa1684ad6a682017148cbf56c57","169af5fd21d6ee65c9a033918b729d9509feb0cb01ca7ac1613b447464adda74","da4388697b7d847d86a2655dab54920e901f66613799c1a28423ae22b538e17c","f7b4a4eabb3c0b533f153a9dbf1a383f3b938e33df0d1dafb8fdf698e46adbd9","5a18fbc152dce107e45eecb4f3a25cad86160c4f156516e9d04eea276b15cda1","1071745d7dab97841aeb5664e4dc5dce22e24bfa65b33bf8d208e032e55e538c","d5f59daadc069d4aea49911c1a7cc372e72487299c2cf1eb94fcfbb6291ed9c0","5e24ea837318b3bc39dbb166177088d6ea690e12719bb23ac3af127b87a74af2","607213b1b23c933acda146a01015b5cb5d2ae7c8d52b21ba07c754a4e1d98562","a2317f2e0fb1214b4bc63eee757d3f4a252992a3206750dc4fcef44d3923153b","dd995ae88aabf0fa16d479cab259be029efcccb585557f6ed8587586241c3222","35d84d462e1c975a1e2e02249e98fe54d4368bc051393cb13172c3d80b81d98f","98b935d8c3caf4c3fde57f01f5774a193d71eb3940d0f88e2578eb1a938c6393","9b1260eda4cfee9561f57eac932c361e771da5e07c82f63f9a64c85ffea94b66","ae7995215d135622727a53fd5c8726404940ecb5f54f57f49b969b95d490325e","ba4ea94bc58c16016429f53e3e1c09ce9a2a5c5bbaafba7633319b23568752cd","67e9c055e5ce3cd259fae55ea45ea94f81a3253b0dfefe6eca5eb9b6dc5e70cd","b40941398bf202d6aac1c9a15778d0c7e30644a2a381b7d1742ce9aa300f32ec"],"released_tool_response_sha256":"ded8ffe5886bbe8e998e491d5231a64f93599a61c7b16826bb91b857200f6429","unsupported_refusal_count":16,"useful_response_count":17}}
+
+thread 'immediate_resource_refusals_preserve_same_session_recovery_and_eof' (18450900) panicked at crates/agentfw/tests/mcp_concurrency.rs:174:5:
+resource reply backpressure (immediate-refusals): stdout={"boundary": "production_mcp_resource_stdout", "mode": "immediate-refusals", "witness": {"prepared_frames": ["{\"jsonrpc\":\"2.0\",\"id\":\"absolute-read\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou18_absolute-read\",\"progressToken\":1}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-1\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_1\",\"progressToken\":2}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-2\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_2\",\"progressToken\":3}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-3\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_3\",\"progressToken\":4}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-4\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_4\",\"progressToken\":5}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-5\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_5\",\"progressToken\":6}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-6\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_6\",\"progressToken\":7}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-7\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_7\",\"progressToken\":8}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-8\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_8\",\"progressToken\":9}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-9\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_9\",\"progressToken\":10}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-10\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_10\",\"progressToken\":11}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-11\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_11\",\"progressToken\":12}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-12\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_12\",\"progressToken\":13}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-13\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_13\",\"progressToken\":14}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-14\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_14\",\"progressToken\":15}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-15\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_15\",\"progressToken\":16}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-16\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_16\",\"progressToken\":17}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-17\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_17\",\"progressToken\":18}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-18\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_18\",\"progressToken\":19}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-19\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_19\",\"progressToken\":20}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-20\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_20\",\"progressToken\":21}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-21\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_21\",\"progressToken\":22}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-22\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_22\",\"progressToken\":23}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-23\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_23\",\"progressToken\":24}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-24\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_24\",\"progressToken\":25}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-25\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_25\",\"progressToken\":26}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-26\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_26\",\"progressToken\":27}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-27\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_27\",\"progressToken\":28}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-28\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_28\",\"progressToken\":29}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-29\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_29\",\"progressToken\":30}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-30\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_30\",\"progressToken\":31}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-31\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_31\",\"progressToken\":32}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-32\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_32\",\"progressToken\":33}}}"], "expected_outcomes": ["allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow"], "next_frame_written_after_lf_before_json_validation": true, "released_response_sha256": ["7579e5973b676863125e1d26343a76bf27f2480fdd1c112a564adb97767b4812", "f4f1bea6dde8a06cebb317f23f7b0fe9ca27fb34b65e9fa81766a06dd5ff13d6", "3da7257c88b6c356fd99496ea6c173a9e94d687ede32fd51d7692305be0bb1ef", "71d6e5c05ef6d5c3bbeda5cc9c7820465485912b6ff46e65cb79b3707cdfdf8b", "1c4607927a738aa0a7c9af304cfdff55b1ed701a31cd387b308fe53291c4ca4b", "e2d8f91f8cce08ee5ccfa91da862fc2424dceb5937cf023fead1e9e776df6e90", "4bba4b83441b43899f32ae83c7cd6b9757ddfc2edc9190d86d588867788f6705", "399e6d244a3f2a770ec40a624ba5dd317ff480494498f78137c669975f65300e", "bb3a3ba42adb9c220e4421b5d24a5363f07ba2d21a83c448027b0c0b1eafd0e6", "49c0a376529e46a46f6a64811ebecd693a233fb5c20080bf4f2f30c34aa4a2f1", "4003ed7929d85ae1eadc8ddbb4b57c5b325f4fc97a8a8eb1384796e32291b3a4", "00afb068d7647422b507c9123387c68d4fc8b5222cf06a6d043aa479fcd02d2d", "1e4f77236628360704910c1ec5eb411e5898da564556a7ba0a75b8d62fbac4c6", "174536079ed91db17ede6e9c20d58dddab0fb314ac1a6cf8436127bd3d2c482f", "4ad648a9efc4e07bda7e956fff50a82393dd648c629226d4c4142498fdd6a4c0", "ca4d1abd4922b496d0ae3e05ec127690efb1eaa1684ad6a682017148cbf56c57", "169af5fd21d6ee65c9a033918b729d9509feb0cb01ca7ac1613b447464adda74", "da4388697b7d847d86a2655dab54920e901f66613799c1a28423ae22b538e17c", "f7b4a4eabb3c0b533f153a9dbf1a383f3b938e33df0d1dafb8fdf698e46adbd9", "5a18fbc152dce107e45eecb4f3a25cad86160c4f156516e9d04eea276b15cda1", "1071745d7dab97841aeb5664e4dc5dce22e24bfa65b33bf8d208e032e55e538c", "d5f59daadc069d4aea49911c1a7cc372e72487299c2cf1eb94fcfbb6291ed9c0", "5e24ea837318b3bc39dbb166177088d6ea690e12719bb23ac3af127b87a74af2", "607213b1b23c933acda146a01015b5cb5d2ae7c8d52b21ba07c754a4e1d98562", "a2317f2e0fb1214b4bc63eee757d3f4a252992a3206750dc4fcef44d3923153b", "dd995ae88aabf0fa16d479cab259be029efcccb585557f6ed8587586241c3222", "35d84d462e1c975a1e2e02249e98fe54d4368bc051393cb13172c3d80b81d98f", "98b935d8c3caf4c3fde57f01f5774a193d71eb3940d0f88e2578eb1a938c6393", "9b1260eda4cfee9561f57eac932c361e771da5e07c82f63f9a64c85ffea94b66", "ae7995215d135622727a53fd5c8726404940ecb5f54f57f49b969b95d490325e", "ba4ea94bc58c16016429f53e3e1c09ce9a2a5c5bbaafba7633319b23568752cd", "67e9c055e5ce3cd259fae55ea45ea94f81a3253b0dfefe6eca5eb9b6dc5e70cd", "b40941398bf202d6aac1c9a15778d0c7e30644a2a381b7d1742ce9aa300f32ec"], "received_outcomes": [{"id": "absolute-read", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-1", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-2", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-3", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-4", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-5", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-6", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-7", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-8", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-9", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-10", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-11", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-12", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-13", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-14", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-15", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-16", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-17", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-18", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-19", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-20", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-21", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-22", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-23", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-24", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-25", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-26", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-27", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-28", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-29", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-30", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-31", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-32", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}], "clean_eof_sent_after_final_lf": true, "released_reply_ids": ["absolute-read", "rapid-immediate-refusals-1", "rapid-immediate-refusals-2", "rapid-immediate-refusals-3", "rapid-immediate-refusals-4", "rapid-immediate-refusals-5", "rapid-immediate-refusals-6", "rapid-immediate-refusals-7", "rapid-immediate-refusals-8", "rapid-immediate-refusals-9", "rapid-immediate-refusals-10", "rapid-immediate-refusals-11", "rapid-immediate-refusals-12", "rapid-immediate-refusals-13", "rapid-immediate-refusals-14", "rapid-immediate-refusals-15", "rapid-immediate-refusals-16", "rapid-immediate-refusals-17", "rapid-immediate-refusals-18", "rapid-immediate-refusals-19", "rapid-immediate-refusals-20", "rapid-immediate-refusals-21", "rapid-immediate-refusals-22", "rapid-immediate-refusals-23", "rapid-immediate-refusals-24", "rapid-immediate-refusals-25", "rapid-immediate-refusals-26", "rapid-immediate-refusals-27", "rapid-immediate-refusals-28", "rapid-immediate-refusals-29", "rapid-immediate-refusals-30", "rapid-immediate-refusals-31", "rapid-immediate-refusals-32"], "correlated_response_count": 33, "useful_response_count": 17, "error_response_count": 0, "unsupported_refusal_count": 16, "released_tool_response_sha256": "ded8ffe5886bbe8e998e491d5231a64f93599a61c7b16826bb91b857200f6429"}, "native_gates": 66, "actual_broker_reads": 33, "native_call_ids": ["wHVN_1zTDmCuxE66EDWgOXTPRo3ayuNKnCHBLlkuVKA", "g568DZKYhpNL8gwLOaqlVkebk9JsEahD1VA5R9qgVNc", "25WFaET9xf6F3e1uCuAl5ZuBD4mrdEPWrGZU8-hWYZY", "0ipIM8FSkPmnwt9vdYLzQjXpaMrvq57S0yTZ_qfg61A", "aGZdImOnp44MjW-Dm9i73tqmd9twDx4BpsyM3X7aUZE", "r1hV1OQp5dG74GlVkWx2LCwHmUICkkUUQsIAh2i5JEg", "aXL7pIrSjrJNpRi_xeUIQOpVV21wGk0qmcU2-fezoOw", "K52sJu63wQq-v7m0xTBv8vBXTf0cycdIcuR0ptmQ8xQ", "8qe1mFtae3LeqM7iib69GJgmwHHfZkiy4BKGVooBqMc", "_mdYfaebE8SaQo4JBR5iChVBh5bG5eDBoLAUWjsvHIk", "XJU38JmjLsi3Gfb8JqxuEWfcmpnGFsjb7tlMnHJ5N4g", "Zjs6VN2AzCqBvctjHJdFdMa1jX9ByDEamPstycoAgho", "V1d9xnR-9QsliGVb6JDmeDVOC8V433EB1ejs7u9nH7E", "YJJeDmWGdAUbAFJYz5NZuYDTF1AnKUBD3K12vwTq_QA", "Flvlk0qHm9ZyXBV8zeisnlq5F_YOvxDEcBpwQjTO2YE", "OunZmshErfZO7OVJhiBG1St4q_eVnSL-3H-z18pAsUc", "ct308gFNm-lFO-NOXGwa7-amspVQ2HJmBKvCdl5dEtE", "JiVbiqo-z6X_I7UXWwrPwwbyenyZuMe_kCjgwroUKKM", "9ZLXKZ_WcMaUbiojDlB9KTqC4P4KHYCT3gAjQ9B9DDc", "ArPshL4R8yTXr-sBZ5g6hrF33cJcz-dSnik29wEpaeE", "5Qg2CBrTKQeyq_GuwkbSx1youYB4tU4ykuTuJtAeFV4", "oNB1leKG0O9l2x3CSDSqQfgg1slBqKL9QwRizxtWd_Q", "e8pEvZDo-lvaRq7Q7l9l8iEKxjq_R4yOygAECOdzfDA", "q5eS3dcWY5p5CV2NgrKxEZYYXGYu8YDpeKB9KKZQ6ac", "7uYGqRCjF6lkx8KZu3AkXURRRs5tS7BBzP5DnoLJwaQ", "O6iuygODtjhp_pSuiR8jLDBFRWokxZVCdkrAatoeyck", "RSNY2YV6Uysk-eGSc13F-uC-2rJSl8OGafFy3ce0kf4", "jznSF1c4B2jXc860ZYp1DV3hap_p9sm6RPq6LIMcPf8", "uzk2CdJznu8AgMnwI9b07F3k7RCNtQC3IZ8r4D1zFD8", "mNhlnv9Wx750vAGZjNsikmAIdRzbN_LQygsF_P-b0o8", "3dn-LfSZ2_lxaWlhU53WA8GCaynX1DkUxIJhU_JPDug", "HVinvylKAYZWh1VubaxfaQ7WefuYhHb7t-V7Ajbvhv4", "dOGgv7VgNHP_Dg2yPHYp1UuRuLFMKNa5qXFAR_sYHzw"], "client_tool_result_bytes": 4168, "client_output_sha256": "1846eddbc2bf2f8ce47191e827094d02625252e301984a28d7769f5bccfc7a70", "child_executor_entries": 0, "receiver_deliveries": 0, "file_bytes_unchanged": true, "stdout_eof_observed": true, "owned_profile_removed": true, "collector_exit": 0, "error": null}
+ stderr=Traceback (most recent call last):
+  File "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/scripts/fixtures/mcp_resource_backpressure.py", line 346, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/scripts/fixtures/mcp_resource_backpressure.py", line 303, in main
+    assert observation["is_error"] is True and observation["expected_refusal_present"] is True, summary
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'boundary': 'production_mcp_resource_stdout', 'mode': 'immediate-refusals', 'witness': {'prepared_frames': ['{"jsonrpc":"2.0","id":"absolute-read","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou18_absolute-read","progressToken":1}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-1","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_1","progressToken":2}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-2","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_2","progressToken":3}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-3","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_3","progressToken":4}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-4","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_4","progressToken":5}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-5","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_5","progressToken":6}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-6","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_6","progressToken":7}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-7","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_7","progressToken":8}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-8","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_8","progressToken":9}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-9","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_9","progressToken":10}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-10","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_10","progressToken":11}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-11","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_11","progressToken":12}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-12","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_12","progressToken":13}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-13","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_13","progressToken":14}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-14","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_14","progressToken":15}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-15","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_15","progressToken":16}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-16","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_16","progressToken":17}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-17","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_17","progressToken":18}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-18","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_18","progressToken":19}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-19","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_19","progressToken":20}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-20","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_20","progressToken":21}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-21","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_21","progressToken":22}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-22","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_22","progressToken":23}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-23","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_23","progressToken":24}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-24","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_24","progressToken":25}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-25","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_25","progressToken":26}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-26","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_26","progressToken":27}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-27","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_27","progressToken":28}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-28","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_28","progressToken":29}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-29","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_29","progressToken":30}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-30","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_30","progressToken":31}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-31","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_31","progressToken":32}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-32","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou18-resource-vxtst63a/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_32","progressToken":33}}}'], 'expected_outcomes': ['allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow'], 'next_frame_written_after_lf_before_json_validation': True, 'released_response_sha256': ['7579e5973b676863125e1d26343a76bf27f2480fdd1c112a564adb97767b4812', 'f4f1bea6dde8a06cebb317f23f7b0fe9ca27fb34b65e9fa81766a06dd5ff13d6', '3da7257c88b6c356fd99496ea6c173a9e94d687ede32fd51d7692305be0bb1ef', '71d6e5c05ef6d5c3bbeda5cc9c7820465485912b6ff46e65cb79b3707cdfdf8b', '1c4607927a738aa0a7c9af304cfdff55b1ed701a31cd387b308fe53291c4ca4b', 'e2d8f91f8cce08ee5ccfa91da862fc2424dceb5937cf023fead1e9e776df6e90', '4bba4b83441b43899f32ae83c7cd6b9757ddfc2edc9190d86d588867788f6705', '399e6d244a3f2a770ec40a624ba5dd317ff480494498f78137c669975f65300e', 'bb3a3ba42adb9c220e4421b5d24a5363f07ba2d21a83c448027b0c0b1eafd0e6', '49c0a376529e46a46f6a64811ebecd693a233fb5c20080bf4f2f30c34aa4a2f1', '4003ed7929d85ae1eadc8ddbb4b57c5b325f4fc97a8a8eb1384796e32291b3a4', '00afb068d7647422b507c9123387c68d4fc8b5222cf06a6d043aa479fcd02d2d', '1e4f77236628360704910c1ec5eb411e5898da564556a7ba0a75b8d62fbac4c6', '174536079ed91db17ede6e9c20d58dddab0fb314ac1a6cf8436127bd3d2c482f', '4ad648a9efc4e07bda7e956fff50a82393dd648c629226d4c4142498fdd6a4c0', 'ca4d1abd4922b496d0ae3e05ec127690efb1eaa1684ad6a682017148cbf56c57', '169af5fd21d6ee65c9a033918b729d9509feb0cb01ca7ac1613b447464adda74', 'da4388697b7d847d86a2655dab54920e901f66613799c1a28423ae22b538e17c', 'f7b4a4eabb3c0b533f153a9dbf1a383f3b938e33df0d1dafb8fdf698e46adbd9', '5a18fbc152dce107e45eecb4f3a25cad86160c4f156516e9d04eea276b15cda1', '1071745d7dab97841aeb5664e4dc5dce22e24bfa65b33bf8d208e032e55e538c', 'd5f59daadc069d4aea49911c1a7cc372e72487299c2cf1eb94fcfbb6291ed9c0', '5e24ea837318b3bc39dbb166177088d6ea690e12719bb23ac3af127b87a74af2', '607213b1b23c933acda146a01015b5cb5d2ae7c8d52b21ba07c754a4e1d98562', 'a2317f2e0fb1214b4bc63eee757d3f4a252992a3206750dc4fcef44d3923153b', 'dd995ae88aabf0fa16d479cab259be029efcccb585557f6ed8587586241c3222', '35d84d462e1c975a1e2e02249e98fe54d4368bc051393cb13172c3d80b81d98f', '98b935d8c3caf4c3fde57f01f5774a193d71eb3940d0f88e2578eb1a938c6393', '9b1260eda4cfee9561f57eac932c361e771da5e07c82f63f9a64c85ffea94b66', 'ae7995215d135622727a53fd5c8726404940ecb5f54f57f49b969b95d490325e', 'ba4ea94bc58c16016429f53e3e1c09ce9a2a5c5bbaafba7633319b23568752cd', '67e9c055e5ce3cd259fae55ea45ea94f81a3253b0dfefe6eca5eb9b6dc5e70cd', 'b40941398bf202d6aac1c9a15778d0c7e30644a2a381b7d1742ce9aa300f32ec'], 'received_outcomes': [{'id': 'absolute-read', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-1', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-2', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-3', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-4', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-5', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-6', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-7', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-8', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-9', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-10', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-11', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-12', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-13', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-14', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-15', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-16', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-17', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-18', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-19', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-20', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-21', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-22', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-23', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-24', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-25', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-26', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-27', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-28', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-29', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-30', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-31', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-32', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}], 'clean_eof_sent_after_final_lf': True, 'released_reply_ids': ['absolute-read', 'rapid-immediate-refusals-1', 'rapid-immediate-refusals-2', 'rapid-immediate-refusals-3', 'rapid-immediate-refusals-4', 'rapid-immediate-refusals-5', 'rapid-immediate-refusals-6', 'rapid-immediate-refusals-7', 'rapid-immediate-refusals-8', 'rapid-immediate-refusals-9', 'rapid-immediate-refusals-10', 'rapid-immediate-refusals-11', 'rapid-immediate-refusals-12', 'rapid-immediate-refusals-13', 'rapid-immediate-refusals-14', 'rapid-immediate-refusals-15', 'rapid-immediate-refusals-16', 'rapid-immediate-refusals-17', 'rapid-immediate-refusals-18', 'rapid-immediate-refusals-19', 'rapid-immediate-refusals-20', 'rapid-immediate-refusals-21', 'rapid-immediate-refusals-22', 'rapid-immediate-refusals-23', 'rapid-immediate-refusals-24', 'rapid-immediate-refusals-25', 'rapid-immediate-refusals-26', 'rapid-immediate-refusals-27', 'rapid-immediate-refusals-28', 'rapid-immediate-refusals-29', 'rapid-immediate-refusals-30', 'rapid-immediate-refusals-31', 'rapid-immediate-refusals-32'], 'correlated_response_count': 33, 'useful_response_count': 17, 'error_response_count': 0, 'unsupported_refusal_count': 16, 'released_tool_response_sha256': 'ded8ffe5886bbe8e998e491d5231a64f93599a61c7b16826bb91b857200f6429'}, 'native_gates': 66, 'actual_broker_reads': 33, 'native_call_ids': ['wHVN_1zTDmCuxE66EDWgOXTPRo3ayuNKnCHBLlkuVKA', 'g568DZKYhpNL8gwLOaqlVkebk9JsEahD1VA5R9qgVNc', '25WFaET9xf6F3e1uCuAl5ZuBD4mrdEPWrGZU8-hWYZY', '0ipIM8FSkPmnwt9vdYLzQjXpaMrvq57S0yTZ_qfg61A', 'aGZdImOnp44MjW-Dm9i73tqmd9twDx4BpsyM3X7aUZE', 'r1hV1OQp5dG74GlVkWx2LCwHmUICkkUUQsIAh2i5JEg', 'aXL7pIrSjrJNpRi_xeUIQOpVV21wGk0qmcU2-fezoOw', 'K52sJu63wQq-v7m0xTBv8vBXTf0cycdIcuR0ptmQ8xQ', '8qe1mFtae3LeqM7iib69GJgmwHHfZkiy4BKGVooBqMc', '_mdYfaebE8SaQo4JBR5iChVBh5bG5eDBoLAUWjsvHIk', 'XJU38JmjLsi3Gfb8JqxuEWfcmpnGFsjb7tlMnHJ5N4g', 'Zjs6VN2AzCqBvctjHJdFdMa1jX9ByDEamPstycoAgho', 'V1d9xnR-9QsliGVb6JDmeDVOC8V433EB1ejs7u9nH7E', 'YJJeDmWGdAUbAFJYz5NZuYDTF1AnKUBD3K12vwTq_QA', 'Flvlk0qHm9ZyXBV8zeisnlq5F_YOvxDEcBpwQjTO2YE', 'OunZmshErfZO7OVJhiBG1St4q_eVnSL-3H-z18pAsUc', 'ct308gFNm-lFO-NOXGwa7-amspVQ2HJmBKvCdl5dEtE', 'JiVbiqo-z6X_I7UXWwrPwwbyenyZuMe_kCjgwroUKKM', '9ZLXKZ_WcMaUbiojDlB9KTqC4P4KHYCT3gAjQ9B9DDc', 'ArPshL4R8yTXr-sBZ5g6hrF33cJcz-dSnik29wEpaeE', '5Qg2CBrTKQeyq_GuwkbSx1youYB4tU4ykuTuJtAeFV4', 'oNB1leKG0O9l2x3CSDSqQfgg1slBqKL9QwRizxtWd_Q', 'e8pEvZDo-lvaRq7Q7l9l8iEKxjq_R4yOygAECOdzfDA', 'q5eS3dcWY5p5CV2NgrKxEZYYXGYu8YDpeKB9KKZQ6ac', '7uYGqRCjF6lkx8KZu3AkXURRRs5tS7BBzP5DnoLJwaQ', 'O6iuygODtjhp_pSuiR8jLDBFRWokxZVCdkrAatoeyck', 'RSNY2YV6Uysk-eGSc13F-uC-2rJSl8OGafFy3ce0kf4', 'jznSF1c4B2jXc860ZYp1DV3hap_p9sm6RPq6LIMcPf8', 'uzk2CdJznu8AgMnwI9b07F3k7RCNtQC3IZ8r4D1zFD8', 'mNhlnv9Wx750vAGZjNsikmAIdRzbN_LQygsF_P-b0o8', '3dn-LfSZ2_lxaWlhU53WA8GCaynX1DkUxIJhU_JPDug', 'HVinvylKAYZWh1VubaxfaQ7WefuYhHb7t-V7Ajbvhv4', 'dOGgv7VgNHP_Dg2yPHYp1UuRuLFMKNa5qXFAR_sYHzw'], 'client_tool_result_bytes': 4168, 'client_output_sha256': '1846eddbc2bf2f8ce47191e827094d02625252e301984a28d7769f5bccfc7a70', 'child_executor_entries': 0, 'receiver_deliveries': 0, 'file_bytes_unchanged': True, 'stdout_eof_observed': True, 'owned_profile_removed': True, 'collector_exit': 0, 'error': None}
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    immediate_resource_refusals_preserve_same_session_recovery_and_eof
+
+test result: FAILED. 10 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.25s
+
+error: test failed, to rerun pass `-p agentfw --test mcp_concurrency`

@@ -1,0 +1,12 @@
+# SOU-63 final CI repair
+
+Base `b08ed7962238206cb88d66ecdb94a0f9d37dc54d` failed Cargo audit for zip 8.6.0, OIDC/PostgreSQL before the analyst callback, and two Linux all-features lifecycle tests with lock contention.
+
+- ZIP: vendor the checksum-verified published candle-core 0.11.0 with only the four-file delta recorded in [intake verification](vendor-intake-verification.json) and [PATCH.md](../../../../vendor/candle-core/PATCH.md). ZIP is 9.0.4; errors in its newly fallible archive-name API propagate. No audit ignore. Original license and source/test assets are retained. A CPU-only test reads the bundled NPZ and PyTorch tensor fixtures through all three adapted paths, without live models or downloads.
+- Lifecycle: scope-owned OperationLock explicitly unlocks before closing. A duplicated descriptor keeps a close-only POSIX lock alive, reproduced by the [kernel probe](kernel-lock-probe.json). The regression verifies exclusivity while owned and release despite an outstanding duplicate. This supports the fork/exec retention explanation; it does not claim an original CI process trace. The two Linux service tests still require native CI confirmation.
+- OIDC: observe failed navigation from console entry onward; record only bounded categories. At most one fresh login is allowed only for explicitly observed ERR_NETWORK_CHANGED before any callback response, on owned browser locations, without visible authentication errors. Callback/status/role/replay/revocation assertions remain. The earlier generic browser Error alone was not proof of its exact network category; genuine CI must confirm the driver behavior.
+- Provenance/license: add exact reviewed path/version, manifest and license digests. Missing, duplicated, modified and unlisted path dependencies remain failures; 35 checker tests and the actual 443-package gate pass.
+
+Local isolated full all-features workspace: **1286 passed, 0 failed, 11 intentional ignores**. Clippy with all features/targets and -D warnings and formatting pass. [Actual RustSec audit](ci-repair-audit.json): zero vulnerabilities, no added exceptions; existing informational unmaintained warnings remain visible. [results.json](results.json) records suite summaries. Execution used a scratch export with writes confined there and only loopback networking; the separately verified official cargo-audit binary fetched the public advisory database.
+
+These are local results. GitHub CI and reviewer re-approval are separate gates. Earlier reports' dependency blocker describes the prior lockfile, not this remediation.

@@ -8,8 +8,8 @@ backend="${1:-sqlite}"
 case "$backend" in sqlite|postgres) ;; *) echo 'usage: keycloak-oidc-acceptance.sh [sqlite|postgres]' >&2; exit 2;; esac
 cargo build --locked -p llm-firewall --bin llm-firewall --example keycloak-oidc-bootstrap
 mkdir -p target/oidc-evidence
-python3 scripts/keycloak-oidc-acceptance.py --docker --backend "$backend" \
+python3 scripts/sso_acceptance_batch.py --protocol oidc --backend "$backend" --runs "${SSO_RUNS:-1}" \
   --gateway target/debug/llm-firewall \
   --bootstrap-helper target/debug/examples/keycloak-oidc-bootstrap \
   --artifact-label "$(git rev-parse HEAD)" \
-  --out "target/oidc-evidence/acceptance-$backend-$(date -u +%Y%m%dT%H%M%SZ).json"
+  --out "target/oidc-evidence/batch-$backend-$(date -u +%Y%m%dT%H%M%SZ)-$$"

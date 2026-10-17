@@ -4,8 +4,11 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::future::Future;
+use std::pin::Pin;
 use std::process::Stdio;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::task::{Context as TaskContext, Poll};
 use std::time::Duration;
 
 use anyhow::{bail, ensure, Context};
@@ -176,18 +179,25 @@ impl InvocationClassifier for RuleBaseline {
                 }
             }
         })?;
-        let reply: BaselineReply =
-            serde_json::from_slice(&output).context("invalid classifier output")?;
-        ensure!(
-            matches!(reply.status.as_str(), "ok" | "unknown"),
-            "classifier returned technical error"
-        );
-        ensure!(
-            reply.status != "unknown" || reply.classification.unknown,
-            "inconsistent unknown status"
-        );
-        Ok(reply.classification)
+        parse_classifier_reply(&output)
     }
+}
+
+/// Shared by the single-shot adapter and the packaged worker so both accept exactly
+/// the same classifier output.
+pub(crate) fn parse_classifier_reply(bytes: &[u8]) -> anyhow::Result<Classification> {
+    ensure!(bytes.len() <= 16 * 1024, "classifier output exceeds limit");
+    let reply: BaselineReply =
+        serde_json::from_slice(bytes).context("invalid classifier output")?;
+    ensure!(
+        matches!(reply.status.as_str(), "ok" | "unknown"),
+        "classifier returned technical error"
+    );
+    ensure!(
+        reply.status != "unknown" || reply.classification.unknown,
+        "inconsistent unknown status"
+    );
+    Ok(reply.classification)
 }
 
 /// Select a real classifier explicitly; test doubles remain debug-only.
@@ -226,6 +236,19 @@ pub fn classifier_from_env() -> anyhow::Result<Option<Arc<dyn InvocationClassifi
                 python,
                 digest,
             })))
+        }
+        Ok(value) if value == "rule-package" => {
+            ensure!(
+                std::env::var_os("AGENTFW_TEST_CLASSIFIER").is_none()
+                    && std::env::var_os("AGENTFW_TEST_CLASSIFIER_READ").is_none()
+                    && std::env::var_os("AGENTFW_RULE_BASELINE").is_none(),
+                "conflicting classifiers"
+            );
+            // Only the verified installed package; no path, no PATH lookup, no fallback.
+            let home = crate::config::Config::home()?;
+            Ok(Some(Arc::new(
+                crate::classifier_runtime::worker::PackagedClassifier::from_home(&home)?,
+            )))
         }
         _ => bail!("unsupported classifier setting"),
     }
@@ -559,6 +582,8 @@ pub fn classification_to_adapter(
 }
 
 pub struct AdmissionCfg {
+    pub host_session: Option<String>,
+    pub child_authority: Option<String>,
     pub daemon_url: String,
     pub manifest_url: String,
     pub manifest_token: String,
@@ -856,14 +881,23 @@ struct ClassificationAuthority {
 
 struct Collector<'a> {
     config: &'a AdmissionCfg,
+    host_session: Option<String>,
+    child_authority: Option<String>,
     client: reqwest::Client,
     session: String,
 }
 
 impl<'a> Collector<'a> {
     fn new(config: &'a AdmissionCfg) -> anyhow::Result<Self> {
+        if config.host_session.is_some() != config.child_authority.is_some() {
+            anyhow::bail!(
+                "both host_session and child_authority must be provided together for authenticated binding"
+            );
+        }
         Ok(Self {
             config,
+            host_session: config.host_session.clone(),
+            child_authority: config.child_authority.clone(),
             client: reqwest::Client::builder()
                 .no_proxy()
                 .redirect(reqwest::redirect::Policy::none())
@@ -1745,9 +1779,19 @@ where
                                 let [super::resources::Resource::Path { canonical }] = policy.allowed_resources.as_slice() else {
                                     bail!("validated Windows handle authority missing");
                                 };
-                                let original = args["path"].as_str().context("validated Windows path missing")?;
+                                let path_ptr = policy.path_selector();
+                                let original = crate::mcp::resources::selected(&args, path_ptr)
+                                    .ok()
+                                    .flatten()
+                                    .and_then(|v| v.as_str())
+                                    .context("validated Windows path missing")?;
                                 if policy.is_windows_create() {
-                                    let content = args["content"].as_str().context("validated create content missing")?;
+                                    let content_ptr = policy.content_selector();
+                                    let content = crate::mcp::resources::selected(&args, content_ptr)
+                                        .ok()
+                                        .flatten()
+                                        .and_then(|v| v.as_str())
+                                        .context("validated create content missing")?;
                                     let prepared = match crate::windows_create::PreparedCreate::prepare(
                                         &policy.workspace, &policy.cwd, original, canonical, content) {
                                         Ok(prepared) => prepared,
@@ -1771,12 +1815,17 @@ where
                                     prepared_windows_read = Some(prepared);
                                 }
                             }
+                            if (policy.is_create_file()
+                                || policy.is_https_get()
+                                || policy.is_windows_handles()
+                                || policy.binding.is_some())
+                                && collector.config.server_id != policy.profile.server_id
+                            {
+                                write_resource_reply(client, host, true,
+                                    &withheld(request_id, "invocation", &json!(["resource_server_identity_mismatch"]))).await?;
+                                continue;
+                            }
                             if policy.is_create_file() || policy.is_https_get() || policy.is_windows_handles() {
-                                if collector.config.server_id != policy.profile.server_id {
-                                    write_resource_reply(client, host, true,
-                                        &withheld(request_id, "invocation", &json!(["resource_server_identity_mismatch"]))).await?;
-                                    continue;
-                                }
                                 if !policy.is_windows_handles() {
                                     // Match run()'s actual operator-selected session root,
                                     // including its cwd fallback when no override exists.
@@ -2091,7 +2140,7 @@ where
                                     &withheld(request_id, "invocation", &json!([reason]))).await?;
                                 continue;
                             }
-                            let creating = policy.is_create_file();
+                            let creating = policy.is_create_bound_or_named(name);
                             if creating && !cfg!(target_os = "linux") {
                                 let reasons = json!(["resource_create_platform_unsupported"]);
                                 write_resource_reply(client, host, resource_reply,
@@ -2099,9 +2148,9 @@ where
                                 continue;
                             }
                             if !((installed.action_class == ActionClass::ReadOnly
-                                && name == "read_document" && !creating)
+                                && policy.is_read_bound_or_named(name))
                                 || (installed.action_class == ActionClass::SideEffecting
-                                    && name == "create_file" && creating))
+                                    && creating))
                             {
                                 let reasons = json!(["resource_executor_unsupported"]);
                                 write_resource_reply(client, host, resource_reply, &withheld(request_id, "invocation", &reasons)).await?;
@@ -2134,7 +2183,11 @@ where
                                 if creating {
                                     #[cfg(target_os = "linux")]
                                     {
-                                        let content = args["content"].as_str()
+                                        let content_ptr = policy.content_selector();
+                                        let content = crate::mcp::resources::selected(&args, content_ptr)
+                                            .ok()
+                                            .flatten()
+                                            .and_then(|v| v.as_str())
                                             .context("validated create content missing")?;
                                         match super::create_file::PreparedCreate::prepare(&pinned, target_path, content) {
                                             Ok(prepared) => prepared_create = Some(prepared),
@@ -2163,7 +2216,7 @@ where
                                 continue;
                             };
                             if policy.is_windows_create() {
-                                ensure!(installed.action_class == ActionClass::SideEffecting && name == "create_file",
+                                ensure!(installed.action_class == ActionClass::SideEffecting && policy.profile.tool_name == name,
                                     "Windows create tool semantics changed");
                                 let prepared = prepared_create.as_ref().context("Windows create parent not pinned before admission")?;
                                 let bound = crate::native::resource::windows_create_binding_with_identity(
@@ -2293,15 +2346,28 @@ where
                         }
                         #[cfg(any(target_os = "linux", windows))]
                         if let Some(prepared) = prepared_create {
+                            let policy = installed.resource_policy.as_ref().expect("create policy selected");
                             #[cfg(windows)]
                             {
-                                let policy = installed.resource_policy.as_ref().expect("Windows create policy selected");
                                 let bound = resource_admission.as_ref().and_then(|(admission, _)| admission.execution.as_ref())
                                     .context("Windows create authority missing")?;
                                 ensure!(&crate::native::resource::windows_create_binding_with_identity(
                                     policy, &args, prepared.identity()).map_err(anyhow::Error::msg)? == bound,
                                     "Windows create authority changed before staging");
                             }
+                            let path_ptr = policy.path_selector();
+                            let content_ptr = policy.content_selector();
+                            let path_str = crate::mcp::resources::selected(&args, path_ptr)
+                                .ok()
+                                .flatten()
+                                .and_then(|v| v.as_str())
+                                .or_else(|| args["path"].as_str());
+                            let content_str = crate::mcp::resources::selected(&args, content_ptr)
+                                .ok()
+                                .flatten()
+                                .and_then(|v| v.as_str())
+                                .or_else(|| args["content"].as_str())
+                                .unwrap_or("");
                             // Only staging runs on the blocking worker. If unsupported
                             // cancellation/overlap wins, a detached worker cannot publish:
                             // dropping its returned owner cleans only its own stage.
@@ -2316,7 +2382,7 @@ where
                                     // publication is indeterminate, never evidence of no write.
                                     eprintln!("{}", json!({"event":"mcp_create_file_publication_intent",
                                         "host_call_id":request_id,"publication_attempted":true,
-                                        "staged_bytes":args["content"].as_str().map(str::len),
+                                        "staged_bytes":content_str.len(),
                                         "outcome":"indeterminate_until_completion"}));
                                     Ok(staged.publish())
                                 }).await?,
@@ -2325,8 +2391,9 @@ where
                             let (payload, committed, result_kind) = match creation {
                                 Ok(commit) => (json!({
                                     "success": true, "created": true, "committed": commit.committed,
-                                    "path": args["path"], "bytes_written": commit.bytes_written,
-                                    "content_sha256": sha(args["content"].as_str().unwrap().as_bytes()),
+                                    "path": path_str.map(Value::from).unwrap_or_else(|| args["path"].clone()),
+                                    "bytes_written": commit.bytes_written,
+                                    "content_sha256": sha(content_str.as_bytes()),
                                     "file_synced": commit.file_synced,
                                     "directory_synced": commit.directory_synced
                                 }), commit.committed, "value"),
@@ -2548,9 +2615,71 @@ where
     }
 }
 
+/// Stop host output once the owned diagnostic reader has observed a failure.
+/// A write already committed before that observation cannot be retracted; the
+/// next write/flush fails, and the outer biased select cancels the relay.
+struct DiagnosticOutput<W> {
+    inner: W,
+    failed: Arc<AtomicBool>,
+}
+
+impl<W: AsyncWrite + Unpin> AsyncWrite for DiagnosticOutput<W> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut TaskContext<'_>,
+        bytes: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        let this = self.get_mut();
+        if this.failed.load(Ordering::Acquire) {
+            return Poll::Ready(Err(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "native MCP diagnostics boundary closed",
+            )));
+        }
+        Pin::new(&mut this.inner).poll_write(cx, bytes)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<std::io::Result<()>> {
+        let this = self.get_mut();
+        if this.failed.load(Ordering::Acquire) {
+            return Poll::Ready(Err(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "native MCP diagnostics boundary closed",
+            )));
+        }
+        Pin::new(&mut this.inner).poll_flush(cx)
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<std::io::Result<()>> {
+        let this = self.get_mut();
+        if this.failed.load(Ordering::Acquire) {
+            return Poll::Ready(Err(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "native MCP diagnostics boundary closed",
+            )));
+        }
+        Pin::new(&mut this.inner).poll_shutdown(cx)
+    }
+}
+
 pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
     let collector = Collector::new(&config)?;
-    collector.event("session_start", json!({})).await?;
+    if let (Some(host_session), Some(child_authority)) =
+        (&collector.host_session, &collector.child_authority)
+    {
+        collector
+            .event(
+                "session_start",
+                json!({
+                    "host_session": host_session,
+                    "child_authority": child_authority,
+                    "server_id": collector.config.server_id,
+                }),
+            )
+            .await?;
+    } else {
+        collector.event("session_start", json!({})).await?;
+    }
     // Fail closed before spawning the server if the native daemon cannot admit a session.
     let operation = async {
         let cwd = std::env::current_dir()?;
@@ -2613,67 +2742,153 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
         let mut client =
             BufReader::new(super::stdio::Pipe::stdin().context("unsupported MCP stdin")?);
         #[cfg(unix)]
-        let mut host = super::stdio::Pipe::stdout().context("unsupported MCP stdout")?;
+        let host = super::stdio::Pipe::stdout().context("unsupported MCP stdout")?;
         #[cfg(not(unix))]
         let mut client = BufReader::new(tokio::io::stdin());
         #[cfg(not(unix))]
-        let mut host = tokio::io::stdout();
+        let host = tokio::io::stdout();
         // A working directory is operational context, never a sandbox assertion.
-        let mut process = Command::new(&config.command)
+        // The child owns only piped diagnostics. Raw server stderr is never a
+        // host stream, an audit field or a temporary log.
+        let mut command = Command::new(&config.command);
+        command
             .args(&config.args)
             .current_dir(&workspace)
             .env_remove("AGENTFW_TOKEN")
             .env_remove("AGENTFW_NATIVE_TOKEN")
+            .env_remove("AGENTFW_CHILD_AUTHORITY")
+            .env_remove("AGENTFW_HOST_SESSION")
             .env_remove("AGENTFW_TEST_CLASSIFIER_READ")
             .env_remove("AGENTFW_TEST_CLASSIFIER")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .kill_on_drop(true)
-            .spawn()?;
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+        let mut process = super::native_child::OwnedChild::spawn(&mut command).await?;
         // The startup pins protect current_dir resolution only. Per-call
         // metadata pins are acquired independently before resource extraction.
         #[cfg(windows)]
         drop(windows_spawn_pins);
-        let mut child = process
-            .stdin
-            .take()
-            .context("MCP server stdin unavailable")?;
-        let mut server = BufReader::new(
-            process
-                .stdout
+        let server_pid = process.child_mut().id();
+        let ownership = process.ownership();
+        let mut stderr_drain = None;
+        // Every pipe extraction and relay error still reaches owned cleanup.
+        let operation = async {
+            let stderr = process
+                .child_mut()
+                .stderr
                 .take()
-                .context("MCP server stdout unavailable")?,
-        );
-        let mut outcome = relay(&collector, &mut client, &mut host, &mut server, &mut child).await;
-        let create_profile = config.native.registry.tools.iter().any(|tool| {
-            tool.resource_policy
-                .as_ref()
-                .is_some_and(|policy| policy.is_create_file() || policy.is_https_get())
-        });
-        let windows_handles_profile = config.native.registry.tools.iter().any(|tool| {
-            tool.resource_policy
-                .as_ref()
-                .is_some_and(|policy| policy.is_windows_handles())
-        });
-        // Discovery-only servers receive EOF. Windows handle profiles also
-        // finalize their independent no-execution ledger after a refused session.
-        // The bounded wait cannot turn a protocol failure into success.
-        drop(child);
-        if (create_profile && outcome.is_ok()) || windows_handles_profile {
-            match tokio::time::timeout(Duration::from_secs(2), process.wait()).await {
-                Ok(Ok(status)) if status.success() => {}
-                _ => {
-                    let _ = process.kill().await;
-                    outcome = Err(anyhow::anyhow!(
-                        "MCP create-profile server did not close cleanly"
-                    ));
+                .context("native_mcp_stderr_missing")?;
+            let drain = super::native_child::Drain::start(stderr);
+            let failed = drain.failure_flag();
+            stderr_drain = Some(drain);
+            eprintln!(
+                "{}",
+                json!({"event":"mcp_native_server_start","diagnostics":"sw-mcp/native-stderr/1",
+                    "server_pid":server_pid,"ownership":ownership,
+                    "stderr_chunk_bytes":super::native_child::STDERR_CHUNK_BYTES,
+                    "stderr_byte_limit":super::native_child::STDERR_BYTE_LIMIT,
+                    "stderr_read_limit":super::native_child::STDERR_READ_LIMIT,
+                    "stderr_lifetime_ms":super::native_child::STDERR_LIFETIME.as_millis(),
+                    "shutdown_grace_ms":super::native_child::CHILD_GRACE.as_millis(),
+                    "shutdown_reap_ms":super::native_child::CHILD_REAP.as_millis(),
+                    "shutdown_drain_ms":super::native_child::DRAIN_SHUTDOWN.as_millis()})
+            );
+            let mut child = process
+                .child_mut()
+                .stdin
+                .take()
+                .context("MCP server stdin unavailable")?;
+            let mut server = BufReader::new(
+                process
+                    .child_mut()
+                    .stdout
+                    .take()
+                    .context("MCP server stdout unavailable")?,
+            );
+            let mut host = DiagnosticOutput { inner: host, failed };
+            let result = {
+                let exchange = relay(&collector, &mut client, &mut host, &mut server, &mut child);
+                tokio::pin!(exchange);
+                let mut diagnostics_eof = false;
+                loop {
+                    tokio::select! {
+                        // Once diagnostic uncertainty is observed, a pending
+                        // relay cannot win over that failure on the next poll.
+                        biased;
+                        report = stderr_drain.as_mut().expect("owned stderr reader").wait(), if !diagnostics_eof => {
+                            if report.is_failure() {
+                                break Err(anyhow::anyhow!(report.code()));
+                            }
+                            // EOF is normal; closing stderr does not disable
+                            // useful protocol work or recreate a drain task.
+                            diagnostics_eof = true;
+                        }
+                        result = &mut exchange => break result,
+                    }
                 }
-            }
-        } else {
-            let _ = process.kill().await;
+            };
+            drop(child);
+            drop(server);
+            result
+        }.await;
+        let clean_exit_required = config.native.registry.tools.iter().any(|tool| {
+            tool.resource_policy.as_ref().is_some_and(|policy| {
+                policy.is_create_file() || policy.is_https_get() || policy.is_windows_handles()
+            })
+        });
+        // Windows handle profiles finalize their independent refusal ledgers
+        // after EOF even when the relay refused an operation. Preserve that
+        // accepted bounded grace; no result forwarding resumes during cleanup.
+        let windows_handles_profile = config.native.registry.tools.iter().any(|tool| {
+            tool.resource_policy.as_ref().is_some_and(|policy| policy.is_windows_handles())
+        });
+        let cleanup = process.cleanup(operation.is_ok() || windows_handles_profile).await;
+        let stderr_report = match stderr_drain {
+            Some(drain) => Some(drain.finish().await),
+            None => None,
+        };
+        let stderr_cleanup_verified = stderr_report
+            .as_ref()
+            .is_some_and(|report| report.cleanup_verified());
+        let stderr_failed = stderr_report.as_ref().is_none_or(|report| report.is_failure());
+        if let Some(report) = &stderr_report {
+            eprintln!(
+                "{}",
+                json!({"event":"mcp_native_stderr","outcome":report.code(),
+                    "received_bytes":report.received_bytes,"read_chunks":report.read_chunks,
+                    "released":false})
+            );
         }
-        outcome
+        let clean_exit = !clean_exit_required || cleanup.exit_success;
+        let reason = if stderr_failed {
+            stderr_report.as_ref().map_or("native_mcp_stderr_missing", |report| report.code())
+        } else if !cleanup.cleaned || !cleanup.reaped {
+            cleanup.failure.unwrap_or("native_mcp_child_cleanup_unverified")
+        } else if !clean_exit {
+            "native_mcp_profile_exit_failed"
+        } else if operation.is_err() {
+            "native_mcp_transport_failed"
+        } else {
+            "native_mcp_transport_complete"
+        };
+        eprintln!(
+            "{}",
+            json!({"event":"mcp_native_server_end","server_pid":server_pid,"ownership":cleanup.ownership,
+                "process_cleanup_verified":cleanup.cleaned&&cleanup.reaped,
+                "stderr_cleanup_verified":stderr_cleanup_verified,
+                "graceful_observed":cleanup.graceful_observed,"child_exit_success":cleanup.exit_success,
+                "transport_complete":operation.is_ok()&&!stderr_failed&&cleanup.cleaned&&cleanup.reaped&&clean_exit,
+                "reason":reason})
+        );
+        operation?;
+        if stderr_failed {
+            bail!("{reason}");
+        }
+        ensure!(cleanup.cleaned && cleanup.reaped, "native_mcp_child_cleanup_unverified");
+        ensure!(stderr_cleanup_verified, "native_mcp_stderr_cleanup_unverified");
+        ensure!(clean_exit, "MCP create-profile server did not close cleanly");
+        Ok(())
     }
     .await;
     let ended = collector.event("session_end", json!({})).await;
@@ -3262,6 +3477,8 @@ mod resource_receipt_tests {
             )
             .unwrap();
             let config = AdmissionCfg {
+                host_session: None,
+                child_authority: None,
                 server_id: "resource-fixture".into(),
                 daemon_url: format!("{}/native/v1", server.uri()),
                 manifest_url: format!("{}/mcp/manifest", server.uri()),
@@ -3312,5 +3529,58 @@ mod resource_receipt_tests {
         assert!(validate_resource_receipt(Some(&context), &reply).is_ok());
         assert!(validate_resource_receipt(None, &reply).is_err());
         assert!(validate_resource_receipt(None, &json!({})).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod diagnostic_output_tests {
+    use super::*;
+    use tokio::io::AsyncReadExt;
+
+    #[tokio::test]
+    async fn observed_diagnostic_failure_refuses_future_output_and_flush() {
+        let (mut observer, output) = tokio::io::duplex(64);
+        let failed = Arc::new(AtomicBool::new(false));
+        let mut guarded = DiagnosticOutput {
+            inner: output,
+            failed: failed.clone(),
+        };
+        guarded.write_all(b"useful\n").await.unwrap();
+        failed.store(true, Ordering::Release);
+        let error = guarded.write_all(b"withheld\n").await.unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::BrokenPipe);
+        assert!(guarded.flush().await.is_err());
+        assert!(guarded.shutdown().await.is_err());
+        drop(guarded);
+        let mut received = Vec::new();
+        observer.read_to_end(&mut received).await.unwrap();
+        assert!(
+            received == b"useful\n",
+            "only the earlier committed frame may be present"
+        );
+    }
+
+    #[tokio::test]
+    async fn diagnostic_failure_stops_a_pending_partial_write() {
+        let (mut observer, output) = tokio::io::duplex(1);
+        let failed = Arc::new(AtomicBool::new(false));
+        let mut guarded = DiagnosticOutput {
+            inner: output,
+            failed: failed.clone(),
+        };
+        {
+            let writing = guarded.write_all(b"xy");
+            tokio::pin!(writing);
+            assert!(futures_util::poll!(writing.as_mut()).is_pending());
+            failed.store(true, Ordering::Release);
+            assert!(writing.await.is_err());
+        }
+        drop(guarded);
+        let mut received = Vec::new();
+        observer.read_to_end(&mut received).await.unwrap();
+        assert!(
+            received == b"x",
+            "bytes committed before failure are not retracted or extended"
+        );
     }
 }

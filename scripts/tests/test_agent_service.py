@@ -5,6 +5,7 @@ import io
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest import mock
 
 SPEC = importlib.util.spec_from_file_location("agent_service_acceptance", Path(__file__).resolve().parents[1] / "test-agent-service.py")
 MODULE = importlib.util.module_from_spec(SPEC)
@@ -13,7 +14,7 @@ SPEC.loader.exec_module(MODULE)
 
 class ServiceAcceptanceGraderTests(unittest.TestCase):
     def complete(self):
-        return {"manager_verified": True, "cases": [{"name": name, "status": "passed"} for name in MODULE.CORE_CASES]}
+        return {"suite": "core", "manager_verified": True, "cases": [{"name": name, "status": "passed"} for name in MODULE.CORE_CASES]}
 
     def test_only_complete_executed_success_passes(self):
         self.assertTrue(MODULE.grade(self.complete()))
@@ -29,6 +30,30 @@ class ServiceAcceptanceGraderTests(unittest.TestCase):
             report = self.complete()
             change(report)
             self.assertFalse(MODULE.grade(report))
+
+    def test_full_acceptance_requires_every_failure_scenario(self):
+        report = self.complete()
+        report["suite"] = "full"
+        self.assertFalse(MODULE.grade(report))
+        report["cases"] = [{"name": name, "status": "passed"} for name in MODULE.FULL_CASES]
+        self.assertTrue(MODULE.grade(report))
+        for status in ("not_run", "skipped", "failed"):
+            changed = copy.deepcopy(report)
+            changed["cases"][-1]["status"] = status
+            self.assertFalse(MODULE.grade(changed))
+        for suite in (None, "unknown", "FULL"):
+            report["suite"] = suite
+            self.assertFalse(MODULE.grade(report))
+
+    def test_outage_fixture_cannot_pass_when_manager_is_still_accessible(self):
+        runner = MODULE.Acceptance.__new__(MODULE.Acceptance)
+        runner.root = Path("/tmp/synthetic-service-outage")
+        runner.env = {}
+        runner.service = mock.Mock()
+        with mock.patch.object(MODULE.subprocess, "run", return_value=mock.Mock(returncode=0)):
+            with self.assertRaisesRegex(AssertionError, "did not isolate the real manager"):
+                runner.unavailable_manager()
+        runner.service.assert_not_called()
 
     def test_opt_in_is_required_before_creating_output(self):
         import tempfile

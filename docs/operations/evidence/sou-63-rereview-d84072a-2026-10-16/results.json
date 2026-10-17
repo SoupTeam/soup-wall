@@ -1,0 +1,39 @@
+{
+  "head": "d84072a40a2da6faff9b084d3084a20dead048c4",
+  "verdict": "REQUEST_CHANGES",
+  "previous_six_witnesses": {
+    "passed": 6,
+    "failed": 0
+  },
+  "shipped_native_endpoint": {
+    "passed": 65,
+    "failed": 0
+  },
+  "additional_controls": {
+    "passed": 0,
+    "failed": 5
+  },
+  "observations": {
+    "host_ask": "network call gets verdict=allow, release=true, a call_id and reason shared-mcp-ask",
+    "host_incomplete": "host provenance_incomplete is true; destructive call gets allow, release=true and reason taint-history-incomplete",
+    "unbounded_reader": "unauthenticated request consumes all eight 1024-byte chunks before returning 401 with configured max_body_bytes=1024",
+    "oversized_pretooluse": "authenticated enforce-mode protected PreToolUse above configured cap returns HTTP 200 {}",
+    "truncated_posttooluse": "audit truncated=true but provenance_incomplete(host)=false"
+  },
+  "isolation": "Source archive in /private/tmp/sou63-review/d84072a; sandbox denies network and writes outside review scratch; no product changes or destructive execution.",
+  "patch_sha256": "492bdd98e6a93d09c64679d9cc732c8781ef3b6ee400ae8de831415e199218c0",
+  "source_sha256": {
+    "crates/agentfw/src/native.rs": "2f455dff2855a296b935353bd6145ba9a416599721bc4b62de27bd7597ea9573",
+    "crates/agentfw/src/handlers.rs": "9e5825e36cfe29910d4c484ea3d2bff20a5ac0303f1ce735ac8db1f8cb0d145d",
+    "crates/agentfw/src/lib.rs": "89e9cd3efbb3f0eb9c5bccd04cca350a77261fb1525fd874cebe58c9886122f9",
+    "crates/agentfw/src/mcp/admission.rs": "73f5ad23649b79b097412679c163bbb11c6c8be584a995da001d9b8c330f4bb9",
+    "crates/agentfw/src/main.rs": "dcb6cb742e64803fcd0b0328e2003b4ed55cdeb488019c3ce2dbd155400bf037",
+    "crates/agent/src/engine.rs": "6afd21a28fe8ebed2881b339ecdfeeefd2681a2233c6d08c174a4f25ae4ef59f",
+    "crates/agent/src/taint.rs": "b280b52703f3d58c5cd53fb405f47ff34b47e4f8198cedfcb8484b251daf4ee8"
+  },
+  "limitations": [
+    "No full workspace or Clippy rerun in this focused review",
+    "CI was still running when inspected",
+    "Original actual-agent/parent/resource/destination binding and support-matrix gaps are not closed by these six fixes"
+  ]
+}

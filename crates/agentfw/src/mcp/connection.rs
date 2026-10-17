@@ -16,6 +16,9 @@ pub struct Options {
     pub probe_tool: Option<String>,
     #[arg(long, requires = "probe_tool")]
     pub probe_args: Option<String>,
+    #[cfg(windows)]
+    #[arg(long)]
+    pub runtime: Option<PathBuf>,
 }
 
 #[derive(clap::Subcommand)]
@@ -24,9 +27,60 @@ pub enum Command {
     Connect(Options),
     Inspect(Options),
     Disconnect(Options),
+    #[cfg(windows)]
+    #[command(hide = true)]
+    Collector {
+        #[arg(long)]
+        home: PathBuf,
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        runtime: Option<PathBuf>,
+        #[arg(long, requires = "runtime")]
+        runtime_sha256: Option<String>,
+        #[arg(last = true, required = true)]
+        command: Vec<String>,
+    },
+}
+
+/// Reuse the accepted connection inspector without invoking a tool or
+/// writing/printing host configuration. Return only the allowlisted status.
+pub async fn inspect_read_only(options: &Options) -> anyhow::Result<&'static str> {
+    anyhow::ensure!(
+        options.probe_tool.is_none() && options.probe_args.is_none(),
+        "doctor never issues a probe"
+    );
+    #[cfg(target_os = "linux")]
+    {
+        Ok(linux::run("inspect", options).await?.status)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = options;
+        anyhow::bail!("installed doctor connection inspection requires Linux")
+    }
 }
 
 pub fn run(command: Command) -> anyhow::Result<()> {
+    #[cfg(windows)]
+    let command = match command {
+        Command::Collector {
+            home,
+            id,
+            runtime,
+            runtime_sha256,
+            command,
+        } => {
+            return windows::collector(
+                &home,
+                &id,
+                runtime.as_deref(),
+                runtime_sha256.as_deref(),
+                &command,
+            )
+        }
+        other => other,
+    };
     #[cfg(target_os = "linux")]
     {
         let (operation, options) = match command {
@@ -48,12 +102,38 @@ pub fn run(command: Command) -> anyhow::Result<()> {
     }
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = command;
-        anyhow::bail!(
-            "MCP connection transactions require Linux; use an explicit WSL2 Linux profile"
-        );
+        #[cfg(windows)]
+        {
+            let (operation, options) = match command {
+                Command::Preview(o) => ("preview", o),
+                Command::Connect(o) => ("connect", o),
+                Command::Inspect(o) => ("inspect", o),
+                Command::Disconnect(o) => ("disconnect", o),
+                Command::Collector { .. } => unreachable!(),
+            };
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()?;
+            let report = runtime.block_on(windows::run(operation, &options))?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+            anyhow::ensure!(
+                report.status != "unavailable" && report.status != "unknown",
+                "connection could not be verified"
+            );
+            Ok(())
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = command;
+            anyhow::bail!(
+                "MCP connection transactions require Linux or native Windows; use an explicit WSL2 Linux profile"
+            );
+        }
     }
 }
+
+#[cfg(windows)]
+mod windows;
 
 #[cfg(target_os = "linux")]
 mod linux {

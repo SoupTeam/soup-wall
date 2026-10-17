@@ -18,6 +18,10 @@ use serde::Serialize;
 pub struct AuditLine {
     pub at_ms: u64,
     pub session: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
     pub seq: u64,
     pub event: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -221,6 +225,8 @@ mod tests {
         AuditLine {
             at_ms: 1,
             session: "s1".into(),
+            agent_id: None,
+            parent_id: None,
             seq: 2,
             event: "tool_call".into(),
             tool: Some("Bash".into()),

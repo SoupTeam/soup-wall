@@ -1,0 +1,697 @@
+{
+  "version": "sw-roadmap-support/1",
+  "roadmap_sha256": "987c5916384d45723c8956716c2a460d346df266109409ef78a4204b5624aff6",
+  "criteria": [
+    {
+      "id": "foundation.1",
+      "phase": "Foundation",
+      "title": "Reviewed scope and fail modes across platforms, hosts, transports, tools and integrations",
+      "capabilities": [
+        "filesystem-linux",
+        "git-linux",
+        "create-file-linux",
+        "https-get-linux",
+        "stderr-linux",
+        "shared-session-macos",
+        "self-test-linux",
+        "self-test-macos",
+        "self-test-macos-x86",
+        "self-test-windows"
+      ]
+    },
+    {
+      "id": "foundation.2",
+      "phase": "Foundation",
+      "title": "Pinned source, lockfile, toolchain, policy, registry, dataset and optional assets",
+      "capabilities": [
+        "filesystem-linux",
+        "git-linux",
+        "create-file-linux",
+        "https-get-linux",
+        "stderr-linux",
+        "shared-session-macos",
+        "self-test-linux",
+        "self-test-macos"
+      ]
+    },
+    {
+      "id": "foundation.3",
+      "phase": "Foundation",
+      "title": "Predeclared numeric acceptance limits and independent denied-action witnesses",
+      "capabilities": [
+        "filesystem-linux",
+        "git-linux",
+        "create-file-linux",
+        "https-get-linux",
+        "stderr-linux",
+        "shared-session-macos",
+        "self-test-linux",
+        "self-test-macos"
+      ]
+    },
+    {
+      "id": "foundation.4",
+      "phase": "Foundation",
+      "title": "Recorded role ownership, review boundaries and checks",
+      "capabilities": []
+    },
+    {
+      "id": "foundation.5",
+      "phase": "Foundation",
+      "title": "Full-workspace provenance, security review and private evidence handling",
+      "capabilities": []
+    },
+    {
+      "id": "foundation.6",
+      "phase": "Foundation",
+      "title": "Reviewed integration decision for baseline, main and open changes",
+      "capabilities": []
+    },
+    {
+      "id": "phase-1.1",
+      "phase": "Phase 1",
+      "title": "Reviewed schemas, action classes, provenance and destinations for every supported tool",
+      "capabilities": [
+        "filesystem-linux",
+        "git-linux",
+        "create-file-linux",
+        "https-get-linux"
+      ]
+    },
+    {
+      "id": "phase-1.2",
+      "phase": "Phase 1",
+      "title": "Original tool names and results with refusal of unknown or drifting declarations",
+      "capabilities": [
+        "filesystem-linux",
+        "git-linux",
+        "create-file-linux",
+        "https-get-linux"
+      ]
+    },
+    {
+      "id": "phase-1.3",
+      "phase": "Phase 1",
+      "title": "Accepted and refused defaults, nesting, recipients and resource bounds",
+      "capabilities": [
+        "filesystem-linux",
+        "git-linux",
+        "create-file-linux",
+        "https-get-linux"
+      ]
+    },
+    {
+      "id": "phase-1.4",
+      "phase": "Phase 1",
+      "title": "Benign and security regressions retain intended decisions",
+      "capabilities": [
+        "filesystem-linux",
+        "git-linux",
+        "create-file-linux",
+        "https-get-linux",
+        "stderr-linux",
+        "shared-session-macos",
+        "self-test-linux",
+        "self-test-macos"
+      ]
+    },
+    {
+      "id": "phase-2.1",
+      "phase": "Phase 2",
+      "title": "Independent denied-execution witness and useful work after refusal",
+      "capabilities": [
+        "filesystem-linux",
+        "git-linux",
+        "create-file-linux",
+        "https-get-linux",
+        "stderr-linux",
+        "shared-session-macos",
+        "self-test-linux",
+        "self-test-macos"
+      ]
+    },
+    {
+      "id": "phase-2.2",
+      "phase": "Phase 2",
+      "title": "Admitted direct, nested, error and batched execution and release paths",
+      "capabilities": [
+        "filesystem-linux",
+        "git-linux",
+        "create-file-linux",
+        "https-get-linux",
+        "stderr-linux",
+        "shared-session-macos"
+      ]
+    },
+    {
+      "id": "phase-2.3",
+      "phase": "Phase 2",
+      "title": "Authenticated parent grants, session binding and replay/cancellation boundaries",
+      "capabilities": [
+        "shared-session-macos"
+      ]
+    },
+    {
+      "id": "phase-2.4",
+      "phase": "Phase 2",
+      "title": "Reviewed long-session, eviction and oversized-input outcomes",
+      "capabilities": [
+        "shared-session-macos"
+      ]
+    },
+    {
+      "id": "phase-2.5",
+      "phase": "Phase 2",
+      "title": "Safe uncertainty and explicit host, stderr and OS-effect limits",
+      "capabilities": [
+        "stderr-linux",
+        "shared-session-macos"
+      ]
+    },
+    {
+      "id": "phase-2.6",
+      "phase": "Phase 2",
+      "title": "Reviewed single-use Ask continuation or accurate unsupported status",
+      "capabilities": []
+    },
+    {
+      "id": "phase-3.1",
+      "phase": "Phase 3",
+      "title": "Executable reviewed policy overlap matrix and judge failures",
+      "capabilities": []
+    },
+    {
+      "id": "phase-3.2",
+      "phase": "Phase 3",
+      "title": "Required Ask/Deny floors and native judge refusal",
+      "capabilities": []
+    },
+    {
+      "id": "phase-3.3",
+      "phase": "Phase 3",
+      "title": "Frozen corpus, benign combinations and policy expectations",
+      "capabilities": []
+    },
+    {
+      "id": "phase-4.1",
+      "phase": "Phase 4",
+      "title": "Measured live attack effects, utility, interruption and latency",
+      "capabilities": []
+    },
+    {
+      "id": "phase-4.2",
+      "phase": "Phase 4",
+      "title": "Denominators, incomplete runs, uncertainty, resource use and exact identities",
+      "capabilities": []
+    },
+    {
+      "id": "phase-4.3",
+      "phase": "Phase 4",
+      "title": "Separated development, held-out and adaptive evaluation",
+      "capabilities": []
+    },
+    {
+      "id": "phase-4.4",
+      "phase": "Phase 4",
+      "title": "Reviewed results meet limits fixed before the run",
+      "capabilities": []
+    },
+    {
+      "id": "phase-5.1",
+      "phase": "Phase 5",
+      "title": "Clean install, upgrade, rollback and removal on supported platforms",
+      "capabilities": [
+        "self-test-linux",
+        "self-test-macos",
+        "self-test-macos-x86",
+        "self-test-windows"
+      ]
+    },
+    {
+      "id": "phase-5.2",
+      "phase": "Phase 5",
+      "title": "Verified active policy, registry and host coverage status",
+      "capabilities": [
+        "self-test-linux",
+        "self-test-macos",
+        "self-test-macos-x86",
+        "self-test-windows"
+      ]
+    },
+    {
+      "id": "phase-5.3",
+      "phase": "Phase 5",
+      "title": "Safe receiver demo and benign task with independent witnesses",
+      "capabilities": [
+        "self-test-linux",
+        "self-test-macos",
+        "self-test-macos-x86",
+        "self-test-windows"
+      ]
+    },
+    {
+      "id": "phase-5.4",
+      "phase": "Phase 5",
+      "title": "Documented startup, daemon-loss, stale and recovery outcomes",
+      "capabilities": [
+        "self-test-linux",
+        "self-test-macos",
+        "self-test-macos-x86",
+        "self-test-windows"
+      ]
+    },
+    {
+      "id": "phase-5.5",
+      "phase": "Phase 5",
+      "title": "Setup and demo without real secrets or provider traffic",
+      "capabilities": [
+        "self-test-linux",
+        "self-test-macos",
+        "self-test-macos-x86",
+        "self-test-windows"
+      ]
+    },
+    {
+      "id": "phase-6.1",
+      "phase": "Phase 6",
+      "title": "Bundle verification, tenant/host authorization, rotation and revocation",
+      "capabilities": []
+    },
+    {
+      "id": "phase-6.2",
+      "phase": "Phase 6",
+      "title": "Applied revision acknowledgements, staged rollout and rollback",
+      "capabilities": []
+    },
+    {
+      "id": "phase-6.3",
+      "phase": "Phase 6",
+      "title": "Reviewed release graph, portable crypto and real identity interoperability",
+      "capabilities": []
+    },
+    {
+      "id": "phase-6.4",
+      "phase": "Phase 6",
+      "title": "Managed TLS, identity lifecycle, migration and recovery acceptance",
+      "capabilities": []
+    },
+    {
+      "id": "phase-6.5",
+      "phase": "Phase 6",
+      "title": "Actual webhook and authenticated notification delivery",
+      "capabilities": []
+    },
+    {
+      "id": "phase-6.6",
+      "phase": "Phase 6",
+      "title": "Consented pilot utility, interruption and recovery review",
+      "capabilities": []
+    },
+    {
+      "id": "phase-7.1",
+      "phase": "Phase 7",
+      "title": "All required tests and acceptance evidence on one candidate artifact set",
+      "capabilities": [
+        "filesystem-linux",
+        "git-linux",
+        "create-file-linux",
+        "https-get-linux",
+        "stderr-linux",
+        "shared-session-macos",
+        "self-test-linux",
+        "self-test-macos",
+        "self-test-macos-x86",
+        "self-test-windows"
+      ]
+    },
+    {
+      "id": "phase-7.2",
+      "phase": "Phase 7",
+      "title": "Reviewed measured claims, migration, hashes, SBOM and attribution",
+      "capabilities": [
+        "filesystem-linux",
+        "git-linux",
+        "create-file-linux",
+        "https-get-linux",
+        "stderr-linux",
+        "shared-session-macos",
+        "self-test-linux",
+        "self-test-macos",
+        "self-test-macos-x86",
+        "self-test-windows"
+      ]
+    },
+    {
+      "id": "phase-7.3",
+      "phase": "Phase 7",
+      "title": "Every external publication gated on the complete accepted candidate",
+      "capabilities": []
+    },
+    {
+      "id": "phase-7.4",
+      "phase": "Phase 7",
+      "title": "One final release with verified downloads, installation and rollback",
+      "capabilities": []
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "filesystem-linux",
+      "title": "Original read-only filesystem MCP",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "host": "Claude Code 2.1.251 with scripted provider",
+      "transport": "stdio",
+      "server": "@modelcontextprotocol/server-filesystem@2026.8.31",
+      "profile": "filesystem-readonly-v1",
+      "support": "supported",
+      "fail_mode": "Unknown or unapproved tools refuse; absent exact-run report stays unverified",
+      "limits": "Nine selected read-only tools; sandbox and original host acceptance are Linux x86_64 only",
+      "identity": {
+        "implementation": null,
+        "policy": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+        "registry": null,
+        "runtime": null,
+        "server": "bd2b235f11e4e3ccd31467185b33b26751a626ed23e499ca72392b56dc9849ca"
+      }
+    },
+    {
+      "id": "git-linux",
+      "title": "Original read-only Git MCP",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "host": "scripted MCP client",
+      "transport": "stdio",
+      "server": "mcp-server-git@2026.10.10",
+      "profile": "git-readonly-v1",
+      "support": "supported",
+      "fail_mode": "Unapproved or mutating tools refuse; absent exact-run report stays unverified",
+      "limits": "Six read-only tools on one owned synthetic repository; no general Git support",
+      "identity": {
+        "implementation": null,
+        "policy": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+        "registry": null,
+        "runtime": null,
+        "server": "90fbf2f84db1fee38145914adaf851c35d9b8b3735dc4e78caf7820c507e09e4"
+      }
+    },
+    {
+      "id": "create-file-linux",
+      "title": "Native constrained create_file",
+      "platform": "linux",
+      "architecture": "aarch64",
+      "host": "scripted MCP client",
+      "transport": "stdio",
+      "server": "agentfw native create_file",
+      "profile": "sw-native/create-file/linux-root-child/1",
+      "support": "supported",
+      "fail_mode": "Unsupported targets and missing native admission refuse",
+      "limits": "Single Linux root child; 4 KiB UTF-8 maximum; historical scripted-host evidence",
+      "identity": {
+        "implementation": "369bf527e590701796d2c0ea202f7e63d3bab02ffbeae6865746e4747914582f",
+        "policy": null,
+        "registry": null,
+        "runtime": "8a248e7db45b5f30e6d1c75134ba387a336b83634e45a46c9569015afcad664a",
+        "server": null
+      }
+    },
+    {
+      "id": "https-get-linux",
+      "title": "Native constrained HTTPS GET",
+      "platform": "linux",
+      "architecture": "aarch64",
+      "host": "scripted MCP client",
+      "transport": "stdio",
+      "server": "agentfw native HTTPS GET",
+      "profile": "sw-native/https-get/linux-pinned/1",
+      "support": "supported",
+      "fail_mode": "Unapproved endpoint, proxy or TLS identity refuses",
+      "limits": "Owned loopback receiver; no external provider traffic; historical scripted-host evidence",
+      "identity": {
+        "implementation": "867ee6cb72f2467d9b4ac270ca8cec24947da0748724533ff8293d4fbb27e52c",
+        "policy": null,
+        "registry": null,
+        "runtime": "043baf5b7051e057ab63cb3b4ebc81f022b2adff4c31300ff4a356897a37c971",
+        "server": null
+      }
+    },
+    {
+      "id": "stderr-linux",
+      "title": "Generic native MCP stderr drain",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "host": "scripted MCP client",
+      "transport": "stdio",
+      "server": "owned MCP fixture",
+      "profile": "sw-mcp/native-stderr/1",
+      "support": "conditional",
+      "fail_mode": "Oversize or uncertain stderr terminates the session; no public exact-run report indexed",
+      "limits": "One MiB quota; private runtime report required; no raw stderr released",
+      "identity": {
+        "implementation": null,
+        "policy": null,
+        "registry": null,
+        "runtime": null,
+        "server": null
+      }
+    },
+    {
+      "id": "shared-session-macos",
+      "title": "Scoped shared host-session provenance",
+      "platform": "macos",
+      "architecture": "aarch64",
+      "host": "component test host",
+      "transport": "native HTTP and stdio",
+      "server": "owned MCP fixture",
+      "profile": "scoped-host-session/1",
+      "support": "conditional",
+      "fail_mode": "Missing scoped identity or incomplete provenance refuses; original-server combined report absent",
+      "limits": "Historical macOS component checks only; ten ignored workspace tests are visible",
+      "identity": {
+        "implementation": null,
+        "policy": null,
+        "registry": null,
+        "runtime": null,
+        "server": null
+      }
+    },
+    {
+      "id": "self-test-linux",
+      "title": "Installed Agent self-test",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "host": "scripted MCP client",
+      "transport": "stdio",
+      "server": "bundled self-test fixture",
+      "profile": "linux-stdio-mcp-admission-v1",
+      "support": "supported",
+      "fail_mode": "Unavailable prerequisite or wrong classifier hash fails closed",
+      "limits": "Two synthetic fixture tools; no Claude Code or live model",
+      "identity": {
+        "implementation": null,
+        "policy": "8b2bfb66b14a988a29cf2698c482bc7cd91ba550fea14ccfa63540e815eb3c57",
+        "registry": "2929e475aa0ebf96291cb29c6e7412240d737d0ecc445a7ad6a4fd120f43f901",
+        "runtime": "461216e4e41bad1f180f79bf593329f5a4ee5fbb0a4067b65d0dabae5209cc12",
+        "server": null
+      }
+    },
+    {
+      "id": "self-test-macos",
+      "title": "Installed Agent self-test",
+      "platform": "macos",
+      "architecture": "aarch64",
+      "host": "scripted MCP client",
+      "transport": "stdio",
+      "server": "bundled self-test fixture",
+      "profile": "macos-stdio-mcp-admission-v1",
+      "support": "supported",
+      "fail_mode": "Unavailable prerequisite or wrong classifier hash fails closed",
+      "limits": "Native Apple Silicon evidence; no live model",
+      "identity": {
+        "implementation": null,
+        "policy": "8b2bfb66b14a988a29cf2698c482bc7cd91ba550fea14ccfa63540e815eb3c57",
+        "registry": "2929e475aa0ebf96291cb29c6e7412240d737d0ecc445a7ad6a4fd120f43f901",
+        "runtime": "c070a10397203cf03f869f5ba7f89f8d274fa78ce3865dd4f768bcf281780461",
+        "server": null
+      }
+    },
+    {
+      "id": "self-test-macos-x86",
+      "title": "Installed Agent self-test on Intel macOS",
+      "platform": "macos",
+      "architecture": "x86_64",
+      "host": "scripted MCP client",
+      "transport": "stdio",
+      "server": "bundled self-test fixture",
+      "profile": "macos-stdio-mcp-admission-v1",
+      "support": "conditional",
+      "fail_mode": "No native x86_64 positive run retained",
+      "limits": "Conditional pending native x86_64 execution",
+      "identity": {
+        "implementation": null,
+        "policy": null,
+        "registry": null,
+        "runtime": null,
+        "server": null
+      }
+    },
+    {
+      "id": "self-test-windows",
+      "title": "Installed Agent self-test on Windows",
+      "platform": "windows",
+      "architecture": "x86_64",
+      "host": "scripted MCP client",
+      "transport": "stdio",
+      "server": "bundled self-test fixture",
+      "profile": "windows-self-test-unsupported",
+      "support": "unsupported",
+      "fail_mode": "Self-test reports unsupported on this platform",
+      "limits": "No Windows installed self-test acceptance",
+      "identity": {
+        "implementation": null,
+        "policy": null,
+        "registry": null,
+        "runtime": null,
+        "server": null
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "id": "create-file-followup",
+      "capability": "create-file-linux",
+      "path": "MCP_CREATE_FILE_2026-10-15.followup.json",
+      "sha256": "b77c1d53b371ce2827815ad14d54894c8693fdcc44f749e59f08d10e82402dc2",
+      "format": "sou54-followup/1",
+      "kind": "component",
+      "source": "dbd7a097f4da79341aab5fcf49b32598d523bb41",
+      "platform": "linux",
+      "architecture": "aarch64",
+      "host": "scripted MCP client",
+      "transport": "stdio",
+      "server": "agentfw native create_file",
+      "profile": "sw-native/create-file/linux-root-child/1",
+      "identity": {
+        "implementation": "369bf527e590701796d2c0ea202f7e63d3bab02ffbeae6865746e4747914582f",
+        "policy": null,
+        "registry": null,
+        "runtime": "8a248e7db45b5f30e6d1c75134ba387a336b83634e45a46c9569015afcad664a",
+        "server": null
+      }
+    },
+    {
+      "id": "https-get-run",
+      "capability": "https-get-linux",
+      "path": "MCP_HTTPS_GET_2026-10-15.json",
+      "sha256": "67191c4c0ea1be24e37fb7335e49918bcd9549f135eb970456b17d9e66af8dec",
+      "format": "sou56-https-get/1",
+      "kind": "component",
+      "source": "283108482d792a33c1a07a3eb9e9a94c2484334c",
+      "platform": "linux",
+      "architecture": "aarch64",
+      "host": "scripted MCP client",
+      "transport": "stdio",
+      "server": "agentfw native HTTPS GET",
+      "profile": "sw-native/https-get/linux-pinned/1",
+      "identity": {
+        "implementation": "867ee6cb72f2467d9b4ac270ca8cec24947da0748724533ff8293d4fbb27e52c",
+        "policy": null,
+        "registry": null,
+        "runtime": "043baf5b7051e057ab63cb3b4ebc81f022b2adff4c31300ff4a356897a37c971",
+        "server": null
+      }
+    },
+    {
+      "id": "shared-session-component",
+      "capability": "shared-session-macos",
+      "path": "sou-63-final-hardening-2026-10-16/results.json",
+      "sha256": "1fcbc58dce2f97537ce3b1b4bdb89f0cf41074d603666be11ea3d17166003016",
+      "format": "sou63-component/1",
+      "kind": "component",
+      "source": null,
+      "platform": "macos",
+      "architecture": "aarch64",
+      "host": "component test host",
+      "transport": "native HTTP and stdio",
+      "server": "owned MCP fixture",
+      "profile": "scoped-host-session/1",
+      "identity": {
+        "implementation": null,
+        "policy": null,
+        "registry": null,
+        "runtime": null,
+        "server": null
+      }
+    },
+    {
+      "id": "self-test-linux-run",
+      "capability": "self-test-linux",
+      "path": "sou61/self-test-report.json",
+      "sha256": "e1e0dd67c2f7321b71e77470e2d17d5e49a2efab1ed9c752ba74f43aa39b038e",
+      "format": "sw-self-test/1",
+      "kind": "component",
+      "source": null,
+      "platform": "linux",
+      "architecture": "x86_64",
+      "host": "scripted MCP client",
+      "transport": "stdio",
+      "server": "bundled self-test fixture",
+      "profile": "linux-stdio-mcp-admission-v1",
+      "identity": {
+        "implementation": null,
+        "policy": "8b2bfb66b14a988a29cf2698c482bc7cd91ba550fea14ccfa63540e815eb3c57",
+        "registry": "2929e475aa0ebf96291cb29c6e7412240d737d0ecc445a7ad6a4fd120f43f901",
+        "runtime": "461216e4e41bad1f180f79bf593329f5a4ee5fbb0a4067b65d0dabae5209cc12",
+        "server": null
+      }
+    },
+    {
+      "id": "self-test-macos-run",
+      "capability": "self-test-macos",
+      "path": "sou77/self-test-report.json",
+      "sha256": "49a079d0166321d0f844d260c68858155fb11fad17c8779d75138d101bb0d879",
+      "format": "sw-self-test/1",
+      "kind": "component",
+      "source": null,
+      "platform": "macos",
+      "architecture": "aarch64",
+      "host": "scripted MCP client",
+      "transport": "stdio",
+      "server": "bundled self-test fixture",
+      "profile": "macos-stdio-mcp-admission-v1",
+      "identity": {
+        "implementation": null,
+        "policy": "8b2bfb66b14a988a29cf2698c482bc7cd91ba550fea14ccfa63540e815eb3c57",
+        "registry": "2929e475aa0ebf96291cb29c6e7412240d737d0ecc445a7ad6a4fd120f43f901",
+        "runtime": "c070a10397203cf03f869f5ba7f89f8d274fa78ce3865dd4f768bcf281780461",
+        "server": null
+      }
+    }
+  ],
+  "profile_inputs": [
+    {
+      "capability": "filesystem-linux",
+      "path": "profiles/mcp/filesystem-readonly-v1/policy.yaml",
+      "identity_field": "policy",
+      "sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec"
+    },
+    {
+      "capability": "filesystem-linux",
+      "path": "profiles/mcp/filesystem-readonly-v1/upstream-identity.json",
+      "identity_field": "server",
+      "sha256": "bd2b235f11e4e3ccd31467185b33b26751a626ed23e499ca72392b56dc9849ca"
+    },
+    {
+      "capability": "git-linux",
+      "path": "profiles/mcp/git-readonly-v1/policy.yaml",
+      "identity_field": "policy",
+      "sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c"
+    },
+    {
+      "capability": "git-linux",
+      "path": "profiles/mcp/git-readonly-v1/upstream-identity.json",
+      "identity_field": "server",
+      "sha256": "90fbf2f84db1fee38145914adaf851c35d9b8b3735dc4e78caf7820c507e09e4"
+    }
+  ]
+}

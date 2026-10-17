@@ -1,0 +1,73 @@
+[
+  {
+    "agentfw_binary_sha256": "494415b375f99662a672fef3f43dd864bf758bb889ff3be1634294482e0628e3",
+    "backend_execution_counts": {
+      "mcp_backend": 0
+    },
+    "bindings": [
+      {
+        "agent_id": "collector-read_document-delete_note",
+        "binding_sha256": "294d0e6ec103ebe1798d3440aea466015afc23a4f8543e52648194bf9066f3e6",
+        "host_session": "host-hook",
+        "parent_id": null,
+        "server_id": "fixture",
+        "tools": [
+          "read_document",
+          "delete_note"
+        ]
+      }
+    ],
+    "owned_server_source_sha256": "c161103d8a38d26e7494841e670d5f5bf892d8b9c89e4d9f831f1c3b291266a0",
+    "policy_sha256": "e7b4bd4d02721ecc65dee1995687dd3211b0cc12584a0e9a421bcb566f765fe4",
+    "registry_sha256": "c778b2a394add8e7cf40f0455d1492af8e53d67da36ec5b5eb1ae9a7f6e278b8",
+    "scenario": "signed_hook_to_mcp",
+    "withheld_rule": "fixture-mcp-reuse"
+  },
+  {
+    "agentfw_binary_sha256": "494415b375f99662a672fef3f43dd864bf758bb889ff3be1634294482e0628e3",
+    "backend_execution_counts": {
+      "separate_session": 1,
+      "server_a": 1,
+      "server_b": 0
+    },
+    "bindings": [
+      {
+        "agent_id": "collector-read_document-delete_note",
+        "binding_sha256": "6d865b97d13b262b427b6379121fab7f8f008824430fab2d78af9b017bf5c5bd",
+        "host_session": "host",
+        "parent_id": null,
+        "server_id": "fixture",
+        "tools": [
+          "read_document",
+          "delete_note"
+        ]
+      },
+      {
+        "agent_id": "collector-delete_note",
+        "binding_sha256": "aa7ef978b63c90ad90c101b5cd180aad2777bc8ed6bebe72bc332367546bab55",
+        "host_session": "host",
+        "parent_id": "collector-read_document-delete_note",
+        "server_id": "server_b",
+        "tools": [
+          "delete_note"
+        ]
+      },
+      {
+        "agent_id": "collector-read_document-delete_note",
+        "binding_sha256": "cc10a9fcb6911af7f97655cf5743f5a5ddda463c9f0747bfb562e164b268aa29",
+        "host_session": "untainted-host",
+        "parent_id": null,
+        "server_id": "fixture",
+        "tools": [
+          "read_document",
+          "delete_note"
+        ]
+      }
+    ],
+    "owned_server_source_sha256": "c161103d8a38d26e7494841e670d5f5bf892d8b9c89e4d9f831f1c3b291266a0",
+    "policy_sha256": "e7b4bd4d02721ecc65dee1995687dd3211b0cc12584a0e9a421bcb566f765fe4",
+    "registry_sha256": "c778b2a394add8e7cf40f0455d1492af8e53d67da36ec5b5eb1ae9a7f6e278b8",
+    "scenario": "server_a_to_server_b",
+    "withheld_rule": "fixture-mcp-reuse"
+  }
+]

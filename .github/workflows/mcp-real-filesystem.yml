@@ -11,6 +11,8 @@ on:
       - 'scripts/install-sou62-filesystem-profile.py'
       - 'scripts/verify-sou62-real-mcp.py'
       - 'scripts/tests/test_sou62_real_mcp.py'
+      - 'scripts/verify-sou62-sou63-combined.py'
+      - 'scripts/tests/test_sou62_sou63_combined.py'
       - 'scripts/linux-alert-acceptance.py'
       - 'scripts/tests/test_linux_alert_acceptance.py'
       - '.github/workflows/mcp-real-filesystem.yml'
@@ -92,6 +94,14 @@ jobs:
         run: |
           python3 -B -m unittest discover -s scripts/tests -p test_sou62_real_mcp.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_linux_alert_acceptance.py -v
+          python3 -B - <<'PYCONTROLS'
+          import unittest
+          suite = unittest.defaultTestLoader.discover('scripts/tests', pattern='test_sou62_sou63_combined.py')
+          if suite.countTestCases() == 0:
+              raise SystemExit('combined smoke controls are required; zero tests discovered')
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          raise SystemExit(0 if result.wasSuccessful() else 1)
+          PYCONTROLS
       - name: Required real server, positive sandbox, overlap, cancellation and actual Claude Code
         shell: bash
         run: |
@@ -102,6 +112,16 @@ jobs:
             --claude "$RUNNER_TEMP/sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --sandbox-test-binary "$SOU62_SANDBOX_TEST_BINARY" --expected-commit "$(git rev-parse HEAD)" \
             --output "$RUNNER_TEMP/sou62-acceptance" 2>&1 | tee "$RUNNER_TEMP/sou62-acceptance.log"
+      - name: Required combined original-server, shared-session, hooks and actual Claude Code smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/verify-sou62-sou63-combined.py --run --agentfw "$PWD/target/debug/agentfw" \
+            --node "$RUNNER_TEMP/sou62-runtime/bin/node" --npm "$RUNNER_TEMP/sou62-runtime/bin/npm" \
+            --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" \
+            --claude "$RUNNER_TEMP/sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --sandbox-test-binary "$SOU62_SANDBOX_TEST_BINARY" --expected-commit "$(git rev-parse HEAD)" \
+            --output "$RUNNER_TEMP/sou62-sou63-combined" 2>&1 | tee "$RUNNER_TEMP/sou62-sou63-combined.log"
       - name: Publish bounded outcome
         if: always()
         shell: bash
@@ -118,6 +138,37 @@ jobs:
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
               stream.write('```json\n' + json.dumps(selected, indent=2) + '\n```\n')
           PY
+      - name: Publish bounded combined smoke outcome
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PYCOMBINED'
+          import json, os
+          from pathlib import Path
+          path = Path(os.environ['RUNNER_TEMP']) / 'sou62-sou63-combined/report.json'
+          data = json.loads(path.read_text()) if path.exists() else {'status': 'incomplete', 'error': 'required combined smoke did not produce a report'}
+          selected = {k: data.get(k) for k in ['status', 'passed', 'failed', 'skipped', 'source_before', 'source_after', 'binary_sha256', 'claude_sha256', 'sandbox_test_binary_sha256', 'proof_policy_sha256', 'required_positive_sandbox']}
+          selected['error'] = str(data['error'])[:2000] if data.get('error') else None
+          selected['bindings'] = [{k: row[k] for k in ['host_session', 'server_id', 'agent_id', 'parent_id', 'tools', 'proof_sha256', 'binding_sha256'] if k in row} for row in (data.get('bindings') or [])[:8]]
+          for name in ['clean_control', 'shared_mcp', 'shared_hook']:
+              section = data.get(name) or {}
+              selected[name] = {k: section[k] for k in ['status', 'rule', 'rule_name', 'no_reader', 'no_backend_execution', 'shared_host_session', 'passed'] if k in section}
+          host = data.get('actual_claude_host') or {}
+          selected['actual_claude_host'] = {k: host.get(k) for k in ['status', 'claude_version', 'claude_sha256', 'exit_code', 'real_host_executed', 'scripted_owned_provider', 'live_model_efficacy_measured']}
+          def process_summary(value):
+              value = value if isinstance(value, dict) else {}
+              return {k: value.get(k) for k in ['all_stopped', 'descendant_count']} | {'remaining_count': len(value.get('remaining') or [])}
+          selected['actual_claude_host']['process_cleanup'] = process_summary(host.get('process_cleanup', {}))
+          cleanup = data.get('cleanup') or {}
+          selected['cleanup'] = {k: cleanup.get(k) for k in ['daemon_stopped', 'private_profile_removed', 'all_stopped']}
+          selected['cleanup']['daemon_process_cleanup'] = process_summary(cleanup.get('daemon_process_cleanup', {}))
+          selected['cleanup']['client_count'] = len(cleanup.get('clients') or [])
+          selected['cleanup']['clients'] = [{k: row.get(k) for k in ['exit_code', 'forced_cleanup']} | {'process_cleanup': process_summary(row.get('process_cleanup', {}))} for row in (cleanup.get('clients') or [])[:8]]
+          rendered = json.dumps(selected, indent=2)
+          print(rendered)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+              stream.write('```json\n' + rendered + '\n```\n')
+          PYCOMBINED
       - name: Retain exact source, runtime and owned acceptance witnesses
         if: always()
         uses: actions/upload-artifact@v7
@@ -129,5 +180,7 @@ jobs:
             ${{ runner.temp }}/sou62-*.log
             ${{ runner.temp }}/sou62-acceptance/*.json
             ${{ runner.temp }}/sou62-acceptance/*.log
+            ${{ runner.temp }}/sou62-sou63-combined/*.json
+            ${{ runner.temp }}/sou62-sou63-combined/*.log
           if-no-files-found: error
           retention-days: 30

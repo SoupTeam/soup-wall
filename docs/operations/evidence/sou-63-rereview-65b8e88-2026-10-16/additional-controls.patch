@@ -1,0 +1,36 @@
+--- a/crates/agentfw/tests/native_endpoint.rs
++++ b/crates/agentfw/tests/native_endpoint.rs
+@@ -4001,3 +4001,33 @@
+     }
+     assert!(gaps.is_empty(),"authenticated enforce PreToolUse with invalid/missing identity or unsupported Bash args returned no opinion: {gaps:?}");
+ }
++
++#[tokio::test]
++async fn review65_shadow_unsupported_shapes_stay_nonblocking_without_sequence_allocation() {
++    let f=Fixture::configured(ALLOW,Config { enforce:false,..Config::default() });
++    let cases=[
++        json!({"session_id":"host","hook_event_name":"PreToolUse","tool_input":{"command":"synthetic"}}),
++        json!({"session_id":"host","hook_event_name":"PreToolUse","tool_name":null}),
++        json!({"session_id":"host","hook_event_name":"PreToolUse","tool_name":""}),
++        json!({"session_id":"host","hook_event_name":"PreToolUse","tool_name":"Bash"}),
++        json!({"session_id":"host","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{}}),
++        json!({"session_id":"host","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":42}}),
++    ];
++    for body in cases {
++        let(s,r)=post(f.state.clone(),"/hook",&body,Some(HOOK_TOKEN)).await;
++        assert_eq!(s,StatusCode::OK);
++        assert_eq!(r,json!({}));
++    }
++    assert_eq!(f.state.sessions.next("host"),1);
++}
++
++#[tokio::test]
++async fn review65_supported_benign_read_and_bash_remain_usable() {
++    let f=Fixture::new(ALLOW);
++    for (tool,args) in [("Read",json!({"file_path":"/tmp/reviewer-example.txt"})),("Bash",json!({"command":"printf hello"}))] {
++        let body=json!({"session_id":"host","hook_event_name":"PreToolUse","tool_name":tool,"tool_input":args});
++        let(s,r)=post(f.state.clone(),"/hook",&body,Some(HOOK_TOKEN)).await;
++        assert_eq!(s,StatusCode::OK);
++        assert_eq!(r,json!({}),"valid benign {tool} should remain allowed");
++    }
++}

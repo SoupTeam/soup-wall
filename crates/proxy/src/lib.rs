@@ -104,6 +104,10 @@ pub fn app(state: Shared) -> Router {
                 post(managed_agent_api::acknowledge_policy),
             );
         let scim_api = Router::new()
+            .route("/scim/v2/ResourceTypes", get(scim::resource_types))
+            .route("/scim/v2/ResourceTypes/:id", get(scim::get_resource_type))
+            .route("/scim/v2/Schemas", get(scim::schemas))
+            .route("/scim/v2/Schemas/:id", get(scim::get_schema))
             .route(
                 "/scim/v2/ServiceProviderConfig",
                 get(scim::service_provider_config),

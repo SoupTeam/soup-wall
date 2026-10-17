@@ -1,0 +1,99 @@
+--- a/crates/agentfw/tests/native_endpoint.rs
++++ b/crates/agentfw/tests/native_endpoint.rs
+@@ -4434,3 +4434,96 @@
+     assert_eq!(s, StatusCode::OK, "exact granted URL refused: {r}");
+     assert_eq!(r["release"], true, "exact granted URL refused: {r}");
+ }
++
++#[tokio::test]
++async fn review36_unknown_hook_agent_must_not_bypass_binding() {
++    let f = Fixture::new(ALLOW);
++    let (s,r)=review8dd_start(&f,"reader-session","reader",Some("parent"),&["read_document"],Some(vec![])).await;
++    assert_allow(s,&r);
++    let mut hook=json!({"session_id":"review-host","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo harmless"},"agent_id":"reader"});
++    let (_,r)=post(f.state.clone(),"/hook",&hook,Some(HOOK_TOKEN)).await;
++    assert_eq!(r["hookSpecificOutput"]["permissionDecision"],"deny","control: {r}");
++    hook["agent_id"]=json!("unregistered-impostor");
++    let (_,r)=post(f.state.clone(),"/hook",&hook,Some(HOOK_TOKEN)).await;
++    assert_eq!(r["hookSpecificOutput"]["permissionDecision"],"deny","changing only agent_id bypassed verified binding: {r}");
++}
++
++#[tokio::test]
++async fn review36_missing_parent_must_not_register_child_as_root() {
++    let f = Fixture::new(ALLOW);
++    let (s,r)=review8dd_start(&f,"orphan","worker",Some("nonexistent-parent"),&["delete_document"],Some(vec![])).await;
++    if s != StatusCode::OK || r["release"] != true {return;}
++    let (s,r)=f.post(&f.call("orphan","delete_document",&json!({}))).await;
++    assert!(s != StatusCode::OK || r["release"] != true,"unprovable parent granted destructive authority: {r}");
++}
++
++#[tokio::test]
++async fn review36_parent_end_must_not_drop_resource_constraints() {
++    let f=Fixture::new(ALLOW);
++    let (s,r)=review8dd_start(&f,"parent","parent-agent",None,&["send_email"],Some(vec!["internal.corp".into()])).await;
++    assert_allow(s,&r);
++    let (s,r)=review8dd_start(&f,"blocked-child","worker",Some("parent-agent"),&["send_email"],Some(vec!["attacker.invalid".into()])).await;
++    assert!(s != StatusCode::OK || r["release"] != true,"control must reject escalation: {r}");
++    let (s,r)=f.post(&f.event("parent","session_end")).await;
++    assert_allow(s,&r);
++    let (s,r)=review8dd_start(&f,"after-end","worker",Some("parent-agent"),&["send_email"],Some(vec!["attacker.invalid".into()])).await;
++    if s != StatusCode::OK || r["release"] != true{return;}
++    let (s,r)=f.post(&f.call("after-end","send_email",&json!({"to":"outside@attacker.invalid"}))).await;
++    assert!(s != StatusCode::OK || r["release"] != true,"ending parent erased destination narrowing but retained tool grant: {r}");
++}
++
++#[tokio::test]
++async fn review36_unknown_parent_scope_must_not_become_proven_child_scope() {
++    let f=Fixture::new(ALLOW);
++    let (s,r)=review8dd_start(&f,"parent","parent-agent",None,&["send_email"],None).await;
++    assert_allow(s,&r);
++    let (s,r)=f.post(&f.call("parent","send_email",&json!({"to":"outside@attacker.invalid"}))).await;
++    assert!(s != StatusCode::OK || r["release"] != true,"control: parent destination authority is unprovable");
++    let (s,r)=review8dd_start(&f,"child","worker",Some("parent-agent"),&["send_email"],Some(vec!["attacker.invalid".into()])).await;
++    if s != StatusCode::OK || r["release"] != true{return;}
++    let (s,r)=f.post(&f.call("child","send_email",&json!({"to":"outside@attacker.invalid"}))).await;
++    assert!(s != StatusCode::OK || r["release"] != true,"child obtained destination denied to its parent: {r}");
++}
++
++#[tokio::test]
++async fn review36_legitimate_mailbox_narrowing_must_be_usable() {
++    let f=Fixture::new(ALLOW);
++    let (s,r)=review8dd_start(&f,"parent","parent-agent",None,&["send_email"],Some(vec!["internal.corp".into()])).await;
++    assert_allow(s,&r);
++    let (s,r)=review8dd_start(&f,"child","worker",Some("parent-agent"),&["send_email"],Some(vec!["alice@internal.corp".into()])).await;
++    assert_allow(s,&r);
++    let (s,r)=f.post(&f.call("child","send_email",&json!({"to":"alice@internal.corp"}))).await;
++    assert_allow(s,&r);
++}
++
++#[tokio::test]
++async fn review36_expired_child_authority_must_not_authorize_hooks() {
++    use agentfw::native::child_authority as ca;
++    let f=Fixture::new(ALLOW);
++    let (s,r)=review8dd_start(&f,"parent","parent-agent",None,&["read_document","Bash"],Some(vec![])).await;
++    assert_allow(s,&r);
++    let now=SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
++    let grant=ca::mint_scoped(&ca::derive_key(NATIVE_TOKEN),"review-host","resource-fixture",&["read_document".into(),"Bash".into()],now,500,"short-lived".into(),Some("worker".into()),Some("parent-agent".into()),Some(vec![]));
++    let mut start=f.event("short-child","session_start");
++    start["host_session"]=json!("review-host");start["server_id"]=json!("resource-fixture");start["child_authority"]=json!(ca::encode_token(&grant));
++    let (s,r)=f.post(&start).await;assert_allow(s,&r);
++    let hook=json!({"session_id":"review-host","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo harmless"},"agent_id":"worker"});
++    let (_,r)=post(f.state.clone(),"/hook",&hook,Some(HOOK_TOKEN)).await;assert_eq!(r,json!({}),"control: valid grant remains useful");
++    tokio::time::sleep(std::time::Duration::from_millis(550)).await;
++    let (_,r)=f.post(&f.call("short-child","read_document",&json!({}))).await;
++    assert_eq!(r["error_code"],"native_child_authority_expired","control: grant really expired");
++    let (_,r)=post(f.state.clone(),"/hook",&hook,Some(HOOK_TOKEN)).await;
++    assert_eq!(r["hookSpecificOutput"]["permissionDecision"],"deny","expired native authority still authorizes hook: {r}");
++}
++
++#[tokio::test]
++async fn review36_conflicting_posttool_identity_must_mark_history_loss() {
++    let f=Fixture::new(ALLOW);
++    let (s,r)=review8dd_start(&f,"reader","reader-agent",Some("parent"),&["read_document","delete_document"],Some(vec![])).await;
++    assert_allow(s,&r);
++    let hook=json!({"session_id":"review-host","hook_event_name":"PostToolUse","tool_name":"WebFetch","tool_input":{"url":"https://fixture.invalid"},"tool_response":INJECTION,"agent_id":"reader-agent","parent_id":"wrong-parent"});
++    let (s,_)=post(f.state.clone(),"/hook",&hook,Some(HOOK_TOKEN)).await;
++    assert_eq!(s,StatusCode::OK);
++    let fw=f.state.firewall.lock().unwrap();
++    assert!(fw.provenance_incomplete("review-host") || fw.taint_len("review-host") > 0,"identity conflict silently discarded consumed untrusted result without sticky incomplete history");
++}

@@ -1703,12 +1703,17 @@ impl PostgresTenantStore {
         scim_user_from_row(row)
     }
 
-    pub(super) async fn list_scim_users(
+    pub(super) async fn list_scim_users_filtered(
         &self,
         identity: &ScimIdentity,
         start_index: usize,
         count: usize,
+        filter: Option<&super::ScimEqualityFilter>,
     ) -> anyhow::Result<ScimUserPage> {
+        let (column, value) = filter
+            .map(|f| (f.column(), Some(f.value.as_str())))
+            .unwrap_or(("id", None));
+        let predicate = format!(" AND ($4::text IS NULL OR {column} COLLATE \"C\" = $4)");
         super::validate_scim_page(start_index, count)?;
         let offset = i64::try_from(start_index - 1)
             .context("SCIM start index exceeds PostgreSQL integer range")?;
@@ -1717,21 +1722,24 @@ impl PostgresTenantStore {
         let client = self.checkout().await?;
         let total_results: i64 = self
             .bounded(client.query_one(
-                "SELECT COUNT(*) FROM scim_users WHERE organization_id = $1",
-                &[&identity.organization_id],
+                &format!("SELECT COUNT(*) FROM scim_users WHERE organization_id = $1 AND ($2::text IS NULL OR {column} COLLATE \"C\" = $2)"),
+                &[&identity.organization_id, &value],
             ))
             .await
             .context("failed to count SCIM users")?
             .get(0);
         let rows = self
             .bounded(client.query(
-                "SELECT id, organization_id, external_id, user_name, display_name, active,
+                &format!(
+                    "SELECT id, organization_id, external_id, user_name, display_name, active,
                         created_at_unix, updated_at_unix
                  FROM scim_users
                  WHERE organization_id = $1
+                 {predicate}
                  ORDER BY id ASC
-                 LIMIT $2 OFFSET $3",
-                &[&identity.organization_id, &limit, &offset],
+                 LIMIT $2 OFFSET $3"
+                ),
+                &[&identity.organization_id, &limit, &offset, &value],
             ))
             .await
             .context("failed to query SCIM users")?;
@@ -1899,12 +1907,17 @@ impl PostgresTenantStore {
         Ok(group)
     }
 
-    pub(super) async fn list_scim_groups(
+    pub(super) async fn list_scim_groups_filtered(
         &self,
         identity: &ScimIdentity,
         start_index: usize,
         count: usize,
+        filter: Option<&super::ScimEqualityFilter>,
     ) -> anyhow::Result<ScimGroupPage> {
+        let (column, value) = filter
+            .map(|f| (f.column(), Some(f.value.as_str())))
+            .unwrap_or(("id", None));
+        let predicate = format!(" AND ($4::text IS NULL OR {column} COLLATE \"C\" = $4)");
         super::validate_scim_page(start_index, count)?;
         let offset = i64::try_from(start_index - 1)
             .context("SCIM start index exceeds PostgreSQL integer range")?;
@@ -1913,21 +1926,24 @@ impl PostgresTenantStore {
         let client = self.checkout().await?;
         let total_results: i64 = self
             .bounded(client.query_one(
-                "SELECT COUNT(*) FROM scim_groups WHERE organization_id = $1 AND active = TRUE",
-                &[&identity.organization_id],
+                &format!("SELECT COUNT(*) FROM scim_groups WHERE organization_id = $1 AND active = TRUE AND ($2::text IS NULL OR {column} COLLATE \"C\" = $2)"),
+                &[&identity.organization_id, &value],
             ))
             .await
             .context("failed to count SCIM groups")?
             .get(0);
         let rows = self
             .bounded(client.query(
-                "SELECT id, organization_id, external_id, display_name, active,
+                &format!(
+                    "SELECT id, organization_id, external_id, display_name, active,
                         created_at_unix, updated_at_unix
                  FROM scim_groups
                  WHERE organization_id = $1 AND active = TRUE
+                 {predicate}
                  ORDER BY id ASC
-                 LIMIT $2 OFFSET $3",
-                &[&identity.organization_id, &limit, &offset],
+                 LIMIT $2 OFFSET $3"
+                ),
+                &[&identity.organization_id, &limit, &offset, &value],
             ))
             .await
             .context("failed to query SCIM groups")?;
@@ -2021,6 +2037,7 @@ impl PostgresTenantStore {
                     DELETE FROM scim_group_members
                     USING saved_group
                     WHERE $6 = 'replace' AND scim_group_members.group_id = saved_group.id
+                      AND NOT EXISTS (SELECT 1 FROM valid_members WHERE valid_members.id = scim_group_members.principal_id)
                  ), removed_members AS (
                     DELETE FROM scim_group_members
                     USING saved_group, requested_members

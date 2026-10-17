@@ -1,0 +1,95 @@
+--- a/crates/agentfw/tests/native_endpoint.rs
++++ b/crates/agentfw/tests/native_endpoint.rs
+@@ -4225,3 +4225,92 @@
+     assert_eq!(status, StatusCode::CONFLICT);
+     assert_eq!(reply["error_code"], "native_child_authority_escalation");
+ }
++
++async fn review8dd_start(f: &Fixture, session: &str, agent: &str, parent: Option<&str>, tools: &[&str], resources: Option<Vec<String>>) -> (StatusCode, Value) {
++    use agentfw::native::child_authority as ca;
++    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
++    let grant = ca::mint_scoped(&ca::derive_key(NATIVE_TOKEN), "review-host", "resource-fixture", &tools.iter().map(|s|s.to_string()).collect::<Vec<_>>(), now, 60_000, session.into(), Some(agent.into()), parent.map(str::to_owned), resources);
++    let mut start = f.event(session,"session_start");
++    start["host_session"] = json!("review-host");
++    start["server_id"] = json!("resource-fixture");
++    start["child_authority"] = json!(ca::encode_token(&grant));
++    f.post(&start).await
++}
++
++#[tokio::test]
++async fn review8dd_parent_claim_without_host_must_verify_signature() {
++    let f = Fixture::new(ALLOW);
++    let mut start = f.event("forged-child", "session_start");
++    start["agent_id"] = json!("forged-worker");
++    start["parent_id"] = json!("victim-parent");
++    start["child_authority"] = json!("not-a-valid-signature");
++    let (s,r) = f.post(&start).await;
++    assert!(s != StatusCode::OK || r["release"] != true, "unsigned identity accepted: {r}");
++}
++
++#[tokio::test]
++async fn review8dd_child_must_not_exceed_registered_parent() {
++    let f = Fixture::new(ALLOW);
++    let (s,r) = review8dd_start(&f,"parent-session","narrow-parent",None,&["read_document"],Some(vec![])).await;
++    assert_allow(s,&r);
++    let (s,r) = review8dd_start(&f,"overbroad-child","worker",Some("narrow-parent"), &["delete_document"],Some(vec![])).await;
++    if s != StatusCode::OK || r["release"] != true { return; }
++    let (s,r) = f.post(&f.call("overbroad-child","delete_document",&json!({}))).await;
++    assert!(s != StatusCode::OK || r["release"] != true, "child exceeded actual parent grant: {r}");
++}
++
++#[tokio::test]
++async fn review8dd_missing_resources_must_not_allow_network() {
++    let f = Fixture::new(ALLOW);
++    let (s,r) = review8dd_start(&f,"missing-scope","mailer",None,&["send_email"],None).await;
++    if s != StatusCode::OK || r["release"] != true { return; }
++    let (s,r) = f.post(&f.call("missing-scope","send_email",&json!({"to":"outside@attacker.invalid"}))).await;
++    assert!(s != StatusCode::OK || r["release"] != true, "unprovable destination scope allowed: {r}");
++}
++
++#[tokio::test]
++async fn review8dd_child_path_grant_must_respect_component_boundary() {
++    let mut f = Fixture::new(ALLOW);
++    let root = f.dir.path().canonicalize().unwrap();
++    std::fs::create_dir(root.join("allowed")).unwrap();
++    let target = root.join("allowed-secret.txt");
++    std::fs::write(&target,"synthetic private data").unwrap();
++    let profile = json!({"server_id":"resource-fixture","tool_name":"read_document","schema_sha256":schema(),"selectors":[{"pointer":"/path","kind":"path"}]});
++    let mut reg = registry();
++    reg["tools"][0]["resource_policy"] = json!({"profile":profile,"workspace":root,"cwd":root,"executor_sha256":"e".repeat(64),"classifier_sha256":"c".repeat(64),"allowed_resources":[{"kind":"path","canonical":target}]});
++    let bytes=reg.to_string().into_bytes();
++    f.registry_sha256=sha(&bytes);
++    f.state=make_state(f.dir.path(),Config{enforce:true,..Config::default()},ALLOW,&bytes,&f.registry_sha256);
++    let (s,r) = review8dd_start(&f,"path-child","reader",None,&["read_document"],Some(vec![root.join("allowed").to_string_lossy().into_owned()])).await;
++    assert_allow(s,&r);
++    let context=resource_context(&profile,json!([{"pointer":"/path","source":"argument","resource":{"kind":"path","canonical":target}}]));
++    let body=resource_call(&f,"path-child","read_document",json!({"path":"allowed-secret.txt"}),context);
++    let (s,r)=f.post(&body).await;
++    assert!(s != StatusCode::OK || r["release"] != true,"sibling outside granted directory admitted: {r}");
++}
++
++#[tokio::test]
++async fn review8dd_hook_must_not_drop_authenticated_parent_identity() {
++    let f=Fixture::new(ALLOW);
++    let (s,r)=review8dd_start(&f,"bound-reader","reader",Some("parent"),&["read_document"],Some(vec![])).await;
++    assert_allow(s,&r);
++    let mut hook=json!({"session_id":"review-host","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo harmless"},"agent_id":"reader","parent_id":"parent"});
++    let (_,r)=post(f.state.clone(),"/hook",&hook,Some(HOOK_TOKEN)).await;
++    assert_eq!(r["hookSpecificOutput"]["permissionDecision"],"deny","control: {r}");
++    hook.as_object_mut().unwrap().remove("parent_id");
++    let (_,r)=post(f.state.clone(),"/hook",&hook,Some(HOOK_TOKEN)).await;
++    assert_eq!(r["hookSpecificOutput"]["permissionDecision"],"deny","omitting parent bypassed the bound agent's grant: {r}");
++}
++
++#[tokio::test]
++async fn review8dd_exact_granted_url_must_remain_usable() {
++    let url="http://127.0.0.1:8000/allowed";
++    let permitted=url_resource(url);
++    let (f,profile)=resource_fixture("retrieve_page","/url","url",json!([permitted["resource"]]));
++    let (s,r)=review8dd_start(&f,"url-child","reader",None,&["retrieve_page"],Some(vec![url.into()])).await;
++    assert_allow(s,&r);
++    let body=resource_call(&f,"url-child","retrieve_page",json!({"url":url}),resource_context(&profile,json!([permitted])));
++    let (s,r)=f.post(&body).await;
++    assert_eq!(s,StatusCode::OK,"exact granted URL refused: {r}");
++    assert_eq!(r["release"],true,"exact granted URL refused: {r}");
++}
