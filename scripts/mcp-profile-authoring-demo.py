@@ -406,7 +406,12 @@ def real_https_get_proof(binary, root, run, check):
             data = collector.send({"jsonrpc": "2.0", "id": call_id,
                 "method": "tools/call", "params": {"name": tool, "arguments": args,
                     "_meta": {"claudecode/toolUseId": "toolu_sou65_" + call_id,
-                              "progressToken": call_id}}})
+                              "progressToken": {
+                                  "https-useful": 41,
+                                  "https-other-recipient": 42,
+                                  "https-continue": 43,
+                                  "https-malformed-url": 44,
+                              }[call_id]}}})
             return json.loads(data) if data else None
 
         first = call("https-useful", "https_get", {"url": url})
