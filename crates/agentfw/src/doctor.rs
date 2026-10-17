@@ -319,7 +319,7 @@ async fn diagnose(args: &DoctorArgs) -> Report {
 
     if let (Some(path), Some(wanted)) = (&args.classifier_script, &args.classifier_sha256) {
         let actual = hash_selected_file(path, 16 * 1024 * 1024);
-        let valid = is_digest(wanted) && actual.as_deref() == Ok(wanted.as_str());
+        let valid = is_digest(wanted) && actual.ok().as_deref() == Some(wanted.as_str());
         checks.push(check("classifier", "selected_classifier_bytes",
             if valid { Outcome::Ready } else { Outcome::Failed },
             if valid { "classifier_pin_verified" } else { "classifier_pin_mismatch" },
@@ -343,7 +343,7 @@ async fn diagnose(args: &DoctorArgs) -> Report {
         }
         if let Some(native) = &cfg.native {
             let registry = hash_selected_file(&native.registry_path, 8 * 1024 * 1024);
-            let matches = registry.as_deref() == Ok(native.registry_sha256.as_str());
+            let matches = registry.ok().as_deref() == Some(native.registry_sha256.as_str());
             checks.push(check("registry", "selected_native_registry", if matches { Outcome::Ready } else { Outcome::Failed },
                 if matches { "registry_pin_verified" } else { "registry_pin_mismatch" },
                 if matches { "Selected native registry matches the configuration pin." } else { "Native registry bytes differ or are missing." },
@@ -388,11 +388,14 @@ async fn diagnose(args: &DoctorArgs) -> Report {
                     }
                 }
                 Err(code) => {
+                    let probe_addr = if cfg.bind == "::1" {
+                        std::net::SocketAddr::new(
+                            std::net::IpAddr::V6(std::net::Ipv6Addr::LOCALHOST), cfg.port)
+                    } else {
+                        std::net::SocketAddr::from(([127, 0, 0, 1], cfg.port))
+                    };
                     let occupied = std::net::TcpStream::connect_timeout(
-                        &format!("{}:{}", cfg.bind, cfg.port)
-                            .parse().unwrap_or_else(|_| std::net::SocketAddr::from(([127, 0, 0, 1], cfg.port))),
-                        Duration::from_millis(250),
-                    ).is_ok();
+                        &probe_addr, Duration::from_millis(250)).is_ok();
                     let (reason, explain) = if code == "status_identity_mismatch" {
                         ("runtime_identity_mismatch", "Live daemon did not match selected disk intent.")
                     } else if occupied {
