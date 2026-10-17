@@ -434,6 +434,7 @@ fn policy_for(
                 resources::canonical_url(exact_url).map_err(anyhow::Error::msg)?;
             ensure!(canonical == *exact_url, "reviewed URL must be canonical");
             if let Some(pem) = root_certificate_pem {
+                use rustls_pki_types::pem::PemObject;
                 // The native validator enforces trust-root size/authority.
                 // Independently parse the DER framing at authoring time:
                 // reqwest's PEM constructor may defer invalid PEM rejection
