@@ -97,6 +97,13 @@ launches and bounded safe metadata. Fixed terminal reasons include
 native work and verifies cleanup. A dispatched operation may already have run;
 withholding its result does not undo its effects.
 
+Verified cleanup describes the collector's structured exit path. If it is killed
+before that path can run, no successful teardown or immediate native retirement
+is claimed. Keep the existing bubblewrap parent-death boundary and an owned
+service lifecycle; an abandoned empty leaf may require operator removal, and
+unreachable native state retains its existing expiry/refusal behavior. Never
+remove an unrelated cgroup as recovery.
+
 ## Reproducible disposable Linux acceptance
 
 [The dedicated workflow](../../.github/workflows/sou79-resource-budgets.yml) builds
