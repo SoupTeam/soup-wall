@@ -75,6 +75,32 @@ enum ChildAuthorityCmd {
 }
 
 #[derive(Subcommand)]
+enum ProfileCommand {
+    /// Save bounded original tools/list, initially without any permissions.
+    Import {
+        #[arg(long)] discovery: PathBuf,
+        #[arg(long)] output: PathBuf,
+        #[arg(long)] server: String,
+        #[arg(long)] version: String,
+    },
+    /// Check reviewed declarations against saved discovery and current registry enforcement.
+    Validate {
+        #[arg(long)] snapshot: PathBuf,
+        #[arg(long)] declaration: PathBuf,
+    },
+    /// Explain unreviewed tool inventory without granting any access.
+    Explain { #[arg(long)] snapshot: PathBuf },
+    /// Compare reviewed declarations; any drift requires revalidation.
+    Diff { #[arg(long)] before: PathBuf, #[arg(long)] after: PathBuf },
+    /// Create a fresh private registry+report directory; never installs it.
+    Compile {
+        #[arg(long)] snapshot: PathBuf,
+        #[arg(long)] declaration: PathBuf,
+        #[arg(long)] output: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
 enum Cmd {
     /// Run the daemon.
     Serve,
@@ -170,6 +196,11 @@ enum Cmd {
     NativeApproval {
         #[command(subcommand)]
         action: NativeApprovalCmd,
+    },
+    /// Author an explicit reviewed MCP registry from saved discovery; never installs.
+    McpProfile {
+        #[command(subcommand)]
+        command: ProfileCommand,
     },
     /// Inspect a selected Claude-style MCP JSON config without starting servers.
     /// Only server names and supported transport flags are printed.
@@ -574,6 +605,23 @@ fn main() -> anyhow::Result<()> {
                     println!("Rejected {id}.");
                 }
             }
+            Ok(())
+        }
+        Cmd::McpProfile { command } => {
+            use agentfw::mcp::profile_authoring as profile;
+            let result = match command {
+                ProfileCommand::Import {discovery,output,server,version} => {
+                    profile::import(&discovery,&output,server,version)?;
+                    serde_json::json!({"status":"imported_unreviewed","output":output})
+                }
+                ProfileCommand::Validate {snapshot,declaration} =>
+                    profile::validate(&snapshot,&declaration)?,
+                ProfileCommand::Explain {snapshot} => profile::explain(&snapshot)?,
+                ProfileCommand::Diff {before,after} => profile::diff(&before,&after)?,
+                ProfileCommand::Compile {snapshot,declaration,output} =>
+                    profile::compile(&snapshot,&declaration,&output)?,
+            };
+            println!("{}",serde_json::to_string_pretty(&result)?);
             Ok(())
         }
         Cmd::McpInspectConfig { path } => {
