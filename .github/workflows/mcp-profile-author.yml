@@ -22,8 +22,6 @@ jobs:
         with:
           components: rustfmt,clippy
       - uses: Swatinem/rust-cache@v2
-      - name: Rust formatting
-        run: cargo fmt --all -- --check
       - name: Build and emit bounded exact diagnostics
         shell: bash
         run: |
@@ -50,7 +48,11 @@ jobs:
           print("SOU65_DIAGNOSTIC_COUNT",count,flush=True)
           PY
           exit "$code"
+      - name: Rust formatting
+        run: cargo fmt --all -- --check
       - name: Focused library tests
         run: cargo test --locked -p agentfw mcp::profile_author -- --nocapture
+      - name: Build actual Agent CLI
+        run: cargo build --locked -p agentfw
       - name: Real CLI proof
         run: python3 scripts/mcp-profile-authoring-demo.py --no-build
