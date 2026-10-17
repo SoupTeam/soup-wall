@@ -152,8 +152,8 @@ def receive(args):
                 record("response_disconnected", status=status)
             self.close_connection = True
 
-        def do_POST(self):
-            record("request", method="POST", target=self.path, host=self.headers.get("Host"))
+        def do_GET(self):
+            record("request", method="GET", target=self.path, host=self.headers.get("Host"))
             self.send_error(405)
 
         def do_CONNECT(self):

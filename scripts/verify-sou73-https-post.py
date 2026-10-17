@@ -40,21 +40,21 @@ SPEC.loader.exec_module(H)
 SPEC = importlib.util.spec_from_file_location("sou73_owned_receiver", FIXTURE)
 F = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(F)
-CASES = ("allow-json", "allow-text", "cookie-state", "native-deny", "native-ask", "classifier-deny", "classifier-ask", "secret-deny",
+CASES = ("allow-json", "allow-text", "request-text", "body-boundary", "body-byte-overflow", "body-invalid-json", "cookie-state", "native-deny", "native-ask", "classifier-deny", "classifier-ask", "secret-deny",
          "url-substitution", "query-substitution", "host-substitution", "port-substitution", "http-scheme",
          "caller-headers", "caller-method", "caller-content-type", "url-credentials", "metadata-address", "private-address",
          "loopback-without-exception", "dns-address-substitution", "native-url-substitution", "native-authority-substitution", "native-body-substitution",
          "redirect", "proxy-poisoning", "tls-hostname", "tls-untrusted", "tls-expired", "tls-invalid",
          "timeout", "oversize", "invalid-utf8", "invalid-json", "unsupported-compression", "unsupported-content",
          "unsupported-charset", "http-error", "result-withheld", "repeated-failures", "cross-session", "replayed-id",
-         "queued-cancellation", "queued-overlap", "inflight-cancellation", "unsupported-chunked", "massive-header", "informational-response",
+         "queued-cancellation", "queued-overlap", "inflight-cancellation", "daemon-loss", "unsupported-chunked", "massive-header", "informational-response",
          "truncated-body", "duplicate-content-length")
 SCHEMA_REFUSALS = {"caller-headers", "caller-method", "caller-content-type"}
-PROTOCOL = {"replayed-id", "queued-cancellation", "queued-overlap", "inflight-cancellation"} | SCHEMA_REFUSALS
+PROTOCOL = {"daemon-loss", "replayed-id", "queued-cancellation", "queued-overlap", "inflight-cancellation"} | SCHEMA_REFUSALS
 HELD = {"queued-cancellation", "queued-overlap"}
 PROXIED = HELD | {"native-url-substitution", "native-authority-substitution", "native-body-substitution", "cross-session"}
-SUCCESS = {"allow-json", "allow-text", "cookie-state", "proxy-poisoning", "cross-session", "replayed-id"}
-ZERO = {"secret-deny", "native-deny", "native-ask", "classifier-deny", "classifier-ask", "secret-deny", "url-substitution", "query-substitution",
+SUCCESS = {"allow-json", "allow-text", "request-text", "body-boundary", "cookie-state", "proxy-poisoning", "cross-session", "replayed-id"}
+ZERO = {"body-byte-overflow", "body-invalid-json", "secret-deny", "native-deny", "native-ask", "classifier-deny", "classifier-ask", "url-substitution", "query-substitution",
         "host-substitution", "port-substitution", "http-scheme", "caller-headers", "caller-method", "caller-content-type",
         "url-credentials", "metadata-address", "private-address", "loopback-without-exception", "dns-address-substitution",
         "native-url-substitution", "native-authority-substitution", "native-body-substitution"} | HELD
@@ -71,6 +71,22 @@ ERRORS = {"redirect": {"redirect_refused"}, "timeout": {"request_timeout"}, "ove
 
 class ExpectedStartupRefusal(Exception):
     """Control flow for one deliberately invalid operator installation."""
+
+
+def body_for(name):
+    if name == "request-text":
+        return "owned plain text: caf\u00e9\n"
+    if name == "body-boundary":
+        return '"' + "a" * 4094 + '"'
+    if name == "body-byte-overflow":
+        return '"' + "\u00e9" * 2048 + '"'
+    if name == "body-invalid-json":
+        return '{"unfinished":'
+    return POST_BODY
+
+
+def content_type_for(name):
+    return "text/plain" if name == "request-text" else "application/json"
 
 
 def expected_sessions(name):
@@ -93,7 +109,7 @@ def successful_fetch(name, label):
 
 def expected_attempts(name, label):
     """Only replies already observed are attempts; held/aborted calls have none."""
-    if label != "primary" or name in HELD | SCHEMA_REFUSALS | {"inflight-cancellation"}:
+    if label != "primary" or name in HELD | SCHEMA_REFUSALS | {"inflight-cancellation", "daemon-loss"}:
         return 0
     return REPEATED if name == "repeated-failures" else 2 if name == "cookie-state" else 1
 
@@ -159,7 +175,7 @@ def registry(workspace, url, port, ca_pem, binary_digest, classifier_digest, nam
             "allowed_resources": ([{"kind": "url", "canonical": url, "host": "localhost" if name == "dns-address-substitution" else "127.0.0.1", "port": port}]
                                   if fetch else [{"kind": "path", "canonical": str(workspace / "inventory.txt")}])}
         if fetch:
-            resource["post"] = {"endpoint":network, "content_type":"application/json", "max_body_bytes":4096}
+            resource["post"] = {"endpoint":network, "content_type":content_type_for(name), "max_body_bytes":4096}
         declarations.append({"name": tool["name"], "schema_sha256": H.sha(H.canonical(tool["inputSchema"])),
             "action_class": "network" if fetch else "read_only", "result_provenance": "untrusted",
             "egress": [{"pointer": "/url", "kind": "url_host", "optional": False}] if fetch else [],
@@ -175,7 +191,7 @@ def policy_for(name):
                 "    action: " + action + "\ndefault: allow\n")
     if name == "secret-deny":
         return (egress + "agent_policies:\n  - name: sou73-secret-floor\n"
-                "    when: { detector: secret }\n    action: deny\ndefault: allow\n")
+                "    when: { detector: secret, facet: tool_args, min_action_class: network }\n    action: deny\ndefault: allow\n")
     if name == "result-withheld":
         return (egress + "agent_policies:\n  - name: sou73-withhold-result-injection\n"
                 "    when: { detector: injection, facet: tool_result }\n    action: deny\ndefault: allow\n")
@@ -183,7 +199,7 @@ def policy_for(name):
 
 
 def arguments_for(name, url, alternate_port):
-    arguments = {"url": url, "body": POST_BODY}
+    arguments = {"url": url, "body": body_for(name)}
     if name == "url-substitution":
         arguments["url"] = url.replace("/document", "/unapproved")
     elif name == "query-substitution":
@@ -338,12 +354,12 @@ def grade(row):
                       "implicit credentials/cookies/streaming reached receiver")
         payloads = [value for value in receiver if value.get("event") == "payload"]
         H.require(len(payloads) == expected and all(value.get("complete") is True
-                  and value.get("bytes") == len(POST_BODY.encode())
-                  and value.get("sha256") == H.sha(POST_BODY.encode()) for value in payloads),
+                  and value.get("bytes") == len(body_for(name).encode())
+                  and value.get("sha256") == H.sha(body_for(name).encode()) for value in payloads),
                   "receiver did not observe the exact admitted UTF-8 payload")
         for request in requests:
-            H.require(request["headers"].get("content-type") == "application/json"
-                      and request["headers"].get("content-length") == str(len(POST_BODY.encode())),
+            H.require(request["headers"].get("content-type") == content_type_for(name)
+                      and request["headers"].get("content-length") == str(len(body_for(name).encode())),
                       "POST framing/content type changed")
         if name in SUCCESS | {"result-withheld"}:
             responses = [value for value in receiver if value.get("event") == "response"]
@@ -368,9 +384,15 @@ def grade(row):
         ends = [value for value in native if value.get("event") == "native_session_end"]
         sessions = row["sessions"]
         H.require([session["label"] for session in sessions] == expected_sessions(name), "wrong MCP session sequence")
-        H.require(len(starts) == len(ends) == len(sessions) and len({value["session"] for value in starts}) == len(sessions)
-                  and {value["session"] for value in starts} == {value["session"] for value in ends},
-                  "native session cleanup/isolation missing")
+        if name == "daemon-loss":
+            H.require(len(starts) == 2 and len(ends) == 1 and ends[0]["session"] == starts[1]["session"]
+                      and starts[0]["session"] != starts[1]["session"], "daemon restart/session witness missing")
+            H.require(type(row.get("stopped_daemon_exit")) is int and row.get("restart_healthy") is True
+                      and requests[0]["at_monotonic"] <= row["daemon_stopped_at"], "daemon was not lost after receiver commit")
+        else:
+            H.require(len(starts) == len(ends) == len(sessions) and len({value["session"] for value in starts}) == len(sessions)
+                      and {value["session"] for value in starts} == {value["session"] for value in ends},
+                      "native session cleanup/isolation missing")
         for session in sessions:
             H.require(session["child_ledger_present"] is True and session["child_started_raw"] == "started\n"
                       and session["child_ledger_raw"] == "", "discovery child executed a call or ledger missing")
@@ -386,7 +408,7 @@ def grade(row):
                       and closure.get("forced_cleanup") is False, "collector closure incomplete")
             abnormal = abnormal_session(name, session["label"])
             if abnormal:
-                reason = ("replayed MCP request" if name == "replayed-id" else "MCP admission request rejected"
+                reason = ("MCP admission unavailable" if name == "daemon-loss" else "replayed MCP request" if name == "replayed-id" else "MCP admission request rejected"
                           if name == "cross-session" else "unknown MCP argument" if name in SCHEMA_REFUSALS
                           else "concurrent MCP requests are not supported")
                 H.require(closure.get("exit_code") != 0 and reason in session["collector_raw"], "unrelated failure is not protocol refusal")
@@ -473,7 +495,8 @@ def grade(row):
         for execution in executions:
             attempt = next((value for session in sessions for value in session.get("attempts", [])
                             if value["request"]["id"] == execution.get("host_call_id")), None)
-            H.require(attempt is not None, "execution lost original host-call identifier")
+            H.require((name == "daemon-loss" and execution.get("host_call_id") == row["inflight_original_frame"]["id"])
+                      or attempt is not None, "execution lost original host-call identifier")
             if name == "result-withheld" or successful_fetch(name, "primary"):
                 H.require(execution.get("result_kind") == "value" and execution.get("request_issued") is True
                           and execution.get("error") is None, "actual successful execution/effect witness missing")
@@ -517,6 +540,12 @@ def grade(row):
                           "the requested native Deny/Ask boundary was not exercised")
             else:
                 H.require(not fetch_calls, "classifier Deny/Ask reached native execution admission")
+        if name == "daemon-loss":
+            H.require(len(fetch_calls) == 1 and fetch_calls[0].get("released") is True and not fetch_results,
+                      "daemon loss must retain admitted effect but never release an uninspected result")
+            progress = H.classify_rows(sessions[0]["collector_raw"].encode(), "mcp_https_post_progress")
+            H.require(len(progress) == 1 and progress[0]["progress"].get("request_attempted") is True
+                      and progress[0]["progress"].get("receiver_observed") == "unknown", "ambiguous effect accounting missing")
         if name == "inflight-cancellation":
             H.require(len(fetch_calls) == 1 and not fetch_results
                       and fetch_calls[0].get("released") is True and fetch_calls[0].get("verdict") == "allow"
@@ -621,7 +650,7 @@ def run_case(repo, binary, name, binary_digest, certificate_dir, certificate_wit
             poisoned_port = receiver("proxy_receiver", plain=True)
             mode = {"allow-text": "text", "redirect": "redirect", "oversize": "oversize", "invalid-utf8": "invalid-utf8",
                     "invalid-json": "invalid-json", "unsupported-compression": "compressed", "unsupported-content": "binary",
-                    "unsupported-charset": "charset", "result-withheld": "injection", "timeout": "timeout", "inflight-cancellation": "timeout",
+                    "unsupported-charset": "charset", "result-withheld": "injection", "timeout": "timeout", "inflight-cancellation": "timeout", "daemon-loss":"timeout",
                     "http-error": "status", "repeated-failures": "invalid-utf8", "unsupported-chunked": "chunked",
                     "massive-header": "massive-header", "informational-response": "informational", "truncated-body": "truncated",
                     "duplicate-content-length": "duplicate-length", "tls-invalid": "invalid-tls"}.get(name, "document")
@@ -706,7 +735,7 @@ def run_case(repo, binary, name, binary_digest, certificate_dir, certificate_wit
             arguments = arguments_for(name, url, secondary_port)
             if name == "dns-address-substitution":
                 arguments["url"] = url.replace("127.0.0.1", "localhost")
-            if name == "inflight-cancellation":
+            if name in {"inflight-cancellation", "daemon-loss"}:
                 original = H.frame("fetch-1", "https_post", arguments)
                 primary["collector"].send(original, reply=False)
                 receiver_ledger = next(item["ledger"] for item in receivers if item["label"] == "receiver")
@@ -723,10 +752,14 @@ def run_case(repo, binary, name, binary_digest, certificate_dir, certificate_wit
                 H.require(any(value.get("event") == "request" for value in observed), "active owned POST witness missing")
                 row["inflight_request_seen_at"] = time.monotonic()
                 row["inflight_original_frame"] = original
-                row["cancellation_frame"] = {"jsonrpc": "2.0", "method": "notifications/cancelled", "params": {
-                    "requestId": original["id"], "reason": "SOU73 owned cancellation after receiver observed POST"}}
-                primary["collector"].send(row["cancellation_frame"], reply=False)
-                row["cancellation_queued_at"] = time.monotonic()
+                if name == "daemon-loss":
+                    H.stop_owned(daemon)
+                    row.update(stopped_daemon_exit=daemon.returncode, daemon_stopped_at=time.monotonic())
+                else:
+                    row["cancellation_frame"] = {"jsonrpc": "2.0", "method": "notifications/cancelled", "params": {
+                        "requestId": original["id"], "reason": "SOU73 owned cancellation after receiver observed POST"}}
+                    primary["collector"].send(row["cancellation_frame"], reply=False)
+                    row["cancellation_queued_at"] = time.monotonic()
             elif name in HELD:
                 original = H.frame("fetch-1", "https_post", arguments)
                 primary["collector"].send(original, reply=False)
@@ -752,6 +785,11 @@ def run_case(repo, binary, name, binary_digest, certificate_dir, certificate_wit
             if name in PROTOCOL:
                 primary["closure"] = primary["collector"].close()
                 primary["closed"] = True
+                if name == "daemon-loss":
+                    daemon = subprocess.Popen([str(binary), "serve"], env=env, cwd=root,
+                                              stdout=daemon_stream, stderr=daemon_stream, start_new_session=True)
+                    row["restart_healthy"] = H.healthy(daemon_port, daemon)
+                    H.require(row["restart_healthy"], "daemon restart did not become healthy")
                 fresh = start("fresh-after-refusal")
                 useful(fresh)
             elif name == "cross-session":
@@ -817,7 +855,8 @@ def run_case(repo, binary, name, binary_digest, certificate_dir, certificate_wit
 
 def run(args):
     repo, binary, output = args.repo.resolve(), args.agentfw.resolve(), args.output.resolve()
-    H.require(not output.exists(), "fresh output required")
+    partial = output.with_suffix(".partial.jsonl")
+    H.require(not output.exists() and not partial.exists(), "fresh output and checkpoint paths required")
     H.require(binary.is_file(), "built Agent binary missing")
     before = H.source_snapshot(repo)
     H.require(before == {"commit": args.expected_commit, "tracked_dirty": False}, "clean exact expected source required")
@@ -840,6 +879,14 @@ def run(args):
             "The cross-session transport control substitutes an ended session ID, retains the real daemon 409, and proves useful recovery in a third session.",
             "Active cancellation is queued only after the independent receiver records the POST; the already issued request is retained while result release is refused.",
             "Binary digests identify artifacts; matching build logs establish build provenance."]}
+    output.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(partial, os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    checkpoint = os.fdopen(descriptor, "w", encoding="utf-8")
+    def retain(value):
+        checkpoint.write(json.dumps(value, ensure_ascii=False, allow_nan=False) + "\n")
+        checkpoint.flush()
+        os.fsync(checkpoint.fileno())
+    retain({"status":"incomplete", "acceptance_passed":False, "source":before, "binary_sha256":digest})
     try:
         if platform.system() != "Linux":
             report["unsupported"] = "positive HTTPS POST execution acceptance requires Linux"
@@ -851,6 +898,7 @@ def run(args):
                 for name in CASES:
                     row = run_case(repo, binary, name, digest, certificate_dir, witness)
                     report["cases"].append(row)
+                    retain(row)
                     print(name + ": " + row["grade"]["status"] + " (" + row["grade"]["reason"] + ")", flush=True)
             report["certificate_fixture_removed"] = not Path(temporary).exists()
         report["source_after"] = H.source_snapshot(repo)
@@ -862,6 +910,8 @@ def run(args):
             report["status"] = "pass"
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         report["error"] = type(error).__name__ + ": " + str(error)
+    finally:
+        checkpoint.close()
     report["summary"] = {"cases_run": len(report["cases"]), "cases_expected": len(CASES),
         "passed": sum(row["grade"]["status"] == "pass" for row in report["cases"]),
         "failed": sum(row["grade"]["status"] == "fail" for row in report["cases"]), "skips": int("unsupported" in report)}

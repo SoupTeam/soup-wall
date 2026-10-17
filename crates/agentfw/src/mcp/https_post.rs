@@ -12,8 +12,8 @@ use std::fmt;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 #[cfg(target_os = "linux")]
 use std::{net::SocketAddr, sync::Arc, time::Duration};
-#[cfg(target_os = "linux")]
-use tokio::io::AsyncWriteExt;
+#[cfg(any(target_os = "linux", test))]
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 #[cfg(target_os = "linux")]
 use tokio_rustls::rustls;
 
@@ -82,6 +82,38 @@ impl PostProgress {
             "response_received":self.response_received.load(Ordering::SeqCst),
             "receiver_observed":"unknown"})
     }
+}
+
+#[cfg(any(target_os = "linux", test))]
+async fn write_request<W: AsyncWrite + Unpin>(
+    stream: &mut W,
+    header: &[u8],
+    body: &[u8],
+    progress: &PostProgress,
+) -> Result<(), HttpsGetError> {
+    progress.attempted.store(true, Ordering::SeqCst);
+    stream
+        .write_all(header)
+        .await
+        .map_err(|_| HttpsGetError::issued("request_write_failed"))?;
+    let mut written = 0;
+    while written < body.len() {
+        let count = stream
+            .write(&body[written..])
+            .await
+            .map_err(|_| HttpsGetError::issued("request_write_failed"))?;
+        if count == 0 {
+            return Err(HttpsGetError::issued("request_write_failed"));
+        }
+        written += count;
+        progress
+            .body_bytes_accepted
+            .store(written, Ordering::SeqCst);
+    }
+    stream
+        .flush()
+        .await
+        .map_err(|_| HttpsGetError::issued("request_write_failed"))
 }
 
 pub struct PreparedHttpsPost {
@@ -189,19 +221,7 @@ impl PreparedHttpsPost {
                     // No HTTP bytes are written until ordinary certificate,
                     // hostname and expiry verification has completed.
                     request_issued = true;
-                    progress.attempted.store(true, Ordering::SeqCst);
-                    stream.write_all(request.as_bytes()).await
-                        .map_err(|_| HttpsGetError::issued("request_write_failed"))?;
-                    let mut written = 0;
-                    while written < self.body.len() {
-                        let count = stream.write(&self.body.as_bytes()[written..]).await
-                            .map_err(|_| HttpsGetError::issued("request_write_failed"))?;
-                        if count == 0 { return Err(HttpsGetError::issued("request_write_failed")); }
-                        written += count;
-                        progress.body_bytes_accepted.store(written, Ordering::SeqCst);
-                    }
-                    stream.flush().await
-                        .map_err(|_| HttpsGetError::issued("request_write_failed"))?;
+                    write_request(&mut stream, request.as_bytes(), self.body.as_bytes(), progress).await?;
                     let (content_type, bytes, received_http_bytes) = read_response(&mut stream).await?;
                     let text = String::from_utf8(bytes)
                         .map_err(|_| HttpsGetError::issued("invalid_response_utf8"))?;
@@ -232,6 +252,27 @@ impl PreparedHttpsPost {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn cancellation_during_body_write_retains_prefix_without_resending() {
+        use tokio::io::AsyncReadExt;
+        let (mut writer, mut receiver) = tokio::io::duplex(8);
+        let progress = PostProgress::default();
+        let body = b"0123456789abcdef";
+        // Four header bytes and four body bytes fit; the remaining body stalls.
+        let outcome = tokio::time::timeout(
+            std::time::Duration::from_millis(20),
+            write_request(&mut writer, b"HEAD", body, &progress),
+        )
+        .await;
+        assert!(outcome.is_err());
+        assert_eq!(progress.snapshot()["body_bytes_accepted_by_tls"], 4);
+        assert_eq!(progress.snapshot()["request_attempted"], true);
+        drop(writer);
+        let mut received = Vec::new();
+        receiver.read_to_end(&mut received).await.unwrap();
+        assert_eq!(received, b"HEAD0123");
+        assert_eq!(progress.snapshot()["receiver_observed"], "unknown");
+    }
     fn authority() -> HttpsPostAuthority {
         HttpsPostAuthority {
             endpoint: HttpsGetAuthority {

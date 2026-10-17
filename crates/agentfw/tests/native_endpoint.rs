@@ -5626,3 +5626,49 @@ async fn https_post_v6_native_ask_deny_and_egress_floors() {
         assert_eq!(reply["verdict"], verdict, "{reply}");
     }
 }
+
+#[tokio::test]
+async fn https_post_v6_recomputed_authority_cannot_replace_operator_policy() {
+    let (fixture, policy) = https_post_fixture(HTTPS_ALLOW);
+    fixture.start("post-policy").await;
+    let request = https_post_call(&fixture, &policy, "post-policy");
+    for field in ["address", "content_type", "selector", "classifier"] {
+        let mut replacement = policy.clone();
+        match field {
+            "address" => {
+                replacement
+                    .post
+                    .as_mut()
+                    .unwrap()
+                    .endpoint
+                    .approved_addresses = vec!["93.184.216.35".parse().unwrap()]
+            }
+            "content_type" => {
+                replacement.post.as_mut().unwrap().content_type = "application/json".into()
+            }
+            "selector" => replacement.profile.selectors[0].pointer = "/body".into(),
+            _ => replacement.classifier_sha256 = "b".repeat(64),
+        }
+        let mut forged = request.clone();
+        if field == "content_type" {
+            forged["args"]["body"] = json!("{} ");
+        }
+        forged["resource_admission"]["post"] = serde_json::to_value(
+            agentfw::native::resource::https_post_binding(&replacement, &forged["args"]).unwrap(),
+        )
+        .unwrap();
+        let (_, refused) = fixture.post(&forged).await;
+        assert_eq!(refused["release"], false, "{field}: {refused}");
+    }
+    for version in [
+        agentfw::native::resource::CONTRACT,
+        agentfw::native::resource::NETWORK_CONTRACT,
+    ] {
+        let mut downgrade = request.clone();
+        downgrade["contract_version"] = json!(version);
+        let (_, refused) = fixture.post(&downgrade).await;
+        assert_ne!(refused["release"], true, "{refused}");
+    }
+    let (_, allowed) = fixture.post(&request).await;
+    assert_eq!(allowed["release"], true, "{allowed}");
+}

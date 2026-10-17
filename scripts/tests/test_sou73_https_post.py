@@ -380,5 +380,46 @@ class EvidenceControls(unittest.TestCase):
         self.assertEqual(result["actions"], ["send_data"])
         self.assertFalse(result["unknown"])
 
+class ReceiverCalibration(unittest.TestCase):
+    def test_actual_owned_receiver_records_exact_payload_and_rejects_get(self):
+        # This calibrates the ledger, not TLS/executor acceptance.
+        import http.client
+        with tempfile.TemporaryDirectory(prefix="sou73-receiver-control-") as temporary:
+            root = Path(temporary)
+            ledger, ready = root / "ledger.jsonl", root / "ready.json"
+            process = subprocess.Popen([sys.executable, str(P.FIXTURE), "--https", "--plain-http",
+                "--ledger", str(ledger), "--ready", str(ready)], stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            try:
+                deadline = time.monotonic() + 5
+                while not ready.exists() and time.monotonic() < deadline:
+                    self.assertIsNone(process.poll())
+                    time.sleep(.01)
+                port = json.loads(ready.read_text())["port"]
+                connection = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
+                body = P.POST_BODY.encode()
+                connection.request("POST", "/document?item=7", body=body,
+                                   headers={"Content-Type":"application/json"})
+                reply = connection.getresponse()
+                self.assertEqual(reply.status, 200)
+                self.assertEqual(reply.read(), P.F.DOCUMENT.encode())
+                connection.close()
+                connection = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
+                connection.request("GET", "/must-refuse")
+                reply = connection.getresponse()
+                self.assertEqual(reply.status, 405)
+                reply.read()
+                connection.close()
+                rows = P.H.json_lines(ledger.read_bytes())
+                payloads = [row for row in rows if row.get("event") == "payload"]
+                self.assertEqual(len(payloads), 1)
+                self.assertEqual(payloads[0]["sha256"], P.H.sha(body))
+                self.assertEqual(payloads[0]["bytes"], len(body))
+                self.assertTrue(payloads[0]["complete"])
+                self.assertEqual([row["method"] for row in rows if row.get("event") == "request"], ["POST", "GET"])
+            finally:
+                process.terminate()
+                process.communicate(timeout=5)
+
 if __name__ == "__main__":
     unittest.main()
