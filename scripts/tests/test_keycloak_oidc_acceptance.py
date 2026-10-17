@@ -41,6 +41,8 @@ class SamlNavigationDiagnosticsTests(unittest.TestCase):
         transient = {"final_location": "browser_error", "network_failures": [
             {"category": "net::ERR_NETWORK_CHANGED"}]}
         self.assertTrue(driver.retryable_login_transport(transient))
+        self.assertTrue(driver.retryable_login_transport(dict(transient, final_location="vendor")))
+        self.assertTrue(driver.retryable_login_transport(dict(transient, final_location="gateway_start")))
         for extra in ({"acs_status": 400}, {"acs_status": 303}, {"local_authorization_error": True},
                       {"validation_error_categories": ["signature"]},
                       {"vendor_error_categories": ["invalid username or password"]},

@@ -142,3 +142,57 @@ async fn scim_users_lifecycle_works_over_a_real_loopback_http_listener() -> anyh
     server.await??;
     Ok(())
 }
+
+#[tokio::test]
+async fn scim_filtered_pages_and_patch_failures_preserve_directory_state() -> anyhow::Result<()> {
+    let (state, token) = state()?;
+    let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
+    let base = format!("http://{}/scim/v2", listener.local_addr()?);
+    let server = tokio::spawn(async move { axum::serve(listener, app(state)).await.unwrap() });
+    let client = reqwest::Client::new();
+    let user = client
+        .post(format!("{base}/Users"))
+        .bearer_auth(&token)
+        .json(
+            &serde_json::json!({"externalId":"fixture-a","userName":"CaseSensitive","active":true}),
+        )
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    for (filter, count, total, size) in [
+        ("userName eq \"CaseSensitive\"", 1, 1, 1),
+        ("userName eq \"casesensitive\"", 1, 0, 0),
+        ("externalId eq \"fixture-a\"", 0, 1, 0),
+        ("id eq \"' OR 1=1 --\"", 100, 0, 0),
+    ] {
+        let page = client
+            .get(format!("{base}/Users"))
+            .bearer_auth(&token)
+            .query(&[("filter", filter.to_owned()), ("count", count.to_string())])
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<serde_json::Value>()
+            .await?;
+        assert_eq!(page["totalResults"], total);
+        assert_eq!(page["itemsPerPage"], size);
+    }
+    let uri = format!("{base}/Users/{}", user["id"].as_str().unwrap());
+    let invalid = client.patch(&uri).bearer_auth(&token).json(&serde_json::json!({"Operations":[
+        {"op":"replace","path":"active","value":false}, {"op":"replace","path":"roles","value":["Owner"]}]}))
+        .send().await?;
+    assert_eq!(invalid.status(), reqwest::StatusCode::BAD_REQUEST);
+    let unchanged = client
+        .get(&uri)
+        .bearer_auth(&token)
+        .send()
+        .await?
+        .json::<serde_json::Value>()
+        .await?;
+    assert_eq!(unchanged["active"], true);
+    server.abort();
+    let _ = server.await;
+    Ok(())
+}

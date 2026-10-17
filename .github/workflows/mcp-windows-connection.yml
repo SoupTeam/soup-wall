@@ -1,0 +1,82 @@
+name: Native Windows MCP connection acceptance
+
+on:
+  pull_request:
+    paths:
+      - 'crates/agentfw/**'
+      - 'scripts/test-windows-connection.py'
+      - 'scripts/ci-windows-connection.ps1'
+      - 'scripts/fixtures/connection_windows_server.py'
+      - 'scripts/tests/test_windows_connection.py'
+      - '.github/workflows/mcp-windows-connection.yml'
+      - 'Cargo.lock'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sou66-native-windows-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  standard-user-acceptance:
+    runs-on: windows-2022
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Prepare the pinned host in disposable runner storage
+        shell: pwsh
+        run: |
+          $directory = Join-Path $env:RUNNER_TEMP 'connection-host'
+          New-Item -ItemType Directory -Path $directory -ErrorAction Stop | Out-Null
+          $archive = Join-Path $directory 'claude.tgz'
+          Invoke-WebRequest -Uri 'https://registry.npmjs.org/@anthropic-ai/claude-code-win32-x64/-/claude-code-win32-x64-2.1.251.tgz' -OutFile $archive
+          $expected = '7d55c0bd2da508c2560ff95ccb3cda8b9a5c0d09e595d1a5f29c32190daf07172e17c2d2ffb9d50ea2cea9366ca0027e5432a79643e53ce272b434048531c731'
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA512).Hash.ToLowerInvariant() -ne $expected) {
+            throw 'Pinned vendor archive digest mismatch'
+          }
+          & tar -xf $archive -C $directory package/claude.exe package/LICENSE.md package/README.md
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned vendor archive extraction failed' }
+          $hostBinary = Join-Path $directory 'package/claude.exe'
+          $hostHash = '8d1229a281281b98fd2dee72b3253a704be4fce4d45207200cd32a9bb5a6c909'
+          if ((Get-FileHash -LiteralPath $hostBinary -Algorithm SHA256).Hash.ToLowerInvariant() -ne $hostHash) {
+            throw 'Pinned native host digest mismatch'
+          }
+          "CONNECTION_HOST_BINARY=$hostBinary" | Add-Content $env:GITHUB_ENV
+          "CONNECTION_HOST_SHA256=$hostHash" | Add-Content $env:GITHUB_ENV
+      - name: Build the selected native Windows source
+        shell: pwsh
+        run: |
+          & cargo build --locked -p agentfw --bin agentfw
+          if ($LASTEXITCODE -ne 0) { throw 'Native Agent build failed' }
+          & cargo test --locked -p agentfw --lib --no-run --message-format=json > "$env:RUNNER_TEMP/connection-build.jsonl"
+          if ($LASTEXITCODE -ne 0) { throw 'Native regression build failed' }
+          $artifacts = Get-Content "$env:RUNNER_TEMP/connection-build.jsonl" |
+            ForEach-Object { $_ | ConvertFrom-Json } |
+            Where-Object { $_.reason -eq 'compiler-artifact' -and $_.target.name -eq 'agentfw' -and $_.profile.test -and $_.executable }
+          if (@($artifacts).Count -ne 1) { throw 'Unique native test binary required' }
+          "CONNECTION_TEST_BINARY=$($artifacts.executable)" | Add-Content $env:GITHUB_ENV
+      - name: Check fixture ACL regression
+        run: python -B -m unittest discover -s scripts/tests -p test_windows_connection.py -v
+      - name: Verify native transactions and actual host as a disposable standard user
+        shell: pwsh
+        run: |
+          ./scripts/ci-windows-connection.ps1 -AgentBinary ./target/debug/agentfw.exe `
+            -TestBinary $env:CONNECTION_TEST_BINARY -PythonBinary (Get-Command python).Source `
+            -ClaudeBinary $env:CONNECTION_HOST_BINARY -ClaudeSha256 $env:CONNECTION_HOST_SHA256 `
+            -Commit ((& git rev-parse HEAD).Trim()) -OutputDirectory "$env:RUNNER_TEMP/connection-results"
+          if ($LASTEXITCODE -ne 0) { throw 'Standard-user connection and actual-host acceptance failed' }
+      - name: Retain native acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou66-native-windows-acceptance
+          path: ${{ runner.temp }}/connection-results/

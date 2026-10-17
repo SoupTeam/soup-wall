@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use crate::lifecycle::{sha256_file, Manager};
+use crate::lifecycle::{sha256_file, Manager, Record};
 
 const STATE: &str = "ownership.json";
 const SYSTEMCTL: &str = "/usr/bin/systemctl";
@@ -57,6 +57,7 @@ pub struct Preview {
     pub launcher: PathBuf,
     pub unit: String,
     pub starts_automatically: bool,
+    pub transaction_protocol: u32,
 }
 
 pub struct Service {
@@ -117,6 +118,7 @@ impl Service {
             launcher: self.launcher(),
             unit,
             starts_automatically: false,
+            transaction_protocol: 1,
         })
     }
 
@@ -177,10 +179,14 @@ impl Service {
         self.save(&record)?;
         drop(state_lock);
         let mut launcher = create_private(&record.launcher)?;
+        record.launcher_identity = Some(identity(&record.launcher)?);
+        self.save(&record)?;
         std::io::copy(&mut File::open(source)?, &mut launcher)?;
         launcher.set_permissions(fs::Permissions::from_mode(0o700))?;
         launcher.sync_all()?;
         let mut unit = create_private(&record.unit)?;
+        record.unit_identity = Some(identity(&record.unit)?);
+        self.save(&record)?;
         unit.write_all(preview.unit.as_bytes())?;
         unit.sync_all()?;
         record.launcher_identity = Some(identity(&record.launcher)?);
@@ -202,23 +208,30 @@ impl Service {
         manager_available()?;
         self.verify_remaining(&record)?;
         let shown = self.show()?;
-        if property(&shown, "LoadState") != "not-found" {
+        if record.phase == Phase::Installed {
+            self.idle()?;
             self.verify_loaded()?;
-            if record.phase == Phase::Installed {
-                self.stop_locked()?;
-            }
-            let shown = self.show()?;
-            ensure!(
-                property(&shown, "MainPID") == "0"
-                    && matches!(property(&shown, "ActiveState"), "inactive" | "failed"),
-                "stop the service before uninstalling it"
-            );
+            self.stop_locked()?;
+        } else {
+            // Interrupted installation/removal may leave an invalid fragment or
+            // a stale cached definition. Never stop an unidentified live unit.
+            ensure!(property(&shown, "MainPID") == "0"
+                && matches!(property(&shown, "ActiveState"), "inactive" | "failed")
+                && property(&shown, "DropInPaths").is_empty()
+                && property(&shown, "Transient") == "no"
+                && (property(&shown, "FragmentPath").is_empty()
+                    || property(&shown, "FragmentPath") == record.unit.to_str().context("unit path is not UTF-8")?),
+                "incomplete service has a live process or foreign configuration; inspect before removal");
         }
         // Stop may wait for the Agent. Revalidate ownership after that wait,
         // then again immediately before unlinking each recorded artifact.
         self.verify_remaining(&record)?;
-        record.phase = Phase::Removing;
-        self.save(&record)?;
+        // Keep Installing while deleting a partial copy: its recorded inode is
+        // the cleanup authority even when the content never reached its hash.
+        if record.phase != Phase::Installing {
+            record.phase = Phase::Removing;
+            self.save(&record)?;
+        }
         for (path, hash, expected) in [
             (
                 &record.unit,
@@ -232,7 +245,7 @@ impl Service {
             ),
         ] {
             if exists(path)? {
-                verify_file(path, hash, expected)?;
+                verify_removable(record.phase, path, hash, expected)?;
                 fs::remove_file(path)?;
             }
         }
@@ -242,8 +255,131 @@ impl Service {
         Ok(())
     }
 
+    fn require_transaction_launcher(&self) -> Result<()> {
+        self.installed()?;
+        let home = self.home.to_str().context("profile path is not UTF-8")?;
+        let mut command = Command::new(self.launcher());
+        command.args(["service", "--home", home, "preview"]);
+        let output = command_output(command, false)
+            .context("installed launcher predates service transactions; stop, uninstall and reinstall the service with this CLI first")?;
+        let preview: serde_json::Value = serde_json::from_str(&output)?;
+        ensure!(preview["transaction_protocol"] == 1,
+            "installed launcher predates service transactions; stop, uninstall and reinstall the service with this CLI first");
+        Ok(())
+    }
+
+    fn idle(&self) -> Result<()> {
+        let (state, _) = self.manager().service_snapshot()?;
+        ensure!(
+            state.operation.is_none() && state.pending_stage.is_none(),
+            "recover the interrupted operation first"
+        );
+        Ok(())
+    }
+
+    fn running_intent(&self) -> Result<bool> {
+        self.installed()?;
+        let shown = self.verify_loaded()?;
+        if self.verified_health()?.is_some() {
+            return Ok(true);
+        }
+        ensure!(
+            property(&shown, "MainPID") == "0" && property(&shown, "ActiveState") == "inactive",
+            "service is not verified running or explicitly stopped; recover it first"
+        );
+        self.manager().service_clear_dead()?;
+        Ok(false)
+    }
+
+    pub fn upgrade(&self, version: &str, candidate: &Path, digest: &str) -> Result<Record> {
+        let _operation = self.operation_lock()?;
+        self.idle()?;
+        self.require_transaction_launcher()?;
+        let running = self.running_intent()?;
+        // Verify and stage before stopping the healthy service.
+        let target = self
+            .manager()
+            .service_prepare_upgrade(version, candidate, digest, running)?;
+        self.switch_transaction(&target)?;
+        Ok(target)
+    }
+
+    pub fn rollback(&self) -> Result<Record> {
+        let _operation = self.operation_lock()?;
+        self.idle()?;
+        self.require_transaction_launcher()?;
+        let running = self.running_intent()?;
+        let target = self.manager().service_prepare_rollback(running)?;
+        self.switch_transaction(&target)?;
+        Ok(target)
+    }
+
+    pub fn recover(&self) -> Result<()> {
+        let _operation = self.operation_lock()?;
+        self.installed()?;
+        self.verify_loaded()?;
+        self.require_transaction_launcher()?;
+        self.manager().service_recover_staging()?;
+        let (state, _) = self.manager().service_snapshot()?;
+        if state.operation.is_some() {
+            return self.restore_transaction().context(
+                "service recovery is incomplete; resolve the conflict and retry lifecycle recover",
+            );
+        }
+        let shown = self.verify_loaded()?;
+        if property(&shown, "MainPID") != "0" {
+            ensure!(
+                self.verified_health()?.is_some(),
+                "live service identity cannot be verified; refusing recovery"
+            );
+        } else {
+            self.manager().service_clear_dead()?;
+        }
+        self.manager()
+            .verify(state.active.as_ref().context("Agent is not installed")?)
+    }
+
+    fn switch_transaction(&self, target: &Record) -> Result<()> {
+        let (state, _) = self.manager().service_snapshot()?;
+        let operation = state.operation.context("no service transaction")?;
+        let changed = (|| -> Result<()> {
+            self.stop_locked()?;
+            self.manager().service_select(target)?;
+            if operation.was_running {
+                self.start_locked()?;
+            }
+            Ok(())
+        })();
+        if let Err(error) = changed {
+            self.restore_transaction().context(
+                "service update failed and recovery is incomplete; run lifecycle recover",
+            )?;
+            bail!("service update failed and the original version was restored: {error:#}");
+        }
+        self.manager().service_finish()
+    }
+
+    fn restore_transaction(&self) -> Result<()> {
+        let (state, _) = self.manager().service_snapshot()?;
+        let operation = state
+            .operation
+            .context("no interrupted service transaction")?;
+        // Stop also cancels a queued automatic restart after a failed candidate.
+        self.stop_locked()?;
+        self.manager().service_select(&operation.from)?;
+        if operation.was_running {
+            let shown = self.verify_loaded()?;
+            if property(&shown, "ActiveState") == "failed" {
+                control(&["reset-failed", &self.name])?;
+            }
+            self.start_locked()?;
+        }
+        self.manager().service_finish()
+    }
+
     pub fn start(&self) -> Result<()> {
         let _operation = self.operation_lock()?;
+        self.idle()?;
         self.start_locked()
     }
 
@@ -275,6 +411,7 @@ impl Service {
 
     pub fn stop(&self) -> Result<()> {
         let _operation = self.operation_lock()?;
+        self.idle()?;
         self.stop_locked()
     }
 
@@ -285,7 +422,8 @@ impl Service {
         if main_pid != 0 {
             let (_, health) = self.manager().service_snapshot()?;
             ensure!(
-                health.is_some_and(|h| h.pid == main_pid),
+                health.is_some_and(|h| h.pid == main_pid)
+                    || self.preparing_launcher(&shown, main_pid)?,
                 "live process identity cannot be verified; refusing stop"
             );
         }
@@ -299,8 +437,37 @@ impl Service {
         self.manager().service_clear_dead()
     }
 
+    fn preparing_launcher(&self, shown: &BTreeMap<String, String>, pid: u32) -> Result<bool> {
+        // A restart can be in the owned launcher before any Agent/HTTP identity
+        // exists. Confirm executable inode and the exact unit cgroup; never infer
+        // ownership from a PID or a startup state alone.
+        if !matches!(property(shown, "SubState"), "start" | "start-post") {
+            return Ok(false);
+        }
+        let record = self.installed()?;
+        let Some(expected) = record.launcher_identity else {
+            return Ok(false);
+        };
+        let exe = format!("/proc/{pid}/exe");
+        let Ok(path) = fs::read_link(&exe) else {
+            return Ok(false);
+        };
+        if path != self.launcher() {
+            return Ok(false);
+        }
+        let metadata = fs::metadata(&exe)?;
+        let group = property(shown, "ControlGroup");
+        Ok(metadata.dev() == expected.device
+            && metadata.ino() == expected.inode
+            && !group.is_empty()
+            && fs::read_to_string(format!("/proc/{pid}/cgroup"))?
+                .lines()
+                .any(|line| line.rsplit_once(':').is_some_and(|(_, path)| path == group)))
+    }
+
     pub fn restart(&self) -> Result<()> {
         let _operation = self.operation_lock()?;
+        self.idle()?;
         self.stop_locked()?;
         self.start_locked()
     }
@@ -422,9 +589,37 @@ impl Service {
             .service_shutdown(property(&shown, "MainPID").parse()?)
     }
 
+    pub fn status(&self) -> Result<crate::lifecycle::Status> {
+        let (state, _) = self.manager().service_snapshot()?;
+        let observation = self.inspect();
+        let running = observation["ready"] == true;
+        let interrupted = state.operation.is_some() || state.pending_stage.is_some();
+        let detail = if interrupted {
+            "interrupted operation; run lifecycle recover".into()
+        } else if let Some(error) = observation["error"].as_str() {
+            error.to_owned()
+        } else if running {
+            "running and verified by systemd".into()
+        } else {
+            "service is not verified ready; inspect service status".into()
+        };
+        Ok(crate::lifecycle::Status {
+            active: state.active,
+            previous: state.previous,
+            process: state.process,
+            running,
+            interrupted,
+            detail,
+        })
+    }
+
     pub fn inspect(&self) -> serde_json::Value {
         let mut report = serde_json::json!({"format_version":1, "home":self.home, "unit_name":self.name, "registered":registered(&self.home), "ready":false});
         let observed = (|| -> Result<()> {
+            let (state, _) = self.manager().service_snapshot()?;
+            report["interrupted"] =
+                serde_json::json!(state.operation.is_some() || state.pending_stage.is_some());
+            report["transaction"] = serde_json::to_value(&state.operation)?;
             let record = self.load()?;
             report["phase"] = serde_json::to_value(record.phase)?;
             self.verify(&record)?;
@@ -522,7 +717,7 @@ impl Service {
             ),
         ] {
             if exists(path)? {
-                verify_file(path, hash, id)?;
+                verify_removable(record.phase, path, hash, id)?;
             } else {
                 ensure!(
                     record.phase != Phase::Installed,
@@ -720,6 +915,24 @@ fn verify_file(path: &Path, hash: &str, expected: Option<&Identity>) -> Result<(
     Ok(())
 }
 
+fn verify_removable(
+    phase: Phase,
+    path: &Path,
+    hash: &str,
+    expected: Option<&Identity>,
+) -> Result<()> {
+    if let (Phase::Installing, Some(expected)) = (phase, expected) {
+        let actual = identity(path)?;
+        ensure!(
+            actual.device == expected.device && actual.inode == expected.inode,
+            "partially installed service file was replaced; refusing cleanup"
+        );
+        Ok(())
+    } else {
+        verify_file(path, hash, expected)
+    }
+}
+
 fn manager_available() -> Result<()> {
     systemctl(&["show", "--property=Version"], false)
         .context("user systemd manager is unavailable; run in a Linux user session")?;
@@ -730,9 +943,15 @@ fn control(args: &[&str]) -> Result<()> {
 }
 
 fn systemctl(args: &[&str], allow_missing: bool) -> Result<String> {
-    let mut child = Command::new(SYSTEMCTL)
+    let mut command = Command::new(SYSTEMCTL);
+    command
         .args(["--user", "--no-pager", "--no-ask-password"])
-        .args(args)
+        .args(args);
+    command_output(command, allow_missing)
+}
+
+fn command_output(mut command: Command, allow_missing: bool) -> Result<String> {
+    let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -814,21 +1033,30 @@ mod tests {
         fs::create_dir(temp.path().join("service")).unwrap();
         fs::write(temp.path().join("service/ownership.json"), "invalid").unwrap();
         let manager = Manager::new(temp.path());
-        assert!(manager
-            .start()
-            .unwrap_err()
-            .to_string()
-            .contains("registered service"));
+        assert!(manager.start().is_err());
         assert!(manager
             .remove()
             .unwrap_err()
             .to_string()
             .contains("registered service"));
-        assert!(manager
-            .recover()
-            .unwrap_err()
-            .to_string()
-            .contains("registered service"));
+        assert!(manager.recover().is_err());
+    }
+
+    #[test]
+    fn incomplete_copy_cleanup_requires_the_recorded_inode() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("partial");
+        fs::write(&path, b"").unwrap();
+        let id = identity(&path).unwrap();
+        fs::write(&path, b"partial copy").unwrap();
+        let expected_hash = digest(b"complete copy");
+        assert!(verify_removable(Phase::Installed, &path, &expected_hash, Some(&id)).is_err());
+        assert!(verify_removable(Phase::Installing, &path, &expected_hash, Some(&id)).is_ok());
+        fs::rename(&path, temp.path().join("original")).unwrap();
+        fs::write(&path, b"partial copy").unwrap();
+        assert!(verify_removable(Phase::Installing, &path, &expected_hash, Some(&id)).is_err());
+        // Old incomplete records without an inode only authorize a full hash match.
+        assert!(verify_removable(Phase::Installing, &path, &expected_hash, None).is_err());
     }
 
     #[test]

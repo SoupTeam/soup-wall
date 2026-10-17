@@ -73,7 +73,7 @@ def retryable_login_transport(observation):
     # Restarting the owned PostgreSQL Docker container can briefly change the
     # runner's network interfaces. Only retry a browser transport failure before
     # any ACS response; authorization/signature failures must remain failures.
-    return (observation.get("final_location") == "browser_error"
+    return (observation.get("final_location") in ("browser_error", "vendor", "gateway_start")
             and "acs_status" not in observation
             and not observation.get("local_authorization_error")
             and not observation.get("validation_error_categories")
@@ -406,48 +406,51 @@ def run(args):
                     "workspace_id": workspace or scope["workspace_id"]})
                 report["phase"] = "saml-browser-login-" + user["username"]
                 output.publish(report)
-                page.goto(url)
-                page.locator("#username").fill(user["username"])
-                page.locator("#password").fill(user["password"])
-                page.locator("#kc-login").click()
-                if capture is not None:
-                    page.wait_for_url(callback)
-                    page.get_by_text("Synthetic callback held", exact=True).wait_for()
-                    if "SAMLResponse" not in capture.get("fields", {}):
-                        raise RuntimeError("genuine vendor callback absent")
-                elif success:
-                    try:
+                try:
+                    page.goto(url)
+                    page.locator("#username").fill(user["username"])
+                    page.locator("#password").fill(user["password"])
+                    page.locator("#kc-login").click()
+                    if capture is not None:
+                        page.wait_for_url(callback)
+                        page.get_by_text("Synthetic callback held", exact=True).wait_for()
+                        if "SAMLResponse" not in capture.get("fields", {}):
+                            raise RuntimeError("genuine vendor callback absent")
+                    elif success:
                         page.wait_for_url(gateway_base + "/customer")
                         page.locator("#identity").wait_for(state="visible")
                         page.locator("#role").wait_for(state="visible")
-                    except Exception:
-                        # Keep bounded diagnostics, never cookies, assertions,
-                        # raw error text or private runtime logs in evidence.
-                        observation["final_location"] = navigation_location(page.url, gateway_base, vendor_base)
-                        observation["at_acs"] = page.url == callback
-                        observation["at_console"] = page.url == gateway_base + "/customer"
-                        observation["at_vendor"] = page.url.startswith(vendor_base + "/")
+                    else:
+                        page.wait_for_url(callback)
+                        page.get_by_text("SAML login could not be completed", exact=False).wait_for()
+                except Exception:
+                    # Keep bounded diagnostics, never cookies, assertions,
+                    # raw error text or private runtime logs in evidence.
+                    observation["final_location"] = navigation_location(page.url, gateway_base, vendor_base)
+                    observation["at_acs"] = page.url == callback
+                    observation["at_console"] = page.url == gateway_base + "/customer"
+                    observation["at_vendor"] = page.url.startswith(vendor_base + "/")
+                    try:
                         visible = page.locator("body").inner_text(timeout=3000).lower()
-                        observation["vendor_error_categories"] = [label for label in (
-                            "invalid username or password", "invalid user", "account is disabled", "account is not fully set up",
-                            "expired", "timed out", "cookie", "invalid requester", "invalid signature", "unexpected error",
-                            "verify your email", "update password", "update account information") if label in visible]
-                        log_text = (directory / "gateway.log").read_bytes()[log_offset:].decode(errors="replace").lower()
-                        last = log_text.rsplit("saml response validation failed", 1)
-                        observation["validation_error_categories"] = [word for word in
-                            ("expired", "signature", "audience", "issuer", "destination", "recipient", "request", "replay", "notbefore", "not yet valid")
-                            if len(last) == 2 and word in last[-1]]
-                        observation["local_authorization_error"] = "failed to authorize saml identity" in log_text
-                        if network_retry == 0 and retryable_login_transport(observation):
-                            report.setdefault("browser_transport_retries", []).append(observation)
-                            output.publish(report)
-                            page.close()
-                            return login(ctx, user, organization, workspace, success, capture, network_retry=1)
-                        report["failed_login"] = observation
-                        raise
-                else:
-                    page.wait_for_url(callback)
-                    page.get_by_text("SAML login could not be completed", exact=False).wait_for()
+                    except Exception:
+                        visible = ""
+                    observation["vendor_error_categories"] = [label for label in (
+                        "invalid username or password", "invalid user", "account is disabled", "account is not fully set up",
+                        "expired", "timed out", "cookie", "invalid requester", "invalid signature", "unexpected error",
+                        "verify your email", "update password", "update account information") if label in visible]
+                    log_text = (directory / "gateway.log").read_bytes()[log_offset:].decode(errors="replace").lower()
+                    last = log_text.rsplit("saml response validation failed", 1)
+                    observation["validation_error_categories"] = [word for word in
+                        ("expired", "signature", "audience", "issuer", "destination", "recipient", "request", "replay", "notbefore", "not yet valid")
+                        if len(last) == 2 and word in last[-1]]
+                    observation["local_authorization_error"] = "failed to authorize saml identity" in log_text
+                    if network_retry == 0 and retryable_login_transport(observation):
+                        report.setdefault("browser_transport_retries", []).append(observation)
+                        output.publish(report)
+                        page.close()
+                        return login(ctx, user, organization, workspace, success, capture, network_retry=1)
+                    report["failed_login"] = observation
+                    raise
                 return page
 
             def browser_fetch(page, path, method="GET", headers=None, body=None):

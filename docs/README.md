@@ -87,3 +87,5 @@ Reviewed aggregates and explanatory records are retained under
 [populated restore checkpoint](operations/evidence/POPULATED_RESTORE_2026-10-05.md).
 Keep these records separate from onboarding instructions so their versions,
 failures and limitations remain reviewable.
+
+- [SCIM directory client interoperability](operations/SCIM_DIRECTORY.md): bounded discovery/filter/PATCH profile and genuine client lifecycle on SQLite/PostgreSQL.
