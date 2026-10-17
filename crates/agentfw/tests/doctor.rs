@@ -234,3 +234,53 @@ fn real_owned_linux_install_reaches_authenticated_ready_without_host_execution()
         .iter()
         .any(|v| v["reason_code"] == "shadow_mode"));
 }
+
+#[test]
+fn cancellation_before_completion_never_publishes_support_bundle() {
+    use std::io::ErrorKind;
+    use std::net::TcpListener;
+    use std::time::{Duration, Instant};
+    let work = tempfile::tempdir().unwrap();
+    let home = work.path().join(".agentfw");
+    std::fs::create_dir(&home).unwrap();
+    std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    private(&home.join("config.yaml"), format!("enforce: true\nport: {port}\n").as_bytes());
+    private(&home.join("token"), b"private-fixture-token");
+    let out_parent = work.path().join("private");
+    std::fs::create_dir(&out_parent).unwrap();
+    std::fs::set_permissions(&out_parent, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let bundle = out_parent.join("bundle");
+    let mut child = Command::new(env!("CARGO_BIN_EXE_agentfw"))
+        .arg("doctor")
+        .arg("--json")
+        .arg("--home")
+        .arg(&home)
+        .arg("--support-bundle")
+        .arg(&bundle)
+        .current_dir(work.path())
+        .spawn()
+        .unwrap();
+    // Bound the wait for the owned listener; never sleep until a remote timeout.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let opened = loop {
+        match listener.accept() {
+            Ok((stream, _)) => break Some(stream),
+            Err(err) if err.kind() == ErrorKind::WouldBlock && Instant::now() < deadline => {
+                if child.try_wait().unwrap().is_some() {
+                    break None;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            _ => break None,
+        }
+    };
+    // Keep the local probe pending; cancel before reporting or export.
+    assert!(opened.is_some(), "doctor never reached the owned listener");
+    child.kill().unwrap();
+    assert!(!child.wait().unwrap().success());
+    assert!(!bundle.exists());
+    assert_eq!(std::fs::read_dir(&out_parent).unwrap().count(), 0);
+}
