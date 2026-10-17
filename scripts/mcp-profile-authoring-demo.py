@@ -94,9 +94,11 @@ def real_collector_proof(binary,root,compiled,check):
     policy=home/"policy.yaml"
     policy.write_text("default: allow\n")
     conf=home/".agentfw/config.yaml"
-    dump(conf,{"port":port,"enforce":True,"policy":str(policy),"native":{
-        "registry_path":str(compiled/"registry.json"),
-        "registry_sha256":digest(compiled/"registry.json")}})
+    generated=json.loads((compiled/"native-config.json").read_text())["native"]
+    check("daemon-consumes-generated-native-config",
+          generated["registry_path"]==str(compiled/"registry.json")
+          and generated["registry_sha256"]==digest(compiled/"registry.json"))
+    dump(conf,{"port":port,"enforce":True,"policy":str(policy),"native":generated})
     fixture=ROOT/"scripts/fixtures/mcp_profile_author_server.py"
     emitter=env.copy()
     emitter["AGENTFW_TEST_CLASSIFIER_READ"]="1"
@@ -196,9 +198,11 @@ def real_create_file_proof(binary,root,run,check):
     port=available_port()
     policy_path=home/"policy.yaml"
     policy_path.write_text("agent_policies: []\ndefault: allow\n")
+    generated=json.loads((compiled/"native-config.json").read_text())["native"]
+    check("write-agent-consumes-generated-native-config",
+          generated["registry_sha256"]==digest(compiled/"registry.json"))
     dump(home/".agentfw/config.yaml",{"port":port,"enforce":True,
-        "policy":str(policy_path),"native":{"registry_path":str(compiled/"registry.json"),
-            "registry_sha256":digest(compiled/"registry.json")}})
+        "policy":str(policy_path),"native":generated})
     collector_env=env.copy()
     collector_env.update(AGENTFW_CLASSIFIER="rule-baseline",
         AGENTFW_RULE_BASELINE=str(classifier),
@@ -292,6 +296,10 @@ def main():
         valid=run("validate","--snapshot",source,"--declarations",decl,"--example",example)
         check("typed-nested-input",valid["example"]["admitted"] is True)
         run("compile","--snapshot",source,"--declarations",decl,"--out",profile)
+        check("native-config-generated-from-typed-config",
+              json.loads((profile/"native-config.json").read_text())["native"]
+              == {"registry_path":str(profile/"registry.json"),
+                  "registry_sha256":digest(profile/"registry.json")})
         reg_bytes=(profile/"registry.json").read_bytes()
         reg=json.loads(reg_bytes)
         check("native-registry-consumable",reg["contract_version"]=="sw-native/1"
@@ -347,6 +355,19 @@ def main():
         link.symlink_to(source)
         run("validate","--snapshot",link,"--declarations",decl,success=False)
         check("symlink-input-rejected",True)
+        duplicate=root/"duplicate-root.json"
+        duplicate.write_text('{"format":"sw-mcp/operator-discovery/1",'
+                             '"format":"sw-mcp/operator-discovery/1",'
+                             '"server_id":"sou65-owned","server_version":"1.0","tools":[]}')
+        duplicate.chmod(0o600)
+        run("validate","--snapshot",duplicate,"--declarations",decl,success=False)
+        check("duplicate-json-keys-refused",True)
+        changed_pin=root/"changed-pin.json"
+        changed_review=json.loads(decl.read_text())
+        changed_review["tools"][0]["schema_sha256"]="0"*64
+        dump(changed_pin,changed_review)
+        run("validate","--snapshot",source,"--declarations",changed_pin,success=False)
+        check("changed-schema-pin-refused",True)
         bad=root/"bad.json"
         dump(bad,{"tool":"read_document","arguments":{"name":"inventory","unexpected":True}})
         run("validate","--snapshot",source,"--declarations",decl,"--example",bad,success=False)
