@@ -51,11 +51,13 @@ The private Git policy refuses Medium/High injection findings. A bare 40-digit
 Git object ID triggers the detector's Low long-token heuristic and is not alone
 an instruction. No result bytes are stripped or trusted to avoid inspection.
 Instruction override and prompt-exfiltration controls remain refused, followed
-by a useful hash-bearing read. This is an explicitly read-only scenario policy,
-not a replacement for a user's general Agent policy: the 40-session general
-corpus retains all 19 attack interruptions but intentionally interrupts six
-benign write/network sessions outside this profile. Its general-purpose policy
-gate therefore fails; the unchanged shipped policy passes all 40 sessions.
+by a useful hash-bearing read. The private policy preserves the shipped Agent
+rules and strengthens inspected-result injection to Medium/Deny. Both policies
+pass the unchanged 40-session general corpus (19 attacks and 21 benign sessions).
+Read-only Git authority is independently bounded by profile/registry admission,
+argument validation and the mandatory sandbox; the policy does not grant a
+mutating, remote or unsupported tool an execution path. Installation never
+replaces an existing user's policy.
 The existing filesystem profile continues to require its original structured
 result contract. Cancellation never claims to roll back dispatched work.
 

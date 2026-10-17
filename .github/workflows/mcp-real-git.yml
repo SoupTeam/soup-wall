@@ -80,6 +80,7 @@ jobs:
           python3 -B -m unittest discover -s rule_baseline -p 'test_*.py' -v
           python3 eval/eval_runner.py eval/fixtures/soup_task1_evaluation_cases_v0.4.json --classifier-path rule_baseline/git_readonly_v1 --out-dir target/sou68-core-evaluation
           python3 eval/eval_runner.py eval/fixtures/soup_task1_mixed_actions_urtisto_v0.1.json eval/fixtures/soup_task1_benign_comparison_urtisto_v0.1.json --classifier-path rule_baseline/git_readonly_v1 --out-dir target/sou68-mixed-evaluation
+          cargo run --locked --release -p soup-wall-bench -- --agent crates/bench/corpora/agent_sessions.jsonl --policy profiles/mcp/git-readonly-v1/policy.yaml
       - name: Actual Git server and independent OS isolation
         shell: bash
         run: |
