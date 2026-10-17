@@ -410,6 +410,11 @@ def real_https_get_proof(binary, root, run, check):
             return json.loads(data) if data else None
 
         first = call("https-useful", "https_get", {"url": url})
+        if first is None or "result" not in first or "red_widgets" not in json.dumps(first):
+            # Only owned fixture bytes; no URL, private key or auth header.
+            print("SOU65_HTTPS_DEBUG receipt="+json.dumps(first,ensure_ascii=False)[:650]
+                  +" receiver_events="+str([r.get("event") for r in records(ledger)]),
+                  file=sys.stderr)
         check("https-real-useful-fetch-returned",
               first is not None and "result" in first
               and "red_widgets" in json.dumps(first))
