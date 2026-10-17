@@ -134,3 +134,72 @@ fn symlink_and_public_inputs_refused_without_unsafe_fallback() {
         .iter()
         .any(|c| c["reason_code"] == "config_missing_or_unsafe"));
 }
+
+
+#[test]
+fn real_owned_linux_install_reaches_authenticated_ready_without_host_execution() {
+    use agentfw::lifecycle::{sha256_file, Manager};
+    use std::net::TcpListener;
+    struct Cleanup(Manager);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = self.0.stop();
+        }
+    }
+
+    let scratch = tempfile::tempdir().unwrap();
+    let home = scratch.path().join(".agentfw");
+    std::fs::create_dir(&home).unwrap();
+    std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let available = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = available.local_addr().unwrap().port();
+    drop(available);
+    let config = format!("enforce: true\nport: {port}\n");
+    private(&home.join("config.yaml"), config.as_bytes());
+
+    let manager = Manager::new(&home);
+    let original_binary = Path::new(env!("CARGO_BIN_EXE_agentfw"));
+    let binary_digest = sha256_file(original_binary).unwrap();
+    let installed = manager
+        .install("doctor-one", original_binary, &binary_digest)
+        .unwrap();
+    assert_eq!(installed.digest, binary_digest);
+    let cleanup = Cleanup(manager);
+    cleanup.0.start().unwrap();
+    let installed_bin = home.join("versions").join("agentfw-doctor-one");
+    assert!(installed_bin.is_file());
+    let config_before = std::fs::read(home.join("config.yaml")).unwrap();
+    let token_before = std::fs::read(home.join("token")).unwrap();
+    let state_before = std::fs::read(home.join("versions/lifecycle.json")).unwrap();
+
+    let output = doctor(
+        &home,
+        scratch.path(),
+        &["--agent", installed_bin.to_str().unwrap()],
+    );
+    assert_eq!(output.status.code(), Some(0), "{}", String::from_utf8_lossy(&output.stderr));
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["setup"], "ready");
+    assert_eq!(report["active_host_call_protection"], "unknown");
+    for reason in ["runtime_identity_verified", "runtime_matches_managed_process", "enforce_requested_on_disk"] {
+        assert!(report["checks"].as_array().unwrap().iter().any(|v| v["reason_code"] == reason),
+            "missing {reason}: {report}");
+    }
+    assert_eq!(std::fs::read(home.join("config.yaml")).unwrap(), config_before);
+    assert_eq!(std::fs::read(home.join("token")).unwrap(), token_before);
+    assert_eq!(std::fs::read(home.join("versions/lifecycle.json")).unwrap(), state_before);
+
+    // A modified on-disk setting must not silently become a claimed runtime
+    // fact. The actual running owned daemon remains on the old configuration.
+    private(&home.join("config.yaml"), format!("enforce: false\nport: {port}\n").as_bytes());
+    let negative = doctor(
+        &home,
+        scratch.path(),
+        &["--agent", installed_bin.to_str().unwrap()],
+    );
+    assert_eq!(negative.status.code(), Some(3));
+    let negative_report: serde_json::Value = serde_json::from_slice(&negative.stdout).unwrap();
+    assert_eq!(negative_report["active_host_call_protection"], "unknown");
+    assert!(negative_report["checks"].as_array().unwrap().iter().any(|v| v["reason_code"] == "host_config_drift"));
+    assert!(negative_report["checks"].as_array().unwrap().iter().any(|v| v["reason_code"] == "shadow_mode"));
+}
