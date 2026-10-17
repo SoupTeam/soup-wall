@@ -122,6 +122,10 @@ enum Authority {
         workspace: PathBuf,
         exact_url: String,
         approved_addresses: Vec<IpAddr>,
+        #[serde(default)]
+        private_endpoint: Option<crate::mcp::https_get::PrivateEndpointException>,
+        #[serde(default)]
+        root_certificate_pem: Option<String>,
         classifier_sha256: String,
     },
 }
@@ -410,6 +414,8 @@ fn policy_for(
             workspace,
             exact_url,
             approved_addresses,
+            private_endpoint,
+            root_certificate_pem,
             classifier_sha256,
         } => {
             ensure!(
@@ -430,9 +436,12 @@ fn policy_for(
             let net = crate::mcp::https_get::HttpsGetAuthority {
                 exact_url: exact_url.clone(),
                 approved_addresses: approved_addresses.clone(),
-                private_endpoint: None,
-                root_certificate_pem: None,
+                private_endpoint: private_endpoint.clone(),
+                root_certificate_pem: root_certificate_pem.clone(),
             };
+            // The selected native executor verifies public CA/hostname normally.
+            // An explicit private fixture exception remains a reviewed typed
+            // authority, never inferred from descriptions, DNS, or schemas.
             net.validate()
                 .map_err(|e| anyhow::anyhow!("HTTPS authority invalid: {}", e.code))?;
             let p = resource::Policy {
