@@ -247,6 +247,16 @@ pub fn compile(snapshot_path:&Path,declaration_path:&Path,directory:&Path)->Resu
     #[cfg(not(unix))] {anyhow::bail!("initial compiler requires Unix private output directories")}
     let publication=(||->Result<()>{
         private_write(&directory.join("registry.json"),&canonical(&registry))?;
+        // Emit the actual typed native configuration fragment. This is not an
+        // installation or a mutation of the host's selected configuration.
+        let native = crate::config::NativeCfg {
+            registry_path: directory.join("registry.json"),
+            registry_sha256: summary["registry_sha256"].as_str()
+                .context("compiled registry digest absent")?.into(),
+            approval: None,
+        };
+        private_write(&directory.join("native-config.json"),
+            &canonical(&json!({"native":native})))?;
         private_write(&directory.join("report.json"),&canonical(&summary))?;
         Ok(())
     })();
