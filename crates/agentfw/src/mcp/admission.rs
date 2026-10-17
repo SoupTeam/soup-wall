@@ -1249,6 +1249,7 @@ impl<'a> Collector<'a> {
                 CONTRACT
                     | crate::native::resource::CONTRACT
                     | crate::native::resource::CREATE_CONTRACT
+                    | crate::native::resource::POST_CONTRACT
                     | crate::native::resource::NETWORK_CONTRACT
                     | crate::native::resource::WINDOWS_READ_CONTRACT
                     | crate::native::resource::WINDOWS_CREATE_CONTRACT
@@ -1714,7 +1715,14 @@ where
                         let installed = collector.config.native.registry.tools.iter().find(|tool| tool.name == name).context("MCP call tool is not installed")?;
                         let resource_reply = installed.resource_policy.is_some()
                             || collector.config.resource_profiles.contains_key(name)
-                            || name == "create_file" || name == "https_get";
+                            || name == "create_file" || name == "https_get" || name == "https_post";
+                        if name == "https_post"
+                            && !installed.resource_policy.as_ref().is_some_and(|policy| policy.is_https_post())
+                        {
+                            write_resource_reply(client, host, true,
+                                &withheld(request_id, "invocation", &json!(["resource_https_profile_required"]))).await?;
+                            continue;
+                        }
                         if name == "https_get"
                             && !installed.resource_policy.as_ref().is_some_and(|policy| policy.is_https_get())
                         {
@@ -1782,7 +1790,7 @@ where
                                     prepared_windows_read = Some(prepared);
                                 }
                             }
-                            if policy.is_create_file() || policy.is_https_get() || policy.is_windows_handles() {
+                            if policy.is_create_file() || policy.is_https_get() || policy.is_https_post() || policy.is_windows_handles() {
                                 if collector.config.server_id != policy.profile.server_id {
                                     write_resource_reply(client, host, true,
                                         &withheld(request_id, "invocation", &json!(["resource_server_identity_mismatch"]))).await?;
@@ -1820,7 +1828,7 @@ where
                                     continue;
                                 }
                             }
-                            if (policy.is_create_file() || policy.is_https_get() || policy.is_windows_handles())
+                            if (policy.is_create_file() || policy.is_https_get() || policy.is_https_post() || policy.is_windows_handles())
                                 && collector.config.classifier.as_ref()
                                     .and_then(|classifier| classifier.revision())
                                     != Some(policy.classifier_sha256.as_str())
@@ -1976,6 +1984,16 @@ where
                                         }
                                     }
                                 } else { None },
+                                post: if policy.is_https_post() {
+                                    match crate::native::resource::https_post_binding(policy, &args) {
+                                        Ok(binding) => Some(binding),
+                                        Err(reason) => {
+                                            write_resource_reply(client, host, true,
+                                                &withheld(request_id, "invocation", &json!([reason]))).await?;
+                                            continue;
+                                        }
+                                    }
+                                } else { None },
                             };
                             Some((admission, derived))
                         } else if collector.config.resource_profiles.contains_key(name) {
@@ -2072,7 +2090,8 @@ where
                         #[cfg(windows)]
                         let mut resource_admission = resource_admission;
                         let https_get = installed.resource_policy.as_ref().is_some_and(|policy| policy.is_https_get());
-                        if https_get && !cfg!(target_os = "linux") {
+                        let https_post = installed.resource_policy.as_ref().is_some_and(|policy| policy.is_https_post());
+                        if (https_get || https_post) && !cfg!(target_os = "linux") {
                             write_resource_reply(client, host, true,
                                 &withheld(request_id, "invocation", &json!(["resource_https_platform_unsupported"]))).await?;
                             continue;
@@ -2090,7 +2109,7 @@ where
                         }
                         #[cfg(unix)]
                         if let Some((_, ref derived)) = resource_admission.as_ref()
-                            .filter(|_| !https_get) {
+                            .filter(|_| !https_get && !https_post) {
                             let policy = installed.resource_policy.as_ref().unwrap();
                             if policy.is_windows_handles() {
                                 let reason = if policy.is_windows_create() {
@@ -2292,6 +2311,79 @@ where
                                     "result_kind":result_kind,"delivery":"mcp_host","content":result_content,
                                     "expected_binding_sha256":receipt["binding_sha256"]
                                 }))).await?;
+                            if result_receipt["release"] != true {
+                                let mut reasons = result_receipt["reason_codes"].as_array().cloned().unwrap_or_default();
+                                if request_issued { reasons.push(json!("resource_https_request_may_have_been_issued")); }
+                                write_resource_reply(client, host, true,
+                                    &withheld(request_id,"result",&json!(reasons))).await?;
+                            } else {
+                                write_resource_reply(client, host, true, &raw_response).await?;
+                            }
+                            continue;
+                        }
+                        if https_post {
+                            let policy = installed.resource_policy.as_ref().expect("network policy selected");
+                            let bound = resource_admission.as_ref().and_then(|(admission, _)| admission.post.as_ref())
+                                .context("network authority missing")?;
+                            // Recompute the complete immutable policy/arguments authority
+                            // after actual native Allow, immediately before dispatch.
+                            ensure!(&crate::native::resource::https_post_binding(policy, &args)
+                                .map_err(anyhow::Error::msg)? == bound, "network authority changed before dispatch");
+                            let authority = policy.post.as_ref().expect("network profile selected");
+                            let original_url = args["url"].as_str().context("validated URL missing")?;
+                            let body = args["body"].as_str().context("validated POST body missing")?;
+                            let progress = super::https_post::PostProgress::default();
+                            let fetched = without_resource_overlap(client, true, async {
+                                // Even DNS preparation starts only after real native
+                                // Allow. Every preparation failure completes the spent
+                                // reservation with an ordinary correlated error result.
+                                Ok(match super::https_post::PreparedHttpsPost::prepare(authority, original_url, body).await {
+                                    Ok(prepared) => prepared.execute(&progress).await,
+                                    Err(error) => Err(error),
+                                })
+                            }).await;
+                            // Always record conservative progress, including cancellation.
+                            // A killed process can leave only receiver-side evidence.
+                            eprintln!("{}", json!({"event":"mcp_https_post_progress", "host_call_id":request_id,
+                                "progress":progress.snapshot(), "execution_interrupted":fetched.is_err()}));
+                            let fetched = fetched?;
+                            let (payload, fetched_text, result_kind, request_issued) = match fetched {
+                                Ok(result) => (json!({"success":true,"status":result.status,
+                                    "content_type":result.content_type,
+                                    "received_bytes":result.received_bytes,
+                                    "received_http_bytes":result.received_http_bytes,
+                                    "received_encrypted_bytes":result.received_encrypted_bytes,
+                                    "request_issued":result.request_issued}),
+                                    Some(result.text), "value", result.request_issued),
+                                Err(error) => (json!({"success":false,"error":error.code,
+                                    "request_issued":error.request_issued}),None,"error",error.request_issued),
+                            };
+                            eprintln!("{}", json!({"event":"mcp_https_post_execution",
+                                "host_call_id":request_id,"request_issued":request_issued,
+                                "result_kind":result_kind,"received_bytes":payload.get("received_bytes"),
+                                "received_http_bytes":payload.get("received_http_bytes"),
+                                "received_encrypted_bytes":payload.get("received_encrypted_bytes"),
+                                "error":payload.get("error")}));
+                            let mut content = vec![json!({"type":"text","text":payload.to_string()})];
+                            // Keep untrusted document text as an actual MCP text
+                            // block. Nesting it inside a JSON string would escape
+                            // line breaks before the native content inspector.
+                            if let Some(text) = fetched_text { content.push(json!({"type":"text","text":text})); }
+                            let response = json!({"jsonrpc":"2.0","id":request_id,
+                                "result":{"isError":result_kind == "error",
+                                    "content":content}});
+                            let mut raw_response = response.to_string().into_bytes();
+                            raw_response.push(b'\n');
+                            let result_content = std::str::from_utf8(&raw_response).context("HTTPS result is UTF-8")?;
+                            let result_receipt = without_resource_overlap(client, true,
+                                collector.event("result", json!({
+                                    "expected_contract_version":contract_version,
+                                    "tool":name,"args":args,"call_id":receipt["call_id"],
+                                    "result_kind":result_kind,"delivery":"mcp_host","content":result_content,
+                                    "expected_binding_sha256":receipt["binding_sha256"]
+                                }))).await?;
+                            eprintln!("{}", json!({"event":"mcp_https_post_result_gate", "host_call_id":request_id,
+                                "release_authorized":result_receipt["release"], "progress":progress.snapshot()}));
                             if result_receipt["release"] != true {
                                 let mut reasons = result_receipt["reason_codes"].as_array().cloned().unwrap_or_default();
                                 if request_issued { reasons.push(json!("resource_https_request_may_have_been_issued")); }
@@ -2675,9 +2767,9 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
         );
         let mut outcome = relay(&collector, &mut client, &mut host, &mut server, &mut child).await;
         let create_profile = config.native.registry.tools.iter().any(|tool| {
-            tool.resource_policy
-                .as_ref()
-                .is_some_and(|policy| policy.is_create_file() || policy.is_https_get())
+            tool.resource_policy.as_ref().is_some_and(|policy| {
+                policy.is_create_file() || policy.is_https_get() || policy.is_https_post()
+            })
         });
         let windows_handles_profile = config.native.registry.tools.iter().any(|tool| {
             tool.resource_policy
