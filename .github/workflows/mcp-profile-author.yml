@@ -6,6 +6,8 @@ on:
       - 'crates/agentfw/src/mcp/mod.rs'
       - 'crates/agentfw/src/main.rs'
       - 'scripts/mcp-profile-authoring-demo.py'
+      - 'scripts/fixtures/mcp_profile_author_server.py'
+      - 'docs/operations/MCP_PROFILE_AUTHORING.md'
       - '.github/workflows/mcp-profile-author.yml'
   workflow_dispatch:
 permissions:
@@ -56,3 +58,11 @@ jobs:
         run: cargo build --locked -p agentfw
       - name: Real CLI proof
         run: python3 scripts/mcp-profile-authoring-demo.py --no-build
+      - name: Retain sanitized exact-source SOU-65 evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou65-operator-profile-proof
+          path: target/sou65-profile-author-evidence.json
+          if-no-files-found: warn
+          retention-days: 30
