@@ -106,6 +106,10 @@ pub(crate) fn validate_repository(root: &Path) -> anyhow::Result<()> {
         fs::symlink_metadata(root.join(".git"))?.is_dir(),
         "Git requires a standalone non-bare repository"
     );
+    ensure!(
+        fs::symlink_metadata(root.join(".git/config"))?.is_file(),
+        "Git config must be a regular file, not a link or special file"
+    );
     for path in [
         ".gitmodules",
         ".gitattributes",
@@ -126,9 +130,19 @@ pub(crate) fn validate_repository(root: &Path) -> anyhow::Result<()> {
         );
     }
     let mut config = Vec::new();
-    fs::File::open(root.join(".git/config"))?
-        .take(8193)
-        .read_to_end(&mut config)?;
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    let file = options.open(root.join(".git/config"))?;
+    ensure!(
+        file.metadata()?.is_file(),
+        "Git config changed to a special file"
+    );
+    file.take(8193).read_to_end(&mut config)?;
     ensure!(config.len() <= 8192, "Git config exceeds limit");
     let config = std::str::from_utf8(&config)?;
     let mut core = false;
@@ -166,6 +180,10 @@ pub(crate) fn validate_repository(root: &Path) -> anyhow::Result<()> {
             let entry = entry?;
             *count += 1;
             ensure!(*count <= 32768, "Git repository entry limit");
+            ensure!(
+                entry.file_name() != ".gitattributes" && entry.file_name() != ".gitmodules",
+                "nested Git attributes and submodule declarations are unsupported"
+            );
             let meta = fs::symlink_metadata(entry.path())?;
             ensure!(
                 !meta.is_symlink() && (meta.is_file() || meta.is_dir()),
@@ -279,5 +297,65 @@ mod tests {
         )
         .unwrap();
         assert!(validate_repository(root).is_err());
+    }
+
+    #[test]
+    fn repository_rejects_alternates_worktrees_attributes_and_includes() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::create_dir_all(root.join(".git/objects/info")).unwrap();
+        let config = "[core]\nbare = false\nrepositoryformatversion = 0\n";
+        fs::write(root.join(".git/config"), config).unwrap();
+        for relative in [
+            ".git/commondir",
+            ".git/gitdir",
+            ".git/config.worktree",
+            ".git/objects/info/alternates",
+            ".git/objects/info/http-alternates",
+            ".gitmodules",
+            ".gitattributes",
+        ] {
+            fs::write(root.join(relative), "/outside/unsupported").unwrap();
+            assert!(validate_repository(root).is_err(), "{relative}");
+            fs::remove_file(root.join(relative)).unwrap();
+        }
+        for section in [
+            "include",
+            "includeIf \"gitdir:/workspace\"",
+            "remote \"origin\"",
+            "diff",
+            "filter \"custom\"",
+            "credential",
+        ] {
+            fs::write(
+                root.join(".git/config"),
+                format!("{config}[{section}]\nhelper = forbidden\n"),
+            )
+            .unwrap();
+            assert!(validate_repository(root).is_err(), "{section}");
+        }
+        fs::write(root.join(".git/config"), config).unwrap();
+        fs::create_dir(root.join("nested")).unwrap();
+        fs::write(root.join("nested/.gitattributes"), "* filter=custom").unwrap();
+        assert!(validate_repository(root).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn repository_refuses_config_symlink_before_opening_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("repo");
+        fs::create_dir_all(root.join(".git")).unwrap();
+        let outside = dir.path().join("outside");
+        fs::write(&outside, "[core]\nbare = false\n").unwrap();
+        std::os::unix::fs::symlink(&outside, root.join(".git/config")).unwrap();
+        assert!(validate_repository(&root)
+            .unwrap_err()
+            .to_string()
+            .contains("regular file"));
+        assert_eq!(
+            fs::read_to_string(outside).unwrap(),
+            "[core]\nbare = false\n"
+        );
     }
 }
