@@ -122,7 +122,9 @@ fn open_private_bounded(path: &Path, max: u64) -> anyhow::Result<std::fs::File> 
 
     anyhow::ensure!(safe_selected_path(path), "absolute canonical path required");
     let mut dir = File::open("/")?;
-    let parent = path.parent().ok_or_else(|| anyhow::anyhow!("missing parent"))?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("missing parent"))?;
     for part in parent.components() {
         match part {
             Component::RootDir => (),
@@ -141,7 +143,9 @@ fn open_private_bounded(path: &Path, max: u64) -> anyhow::Result<std::fs::File> 
             _ => anyhow::bail!("path alias not accepted"),
         }
     }
-    let leaf = path.file_name().ok_or_else(|| anyhow::anyhow!("missing filename"))?;
+    let leaf = path
+        .file_name()
+        .ok_or_else(|| anyhow::anyhow!("missing filename"))?;
     let leaf = CString::new(leaf.as_bytes())?;
     let fd = unsafe {
         libc::openat(
@@ -303,7 +307,9 @@ async fn diagnose(args: &DoctorArgs) -> Report {
     let config_bytes = read_private(&home.join("config.yaml"), 1024 * 1024);
     // Snapshot once. A rejected config must never be reopened by lifecycle:
     // that would follow a link or hang on a FIFO after initial safe refusal.
-    let observed_config_sha256 = config_bytes.as_ref().ok()
+    let observed_config_sha256 = config_bytes
+        .as_ref()
+        .ok()
         .map(|bytes| format!("{:x}", Sha256::digest(bytes)));
     let config = match config_bytes {
         Ok(bytes) => match std::str::from_utf8(&bytes)
