@@ -14,6 +14,12 @@ use sha2::{Digest, Sha256};
 
 use super::input::InputSchema;
 
+pub mod git;
+
+pub fn selected(format: Option<&str>) -> bool {
+    matches!(format, Some(FORMAT | git::FORMAT))
+}
+
 pub const FORMAT: &str = "sw-mcp/filesystem-readonly/1";
 pub const ENVIRONMENT: &str = "AGENTFW_MCP_SERVER_PROFILE";
 pub const PACKAGE: &str = "@modelcontextprotocol/server-filesystem";
@@ -61,6 +67,8 @@ pub struct ProfileConfig {
     pub bwrap_path: PathBuf,
     pub bwrap_sha256: String,
     pub libraries: Vec<Library>,
+    #[serde(default)]
+    pub git: Option<Library>,
 }
 
 impl ProfileConfig {
@@ -85,7 +93,20 @@ impl ProfileConfig {
             .map_err(|_| anyhow::anyhow!("invalid MCP server profile JSON"))?;
         let config: Self = serde_json::from_value(value)
             .map_err(|_| anyhow::anyhow!("invalid MCP server profile fields"))?;
-        ensure!(config.format == FORMAT, "unsupported MCP server profile");
+        ensure!(
+            selected(Some(&config.format)),
+            "unsupported MCP server profile"
+        );
+        ensure!(
+            (config.format == git::FORMAT) == config.git.is_some(),
+            "Git runtime/profile mismatch"
+        );
+        if let Some(git) = &config.git {
+            ensure!(
+                normal_absolute(&git.path) && crate::native::is_digest(&git.sha256),
+                "invalid Git executable pin"
+            );
+        }
         ensure!(config.libraries.len() <= 32, "MCP runtime library limit");
         for path in [
             &config.workspace,
@@ -136,6 +157,24 @@ impl ProfileConfig {
             Path::new(command) == self.runtime_path,
             "MCP command differs from selected runtime"
         );
+        if self.format == git::FORMAT {
+            ensure!(
+                args == [
+                    "-I",
+                    "-B",
+                    "-m",
+                    "mcp_server_git",
+                    "--repository",
+                    "/workspace"
+                ],
+                "MCP arguments differ from selected Git server"
+            );
+            ensure!(
+                workspace == self.workspace,
+                "Git workspace differs from selected profile"
+            );
+            return Ok(());
+        }
         let entry = self.package_root.join(SERVER_ENTRYPOINT);
         ensure!(
             args.len() == 2
@@ -169,6 +208,33 @@ pub fn original_manifest() -> Value {
         .clone()
 }
 
+pub fn original_manifest_for(format: &str) -> anyhow::Result<Value> {
+    match format {
+        FORMAT => Ok(original_manifest()),
+        git::FORMAT => Ok(git::original_manifest()),
+        _ => anyhow::bail!("unsupported MCP profile"),
+    }
+}
+
+pub fn validate_initialization_for(format: &str, value: &Value) -> anyhow::Result<()> {
+    match format {
+        FORMAT => validate_initialization(value),
+        git::FORMAT => git::validate_initialization(value),
+        _ => anyhow::bail!("unsupported MCP profile"),
+    }
+}
+
+pub fn classify_manifest_for(
+    format: &str,
+    value: &Value,
+) -> anyhow::Result<BTreeMap<String, ToolProfile>> {
+    match format {
+        FORMAT => classify_manifest(value),
+        git::FORMAT => git::classify_manifest(value),
+        _ => anyhow::bail!("unsupported MCP profile"),
+    }
+}
+
 pub fn validate_initialization(value: &Value) -> anyhow::Result<()> {
     let original: Value = serde_json::from_str(ORIGINAL_INITIALIZATION)?;
     ensure!(
@@ -189,6 +255,7 @@ pub struct ToolProfile {
     pub input: Option<InputSchema>,
     pub output: Option<InputSchema>,
     pub unsupported_reason: Option<&'static str>,
+    git_tool: Option<String>,
 }
 
 impl ToolProfile {
@@ -197,6 +264,9 @@ impl ToolProfile {
             self.unsupported_reason.is_none(),
             "MCP tool is unsupported by selected profile"
         );
+        if let Some(name) = &self.git_tool {
+            return git::validate_arguments(name, value);
+        }
         self.input
             .as_ref()
             .context("MCP input schema unavailable")?
@@ -276,7 +346,7 @@ impl ToolProfile {
                 .as_ref()
                 .context("MCP output schema unavailable")?
                 .validate(structured)?;
-        } else {
+        } else if self.git_tool.is_none() {
             ensure!(result["isError"] == true, "MCP structured output missing");
         }
         Ok(if result["isError"] == true {
@@ -371,7 +441,8 @@ pub fn classify_manifest(value: &Value) -> anyhow::Result<BTreeMap<String, ToolP
                     ToolProfile {
                         input,
                         output,
-                        unsupported_reason
+                        unsupported_reason,
+                        git_tool: None
                     }
                 )
                 .is_none(),

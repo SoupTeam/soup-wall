@@ -1,0 +1,21 @@
+{
+  "package": "mcp-server-git",
+  "version": "2026.10.10",
+  "sdk": "1.29.0",
+  "protocol": "2025-11-25",
+  "source": "https://github.com/modelcontextprotocol/servers/tree/main/src/git",
+  "python": {
+    "version": "3.11.14",
+    "release": "20251014",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20251014/cpython-3.11.14%2B20251014-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "91ab434738647ab45d630aaa02e3808bb516239beeb52f7799c12a12d1557a38"
+  },
+  "git_version": "2.51.2",
+  "git_source_url": "https://www.kernel.org/pub/software/scm/git/git-2.51.2.tar.xz",
+  "git_source_sha256": "233d7143a2d58e60755eee9b76f559ec73ea2b3c297f5b503162ace95966b4e3",
+  "files": {
+    "upstream-initialize.json": "d3cf3433f2e2fe8bef9389e8aa93f9bb3f7f00082f7b14a7c915d06aabae042d",
+    "upstream-tools-list.json": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b",
+    "requirements.lock": "a2cfeda583ce58ab092610ee5b8902ef2f6ab1c97dabebf7eb67bcc512f5f1e5"
+  }
+}

@@ -1,0 +1,356 @@
+[
+  {
+    "name": "annotated-types",
+    "version": "0.8.0",
+    "license": "MIT",
+    "project_urls": {
+      "Changelog": "https://github.com/annotated-types/annotated-types/releases",
+      "Homepage": "https://github.com/annotated-types/annotated-types",
+      "Source": "https://github.com/annotated-types/annotated-types"
+    }
+  },
+  {
+    "name": "anyio",
+    "version": "4.15.1",
+    "license": "MIT",
+    "project_urls": {
+      "Changelog": "https://anyio.readthedocs.io/en/stable/versionhistory.html",
+      "Documentation": "https://anyio.readthedocs.io/en/latest/",
+      "Issue tracker": "https://github.com/agronholm/anyio/issues",
+      "Source code": "https://github.com/agronholm/anyio"
+    }
+  },
+  {
+    "name": "attrs",
+    "version": "26.1.0",
+    "license": "MIT",
+    "project_urls": {
+      "Changelog": "https://www.attrs.org/en/stable/changelog.html",
+      "Documentation": "https://www.attrs.org/",
+      "Funding": "https://github.com/sponsors/hynek",
+      "GitHub": "https://github.com/python-attrs/attrs",
+      "Tidelift": "https://tidelift.com/subscription/pkg/pypi-attrs?utm_source=pypi-attrs&utm_medium=pypi"
+    }
+  },
+  {
+    "name": "certifi",
+    "version": "2026.7.22",
+    "license": "MPL-2.0",
+    "project_urls": {
+      "Homepage": "https://github.com/certifi/python-certifi",
+      "Source": "https://github.com/certifi/python-certifi"
+    }
+  },
+  {
+    "name": "cffi",
+    "version": "2.1.1",
+    "license": "MIT-0",
+    "project_urls": {
+      "Changelog": "https://cffi.readthedocs.io/en/latest/whatsnew.html",
+      "Contact": "https://groups.google.com/forum/#!forum/python-cffi",
+      "Documentation": "https://cffi.readthedocs.io/",
+      "Download": "https://github.com/python-cffi/cffi/releases",
+      "Issue Tracker": "https://github.com/python-cffi/cffi/issues",
+      "Source Code": "https://github.com/python-cffi/cffi"
+    }
+  },
+  {
+    "name": "click",
+    "version": "8.5.0",
+    "license": "BSD-3-Clause",
+    "project_urls": {
+      "Changes": "https://click.palletsprojects.com/page/changes/",
+      "Chat": "https://discord.gg/pallets",
+      "Documentation": "https://click.palletsprojects.com/",
+      "Donate": "https://palletsprojects.com/donate",
+      "Source": "https://github.com/pallets/click/"
+    }
+  },
+  {
+    "name": "cryptography",
+    "version": "50.0.2",
+    "license": "Apache-2.0 OR BSD-3-Clause",
+    "project_urls": {
+      "changelog": "https://cryptography.io/en/latest/changelog/",
+      "documentation": "https://cryptography.io/",
+      "homepage": "https://github.com/pyca/cryptography",
+      "issues": "https://github.com/pyca/cryptography/issues",
+      "source": "https://github.com/pyca/cryptography/"
+    }
+  },
+  {
+    "name": "gitdb",
+    "version": "4.0.12",
+    "license": "BSD License",
+    "project_urls": {
+      "Homepage": "https://github.com/gitpython-developers/gitdb"
+    }
+  },
+  {
+    "name": "GitPython",
+    "version": "3.2.1",
+    "license": "BSD-3-Clause",
+    "project_urls": {
+      "Changelog": "https://github.com/gitpython-developers/GitPython/blob/main/doc/source/changes.rst",
+      "Documentation": "https://gitpython.readthedocs.io/en/stable/",
+      "Source code": "https://github.com/gitpython-developers/GitPython"
+    }
+  },
+  {
+    "name": "h11",
+    "version": "0.16.0",
+    "license": "MIT",
+    "project_urls": {
+      "Homepage": "https://github.com/python-hyper/h11"
+    }
+  },
+  {
+    "name": "httpcore",
+    "version": "1.0.9",
+    "license": "BSD-3-Clause",
+    "project_urls": {
+      "Documentation": "https://www.encode.io/httpcore",
+      "Homepage": "https://www.encode.io/httpcore/",
+      "Source": "https://github.com/encode/httpcore"
+    }
+  },
+  {
+    "name": "httpx",
+    "version": "0.28.1",
+    "license": "BSD-3-Clause",
+    "project_urls": {
+      "Changelog": "https://github.com/encode/httpx/blob/master/CHANGELOG.md",
+      "Documentation": "https://www.python-httpx.org",
+      "Homepage": "https://github.com/encode/httpx",
+      "Source": "https://github.com/encode/httpx"
+    }
+  },
+  {
+    "name": "httpx-sse",
+    "version": "0.4.3",
+    "license": "MIT",
+    "project_urls": {
+      "Homepage": "https://github.com/florimondmanca/httpx-sse"
+    }
+  },
+  {
+    "name": "idna",
+    "version": "3.20",
+    "license": "BSD-3-Clause",
+    "project_urls": {
+      "Changelog": "https://github.com/kjd/idna/blob/master/HISTORY.md",
+      "Issue tracker": "https://github.com/kjd/idna/issues",
+      "Source": "https://github.com/kjd/idna"
+    }
+  },
+  {
+    "name": "jsonschema",
+    "version": "4.26.0",
+    "license": "MIT",
+    "project_urls": {
+      "Changelog": "https://github.com/python-jsonschema/jsonschema/blob/main/CHANGELOG.rst",
+      "Documentation": "https://python-jsonschema.readthedocs.io/",
+      "Funding": "https://github.com/sponsors/Julian",
+      "Homepage": "https://github.com/python-jsonschema/jsonschema",
+      "Issues": "https://github.com/python-jsonschema/jsonschema/issues/",
+      "Source": "https://github.com/python-jsonschema/jsonschema",
+      "Tidelift": "https://tidelift.com/subscription/pkg/pypi-jsonschema?utm_source=pypi-jsonschema&utm_medium=referral&utm_campaign=pypi-link"
+    }
+  },
+  {
+    "name": "jsonschema-specifications",
+    "version": "2025.9.1",
+    "license": "MIT",
+    "project_urls": {
+      "Documentation": "https://jsonschema-specifications.readthedocs.io/",
+      "Funding": "https://github.com/sponsors/Julian",
+      "Homepage": "https://github.com/python-jsonschema/jsonschema-specifications",
+      "Issues": "https://github.com/python-jsonschema/jsonschema-specifications/issues/",
+      "Source": "https://github.com/python-jsonschema/jsonschema-specifications",
+      "Tidelift": "https://tidelift.com/subscription/pkg/pypi-jsonschema-specifications?utm_source=pypi-jsonschema-specifications&utm_medium=referral&utm_campaign=pypi-link"
+    }
+  },
+  {
+    "name": "mcp",
+    "version": "1.29.0",
+    "license": "MIT",
+    "project_urls": {
+      "Documentation": "https://py.sdk.modelcontextprotocol.io/v1/",
+      "Homepage": "https://modelcontextprotocol.io",
+      "Issues": "https://github.com/modelcontextprotocol/python-sdk/issues",
+      "Repository": "https://github.com/modelcontextprotocol/python-sdk"
+    }
+  },
+  {
+    "name": "mcp-server-git",
+    "version": "2026.10.10",
+    "license": "MIT",
+    "project_urls": {
+      "Issues": "https://github.com/modelcontextprotocol/servers/issues",
+      "Repository": "https://github.com/modelcontextprotocol/servers/tree/main/src/git"
+    }
+  },
+  {
+    "name": "pycparser",
+    "version": "3.11",
+    "license": "BSD-3-Clause",
+    "project_urls": {
+      "Homepage": "https://github.com/eliben/pycparser"
+    }
+  },
+  {
+    "name": "pydantic",
+    "version": "2.14.1",
+    "license": "MIT",
+    "project_urls": {
+      "Changelog": "https://pydantic.dev/docs/validation/latest/get-started/changelog/",
+      "Documentation": "https://pydantic.dev/docs/validation/latest/get-started/",
+      "Funding": "https://github.com/sponsors/samuelcolvin",
+      "Homepage": "https://github.com/pydantic/pydantic",
+      "Source": "https://github.com/pydantic/pydantic"
+    }
+  },
+  {
+    "name": "pydantic-settings",
+    "version": "2.16.0",
+    "license": "MIT",
+    "project_urls": {
+      "Changelog": "https://github.com/pydantic/pydantic-settings/releases",
+      "Documentation": "https://docs.pydantic.dev/dev-v2/concepts/pydantic_settings/",
+      "Funding": "https://github.com/sponsors/samuelcolvin",
+      "Homepage": "https://github.com/pydantic/pydantic-settings",
+      "Source": "https://github.com/pydantic/pydantic-settings"
+    }
+  },
+  {
+    "name": "pydantic_core",
+    "version": "2.50.1",
+    "license": "MIT",
+    "project_urls": {
+      "Funding": "https://github.com/sponsors/samuelcolvin",
+      "Homepage": "https://github.com/pydantic",
+      "Source": "https://github.com/pydantic/pydantic/tree/main/pydantic-core"
+    }
+  },
+  {
+    "name": "PyJWT",
+    "version": "2.15.1",
+    "license": "MIT",
+    "project_urls": {
+      "Homepage": "https://github.com/jpadilla/pyjwt"
+    }
+  },
+  {
+    "name": "python-dotenv",
+    "version": "1.2.4",
+    "license": "BSD-3-Clause",
+    "project_urls": {
+      "Source": "https://github.com/theskumar/python-dotenv"
+    }
+  },
+  {
+    "name": "python-multipart",
+    "version": "0.0.32",
+    "license": "Apache-2.0",
+    "project_urls": {
+      "Changelog": "https://github.com/Kludex/python-multipart/blob/master/CHANGELOG.md",
+      "Documentation": "https://kludex.github.io/python-multipart/",
+      "Homepage": "https://github.com/Kludex/python-multipart",
+      "Source": "https://github.com/Kludex/python-multipart"
+    }
+  },
+  {
+    "name": "referencing",
+    "version": "0.37.0",
+    "license": "MIT",
+    "project_urls": {
+      "Changelog": "https://referencing.readthedocs.io/en/stable/changes/",
+      "Documentation": "https://referencing.readthedocs.io/",
+      "Funding": "https://github.com/sponsors/Julian",
+      "Homepage": "https://github.com/python-jsonschema/referencing",
+      "Issues": "https://github.com/python-jsonschema/referencing/issues/",
+      "Source": "https://github.com/python-jsonschema/referencing",
+      "Tidelift": "https://tidelift.com/subscription/pkg/pypi-referencing?utm_source=pypi-referencing&utm_medium=referral&utm_campaign=pypi-link"
+    }
+  },
+  {
+    "name": "rpds-py",
+    "version": "2026.9.1",
+    "license": "MIT",
+    "project_urls": {
+      "Documentation": "https://rpds.readthedocs.io/",
+      "Funding": "https://github.com/sponsors/Julian",
+      "Homepage": "https://github.com/crate-py/rpds",
+      "Issues": "https://github.com/crate-py/rpds/issues/",
+      "Source": "https://github.com/crate-py/rpds",
+      "Tidelift": "https://tidelift.com/subscription/pkg/pypi-rpds-py?utm_source=pypi-rpds-py&utm_medium=referral&utm_campaign=pypi-link",
+      "Upstream": "https://github.com/orium/rpds"
+    }
+  },
+  {
+    "name": "smmap",
+    "version": "5.0.3",
+    "license": "BSD-3-Clause",
+    "project_urls": {
+      "Homepage": "https://github.com/gitpython-developers/smmap"
+    }
+  },
+  {
+    "name": "sse-starlette",
+    "version": "3.5.0",
+    "license": "BSD-3-Clause",
+    "project_urls": {
+      "Homepage": "https://github.com/sysid/sse-starlette",
+      "Issues": "https://github.com/sysid/sse-starlette/issues",
+      "Repository": "https://github.com/sysid/sse-starlette",
+      "Source": "https://github.com/sysid/sse-starlette"
+    }
+  },
+  {
+    "name": "starlette",
+    "version": "1.8.0",
+    "license": "BSD-3-Clause",
+    "project_urls": {
+      "Changelog": "https://starlette.dev/release-notes/",
+      "Documentation": "https://starlette.dev/",
+      "Funding": "https://github.com/sponsors/Kludex",
+      "Homepage": "https://github.com/Kludex/starlette",
+      "Source": "https://github.com/Kludex/starlette"
+    }
+  },
+  {
+    "name": "typing-inspection",
+    "version": "0.4.4",
+    "license": "MIT",
+    "project_urls": {
+      "Changelog": "https://github.com/pydantic/typing-inspection/blob/main/HISTORY.md",
+      "Documentation": "https://pydantic.github.io/typing-inspection/dev/",
+      "Homepage": "https://github.com/pydantic/typing-inspection",
+      "Source": "https://github.com/pydantic/typing-inspection"
+    }
+  },
+  {
+    "name": "typing_extensions",
+    "version": "4.16.0",
+    "license": "PSF-2.0",
+    "project_urls": {
+      "Bug Tracker": "https://github.com/python/typing_extensions/issues",
+      "Changes": "https://github.com/python/typing_extensions/blob/main/CHANGELOG.md",
+      "Documentation": "https://typing-extensions.readthedocs.io/",
+      "Home": "https://github.com/python/typing_extensions",
+      "Q & A": "https://github.com/python/typing/discussions",
+      "Repository": "https://github.com/python/typing_extensions"
+    }
+  },
+  {
+    "name": "uvicorn",
+    "version": "0.54.0",
+    "license": "BSD-3-Clause",
+    "project_urls": {
+      "Changelog": "https://uvicorn.dev/release-notes",
+      "Funding": "https://github.com/sponsors/Kludex",
+      "Homepage": "https://uvicorn.dev/",
+      "Source": "https://github.com/Kludex/uvicorn"
+    }
+  }
+]
