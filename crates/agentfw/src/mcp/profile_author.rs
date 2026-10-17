@@ -872,15 +872,9 @@ mod tests {
         assert!(t["tools"][0]["authority"].is_null());
     }
     #[test]
-    fn registry_is_not_granted_by_tool_name() {
-        let unsupported = Authority::ReadOnly;
-        assert_eq!(
-            policy_for("owned", "send_data", &"0".repeat(64), &unsupported)
-                .unwrap()
-                .0,
-            "read_only"
-        );
-        // Server calls need actual reviewed declarations and native runtime
-        // evaluation; the name or poisoned description is never authorization.
+    fn privileged_names_cannot_be_relabelled_read_only() {
+        for name in ["create_file", "https_get"] {
+            assert!(policy_for("owned", name, &"0".repeat(64), &Authority::ReadOnly).is_err());
+        }
     }
 }
