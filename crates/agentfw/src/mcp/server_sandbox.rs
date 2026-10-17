@@ -260,16 +260,29 @@ fn filter_instructions(git_landlock: bool) -> anyhow::Result<Vec<(u16, u8, u8, u
     // The pinned Node/libuv opens its explicitly piped stdio with FIONBIO.
     // Permit that local nonblocking flag only on descriptors 0, 1 and 2.
     // No ioctl is admitted for workspace/device descriptors or another request.
-    instructions.extend([
-        (0x15, 0, 7, libc::SYS_ioctl as u32),
-        (0x20, 0, 0, 16), // ioctl fd
-        (0x25, 0, 1, 2),  // JGT: only explicit stdio descriptors
-        (0x06, 0, 0, deny),
-        (0x20, 0, 0, 24), // ioctl request
-        (0x15, 0, 1, libc::FIONBIO as u32),
-        (0x06, 0, 0, 0x7fff_0000),
-        (0x06, 0, 0, deny),
-    ]);
+    if git_landlock {
+        // CPython's asyncio socketpair uses generic FIONBIO on non-stdio
+        // descriptors. This only toggles O_NONBLOCK (already possible with
+        // fcntl); no device-specific ioctl or new descriptor authority is granted.
+        instructions.extend([
+            (0x15, 0, 4, libc::SYS_ioctl as u32),
+            (0x20, 0, 0, 24),
+            (0x15, 0, 1, libc::FIONBIO as u32),
+            (0x06, 0, 0, 0x7fff_0000),
+            (0x06, 0, 0, deny),
+        ]);
+    } else {
+        instructions.extend([
+            (0x15, 0, 7, libc::SYS_ioctl as u32),
+            (0x20, 0, 0, 16), // ioctl fd
+            (0x25, 0, 1, 2),  // JGT: only explicit stdio descriptors
+            (0x06, 0, 0, deny),
+            (0x20, 0, 0, 24), // ioctl request
+            (0x15, 0, 1, libc::FIONBIO as u32),
+            (0x06, 0, 0, 0x7fff_0000),
+            (0x06, 0, 0, deny),
+        ]);
+    }
     // Read-only bind mounts do not prevent writing to an existing FIFO or all
     // device effects. Deny writable opens independently of the mounted file
     // type. openat2 takes an indirect flags structure, so it is denied above.
@@ -591,7 +604,7 @@ mod tests {
         let outside_json = serde_json::to_string(&outside).unwrap();
         let script = format!(
             r#"
-import json, os, pathlib, socket, subprocess
+import asyncio, json, os, pathlib, socket, subprocess
 def denied(fn):
     try:
         fn()
@@ -609,7 +622,11 @@ def null_open():
     os.close(fd)
     return True
 git = subprocess.run(['/mcp-runtime/git', 'status', '--porcelain'], cwd='/workspace', capture_output=True, timeout=5)
+loop = asyncio.new_event_loop()
+loop.run_until_complete(asyncio.sleep(0))
+loop.close()
 result = {{
+ 'asyncio_ready': True,
  'null_open_allowed': null_open(),
  'git_read': git.returncode == 0,
  'git_exit': git.returncode,
@@ -688,6 +705,7 @@ print(json.dumps(result))
         let result: serde_json::Value = serde_json::from_slice(&output).unwrap();
         for key in [
             "null_open_allowed",
+            "asyncio_ready",
             "git_read",
             "workspace_write_denied",
             "runtime_write_denied",
@@ -764,84 +782,100 @@ print(json.dumps(result))
     #[cfg(target_os = "linux")]
     #[test]
     fn syscall_filter_preserves_read_opens_and_only_stdio_fionbio() {
-        let instructions = filter_instructions(false).unwrap();
-        let evaluate = |syscall: i64, first: u32, second: u32, third: u32| {
-            let mut data = [0_u8; 64];
-            let architecture = instructions[1].3;
-            for (offset, value) in [
-                (0, syscall as u32),
-                (4, architecture),
-                (16, first),
-                (24, second),
-                (32, third),
+        for git_landlock in [false, true] {
+            let instructions = filter_instructions(git_landlock).unwrap();
+            let evaluate = |syscall: i64, first: u32, second: u32, third: u32| {
+                let mut data = [0_u8; 64];
+                let architecture = instructions[1].3;
+                for (offset, value) in [
+                    (0, syscall as u32),
+                    (4, architecture),
+                    (16, first),
+                    (24, second),
+                    (32, third),
+                ] {
+                    data[offset..offset + 4].copy_from_slice(&value.to_ne_bytes());
+                }
+                let mut accumulator = 0;
+                let mut index = 0;
+                loop {
+                    assert!(index < instructions.len(), "filter branch escaped program");
+                    let (code, yes, no, value) = instructions[index];
+                    let jump = match code {
+                        0x20 => {
+                            accumulator = u32::from_ne_bytes(
+                                data[value as usize..value as usize + 4].try_into().unwrap(),
+                            );
+                            None
+                        }
+                        0x15 => Some(accumulator == value),
+                        0x25 => Some(accumulator > value),
+                        0x35 => Some(accumulator >= value),
+                        0x45 => Some(accumulator & value != 0),
+                        0x06 => return value,
+                        _ => panic!("unsupported classic-BPF instruction"),
+                    };
+                    index += 1 + jump.map_or(0, |taken| if taken { yes } else { no }) as usize;
+                }
+            };
+            let allow = 0x7fff_0000;
+            let deny = 0x0005_0000 | libc::EACCES as u32;
+            for fd in [0, 1, 2] {
+                assert_eq!(
+                    evaluate(libc::SYS_ioctl, fd, libc::FIONBIO as u32, 0),
+                    allow
+                );
+                assert_eq!(
+                    evaluate(libc::SYS_ioctl, fd, libc::FIONREAD as u32, 0),
+                    deny
+                );
+            }
+            for fd in [3, 127, u32::MAX] {
+                assert_eq!(
+                    evaluate(libc::SYS_ioctl, fd, libc::FIONBIO as u32, 0),
+                    if git_landlock { allow } else { deny }
+                );
+                assert_eq!(
+                    evaluate(libc::SYS_ioctl, fd, libc::FIONREAD as u32, 0),
+                    deny
+                );
+                assert_eq!(evaluate(libc::SYS_ioctl, fd, libc::TIOCSTI as u32, 0), deny);
+            }
+            for flags in [
+                libc::O_RDONLY,
+                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
             ] {
-                data[offset..offset + 4].copy_from_slice(&value.to_ne_bytes());
+                assert_eq!(evaluate(libc::SYS_openat, u32::MAX, 0, flags as u32), allow);
             }
-            let mut accumulator = 0;
-            let mut index = 0;
-            loop {
-                assert!(index < instructions.len(), "filter branch escaped program");
-                let (code, yes, no, value) = instructions[index];
-                let jump = match code {
-                    0x20 => {
-                        accumulator = u32::from_ne_bytes(
-                            data[value as usize..value as usize + 4].try_into().unwrap(),
-                        );
-                        None
-                    }
-                    0x15 => Some(accumulator == value),
-                    0x25 => Some(accumulator > value),
-                    0x35 => Some(accumulator >= value),
-                    0x45 => Some(accumulator & value != 0),
-                    0x06 => return value,
-                    _ => panic!("unsupported classic-BPF instruction"),
-                };
-                index += 1 + jump.map_or(0, |taken| if taken { yes } else { no }) as usize;
+            for flags in [
+                libc::O_WRONLY,
+                libc::O_RDWR,
+                libc::O_CREAT,
+                libc::O_TRUNC,
+                libc::O_APPEND,
+                libc::O_TMPFILE,
+            ] {
+                assert_eq!(
+                    evaluate(libc::SYS_openat, u32::MAX, 0, flags as u32),
+                    if git_landlock { allow } else { deny }
+                );
+                #[cfg(target_arch = "x86_64")]
+                assert_eq!(
+                    evaluate(libc::SYS_open, 0, flags as u32, 0),
+                    if git_landlock { allow } else { deny }
+                );
             }
-        };
-        let allow = 0x7fff_0000;
-        let deny = 0x0005_0000 | libc::EACCES as u32;
-        for fd in [0, 1, 2] {
-            assert_eq!(
-                evaluate(libc::SYS_ioctl, fd, libc::FIONBIO as u32, 0),
-                allow
-            );
-            assert_eq!(
-                evaluate(libc::SYS_ioctl, fd, libc::FIONREAD as u32, 0),
-                deny
-            );
+            for syscall in [
+                libc::SYS_openat2,
+                libc::SYS_socket,
+                libc::SYS_connect,
+                libc::SYS_io_uring_setup,
+            ] {
+                assert_eq!(evaluate(syscall, 0, 0, 0), deny);
+            }
+            assert_eq!(evaluate(libc::SYS_read, 0, 0, 0), allow);
+            assert_eq!(evaluate(libc::SYS_read | 0x4000_0000, 0, 0, 0), 0x8000_0000);
         }
-        for fd in [3, 127, u32::MAX] {
-            assert_eq!(evaluate(libc::SYS_ioctl, fd, libc::FIONBIO as u32, 0), deny);
-        }
-        for flags in [
-            libc::O_RDONLY,
-            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
-        ] {
-            assert_eq!(evaluate(libc::SYS_openat, u32::MAX, 0, flags as u32), allow);
-        }
-        for flags in [
-            libc::O_WRONLY,
-            libc::O_RDWR,
-            libc::O_CREAT,
-            libc::O_TRUNC,
-            libc::O_APPEND,
-            libc::O_TMPFILE,
-        ] {
-            assert_eq!(evaluate(libc::SYS_openat, u32::MAX, 0, flags as u32), deny);
-            #[cfg(target_arch = "x86_64")]
-            assert_eq!(evaluate(libc::SYS_open, 0, flags as u32, 0), deny);
-        }
-        for syscall in [
-            libc::SYS_openat2,
-            libc::SYS_socket,
-            libc::SYS_connect,
-            libc::SYS_io_uring_setup,
-        ] {
-            assert_eq!(evaluate(syscall, 0, 0, 0), deny);
-        }
-        assert_eq!(evaluate(libc::SYS_read, 0, 0, 0), allow);
-        assert_eq!(evaluate(libc::SYS_read | 0x4000_0000, 0, 0, 0), 0x8000_0000);
     }
 
     /// An explicitly invoked positive acceptance test. A missing runtime,
