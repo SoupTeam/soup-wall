@@ -135,7 +135,6 @@ fn symlink_and_public_inputs_refused_without_unsafe_fallback() {
         .any(|c| c["reason_code"] == "config_missing_or_unsafe"));
 }
 
-
 #[test]
 fn real_owned_linux_install_reaches_authenticated_ready_without_host_execution() {
     use agentfw::lifecycle::{sha256_file, Manager};
@@ -177,21 +176,45 @@ fn real_owned_linux_install_reaches_authenticated_ready_without_host_execution()
         scratch.path(),
         &["--agent", installed_bin.to_str().unwrap()],
     );
-    assert_eq!(output.status.code(), Some(0), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(report["setup"], "ready");
     assert_eq!(report["active_host_call_protection"], "unknown");
-    for reason in ["runtime_identity_verified", "runtime_matches_managed_process", "enforce_requested_on_disk"] {
-        assert!(report["checks"].as_array().unwrap().iter().any(|v| v["reason_code"] == reason),
-            "missing {reason}: {report}");
+    for reason in [
+        "runtime_identity_verified",
+        "runtime_matches_managed_process",
+        "enforce_requested_on_disk",
+    ] {
+        assert!(
+            report["checks"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|v| v["reason_code"] == reason),
+            "missing {reason}: {report}"
+        );
     }
-    assert_eq!(std::fs::read(home.join("config.yaml")).unwrap(), config_before);
+    assert_eq!(
+        std::fs::read(home.join("config.yaml")).unwrap(),
+        config_before
+    );
     assert_eq!(std::fs::read(home.join("token")).unwrap(), token_before);
-    assert_eq!(std::fs::read(home.join("versions/lifecycle.json")).unwrap(), state_before);
+    assert_eq!(
+        std::fs::read(home.join("versions/lifecycle.json")).unwrap(),
+        state_before
+    );
 
     // A modified on-disk setting must not silently become a claimed runtime
     // fact. The actual running owned daemon remains on the old configuration.
-    private(&home.join("config.yaml"), format!("enforce: false\nport: {port}\n").as_bytes());
+    private(
+        &home.join("config.yaml"),
+        format!("enforce: false\nport: {port}\n").as_bytes(),
+    );
     let negative = doctor(
         &home,
         scratch.path(),
@@ -200,6 +223,14 @@ fn real_owned_linux_install_reaches_authenticated_ready_without_host_execution()
     assert_eq!(negative.status.code(), Some(3));
     let negative_report: serde_json::Value = serde_json::from_slice(&negative.stdout).unwrap();
     assert_eq!(negative_report["active_host_call_protection"], "unknown");
-    assert!(negative_report["checks"].as_array().unwrap().iter().any(|v| v["reason_code"] == "host_config_drift"));
-    assert!(negative_report["checks"].as_array().unwrap().iter().any(|v| v["reason_code"] == "shadow_mode"));
+    assert!(negative_report["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|v| v["reason_code"] == "host_config_drift"));
+    assert!(negative_report["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|v| v["reason_code"] == "shadow_mode"));
 }
