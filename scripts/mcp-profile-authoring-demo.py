@@ -246,6 +246,212 @@ def real_create_file_proof(binary,root,run,check):
         finally:close(daemon)
 
 
+def real_https_get_proof(binary, root, run, check):
+    """Use a generated operator-reviewed HTTPS profile in the real MCP collector.
+
+    Two independent owned TLS receivers witness exact GET and zero transport
+    to a substituted recipient. The child is incapable of making HTTPS calls.
+    The ordinary native executor validates the disposable CA and hostname.
+    """
+    import importlib.util
+    sys.dont_write_bytecode = True
+    upstream = ROOT / "scripts/verify-sou56-https-get.py"
+    spec = importlib.util.spec_from_file_location("sou65_owned_sou56_helpers", upstream)
+    sou56 = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sou56)
+    fixture = ROOT / "scripts/fixtures/mcp_profile_author_server.py"
+    ca_dir = root / "https-certificates"
+    certs = sou56.certificates(ca_dir)
+    receivers = []
+    handles = []
+    daemon = None
+    collector = None
+
+    def owned_receiver(label):
+        ready = root / (label + "-receiver.ready")
+        ledger = root / (label + "-receiver.jsonl")
+        log = (root / (label + "-receiver.log")).open("wb")
+        handles.append(log)
+        proc = subprocess.Popen(
+            [sys.executable, "-I", "-u", str(sou56.FIXTURE), "--https",
+             "--ledger", str(ledger), "--ready", str(ready),
+             "--cert", str(ca_dir / "valid.pem"), "--key", str(ca_dir / "server.key"),
+             "--mode", "document"],
+            cwd=root, stdout=log, stderr=log, start_new_session=True)
+        receivers.append(proc)
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline and not ready.exists() and proc.poll() is None:
+            time.sleep(.02)
+        check(label + "-owned-receiver-started", ready.exists() and proc.poll() is None)
+        return json.loads(ready.read_text())["port"], ledger
+
+    def records(path):
+        if not path.exists():
+            return []
+        return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+
+    def count(path, kind):
+        return sum(r.get("event") == kind for r in records(path))
+
+    try:
+        port, ledger = owned_receiver("approved")
+        alternate_port, alternate_ledger = owned_receiver("substituted")
+        url = f"https://127.0.0.1:{port}/document?item=7"
+        workspace = root / "https-workspace"
+        workspace.mkdir(mode=0o700)
+        classifier = ROOT / "rule_baseline/rule_baseline.py"
+        original = root / "https-discovery.json"
+        declarations = root / "https-declarations.json"
+        compiled = root / "https-compiled"
+        # No unreviewed tools from the original owned server are dropped:
+        # a static read plus one pinned, native broker-only HTTPS executor.
+        import copy
+        fixture_source = ROOT / "scripts/fixtures/mcp_profile_author_server.py"
+        spec = importlib.util.spec_from_file_location("sou65_owned_original_server", fixture_source)
+        original_server = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(original_server)
+        discovered = copy.deepcopy(original_server.TOOLS + [original_server.HTTPS_GET])
+        dump(original, {"format": "sw-mcp/operator-discovery/1",
+                        "server_id": "sou65-https", "server_version": "1.0", "tools": discovered})
+        run("import", "--snapshot", original, "--server-id", "sou65-https",
+            "--server-version", "1.0", "--out", declarations)
+        reviewed = json.loads(declarations.read_text())
+        for tool in reviewed["tools"]:
+            tool["reviewed"] = True
+            tool["operator_review"] = (
+                "Independently inspected owned stdio fixture and native HTTPS broker, "
+                "with exact private TLS identity and receiver selected by operator")
+            if tool["name"] == "https_get":
+                tool["authority"] = {
+                    "kind": "https_get", "workspace": str(workspace),
+                    "exact_url": url, "approved_addresses": ["127.0.0.1"],
+                    "private_endpoint": {"host": "127.0.0.1", "port": port,
+                                         "address": "127.0.0.1"},
+                    "root_certificate_pem": certs["ca"]["certificate"],
+                    "classifier_sha256": digest(classifier),
+                }
+            else:
+                tool["authority"] = {"kind": "read_only"}
+        dump(declarations, reviewed)
+        run("validate", "--snapshot", original, "--declarations", declarations)
+        run("compile", "--snapshot", original, "--declarations", declarations, "--out", compiled)
+        compiled_registry = json.loads((compiled / "registry.json").read_text())
+        rule = next(t for t in compiled_registry["tools"] if t["name"] == "https_get")
+        check("https-generated-native-typed-execution",
+              rule["resource_policy"]["network"]["exact_url"] == url
+              and rule["egress"] == [{"pointer": "/url", "kind": "url_host", "optional": False}])
+        generated = json.loads((compiled / "native-config.json").read_text())["native"]
+        check("https-generated-final-registry-pin",
+              generated["registry_path"] == str(compiled / "registry.json")
+              and generated["registry_sha256"] == digest(compiled / "registry.json"))
+        # A changed authority must require a new human review. In particular,
+        # dropping the private-endpoint/CA fields must never silently succeed.
+        changed = root / "https-mutated-declaration.json"
+        mutated = copy.deepcopy(reviewed)
+        for tool in mutated["tools"]:
+            if tool["name"] == "https_get":
+                tool["authority"]["private_endpoint"]["port"] = alternate_port
+        dump(changed, mutated)
+        run("validate", "--snapshot", original, "--declarations", changed, success=False)
+        check("https-private-endpoint-mismatch-refused", True)
+        mutated = copy.deepcopy(reviewed)
+        for tool in mutated["tools"]:
+            if tool["name"] == "https_get":
+                tool["authority"]["root_certificate_pem"] = "not a PEM"
+        dump(changed, mutated)
+        run("validate", "--snapshot", original, "--declarations", changed, success=False)
+        check("https-malformed-ca-refused", True)
+
+        home = root / "https-agent"
+        home.mkdir(mode=0o700)
+        env = {k: v for k, v in os.environ.items() if not k.startswith("AGENTFW_")}
+        env["HOME"] = env["USERPROFILE"] = str(home)
+        subprocess.run([str(binary), "install"], env=env, stdin=subprocess.DEVNULL,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=30)
+        port_agent = available_port()
+        policy_path = home / "policy.yaml"
+        policy_path.write_text("egress_allowlist: [127.0.0.1, localhost]\n"
+                               "agent_policies: []\ndefault: allow\n")
+        dump(home / ".agentfw/config.yaml", {
+            "port": port_agent, "enforce": True, "policy": str(policy_path),
+            "native": generated,
+        })
+        collector_env = env.copy()
+        collector_env.update(AGENTFW_CLASSIFIER="rule-baseline",
+                             AGENTFW_RULE_BASELINE=str(classifier),
+                             AGENTFW_CLASSIFIER_PYTHON=sys.executable,
+                             AGENTFW_WORKSPACE=str(workspace))
+        child_ledger = root / "https-child-ledger.jsonl"
+        daemon_log = (root / "https-agent.log").open("wb")
+        handles.append(daemon_log)
+        daemon = subprocess.Popen([str(binary), "serve"], cwd=workspace, env=env,
+                                  stdout=daemon_log, stderr=daemon_log)
+        wait_for_health(port_agent, daemon)
+        collector_log = (root / "https-collector.log").open("wb")
+        handles.append(collector_log)
+        collector = MCPClient(
+            [str(binary), "mcp", "--native-admission", "--id", "sou65-https",
+             "--", sys.executable, "-I", "-u", str(fixture),
+             "--ledger", str(child_ledger), "--with-https"],
+            collector_env, collector_log, cwd=workspace)
+        init = collector.send({"jsonrpc": "2.0", "id": "init", "method": "initialize",
+                               "params": {"protocolVersion": "2024-11-05", "capabilities": {},
+                                          "clientInfo": {"name": "sou65-https", "version": "1"}}})
+        check("https-original-initialize", init is not None and "result" in json.loads(init))
+        collector.send({"jsonrpc": "2.0", "method": "notifications/initialized"}, reply=False)
+        listed = collector.send({"jsonrpc": "2.0", "id": "list", "method": "tools/list"})
+        check("https-original-complete-manifest",
+              listed is not None and json.loads(listed)["result"]["tools"] == discovered)
+        def call(call_id, tool, args):
+            data = collector.send({"jsonrpc": "2.0", "id": call_id,
+                "method": "tools/call", "params": {"name": tool, "arguments": args,
+                    "_meta": {"claudecode/toolUseId": "toolu_sou65_" + call_id,
+                              "progressToken": call_id}}})
+            return json.loads(data) if data else None
+
+        first = call("https-useful", "https_get", {"url": url})
+        check("https-real-useful-fetch-returned",
+              first is not None and "result" in first
+              and "red_widgets" in json.dumps(first))
+        check("https-independent-receiver-one-get",
+              count(ledger, "request") == 1
+              and count(ledger, "connection") == 1
+              and any(x.get("target") == "/document?item=7"
+                      and x.get("method") == "GET" and x.get("host") == f"127.0.0.1:{port}"
+                      for x in records(ledger) if x.get("event") == "request"))
+        check("https-broker-never-executed-in-child", not child_ledger.exists()
+              or child_ledger.stat().st_size == 0)
+
+        denied = call("https-other-recipient", "https_get", {
+            "url": f"https://127.0.0.1:{alternate_port}/document?item=7"})
+        check("https-substituted-destination-refused",
+              denied is not None and "red_widgets" not in json.dumps(denied)
+              and count(ledger, "request") == 1
+              and count(alternate_ledger, "connection") == 0
+              and count(alternate_ledger, "request") == 0
+              and (not child_ledger.exists() or child_ledger.stat().st_size == 0))
+        continuation = call("https-continue", "read_document", {"name": "inventory"})
+        check("https-useful-continuation-after-refusal",
+              continuation is not None and "Inventory: 7 red widgets." in json.dumps(continuation))
+        malformed = call("https-malformed-url", "https_get", {"url": "http://127.0.0.1/"})
+        check("https-malformed-scheme-no-transport",
+              (malformed is None or "red_widgets" not in json.dumps(malformed))
+              and count(ledger, "request") == 1
+              and count(alternate_ledger, "request") == 0)
+        check("https-child-only-executed-useful-read",
+              child_ledger.exists() and len(child_ledger.read_bytes().splitlines()) == 1)
+        check("https-enforcing-Agent-still-running", daemon.poll() is None)
+    finally:
+        if collector is not None:
+            collector.close()
+        if daemon is not None:
+            close(daemon)
+        for receiver in receivers:
+            close(receiver)
+        for handle in handles:
+            handle.close()
+
+
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument("--no-build",action="store_true")
@@ -308,6 +514,7 @@ def main():
               json.loads((profile/"profile.json").read_text())["registry_sha256"])
         real_collector_proof(binary,root,profile,check)
         real_create_file_proof(binary,root,run,check)
+        real_https_get_proof(binary,root,run,check)
         check("source-and-operator-doc-preserved",
               json.loads((profile/"source-snapshot.json").read_text())==discovery
               and json.loads((profile/"operator-declarations.json").read_text())==review)
