@@ -1,0 +1,56 @@
+name: SOU-65 focused MCP profile authoring
+on:
+  pull_request:
+    paths:
+      - 'crates/agentfw/src/mcp/profile_author.rs'
+      - 'crates/agentfw/src/mcp/mod.rs'
+      - 'crates/agentfw/src/main.rs'
+      - 'scripts/mcp-profile-authoring-demo.py'
+      - '.github/workflows/mcp-profile-author.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  author-cli:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt,clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Rust formatting
+        run: cargo fmt --all -- --check
+      - name: Build and emit bounded exact diagnostics
+        shell: bash
+        run: |
+          set +e
+          cargo check --locked -p agentfw --message-format=json > "$RUNNER_TEMP/mcp65-check.jsonl" 2> "$RUNNER_TEMP/mcp65-check.stderr"
+          code=$?
+          set -e
+          python3 - "$RUNNER_TEMP/mcp65-check.jsonl" <<'PY'
+          import json,sys
+          count=0
+          with open(sys.argv[1], encoding="utf-8") as stream:
+              for line in stream:
+                  try: event=json.loads(line)
+                  except ValueError: continue
+                  if event.get("reason") != "compiler-message": continue
+                  message=event.get("message",{})
+                  if message.get("level") not in ("error","warning"): continue
+                  count+=1
+                  if count>40: break
+                  first=(message.get("message") or "").replace("\n"," ")[:220]
+                  spans=message.get("spans") or []
+                  position=next((f'{s["file_name"]}:{s["line_start"]}' for s in spans if s.get("is_primary")), "unknown")
+                  print("SOU65_DIAGNOSTIC level="+message["level"]+" position="+position+" message="+first,flush=True)
+          print("SOU65_DIAGNOSTIC_COUNT",count,flush=True)
+          PY
+          exit "$code"
+      - name: Focused library tests
+        run: cargo test --locked -p agentfw mcp::profile_author -- --nocapture
+      - name: Real CLI proof
+        run: python3 scripts/mcp-profile-authoring-demo.py --no-build
