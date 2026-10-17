@@ -2523,6 +2523,145 @@ async fn sou67_create_file_v2_native_operator_bound_tool_name_admits_and_binds()
         .is_some_and(agentfw::native::is_digest));
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn sou67_create_file_v2_native_operator_bound_nested_schema_admits_and_binds() {
+    use agentfw::native::resource::{
+        create_file_executor_sha256, CREATE_FILE_EXECUTOR_PROFILE, CREATE_FILE_MAX_CONTENT,
+    };
+    let mut fixture = Fixture::new(ALLOW);
+    let workspace = fixture.dir.path().join("nested-workspace");
+    std::fs::create_dir(&workspace).unwrap();
+    let workspace = workspace.canonicalize().unwrap();
+    let tool_name = "publish_blob";
+    let schema = json!({
+        "type": "object",
+        "properties": {
+            "spec": {
+                "type": "object",
+                "properties": {
+                    "destination": { "type": "string" },
+                    "payload": { "type": "string" }
+                },
+                "required": ["destination", "payload"],
+                "additionalProperties": false
+            }
+        },
+        "required": ["spec"],
+        "additionalProperties": false
+    });
+    let schema_sha256 = agentfw::native::canonical_digest(&schema);
+    let resource_policy = json!({
+        "profile": {
+            "server_id": "nested-native-fixture",
+            "tool_name": tool_name,
+            "schema_sha256": schema_sha256,
+            "selectors": [{
+                "pointer": "/spec/destination",
+                "kind": "path",
+                "allow_missing_leaf": true
+            }]
+        },
+        "workspace": workspace,
+        "cwd": workspace,
+        "executor_sha256": create_file_executor_sha256(),
+        "classifier_sha256": "c".repeat(64),
+        "allowed_resources": [{
+            "kind": "path",
+            "canonical": workspace.join("nested_out.txt")
+        }],
+        "binding": {
+            "contract_version": "sw-native/binding/1",
+            "operation": "create_file",
+            "action": "write",
+            "path_selector": "/spec/destination",
+            "content_selector": "/spec/payload",
+            "response_contract": "sw-native/response/text/1",
+            "executor_profile": CREATE_FILE_EXECUTOR_PROFILE,
+            "max_content_bytes": CREATE_FILE_MAX_CONTENT
+        }
+    });
+
+    let policy: agentfw::native::resource::Policy =
+        serde_json::from_value(resource_policy.clone()).unwrap();
+    let mut configured = registry();
+    configured["tools"].as_array_mut().unwrap().push(json!({
+        "name": tool_name,
+        "schema_sha256": schema_sha256,
+        "action_class": "side_effecting",
+        "result_provenance": "local_project",
+        "egress": [],
+        "resource_policy": resource_policy
+    }));
+    let bytes = serde_json::to_vec(&configured).unwrap();
+    fixture.registry_sha256 = sha(&bytes);
+    // Explicitly proves that NativeState::from_bytes accepts nested create schema under SOU-67 operator binding.
+    fixture.state = make_state(
+        fixture.dir.path(),
+        Config {
+            enforce: true,
+            ..Config::default()
+        },
+        ALLOW,
+        &bytes,
+        &fixture.registry_sha256,
+    );
+
+    fixture.start("nested-write").await;
+    let args = json!({
+        "spec": {
+            "destination": "nested_out.txt",
+            "payload": "nested create bound content\n"
+        }
+    });
+    let admission = agentfw::native::resource::Admission {
+        server_id: policy.profile.server_id.clone(),
+        host_call_id: json!("nested-call-1"),
+        profile_sha256: agentfw::native::canonical_digest(
+            &serde_json::to_value(&policy.profile).unwrap(),
+        ),
+        executor_sha256: policy.executor_sha256.clone(),
+        classifier_sha256: policy.classifier_sha256.clone(),
+        snapshot_sha256: "d".repeat(64),
+        definition_sha256: "f".repeat(64),
+        input_sha256: "a".repeat(64),
+        resources: vec![agentfw::mcp::resources::ResourceEvidence {
+            pointer: "/spec/destination".into(),
+            source: agentfw::mcp::resources::EvidenceSource::Argument,
+            resource: policy.allowed_resources[0].clone(),
+        }],
+        execution: Some(agentfw::native::resource::create_file_binding(&policy, &args).unwrap()),
+        network: None,
+        windows_read: None,
+    };
+    let mut body = fixture.event("nested-write", "call");
+    body["contract_version"] = json!(agentfw::native::resource::CREATE_CONTRACT);
+    body["tool"] = json!(tool_name);
+    body["args"] = args.clone();
+    body["schema_sha256"] = json!(policy.profile.schema_sha256);
+    body["resource_admission"] = serde_json::to_value(admission).unwrap();
+
+    let (status, reply) = fixture.post(&body).await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert_eq!(reply["verdict"], "allow", "{reply}");
+    assert_eq!(reply["release"], true);
+    assert!(reply["binding_sha256"]
+        .as_str()
+        .is_some_and(agentfw::native::is_digest));
+
+    // Content substitution is denied
+    let mut mutated = body.clone();
+    mutated["args"]["spec"]["payload"] = json!("substituted payload\n");
+    let (mut_status, mut_reply) = fixture.post(&mutated).await;
+    assert_eq!(mut_status, StatusCode::OK, "{mut_reply}");
+    assert_eq!(mut_reply["verdict"], "deny");
+    assert_eq!(mut_reply["release"], false);
+    assert_eq!(
+        mut_reply["reason_codes"],
+        json!(["native_create_binding_mismatch"])
+    );
+}
+
 const HTTPS_NATIVE_URL: &str = "https://fixture.example/document.json?edition=approved";
 const HTTPS_ALLOW: &str =
     "agent_policies: []\negress_allowlist: [fixture.example]\ndefault: allow\n";

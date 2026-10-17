@@ -1756,9 +1756,19 @@ where
                                 let [super::resources::Resource::Path { canonical }] = policy.allowed_resources.as_slice() else {
                                     bail!("validated Windows handle authority missing");
                                 };
-                                let original = args["path"].as_str().context("validated Windows path missing")?;
+                                let path_ptr = policy.path_selector();
+                                let original = crate::mcp::resources::selected(&args, path_ptr)
+                                    .ok()
+                                    .flatten()
+                                    .and_then(|v| v.as_str())
+                                    .context("validated Windows path missing")?;
                                 if policy.is_windows_create() {
-                                    let content = args["content"].as_str().context("validated create content missing")?;
+                                    let content_ptr = policy.content_selector();
+                                    let content = crate::mcp::resources::selected(&args, content_ptr)
+                                        .ok()
+                                        .flatten()
+                                        .and_then(|v| v.as_str())
+                                        .context("validated create content missing")?;
                                     let prepared = match crate::windows_create::PreparedCreate::prepare(
                                         &policy.workspace, &policy.cwd, original, canonical, content) {
                                         Ok(prepared) => prepared,
@@ -1782,12 +1792,12 @@ where
                                     prepared_windows_read = Some(prepared);
                                 }
                             }
+                            if collector.config.server_id != policy.profile.server_id {
+                                write_resource_reply(client, host, true,
+                                    &withheld(request_id, "invocation", &json!(["resource_server_identity_mismatch"]))).await?;
+                                continue;
+                            }
                             if policy.is_create_file() || policy.is_https_get() || policy.is_windows_handles() {
-                                if collector.config.server_id != policy.profile.server_id {
-                                    write_resource_reply(client, host, true,
-                                        &withheld(request_id, "invocation", &json!(["resource_server_identity_mismatch"]))).await?;
-                                    continue;
-                                }
                                 if !policy.is_windows_handles() {
                                     // Match run()'s actual operator-selected session root,
                                     // including its cwd fallback when no override exists.
@@ -2102,7 +2112,7 @@ where
                                     &withheld(request_id, "invocation", &json!([reason]))).await?;
                                 continue;
                             }
-                            let creating = policy.is_create_file();
+                            let creating = policy.is_create_bound_or_named(name);
                             if creating && !cfg!(target_os = "linux") {
                                 let reasons = json!(["resource_create_platform_unsupported"]);
                                 write_resource_reply(client, host, resource_reply,
@@ -2110,7 +2120,7 @@ where
                                 continue;
                             }
                             if !((installed.action_class == ActionClass::ReadOnly
-                                && !creating)
+                                && policy.is_read_bound_or_named(name))
                                 || (installed.action_class == ActionClass::SideEffecting
                                     && creating))
                             {
@@ -2145,7 +2155,11 @@ where
                                 if creating {
                                     #[cfg(target_os = "linux")]
                                     {
-                                        let content = args["content"].as_str()
+                                        let content_ptr = policy.content_selector();
+                                        let content = crate::mcp::resources::selected(&args, content_ptr)
+                                            .ok()
+                                            .flatten()
+                                            .and_then(|v| v.as_str())
                                             .context("validated create content missing")?;
                                         match super::create_file::PreparedCreate::prepare(&pinned, target_path, content) {
                                             Ok(prepared) => prepared_create = Some(prepared),
@@ -2304,15 +2318,28 @@ where
                         }
                         #[cfg(any(target_os = "linux", windows))]
                         if let Some(prepared) = prepared_create {
+                            let policy = installed.resource_policy.as_ref().expect("create policy selected");
                             #[cfg(windows)]
                             {
-                                let policy = installed.resource_policy.as_ref().expect("Windows create policy selected");
                                 let bound = resource_admission.as_ref().and_then(|(admission, _)| admission.execution.as_ref())
                                     .context("Windows create authority missing")?;
                                 ensure!(&crate::native::resource::windows_create_binding_with_identity(
                                     policy, &args, prepared.identity()).map_err(anyhow::Error::msg)? == bound,
                                     "Windows create authority changed before staging");
                             }
+                            let path_ptr = policy.path_selector();
+                            let content_ptr = policy.content_selector();
+                            let path_str = crate::mcp::resources::selected(&args, path_ptr)
+                                .ok()
+                                .flatten()
+                                .and_then(|v| v.as_str())
+                                .or_else(|| args["path"].as_str());
+                            let content_str = crate::mcp::resources::selected(&args, content_ptr)
+                                .ok()
+                                .flatten()
+                                .and_then(|v| v.as_str())
+                                .or_else(|| args["content"].as_str())
+                                .unwrap_or("");
                             // Only staging runs on the blocking worker. If unsupported
                             // cancellation/overlap wins, a detached worker cannot publish:
                             // dropping its returned owner cleans only its own stage.
@@ -2327,7 +2354,7 @@ where
                                     // publication is indeterminate, never evidence of no write.
                                     eprintln!("{}", json!({"event":"mcp_create_file_publication_intent",
                                         "host_call_id":request_id,"publication_attempted":true,
-                                        "staged_bytes":args["content"].as_str().map(str::len),
+                                        "staged_bytes":content_str.len(),
                                         "outcome":"indeterminate_until_completion"}));
                                     Ok(staged.publish())
                                 }).await?,
@@ -2336,8 +2363,9 @@ where
                             let (payload, committed, result_kind) = match creation {
                                 Ok(commit) => (json!({
                                     "success": true, "created": true, "committed": commit.committed,
-                                    "path": args["path"], "bytes_written": commit.bytes_written,
-                                    "content_sha256": sha(args["content"].as_str().unwrap().as_bytes()),
+                                    "path": path_str.map(Value::from).unwrap_or_else(|| args["path"].clone()),
+                                    "bytes_written": commit.bytes_written,
+                                    "content_sha256": sha(content_str.as_bytes()),
                                     "file_synced": commit.file_synced,
                                     "directory_synced": commit.directory_synced
                                 }), commit.committed, "value"),

@@ -1,0 +1,45 @@
+Agent lifecycle on macOS	pass	3m2s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067335/job/117368583516	
+Agent security scorecard	pass	37s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067310/job/117368582950	
+Analyze (actions)	pass	39s	https://github.com/SoupTeam/soup-wall/actions/runs/39023066268/job/117368582188	
+Analyze (c-cpp)	pass	50s	https://github.com/SoupTeam/soup-wall/actions/runs/39023066268/job/117368582063	
+linux-read-create-https-regressions	pending	0	https://github.com/SoupTeam/soup-wall/actions/runs/39023067303/job/117368583252	
+linux-create-file	pending	0	https://github.com/SoupTeam/soup-wall/actions/runs/39023067283/job/117368583189	
+Documentation links	pass	8s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067335/job/117368583449	
+docker-build	pending	0	https://github.com/SoupTeam/soup-wall/actions/runs/39023067335/job/117368583477	
+SAML x86_64-pc-windows-msvc	pass	2m3s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067335/job/117368583451	
+SAML x86_64-apple-darwin	pass	1m33s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067335/job/117368583533	
+validate-gate-matrix	pass	7s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067331/job/117368583207	
+postgres-integration	pass	3m10s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067335/job/117368583399	
+Linux fixture baseline (linux/amd64)	pass	2m54s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067421/job/117368583952	
+Windows launcher guidance and reporting	pass	19s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067421/job/117368583979	
+Analyze (python)	pass	1m3s	https://github.com/SoupTeam/soup-wall/actions/runs/39023066268/job/117368582197	
+required-linux-sandbox-and-real-host	pass	2m53s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067345/job/117368583170	
+linux	pass	4m15s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067297/job/117368583051	
+Native macOS admission resilience	pending	0	https://github.com/SoupTeam/soup-wall/actions/runs/39023067335/job/117368583407	
+Real Agent verified HTTPS rollout and rollback	pass	2m2s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067358/job/117368583352	
+Keycloak driver offline safety	pass	9s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067290/job/117368583138	
+Signed activation and rollback on real Agent	pass	2m20s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067373/job/117368583400	
+Cargo audit	pass	18s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067364/job/117368583429	
+CodeQL	skipping	3s	https://github.com/SoupTeam/soup-wall/runs/117368673306	
+group-rollout	pass	4m21s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067343/job/117368583247	
+redis-integration	pass	1m31s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067335/job/117368583510	
+Linux fixture baseline (linux/arm64)	pass	2m36s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067421/job/117368583777	
+Analyze (rust)	pending	0	https://github.com/SoupTeam/soup-wall/actions/runs/39023066268/job/117368582235	
+Real Console + Agent credential rotation (sqlite)	pass	2m20s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067342/job/117368583272	
+OIDC SAML SCIM sandbox fixtures	pass	1m18s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067290/job/117368582966	
+Rust formatting preview (read-only)	pass	18s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067342/job/117368583063	
+CycloneDX SBOM	pass	20s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067364/job/117368583289	
+Real Console + Agent credential rotation (postgres)	pass	2m37s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067342/job/117368583208	
+linux-https-get	pending	0	https://github.com/SoupTeam/soup-wall/actions/runs/39023067344/job/117368583160	
+Locked workspace license policy	pass	20s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067339/job/117368583153	
+PostgreSQL migration and real Agent rollout	pending	0	https://github.com/SoupTeam/soup-wall/actions/runs/39023067298/job/117368583017	
+all-features	pending	0	https://github.com/SoupTeam/soup-wall/actions/runs/39023067335/job/117368583396	
+agent-windows-security	pending	0	https://github.com/SoupTeam/soup-wall/actions/runs/39023067335/job/117368583277	
+SAML x86_64-unknown-linux-gnu	pass	41s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067335/job/117368583479	
+Linux dependency alerts and protected durable recovery	pending	0	https://github.com/SoupTeam/soup-wall/actions/runs/39023067357/job/117368583178	
+SAML aarch64-apple-darwin	pass	1m21s	https://github.com/SoupTeam/soup-wall/actions/runs/39023067335/job/117368583484	
+native-windows-standard-user	pending	0	https://github.com/SoupTeam/soup-wall/actions/runs/39023067295/job/117368583100	
+native-windows-standard-user	pending	0	https://github.com/SoupTeam/soup-wall/actions/runs/39023067303/job/117368583055	
+owned-recovery	pending	0	https://github.com/SoupTeam/soup-wall/actions/runs/39023067363/job/117368583254	
+standard-user-acceptance	pending	0	https://github.com/SoupTeam/soup-wall/actions/runs/39023067341/job/117368583296	
+test	pending	0	https://github.com/SoupTeam/soup-wall/actions/runs/39023067335/job/117368583501	

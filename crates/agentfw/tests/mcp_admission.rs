@@ -158,6 +158,9 @@ if mode == 'classified-read': schemas['read_document'] = {'type':'object','prope
 if mode == 'operator-binding':
  del schemas['read_document']
  schemas['fetch_document'] = {'type':'object','properties':{'path':{'type':'string'}},'required':['path'],'additionalProperties':False}
+if mode == 'operator-create-binding':
+ del schemas['read_document']
+ schemas['save_artifact'] = {'type':'object','properties':{'spec':{'type':'object','properties':{'destination':{'type':'string'},'payload':{'type':'string'}},'required':['destination','payload'],'additionalProperties':False}},'required':['spec'],'additionalProperties':False}
 if mode == 'nested-input':
  del schemas['read_document']
  schemas['inventory_lookup'] = json.loads(nested_schema)
@@ -4949,6 +4952,11 @@ async fn sou67_operator_owned_tool_bindings_allow_arbitrary_tool_name_under_cons
                     "cwd": canonical_dir,
                     "executor_sha256": "e".repeat(64),
                     "classifier_sha256": "c".repeat(64),
+                    "binding": {
+                        "contract_version": "sw-native/binding/1",
+                        "operation": "read_document",
+                        "path_selector": "/path"
+                    },
                     "allowed_resources": [{
                         "kind": "path",
                         "canonical": canonical_file
@@ -5017,5 +5025,238 @@ async fn sou67_operator_owned_tool_bindings_allow_arbitrary_tool_name_under_cons
                 .to_string()
                 .contains("native_resource_not_allowed")
     );
+    assert_eq!(executed(&fixture.ledger).len(), 0);
+}
+
+#[tokio::test]
+async fn sou67_operator_owned_tool_bindings_allow_arbitrary_create_tool_name_under_constrained_execution(
+) {
+    use agentfw::native::resource::{
+        create_file_executor_sha256, CREATE_FILE_EXECUTOR_PROFILE, CREATE_FILE_MAX_CONTENT,
+    };
+
+    let rule_baseline_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("rule_baseline/rule_baseline.py");
+    let classifier_digest = sha(&std::fs::read(&rule_baseline_path).unwrap());
+
+    let mut fixture =
+        Fixture::with_resource_policy("operator-create-binding", true, Some("rule-baseline"), |dir, registry| {
+            let canonical_dir = dir.canonicalize().unwrap();
+            let canonical_file = canonical_dir.join("created-nested.txt").to_str().unwrap().to_string();
+            let schema = json!({
+                "type": "object",
+                "properties": {
+                    "spec": {
+                        "type": "object",
+                        "properties": {
+                            "destination": { "type": "string" },
+                            "payload": { "type": "string" }
+                        },
+                        "required": ["destination", "payload"],
+                        "additionalProperties": false
+                    }
+                },
+                "required": ["spec"],
+                "additionalProperties": false
+            });
+            let profile = json!({
+                "server_id": "fixture",
+                "tool_name": "save_artifact",
+                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "selectors": [{ "pointer": "/spec/destination", "kind": "path", "allow_missing_leaf": true }]
+            });
+            registry["tools"][0] = json!({
+                "name": "save_artifact",
+                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "action_class": "side_effecting",
+                "result_provenance": "untrusted",
+                "egress": [],
+                "resource_policy": {
+                    "profile": profile,
+                    "workspace": canonical_dir,
+                    "cwd": canonical_dir,
+                    "executor_sha256": create_file_executor_sha256(),
+                    "classifier_sha256": classifier_digest,
+                    "binding": {
+                        "contract_version": "sw-native/binding/1",
+                        "operation": "create_file",
+                        "action": "write",
+                        "path_selector": "/spec/destination",
+                        "content_selector": "/spec/payload",
+                        "response_contract": "sw-native/response/text/1",
+                        "executor_profile": CREATE_FILE_EXECUTOR_PROFILE,
+                        "max_content_bytes": CREATE_FILE_MAX_CONTENT
+                    },
+                    "allowed_resources": [{
+                        "kind": "path",
+                        "canonical": canonical_file
+                    }]
+                }
+            });
+        })
+        .await;
+    fixture.ready().await;
+
+    // 1. Authorized create with nested arguments under operator binding.
+    let target_dest = "created-nested.txt";
+    let call = json!({
+        "jsonrpc": "2.0",
+        "id": "sou67-create-auth",
+        "method": "tools/call",
+        "params": {
+            "name": "save_artifact",
+            "arguments": {
+                "spec": {
+                    "destination": target_dest,
+                    "payload": "nested create file payload\n"
+                }
+            }
+        }
+    });
+    let reply: Value =
+        serde_json::from_str(&fixture.exchange(&call.to_string()).await.unwrap()).unwrap();
+    assert_eq!(reply["id"], "sou67-create-auth");
+    #[cfg(target_os = "linux")]
+    {
+        assert!(reply["result"]["isError"].is_null() || reply["result"]["isError"] == false);
+        let created_path = fixture._dir.path().join(target_dest);
+        assert!(created_path.exists());
+        assert_eq!(
+            std::fs::read_to_string(&created_path).unwrap(),
+            "nested create file payload\n"
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                created_path.metadata().unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+        assert_eq!(
+            executed(&fixture.ledger).len(),
+            0,
+            "constrained executor handles create directly; child process must never execute"
+        );
+
+        // 2. Replay / no-overwrite: creating existing file fails closed.
+        let mut replay_call = call.clone();
+        replay_call["id"] = json!("sou67-create-replay");
+        let replay_reply: Value =
+            serde_json::from_str(&fixture.exchange(&replay_call.to_string()).await.unwrap())
+                .unwrap();
+        assert_eq!(replay_reply["id"], "sou67-create-replay");
+        assert_eq!(replay_reply["result"]["isError"], true);
+        assert!(replay_reply
+            .to_string()
+            .contains("native_create_target_exists_or_unavailable"));
+        assert_eq!(executed(&fixture.ledger).len(), 0);
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        assert_eq!(reply["result"]["isError"], true);
+        assert!(reply
+            .to_string()
+            .contains("resource_create_platform_unsupported"));
+        assert_eq!(
+            executed(&fixture.ledger).len(),
+            0,
+            "refused create must never execute hostile child process"
+        );
+    }
+
+    // 3. Traversal outside workspace fails closed.
+    let traversal_call = json!({
+        "jsonrpc": "2.0",
+        "id": "sou67-create-traversal",
+        "method": "tools/call",
+        "params": {
+            "name": "save_artifact",
+            "arguments": {
+                "spec": {
+                    "destination": "../outside.txt",
+                    "payload": "hostile"
+                }
+            }
+        }
+    });
+    let trav_reply: Value =
+        serde_json::from_str(&fixture.exchange(&traversal_call.to_string()).await.unwrap())
+            .unwrap();
+    assert_eq!(trav_reply["id"], "sou67-create-traversal");
+    assert_eq!(trav_reply["result"]["isError"], true);
+    assert_eq!(executed(&fixture.ledger).len(), 0);
+}
+
+#[tokio::test]
+async fn sou67_read_policy_server_id_mismatch_refused() {
+    let mut fixture =
+        Fixture::with_resource_policy("operator-binding", true, None, |dir, registry| {
+            let file = dir.join("reviewed-input.txt");
+            std::fs::write(&file, "custom bound contents").unwrap();
+            let canonical_file = file.canonicalize().unwrap().to_str().unwrap().to_string();
+            let canonical_dir = dir.canonicalize().unwrap();
+            let schema = json!({
+                "type": "object",
+                "properties": { "path": { "type": "string" } },
+                "required": ["path"],
+                "additionalProperties": false
+            });
+            let profile = json!({
+                "server_id": "other-server",
+                "tool_name": "fetch_document",
+                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "selectors": [{ "pointer": "/path", "kind": "path" }]
+            });
+            registry["tools"][0] = json!({
+                "name": "fetch_document",
+                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "action_class": "read_only",
+                "result_provenance": "untrusted",
+                "egress": [],
+                "resource_policy": {
+                    "profile": profile,
+                    "workspace": canonical_dir,
+                    "cwd": canonical_dir,
+                    "executor_sha256": "e".repeat(64),
+                    "classifier_sha256": "c".repeat(64),
+                    "binding": {
+                        "contract_version": "sw-native/binding/1",
+                        "operation": "read_document",
+                        "path_selector": "/path"
+                    },
+                    "allowed_resources": [{
+                        "kind": "path",
+                        "canonical": canonical_file
+                    }]
+                }
+            });
+        })
+        .await;
+    fixture.ready().await;
+
+    let target_file = fixture._dir.path().join("reviewed-input.txt");
+    let call = json!({
+        "jsonrpc": "2.0",
+        "id": "sou67-server-mismatch",
+        "method": "tools/call",
+        "params": {
+            "name": "fetch_document",
+            "arguments": {
+                "path": target_file.to_str().unwrap()
+            }
+        }
+    });
+    let reply: Value =
+        serde_json::from_str(&fixture.exchange(&call.to_string()).await.unwrap()).unwrap();
+    assert_eq!(reply["id"], "sou67-server-mismatch");
+    assert_eq!(reply["result"]["isError"], true);
+    assert!(reply
+        .to_string()
+        .contains("resource_server_identity_mismatch"));
     assert_eq!(executed(&fixture.ledger).len(), 0);
 }
