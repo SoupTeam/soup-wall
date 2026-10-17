@@ -184,8 +184,11 @@ enum Cmd {
         #[arg(long)]
         path: PathBuf,
     },
-    /// Review and compile one operator-owned MCP admission profile (no installation).
+    /// Review, compile, and manage transactional MCP admission profiles.
     McpProfile {
+        /// Optional custom agentfw home directory (default: ~/.agentfw).
+        #[arg(long)]
+        home: Option<PathBuf>,
         #[command(subcommand)]
         command: agentfw::mcp::profile_author::Command,
     },
@@ -601,7 +604,13 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Cmd::McpConnection { command } => agentfw::mcp::connection::run(command),
-        Cmd::McpProfile { command } => agentfw::mcp::profile_author::run(command),
+        Cmd::McpProfile { home, command } => {
+            let home = match home {
+                Some(h) => h,
+                None => Config::home()?,
+            };
+            agentfw::mcp::profile_author::run(command, &home)
+        }
         Cmd::ChildAuthority { action } => {
             use agentfw::native::child_authority;
             let home = Config::home()?;

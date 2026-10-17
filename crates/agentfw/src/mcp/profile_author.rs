@@ -71,6 +71,37 @@ pub enum Command {
         #[arg(long)]
         out: PathBuf,
     },
+    /// Transactionally install a compiled MCP profile into active configuration.
+    Install {
+        #[arg(long)]
+        profile: PathBuf,
+        #[arg(long)]
+        expected_bundle_sha: Option<String>,
+    },
+    /// Transactionally upgrade the active MCP profile with fresh generation authority.
+    Upgrade {
+        #[arg(long)]
+        profile: PathBuf,
+        #[arg(long)]
+        expected_bundle_sha: Option<String>,
+        #[arg(long)]
+        expect_generation: Option<u64>,
+        #[arg(long)]
+        accept_diff: Option<String>,
+    },
+    /// Transactionally rollback to a previous MCP profile revision.
+    Rollback {
+        #[arg(long)]
+        revision: Option<String>,
+        #[arg(long)]
+        expect_generation: Option<u64>,
+        #[arg(long)]
+        accept_diff: Option<String>,
+    },
+    /// Inspect active and installed MCP profiles and daemon binding.
+    Status,
+    /// Recover from an interrupted or crashed profile lifecycle transaction.
+    Recover,
 }
 
 #[derive(Deserialize)]
@@ -747,7 +778,7 @@ fn publish_dir(out: &Path, files: &[(&str, Vec<u8>)]) -> Result<()> {
         anyhow::bail!("private atomic profile publication currently requires Linux")
     }
 }
-pub fn run(cmd: Command) -> Result<()> {
+pub fn run(cmd: Command, home: &Path) -> Result<()> {
     match cmd {
         Command::Import {
             snapshot,
@@ -837,6 +868,49 @@ pub fn run(cmd: Command) -> Result<()> {
                 json!({"status":"compiled-not-installed","path":out,
                 "registry_sha256":p.profile.registry_sha256,"admitted_tools":p.profile.tools.len()})
             );
+        }
+        Command::Install {
+            profile,
+            expected_bundle_sha,
+        } => {
+            let manager = crate::mcp::profile_lifecycle::ProfileManager::new(home);
+            let record = manager.install(&profile, expected_bundle_sha.as_deref())?;
+            println!("{}", serde_json::to_string_pretty(&record)?);
+        }
+        Command::Upgrade {
+            profile,
+            expected_bundle_sha,
+            expect_generation,
+            accept_diff,
+        } => {
+            let manager = crate::mcp::profile_lifecycle::ProfileManager::new(home);
+            let record = manager.upgrade(
+                &profile,
+                expected_bundle_sha.as_deref(),
+                expect_generation,
+                accept_diff.as_deref(),
+            )?;
+            println!("{}", serde_json::to_string_pretty(&record)?);
+        }
+        Command::Rollback {
+            revision,
+            expect_generation,
+            accept_diff,
+        } => {
+            let manager = crate::mcp::profile_lifecycle::ProfileManager::new(home);
+            let record =
+                manager.rollback(revision.as_deref(), expect_generation, accept_diff.as_deref())?;
+            println!("{}", serde_json::to_string_pretty(&record)?);
+        }
+        Command::Status => {
+            let manager = crate::mcp::profile_lifecycle::ProfileManager::new(home);
+            let status = manager.status()?;
+            println!("{}", serde_json::to_string_pretty(&status)?);
+        }
+        Command::Recover => {
+            let manager = crate::mcp::profile_lifecycle::ProfileManager::new(home);
+            manager.recover()?;
+            println!("{}", json!({"status": "recovered"}));
         }
     }
     Ok(())
@@ -966,5 +1040,12 @@ mod tests {
         for name in ["create_file", "https_get"] {
             assert!(policy_for("owned", name, &"0".repeat(64), &Authority::ReadOnly).is_err());
         }
+    }
+    #[test]
+    fn run_dispatches_lifecycle_status_and_recover() {
+        let temp = tempfile::tempdir().unwrap();
+        let home = temp.path().canonicalize().unwrap();
+        assert!(run(Command::Status, &home).is_ok());
+        assert!(run(Command::Recover, &home).is_ok());
     }
 }
