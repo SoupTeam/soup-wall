@@ -540,10 +540,17 @@ fn spawn_gateway_named(
             let profile = directory.join(".agentfw");
             if !profile.exists() {
                 std::fs::create_dir_all(&profile).unwrap();
-                use std::os::unix::fs::PermissionsExt;
-                std::fs::set_permissions(&profile, std::fs::Permissions::from_mode(0o700)).unwrap();
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    std::fs::set_permissions(&profile, std::fs::Permissions::from_mode(0o700))
+                        .unwrap();
+                }
             }
-            let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+            let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .parent()
+                .and_then(Path::parent)
+                .expect("workspace root is embedded in the test");
             let archive = agentfw::classifier_runtime::package::build(
                 agentfw::classifier_runtime::package::Which::Frozen,
                 &root,
@@ -5383,8 +5390,11 @@ async fn sou64_installed_package_satisfies_constrained_create_profile_and_wrong_
     use agentfw::native::resource::{
         create_file_executor_sha256, CREATE_FILE_EXECUTOR_PROFILE, CREATE_FILE_MAX_CONTENT,
     };
-    let rule_baseline_path =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../rule_baseline/rule_baseline.py");
+    let rule_baseline_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("workspace root is embedded in the test")
+        .join("rule_baseline/rule_baseline.py");
     let real_digest = sha(&std::fs::read(&rule_baseline_path).unwrap());
     const CREATE_POLICY: &str = "agent_policies:
   - name: fixture-destructive-confirmation
