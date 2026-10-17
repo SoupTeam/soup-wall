@@ -78,6 +78,8 @@ enum ChildAuthorityCmd {
 enum Cmd {
     /// Run the daemon.
     Serve,
+    /// Diagnose an installed Agent without modifying host settings or starting tools.
+    Doctor(agentfw::doctor::DoctorArgs),
     /// Query authenticated runtime diagnostics; unknown protection exits 2.
     ProtectionStatus(agentfw::protection_status::QueryArgs),
     /// Summarize an audit log: what would this policy have done?
@@ -356,6 +358,7 @@ enum ServiceCommand {
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.cmd {
+        Cmd::Doctor(args) => std::process::exit(agentfw::doctor::run(args)),
         Cmd::ProtectionStatus(args) => {
             std::process::exit(agentfw::protection_status::run_cli(args))
         }

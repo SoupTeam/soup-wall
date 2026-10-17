@@ -1,0 +1,41 @@
+name: SOU-74 installed Agent doctor
+on:
+  pull_request:
+    paths:
+      - 'crates/agentfw/**'
+      - 'docs/operations/AGENT_DOCTOR.md'
+      - 'docs/operations/evidence/sou74/**'
+      - '.github/workflows/agent-doctor.yml'
+  push:
+    branches: [codex/sou-74-agent-doctor]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  agent-doctor-linux:
+    name: doctor-linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Record exact source
+        run: |
+          git rev-parse HEAD
+          rustc --version
+          cargo --version
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Focused doctor and privacy unit tests
+        run: |
+          cargo test --locked -p agentfw --lib doctor
+          cargo test --locked -p agentfw --lib support_bundle
+      - name: Installed command outside checkout
+        run: cargo test --locked -p agentfw --test doctor -- --nocapture
+      - name: Warnings denied
+        run: cargo clippy --locked -p agentfw --all-targets -- -D warnings
