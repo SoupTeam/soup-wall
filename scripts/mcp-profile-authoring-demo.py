@@ -468,6 +468,14 @@ def main():
     def run(*args,success=True):
         result=subprocess.run([str(binary),"mcp-profile",*map(str,args)],
                               cwd=ROOT,capture_output=True,text=True,timeout=20)
+        if (result.returncode == 0) != success:
+            # Only fixed test-owned fixtures are passed to this helper. Bound
+            # CLI diagnostics; never print raw command arguments or JSON bodies.
+            message=result.stderr.strip().splitlines()[-1:] or ["no diagnostic"]
+            print("SOU65_CLI_FAILURE operation="+str(args[0])+
+                  " expected_success="+str(success)+
+                  " returncode="+str(result.returncode)+
+                  " diagnostic="+message[0][:240],file=sys.stderr)
         check("exit-"+str(len(checks)), (result.returncode==0)==success)
         return json.loads(result.stdout) if success else None
     with tempfile.TemporaryDirectory(prefix="sou65-owned-") as folder:
