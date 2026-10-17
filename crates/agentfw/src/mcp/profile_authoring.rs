@@ -537,12 +537,25 @@ mod tests {
         assert!(selector_shape(&schema, "/message/~2recipient").is_err());
     }
 
-    #[test] fn drift_is_rejected() {
-        let snap=Discovery{format:FORMAT.into(),server_id:"owned".into(),server_version:"1".into(),
-            tools:vec![json!({"name":"read","inputSchema":{"type":"object","properties":{},
-                "additionalProperties":false}})]};
-        let declaration=Declaration{format:FORMAT.into(),server_id:"owned".into(),server_version:"1".into(),
-            discovery_sha256:"0".repeat(64),registry_id:"owned".into(),tools:vec![]};
-        assert!(verify_declaration(&declaration,&snap).is_err());
+    #[test]
+    fn drift_is_rejected() {
+        let snap = Discovery {
+            format: FORMAT.into(),
+            server_id: "owned".into(),
+            server_version: "1".into(),
+            tools: vec![
+                json!({"name":"read","inputSchema":{"type":"object","properties":{},
+                "additionalProperties":false}}),
+            ],
+        };
+        let declaration = Declaration {
+            format: FORMAT.into(),
+            server_id: "owned".into(),
+            server_version: "1".into(),
+            discovery_sha256: "0".repeat(64),
+            registry_id: "owned".into(),
+            tools: vec![],
+        };
+        assert!(verify_declaration(&declaration, &snap).is_err());
     }
 }
