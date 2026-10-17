@@ -2508,6 +2508,7 @@ async fn sou67_create_file_v2_native_operator_bound_tool_name_admits_and_binds()
         }],
         execution: Some(agentfw::native::resource::create_file_binding(&policy, &args).unwrap()),
         network: None,
+        post: None,
         windows_read: None,
     };
     let mut body = fixture.event("write-bound", "call");
@@ -2635,6 +2636,7 @@ async fn sou67_create_file_v2_native_operator_bound_nested_schema_admits_and_bin
         }],
         execution: Some(agentfw::native::resource::create_file_binding(&policy, &args).unwrap()),
         network: None,
+        post: None,
         windows_read: None,
     };
     let mut body = fixture.event("nested-write", "call");
