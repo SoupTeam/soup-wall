@@ -118,6 +118,12 @@ pub fn openai_tool_calls_strict(response: &serde_json::Value) -> ContentStatus<V
             None => continue,
         };
 
+        if msg.get("function_call").is_some() {
+            return ContentStatus::Unsupported(
+                "legacy function_call is not supported; use tool_calls",
+            );
+        }
+
         if let Some(tool_calls) = msg.get("tool_calls").and_then(|v| v.as_array()) {
             for tc in tool_calls {
                 let tool_type = tc
@@ -639,6 +645,10 @@ impl StreamingToolCalls {
         };
         let mut completed = false;
         for choice in choices {
+            if choice.pointer("/delta/function_call").is_some() {
+                return Err("legacy function_call is not supported in streaming; use tool_calls");
+            }
+
             if let Some(calls) = choice
                 .pointer("/delta/tool_calls")
                 .and_then(serde_json::Value::as_array)

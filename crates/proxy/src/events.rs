@@ -305,32 +305,27 @@ fn anthropic_texts(
     output: bool,
     events: &mut Vec<SecurityEvent>,
 ) -> Result<(), &'static str> {
+    let direction = if output {
+        EventDirection::Output
+    } else {
+        EventDirection::Input
+    };
+
     match value {
         Value::String(content) if !content.is_empty() => {
-            events.push(text(
-                Provider::Anthropic,
-                if output {
-                    EventDirection::Output
-                } else {
-                    EventDirection::Input
-                },
-                role,
-                content,
-            ));
+            events.push(text(Provider::Anthropic, direction, role, content));
         }
         Value::Array(blocks) => {
             for block in blocks {
-                if let Some("text") = block.get("type").and_then(Value::as_str) {
+                let block_type = block.get("type").and_then(Value::as_str);
+                if block_type == Some("text") {
                     if let Some(content) = block.get("text").and_then(Value::as_str) {
                         if !content.is_empty() {
-                            events.push(text(
-                                Provider::Anthropic,
-                                EventDirection::Output,
-                                Some("assistant"),
-                                content,
-                            ));
+                            events.push(text(Provider::Anthropic, direction, role, content));
                         }
                     }
+                } else if matches!(block_type, Some("image") | Some("document")) {
+                    return Err("unsupported multimodal block in text array");
                 }
             }
         }
