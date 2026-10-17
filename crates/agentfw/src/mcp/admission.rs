@@ -1792,7 +1792,12 @@ where
                                     prepared_windows_read = Some(prepared);
                                 }
                             }
-                            if collector.config.server_id != policy.profile.server_id {
+                            if (policy.is_create_file()
+                                || policy.is_https_get()
+                                || policy.is_windows_handles()
+                                || policy.binding.is_some())
+                                && collector.config.server_id != policy.profile.server_id
+                            {
                                 write_resource_reply(client, host, true,
                                     &withheld(request_id, "invocation", &json!(["resource_server_identity_mismatch"]))).await?;
                                 continue;

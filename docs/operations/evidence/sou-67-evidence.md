@@ -38,12 +38,13 @@ PR #161, supported by independent Codex (`gpt-6.1-sol`) verification.
 4. **P2 — Reserved-Name Exceptions:**
    - Documented reserved names (`https_get` for network authority, `create_file` for create authority) in `docs/operations/OPERATOR_TOOL_BINDINGS.md`.
 
-5. **Inherited Security Finding — Unix Read Server ID Scoping:**
-   - Universal equality check ensures collector and policy server IDs match. Negative witness `sou67_read_policy_server_id_mismatch_refused` verifies refusal with `resource_server_identity_mismatch` and zero child dispatch.
+5. **Inherited Security Finding — Server ID Scoping & Continuation Compatibility:**
+   - Scoped server identity check: enforces matching `collector.config.server_id == policy.profile.server_id` across all versioned bindings (`policy.binding.is_some()`), create, https, and windows handles, while preserving compatibility for legacy unbound Unix read continuations (tested in `verify-sou54-create-file.py`).
+   - Negative witness `sou67_read_policy_server_id_mismatch_refused` verifies refusal with `resource_server_identity_mismatch` and zero child dispatch for versioned bindings.
 
-6. **Codex Audit Findings:**
-   - Replay test uses fresh JSON-RPC ID (`sou67-create-replay`) to verify `native_create_target_exists_or_unavailable` without triggering collector session drop.
-   - Enforced supported `executor_profile` in `ExecutionPolicy::supported()` for `read_document`.
+6. **Cross-Platform & Result Firewall Verification (CI Remediation):**
+   - Direct Unix create test `sou67_operator_owned_tool_bindings_allow_arbitrary_create_tool_name_under_constrained_execution` is guarded with `#[cfg(unix)]`, preventing unsupported platform panic during registry loading on Windows.
+   - Scoped fixture firewall policy (`CREATE_POLICY`) configures `min_severity: medium` on `fixture-result-injection`, ensuring 64-character SHA-256 digests in create receipts are released cleanly without false-positive injection withholding.
 
 ---
 
@@ -56,3 +57,4 @@ PR #161, supported by independent Codex (`gpt-6.1-sol`) verification.
 | `cargo test -p agentfw --test mcp_admission` | 75 passed, 0 failed | 75 passed, 0 failed |
 | `cargo test -p agentfw --test native_endpoint` | 114 passed, 0 failed | 114 passed, 0 failed |
 | `cargo test -p agentfw --test mcp_concurrency` | All passed | 1 passed, 0 failed (focused) |
+| `scripts/verify-sou54-create-file.py` | Exit 0, all scenarios pass | Exit 0, server-id-mismatch continuation verified |

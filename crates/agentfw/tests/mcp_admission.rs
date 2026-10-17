@@ -332,6 +332,16 @@ fn fixture_state(
     enforce: bool,
     approval_ttl: Option<u64>,
 ) -> Arc<AppState> {
+    fixture_state_with_policy(home, port, enforce, approval_ttl, POLICY)
+}
+
+fn fixture_state_with_policy(
+    home: &Path,
+    port: u16,
+    enforce: bool,
+    approval_ttl: Option<u64>,
+    policy_str: &str,
+) -> Arc<AppState> {
     let bytes = std::fs::read(home.parent().unwrap().join("registry.json")).unwrap();
     let digest = sha(&bytes);
     let mut native = NativeState::from_bytes(&bytes, &digest, TOKEN.into()).unwrap();
@@ -343,7 +353,7 @@ fn fixture_state(
     Arc::new(AppState {
         native: Some(native),
         firewall: Mutex::new(AgentFirewall::new(
-            AgentPolicySet::from_yaml(POLICY).unwrap(),
+            AgentPolicySet::from_yaml(policy_str).unwrap(),
             DEFAULT_TAINT_CAP,
         )),
         sessions: Sessions::default(),
@@ -810,6 +820,16 @@ impl Fixture {
         classifier: Option<&str>,
         policy_builder: impl FnOnce(&Path, &mut Value),
     ) -> Self {
+        Self::with_resource_policy_custom(mode, enforce, classifier, None, policy_builder).await
+    }
+
+    async fn with_resource_policy_custom(
+        mode: &str,
+        enforce: bool,
+        classifier: Option<&str>,
+        firewall_policy: Option<&str>,
+        policy_builder: impl FnOnce(&Path, &mut Value),
+    ) -> Self {
         let classified_read = classifier == Some("read") || mode == "classified-read";
         let root = std::env::temp_dir();
         #[cfg(unix)]
@@ -855,7 +875,13 @@ impl Fixture {
         let daemon_faults = Arc::new(DaemonFaults::default());
         let (daemon, daemon_shutdown) = start_daemon(
             listener,
-            fixture_state(&home, port, enforce, None),
+            fixture_state_with_policy(
+                &home,
+                port,
+                enforce,
+                None,
+                firewall_policy.unwrap_or(POLICY),
+            ),
             daemon_faults.clone(),
         );
         let path = registry_path.to_string_lossy().replace('\'', "''");
@@ -5028,6 +5054,7 @@ async fn sou67_operator_owned_tool_bindings_allow_arbitrary_tool_name_under_cons
     assert_eq!(executed(&fixture.ledger).len(), 0);
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn sou67_operator_owned_tool_bindings_allow_arbitrary_create_tool_name_under_constrained_execution(
 ) {
@@ -5043,8 +5070,27 @@ async fn sou67_operator_owned_tool_bindings_allow_arbitrary_create_tool_name_und
         .join("rule_baseline/rule_baseline.py");
     let classifier_digest = sha(&std::fs::read(&rule_baseline_path).unwrap());
 
+    const CREATE_POLICY: &str = "agent_policies:
+  - name: fixture-mcp-reuse
+    when: { taint: [mcp], action_class: destructive }
+    action: deny
+  - name: fixture-secret-egress
+    when: { detector: secret, facet: tool_args, min_action_class: network }
+    action: deny
+  - name: fixture-destructive-confirmation
+    when: { action_class: destructive }
+    action: ask
+  - name: fixture-manifest-injection
+    when: { detector: injection, facet: tool_description }
+    action: ask
+  - name: fixture-result-injection
+    when: { detector: injection, facet: tool_result, min_severity: medium }
+    action: ask
+default: allow
+";
+
     let mut fixture =
-        Fixture::with_resource_policy("operator-create-binding", true, Some("rule-baseline"), |dir, registry| {
+        Fixture::with_resource_policy_custom("operator-create-binding", true, Some("rule-baseline"), Some(CREATE_POLICY), |dir, registry| {
             let canonical_dir = dir.canonicalize().unwrap();
             let canonical_file = canonical_dir.join("created-nested.txt").to_str().unwrap().to_string();
             let schema = json!({
