@@ -22,6 +22,15 @@ and side effects, and separately edit each selected declaration:
 `operator_review` statement. The snapshot and schema hashes are pinned; a
 changed description, tool set or schema requires a new import/review.
 
+**Runtime coverage limit:** the existing guarded stdio collector requires the
+native registry to match the complete original `tools/list` inventory.
+`validate` can inspect a partially reviewed declaration for planning, but
+`compile` refuses to publish it while any original tool remains unreviewed.
+The operator must either review **every** tool offered by that specific server
+under supported enforcement or use a separate server offering a narrower
+original tool inventory. The authoring CLI cannot hide undesired tools,
+rename originals, or bypass the production manifest check.
+
 The first Linux version deliberately admits only the current native:
 - `read_only`: explicitly reviewed, zero egress. This is an *admission
   classification*, **not a sandbox** or proof the server cannot write; review
