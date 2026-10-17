@@ -82,6 +82,8 @@ impl Harness {
         )
         .unwrap();
         let config = AdmissionCfg {
+            host_session: None,
+            child_authority: None,
             daemon_url: format!("{}/native", daemon.uri()),
             manifest_url: format!("{}/manifest", daemon.uri()),
             manifest_token: "fault-manifest-token".into(),
@@ -107,6 +109,7 @@ impl Harness {
                 &mut relay_host,
                 &mut BufReader::new(relay_server),
                 &mut relay_child,
+                server_profile::FORMAT,
             )
             .await
         });

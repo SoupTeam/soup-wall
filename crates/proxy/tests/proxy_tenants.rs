@@ -2865,7 +2865,7 @@ async fn scim_conformance_fixture_covers_supported_users_and_groups_subset() {
     let service_provider_config = json_body(service_provider_config).await;
     assert_eq!(service_provider_config["patch"]["supported"], true);
     assert_eq!(service_provider_config["bulk"]["supported"], false);
-    assert_eq!(service_provider_config["filter"]["supported"], false);
+    assert_eq!(service_provider_config["filter"]["supported"], true);
     let other_credential = store
         .issue_scim_token(&other_organization.id, "directory", expires_at_unix)
         .unwrap();
@@ -2875,7 +2875,7 @@ async fn scim_conformance_fixture_covers_supported_users_and_groups_subset() {
         .unwrap();
     let unsupported_filter = app(state.clone())
         .oneshot(
-            Request::get("/scim/v2/Users?filter=userName%20eq%20%22x%22")
+            Request::get("/scim/v2/Users?filter=userName%20co%20%22x%22")
                 .header("authorization", format!("Bearer {}", credential.token))
                 .body(axum::body::Body::empty())
                 .unwrap(),

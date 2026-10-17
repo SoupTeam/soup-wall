@@ -128,7 +128,8 @@ def discovery(output):
 
 
 RUNTIME_FILES = ("target/debug/agentfw", "scripts/test-environment.py", "scripts/clean-setup-acceptance.py",
-                 "scripts/tests/test_test_environment.py", "rule_baseline/rule_baseline.py", "LICENSE", "NOTICE")
+                 "scripts/tests/test_test_environment.py", "rule_baseline/rule_baseline.py",
+                 "rule_baseline/runtime/worker.py", "LICENSE", "NOTICE")
 
 
 def copy_runtime_files(bundle):

@@ -22,4 +22,7 @@ pub use event::{AgentEvent, AgentId, EventKind, Provenance, SessionId, ToolDecl,
 pub use facet::{facets, Facet};
 pub use fingerprint::{fingerprints, overlap};
 pub use policy::{AgentDecision, AgentPolicySet, Signals, TaintSource, Verdict};
-pub use taint::{TaintMark, TaintTracker};
+pub use taint::{
+    LimitError, SessionTaintUsage, TaintLimits, TaintMark, TaintTracker, TaintUsage,
+    TrackingFailure,
+};

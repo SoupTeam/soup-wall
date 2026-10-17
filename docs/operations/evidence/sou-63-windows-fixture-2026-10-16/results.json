@@ -1,0 +1,24 @@
+{
+  "previous_head": "b58cf186368e5687a47993a21ac4a5e276660497",
+  "failure": {
+    "job_url": "https://github.com/SoupTeam/soup-wall/actions/runs/38931187691/job/117075281344",
+    "test": "scoped_mint_accepts_hyphen_prefixed_instance_ids",
+    "error": "private file or directory has an untrusted owner: S-1-5-32-544",
+    "log_sha256": "f59e691ea37f08cb3ab858d079ec64b9bda6c1d304e0da952d6b23a210187fd7"
+  },
+  "resolution": "Bootstrap the temporary profile through agentfw install before mint; retain production owner/DACL validation.",
+  "local_verification": {
+    "mcp_admission_passed": 71,
+    "failed": 0,
+    "clippy": "PASS, -D warnings",
+    "fmt": "PASS"
+  },
+  "source_sha256": "6530f93e44d0472fd71ffc0a32e4beb6814f1176786f2dfe8d99f3b82d09f22a",
+  "saml_failure": {
+    "job_url": "https://github.com/SoupTeam/soup-wall/actions/runs/38931187862/job/117075283544",
+    "phase": "saml-browser-login-analyst",
+    "error_type": "TimeoutError",
+    "log_sha256": "0883e719e6d71eeb893084fa12ea0a6dedbe02c54ecdaf1eaa98112fe1b9ce8e",
+    "action": "Rerun failed job without modifying test assertions or production code."
+  }
+}

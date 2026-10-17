@@ -1,0 +1,5 @@
+{
+  "platform": "macOS ARM64",
+  "close_owner_while_duplicate_open_retains_lock": true,
+  "explicit_unlock_releases_ownership": true
+}

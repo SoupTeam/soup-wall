@@ -1,0 +1,35 @@
+{
+  "head": "e3118ee8f0068d98b2a4c710ac5fca8d1aeb914a",
+  "verdict": "REQUEST_CHANGES",
+  "baseline": {
+    "native_endpoint_passed": 81,
+    "hook_endpoint_passed": 13,
+    "lock_order_passed": 1,
+    "failed": 0
+  },
+  "additional_control": {
+    "passed": 0,
+    "failed": 1,
+    "case_count": 6
+  },
+  "observed_no_opinion_cases": [
+    "missing_tool",
+    "null_tool",
+    "empty_tool",
+    "missing_bash_input",
+    "missing_bash_command",
+    "nonstring_bash_command"
+  ],
+  "actual_response_for_each": "HTTP 200 {} in authenticated enforce mode",
+  "patch_sha256": "0793090ceda02f009c93732dc2f68018da495ac25a9714db6accee9e5508d50c",
+  "source_sha256": {
+    "crates/agentfw/src/handlers.rs": "17f5995b94d6a76010a16ff3cbcb8b432dbb5c19260e7981a2710038ac267a22",
+    "crates/agentfw/src/hook.rs": "ac67cd17a338cffffee347abe04a5c3203f5bf742f3a6bcbf534923b2e2ea402",
+    "crates/agentfw/src/map.rs": "06765851b9c48eb66720af99459b23c6b19d9d206e4a0d53f3c6652106f85f4d"
+  },
+  "isolation": "Exact HEAD archive /private/tmp/sou63-review/e3118ee; separate Cargo target; no network or writes outside scratch; no actual tool execution or product source modification.",
+  "limitations": [
+    "Focused endpoint/lock-order review; full workspace and Clippy not independently rerun",
+    "Not certification of broader original identity/delegation/restart/revocation/support-matrix acceptance"
+  ]
+}

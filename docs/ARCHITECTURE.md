@@ -55,8 +55,14 @@ sticky `incomplete` boolean. With `cap = 0`, any recorded untrusted input sets
 it immediately, including input too short to fingerprint. Trusted input does
 not set or clear it. This marker adds one boolean per session, with no discarded
 text, fabricated source, eviction list or growing counter. Existing retained
-literal/provenance string sizes and the number of active sessions are not a
-global byte bound; hosts must bound input sizes and close ended sessions.
+literal/provenance strings, duplicated FIFO keys, backing table/queue allocations
+and context identifiers also have explicit retained-byte accounting. Default
+limits are 8 MiB per tracked context, 64 MiB globally and 512 contexts; accepted
+input, source metadata, literals and identifiers have separate extraction limits.
+The outer context table is charged globally. This selected accounting metric is
+not a whole-process RSS bound and excludes unrelated stores. See the
+[provenance memory guide](operations/PROVENANCE_MEMORY.md) for configuration,
+accounting, native refusal behavior and exact-source Linux reproduction.
 
 `TaintTracker::is_incomplete`, `AgentFirewall::provenance_incomplete`,
 `Signals::provenance_incomplete` and `Outcome::provenance_incomplete` expose

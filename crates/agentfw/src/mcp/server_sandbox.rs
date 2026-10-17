@@ -27,6 +27,14 @@ use super::server_profile::{package_tree_sha256, SERVER_ENTRYPOINT};
 pub(crate) const SANDBOX_WORKSPACE: &str = "/workspace";
 pub(crate) const SANDBOX_PROFILE: &str = "sw-mcp/filesystem-readonly/linux-bwrap/1";
 
+pub(crate) fn profile_name(format: &str) -> &'static str {
+    if format == super::server_profile::git::FORMAT {
+        "sw-mcp/git-readonly/linux-bwrap-landlock/1"
+    } else {
+        SANDBOX_PROFILE
+    }
+}
+
 /// File descriptors remain owned until the child has consumed its mount list.
 /// The caller must use `spawn`, rather than extracting a command and dropping
 /// the descriptors before the fork/exec boundary.
@@ -207,7 +215,7 @@ fn descriptor_path(file: &File) -> PathBuf {
 /// sockets that may exist in the read-only workspace. Network namespaces alone
 /// do not isolate such filesystem sockets. Anonymous socketpair IPC stays usable.
 #[cfg(target_os = "linux")]
-fn filter_instructions() -> anyhow::Result<Vec<(u16, u8, u8, u32)>> {
+fn filter_instructions(git_landlock: bool) -> anyhow::Result<Vec<(u16, u8, u8, u32)>> {
     #[cfg(target_arch = "x86_64")]
     let architecture = 0xc000_003e_u32;
     #[cfg(target_arch = "aarch64")]
@@ -233,7 +241,6 @@ fn filter_instructions() -> anyhow::Result<Vec<(u16, u8, u8, u32)>> {
         libc::SYS_listen,
         libc::SYS_accept,
         libc::SYS_accept4,
-        libc::SYS_sendto,
         libc::SYS_sendmsg,
         libc::SYS_sendmmsg,
         libc::SYS_io_uring_setup,
@@ -242,29 +249,68 @@ fn filter_instructions() -> anyhow::Result<Vec<(u16, u8, u8, u32)>> {
         instructions.push((0x15, 0, 1, syscall as u32));
         instructions.push((0x06, 0, 0, deny));
     }
+    if git_landlock {
+        // asyncio wakes its loop from worker threads through an anonymous
+        // socketpair. No socket/connect/accept or inherited socket is available.
+        // Permit sendto only without a destination (both pointer words zero).
+        instructions.extend([
+            (0x15, 0, 6, libc::SYS_sendto as u32),
+            (0x20, 0, 0, 48),
+            (0x15, 0, 3, 0),
+            (0x20, 0, 0, 52),
+            (0x15, 0, 1, 0),
+            (0x06, 0, 0, 0x7fff_0000),
+            (0x06, 0, 0, deny),
+        ]);
+    } else {
+        instructions.push((0x15, 0, 1, libc::SYS_sendto as u32));
+        instructions.push((0x06, 0, 0, deny));
+    }
     #[cfg(target_arch = "x86_64")]
     {
-        instructions.push((0x15, 0, 1, libc::SYS_creat as u32));
-        instructions.push((0x06, 0, 0, deny));
+        if !git_landlock {
+            instructions.push((0x15, 0, 1, libc::SYS_creat as u32));
+            instructions.push((0x06, 0, 0, deny));
+        }
     }
     // The pinned Node/libuv opens its explicitly piped stdio with FIONBIO.
     // Permit that local nonblocking flag only on descriptors 0, 1 and 2.
     // No ioctl is admitted for workspace/device descriptors or another request.
-    instructions.extend([
-        (0x15, 0, 7, libc::SYS_ioctl as u32),
-        (0x20, 0, 0, 16), // ioctl fd
-        (0x25, 0, 1, 2),  // JGT: only explicit stdio descriptors
-        (0x06, 0, 0, deny),
-        (0x20, 0, 0, 24), // ioctl request
-        (0x15, 0, 1, libc::FIONBIO as u32),
-        (0x06, 0, 0, 0x7fff_0000),
-        (0x06, 0, 0, deny),
-    ]);
+    if git_landlock {
+        // CPython's asyncio socketpair uses generic FIONBIO on non-stdio
+        // descriptors. This only toggles O_NONBLOCK (already possible with
+        // fcntl); no device-specific ioctl or new descriptor authority is granted.
+        instructions.extend([
+            (0x15, 0, 4, libc::SYS_ioctl as u32),
+            (0x20, 0, 0, 24),
+            (0x15, 0, 1, libc::FIONBIO as u32),
+            (0x06, 0, 0, 0x7fff_0000),
+            (0x06, 0, 0, deny),
+        ]);
+    } else {
+        instructions.extend([
+            (0x15, 0, 7, libc::SYS_ioctl as u32),
+            (0x20, 0, 0, 16), // ioctl fd
+            (0x25, 0, 1, 2),  // JGT: only explicit stdio descriptors
+            (0x06, 0, 0, deny),
+            (0x20, 0, 0, 24), // ioctl request
+            (0x15, 0, 1, libc::FIONBIO as u32),
+            (0x06, 0, 0, 0x7fff_0000),
+            (0x06, 0, 0, deny),
+        ]);
+    }
     // Read-only bind mounts do not prevent writing to an existing FIFO or all
     // device effects. Deny writable opens independently of the mounted file
     // type. openat2 takes an indirect flags structure, so it is denied above.
     // O_TMPFILE also contains O_DIRECTORY: only its distinct high bit belongs
     // in this mask, preserving ordinary read-only directory opens.
+    if git_landlock {
+        // Only the pinned Git launcher may use this branch. Before original
+        // Python/Git executes it installs mandatory Landlock ABI 3 write rules
+        // allowing /dev/null alone. Socket/ioctl restrictions above stay intact.
+        instructions.push((0x06, 0, 0, 0x7fff_0000));
+        return Ok(instructions);
+    }
     let write_flags = (libc::O_WRONLY
         | libc::O_RDWR
         | libc::O_CREAT
@@ -290,11 +336,11 @@ fn filter_instructions() -> anyhow::Result<Vec<(u16, u8, u8, u32)>> {
 }
 
 #[cfg(target_os = "linux")]
-fn network_filter() -> anyhow::Result<File> {
+fn network_filter(git_landlock: bool) -> anyhow::Result<File> {
     use std::io::{Seek, SeekFrom, Write};
     use std::os::fd::FromRawFd;
 
-    let instructions = filter_instructions()?;
+    let instructions = filter_instructions(git_landlock)?;
     let fd = unsafe {
         libc::memfd_create(
             c"sou62-network-filter".as_ptr(),
@@ -326,6 +372,20 @@ fn network_filter() -> anyhow::Result<File> {
 
 #[cfg(target_os = "linux")]
 fn prepare_linux(profile: &ProfileConfig) -> anyhow::Result<PreparedServerSandbox> {
+    if profile.format == super::server_profile::git::FORMAT {
+        return prepare_linux_command(
+            profile,
+            &[
+                "-I",
+                "-B",
+                "-m",
+                "mcp_server_git",
+                "--repository",
+                SANDBOX_WORKSPACE,
+            ]
+            .map(str::to_owned),
+        );
+    }
     prepare_linux_command(
         profile,
         &[
@@ -343,6 +403,12 @@ fn prepare_linux_command(
     use std::os::fd::AsRawFd;
 
     let (workspace, workspace_pin) = open_directory(&profile.workspace)?;
+    let git_profile = profile.format == super::server_profile::git::FORMAT;
+    if git_profile {
+        super::server_profile::git::validate_repository(
+            &descriptor_path(&workspace_pin).join("."),
+        )?;
+    }
     let (_, package_pin) = open_directory(&profile.package_root)?;
     if package_tree_sha256(&descriptor_path(&package_pin).join("."))? != profile.package_tree_sha256
     {
@@ -354,8 +420,32 @@ fn prepare_linux_command(
     let mut mounts = vec![
         (0, PathBuf::from(SANDBOX_WORKSPACE)),
         (1, PathBuf::from("/mcp-server")),
-        (2, PathBuf::from("/mcp-runtime/node")),
+        (
+            2,
+            PathBuf::from(if git_profile {
+                super::server_profile::git::PYTHON
+            } else {
+                "/mcp-runtime/node"
+            }),
+        ),
     ];
+    if let Some(git) = &profile.git {
+        let pin = open_verified_file(&git.path, &git.sha256, true)?;
+        mounts.push((pins.len(), PathBuf::from("/mcp-runtime/git")));
+        pins.push(pin);
+    }
+    if git_profile {
+        let launcher = profile
+            .git_launcher
+            .as_ref()
+            .context("Git Landlock launcher is required")?;
+        let pin = open_verified_file(&launcher.path, &launcher.sha256, true)?;
+        mounts.push((
+            pins.len(),
+            PathBuf::from("/mcp-runtime/git-profile-launcher"),
+        ));
+        pins.push(pin);
+    }
     if profile.libraries.is_empty() || profile.libraries.len() > 32 {
         bail!("MCP sandbox requires a bounded, explicit library list");
     }
@@ -403,7 +493,7 @@ fn prepare_linux_command(
             .arg(pins[index].as_raw_fd().to_string())
             .arg(destination);
     }
-    let seccomp = network_filter()?;
+    let seccomp = network_filter(git_profile)?;
     command
         .arg("--seccomp")
         .arg(seccomp.as_raw_fd().to_string());
@@ -423,9 +513,32 @@ fn prepare_linux_command(
         "--setenv",
         "UV_THREADPOOL_SIZE",
         "16",
-        "--",
-        "/mcp-runtime/node",
     ]);
+    if git_profile {
+        for (name, value) in [
+            ("GIT_PYTHON_GIT_EXECUTABLE", "/mcp-runtime/git"),
+            ("GIT_CONFIG_NOSYSTEM", "1"),
+            ("GIT_CONFIG_GLOBAL", "/dev/null"),
+            ("GIT_TERMINAL_PROMPT", "0"),
+            ("GIT_OPTIONAL_LOCKS", "0"),
+            ("GIT_EXEC_PATH", "/nonexistent"),
+            ("GIT_PAGER", ""),
+            ("GIT_CONFIG_COUNT", "3"),
+            ("GIT_CONFIG_KEY_0", "core.hooksPath"),
+            ("GIT_CONFIG_VALUE_0", "/nonexistent"),
+            ("GIT_CONFIG_KEY_1", "core.fsmonitor"),
+            ("GIT_CONFIG_VALUE_1", "false"),
+            ("GIT_CONFIG_KEY_2", "protocol.allow"),
+            ("GIT_CONFIG_VALUE_2", "never"),
+        ] {
+            command.args(["--setenv", name, value]);
+        }
+    }
+    command.arg("--").arg(if git_profile {
+        "/mcp-runtime/git-profile-launcher"
+    } else {
+        "/mcp-runtime/node"
+    });
     command
         .args(node_args)
         .env_clear()
@@ -476,6 +589,186 @@ fn prepare_linux_command(
 mod tests {
     use super::*;
 
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    #[ignore = "requires explicit pinned Linux Git/Python profile and bubblewrap"]
+    async fn selected_git_sandbox_isolates_real_python_and_git() {
+        use std::io::{Read, Write};
+        use std::net::{TcpListener, TcpStream};
+        use std::os::fd::{AsRawFd, FromRawFd};
+        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::fs::OpenOptionsExt;
+        use tokio::io::AsyncReadExt;
+        let profile_path = std::env::var("SOU68_SANDBOX_TEST_PROFILE")
+            .expect("explicit Git sandbox profile required");
+        let profile = ProfileConfig::read(&std::fs::read(profile_path).unwrap()).unwrap();
+        assert_eq!(profile.format, super::super::server_profile::git::FORMAT);
+        let owned = tempfile::tempdir().unwrap();
+        let outside = owned.path().join("outside-secret");
+        std::fs::write(&outside, b"outside unchanged").unwrap();
+        let host_file = File::open(&outside).unwrap();
+        let descriptor = unsafe { libc::fcntl(host_file.as_raw_fd(), libc::F_DUPFD, 3) };
+        assert!(descriptor >= 0);
+        let _ambient = unsafe { File::from_raw_fd(descriptor) };
+        let receiver = TcpListener::bind("127.0.0.1:0").unwrap();
+        receiver.set_nonblocking(true).unwrap();
+        let address = receiver.local_addr().unwrap();
+        let calibration = TcpStream::connect(address).unwrap();
+        let pair = receiver.accept().unwrap();
+        drop(calibration);
+        drop(pair);
+        let outside_json = serde_json::to_string(&outside).unwrap();
+        let script = format!(
+            r#"
+import asyncio, json, os, pathlib, socket, subprocess
+def denied(fn):
+    try:
+        fn()
+        return False
+    except OSError:
+        return True
+def descriptors():
+    result = []
+    for entry in pathlib.Path('/proc/self/fd').iterdir():
+        try: result.append(os.readlink(entry))
+        except OSError: pass
+    return result
+def null_open():
+    fd = os.open('/dev/null', os.O_RDWR)
+    os.close(fd)
+    return True
+git = subprocess.run(['/mcp-runtime/git', 'status', '--porcelain'], cwd='/workspace', capture_output=True, timeout=5)
+loop = asyncio.new_event_loop()
+assert loop.run_until_complete(asyncio.wait_for(asyncio.to_thread(lambda: 42), 3)) == 42
+loop.close()
+result = {{
+ 'asyncio_ready': True,
+ 'null_open_allowed': null_open(),
+ 'git_read': git.returncode == 0,
+ 'git_exit': git.returncode,
+ 'git_error': git.stderr[-2000:].decode('utf-8', 'replace'),
+ 'workspace_write_denied': denied(lambda: pathlib.Path('/workspace/sandbox-forbidden').write_text('denied')),
+ 'runtime_write_denied': denied(lambda: pathlib.Path('/mcp-runtime/git').open('wb')),
+ 'tmp_write_denied': denied(lambda: pathlib.Path('/tmp/forbidden').write_text('denied')),
+ 'other_device_write_denied': denied(lambda: pathlib.Path('/dev/zero').open('wb')),
+ 'fifo_write_denied': denied(lambda: os.open('/workspace/.sou68-runtime-probe.fifo', os.O_WRONLY | os.O_NONBLOCK)),
+ 'outside_read_denied': denied(lambda: pathlib.Path({outside_json}).read_bytes()),
+ 'outside_write_denied': denied(lambda: pathlib.Path({outside_json}).write_bytes(b'denied')),
+ 'egress_denied': denied(lambda: socket.create_connection(('127.0.0.1', {port}), 1)),
+ 'unix_socket_denied': denied(lambda: socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)),
+ 'ambient_env_absent': 'SOU68_INHERITED_SECRET' not in os.environ,
+ 'home_absent': not pathlib.Path('/home').exists() and not pathlib.Path('/root').exists(),
+ 'descriptor_targets': descriptors(),
+ 'net_namespace': os.readlink('/proc/self/ns/net'),
+ 'pid_namespace': os.readlink('/proc/self/ns/pid'),
+}}
+print(json.dumps(result))
+"#,
+            port = address.port()
+        );
+        let args = vec!["-I".into(), "-B".into(), "-c".into(), script];
+        let mut prepared = prepare_linux_command(&profile, &args).unwrap();
+        // Add an owned FIFO after repository validation to prove that read-only
+        // mounts alone are insufficient, and that Landlock still blocks IPC.
+        let fifo_path = profile.workspace.join(".sou68-runtime-probe.fifo");
+        assert!(!fifo_path.exists());
+        let fifo_name = std::ffi::CString::new(fifo_path.as_os_str().as_bytes()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(fifo_name.as_ptr(), 0o600) }, 0);
+        let mut fifo_reader = std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NONBLOCK)
+            .open(&fifo_path)
+            .unwrap();
+        let mut calibration = std::fs::OpenOptions::new()
+            .write(true)
+            .custom_flags(libc::O_NONBLOCK)
+            .open(&fifo_path)
+            .unwrap();
+        calibration.write_all(b"calibrate").unwrap();
+        let mut marker = [0_u8; 9];
+        fifo_reader.read_exact(&mut marker).unwrap();
+        assert_eq!(&marker, b"calibrate");
+        drop(calibration);
+        prepared
+            .command
+            .env("SOU68_INHERITED_SECRET", "must-not-reach-server");
+        let mut child = prepared.spawn().unwrap();
+        let mut stdout = child.stdout.take().unwrap();
+        let mut stderr = child.stderr.take().unwrap();
+        drop(child.stdin.take());
+        let collected = tokio::time::timeout(std::time::Duration::from_secs(15), async {
+            let mut output = Vec::new();
+            let mut errors = Vec::new();
+            let (out, err, status) = tokio::join!(
+                stdout.read_to_end(&mut output),
+                stderr.read_to_end(&mut errors),
+                child.wait()
+            );
+            out.unwrap();
+            err.unwrap();
+            (output, errors, status.unwrap())
+        })
+        .await;
+        if collected.is_err() {
+            terminate(&mut child).await.unwrap();
+            panic!("real Git/Python sandbox timed out");
+        }
+        let (output, errors, status) = collected.unwrap();
+        let mut forbidden_bytes = [0_u8; 32];
+        assert_eq!(fifo_reader.read(&mut forbidden_bytes).unwrap(), 0);
+        std::fs::remove_file(fifo_path).unwrap();
+        assert!(status.success(), "{}", String::from_utf8_lossy(&errors));
+        let result: serde_json::Value = serde_json::from_slice(&output).unwrap();
+        for key in [
+            "null_open_allowed",
+            "asyncio_ready",
+            "git_read",
+            "workspace_write_denied",
+            "runtime_write_denied",
+            "tmp_write_denied",
+            "other_device_write_denied",
+            "fifo_write_denied",
+            "outside_read_denied",
+            "outside_write_denied",
+            "egress_denied",
+            "unix_socket_denied",
+            "ambient_env_absent",
+            "home_absent",
+        ] {
+            assert_eq!(
+                result[key], true,
+                "Git boundary failed: {key}; owned probe: {result}"
+            );
+        }
+        for namespace in ["net", "pid"] {
+            let host = std::fs::read_link(format!("/proc/self/ns/{namespace}")).unwrap();
+            assert_ne!(
+                result[format!("{namespace}_namespace")].as_str().unwrap(),
+                host.to_str().unwrap()
+            );
+        }
+        for target in result["descriptor_targets"].as_array().unwrap() {
+            for path in [
+                &profile.workspace,
+                &profile.package_root,
+                &profile.runtime_path,
+                &owned.path().to_path_buf(),
+            ] {
+                assert!(
+                    !target.as_str().unwrap().starts_with(path.to_str().unwrap()),
+                    "ambient host descriptor leaked"
+                );
+            }
+        }
+        assert_eq!(std::fs::read(&outside).unwrap(), b"outside unchanged");
+        assert!(!profile.workspace.join("sandbox-forbidden").exists());
+        assert_eq!(
+            receiver.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+        println!("SOU68_SANDBOX_POSITIVE {}", result);
+    }
+
     #[cfg(unix)]
     #[test]
     fn accepts_only_exact_library_file_destinations() {
@@ -505,84 +798,113 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn syscall_filter_preserves_read_opens_and_only_stdio_fionbio() {
-        let instructions = filter_instructions().unwrap();
-        let evaluate = |syscall: i64, first: u32, second: u32, third: u32| {
-            let mut data = [0_u8; 64];
-            let architecture = instructions[1].3;
-            for (offset, value) in [
-                (0, syscall as u32),
-                (4, architecture),
-                (16, first),
-                (24, second),
-                (32, third),
-            ] {
-                data[offset..offset + 4].copy_from_slice(&value.to_ne_bytes());
-            }
-            let mut accumulator = 0;
-            let mut index = 0;
-            loop {
-                assert!(index < instructions.len(), "filter branch escaped program");
-                let (code, yes, no, value) = instructions[index];
-                let jump = match code {
-                    0x20 => {
-                        accumulator = u32::from_ne_bytes(
-                            data[value as usize..value as usize + 4].try_into().unwrap(),
-                        );
-                        None
+        for git_landlock in [false, true] {
+            let instructions = filter_instructions(git_landlock).unwrap();
+            let evaluate_full =
+                |syscall: i64, first: u32, second: u32, third: u32, address: u64| {
+                    let mut data = [0_u8; 64];
+                    let architecture = instructions[1].3;
+                    for (offset, value) in [
+                        (0, syscall as u32),
+                        (4, architecture),
+                        (16, first),
+                        (24, second),
+                        (32, third),
+                        (48, address as u32),
+                        (52, (address >> 32) as u32),
+                    ] {
+                        data[offset..offset + 4].copy_from_slice(&value.to_ne_bytes());
                     }
-                    0x15 => Some(accumulator == value),
-                    0x25 => Some(accumulator > value),
-                    0x35 => Some(accumulator >= value),
-                    0x45 => Some(accumulator & value != 0),
-                    0x06 => return value,
-                    _ => panic!("unsupported classic-BPF instruction"),
+                    let mut accumulator = 0;
+                    let mut index = 0;
+                    loop {
+                        assert!(index < instructions.len(), "filter branch escaped program");
+                        let (code, yes, no, value) = instructions[index];
+                        let jump = match code {
+                            0x20 => {
+                                accumulator = u32::from_ne_bytes(
+                                    data[value as usize..value as usize + 4].try_into().unwrap(),
+                                );
+                                None
+                            }
+                            0x15 => Some(accumulator == value),
+                            0x25 => Some(accumulator > value),
+                            0x35 => Some(accumulator >= value),
+                            0x45 => Some(accumulator & value != 0),
+                            0x06 => return value,
+                            _ => panic!("unsupported classic-BPF instruction"),
+                        };
+                        index += 1 + jump.map_or(0, |taken| if taken { yes } else { no }) as usize;
+                    }
                 };
-                index += 1 + jump.map_or(0, |taken| if taken { yes } else { no }) as usize;
+            let evaluate =
+                |syscall, first, second, third| evaluate_full(syscall, first, second, third, 0);
+            let allow = 0x7fff_0000;
+            let deny = 0x0005_0000 | libc::EACCES as u32;
+            assert_eq!(
+                evaluate(libc::SYS_sendto, 5, 0, 1),
+                if git_landlock { allow } else { deny }
+            );
+            for address in [1, 1_u64 << 32, u64::MAX] {
+                assert_eq!(evaluate_full(libc::SYS_sendto, 5, 0, 1, address), deny);
             }
-        };
-        let allow = 0x7fff_0000;
-        let deny = 0x0005_0000 | libc::EACCES as u32;
-        for fd in [0, 1, 2] {
-            assert_eq!(
-                evaluate(libc::SYS_ioctl, fd, libc::FIONBIO as u32, 0),
-                allow
-            );
-            assert_eq!(
-                evaluate(libc::SYS_ioctl, fd, libc::FIONREAD as u32, 0),
-                deny
-            );
+            assert_eq!(evaluate(libc::SYS_sendmsg, 5, 0, 0), deny);
+            for fd in [0, 1, 2] {
+                assert_eq!(
+                    evaluate(libc::SYS_ioctl, fd, libc::FIONBIO as u32, 0),
+                    allow
+                );
+                assert_eq!(
+                    evaluate(libc::SYS_ioctl, fd, libc::FIONREAD as u32, 0),
+                    deny
+                );
+            }
+            for fd in [3, 127, u32::MAX] {
+                assert_eq!(
+                    evaluate(libc::SYS_ioctl, fd, libc::FIONBIO as u32, 0),
+                    if git_landlock { allow } else { deny }
+                );
+                assert_eq!(
+                    evaluate(libc::SYS_ioctl, fd, libc::FIONREAD as u32, 0),
+                    deny
+                );
+                assert_eq!(evaluate(libc::SYS_ioctl, fd, libc::TIOCSTI as u32, 0), deny);
+            }
+            for flags in [
+                libc::O_RDONLY,
+                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
+            ] {
+                assert_eq!(evaluate(libc::SYS_openat, u32::MAX, 0, flags as u32), allow);
+            }
+            for flags in [
+                libc::O_WRONLY,
+                libc::O_RDWR,
+                libc::O_CREAT,
+                libc::O_TRUNC,
+                libc::O_APPEND,
+                libc::O_TMPFILE,
+            ] {
+                assert_eq!(
+                    evaluate(libc::SYS_openat, u32::MAX, 0, flags as u32),
+                    if git_landlock { allow } else { deny }
+                );
+                #[cfg(target_arch = "x86_64")]
+                assert_eq!(
+                    evaluate(libc::SYS_open, 0, flags as u32, 0),
+                    if git_landlock { allow } else { deny }
+                );
+            }
+            for syscall in [
+                libc::SYS_openat2,
+                libc::SYS_socket,
+                libc::SYS_connect,
+                libc::SYS_io_uring_setup,
+            ] {
+                assert_eq!(evaluate(syscall, 0, 0, 0), deny);
+            }
+            assert_eq!(evaluate(libc::SYS_read, 0, 0, 0), allow);
+            assert_eq!(evaluate(libc::SYS_read | 0x4000_0000, 0, 0, 0), 0x8000_0000);
         }
-        for fd in [3, 127, u32::MAX] {
-            assert_eq!(evaluate(libc::SYS_ioctl, fd, libc::FIONBIO as u32, 0), deny);
-        }
-        for flags in [
-            libc::O_RDONLY,
-            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
-        ] {
-            assert_eq!(evaluate(libc::SYS_openat, u32::MAX, 0, flags as u32), allow);
-        }
-        for flags in [
-            libc::O_WRONLY,
-            libc::O_RDWR,
-            libc::O_CREAT,
-            libc::O_TRUNC,
-            libc::O_APPEND,
-            libc::O_TMPFILE,
-        ] {
-            assert_eq!(evaluate(libc::SYS_openat, u32::MAX, 0, flags as u32), deny);
-            #[cfg(target_arch = "x86_64")]
-            assert_eq!(evaluate(libc::SYS_open, 0, flags as u32, 0), deny);
-        }
-        for syscall in [
-            libc::SYS_openat2,
-            libc::SYS_socket,
-            libc::SYS_connect,
-            libc::SYS_io_uring_setup,
-        ] {
-            assert_eq!(evaluate(syscall, 0, 0, 0), deny);
-        }
-        assert_eq!(evaluate(libc::SYS_read, 0, 0, 0), allow);
-        assert_eq!(evaluate(libc::SYS_read | 0x4000_0000, 0, 0, 0), 0x8000_0000);
     }
 
     /// An explicitly invoked positive acceptance test. A missing runtime,

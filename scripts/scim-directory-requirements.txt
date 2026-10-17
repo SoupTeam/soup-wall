@@ -1,0 +1,8 @@
+﻿# Pinned independent SCIM client and its request/model engine.
+scim2-client[httpx2]==0.13.1
+scim2-models==0.12.2
+pydantic==2.14.1
+cryptography==50.0.2
+psutil==7.2.2
+requests==2.34.2
+httpx2==2.13.1

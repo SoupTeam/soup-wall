@@ -189,3 +189,82 @@ configuration are unchanged. This proves the bounded local managed rollout;
 it is not acceptance of remote HTTPS transport or the full release.
 
 SOU-15 retains responsibility for MCP/resource confinement; SOU-26 owns release publication. This PR must remain Draft until integration tests and security review pass for the exact final source.
+
+
+## Read-only tenant Agent fleet
+
+An authenticated control-plane viewer, operator or owner can open `/admin`, select
+an existing tenant and use **Agent fleet**. The fleet panel has no enrollment,
+revocation, deployment or rollback actions. Credentials remain in tab memory;
+the password input is cleared after connection. Customer workspace sessions and
+Agent credentials do not authorize these control-plane reads.
+
+The panel shows enrolled/revoked Agents, latest issued sequence/revision/digest,
+recorded delivery state and a separate **historical last reported applied**
+identity. A new issued, delivered or rejected deployment never replaces that
+historical identity. It is found across all retained deployment records, not just
+the displayed history page. A missing acknowledgement is explicit. Evidence age
+is displayed; the five-minute historical-evidence annotation is a display aid,
+not an SLA, heartbeat threshold, or policy decision.
+
+Enrollment and past acknowledgements never prove current liveness, active
+protection, model consumption or registry identity. Those runtime facts remain
+`unknown` (registry identity is `null`). Refresh rereads stored records; it does
+not obtain live Agent telemetry. No new Agent-to-Console protocol is introduced.
+The store has issued and reported-applied timestamps, but no distinct delivery
+or rejection timestamp; these missing dates remain `null`, not the issue time.
+
+### Fleet read API
+
+Both SQLite and PostgreSQL implement `sw-agent-fleet/1`:
+
+- `GET /admin/v1/tenants/{tenant_id}/agent-fleet`
+- `GET /admin/v1/tenants/{tenant_id}/agent-fleet/{agent_id}`
+
+Use the existing `X-LLM-Firewall-Admin-Token: Bearer ...` header. Responses use
+`Cache-Control: no-store`. Unknown tenant/Agent returns 404; unavailable storage
+returns a generic 503 without private details. Each query and join is bound to
+both tenant and Agent identity. Credentials/hashes, raw policy payloads, signed
+bundles, signing material and local paths are never selected for this projection.
+
+Inventory parameters: `limit` (1–100, default 25), `after` (exclusive Agent ID
+cursor), `prefix` (literal, case-sensitive ID prefix), `enrollment`
+(`all`, `active`, `revoked`) and `delivery` (`all`, `issued`, `delivered`,
+`applied`, `rejected`, `no_history`). Follow `next_after` until null.
+Sequence identities and `next_before_sequence` are decimal strings in responses
+to preserve exact 64-bit values in browsers. History parameters: `limit` and
+exclusive `before_sequence`; follow
+`next_before_sequence`. New pages are fresh snapshots, not a frozen traversal.
+Refresh starts again from the newest records. Each individual page is internally
+consistent: SQLite read transaction or PostgreSQL read-only repeatable read.
+`observed_at_unix` timestamps this database observation, not Agent activity.
+The browser aborts previous reads and checks request generation, tenant identity
+and Agent identity before rendering, including late successes and errors.
+
+### Reproduction and scope
+
+```sh
+cargo test --locked -p llm-firewall --test fleet_projection
+cargo build --locked -p llm-firewall -p agentfw
+python3 -m venv /tmp/fleet-driver
+/tmp/fleet-driver/bin/python -m pip install playwright==1.55.0 cryptography==50.0.2
+/tmp/fleet-driver/bin/python -m playwright install --with-deps chromium
+/tmp/fleet-driver/bin/python scripts/fleet-console-acceptance.py --backend sqlite --output target/fleet-evidence/sqlite
+/tmp/fleet-driver/bin/python scripts/fleet-console-acceptance.py --backend postgres --output target/fleet-evidence/postgres
+```
+
+The Linux witness requires Docker for the disposable TLS PostgreSQL container.
+It reuses the reviewed fixture helper and pinned PostgreSQL image; it never uses
+an operator database. It launches the actual Console and Agent, observes exact
+fetch/application/acknowledgement, stops the Agent to retain a pending record,
+then restarts it to reject an untrusted issuer while retaining the earlier active
+policy. Separate enrolled/revoked/no-history records and delivered-without-ACK
+records exercise the remaining states. Chromium uses real API responses, with
+controlled delay/error injection to check loading, tenant switching, empty/error
+states and retries. Its clock advances ten minutes for the historical-age label;
+stored acknowledgement timestamps are unchanged.
+
+The `Agent fleet projection` workflow retains source identity, sanitized JSON and
+browser screenshots as `agent-fleet-evidence`. Private credentials, process logs,
+policies and database files remain in disposable storage. These are controlled
+component checks, not a claim about current fleet coverage or product release.

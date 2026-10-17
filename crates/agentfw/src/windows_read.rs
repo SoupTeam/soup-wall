@@ -38,8 +38,8 @@ use windows_sys::Win32::Storage::FileSystem::{
     GetFinalPathNameByHandleW, GetVolumeInformationByHandleW, QueryDosDeviceW, ReadFile,
     FILE_ATTRIBUTE_DEVICE, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_OFFLINE,
     FILE_ATTRIBUTE_REPARSE_POINT, FILE_ATTRIBUTE_TAG_INFO, FILE_EXECUTE, FILE_ID_INFO,
-    FILE_READ_ATTRIBUTES, FILE_READ_DATA, FILE_SHARE_READ, FILE_STANDARD_INFO, FILE_TRAVERSE,
-    FILE_TYPE_DISK, SYNCHRONIZE,
+    FILE_READ_ATTRIBUTES, FILE_READ_DATA, FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_STANDARD_INFO,
+    FILE_TRAVERSE, FILE_TYPE_DISK, SYNCHRONIZE,
 };
 use windows_sys::Win32::System::Threading::CreateEventW;
 use windows_sys::Win32::System::IO::{
@@ -304,6 +304,14 @@ pub(crate) struct CreateParent {
 
 impl CreateParent {
     pub(crate) fn prepare_workspace(workspace: &Path, cwd: &Path) -> anyhow::Result<Self> {
+        Self::prepare_with_sharing(workspace, cwd, FILE_SHARE_READ)
+    }
+
+    pub(crate) fn prepare_connection(workspace: &Path, cwd: &Path) -> anyhow::Result<Self> {
+        Self::prepare_with_sharing(workspace, cwd, FILE_SHARE_READ | FILE_SHARE_WRITE)
+    }
+
+    fn prepare_with_sharing(workspace: &Path, cwd: &Path, sharing: u32) -> anyhow::Result<Self> {
         let workspace = trusted_absolute(workspace)?;
         let cwd = trusted_absolute(cwd)?;
         ensure!(workspace == cwd, "Windows create cwd must equal workspace");
@@ -314,7 +322,7 @@ impl CreateParent {
         for name in workspace[3..].split('\\') {
             let parent = directories.last().expect("drive pinned");
             let path = append_component(&parent.path, name);
-            let file = open_child(&parent.file, name, true, false)?;
+            let file = open_native_sharing(Some(&parent.file), name, true, false, sharing)?;
             let pinned = pin_directory(file, &path)?;
             ensure!(
                 pinned.identity.volume == directories[0].identity.volume,
@@ -565,6 +573,16 @@ fn open_native(
     directory: bool,
     data: bool,
 ) -> anyhow::Result<File> {
+    open_native_sharing(parent, name, directory, data, FILE_SHARE_READ)
+}
+
+fn open_native_sharing(
+    parent: Option<&File>,
+    name: &str,
+    directory: bool,
+    data: bool,
+    sharing: u32,
+) -> anyhow::Result<File> {
     if parent.is_none() {
         ensure!(
             directory && !data,
@@ -654,7 +672,7 @@ fn open_native(
             &mut status,
             null(),
             0,
-            FILE_SHARE_READ,
+            sharing,
             FILE_OPEN,
             options,
             null(),

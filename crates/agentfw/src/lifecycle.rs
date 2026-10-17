@@ -9,6 +9,23 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
+/// Releases ownership explicitly before closing the descriptor. A concurrent
+/// fork may inherit the open-file description until exec; close alone would
+/// otherwise let an unrelated child prolong the lifecycle lock.
+pub struct OperationLock(File);
+
+impl OperationLock {
+    pub(crate) fn held(file: File) -> Self {
+        Self(file)
+    }
+}
+
+impl Drop for OperationLock {
+    fn drop(&mut self) {
+        let _ = self.0.unlock();
+    }
+}
+
 const MANIFEST: &str = "lifecycle.json";
 const MAX_CANDIDATE_BYTES: u64 = 512 * 1024 * 1024;
 const START_TIMEOUT: Duration = Duration::from_secs(30);
@@ -54,9 +71,9 @@ impl ProcessRecord {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Operation {
-    from: Record,
-    to: Record,
-    was_running: bool,
+    pub(crate) from: Record,
+    pub(crate) to: Record,
+    pub(crate) was_running: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -136,6 +153,14 @@ impl Manager {
         candidate: &Path,
         expected_sha256: &str,
     ) -> Result<Record> {
+        #[cfg(target_os = "linux")]
+        if crate::service::registered(&self.home) {
+            return crate::service::Service::new(&self.home)?.upgrade(
+                version,
+                candidate,
+                expected_sha256,
+            );
+        }
         let _lock = self.lock()?;
         #[cfg(target_os = "linux")]
         crate::service::require_unregistered(&self.home)?;
@@ -191,6 +216,10 @@ impl Manager {
     }
 
     pub fn rollback(&self) -> Result<Record> {
+        #[cfg(target_os = "linux")]
+        if crate::service::registered(&self.home) {
+            return crate::service::Service::new(&self.home)?.rollback();
+        }
         let _lock = self.lock()?;
         #[cfg(target_os = "linux")]
         crate::service::require_unregistered(&self.home)?;
@@ -235,7 +264,72 @@ impl Manager {
         state.active.context("rollback lost active version")
     }
 
+    /// Read-only snapshot for doctor. Unlike `status`, this does not create an
+    /// operation lock, change permissions, query a daemon or adopt a process.
+    /// Any recorded process still needs separate authenticated verification.
+    pub fn inspect_read_only(&self, observed_config_sha256: Option<&str>) -> Result<Status> {
+        if !self.home.exists() || !self.root.exists() {
+            return Ok(Status {
+                active: None,
+                previous: None,
+                process: None,
+                running: false,
+                interrupted: false,
+                detail: "not installed".into(),
+            });
+        }
+        ensure_dir(&self.home)?;
+        ensure_dir(&self.root)?;
+
+        // Doctor must never use self.load(), self.verify() or config_digest().
+        // Those normal lifecycle APIs can open unbounded files or follow links.
+        let manifest = crate::doctor::read_private(&self.root.join(MANIFEST), 1024 * 1024)?;
+        let state: State =
+            serde_json::from_slice(&manifest).context("invalid bounded lifecycle manifest")?;
+        self.validate_state(&state)?;
+        let binary_changed = state.active.as_ref().is_some_and(|record| {
+            self.path_for(record)
+                .ok()
+                .and_then(|path| crate::doctor::hash_selected_file(&path, MAX_CANDIDATE_BYTES).ok())
+                .as_deref()
+                != Some(record.digest.as_str())
+        });
+        // Compare the one independently bounded, no-follow config snapshot.
+        // None means the original file was absent/unsafe, NOT an invitation
+        // to read it again (especially not through legacy fs::read).
+        let config_changed = state.process.as_ref().is_some_and(|process| {
+            observed_config_sha256.is_some_and(|hash| hash != process.config_digest)
+        });
+        let detail = if state.operation.is_some() || state.pending_stage.is_some() {
+            "interrupted operation; run recover"
+        } else if binary_changed {
+            "installed binary has changed"
+        } else if state.process.is_some() && observed_config_sha256.is_none() {
+            "config snapshot unavailable"
+        } else if config_changed {
+            "running with changed config; restart to apply it"
+        } else if state.process.is_some() {
+            "process recorded; authenticated observation required"
+        } else if state.active.is_some() {
+            "installed and stopped"
+        } else {
+            "not installed"
+        };
+        Ok(Status {
+            active: state.active,
+            previous: state.previous,
+            process: state.process,
+            running: false,
+            interrupted: state.operation.is_some() || state.pending_stage.is_some(),
+            detail: detail.to_owned(),
+        })
+    }
+
     pub fn status(&self) -> Result<Status> {
+        #[cfg(target_os = "linux")]
+        if crate::service::registered(&self.home) {
+            return crate::service::Service::new(&self.home)?.status();
+        }
         let _lock = self.lock()?;
         let state = self.load()?;
         let health = self.running(&state)?;
@@ -284,6 +378,10 @@ impl Manager {
     }
 
     pub fn start(&self) -> Result<()> {
+        #[cfg(target_os = "linux")]
+        if crate::service::registered(&self.home) {
+            return crate::service::Service::new(&self.home)?.start();
+        }
         let _lock = self.lock()?;
         #[cfg(target_os = "linux")]
         crate::service::require_unregistered(&self.home)?;
@@ -296,6 +394,10 @@ impl Manager {
     }
 
     pub fn stop(&self) -> Result<()> {
+        #[cfg(target_os = "linux")]
+        if crate::service::registered(&self.home) {
+            return crate::service::Service::new(&self.home)?.stop();
+        }
         let _lock = self.lock()?;
         #[cfg(target_os = "linux")]
         crate::service::require_unregistered(&self.home)?;
@@ -308,6 +410,10 @@ impl Manager {
     }
 
     pub fn restart(&self) -> Result<()> {
+        #[cfg(target_os = "linux")]
+        if crate::service::registered(&self.home) {
+            return crate::service::Service::new(&self.home)?.restart();
+        }
         let _lock = self.lock()?;
         #[cfg(target_os = "linux")]
         crate::service::require_unregistered(&self.home)?;
@@ -321,35 +427,15 @@ impl Manager {
     }
 
     pub fn recover(&self) -> Result<()> {
+        #[cfg(target_os = "linux")]
+        if crate::service::registered(&self.home) {
+            return crate::service::Service::new(&self.home)?.recover();
+        }
         let _lock = self.lock()?;
         #[cfg(target_os = "linux")]
         crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
-        if let Some(pending) = state.pending_stage.clone() {
-            ensure!(
-                !state
-                    .owned
-                    .iter()
-                    .any(|record| record.binary == pending.target),
-                "recorded staging target overlaps an installed version"
-            );
-            for name in [&pending.stage, &pending.target] {
-                let path = self.root.join(name);
-                match fs::symlink_metadata(&path) {
-                    Ok(metadata) => {
-                        ensure!(
-                            metadata.file_type().is_file(),
-                            "recorded stage is not a regular file"
-                        );
-                        fs::remove_file(path)?;
-                    }
-                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(error) => return Err(error.into()),
-                }
-            }
-            state.pending_stage = None;
-            self.save(&state)?;
-        }
+        self.cleanup_pending_stage(&mut state)?;
         if let Some(process) = state.process.clone() {
             if self.running(&state)?.is_none() {
                 ensure!(
@@ -731,7 +817,7 @@ impl Manager {
     }
 
     #[cfg(target_os = "linux")]
-    pub fn direct_serve_guard(&self) -> Result<File> {
+    pub fn direct_serve_guard(&self) -> Result<OperationLock> {
         let lock = self.lock()?;
         crate::service::require_unregistered(&self.home)?;
         Ok(lock)
@@ -746,13 +832,138 @@ impl Manager {
     }
 
     #[cfg(target_os = "linux")]
+    pub(crate) fn service_prepare_upgrade(
+        &self,
+        version: &str,
+        candidate: &Path,
+        digest: &str,
+        was_running: bool,
+    ) -> Result<Record> {
+        let _lock = self.lock()?;
+        let mut state = self.load()?;
+        ensure!(
+            state.operation.is_none() && state.pending_stage.is_none(),
+            "recover the interrupted operation first"
+        );
+        let from = state.active.clone().context("Agent is not installed")?;
+        self.verify(&from)?;
+        let to = self.stage(&mut state, version, candidate, digest)?;
+        state.owned.push(to.clone());
+        state.operation = Some(Operation {
+            from,
+            to: to.clone(),
+            was_running,
+        });
+        state.pending_stage = None;
+        self.save(&state)?;
+        Ok(to)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn service_prepare_rollback(&self, was_running: bool) -> Result<Record> {
+        let _lock = self.lock()?;
+        let mut state = self.load()?;
+        ensure!(
+            state.operation.is_none() && state.pending_stage.is_none(),
+            "recover the interrupted operation first"
+        );
+        let from = state.active.clone().context("Agent is not installed")?;
+        let to = state.previous.clone().context("no previous version")?;
+        self.verify(&from)?;
+        self.verify(&to)?;
+        state.operation = Some(Operation {
+            from,
+            to: to.clone(),
+            was_running,
+        });
+        self.save(&state)?;
+        Ok(to)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn service_recover_staging(&self) -> Result<()> {
+        let _lock = self.lock()?;
+        let mut state = self.load()?;
+        self.cleanup_pending_stage(&mut state)
+    }
+
+    fn cleanup_pending_stage(&self, state: &mut State) -> Result<()> {
+        if let Some(pending) = state.pending_stage.clone() {
+            ensure!(
+                !state
+                    .owned
+                    .iter()
+                    .any(|record| record.binary == pending.target),
+                "recorded staging target overlaps an installed version"
+            );
+            for name in [&pending.stage, &pending.target] {
+                let path = self.root.join(name);
+                match fs::symlink_metadata(&path) {
+                    Ok(metadata) => {
+                        ensure!(
+                            metadata.file_type().is_file(),
+                            "recorded stage is not a regular file"
+                        );
+                        fs::remove_file(path)?;
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(error.into()),
+                }
+            }
+            state.pending_stage = None;
+            self.save(state)?;
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn service_select(&self, selected: &Record) -> Result<()> {
+        let _lock = self.lock()?;
+        let mut state = self.load()?;
+        ensure!(
+            state.process.is_none(),
+            "stop the service before switching versions"
+        );
+        let operation = state.operation.as_ref().context("no service transaction")?;
+        ensure!(
+            selected == &operation.from || selected == &operation.to,
+            "selected version is outside the recorded transaction"
+        );
+        self.verify(selected)?;
+        state.previous = Some(if selected == &operation.from {
+            operation.to.clone()
+        } else {
+            operation.from.clone()
+        });
+        state.active = Some(selected.clone());
+        self.save(&state)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn service_finish(&self) -> Result<()> {
+        let _lock = self.lock()?;
+        let mut state = self.load()?;
+        ensure!(
+            state.operation.is_some(),
+            "no service transaction to finish"
+        );
+        state.operation = None;
+        self.save(&state)
+    }
+
+    #[cfg(target_os = "linux")]
     pub(crate) fn service_launch(&self) -> Result<(PathBuf, ProcessRecord)> {
         let _lock = self.lock()?;
         let mut state = self.load()?;
         ensure!(
-            state.pending_stage.is_none() && state.operation.is_none(),
-            "recover lifecycle transaction before service startup"
+            state.operation.as_ref().is_none_or(|operation| {
+                state.active.as_ref() == Some(&operation.from)
+                    || state.active.as_ref() == Some(&operation.to)
+            }),
+            "active service version is outside the recorded transaction"
         );
+        // A staged candidate never changes the running version. During a switch,
+        // only the two journaled versions may boot; recovery restores `from`.
         // systemd has reaped the old main process before invoking a new launcher.
         // A reused/live PID is never cleared solely because the endpoint is down.
         self.clear_dead_record(&mut state)?;
@@ -821,7 +1032,7 @@ impl Manager {
         self.verify(state.active.as_ref().context("Agent is not installed")?)
     }
 
-    pub(crate) fn lock(&self) -> Result<File> {
+    pub(crate) fn lock(&self) -> Result<OperationLock> {
         if self.home.exists() {
             ensure_dir(&self.home)?;
         } else {
@@ -851,7 +1062,7 @@ impl Manager {
             .open(path)?;
         file.try_lock()
             .context("another lifecycle operation is in progress")?;
-        Ok(file)
+        Ok(OperationLock::held(file))
     }
 
     fn load(&self) -> Result<State> {
@@ -862,6 +1073,13 @@ impl Manager {
         ensure_regular(&path)?;
         let state: State = serde_json::from_slice(&fs::read(&path)?)
             .with_context(|| format!("invalid {}", path.display()))?;
+        self.validate_state(&state)?;
+        Ok(state)
+    }
+
+    /// Shared structural validation only. No I/O: the read-only doctor
+    /// provides a bounded manifest and the normal lifecycle keeps its API.
+    fn validate_state(&self, state: &State) -> Result<()> {
         for record in [state.active.as_ref(), state.previous.as_ref()]
             .into_iter()
             .flatten()
@@ -892,7 +1110,7 @@ impl Manager {
             validate_stage_name(&pending.stage)?;
             validate_target_name(&pending.target)?;
         }
-        Ok(state)
+        Ok(())
     }
 
     fn save(&self, state: &State) -> Result<()> {
@@ -906,6 +1124,8 @@ impl Manager {
             ensure_regular(&target)?;
         }
         fs::rename(&temp, target)?;
+        #[cfg(unix)]
+        File::open(&self.root)?.sync_all()?;
         Ok(())
     }
 }
@@ -1057,6 +1277,106 @@ pub(crate) fn pid_alive(pid: u32) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn service_switch_is_journaled_and_staging_failure_keeps_active_version() {
+        let temp = tempfile::tempdir().unwrap();
+        let manager = Manager::new(temp.path());
+        let binary = temp.path().join("candidate");
+        fs::write(&binary, b"synthetic executable").unwrap();
+        let digest = sha256_file(&binary).unwrap();
+        let original = manager.install("one", &binary, &digest).unwrap();
+        assert!(manager
+            .service_prepare_upgrade("bad", &binary, &"0".repeat(64), true)
+            .is_err());
+        let (state, _) = manager.service_snapshot().unwrap();
+        assert_eq!(state.active, Some(original.clone()));
+        assert!(state.pending_stage.is_none() && state.operation.is_none());
+        let target = manager
+            .service_prepare_upgrade("two", &binary, &digest, true)
+            .unwrap();
+        let (state, _) = manager.service_snapshot().unwrap();
+        assert_eq!(state.active, Some(original.clone()));
+        let operation = state.operation.unwrap();
+        assert_eq!(operation.from, original);
+        assert_eq!(operation.to, target);
+        assert!(operation.was_running);
+        // The coordinator releases the state lock before starting systemd.
+        drop(manager.lock().unwrap());
+        assert!(manager
+            .service_prepare_upgrade("three", &binary, &digest, false)
+            .is_err());
+        let foreign = Record {
+            version: "foreign".into(),
+            binary: "agentfw-foreign".into(),
+            digest,
+        };
+        assert!(manager.service_select(&foreign).is_err());
+        manager.service_select(&target).unwrap();
+        manager.service_select(&original).unwrap();
+        manager.service_finish().unwrap();
+        let (state, _) = manager.service_snapshot().unwrap();
+        assert_eq!(state.active, Some(original));
+        assert_eq!(state.previous, Some(target));
+        assert!(state.operation.is_none());
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn stopped_service_rollback_and_interrupted_stage_keep_running_intent() {
+        let temp = tempfile::tempdir().unwrap();
+        let manager = Manager::new(temp.path());
+        let candidate = temp.path().join("candidate");
+        fs::write(&candidate, b"synthetic executable").unwrap();
+        let digest = sha256_file(&candidate).unwrap();
+        let first = manager.install("one", &candidate, &digest).unwrap();
+        let second = manager
+            .service_prepare_upgrade("two", &candidate, &digest, false)
+            .unwrap();
+        manager.service_select(&second).unwrap();
+        manager.service_finish().unwrap();
+        assert_eq!(manager.service_prepare_rollback(false).unwrap(), first);
+        assert!(!manager.load().unwrap().operation.unwrap().was_running);
+        manager.service_select(&first).unwrap();
+        manager.service_finish().unwrap();
+        let lock = manager.lock().unwrap();
+        let mut state = manager.load().unwrap();
+        let stage = format!(".{}.stage", crate::token::generate());
+        fs::write(manager.root.join(&stage), b"partial").unwrap();
+        state.pending_stage = Some(PendingStage {
+            stage: stage.clone(),
+            target: "agentfw-incomplete".into(),
+        });
+        manager.save(&state).unwrap();
+        drop(lock);
+        manager.service_recover_staging().unwrap();
+        assert!(!manager.root.join(stage).exists());
+        let state = manager.load().unwrap();
+        assert_eq!(state.active, Some(first));
+        assert!(state.process.is_none() && state.pending_stage.is_none());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn operation_owner_release_is_not_prolonged_by_an_inherited_descriptor() {
+        let temp = tempfile::tempdir().unwrap();
+        let manager = Manager::new(temp.path());
+        let owner = manager.lock().unwrap();
+        let inherited = owner.0.try_clone().unwrap();
+        assert!(manager.lock().is_err(), "live owner must remain exclusive");
+        drop(owner);
+        let replacement = manager
+            .lock()
+            .expect("an unrelated inherited descriptor must not retain ownership");
+        assert!(
+            manager.lock().is_err(),
+            "replacement must own the same exclusive lock"
+        );
+        drop(replacement);
+        drop(inherited);
+        manager.lock().unwrap();
+    }
 
     #[test]
     fn managed_identity_requires_every_field() {

@@ -74,11 +74,28 @@ pub fn to_event(p: &HookPayload, seq: u64, at_ms: u64, max_bytes: usize) -> Opti
         HookEvent::Other => return None,
     };
 
+    let (agent, parent) = match p.event {
+        HookEvent::SubagentStop => {
+            let agent = p
+                .agent_id
+                .clone()
+                .or_else(|| p.agent_type.clone())
+                .unwrap_or_else(|| "subagent".into());
+            let parent = p.parent_id.clone();
+            (agent, parent)
+        }
+        _ => {
+            let agent = p.agent_id.clone().unwrap_or_else(|| "main".into());
+            let parent = p.parent_id.clone();
+            (agent, parent)
+        }
+    };
+
     Some(Mapped {
         event: AgentEvent {
             session: p.session_id.clone(),
-            agent: "main".into(),
-            parent: None,
+            agent,
+            parent,
             seq,
             at_ms,
             kind,
@@ -151,6 +168,8 @@ mod tests {
         );
         let m = to_event(&p, 1, 0, 262_144).unwrap();
         assert!(!m.truncated);
+        assert_eq!(m.event.agent, "Explore");
+        assert_eq!(m.event.parent, None);
         match m.event.kind {
             EventKind::SubagentReport { name, content } => {
                 assert_eq!(name, "Explore");
@@ -158,6 +177,17 @@ mod tests {
             }
             other => panic!("expected SubagentReport, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn bound_agent_and_parent_identity_are_mapped() {
+        let p = payload(
+            r#"{"session_id":"s1","hook_event_name":"PreToolUse","tool_name":"Bash",
+               "tool_input":{"command":"ls"},"agent_id":"worker-1","parent_id":"orchestrator"}"#,
+        );
+        let m = to_event(&p, 1, 0, 1000).unwrap();
+        assert_eq!(m.event.agent, "worker-1");
+        assert_eq!(m.event.parent.as_deref(), Some("orchestrator"));
     }
 
     #[test]

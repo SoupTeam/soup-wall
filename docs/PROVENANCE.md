@@ -14,7 +14,9 @@ Model weights, benchmark datasets, container base images, and frontend assets ne
 
 ## Dependency and advisory review
 
-The locked workspace includes the Gateway's identity and storage dependencies. The SAML adapter uses [`saml-rs 0.6.1`](https://github.com/salasebas/saml-rs/releases/tag/v0.6.1) (MIT), `bergshamra 0.9.2` (BSD-2-Clause), and [`kryptering 0.6.0`](https://github.com/kushaldas/kryptering/releases/tag/v0.6.0) (BSD-2-Clause). Kryptering is a pinned local package with a narrowly scoped platform patch. [Its intake record](../vendor/kryptering/PATCH.md) records the original registry archive checksum, upstream revision, retained license and source, omitted development assets, exact delta and update procedure. The upstream source differs only in its platform guard and error message; cryptographic operations are unchanged. Other dependencies remain registry packages. The 0.6 migration explicitly retains signed assertions, signed authentication requests, audience validation, and zero clock-skew tolerance; it does not adopt the new five-minute validation default. Metadata signature verification, replay protection, and the provider boundary remain required.
+The locked workspace includes the Gateway's identity and storage dependencies. The SAML adapter uses [`saml-rs 0.6.1`](https://github.com/salasebas/saml-rs/releases/tag/v0.6.1) (MIT), `bergshamra 0.9.2` (BSD-2-Clause), and [`kryptering 0.6.0`](https://github.com/kushaldas/kryptering/releases/tag/v0.6.0) (BSD-2-Clause). Kryptering is a pinned local package with a narrowly scoped platform patch. [Its intake record](../vendor/kryptering/PATCH.md) records the original registry archive checksum, upstream revision, retained license and source, omitted development assets, exact delta and update procedure. The upstream source differs only in its platform guard and error message; cryptographic operations are unchanged. The optional ML dependency also has a reviewed local patch; see below. Other dependencies remain registry packages. The 0.6 migration explicitly retains signed assertions, signed authentication requests, audience validation, and zero clock-skew tolerance; it does not adopt the new five-minute validation default. Metadata signature verification, replay protection, and the provider boundary remain required.
+
+The optional ML graph pins `candle-core 0.11.0` to [a reviewed local patch](../vendor/candle-core/PATCH.md) to use fixed `zip 9.0.4` without suppressing RUSTSEC-2026-0367/0368/0369. Its registry archive SHA-256 and four-file delta are recorded in the patch note; the original license and all upstream source/test fixtures are retained. Three archive-name readers propagate ZIP 9's fallible filename API, and a deprecated import is removed. Tensor computation and application ML features are unchanged. The license gate requires the exact path, version, manifest and license digests from `reviewed_paths`; unlisted or modified path dependencies fail. Both patched dependencies remain excluded from workspace membership.
 
 All release targets select the AWS-LC document provider, using the workspace's existing `aws-lc-rs 1.18.2` dependency (Apache-2.0 OR ISC). The patch adds only non-FIPS Windows x86_64 MSVC to kryptering's existing Linux and non-FIPS macOS x86_64/aarch64 support. [AWS-LC itself supports Windows MSVC](https://aws.github.io/aws-lc-rs/platform_support.html). Windows ARM, Windows GNU and Windows FIPS are not admitted by this patch. Unsupported targets fail at the provider guard; there is no RustCrypto fallback. The complete application `Cargo.lock` and release graphs exclude `rsa`. Keep the vendored package excluded from the application workspace so upstream development dependencies do not enter that lock.
 
@@ -117,4 +119,39 @@ is needed. The Cargo dependency graph remains unchanged.
 
 ## Release evidence
 
+### Optional original Git MCP server
+
+The opt-in [Git profile](operations/GIT_MCP_PROFILE.md) uses the original
+`mcp-server-git` 2026.10.10 from
+[modelcontextprotocol/servers](https://github.com/modelcontextprotocol/servers/tree/main/src/git),
+MCP SDK 1.29.0 (MIT), and GitPython (BSD-3-Clause). Original notices are retained
+in [the profile assets](../profiles/mcp/git-readonly-v1/upstream-notices).
+The hash-locked wheel requirements and adjacent dependency-provenance inventory
+record the complete selected Python graph and its separate upstream licenses;
+the installer preserves package metadata and license files. Discovery bytes are
+behavioral fixtures, not a replacement server implementation.
+
+CPython 3.11.14 uses the pinned Astral python-build-standalone 20251014 original
+distribution, with Python/third-party distribution notices retained in the
+runtime tree. Git 2.51.2 is a separate GPL-2.0 executable built from its pinned
+official source archive; its COPYING file remains in the build source. The
+existing separately built bubblewrap 0.13.1 remains LGPL-2.0-or-later. These
+executables are not linked into or redistributed with the Apache-2.0 Agent.
+Redistributing an installed runtime requires reviewing its complete licenses and
+corresponding-source obligations separately. No model, provider account or
+customer data is needed. The Cargo dependency graph is unchanged.
+
 Review and retain the locked dependency graph, an SBOM, third-party license and notice inventory, model and dataset records, the upstream attribution, and security-scan findings for the **complete** workspace. Document any unresolved advisory or deployment limitation in the release notes.
+
+## Optional SCIM interoperability client
+
+The directory acceptance driver installs `scim2-client` 0.13.1 and
+`scim2-models` 0.12.2 from [python-scim](https://github.com/python-scim), both
+Apache-2.0 (Yaal Coop), with their packaged license notices retained by pip.
+Their independent synchronous httpx2 engine drives the real local HTTP API;
+no upstream library source is copied into this repository. This optional test
+client is not bundled into the Gateway executable. Exact direct versions live
+in [the fixture requirements](../scripts/scim-directory-requirements.txt);
+run reports record the installed client/model/HTTP engine versions and source
+hashes. PostgreSQL uses the existing digest-pinned disposable TLS fixture.
+The pinned httpx2 2.13.1 transport is BSD-3-Clause (Pydantic Services / Tom Christie); its packaged license is retained in the isolated environment.

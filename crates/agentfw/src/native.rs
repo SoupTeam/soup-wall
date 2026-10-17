@@ -4,7 +4,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use axum::extract::State;
@@ -19,6 +19,7 @@ use crate::config::NativeCfg;
 use crate::handlers::Shared;
 
 pub mod approval;
+pub mod child_authority;
 pub mod resource;
 
 pub const CONTRACT: &str = "sw-native/1";
@@ -219,6 +220,150 @@ fn declared_hosts(tool: &Tool, args: &Value) -> Result<Vec<String>, &'static str
     Ok(hosts.into_iter().collect())
 }
 
+// Scope strings retain the wire format, but containment is typed: a host may
+// narrow to an exact URL/mailbox; URLs and mailboxes never widen to a host.
+fn scope_host(value: &str) -> Option<String> {
+    if let Ok(ip) = value.parse::<std::net::IpAddr>() {
+        return Some(ip.to_string());
+    }
+    if value.contains(['/', ':', '@', '?', '#']) {
+        return None;
+    }
+    crate::mcp::resources::canonical_url(&format!("http://{value}"))
+        .ok()
+        .map(|(_, host, _)| host)
+}
+
+fn scope_contains(parent: &str, child: &str) -> bool {
+    let cp = std::path::Path::new(child);
+    let pp = std::path::Path::new(parent);
+    if cp.is_absolute() || pp.is_absolute() {
+        let clean = |p: &std::path::Path| {
+            !p.components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
+        };
+        return cp.is_absolute()
+            && pp.is_absolute()
+            && clean(cp)
+            && clean(pp)
+            && cp.starts_with(pp);
+    }
+    if let Ok((canonical, host, _)) = crate::mcp::resources::canonical_url(child) {
+        return crate::mcp::resources::canonical_url(parent)
+            .map(|(p, _, _)| p == canonical)
+            .unwrap_or_else(|_| scope_host(parent).is_some_and(|p| p == host));
+    }
+    if let Ok((address, domain)) = crate::mcp::resources::canonical_recipient(child) {
+        return crate::mcp::resources::canonical_recipient(parent)
+            .map(|(p, _)| p == address)
+            .unwrap_or_else(|_| scope_host(parent).is_some_and(|p| p == domain));
+    }
+    scope_host(parent)
+        .zip(scope_host(child))
+        .is_some_and(|(p, c)| p == c)
+}
+
+enum EgressDestination {
+    Url { canonical: String },
+    Email { address: String },
+}
+
+impl EgressDestination {
+    fn matches_grant(&self, g: &str) -> bool {
+        match self {
+            EgressDestination::Url { canonical, .. } => scope_contains(g, canonical),
+            EgressDestination::Email { address, .. } => scope_contains(g, address),
+        }
+    }
+}
+
+fn declared_destinations(
+    tool: &Tool,
+    args: &Value,
+) -> Result<Vec<EgressDestination>, &'static str> {
+    let mut destinations = Vec::new();
+    for selector in &tool.egress {
+        let selected = match crate::mcp::resources::selected(args, &selector.pointer)
+            .map_err(|_| "native_egress_type")?
+        {
+            None | Some(Value::Null) if selector.optional => continue,
+            Some(value) => value,
+            None => return Err("native_egress_missing"),
+        };
+        let values: Vec<&Value> = match selected {
+            Value::Array(items) if items.len() <= 256 => items.iter().collect(),
+            Value::String(_) => vec![selected],
+            _ => return Err("native_egress_type"),
+        };
+        if values.is_empty() && !selector.optional {
+            return Err("native_egress_missing");
+        }
+        for value in values {
+            let text = value
+                .as_str()
+                .filter(|s| !s.is_empty() && s.len() <= 4096 && !s.chars().any(char::is_control))
+                .ok_or("native_egress_type")?;
+            match selector.kind {
+                EgressKind::UrlHost => {
+                    let (canonical, _, _) = crate::mcp::resources::canonical_url(text)
+                        .map_err(|_| "native_egress_url")?;
+                    destinations.push(EgressDestination::Url { canonical });
+                }
+                EgressKind::EmailDomain => {
+                    let (address, _) = crate::mcp::resources::canonical_recipient(text)
+                        .map_err(|_| "native_egress_email")?;
+                    destinations.push(EgressDestination::Email { address });
+                }
+            }
+        }
+    }
+    if destinations.is_empty()
+        && (tool.action_class == ActionClass::Network || !tool.egress.is_empty())
+    {
+        return Err("native_egress_missing");
+    }
+    Ok(destinations)
+}
+
+fn child_resources_authorized(
+    granted: &[String],
+    policy: Option<&resource::Policy>,
+    tool: &Tool,
+    args: &Value,
+    admission: Option<&resource::Admission>,
+) -> bool {
+    if policy.is_some() {
+        let Some(admission) = admission else {
+            return false;
+        };
+        for ev in &admission.resources {
+            let target = match &ev.resource {
+                crate::mcp::resources::Resource::Path { canonical }
+                | crate::mcp::resources::Resource::Url { canonical, .. } => canonical,
+                crate::mcp::resources::Resource::Domain { host } => host,
+                crate::mcp::resources::Resource::Recipient { address, .. } => address,
+            };
+            let matched = granted.iter().any(|g| scope_contains(g, target));
+            if !matched {
+                return false;
+            }
+        }
+    }
+    if !tool.egress.is_empty() || tool.action_class == ActionClass::Network {
+        match declared_destinations(tool, args) {
+            Ok(destinations) => {
+                for dest in destinations {
+                    if !granted.iter().any(|g| dest.matches_grant(g)) {
+                        return false;
+                    }
+                }
+            }
+            Err(_) => return false,
+        }
+    }
+    true
+}
+
 #[derive(Clone, Copy, PartialEq)]
 enum Stage {
     Result,
@@ -237,23 +382,167 @@ struct Call {
 }
 
 struct Session {
+    pub host_session: Option<String>,
+    pub server_id: Option<String>,
+    pub agent_id: Option<String>,
+    pub parent_id: Option<String>,
+    pub granted_tools: Vec<String>,
+    pub granted_resources: Option<Vec<String>>,
+    pub authority_expires_at_ms: Option<u64>,
+    parent_epoch: Option<String>,
+    authority_digest: Option<String>,
     epoch: String,
     seq: u64,
     touched: Instant,
     calls: BTreeMap<String, Call>,
 }
 
+impl Session {
+    fn event_at(&self, seq: u64, kind: EventKind) -> AgentEvent {
+        event_scoped(
+            &self.epoch,
+            self.agent_id.as_deref().unwrap_or("native-runtime"),
+            self.parent_id.as_deref(),
+            seq,
+            kind,
+        )
+    }
+
+    fn event(&self, kind: EventKind) -> AgentEvent {
+        self.event_at(self.seq, kind)
+    }
+
+    fn host_event(&self, host_session: &str, seq: u64, kind: EventKind) -> AgentEvent {
+        event_scoped(
+            host_session,
+            self.agent_id.as_deref().unwrap_or("native-runtime"),
+            self.parent_id.as_deref(),
+            seq,
+            kind,
+        )
+    }
+}
+
 #[derive(Default)]
 struct Sessions {
     entries: BTreeMap<String, Session>,
+    // Bounded tombstones prevent a completed scoped host from silently reverting
+    // to unsigned hooks. Reaching the cap refuses new host IDs until restart.
+    scoped_hosts: BTreeSet<String>,
+}
+
+fn wall_time_ms() -> Result<u64, &'static str> {
+    Ok(SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| "native_clock_unavailable")?
+        .as_millis() as u64)
+}
+
+fn validate_lineage(
+    state: &Sessions,
+    session: &Session,
+    now_ms: u64,
+    now: Instant,
+) -> Result<(), &'static str> {
+    let mut current = session;
+    for _ in 0..=MAX_SESSIONS {
+        if now.duration_since(current.touched) >= TTL
+            || current
+                .authority_expires_at_ms
+                .is_some_and(|expires| now_ms >= expires)
+        {
+            return Err("native_child_authority_expired");
+        }
+        let Some(parent) = &current.parent_id else {
+            return Ok(());
+        };
+        current = state
+            .entries
+            .values()
+            .find(|p| {
+                p.host_session == current.host_session
+                    && p.agent_id.as_ref() == Some(parent)
+                    && current.parent_epoch.as_ref() == Some(&p.epoch)
+            })
+            .ok_or("native_child_parent_unavailable")?;
+    }
+    Err("native_child_parent_unavailable")
 }
 
 pub struct NativeState {
     pub registry: Registry,
     pub registry_sha256: String,
     pub token: String,
+    instance_id: String,
     sessions: Mutex<Sessions>,
     pub(crate) approval: Option<approval::ApprovalState>,
+}
+
+/// Keeps authority and parent epochs stable through a synchronous hook decision.
+/// Always acquire before the firewall mutex, and never hold across an await.
+pub(crate) struct HookAuthorityGuard<'a> {
+    native: &'a NativeState,
+    sessions: MutexGuard<'a, Sessions>,
+}
+
+impl HookAuthorityGuard<'_> {
+    pub fn resolve(
+        &self,
+        session: &str,
+        agent: Option<&str>,
+        parent: Option<&str>,
+        proof: Option<&str>,
+        call: Option<(&str, &Value)>,
+    ) -> Result<(String, Option<String>, Option<String>), &'static str> {
+        self.native.resolve_hook_identity_locked(
+            &self.sessions,
+            session,
+            agent,
+            parent,
+            proof,
+            call,
+        )
+    }
+
+    pub fn inspect_call(
+        &self,
+        firewall: &mut soup_wall_agent::AgentFirewall,
+        event: &AgentEvent,
+    ) -> Outcome {
+        if let EventKind::ToolCall { tool: name, args } = &event.kind {
+            let tool = self
+                .sessions
+                .entries
+                .values()
+                .find(|s| {
+                    s.host_session.as_deref() == Some(&event.session)
+                        && s.agent_id.as_deref() == Some(&event.agent)
+                })
+                .and_then(|s| s.server_id.as_deref())
+                .and_then(|server| self.native.hook_tool(server, name));
+            if let Some(tool) = tool {
+                if let Ok(hosts) = declared_hosts(tool, args) {
+                    let mut canonical = event.clone();
+                    if let EventKind::ToolCall { tool: name, .. } = &mut canonical.kind {
+                        *name = tool.name.clone();
+                    }
+                    return firewall.inspect_native_call(&canonical, tool.action_class, &hosts);
+                }
+            }
+            let mut refused = Outcome::allow();
+            refused.verdict = Verdict::Deny;
+            refused.rule = Some("native_hook_tool_unsupported".into());
+            return refused;
+        }
+        firewall.inspect(event)
+    }
+
+    pub fn has_host(&self, host: &str) -> bool {
+        self.sessions
+            .entries
+            .values()
+            .any(|s| s.host_session.as_deref() == Some(host))
+    }
 }
 
 impl NativeState {
@@ -284,15 +573,16 @@ impl NativeState {
             }
             if let Some(profile) = &tool.mcp_result_profile {
                 anyhow::ensure!(
-                    profile == crate::mcp::server_profile::FORMAT
+                    crate::mcp::server_profile::selected(Some(profile))
                         && tool.action_class == ActionClass::ReadOnly
                         && matches!(tool.result_provenance, ResultProvenance::Untrusted)
                         && tool.egress.is_empty()
                         && tool.resource_policy.is_none(),
                     "invalid selected MCP result profile authority"
                 );
-                let manifest = crate::mcp::server_profile::original_manifest();
-                let profiles = crate::mcp::server_profile::classify_manifest(&manifest)?;
+                let manifest = crate::mcp::server_profile::original_manifest_for(profile)?;
+                let profiles =
+                    crate::mcp::server_profile::classify_manifest_for(profile, &manifest)?;
                 anyhow::ensure!(
                     profiles
                         .get(&tool.name)
@@ -322,9 +612,16 @@ impl NativeState {
             registry,
             registry_sha256: expected.into(),
             token,
+            instance_id: crate::token::generate(),
             sessions: Mutex::default(),
             approval: None,
         })
+    }
+
+    /// Public runtime identifier, authenticated by the native transport endpoint.
+    /// Scoped grant nonces bind to it without changing the HMAC wire encoding.
+    pub fn instance_id(&self) -> &str {
+        &self.instance_id
     }
 
     /// Enable the opt-in pending-approval lifecycle (SOU-48). Absent = refusal.
@@ -336,6 +633,132 @@ impl NativeState {
     ) -> anyhow::Result<Self> {
         self.approval = Some(approval::ApprovalState::new(home, grant_key, ttl_seconds)?);
         Ok(self)
+    }
+
+    pub fn has_active_host_session(&self, host_session: &str) -> bool {
+        let Ok(sessions) = self.sessions.lock() else {
+            return false;
+        };
+        sessions
+            .entries
+            .values()
+            .any(|s| s.host_session.as_deref() == Some(host_session))
+    }
+
+    pub fn active_host_sessions(&self) -> Vec<String> {
+        let Ok(sessions) = self.sessions.lock() else {
+            return Vec::new();
+        };
+        let mut hosts = Vec::new();
+        for s in sessions.entries.values() {
+            if let Some(ref h) = s.host_session {
+                if !hosts.contains(h) {
+                    hosts.push(h.clone());
+                }
+            }
+        }
+        hosts
+    }
+
+    pub fn resolve_hook_identity(
+        &self,
+        session_id: &str,
+        agent_id: Option<&str>,
+        parent_id: Option<&str>,
+        proof: Option<&str>,
+        call: Option<(&str, &Value)>,
+    ) -> Result<(String, Option<String>, Option<String>), &'static str> {
+        self.lock_hook_authority()?
+            .resolve(session_id, agent_id, parent_id, proof, call)
+    }
+
+    pub(crate) fn lock_hook_authority(&self) -> Result<HookAuthorityGuard<'_>, &'static str> {
+        Ok(HookAuthorityGuard {
+            native: self,
+            sessions: self
+                .sessions
+                .lock()
+                .map_err(|_| "native_state_unavailable")?,
+        })
+    }
+
+    fn hook_tool(&self, server: &str, name: &str) -> Option<&Tool> {
+        let qualified = format!("mcp__{server}__");
+        let name = if name.starts_with("mcp__") {
+            name.strip_prefix(&qualified)?
+        } else {
+            name
+        };
+        self.registry.tools.iter().find(|tool| tool.name == name)
+    }
+
+    fn resolve_hook_identity_locked(
+        &self,
+        sessions: &Sessions,
+        session_id: &str,
+        agent_id: Option<&str>,
+        parent_id: Option<&str>,
+        proof: Option<&str>,
+        call: Option<(&str, &Value)>,
+    ) -> Result<(String, Option<String>, Option<String>), &'static str> {
+        let Some(proof) = proof else {
+            if sessions.scoped_hosts.contains(session_id)
+                || agent_id.is_some()
+                || parent_id.is_some()
+            {
+                return Err("native_hook_authority_required");
+            }
+            return Ok(("main".into(), None, None));
+        };
+        let now_ms = wall_time_ms()?;
+        let decoded =
+            child_authority::decode_token(proof).map_err(|_| "native_hook_authority_invalid")?;
+        let grant = child_authority::verify_token(
+            &child_authority::derive_key(&self.token),
+            proof,
+            session_id,
+            &decoded.server_id,
+            now_ms,
+        )
+        .map_err(|_| "native_hook_authority_invalid")?;
+        let agent = grant
+            .agent_id
+            .as_deref()
+            .ok_or("native_hook_identity_unsupported")?;
+        if agent_id.is_some_and(|id| id != agent)
+            || parent_id.is_some_and(|id| Some(id) != grant.parent_id.as_deref())
+        {
+            return Err("native_hook_identity_mismatch");
+        }
+        let digest = hash(proof.as_bytes());
+        let session = sessions
+            .entries
+            .values()
+            .find(|s| {
+                s.host_session.as_deref() == Some(session_id)
+                    && s.agent_id.as_deref() == Some(agent)
+                    && s.authority_digest.as_ref() == Some(&digest)
+            })
+            .ok_or("native_hook_session_unknown")?;
+        validate_lineage(sessions, session, now_ms, Instant::now())?;
+        if let Some((name, args)) = call {
+            let tool = self
+                .hook_tool(&grant.server_id, name)
+                .ok_or("native_hook_tool_unsupported")?;
+            if !session.granted_tools.iter().any(|t| t == &tool.name)
+                || tool.resource_policy.is_some()
+                || !child_resources_authorized(
+                    session.granted_resources.as_deref().unwrap_or(&[]),
+                    None,
+                    tool,
+                    args,
+                    None,
+                )
+            {
+                return Err("native_child_authority_escalation");
+            }
+        }
+        Ok((agent.into(), grant.parent_id, Some(grant.server_id)))
     }
 
     pub fn load(config: &NativeCfg, token: String) -> anyhow::Result<Self> {
@@ -382,6 +805,11 @@ struct Request {
     delivery: Option<String>,
     resource_admission: Option<resource::Admission>,
     approval_id: Option<String>,
+    pub host_session: Option<String>,
+    pub child_authority: Option<String>,
+    pub server_id: Option<String>,
+    pub agent_id: Option<String>,
+    pub parent_id: Option<String>,
     mcp_host_call_id: Option<Value>,
 }
 
@@ -400,7 +828,20 @@ fn parse(body: &str) -> Result<Request, &'static str> {
     let mut keys = BTreeSet::from(["contract_version", "registry_sha256", "session_id", "event"]);
     let object = value.as_object().ok_or("native_invalid_json")?;
     match event {
-        "session_start" | "session_end" => {}
+        "session_start" => {
+            for key in [
+                "host_session",
+                "child_authority",
+                "server_id",
+                "agent_id",
+                "parent_id",
+            ] {
+                if object.contains_key(key) {
+                    keys.insert(key);
+                }
+            }
+        }
+        "session_end" => {}
         "call" => {
             keys.extend(["tool", "args", "schema_sha256"]);
             if object.contains_key("mcp_host_call_id") {
@@ -436,6 +877,21 @@ fn parse(body: &str) -> Result<Request, &'static str> {
     }
     if object.keys().map(String::as_str).collect::<BTreeSet<_>>() != keys {
         return Err("native_invalid_fields");
+    }
+    if request
+        .host_session
+        .as_ref()
+        .is_some_and(|id| !identifier(id))
+        || request.server_id.as_ref().is_some_and(|id| !identifier(id))
+        || request.agent_id.as_ref().is_some_and(|id| !identifier(id))
+        || request.parent_id.as_ref().is_some_and(|id| !identifier(id))
+    {
+        return Err("native_invalid_identity");
+    }
+    if (request.parent_id.is_some() || request.child_authority.is_some())
+        && (request.host_session.is_none() || request.child_authority.is_none())
+    {
+        return Err("native_invalid_identity");
     }
     if !identifier(&request.session_id)
         || !matches!(
@@ -515,6 +971,37 @@ struct Response {
     #[serde(skip_serializing_if = "Option::is_none")]
     resources_sha256: Option<String>,
     reason_codes: Vec<String>,
+}
+
+fn merge_provenance_outcomes(mut local: Outcome, host: Outcome) -> Outcome {
+    fn verdict_rank(v: Verdict) -> u8 {
+        match v {
+            Verdict::Deny => 3,
+            Verdict::Ask => 2,
+            Verdict::Escalate => 1,
+            Verdict::Allow => 0,
+        }
+    }
+    if verdict_rank(resolved(&host)) > verdict_rank(resolved(&local)) {
+        let mut merged = host;
+        merged.provenance_incomplete |= local.provenance_incomplete;
+        if local.taint.is_some() && merged.taint.is_none() {
+            merged.taint = local.taint;
+        }
+        if merged.rule.is_none() && local.rule.is_some() {
+            merged.rule = local.rule;
+        }
+        merged
+    } else {
+        local.provenance_incomplete |= host.provenance_incomplete;
+        if host.taint.is_some() && local.taint.is_none() {
+            local.taint = host.taint;
+        }
+        if local.rule.is_none() && host.rule.is_some() {
+            local.rule = host.rule;
+        }
+        local
+    }
 }
 
 fn resolved(outcome: &Outcome) -> Verdict {
@@ -673,6 +1160,14 @@ fn mcp_host_text(content: &str, result_kind: &str) -> Result<Vec<String>, &'stat
 /// Both channels are decoded and independently inspected. Correlation and the
 /// receipt hash continue to bind the complete untouched JSON-RPC response.
 fn selected_mcp_host_text(content: &str, result_kind: &str) -> Result<Vec<String>, &'static str> {
+    selected_mcp_host_text_profile(content, result_kind, true)
+}
+
+fn selected_mcp_host_text_profile(
+    content: &str,
+    result_kind: &str,
+    structured_required: bool,
+) -> Result<Vec<String>, &'static str> {
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     struct SelectedEnvelope {
@@ -726,7 +1221,10 @@ fn selected_mcp_host_text(content: &str, result_kind: &str) -> Result<Vec<String
                 || value["result"]
                     .get("structuredContent")
                     .is_some_and(|v| !v.is_object())
-                || (result.structured_content.is_none() && !result.is_error.unwrap_or(false))
+                || (structured_required
+                    && result.structured_content.is_none()
+                    && !result.is_error.unwrap_or(false))
+                || (!structured_required && result.structured_content.is_some())
             {
                 return Err("native_mcp_result_shape");
             }
@@ -756,6 +1254,42 @@ fn failure(code: &'static str, status: StatusCode) -> (StatusCode, Json<Value>) 
     (
         status,
         Json(json!({"contract_version": CONTRACT, "release": false, "error_code": code})),
+    )
+}
+
+/// Trusted issuer bootstrap; the identifier itself conveys no authority.
+pub async fn instance(State(st): State<Shared>, headers: HeaderMap) -> (StatusCode, Json<Value>) {
+    let Some(native) = &st.native else {
+        return failure("native_not_configured", StatusCode::NOT_FOUND);
+    };
+    let auth = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    if !crate::token::verify(&native.token, auth) {
+        return failure("native_unauthorized", StatusCode::UNAUTHORIZED);
+    }
+    let Ok(sessions) = native.sessions.lock() else {
+        return failure("native_state_unavailable", StatusCode::SERVICE_UNAVAILABLE);
+    };
+    let Ok(now_ms) = wall_time_ms() else {
+        return failure("native_clock_unavailable", StatusCode::SERVICE_UNAVAILABLE);
+    };
+    let bindings: Vec<Value> = sessions.entries.values()
+        .filter(|s| s.host_session.is_some() && s.agent_id.is_some() && validate_lineage(&sessions, s, now_ms, Instant::now()).is_ok())
+        .map(|s| json!({"host_session":s.host_session,"agent_id":s.agent_id,"binding_sha256":hash(s.epoch.as_bytes())})).collect();
+    let Ok(firewall) = st.firewall.lock() else {
+        return failure(
+            "native_inspection_unavailable",
+            StatusCode::SERVICE_UNAVAILABLE,
+        );
+    };
+    (
+        StatusCode::OK,
+        Json(
+            json!({"instance_id":native.instance_id(), "registry_sha256":native.registry_sha256,"bindings":bindings,
+            "provenance":{"accounting_revision":"sw-provenance-storage/1","limits":firewall.provenance_limits(),"usage":firewall.provenance_usage()}}),
+        ),
     )
 }
 
@@ -814,6 +1348,33 @@ pub async fn handler(
     }
 }
 
+/// Reserve both required contexts before publishing an authenticated session.
+/// Only fresh, unpublished shells may be removed on a failed start.
+fn register_provenance_contexts(
+    firewall: &mut soup_wall_agent::AgentFirewall,
+    epoch: &str,
+    host: Option<&str>,
+) -> Result<Vec<String>, &'static str> {
+    let mut created = Vec::with_capacity(2);
+    for context in std::iter::once(epoch).chain(host) {
+        match firewall.try_register_provenance_context(context) {
+            Ok(true) => created.push(context.to_string()),
+            Ok(false) => {}
+            Err(_) => {
+                rollback_provenance_contexts(firewall, &created);
+                return Err("native_provenance_context_capacity");
+            }
+        }
+    }
+    Ok(created)
+}
+
+fn rollback_provenance_contexts(firewall: &mut soup_wall_agent::AgentFirewall, created: &[String]) {
+    for context in created {
+        firewall.end_provenance_context(context);
+    }
+}
+
 fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Response, &'static str> {
     let started = Instant::now();
     // One lock covers sequencing, inspection, admission and audit. No await,
@@ -838,7 +1399,10 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             if let Some(approval) = &native.approval {
                 approval.close_session(&id, "session_expired");
             }
-            firewall.inspect(&event(&old.epoch, old.seq + 1, EventKind::SessionEnd));
+            if let (Some(host), Some(agent)) = (&old.host_session, &old.agent_id) {
+                firewall.end_agent(host, agent);
+            }
+            firewall.inspect(&old.event_at(old.seq + 1, EventKind::SessionEnd));
             st.spans.end_session(&old.epoch);
         }
     }
@@ -873,25 +1437,210 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         if state.entries.len() >= MAX_SESSIONS {
             return Err("native_session_cap");
         }
-        let epoch = format!("native:{}", crate::token::generate());
-        audit(
+        let (granted_tools, granted_resources, agent_id, parent_id, authority_expires_at_ms) =
+            if let Some(host_session) = &request.host_session {
+                let token = request
+                    .child_authority
+                    .as_deref()
+                    .ok_or("native_child_authority_missing")?;
+                let key = child_authority::derive_key(&native.token);
+                let now_ms = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map_err(|_| "native_clock_unavailable")?
+                    .as_millis() as u64;
+                let grant = child_authority::verify_token(
+                    &key,
+                    token,
+                    host_session,
+                    request.server_id.as_deref().unwrap_or(""),
+                    now_ms,
+                )
+                .map_err(|error| {
+                    use child_authority::ChildAuthorityError;
+                    match error {
+                        ChildAuthorityError::BadSignature => "native_child_authority_bad_signature",
+                        ChildAuthorityError::Expired => "native_child_authority_expired",
+                        ChildAuthorityError::NotYetValid => "native_child_authority_not_yet_valid",
+                        ChildAuthorityError::HostSessionMismatch => {
+                            "native_child_authority_host_mismatch"
+                        }
+                        ChildAuthorityError::ServerIdMismatch => {
+                            "native_child_authority_server_mismatch"
+                        }
+                        ChildAuthorityError::InvalidContract => {
+                            "native_child_authority_invalid_contract"
+                        }
+                        ChildAuthorityError::MalformedToken => "native_child_authority_malformed",
+                    }
+                })?;
+                if let Some(req_agent) = &request.agent_id {
+                    if grant.agent_id.as_ref() != Some(req_agent) {
+                        return Err("native_invalid_identity");
+                    }
+                }
+                if let Some(req_parent) = &request.parent_id {
+                    if grant.parent_id.as_ref() != Some(req_parent) {
+                        return Err("native_invalid_identity");
+                    }
+                }
+                // Every host-bound collector shares authoritative provenance.
+                // A legacy grant lacks authenticated agent/lifecycle authority
+                // and must never be used as an alternate shared-host bootstrap.
+                if grant.agent_id.is_none() {
+                    return Err("native_child_authority_identity_required");
+                }
+                if grant.nonce.split_once('.').map(|(instance, _)| instance)
+                    != Some(native.instance_id())
+                {
+                    return Err("native_child_authority_instance_mismatch");
+                }
+                let agent_id = grant.agent_id.or_else(|| request.agent_id.clone());
+                let parent_id = grant.parent_id.or_else(|| request.parent_id.clone());
+                if agent_id.as_deref().is_some_and(|id| !identifier(id))
+                    || parent_id.as_deref().is_some_and(|id| !identifier(id))
+                    || ((parent_id.is_some() || grant.granted_resources.is_some())
+                        && agent_id.is_none())
+                {
+                    return Err("native_invalid_identity");
+                }
+                if let Some(agent) = &agent_id {
+                    if state.entries.values().any(|s| {
+                        s.host_session.as_ref() == Some(host_session)
+                            && s.agent_id.as_ref() == Some(agent)
+                    }) {
+                        return Err("native_agent_already_bound");
+                    }
+                    if !state.scoped_hosts.contains(host_session)
+                        && state.scoped_hosts.len() >= MAX_SESSIONS
+                    {
+                        return Err("native_host_binding_cap");
+                    }
+                }
+                if grant
+                    .granted_resources
+                    .as_ref()
+                    .is_some_and(|rs| rs.iter().any(|r| !scope_contains(r, r)))
+                {
+                    return Err("native_child_authority_escalation");
+                }
+                if let Some(ref parent) = parent_id {
+                    let ps = state
+                        .entries
+                        .values()
+                        .find(|s| {
+                            s.host_session.as_ref() == Some(host_session)
+                                && s.agent_id.as_ref() == Some(parent)
+                        })
+                        .ok_or("native_child_parent_unavailable")?;
+                    if grant.nonce.split('.').nth(1) != Some(hash(ps.epoch.as_bytes()).as_str()) {
+                        return Err("native_child_parent_binding_mismatch");
+                    }
+                    validate_lineage(&state, ps, now_ms, now)?;
+                    if grant
+                        .granted_tools
+                        .iter()
+                        .any(|t| !ps.granted_tools.contains(t))
+                    {
+                        return Err("native_child_authority_escalation");
+                    }
+                    for cr in grant.granted_resources.as_deref().unwrap_or(&[]) {
+                        if !ps
+                            .granted_resources
+                            .as_deref()
+                            .unwrap_or(&[])
+                            .iter()
+                            .any(|pr| scope_contains(pr, cr))
+                        {
+                            return Err("native_child_authority_escalation");
+                        }
+                    }
+                }
+                (
+                    grant.granted_tools,
+                    grant.granted_resources,
+                    agent_id,
+                    parent_id,
+                    Some(grant.expires_at_ms),
+                )
+            } else {
+                (
+                    Vec::new(),
+                    None,
+                    request.agent_id.clone(),
+                    request.parent_id.clone(),
+                    None,
+                )
+            };
+        let parent_epoch = parent_id.as_ref().and_then(|parent| {
+            state
+                .entries
+                .values()
+                .find(|s| {
+                    s.host_session == request.host_session && s.agent_id.as_ref() == Some(parent)
+                })
+                .map(|s| s.epoch.clone())
+        });
+        let session = Session {
+            parent_epoch,
+            authority_digest: request
+                .child_authority
+                .as_ref()
+                .map(|proof| hash(proof.as_bytes())),
+            epoch: format!("native:{}", crate::token::generate()),
+            seq: 1,
+            touched: now,
+            calls: BTreeMap::new(),
+            host_session: request.host_session.clone(),
+            server_id: request.server_id.clone(),
+            agent_id,
+            parent_id,
+            granted_tools,
+            granted_resources,
+            authority_expires_at_ms,
+        };
+        let created = register_provenance_contexts(
+            &mut firewall,
+            &session.epoch,
+            session.host_session.as_deref(),
+        )?;
+        if let Err(reason) = audit(
             st,
             &request,
-            &epoch,
-            1,
+            &session,
             &response,
             None,
             started.elapsed().as_micros(),
-        )?;
-        state.entries.insert(
-            request.session_id,
-            Session {
-                epoch,
-                seq: 1,
-                touched: now,
-                calls: BTreeMap::new(),
-            },
-        );
+        ) {
+            rollback_provenance_contexts(&mut firewall, &created);
+            return Err(reason);
+        }
+        let agent_name = session.agent_id.as_deref().unwrap_or("native-runtime");
+        if let (Some(host), Some(agent)) = (&session.host_session, &session.agent_id) {
+            if let Some(parent) = &session.parent_id {
+                if firewall
+                    .spawn(host, parent, agent, &session.granted_tools)
+                    .is_some()
+                {
+                    rollback_provenance_contexts(&mut firewall, &created);
+                    return Err("native_child_authority_escalation");
+                }
+            } else {
+                firewall.set_root(host, agent, &session.granted_tools);
+            }
+            state.scoped_hosts.insert(host.clone());
+        }
+        let tools = if session.host_session.is_some() {
+            session.granted_tools.clone()
+        } else {
+            native
+                .registry
+                .tools
+                .iter()
+                .map(|t| t.name.clone())
+                .collect()
+        };
+        firewall.set_root(&session.epoch, agent_name, &tools);
+        state.entries.insert(request.session_id, session);
         return Ok(response);
     }
     if request.event == "session_end" {
@@ -902,17 +1651,18 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         if let Some(approval) = &native.approval {
             approval.close_session(&request.session_id, "session_ended");
         }
-        firewall.inspect(&event(
-            &session.epoch,
-            session.seq + 1,
-            EventKind::SessionEnd,
-        ));
+        if let (Some(host), Some(agent)) = (&session.host_session, &session.agent_id) {
+            firewall.end_agent(host, agent);
+        }
+        firewall.inspect(&session.event_at(session.seq + 1, EventKind::SessionEnd));
         st.spans.end_session(&session.epoch);
         audit(
             st,
             &request,
-            &session.epoch,
-            session.seq + 1,
+            &Session {
+                seq: session.seq + 1,
+                ..session
+            },
             &response,
             None,
             started.elapsed().as_micros(),
@@ -920,6 +1670,11 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         return Ok(response);
     }
     let total_calls: usize = state.entries.values().map(|s| s.calls.len()).sum();
+    let session = state
+        .entries
+        .get(&request.session_id)
+        .ok_or("native_session_unknown")?;
+    validate_lineage(&state, session, wall_time_ms()?, now)?;
     let session = state
         .entries
         .get_mut(&request.session_id)
@@ -935,8 +1690,76 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         .ok_or("native_tool_unknown")?;
     let args = request.args.as_ref().ok_or("native_args_missing")?;
     if request.event == "call" {
+        if firewall.provenance_session_usage(&session.epoch).is_none()
+            || session
+                .host_session
+                .as_deref()
+                .is_some_and(|host| firewall.provenance_session_usage(host).is_none())
+        {
+            response.verdict = "deny";
+            response.release = false;
+            response
+                .reason_codes
+                .push("native_provenance_context_unavailable".into());
+            let mut unavailable = Outcome::allow();
+            unavailable.verdict = Verdict::Deny;
+            unavailable.rule = Some("native_provenance_context_unavailable".into());
+            unavailable.provenance_incomplete = true;
+            audit(
+                st,
+                &request,
+                session,
+                &response,
+                Some(&unavailable),
+                started.elapsed().as_micros(),
+            )?;
+            return Ok(response);
+        }
+        if args.to_string().len() > firewall.provenance_limits().max_input_bytes {
+            firewall.mark_provenance_incomplete(&session.epoch);
+            if let Some(host) = &session.host_session {
+                firewall.mark_provenance_incomplete(host);
+            }
+            response.verdict = "deny";
+            response.release = false;
+            response.reason_codes.push("native_provenance_input".into());
+            let mut unavailable = Outcome::allow();
+            unavailable.verdict = Verdict::Deny;
+            unavailable.rule = Some("native_provenance_input".into());
+            unavailable.provenance_incomplete = true;
+            audit(
+                st,
+                &request,
+                session,
+                &response,
+                Some(&unavailable),
+                started.elapsed().as_micros(),
+            )?;
+            return Ok(response);
+        }
+        if session.host_session.is_some() {
+            if !session.granted_tools.iter().any(|tool| tool == name) {
+                return Err("native_child_authority_escalation");
+            }
+            if let Some(ref granted_res) = session.granted_resources {
+                if !child_resources_authorized(
+                    granted_res,
+                    tool.resource_policy.as_ref(),
+                    tool,
+                    args,
+                    request.resource_admission.as_ref(),
+                ) {
+                    return Err("native_child_authority_escalation");
+                }
+            } else if tool.resource_policy.is_some()
+                || ((session.agent_id.is_some() || session.parent_id.is_some())
+                    && (!tool.egress.is_empty() || tool.action_class == ActionClass::Network))
+            {
+                return Err("native_child_authority_escalation");
+            }
+        }
         let selected_result =
-            tool.mcp_result_profile.as_deref() == Some(crate::mcp::server_profile::FORMAT);
+            crate::mcp::server_profile::selected(tool.mcp_result_profile.as_deref());
         if selected_result {
             if request.contract_version != CONTRACT
                 || !request
@@ -968,8 +1791,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                 audit(
                     st,
                     &request,
-                    &session.epoch,
-                    session.seq,
+                    session,
                     &response,
                     None,
                     started.elapsed().as_micros(),
@@ -983,15 +1805,23 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             return Err("native_call_cap");
         }
         let hosts = declared_hosts(tool, args)?;
-        let ev = event(
-            &session.epoch,
-            session.seq,
-            EventKind::ToolCall {
-                tool: name.into(),
-                args: args.clone(),
-            },
-        );
-        let outcome = firewall.inspect_native_call(&ev, tool.action_class, &hosts);
+        let ev = session.event(EventKind::ToolCall {
+            tool: name.into(),
+            args: args.clone(),
+        });
+        let mut outcome = firewall.inspect_native_call(&ev, tool.action_class, &hosts);
+        if let Some(host) = &session.host_session {
+            let ev_host = session.host_event(
+                host,
+                session.seq,
+                EventKind::ToolCall {
+                    tool: name.into(),
+                    args: args.clone(),
+                },
+            );
+            let outcome_host = firewall.inspect_native_call(&ev_host, tool.action_class, &hosts);
+            outcome = merge_provenance_outcomes(outcome, outcome_host);
+        }
         let verdict = resolved(&outcome);
         response.verdict = verdict_label(verdict);
         response.release = verdict == Verdict::Allow;
@@ -1060,8 +1890,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         audit(
             st,
             &request,
-            &session.epoch,
-            session.seq,
+            session,
             &response,
             Some(&outcome),
             started.elapsed().as_micros(),
@@ -1096,7 +1925,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         .remove(id)
         .ok_or("native_call_unknown_or_spent")?;
     if request.event == "result"
-        && tool.mcp_result_profile.as_deref() == Some(crate::mcp::server_profile::FORMAT)
+        && crate::mcp::server_profile::selected(tool.mcp_result_profile.as_deref())
         && request.delivery.as_deref() != Some("mcp_host")
     {
         // A selected MCP grant cannot downgrade to the legacy opaque parent or
@@ -1136,7 +1965,14 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             return Err("native_delivery");
         }
         if request.delivery.as_deref() == Some("mcp_host") {
-            if tool.mcp_result_profile.as_deref() == Some(crate::mcp::server_profile::FORMAT) {
+            if tool.mcp_result_profile.as_deref() == Some(crate::mcp::server_profile::git::FORMAT) {
+                selected_mcp_host_text_profile(
+                    content,
+                    request.result_kind.as_deref().unwrap_or(""),
+                    false,
+                )?
+            } else if tool.mcp_result_profile.as_deref() == Some(crate::mcp::server_profile::FORMAT)
+            {
                 selected_mcp_host_text(content, request.result_kind.as_deref().unwrap_or(""))?
             } else {
                 mcp_host_text(content, request.result_kind.as_deref().unwrap_or(""))?
@@ -1158,7 +1994,16 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         }
         context_text(content, name)?
     };
-    let provenance = source(&native.registry, tool);
+    let provenance = match (
+        request.delivery.as_deref(),
+        &tool.result_provenance,
+        &session.server_id,
+    ) {
+        (Some("mcp_host"), ResultProvenance::Untrusted, Some(server)) => Provenance::McpServer {
+            name: server.clone(),
+        },
+        _ => source(&native.registry, tool),
+    };
     let mut events = Vec::new();
     let mut strongest = Verdict::Allow;
     let mut representative = None;
@@ -1166,15 +2011,11 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
     let mut max_block_risk = 0;
     for text in texts {
         session.seq += 1;
-        let ev = event(
-            &session.epoch,
-            session.seq,
-            EventKind::ToolResult {
-                tool: name.into(),
-                content: text,
-                source: provenance.clone(),
-            },
-        );
+        let ev = session.event(EventKind::ToolResult {
+            tool: name.into(),
+            content: text,
+            source: provenance.clone(),
+        });
         let outcome = firewall.preview_native_result(&ev);
         max_block_risk = max_block_risk.max(outcome.risk_score);
         for (facet, finding) in &outcome.findings {
@@ -1210,30 +2051,97 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         .and_then(|o| o.rule.clone())
         .into_iter()
         .collect();
+    let needs_tracking = request.event == "context"
+        || matches!(request.delivery.as_deref(), Some("parent" | "mcp_host"));
+    let shared_host = session
+        .host_session
+        .as_deref()
+        .filter(|_| request.event == "result" && request.delivery.as_deref() == Some("mcp_host"));
+    let mut host_sequences = vec![None; events.len()];
+    if response.release && needs_tracking {
+        // Commit bounded evidence before the Allow audit, without cloning the
+        // tracker. Partial evidence may conservatively survive a later refusal
+        // or audit failure; no part of the original result is released then.
+        let mut tracking_failure = None;
+        for (index, ev) in events.iter().enumerate() {
+            if firewall.provenance_session_usage(&session.epoch).is_none() {
+                tracking_failure = Some("context_unavailable");
+            } else if let Err(reason) = firewall.try_admit_native_result(ev) {
+                tracking_failure = Some(reason.code());
+            }
+            if let Some(host) = shared_host {
+                let host_seq = st.sessions.next(host);
+                host_sequences[index] = Some(host_seq);
+                if firewall.provenance_session_usage(host).is_none() {
+                    tracking_failure = Some("context_unavailable");
+                    continue;
+                }
+                let mut ev_host = ev.clone();
+                ev_host.session = host.to_string();
+                ev_host.seq = host_seq;
+                if let Err(reason) = firewall.try_admit_native_result(&ev_host) {
+                    tracking_failure = Some(reason.code());
+                }
+            }
+        }
+        // Later blocks or the shared-host copy can evict evidence from an
+        // earlier block. Recheck the complete original delivery before Allow.
+        for (index, ev) in events.iter().enumerate() {
+            if !matches!(firewall.native_result_is_retained(ev), Ok(true)) {
+                tracking_failure.get_or_insert("batch_evicted");
+            }
+            if let (Some(host), Some(host_seq)) = (shared_host, host_sequences[index]) {
+                let mut ev_host = ev.clone();
+                ev_host.session = host.to_string();
+                ev_host.seq = host_seq;
+                if !matches!(firewall.native_result_is_retained(&ev_host), Ok(true)) {
+                    tracking_failure.get_or_insert("batch_evicted");
+                }
+            }
+        }
+        if let Some(outcome) = &mut representative {
+            outcome.provenance_incomplete |= firewall.provenance_incomplete(&session.epoch)
+                || shared_host.is_some_and(|host| firewall.provenance_incomplete(host));
+        }
+        if let Some(reason) = tracking_failure {
+            firewall.mark_provenance_incomplete(&session.epoch);
+            if let Some(host) = shared_host {
+                firewall.mark_provenance_incomplete(host);
+            }
+            response.verdict = "deny";
+            response.release = false;
+            response.reason_codes = vec![
+                "native_provenance_unrecordable".into(),
+                format!("native_provenance_{reason}"),
+            ];
+            let outcome = representative.get_or_insert_with(Outcome::allow);
+            outcome.verdict = Verdict::Deny;
+            outcome.rule = Some("native_provenance_unrecordable".into());
+            outcome.provenance_incomplete = true;
+        }
+    }
     audit(
         st,
         &request,
-        &session.epoch,
-        session.seq,
+        session,
         &response,
         representative.as_ref(),
         started.elapsed().as_micros(),
     )?;
     if response.release {
-        // An outer runtime value is still held inside the collector. It has not
-        // entered model context, including while other preplanned tools in the
-        // same original executor batch run. Nested values really reach a parent.
-        if request.event == "context"
-            || matches!(request.delivery.as_deref(), Some("parent" | "mcp_host"))
-        {
-            for ev in events {
-                firewall.admit_native_result(&ev);
+        // An outer model result is still held inside the collector until the
+        // later context event. Raw judge spans remain post-audit only.
+        if needs_tracking {
+            for (index, ev) in events.iter().enumerate() {
                 if let EventKind::ToolResult {
                     content, source, ..
                 } = &ev.kind
                 {
                     if source.trust() == Trust::Untrusted {
                         st.spans.put(&session.epoch, ev.seq, content);
+                        if let (Some(host), Some(host_seq)) = (shared_host, host_sequences[index]) {
+                            st.spans.put(host, host_seq, content);
+                        }
                     }
                 }
             }
@@ -1247,11 +2155,17 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
     Ok(response)
 }
 
-fn event(session: &str, seq: u64, kind: EventKind) -> AgentEvent {
+fn event_scoped(
+    session: &str,
+    agent: &str,
+    parent: Option<&str>,
+    seq: u64,
+    kind: EventKind,
+) -> AgentEvent {
     AgentEvent {
         session: session.into(),
-        agent: "native-runtime".into(),
-        parent: None,
+        agent: agent.into(),
+        parent: parent.map(Into::into),
         seq,
         at_ms: SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -1261,19 +2175,25 @@ fn event(session: &str, seq: u64, kind: EventKind) -> AgentEvent {
     }
 }
 
+fn event(session: &str, seq: u64, kind: EventKind) -> AgentEvent {
+    event_scoped(session, "native-runtime", None, seq, kind)
+}
+
 fn audit(
     st: &Shared,
     request: &Request,
-    epoch: &str,
-    seq: u64,
+    session: &Session,
     response: &Response,
     outcome: Option<&Outcome>,
     latency_us: u128,
 ) -> Result<(), &'static str> {
-    let record = json!({"at_ms": event(epoch, seq, EventKind::Unknown).at_ms, "session": epoch,
+    let epoch = &session.epoch;
+    let seq = session.seq;
+    let mut record = json!({"at_ms": event(epoch, seq, EventKind::Unknown).at_ms, "session": epoch,
         "seq": seq, "event": format!("native_{}", request.event), "tool": request.tool,
         "verdict": response.verdict, "shadow": false, "released": response.release,
         "rule": outcome.and_then(|o| o.rule.as_ref()),
+        "provenance_incomplete": outcome.is_some_and(|o| o.provenance_incomplete),
         "risk_score": outcome.map_or(0, |o| o.risk_score),
         "findings": outcome.map(|o| o.findings.iter().map(|(_, f)| json!({"detector": f.detector, "severity": format!("{:?}", f.severity).to_lowercase()})).collect::<Vec<_>>()).unwrap_or_default(),
         "egress_hosts": outcome.map(|o| o.egress_hosts.clone()).unwrap_or_default(),
@@ -1284,6 +2204,15 @@ fn audit(
         "delivery": request.delivery,
         "call_id": response.call_id, "binding_sha256": response.binding_sha256,
         "content_sha256": response.content_sha256, "reason_codes": response.reason_codes});
+    if let Some(host_session) = &session.host_session {
+        record["host_session"] = json!(host_session);
+    }
+    if let Some(agent_id) = &session.agent_id {
+        record["agent_id"] = json!(agent_id);
+    }
+    if let Some(parent_id) = &session.parent_id {
+        record["parent_id"] = json!(parent_id);
+    }
     st.audit
         .write_native(&record)
         .map_err(|_| "native_audit_unavailable")
@@ -1299,6 +2228,40 @@ mod tests {
     };
     use soup_wall_agent::AgentFirewall;
     use std::sync::Arc;
+
+    #[test]
+    fn delegated_scope_containment_is_typed_and_canonical() {
+        for (parent, child, allowed) in [
+            ("internal.corp", "alice@internal.corp", true),
+            ("INTERNAL.corp", "https://internal.corp/private", true),
+            ("internal.corp", "https://other.corp/private", false),
+            ("alice@internal.corp", "internal.corp", false),
+            ("alice@internal.corp", "bob@internal.corp", false),
+            ("https://internal.corp/a", "https://internal.corp/a", true),
+            ("https://internal.corp/a", "https://internal.corp/b", false),
+            ("https://internal.corp/a", "http://internal.corp/a", false),
+            ("https://internal.corp/a", "internal.corp", false),
+        ] {
+            assert_eq!(
+                scope_contains(parent, child),
+                allowed,
+                "{parent} -> {child}"
+            );
+        }
+        let root = std::env::temp_dir().join("scope-fixture");
+        let parent = root.join("allowed");
+        for (child, allowed) in [
+            (parent.join("file"), true),
+            (root.join("allowed-secret"), false),
+            (parent.join("..").join("secret"), false),
+            (std::path::PathBuf::from("relative-path"), false),
+        ] {
+            assert_eq!(
+                scope_contains(&parent.to_string_lossy(), &child.to_string_lossy()),
+                allowed
+            );
+        }
+    }
 
     fn fixture(dir: &std::path::Path) -> Shared {
         let bytes = json!({"contract_version": CONTRACT, "registry_id": "unit-suite", "tools": [{
@@ -1632,6 +2595,49 @@ mod tests {
         );
         assert!(parse(&duplicate).is_err());
     }
+    #[test]
+    fn reviewe358_lossy_hook_must_not_take_firewall_before_native_mutex() {
+        let dir = tempfile::tempdir().unwrap();
+        let st = fixture(dir.path());
+        // This is the native inspect preemption point: native.sessions has
+        // been acquired, and its next operation needs st.firewall.
+        let native_guard = st.native.as_ref().unwrap().sessions.lock().unwrap();
+        let hook_st = st.clone();
+        let worker = std::thread::spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            runtime.block_on(async move {
+                let mut headers = axum::http::HeaderMap::new();
+                headers.insert("authorization", "Bearer hook-unit-key".parse().unwrap());
+                crate::handlers::hook(
+                    axum::extract::State(hook_st),
+                    headers,
+                    axum::body::Body::from("{"),
+                )
+                .await
+            })
+        });
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(250);
+        let mut hook_holds_firewall = false;
+        while std::time::Instant::now() < deadline {
+            if st.firewall.try_lock().is_err() {
+                hook_holds_firewall = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        // Release the controlled native owner so this witness can terminate.
+        // An actual native inspect would instead wait for the hook's firewall
+        // guard, completing the wait cycle indefinitely.
+        drop(native_guard);
+        let response = worker.join().unwrap();
+        assert_eq!(response.0, axum::http::StatusCode::OK);
+        assert!(!hook_holds_firewall,
+            "lock inversion: lossy hook holds firewall while waiting for native.sessions; native inspect holds native.sessions and next waits for firewall");
+    }
+
     fn selected_fixture(dir: &std::path::Path) -> Shared {
         let manifest = crate::mcp::server_profile::original_manifest();
         let definition = manifest["tools"]
@@ -1702,6 +2708,32 @@ mod tests {
             let dir = tempfile::tempdir().unwrap();
             assert_eq!(
                 mcp_host_completion(&selected_fixture(dir.path()), original, "value").err(),
+                Some("native_mcp_result_shape")
+            );
+        }
+    }
+
+    #[test]
+    fn selected_git_text_only_result_does_not_weaken_filesystem_or_metadata_checks() {
+        let original = r#"{"jsonrpc":"2.0","id":"git-1","result":{"content":[{"type":"text","text":"original Git output"}],"isError":false}}"#;
+        assert_eq!(
+            selected_mcp_host_text_profile(original, "value", false).unwrap(),
+            ["original Git output"]
+        );
+        assert!(selected_mcp_host_text(original, "value").is_err());
+        assert_eq!(
+            selected_mcp_host_text_profile(original, "error", false).err(),
+            Some("native_mcp_result_kind")
+        );
+        for original in [
+            r#"{"jsonrpc":"2.0","id":1,"result":{"content":[],"_meta":{"hidden":"payload"}}}"#,
+            r#"{"jsonrpc":"2.0","id":1,"result":{"content":[],"structuredContent":{"content":"hidden"}}}"#,
+            r#"{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"image","text":"hidden"}]}}"#,
+            r#"{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"safe","text":"hidden"}]}}"#,
+            r#"{"jsonrpc":"2.0","id":true,"result":{"content":[]}}"#,
+        ] {
+            assert_eq!(
+                selected_mcp_host_text_profile(original, "value", false).err(),
                 Some("native_mcp_result_shape")
             );
         }
@@ -1885,6 +2917,795 @@ mod tests {
                 "tool": "lookup_note", "args": {}, "call_id": call.call_id,
                 "result_kind": "value", "delivery": delivery, "content": "Original ordinary native content."
             }))).unwrap().release);
+        }
+    }
+    fn budget_fixture(
+        dir: &std::path::Path,
+        limits: soup_wall_agent::TaintLimits,
+        cap: usize,
+    ) -> Shared {
+        let mut st = fixture(dir);
+        let state = Arc::get_mut(&mut st).unwrap();
+        let bytes = json!({"contract_version":CONTRACT,"registry_id":"unit-suite","tools":[
+            {"name":"lookup_note","schema_sha256":"a".repeat(64),"action_class":"read_only","result_provenance":"untrusted","egress":[]},
+            {"name":"publish_note","schema_sha256":"a".repeat(64),"action_class":"side_effecting","result_provenance":"untrusted","egress":[]},
+            {"name":"destroy_note","schema_sha256":"a".repeat(64),"action_class":"destructive","result_provenance":"untrusted","egress":[]}
+        ]}).to_string().into_bytes();
+        state.native =
+            Some(NativeState::from_bytes(&bytes, &hash(&bytes), "native-unit-key".into()).unwrap());
+        state.firewall = Mutex::new(
+            AgentFirewall::with_taint_limits(
+                soup_wall_agent::AgentPolicySet::from_yaml("agent_policies: []\ndefault: allow\n")
+                    .unwrap(),
+                cap,
+                limits.clone(),
+            )
+            .unwrap(),
+        );
+        state.config.provenance = limits;
+        st
+    }
+
+    fn budget_scoped_start(
+        st: &Shared,
+        collector: &str,
+        host: &str,
+        agent: &str,
+    ) -> Result<Response, &'static str> {
+        let native = st.native.as_ref().unwrap();
+        let grant = child_authority::mint_scoped(
+            &child_authority::derive_key(&native.token),
+            host,
+            "budget-source",
+            &[
+                "lookup_note".into(),
+                "publish_note".into(),
+                "destroy_note".into(),
+            ],
+            wall_time_ms().unwrap(),
+            60_000,
+            format!("{}.{}", native.instance_id(), crate::token::generate()),
+            Some(agent.into()),
+            None,
+            None,
+        );
+        inspect(
+            st,
+            native,
+            request(
+                native,
+                collector,
+                "session_start",
+                json!({"host_session":host,
+            "server_id":"budget-source","child_authority":child_authority::encode_token(&grant)}),
+            ),
+        )
+    }
+
+    fn budget_call(st: &Shared, collector: &str, tool: &str, args: Value) -> Response {
+        let native = st.native.as_ref().unwrap();
+        inspect(
+            st,
+            native,
+            request(
+                native,
+                collector,
+                "call",
+                json!({"tool":tool,"args":args,"schema_sha256":"a".repeat(64)}),
+            ),
+        )
+        .unwrap()
+    }
+
+    fn budget_mcp_result(
+        st: &Shared,
+        collector: &str,
+        grant: &Response,
+        texts: &[&str],
+    ) -> Result<Response, &'static str> {
+        let native = st.native.as_ref().unwrap();
+        let content = json!({"jsonrpc":"2.0","id":1,"result":{"content":texts.iter().map(|text| json!({"type":"text","text":text})).collect::<Vec<_>>()}}).to_string();
+        inspect(
+            st,
+            native,
+            request(
+                native,
+                collector,
+                "result",
+                json!({"tool":"lookup_note","args":{},
+            "call_id":grant.call_id,"result_kind":"value","delivery":"mcp_host","content":content}),
+            ),
+        )
+    }
+
+    #[test]
+    fn provenance_zero_budget_refuses_start_before_any_allow_or_authority() {
+        let dir = tempfile::tempdir().unwrap();
+        let st = budget_fixture(
+            dir.path(),
+            soup_wall_agent::TaintLimits {
+                total_bytes: 0,
+                ..Default::default()
+            },
+            100,
+        );
+        let native = st.native.as_ref().unwrap();
+        assert_eq!(
+            inspect(
+                &st,
+                native,
+                request(native, "zero", "session_start", json!({}))
+            )
+            .err(),
+            Some("native_provenance_context_capacity")
+        );
+        assert_eq!(st.firewall.lock().unwrap().provenance_usage().sessions, 0);
+        assert!(native.sessions.lock().unwrap().entries.is_empty());
+        assert!(std::fs::read_to_string(dir.path().join("audit.jsonl"))
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn provenance_partial_registration_and_failed_start_audit_release_only_new_shells() {
+        for fail_audit in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let st = budget_fixture(
+                dir.path(),
+                soup_wall_agent::TaintLimits {
+                    max_sessions: if fail_audit { 8 } else { 1 },
+                    ..Default::default()
+                },
+                100,
+            );
+            if fail_audit {
+                st.audit
+                    .fail_writes_for_test(&dir.path().join("audit.jsonl"));
+            }
+            let error = budget_scoped_start(&st, "new", "host", "worker").err();
+            assert_eq!(
+                error,
+                Some(if fail_audit {
+                    "native_audit_unavailable"
+                } else {
+                    "native_provenance_context_capacity"
+                })
+            );
+            assert_eq!(st.firewall.lock().unwrap().provenance_usage().sessions, 0);
+            assert!(st
+                .native
+                .as_ref()
+                .unwrap()
+                .sessions
+                .lock()
+                .unwrap()
+                .entries
+                .is_empty());
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let st = budget_fixture(
+            dir.path(),
+            soup_wall_agent::TaintLimits {
+                max_sessions: 1,
+                ..Default::default()
+            },
+            100,
+        );
+        st.firewall
+            .lock()
+            .unwrap()
+            .try_register_provenance_context("host")
+            .unwrap();
+        st.firewall
+            .lock()
+            .unwrap()
+            .mark_provenance_incomplete("host");
+        assert_eq!(
+            budget_scoped_start(&st, "new", "host", "worker").err(),
+            Some("native_provenance_context_capacity")
+        );
+        assert_eq!(st.firewall.lock().unwrap().provenance_usage().sessions, 1);
+        assert!(st.firewall.lock().unwrap().provenance_incomplete("host"));
+    }
+
+    #[test]
+    fn provenance_multiblock_self_eviction_withholds_whole_result_but_allows_fitting_continuation()
+    {
+        let dir = tempfile::tempdir().unwrap();
+        let st = budget_fixture(dir.path(), Default::default(), 1);
+        start(&st, "s");
+        let grant = budget_call(&st, "s", "lookup_note", json!({}));
+        let result = budget_mcp_result(
+            &st,
+            "s",
+            &grant,
+            &["/tmp/sou72-alpha.json", "/tmp/sou72-bravo.json"],
+        )
+        .unwrap();
+        assert!(!result.release);
+        assert_eq!(result.reason_codes[0], "native_provenance_unrecordable");
+        let native = st.native.as_ref().unwrap();
+        let epoch = native.sessions.lock().unwrap().entries["s"].epoch.clone();
+        assert!(native.sessions.lock().unwrap().entries["s"]
+            .calls
+            .is_empty());
+        assert!(st.firewall.lock().unwrap().provenance_incomplete(&epoch));
+        assert!(st.spans.get(&epoch, 4).is_none());
+        let protected = budget_call(&st, "s", "publish_note", json!({}));
+        assert_eq!(protected.verdict, "ask");
+        assert!(!protected.release);
+        let again = budget_call(&st, "s", "lookup_note", json!({}));
+        assert!(again.release);
+        assert!(
+            budget_mcp_result(&st, "s", &again, &["/tmp/sou72-bravo.json"])
+                .unwrap()
+                .release
+        );
+        assert!(st.firewall.lock().unwrap().provenance_incomplete(&epoch));
+    }
+
+    #[test]
+    fn provenance_shared_copy_global_pressure_refuses_all_contexts_and_consumes_grant() {
+        let text = "/tmp/global-budget.json";
+        let mut probe = AgentFirewall::with_taint_limits(
+            soup_wall_agent::AgentPolicySet::from_yaml("default: allow").unwrap(),
+            100,
+            Default::default(),
+        )
+        .unwrap();
+        let epoch = format!("native:{}", crate::token::generate());
+        probe.try_register_provenance_context(&epoch).unwrap();
+        probe.try_register_provenance_context("host").unwrap();
+        let ev = event(
+            &epoch,
+            4,
+            EventKind::ToolResult {
+                tool: "lookup_note".into(),
+                content: text.into(),
+                source: Provenance::McpServer {
+                    name: "budget-source".into(),
+                },
+            },
+        );
+        probe.try_admit_native_result(&ev).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let st = budget_fixture(
+            dir.path(),
+            soup_wall_agent::TaintLimits {
+                total_bytes: probe.provenance_usage().retained_bytes,
+                ..Default::default()
+            },
+            100,
+        );
+        assert!(
+            budget_scoped_start(&st, "s", "host", "worker")
+                .unwrap()
+                .release
+        );
+        let grant = budget_call(&st, "s", "lookup_note", json!({}));
+        let result = budget_mcp_result(&st, "s", &grant, &[text]).unwrap();
+        assert!(!result.release);
+        assert_eq!(result.verdict, "deny");
+        let native = st.native.as_ref().unwrap();
+        let epoch = native.sessions.lock().unwrap().entries["s"].epoch.clone();
+        let firewall = st.firewall.lock().unwrap();
+        assert!(firewall.provenance_incomplete(&epoch) && firewall.provenance_incomplete("host"));
+        assert!(
+            firewall.provenance_usage().retained_bytes <= firewall.provenance_limits().total_bytes
+        );
+        drop(firewall);
+        assert!(native.sessions.lock().unwrap().entries["s"]
+            .calls
+            .is_empty());
+        assert!(st.spans.get("host", 1).is_none());
+    }
+
+    #[test]
+    fn provenance_result_literal_limit_is_correlated_audited_and_never_a_release() {
+        let dir = tempfile::tempdir().unwrap();
+        let st = budget_fixture(
+            dir.path(),
+            soup_wall_agent::TaintLimits {
+                max_literal_bytes: 24,
+                ..Default::default()
+            },
+            100,
+        );
+        start(&st, "s");
+        let grant = budget_call(&st, "s", "lookup_note", json!({}));
+        let text = format!("https://owned.invalid/{}", "é".repeat(64));
+        let result = budget_mcp_result(&st, "s", &grant, &[&text]).unwrap();
+        assert_eq!(result.call_id, grant.call_id);
+        assert_eq!(result.binding_sha256, grant.binding_sha256);
+        assert!(!result.release && result.verdict == "deny");
+        let audit = std::fs::read_to_string(dir.path().join("audit.jsonl")).unwrap();
+        let row: Value = serde_json::from_str(audit.lines().last().unwrap()).unwrap();
+        assert_eq!(row["rule"], "native_provenance_unrecordable");
+        assert_eq!(row["provenance_incomplete"], true);
+        assert!(!audit.contains(&text));
+    }
+
+    #[test]
+    fn provenance_audit_failure_after_mcp_tracking_withholds_and_keeps_only_bounded_evidence() {
+        let dir = tempfile::tempdir().unwrap();
+        let st = budget_fixture(dir.path(), Default::default(), 100);
+        start(&st, "s");
+        let grant = budget_call(&st, "s", "lookup_note", json!({}));
+        let epoch = st.native.as_ref().unwrap().sessions.lock().unwrap().entries["s"]
+            .epoch
+            .clone();
+        st.audit
+            .fail_writes_for_test(&dir.path().join("audit.jsonl"));
+        assert_eq!(
+            budget_mcp_result(&st, "s", &grant, &["/tmp/audit-failure.json"]).err(),
+            Some("native_audit_unavailable")
+        );
+        let firewall = st.firewall.lock().unwrap();
+        assert!(firewall.provenance_session_usage(&epoch).unwrap().literals > 0);
+        assert!(
+            firewall.provenance_usage().retained_bytes <= firewall.provenance_limits().total_bytes
+        );
+        drop(firewall);
+        assert!(st.spans.get(&epoch, 4).is_none());
+        assert!(
+            st.native.as_ref().unwrap().sessions.lock().unwrap().entries["s"]
+                .calls
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn provenance_close_and_expiry_reclaim_local_capacity_without_erasing_shared_history() {
+        let dir = tempfile::tempdir().unwrap();
+        let st = budget_fixture(dir.path(), Default::default(), 100);
+        budget_scoped_start(&st, "a", "host", "a").unwrap();
+        let first_epoch = st.native.as_ref().unwrap().sessions.lock().unwrap().entries["a"]
+            .epoch
+            .clone();
+        st.firewall
+            .lock()
+            .unwrap()
+            .mark_provenance_incomplete("host");
+        let native = st.native.as_ref().unwrap();
+        inspect(&st, native, request(native, "a", "session_end", json!({}))).unwrap();
+        assert_eq!(st.firewall.lock().unwrap().provenance_usage().sessions, 1);
+        assert!(st
+            .firewall
+            .lock()
+            .unwrap()
+            .provenance_session_usage(&first_epoch)
+            .is_none());
+        assert!(st.firewall.lock().unwrap().provenance_incomplete("host"));
+        budget_scoped_start(&st, "a", "host", "a").unwrap();
+        let second_epoch = native.sessions.lock().unwrap().entries["a"].epoch.clone();
+        assert_ne!(first_epoch, second_epoch);
+        assert!(st.firewall.lock().unwrap().provenance_incomplete("host"));
+        native
+            .sessions
+            .lock()
+            .unwrap()
+            .entries
+            .get_mut("a")
+            .unwrap()
+            .touched = Instant::now() - TTL;
+        start(&st, "fresh");
+        assert!(st
+            .firewall
+            .lock()
+            .unwrap()
+            .provenance_session_usage(&second_epoch)
+            .is_none());
+        assert!(st.firewall.lock().unwrap().provenance_incomplete("host"));
+        assert_eq!(st.firewall.lock().unwrap().provenance_usage().sessions, 2);
+    }
+
+    #[test]
+    fn provenance_unavailable_context_cannot_be_recreated_by_a_call() {
+        let dir = tempfile::tempdir().unwrap();
+        let st = budget_fixture(dir.path(), Default::default(), 100);
+        start(&st, "s");
+        let epoch = st.native.as_ref().unwrap().sessions.lock().unwrap().entries["s"]
+            .epoch
+            .clone();
+        st.firewall.lock().unwrap().end_provenance_context(&epoch);
+        let call = budget_call(&st, "s", "lookup_note", json!({}));
+        assert!(!call.release);
+        assert_eq!(call.reason_codes, ["native_provenance_context_unavailable"]);
+        assert!(st
+            .firewall
+            .lock()
+            .unwrap()
+            .provenance_session_usage(&epoch)
+            .is_none());
+    }
+
+    #[test]
+    fn provenance_incomplete_history_preserves_a_matched_hard_deny() {
+        let dir = tempfile::tempdir().unwrap();
+        let st = budget_fixture(
+            dir.path(),
+            soup_wall_agent::TaintLimits {
+                max_literal_bytes: 24,
+                ..Default::default()
+            },
+            100,
+        );
+        start(&st, "s");
+        let first = budget_call(&st, "s", "lookup_note", json!({}));
+        assert!(
+            budget_mcp_result(&st, "s", &first, &["/tmp/hard-deny.json"])
+                .unwrap()
+                .release
+        );
+        let overflow = budget_call(&st, "s", "lookup_note", json!({}));
+        assert!(
+            !budget_mcp_result(
+                &st,
+                "s",
+                &overflow,
+                &["https://owned.invalid/a-path-that-exceeds-the-literal-limit"]
+            )
+            .unwrap()
+            .release
+        );
+        let denied = budget_call(
+            &st,
+            "s",
+            "destroy_note",
+            json!({"path":"/tmp/hard-deny.json"}),
+        );
+        assert_eq!(denied.verdict, "deny");
+        assert!(!denied.release);
+        assert_eq!(denied.reason_codes, ["deny-tainted-destructive"]);
+    }
+
+    #[test]
+    fn provenance_model_result_defers_tracking_until_the_actual_context_transition() {
+        let dir = tempfile::tempdir().unwrap();
+        let st = budget_fixture(
+            dir.path(),
+            soup_wall_agent::TaintLimits {
+                max_literal_bytes: 24,
+                ..Default::default()
+            },
+            100,
+        );
+        start(&st, "s");
+        let grant = budget_call(&st, "s", "lookup_note", json!({}));
+        let native = st.native.as_ref().unwrap();
+        let text = "https://owned.invalid/a-path-that-exceeds-the-literal-limit";
+        let result = inspect(
+            &st,
+            native,
+            request(
+                native,
+                "s",
+                "result",
+                json!({"tool":"lookup_note","args":{},
+            "call_id":grant.call_id,"result_kind":"value","delivery":"model","content":text}),
+            ),
+        )
+        .unwrap();
+        assert!(result.release);
+        let epoch = native.sessions.lock().unwrap().entries["s"].epoch.clone();
+        assert!(!st.firewall.lock().unwrap().provenance_incomplete(&epoch));
+        assert_eq!(
+            st.firewall
+                .lock()
+                .unwrap()
+                .provenance_session_usage(&epoch)
+                .unwrap()
+                .literals,
+            0
+        );
+        let envelope=json!({"role":"tool","tool_call_id":"owned","error":null,
+            "content":[{"type":"text","content":text}],"tool_call":{"id":"owned","function":"lookup_note","args":{},"placeholder_args":null}}).to_string();
+        let context = inspect(
+            &st,
+            native,
+            request(
+                native,
+                "s",
+                "context",
+                json!({"tool":"lookup_note","args":{},
+            "call_id":grant.call_id,"content":envelope}),
+            ),
+        )
+        .unwrap();
+        assert!(!context.release);
+        assert_eq!(context.reason_codes[0], "native_provenance_unrecordable");
+        assert!(native.sessions.lock().unwrap().entries["s"]
+            .calls
+            .is_empty());
+        assert!(st.firewall.lock().unwrap().provenance_incomplete(&epoch));
+    }
+
+    #[test]
+    fn provenance_delivered_error_text_requires_the_same_tracking_budget() {
+        let dir = tempfile::tempdir().unwrap();
+        let st = budget_fixture(
+            dir.path(),
+            soup_wall_agent::TaintLimits {
+                max_literal_bytes: 24,
+                ..Default::default()
+            },
+            100,
+        );
+        start(&st, "s");
+        let grant = budget_call(&st, "s", "lookup_note", json!({}));
+        let native = st.native.as_ref().unwrap();
+        let result = inspect(
+            &st,
+            native,
+            request(
+                native,
+                "s",
+                "result",
+                json!({"tool":"lookup_note","args":{},
+            "call_id":grant.call_id,"result_kind":"error","delivery":"parent",
+            "content":"https://owned.invalid/an-error-path-exceeding-the-literal-limit"}),
+            ),
+        )
+        .unwrap();
+        assert!(!result.release);
+        assert_eq!(result.reason_codes[0], "native_provenance_unrecordable");
+        assert!(native.sessions.lock().unwrap().entries["s"]
+            .calls
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn provenance_shared_history_approval_is_single_use_and_never_clears_the_floor() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut st = budget_fixture(dir.path(), Default::default(), 100);
+        let app = Arc::get_mut(&mut st).unwrap();
+        let native = app.native.take().unwrap();
+        app.native = Some(
+            native
+                .with_approval(dir.path(), &app.grant_key, 120)
+                .unwrap(),
+        );
+        budget_scoped_start(&st, "a", "host", "a").unwrap();
+        let native = st.native.as_ref().unwrap();
+        st.firewall
+            .lock()
+            .unwrap()
+            .mark_provenance_incomplete("host");
+        let epoch = native.sessions.lock().unwrap().entries["a"].epoch.clone();
+        assert!(!st.firewall.lock().unwrap().provenance_incomplete(&epoch));
+        assert_eq!(
+            budget_call(&st, "a", "publish_note", json!({})).verdict,
+            "ask"
+        );
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "authorization",
+            format!("Bearer {}", native.token).parse().unwrap(),
+        );
+        let body = json!({"contract_version":CONTRACT,"registry_sha256":native.registry_sha256,"session_id":"a",
+            "action":"request","source":"daemon","tool":"publish_note","args":{},"schema_sha256":"a".repeat(64)});
+        let (status, Json(pending)) =
+            approval::handler(State(st.clone()), headers, body.to_string()).await;
+        assert_eq!(status, StatusCode::OK, "{pending}");
+        approval::operator_approve(
+            dir.path(),
+            "hook-unit-key",
+            pending["pending_id"].as_str().unwrap(),
+            pending["binding_sha256"].as_str().unwrap(),
+        )
+        .unwrap();
+        let approved = inspect(
+            &st,
+            native,
+            request(
+                native,
+                "a",
+                "call",
+                json!({"tool":"publish_note","args":{},
+            "schema_sha256":"a".repeat(64),"approval_id":pending["pending_id"]}),
+            ),
+        )
+        .unwrap();
+        assert!(approved.release);
+        assert!(st.firewall.lock().unwrap().provenance_incomplete("host"));
+        let next = budget_call(&st, "a", "publish_note", json!({}));
+        assert_eq!(next.verdict, "ask");
+        assert!(!next.release);
+        let replay = inspect(
+            &st,
+            native,
+            request(
+                native,
+                "a",
+                "call",
+                json!({"tool":"publish_note","args":{},
+            "schema_sha256":"a".repeat(64),"approval_id":pending["pending_id"]}),
+            ),
+        )
+        .unwrap();
+        assert!(!replay.release);
+        assert!(replay
+            .reason_codes
+            .iter()
+            .any(|code| code == "native_approval_spent"));
+        assert!(st.firewall.lock().unwrap().provenance_incomplete("host"));
+    }
+    #[test]
+    fn provenance_read_only_calls_bound_the_whole_argument_envelope_before_any_grant() {
+        let dir = tempfile::tempdir().unwrap();
+        let st = budget_fixture(
+            dir.path(),
+            soup_wall_agent::TaintLimits {
+                max_input_bytes: 32,
+                ..Default::default()
+            },
+            100,
+        );
+        start(&st, "s");
+        for args in [
+            json!({"query":"x".repeat(40)}),
+            json!({"first":"x".repeat(12),"second":"y".repeat(12)}),
+        ] {
+            let refused = budget_call(&st, "s", "lookup_note", args);
+            assert_eq!(refused.verdict, "deny");
+            assert!(!refused.release);
+            assert!(refused.call_id.is_none() && refused.binding_sha256.is_none());
+            assert_eq!(refused.reason_codes, ["native_provenance_input"]);
+        }
+        assert!(
+            st.native.as_ref().unwrap().sessions.lock().unwrap().entries["s"]
+                .calls
+                .is_empty()
+        );
+        assert!(
+            budget_call(&st, "s", "lookup_note", json!({})).release,
+            "small ordinary reads remain useful after history loss"
+        );
+    }
+
+    #[tokio::test]
+    async fn provenance_approval_open_cannot_bypass_the_call_input_budget() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut st = budget_fixture(
+            dir.path(),
+            soup_wall_agent::TaintLimits {
+                max_input_bytes: 32,
+                ..Default::default()
+            },
+            100,
+        );
+        let app = Arc::get_mut(&mut st).unwrap();
+        let native = app.native.take().unwrap();
+        app.native = Some(
+            native
+                .with_approval(dir.path(), &app.grant_key, 120)
+                .unwrap(),
+        );
+        start(&st, "s");
+        let native = st.native.as_ref().unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "authorization",
+            format!("Bearer {}", native.token).parse().unwrap(),
+        );
+        let body = json!({"contract_version":CONTRACT,"registry_sha256":native.registry_sha256,"session_id":"s",
+            "action":"request","source":"classifier","tool":"lookup_note","args":{"query":"x".repeat(40)},"schema_sha256":"a".repeat(64)});
+        let (status, Json(refusal)) =
+            approval::handler(State(st.clone()), headers, body.to_string()).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(refusal["error_code"], "native_provenance_input");
+        assert!(approval::operator_list(dir.path()).is_empty());
+        assert!(native.sessions.lock().unwrap().entries["s"]
+            .calls
+            .is_empty());
+    }
+    #[tokio::test]
+    async fn provenance_diagnostics_require_native_authority_and_expose_only_aggregate_storage() {
+        let dir = tempfile::tempdir().unwrap();
+        let st = budget_fixture(dir.path(), Default::default(), 100);
+        budget_scoped_start(&st, "collector", "private-host", "private-worker").unwrap();
+        let grant = budget_call(&st, "collector", "lookup_note", json!({}));
+        assert!(
+            budget_mcp_result(&st, "collector", &grant, &["/tmp/private-note.json"])
+                .unwrap()
+                .release
+        );
+        let (status, _) = instance(State(st.clone()), HeaderMap::new()).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        let mut headers = HeaderMap::new();
+        headers.insert("authorization", "Bearer native-unit-key".parse().unwrap());
+        let (status, Json(snapshot)) = instance(State(st.clone()), headers).await;
+        assert_eq!(status, StatusCode::OK);
+        let provenance = &snapshot["provenance"];
+        assert_eq!(provenance["accounting_revision"], "sw-provenance-storage/1");
+        assert_eq!(provenance["usage"]["sessions"], 2);
+        assert!(provenance["usage"]["retained_bytes"].as_u64().unwrap() > 0);
+        assert_eq!(provenance["limits"]["total_bytes"], 64 * 1024 * 1024);
+        let public = provenance.to_string();
+        for private in [
+            "private-host",
+            "private-worker",
+            "private-note",
+            "budget-source",
+            "native-unit-key",
+        ] {
+            assert!(
+                !public.contains(private),
+                "aggregate metrics leaked {private}"
+            );
+        }
+    }
+    #[tokio::test]
+    async fn provenance_rejected_review_allows_a_new_review_without_clearing_shared_history() {
+        for polled in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let mut st = budget_fixture(dir.path(), Default::default(), 100);
+            let app = Arc::get_mut(&mut st).unwrap();
+            let native = app.native.take().unwrap();
+            app.native = Some(
+                native
+                    .with_approval(dir.path(), &app.grant_key, 120)
+                    .unwrap(),
+            );
+            budget_scoped_start(&st, "a", "host", "a").unwrap();
+            st.firewall
+                .lock()
+                .unwrap()
+                .mark_provenance_incomplete("host");
+            let native = st.native.as_ref().unwrap();
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                "authorization",
+                format!("Bearer {}", native.token).parse().unwrap(),
+            );
+            let body = json!({"contract_version":CONTRACT,"registry_sha256":native.registry_sha256,"session_id":"a",
+            "action":"request","source":"daemon","tool":"publish_note","args":{},"schema_sha256":"a".repeat(64)});
+            let (status, Json(first)) =
+                approval::handler(State(st.clone()), headers.clone(), body.to_string()).await;
+            assert_eq!(status, StatusCode::OK, "{first}");
+            approval::operator_reject(dir.path(), first["pending_id"].as_str().unwrap()).unwrap();
+            if polled {
+                let poll = json!({"contract_version":CONTRACT,"registry_sha256":native.registry_sha256,"session_id":"a",
+            "action":"status","pending_id":first["pending_id"]});
+                let (status, Json(rejected)) =
+                    approval::handler(State(st.clone()), headers.clone(), poll.to_string()).await;
+                assert_eq!(status, StatusCode::OK);
+                assert_eq!(rejected["state"], "rejected");
+            }
+            let (status, Json(next)) =
+                approval::handler(State(st.clone()), headers, body.to_string()).await;
+            assert_eq!(status, StatusCode::OK, "{next}");
+            assert_ne!(first["pending_id"], next["pending_id"]);
+            assert_eq!(
+                approval::operator_list(dir.path()).len(),
+                1,
+                "rejected terminal files must not accumulate"
+            );
+            approval::operator_approve(
+                dir.path(),
+                "hook-unit-key",
+                next["pending_id"].as_str().unwrap(),
+                next["binding_sha256"].as_str().unwrap(),
+            )
+            .unwrap();
+            let approved = inspect(
+                &st,
+                native,
+                request(
+                    native,
+                    "a",
+                    "call",
+                    json!({"tool":"publish_note","args":{},
+            "schema_sha256":"a".repeat(64),"approval_id":next["pending_id"]}),
+                ),
+            )
+            .unwrap();
+            assert!(approved.release);
+            assert!(st.firewall.lock().unwrap().provenance_incomplete("host"));
+            assert_eq!(
+                budget_call(&st, "a", "publish_note", json!({})).verdict,
+                "ask"
+            );
         }
     }
 }

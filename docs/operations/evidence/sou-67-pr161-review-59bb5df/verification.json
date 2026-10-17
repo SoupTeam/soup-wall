@@ -1,0 +1,41 @@
+{
+  "commit": "59bb5dfda3e326d314ac8f1a8a67222d9fa8229d",
+  "platform": "Darwin arm64",
+  "commands": {
+    "cargo test -p agentfw --test mcp_admission": {
+      "exit_code": 0,
+      "passed": 73
+    },
+    "cargo test -p agentfw --test native_endpoint": {
+      "exit_code": 0,
+      "passed": 113
+    },
+    "cargo clippy --all-targets -- -D warnings": {
+      "exit_code": 0
+    },
+    "cargo fmt --check": {
+      "exit_code": 0
+    },
+    "cargo test": {
+      "exit_code": 101,
+      "failing_target": "mcp_concurrency",
+      "passed_in_failing_target": 10,
+      "failed_in_failing_target": 1
+    },
+    "focused mcp_concurrency immediate-refusals": {
+      "exit_code": 101
+    }
+  },
+  "review_probes": {
+    "reserved_read_name_create_file": {
+      "exit_code": 101,
+      "meaning": "Original success assertion intentionally retained; refusal reason resource_create_profile_required"
+    },
+    "read_policy_other_server": {
+      "exit_code": 0,
+      "meaning": "Original success assertions pass despite policy server ID differing from collector"
+    }
+  },
+  "production_source_changed": false,
+  "verdict": "request_changes"
+}

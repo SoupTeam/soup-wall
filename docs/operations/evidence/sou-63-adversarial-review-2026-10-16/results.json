@@ -1,0 +1,39 @@
+{
+  "head": "554b32bdfcc7b694091f4398063af3773303839b",
+  "verdict": "REQUEST_CHANGES",
+  "isolation": "Exact HEAD exported to /private/tmp/sou63-review; sandbox denies external network and all writes outside scratch; product sources untouched.",
+  "baseline_native_endpoint": {
+    "passed": 59,
+    "failed": 0
+  },
+  "child_authority_unit": {
+    "passed": 10,
+    "failed": 0
+  },
+  "independent_controls": {
+    "passed": 0,
+    "failed": 6
+  },
+  "witness_patch_sha256": "4846e97e163d8e8ee7a3e3cf856533ee4f926abbbf9ec2d8b2d91207fbb0ce99",
+  "observations": {
+    "cross_collector": "server A taints host; server B destructive call reusing the same text returns allow/release=true",
+    "empty_tools": "signed empty grant permits delete_document and issues receipt",
+    "expired_grant": "100 ms grant permits a new destructive call after 150 ms",
+    "hook_session_end": "hook token plus host session string clears taint while authenticated child remains active",
+    "oversized_post_tool_use": "1024-byte configured cap discards 2048-byte result; provenance_incomplete(host) remains false",
+    "hook_2mib_boundary": "2 MiB plus JSON overhead returns extractor HTTP 413 instead of explicit enforce disposition"
+  },
+  "not_run": [
+    "full workspace tests",
+    "Clippy",
+    "full stdio integration suite"
+  ],
+  "source_sha256": {
+    "crates/agentfw/src/native/child_authority.rs": "4f576c8fe428533c313bd5d5bb9ffede157c1ce61f622dbd49e610659a01dc8d",
+    "crates/agentfw/src/native.rs": "328c23547085b8d8ce3c3ea7254a0fcf280a391b9d73585c075748145fe5da33",
+    "crates/agentfw/src/mcp/admission.rs": "749e5a17be75c26966f4f47a2e43d16015291a76d80587c159f16cb6b6a395f0",
+    "crates/agentfw/src/main.rs": "33a31e3d6cb6b52e181627cd77e4bd3105e1f690cdc255faa1cdf2c6c807ef76",
+    "crates/agentfw/src/handlers.rs": "11aa76b82af67f1a42a882a15e02477841757c88a5719cfa64c3b01a8339b6e2",
+    "crates/agentfw/src/lib.rs": "90a8164679f7f8a5c417218295f9c10be4441ad5bfa62f3791fce514460ce684"
+  }
+}

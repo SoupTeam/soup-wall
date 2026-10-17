@@ -225,6 +225,34 @@ decision = "unresolved"
         self.assertFalse(report["summary"]["license_gate_pass"])
         self.assertTrue(any("eval/sou13/requirements-cp2.txt" in e for e in report["errors"]))
 
+    def test_additional_reviewed_path_requires_exact_manifest_notice_and_identity(self):
+        manifest = self.root / "vendor/extra/Cargo.toml"
+        notice = self.root / "vendor/extra/LICENSE"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text("original manifest")
+        notice.write_text("original notice")
+        extra = pkg("extra", "1.0.0", "Apache-2.0", None, root=self.root)
+        extra["manifest_path"] = str(manifest)
+        self.packages.append(extra)
+        self.write_lock()
+        lock = tomllib.loads((self.root / "Cargo.lock").read_text())
+        record = {"name": "extra", "version": "1.0.0", "manifest": "vendor/extra/Cargo.toml",
+                  "manifest_sha256": mod.sha256(manifest), "notice": "vendor/extra/LICENSE",
+                  "notice_sha256": mod.sha256(notice), "license": "Apache-2.0"}
+        self.policy["reviewed_paths"] = [record]
+        def errors():
+            return mod.inventory_rust(self.metadata(), lock, self.policy, self.root)[1]
+        self.assertEqual(errors(), [])
+        for field, replacement in [("version", "2.0.0"), ("manifest", "../outside"),
+                                   ("manifest_sha256", "0" * 64), ("notice_sha256", "0" * 64),
+                                   ("license", "MIT")]:
+            self.policy["reviewed_paths"] = [dict(record, **{field: replacement})]
+            self.assertTrue(errors(), field)
+        self.policy["reviewed_paths"] = [record, record]
+        self.assertTrue(errors(), "duplicate records must not admit a path")
+        self.policy["reviewed_paths"] = []
+        self.assertTrue(errors(), "unknown paths remain rejected")
+
     def test_valid_lock_vendored_and_optional_asset_distinct(self):
         report = self.report()
         self.assertTrue(report["summary"]["license_gate_pass"], report["errors"])

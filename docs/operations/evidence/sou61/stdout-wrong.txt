@@ -1,0 +1,9 @@
+Soup Wall Agent self-test (linux-stdio-mcp-admission-v1)
+  UNAVAILABLE allowed_read               not run: a prerequisite was unavailable
+  UNAVAILABLE adversarial_result         not run: a prerequisite was unavailable
+  UNAVAILABLE protected_send_refused     not run: a prerequisite was unavailable
+  UNAVAILABLE useful_read_after_refusal  not run: a prerequisite was unavailable
+  UNAVAILABLE daemon_loss                not run: a prerequisite was unavailable
+Result: INCOMPLETE (exit 4). Runtime assets are missing or invalid: the classifier source does not match --classifier-sha256 (wrong revision). Nothing was started.
+Scope: scripted MCP client and bundled fixture server; not Claude Code, model-context or live-model coverage.
+Report: <demo>/out/self-test-wrong-revision.json

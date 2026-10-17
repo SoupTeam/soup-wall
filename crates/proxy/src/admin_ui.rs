@@ -11,7 +11,11 @@ use axum::http::HeaderValue;
 use axum::response::{Html, IntoResponse, Response};
 
 pub async fn dashboard() -> Response {
-    let mut response = Html(include_str!("admin_dashboard.html")).into_response();
+    let mut response = Html(
+        include_str!("admin_dashboard.html")
+            .replace("/* FLEET_PANEL */", include_str!("fleet_panel.js")),
+    )
+    .into_response();
     let headers = response.headers_mut();
     headers.insert(
         CONTENT_TYPE,

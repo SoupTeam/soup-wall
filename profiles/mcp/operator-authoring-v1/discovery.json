@@ -1,0 +1,33 @@
+{
+  "format": "sw-mcp/operator-discovery/1",
+  "server_id": "sou65-owned",
+  "server_version": "1.0",
+  "tools": [
+    {
+      "name": "read_document",
+      "description": "Read a reviewed local note.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "flags": {
+            "type": "object",
+            "properties": {
+              "include_meta": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

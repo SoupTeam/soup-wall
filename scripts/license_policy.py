@@ -205,6 +205,11 @@ def inventory_rust(metadata: dict, lock: dict, policy: dict, root: pathlib.Path)
     for mid in member_set:
         if mid not in meta_by_id:
             errors.append(f"workspace member not in resolved metadata: {mid}")
+    reviewed_paths = policy.get("reviewed_paths", [])
+    if not isinstance(reviewed_paths, list) or any(not isinstance(e, dict) for e in reviewed_paths):
+        errors.append("reviewed_paths must be a list of exact path dependency records")
+        reviewed_paths = []
+    seen_paths = set()
     seen_vendor = 0
     exceptions = policy.get("package_exceptions", [])
     if not isinstance(exceptions, list) or any(not isinstance(e, dict) for e in exceptions):
@@ -222,7 +227,23 @@ def inventory_rust(metadata: dict, lock: dict, policy: dict, root: pathlib.Path)
         result, selected, note = judge_spdx(license_expr, policy)
         kind = "workspace" if p.get("id") in member_set else ("registry" if p.get("source") else "path")
         if kind == "path" and name != policy["workspace"]["vendored_package"]:
-            errors.append(f"unreviewed path dependency (not workspace/vendor): {name}@{version}")
+            matches = [e for e in reviewed_paths if e.get("name") == name and e.get("version") == version]
+            valid = False
+            if len(matches) == 1:
+                entry = matches[0]
+                try:
+                    manifest = within(root, entry["manifest"])
+                    notice = within(root, entry["notice"])
+                    valid = (pathlib.Path(p["manifest_path"]).resolve() == manifest
+                             and sha256(manifest) == entry["manifest_sha256"]
+                             and sha256(notice) == entry["notice_sha256"]
+                             and license_expr == entry["license"] and result == "approved")
+                except (KeyError, OSError, ValueError):
+                    valid = False
+            if valid:
+                seen_paths.add((name, version))
+            else:
+                errors.append(f"unreviewed path dependency (not workspace/vendor): {name}@{version}")
         if kind == "registry" and source != "registry+https://github.com/rust-lang/crates.io-index":
             errors.append(f"unreviewed non-default dependency source: {name}@{version}: {source}")
         if kind == "workspace":
@@ -285,6 +306,9 @@ def inventory_rust(metadata: dict, lock: dict, policy: dict, root: pathlib.Path)
         rows.append({"name": name, "version": version, "source": source, "kind": kind,
                      "license": license_expr, "decision": result, "selected": selected,
                      "reason": note, "exception": used_exception})
+    expected_paths = {(e.get("name"), e.get("version")) for e in reviewed_paths}
+    if len(expected_paths) != len(reviewed_paths) or seen_paths != expected_paths:
+        errors.append("reviewed path dependency inventory missing, duplicated or unresolved")
     if seen_vendor != 1:
         errors.append(f"expected exactly one reviewed vendored package, got {seen_vendor}")
     for e in exceptions:

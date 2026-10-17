@@ -1,0 +1,13 @@
+Review witness: retain collector server_id=fixture but change only the SOU-67 read policy profile.server_id to other-server. The original success and traversal assertions are retained.
+   Compiling agentfw v0.3.0 (/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/crates/agentfw)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.05s
+     Running tests/sou67_review_server_identity.rs (target/debug/deps/sou67_review_server_identity-21a0291a71771cd6)
+
+running 1 test
+other-server policy response: {"id":"sou67-auth","jsonrpc":"2.0","result":{"content":[{"text":"custom bound contents","type":"text"}]}}
+test sou67_operator_owned_tool_bindings_allow_arbitrary_tool_name_under_constrained_file_execution ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 72 filtered out; finished in 1.09s
+
+
+Witness cargo exit code: 0
