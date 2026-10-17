@@ -75,7 +75,10 @@ class MCPClient:
         except queue.Empty:return None
     def close(self):
         if self.proc.stdin and not self.proc.stdin.closed:
-            self.proc.stdin.close()
+            try:
+                self.proc.stdin.close()
+            except BrokenPipeError:
+                pass
         close(self.proc)
 
 def real_collector_proof(binary,root,compiled,check):
@@ -260,5 +263,6 @@ def main():
 if __name__=="__main__":
     try:main()
     except Exception as exc:
-        print(f"SOU-65 CLI proof failed: {type(exc).__name__}",file=sys.stderr)
+        label=str(exc)[:120] if isinstance(exc,AssertionError) else "internal"
+        print(f"SOU-65 CLI proof failed: {type(exc).__name__}: {label}",file=sys.stderr)
         sys.exit(1)
