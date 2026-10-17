@@ -59,7 +59,14 @@ The exact CPython archive, Git version/source, wheel graph, binary digests,
 library files, installed package tree and bubblewrap executable are recorded.
 The repository and runtime mounts are read-only. The child has no ambient home,
 credentials, Git global/system config, inherited descriptors or network access.
-The existing seccomp filter denies socket creation and writable file opens.
+The existing seccomp filter denies socket creation and unsafe device ioctls.
+Git unconditionally opens `/dev/null` read/write at startup. Its separately
+pinned `agentfw-git-sandbox` launcher therefore installs mandatory Landlock ABI
+3 mutation restrictions inside the namespace before executing original Python:
+only the verified `/dev/null` character device can be opened for writing.
+File creation, truncation, removal, rename and all other writable opens remain
+denied, including `/tmp` and named FIFOs. Missing Landlock fails closed. The
+filesystem profile retains its original blanket seccomp writable-open denial.
 Hooks, fsmonitor, external helper path, terminal prompting and optional index
 locking are disabled explicitly. Git protocols are disabled. No shell or remote
 helper is installed in the sandbox. Missing Linux/bubblewrap features fail
@@ -69,7 +76,8 @@ closed; Windows is not a positive isolation result.
 
 Preparation downloads are opt-in; protected startup is offline. Supply a
 separately verified Git 2.51.2 executable and bubblewrap 0.13.1 with
-`--ro-bind-fd`. The [Linux workflow](../../.github/workflows/mcp-real-git.yml)
+`--ro-bind-fd`, Linux Landlock ABI >= 3, and the `agentfw-git-sandbox` binary built
+from the same reviewed source. The [Linux workflow](../../.github/workflows/mcp-real-git.yml)
 builds these from pinned official sources without changing host security policy.
 
 ```sh
@@ -77,7 +85,7 @@ python3 -B scripts/install-sou68-git-profile.py --run \
   --destination /absolute/new-private-profile \
   --workspace /absolute/owned-synthetic-repository \
   --git /absolute/git --git-sha256 VERIFIED_GIT_BINARY_SHA256 \
-  --bwrap /absolute/bwrap
+  --bwrap /absolute/bwrap --git-launcher /absolute/agentfw-git-sandbox
 ```
 
 The destination must be new and outside the repository. The installer creates
@@ -87,12 +95,14 @@ remain for diagnosis and must not be treated as usable profiles.
 
 ## Exact-source acceptance
 
-Build the current Agent and its library-test executable, then run:
+Build the current Agent, its private Git launcher (`cargo build --locked -p
+agentfw --bins`) and library-test executable, then run:
 
 ```sh
 python3 -B scripts/verify-sou68-real-mcp.py --run \
   --agentfw /absolute/agentfw --git /absolute/git \
   --git-sha256 VERIFIED_GIT_BINARY_SHA256 --bwrap /absolute/bwrap \
+  --git-launcher /absolute/agentfw-git-sandbox \
   --sandbox-test-binary /absolute/agentfw-library-test-binary \
   --expected-commit FULL_CLEAN_COMMIT --output /absolute/new-evidence-directory
 ```

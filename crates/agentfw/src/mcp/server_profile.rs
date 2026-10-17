@@ -69,6 +69,8 @@ pub struct ProfileConfig {
     pub libraries: Vec<Library>,
     #[serde(default)]
     pub git: Option<Library>,
+    #[serde(default)]
+    pub git_launcher: Option<Library>,
 }
 
 impl ProfileConfig {
@@ -98,10 +100,11 @@ impl ProfileConfig {
             "unsupported MCP server profile"
         );
         ensure!(
-            (config.format == git::FORMAT) == config.git.is_some(),
+            (config.format == git::FORMAT) == config.git.is_some()
+                && (config.format == git::FORMAT) == config.git_launcher.is_some(),
             "Git runtime/profile mismatch"
         );
-        if let Some(git) = &config.git {
+        for git in [&config.git, &config.git_launcher].into_iter().flatten() {
             ensure!(
                 normal_absolute(&git.path) && crate::native::is_digest(&git.sha256),
                 "invalid Git executable pin"

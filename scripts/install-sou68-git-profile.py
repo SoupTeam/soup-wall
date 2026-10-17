@@ -79,10 +79,10 @@ def registry(manifest):
         for tool in manifest["result"]["tools"]]}
 
 
-def install(destination, workspace, git, git_sha256, bwrap):
+def install(destination, workspace, git, git_sha256, bwrap, git_launcher):
     if platform.system() != "Linux" or platform.machine() != "x86_64":
         raise ValueError("Git profile requires Linux x86-64; no isolation fallback")
-    workspace, git, bwrap = [Path(p).resolve(strict=True) for p in (workspace, git, bwrap)]
+    workspace, git, bwrap, git_launcher = [Path(p).resolve(strict=True) for p in (workspace, git, bwrap, git_launcher)]
     destination = Path(destination).absolute()
     if destination.exists() or destination.is_symlink() or destination.is_relative_to(workspace):
         raise ValueError("destination must be new and outside the repository")
@@ -122,12 +122,13 @@ def install(destination, workspace, git, git_sha256, bwrap):
                     "--only-binary=:all:", "--no-compile", "--no-cache-dir", "--disable-pip-version-check",
                     "-r", str(ASSETS / "requirements.lock")], env=env, check=True, timeout=300)
     # Python extension modules may depend on libraries not used by its launcher.
-    elf_files = [python, git]
+    elf_files = [python, git, git_launcher]
     elf_files.extend(path for path in (package / "python/lib").rglob("*.so") if path.is_file())
     profile = {"format": FORMAT, "workspace": str(workspace), "runtimePath": str(python),
                "runtimeSha256": sha(python), "packageRoot": str(package), "packageTreeSha256": tree_sha(package),
                "bwrapPath": str(bwrap), "bwrapSha256": sha(bwrap),
                "git": {"path": str(git), "sha256": git_sha256},
+               "gitLauncher": {"path": str(git_launcher), "sha256": sha(git_launcher)},
                "libraries": dependencies(elf_files, package)}
     private_json(destination / "profile.json", profile)
     manifest = json.loads((ASSETS / "upstream-tools-list.json").read_text())
@@ -146,7 +147,7 @@ def install(destination, workspace, git, git_sha256, bwrap):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true")
-    for name in ("destination", "workspace", "git", "bwrap"):
+    for name in ("destination", "workspace", "git", "bwrap", "git-launcher"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--git-sha256", required=True)
     args = parser.parse_args()
@@ -154,7 +155,7 @@ def main():
         print(json.dumps({"status": "plan", "executed": False, "profile": FORMAT}))
         return 0
     try:
-        print(json.dumps(install(args.destination, args.workspace, args.git, args.git_sha256, args.bwrap)))
+        print(json.dumps(install(args.destination, args.workspace, args.git, args.git_sha256, args.bwrap, args.git_launcher)))
         return 0
     except (OSError, ValueError, subprocess.SubprocessError, tarfile.TarError) as error:
         print(json.dumps({"status": "failed", "error": str(error)}))

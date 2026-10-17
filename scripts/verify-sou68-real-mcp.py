@@ -193,7 +193,7 @@ def protected(stack, report):
     command = [str(stack.binary), "mcp", "--native-admission", "--id", "sou68-git", "--", str(python),
                "-I", "-B", "-m", "mcp_server_git", "--repository", "/workspace"]
     log_path = stack.root / "collector.log"
-    report["reads"], report["refusals"] = [], []
+    report["reads"], report["refusals"], report["read_admission_failures"] = [], [], []
     witness = RepositoryWitness(stack.workspace)
     with log_path.open("wb") as log:
         client = Client(command, env, stack.workspace, log, "protected original Git")
@@ -208,6 +208,10 @@ def protected(stack, report):
             report["result_injection_withheld"] = True
             for identifier, (tool, args, fragment) in enumerate(READS, 10):
                 response, raw = client.exchange(call(identifier, tool, args))
+                if BASE.refused(response):
+                    require("classifier_ask" in json.dumps(response), "unexpected protected read failure: " + json.dumps(response))
+                    report["read_admission_failures"].append({"id": identifier, "tool": tool, "response": response})
+                    continue
                 require(fragment in text(response), "protected useful read failed: " + tool)
                 require(raw == originals[tool], "original result bytes changed: " + tool)
                 report["reads"].append({"tool": tool, "response": response, "passed": True})
@@ -246,12 +250,13 @@ def protected(stack, report):
             witness.close()
             report["protected_client"] = client.transcript()
     rows = BASE.events(log_path)
-    denied_ids = {row["id"] for row in report["refusals"]} | {700, 115}
+    denied_ids = {row["id"] for row in report["refusals"] + report["read_admission_failures"]} | {700, 115}
     require(not any(r.get("host_call_id") in denied_ids and r.get("execution_dispatched") is True for r in rows),
             "refused call reached child dispatch")
     require(BASE.snapshot(stack.workspace) == before, "protected repository/index changed")
     require(client.process_witness.final["all_stopped"], "owned process cleanup incomplete")
     report.update(repository_unchanged=True, transport_events=rows, no_denied_dispatch=True)
+    require(not report["read_admission_failures"], "required Git reads remain blocked by unchanged classifier; no Ask/unknown override")
 
 
 def startup_refusals(stack, report):
@@ -326,7 +331,7 @@ def run(args):
             workspace = private / "workspace"
             poison = prepare_repo(workspace, args.git, env)
             install = private / "installed"
-            INSTALL.install(install, workspace, args.git, args.git_sha256, args.bwrap)
+            INSTALL.install(install, workspace, args.git, args.git_sha256, args.bwrap, args.git_launcher)
             report["installation"] = json.loads((install / "installation.json").read_text())
             positive = subprocess.run([str(args.sandbox_test_binary), "selected_git_sandbox_isolates_real_python_and_git", "--ignored", "--nocapture"],
                 env=dict(env, SOU68_SANDBOX_TEST_PROFILE=str(install / "profile.json")), capture_output=True, timeout=90)
@@ -364,7 +369,7 @@ def run(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true")
-    for name in ("agentfw", "git", "bwrap", "sandbox-test-binary", "output"):
+    for name in ("agentfw", "git", "bwrap", "git-launcher", "sandbox-test-binary", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--git-sha256", required=True)
     parser.add_argument("--expected-commit", required=True)

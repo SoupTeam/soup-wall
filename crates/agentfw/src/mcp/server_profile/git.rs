@@ -278,6 +278,27 @@ mod tests {
     }
 
     #[test]
+    fn git_profile_requires_both_executable_and_landlock_launcher_pins() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let value = json!({"format":FORMAT,"workspace":root,"runtimePath":root.join("python"),
+            "runtimeSha256":"a".repeat(64),"packageRoot":root.join("package"),
+            "packageTreeSha256":"b".repeat(64),"bwrapPath":root.join("bwrap"),
+            "bwrapSha256":"c".repeat(64),"libraries":[],
+            "git":{"path":root.join("git"),"sha256":"d".repeat(64)},
+            "gitLauncher":{"path":root.join("launcher"),"sha256":"e".repeat(64)}});
+        assert!(super::super::ProfileConfig::read(value.to_string().as_bytes()).is_ok());
+        for field in ["git", "gitLauncher"] {
+            let mut missing = value.clone();
+            missing.as_object_mut().unwrap().remove(field);
+            assert!(super::super::ProfileConfig::read(missing.to_string().as_bytes()).is_err());
+        }
+        let mut other = value;
+        other["format"] = json!(super::super::FORMAT);
+        assert!(super::super::ProfileConfig::read(other.to_string().as_bytes()).is_err());
+    }
+
+    #[test]
     fn repository_config_indirection_and_active_hooks_fail_closed() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();

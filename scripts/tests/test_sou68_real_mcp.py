@@ -67,7 +67,7 @@ class GitProfile(unittest.TestCase):
     def test_missing_linux_never_installs_or_passes(self):
         with patch.object(INSTALL.platform, "system", return_value="Windows"), patch.object(INSTALL.urllib.request, "urlopen") as download:
             with self.assertRaisesRegex(ValueError, "no isolation fallback"):
-                INSTALL.install(Path("unused"), Path("unused"), Path("unused"), "a" * 64, Path("unused"))
+                INSTALL.install(Path("unused"), Path("unused"), Path("unused"), "a" * 64, Path("unused"), Path("unused"))
             download.assert_not_called()
 
     @unittest.skipUnless(sys.platform == "linux", "independent inotify witness requires Linux")

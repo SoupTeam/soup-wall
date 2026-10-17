@@ -59,7 +59,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo build --locked -p agentfw --bin agentfw
+          cargo build --locked -p agentfw --bins
           cargo test --locked -p agentfw --lib --no-run --message-format=json > "$RUNNER_TEMP/sou68-test-build.jsonl"
           python3 - <<'PY'
           import json, os
@@ -83,6 +83,7 @@ jobs:
           python3 -B scripts/verify-sou68-real-mcp.py --run --agentfw "$PWD/target/debug/agentfw" \
             --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
             --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --sandbox-test-binary "$SOU68_TEST_BINARY" \
+            --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou68-acceptance" \
             2>&1 | tee "$RUNNER_TEMP/sou68-acceptance.log"
       - name: Retain exact-source synthetic evidence

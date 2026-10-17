@@ -29,7 +29,7 @@ pub(crate) const SANDBOX_PROFILE: &str = "sw-mcp/filesystem-readonly/linux-bwrap
 
 pub(crate) fn profile_name(format: &str) -> &'static str {
     if format == super::server_profile::git::FORMAT {
-        "sw-mcp/git-readonly/linux-bwrap/1"
+        "sw-mcp/git-readonly/linux-bwrap-landlock/1"
     } else {
         SANDBOX_PROFILE
     }
@@ -215,7 +215,7 @@ fn descriptor_path(file: &File) -> PathBuf {
 /// sockets that may exist in the read-only workspace. Network namespaces alone
 /// do not isolate such filesystem sockets. Anonymous socketpair IPC stays usable.
 #[cfg(target_os = "linux")]
-fn filter_instructions() -> anyhow::Result<Vec<(u16, u8, u8, u32)>> {
+fn filter_instructions(git_landlock: bool) -> anyhow::Result<Vec<(u16, u8, u8, u32)>> {
     #[cfg(target_arch = "x86_64")]
     let architecture = 0xc000_003e_u32;
     #[cfg(target_arch = "aarch64")]
@@ -252,8 +252,10 @@ fn filter_instructions() -> anyhow::Result<Vec<(u16, u8, u8, u32)>> {
     }
     #[cfg(target_arch = "x86_64")]
     {
-        instructions.push((0x15, 0, 1, libc::SYS_creat as u32));
-        instructions.push((0x06, 0, 0, deny));
+        if !git_landlock {
+            instructions.push((0x15, 0, 1, libc::SYS_creat as u32));
+            instructions.push((0x06, 0, 0, deny));
+        }
     }
     // The pinned Node/libuv opens its explicitly piped stdio with FIONBIO.
     // Permit that local nonblocking flag only on descriptors 0, 1 and 2.
@@ -273,6 +275,13 @@ fn filter_instructions() -> anyhow::Result<Vec<(u16, u8, u8, u32)>> {
     // type. openat2 takes an indirect flags structure, so it is denied above.
     // O_TMPFILE also contains O_DIRECTORY: only its distinct high bit belongs
     // in this mask, preserving ordinary read-only directory opens.
+    if git_landlock {
+        // Only the pinned Git launcher may use this branch. Before original
+        // Python/Git executes it installs mandatory Landlock ABI 3 write rules
+        // allowing /dev/null alone. Socket/ioctl restrictions above stay intact.
+        instructions.push((0x06, 0, 0, 0x7fff_0000));
+        return Ok(instructions);
+    }
     let write_flags = (libc::O_WRONLY
         | libc::O_RDWR
         | libc::O_CREAT
@@ -298,11 +307,11 @@ fn filter_instructions() -> anyhow::Result<Vec<(u16, u8, u8, u32)>> {
 }
 
 #[cfg(target_os = "linux")]
-fn network_filter() -> anyhow::Result<File> {
+fn network_filter(git_landlock: bool) -> anyhow::Result<File> {
     use std::io::{Seek, SeekFrom, Write};
     use std::os::fd::FromRawFd;
 
-    let instructions = filter_instructions()?;
+    let instructions = filter_instructions(git_landlock)?;
     let fd = unsafe {
         libc::memfd_create(
             c"sou62-network-filter".as_ptr(),
@@ -396,6 +405,18 @@ fn prepare_linux_command(
         mounts.push((pins.len(), PathBuf::from("/mcp-runtime/git")));
         pins.push(pin);
     }
+    if git_profile {
+        let launcher = profile
+            .git_launcher
+            .as_ref()
+            .context("Git Landlock launcher is required")?;
+        let pin = open_verified_file(&launcher.path, &launcher.sha256, true)?;
+        mounts.push((
+            pins.len(),
+            PathBuf::from("/mcp-runtime/git-profile-launcher"),
+        ));
+        pins.push(pin);
+    }
     if profile.libraries.is_empty() || profile.libraries.len() > 32 {
         bail!("MCP sandbox requires a bounded, explicit library list");
     }
@@ -443,7 +464,7 @@ fn prepare_linux_command(
             .arg(pins[index].as_raw_fd().to_string())
             .arg(destination);
     }
-    let seccomp = network_filter()?;
+    let seccomp = network_filter(git_profile)?;
     command
         .arg("--seccomp")
         .arg(seccomp.as_raw_fd().to_string());
@@ -485,7 +506,7 @@ fn prepare_linux_command(
         }
     }
     command.arg("--").arg(if git_profile {
-        super::server_profile::git::PYTHON
+        "/mcp-runtime/git-profile-launcher"
     } else {
         "/mcp-runtime/node"
     });
@@ -543,8 +564,11 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires explicit pinned Linux Git/Python profile and bubblewrap"]
     async fn selected_git_sandbox_isolates_real_python_and_git() {
+        use std::io::{Read, Write};
         use std::net::{TcpListener, TcpStream};
         use std::os::fd::{AsRawFd, FromRawFd};
+        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::fs::OpenOptionsExt;
         use tokio::io::AsyncReadExt;
         let profile_path = std::env::var("SOU68_SANDBOX_TEST_PROFILE")
             .expect("explicit Git sandbox profile required");
@@ -580,13 +604,21 @@ def descriptors():
         try: result.append(os.readlink(entry))
         except OSError: pass
     return result
+def null_open():
+    fd = os.open('/dev/null', os.O_RDWR)
+    os.close(fd)
+    return True
 git = subprocess.run(['/mcp-runtime/git', 'status', '--porcelain'], cwd='/workspace', capture_output=True, timeout=5)
 result = {{
+ 'null_open_allowed': null_open(),
  'git_read': git.returncode == 0,
  'git_exit': git.returncode,
  'git_error': git.stderr[-2000:].decode('utf-8', 'replace'),
  'workspace_write_denied': denied(lambda: pathlib.Path('/workspace/sandbox-forbidden').write_text('denied')),
  'runtime_write_denied': denied(lambda: pathlib.Path('/mcp-runtime/git').open('wb')),
+ 'tmp_write_denied': denied(lambda: pathlib.Path('/tmp/forbidden').write_text('denied')),
+ 'other_device_write_denied': denied(lambda: pathlib.Path('/dev/zero').open('wb')),
+ 'fifo_write_denied': denied(lambda: os.open('/workspace/.sou68-runtime-probe.fifo', os.O_WRONLY | os.O_NONBLOCK)),
  'outside_read_denied': denied(lambda: pathlib.Path({outside_json}).read_bytes()),
  'outside_write_denied': denied(lambda: pathlib.Path({outside_json}).write_bytes(b'denied')),
  'egress_denied': denied(lambda: socket.create_connection(('127.0.0.1', {port}), 1)),
@@ -603,6 +635,27 @@ print(json.dumps(result))
         );
         let args = vec!["-I".into(), "-B".into(), "-c".into(), script];
         let mut prepared = prepare_linux_command(&profile, &args).unwrap();
+        // Add an owned FIFO after repository validation to prove that read-only
+        // mounts alone are insufficient, and that Landlock still blocks IPC.
+        let fifo_path = profile.workspace.join(".sou68-runtime-probe.fifo");
+        assert!(!fifo_path.exists());
+        let fifo_name = std::ffi::CString::new(fifo_path.as_os_str().as_bytes()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(fifo_name.as_ptr(), 0o600) }, 0);
+        let mut fifo_reader = std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NONBLOCK)
+            .open(&fifo_path)
+            .unwrap();
+        let mut calibration = std::fs::OpenOptions::new()
+            .write(true)
+            .custom_flags(libc::O_NONBLOCK)
+            .open(&fifo_path)
+            .unwrap();
+        calibration.write_all(b"calibrate").unwrap();
+        let mut marker = [0_u8; 9];
+        fifo_reader.read_exact(&mut marker).unwrap();
+        assert_eq!(&marker, b"calibrate");
+        drop(calibration);
         prepared
             .command
             .env("SOU68_INHERITED_SECRET", "must-not-reach-server");
@@ -628,12 +681,19 @@ print(json.dumps(result))
             panic!("real Git/Python sandbox timed out");
         }
         let (output, errors, status) = collected.unwrap();
+        let mut forbidden_bytes = [0_u8; 32];
+        assert_eq!(fifo_reader.read(&mut forbidden_bytes).unwrap(), 0);
+        std::fs::remove_file(fifo_path).unwrap();
         assert!(status.success(), "{}", String::from_utf8_lossy(&errors));
         let result: serde_json::Value = serde_json::from_slice(&output).unwrap();
         for key in [
+            "null_open_allowed",
             "git_read",
             "workspace_write_denied",
             "runtime_write_denied",
+            "tmp_write_denied",
+            "other_device_write_denied",
+            "fifo_write_denied",
             "outside_read_denied",
             "outside_write_denied",
             "egress_denied",
@@ -704,7 +764,7 @@ print(json.dumps(result))
     #[cfg(target_os = "linux")]
     #[test]
     fn syscall_filter_preserves_read_opens_and_only_stdio_fionbio() {
-        let instructions = filter_instructions().unwrap();
+        let instructions = filter_instructions(false).unwrap();
         let evaluate = |syscall: i64, first: u32, second: u32, third: u32| {
             let mut data = [0_u8; 64];
             let architecture = instructions[1].3;
