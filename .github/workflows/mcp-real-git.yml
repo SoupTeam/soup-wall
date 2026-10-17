@@ -77,6 +77,9 @@ jobs:
           cargo test --locked -p agentfw syscall_filter --lib
           python3 -B -m unittest discover -s scripts/tests -p test_sou68_real_mcp.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_sou62_real_mcp.py -v
+          python3 -B -m unittest discover -s rule_baseline -p 'test_*.py' -v
+          python3 eval/eval_runner.py eval/fixtures/soup_task1_evaluation_cases_v0.4.json --classifier-path rule_baseline/git_readonly_v1 --out-dir target/sou68-core-evaluation
+          python3 eval/eval_runner.py eval/fixtures/soup_task1_mixed_actions_urtisto_v0.1.json eval/fixtures/soup_task1_benign_comparison_urtisto_v0.1.json --classifier-path rule_baseline/git_readonly_v1 --out-dir target/sou68-mixed-evaluation
       - name: Actual Git server and independent OS isolation
         shell: bash
         run: |

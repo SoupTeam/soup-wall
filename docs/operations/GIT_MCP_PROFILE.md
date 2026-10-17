@@ -5,12 +5,18 @@ stdio package with MCP Python SDK 1.29.0. It extends the existing selected-serve
 relay and bubblewrap boundary. It does not replace the transport, classifier,
 policy engine, original discovery, schemas, tool names or result/error frames.
 
-**Acceptance status:** implementation in progress. On accepted main `fff8ba5`,
-the unchanged rule baseline returns `actions: [], unknown: true` for original
-`git_status`, `git_log` and `git_diff`; `git_show` returns `read`. The former
-remain blocked through classifier/policy admission. A narrow classifier change
-has been raised for coordination. A support declaration below never overrides
-that decision. Full status/log/diff acceptance must pass before review readiness.
+**Acceptance status:** implementation in progress; full Linux acceptance must
+pass before review readiness. Baubek agreed to the narrow Git rule on October 17.
+The opt-in [Git classifier snapshot](../../rule_baseline/git_readonly_v1/rule_baseline.py)
+adds only six exact original schemas and bounded argument forms below. It fixes
+unknown status/log/diff and the generic rule's false write for `context_lines`.
+The frozen research baseline and filesystem profile remain unchanged. No global
+status/log/diff vocabulary is added. Unsupported Git forms retain unknown and
+any recognized risky evidence; policy still determines Ask/refusal. Schema
+recognition is semantic evidence, not authenticated server identity. Registry,
+runtime pins, argument validation, policy and sandbox remain independent gates.
+Select this snapshot with `AGENTFW_RULE_BASELINE` and `AGENTFW_CLASSIFIER=rule-baseline`;
+the acceptance driver records its SHA-256 and selects it explicitly.
 
 ## Original discovery and bounded operations
 

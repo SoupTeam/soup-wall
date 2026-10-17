@@ -189,7 +189,7 @@ def protected(stack, report):
     (stack.workspace / "notes.txt").write_text("synthetic changed text\n")
     before = BASE.snapshot(stack.workspace)
     env.update(AGENTFW_MCP_SERVER_PROFILE=str(stack.install / "profile.json"), AGENTFW_CLASSIFIER="rule-baseline",
-               AGENTFW_RULE_BASELINE=str(ROOT / "rule_baseline/rule_baseline.py"), AGENTFW_CLASSIFIER_PYTHON=sys.executable)
+               AGENTFW_RULE_BASELINE=str(ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py"), AGENTFW_CLASSIFIER_PYTHON=sys.executable)
     command = [str(stack.binary), "mcp", "--native-admission", "--id", "sou68-git", "--", str(python),
                "-I", "-B", "-m", "mcp_server_git", "--repository", "/workspace"]
     log_path = stack.root / "collector.log"
@@ -256,7 +256,7 @@ def protected(stack, report):
     require(BASE.snapshot(stack.workspace) == before, "protected repository/index changed")
     require(client.process_witness.final["all_stopped"], "owned process cleanup incomplete")
     report.update(repository_unchanged=True, transport_events=rows, no_denied_dispatch=True)
-    require(not report["read_admission_failures"], "required Git reads remain blocked by unchanged classifier; no Ask/unknown override")
+    require(not report["read_admission_failures"], "required Git reads remain blocked by classifier; no Ask/unknown override")
 
 
 def startup_refusals(stack, report):
@@ -265,7 +265,7 @@ def startup_refusals(stack, report):
     command = [str(stack.binary), "mcp", "--native-admission", "--id", "sou68-startup", "--",
                profile["runtimePath"], "-I", "-B", "-m", "mcp_server_git", "--repository", "/workspace"]
     env = dict(stack.env, AGENTFW_MCP_SERVER_PROFILE=str(stack.install / "profile.json"),
-               AGENTFW_CLASSIFIER="rule-baseline", AGENTFW_RULE_BASELINE=str(ROOT / "rule_baseline/rule_baseline.py"),
+               AGENTFW_CLASSIFIER="rule-baseline", AGENTFW_RULE_BASELINE=str(ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py"),
                AGENTFW_CLASSIFIER_PYTHON=sys.executable)
     request = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
         "protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "sou68-refusal", "version": "1"}}}).encode() + b"\n"
@@ -319,7 +319,7 @@ def run(args):
     require(not output.exists() and not output.is_relative_to(ROOT), "new evidence directory outside source required")
     output.mkdir(mode=0o700, parents=True)
     report = {"format": "sou68-real-git-acceptance/1", "status": "incomplete", "source_before": before,
-              "binary_sha256": sha(args.agentfw), "driver_sha256": sha(__file__), "skipped": 0}
+              "binary_sha256": sha(args.agentfw), "driver_sha256": sha(__file__), "classifier_sha256": sha(ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py"), "skipped": 0}
     daemon = None
     try:
         with tempfile.TemporaryDirectory(prefix="sou68-owned-") as temporary:
