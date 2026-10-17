@@ -592,6 +592,7 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Cmd::McpConnection { command } => agentfw::mcp::connection::run(command),
+        Cmd::McpProfile { command } => agentfw::mcp::profile_author::run(command),
         Cmd::ChildAuthority { action } => {
             use agentfw::native::child_authority;
             let home = Config::home()?;
