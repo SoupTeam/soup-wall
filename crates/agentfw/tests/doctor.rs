@@ -247,7 +247,10 @@ fn cancellation_before_completion_never_publishes_support_bundle() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let port = listener.local_addr().unwrap().port();
-    private(&home.join("config.yaml"), format!("enforce: true\nport: {port}\n").as_bytes());
+    private(
+        &home.join("config.yaml"),
+        format!("enforce: true\nport: {port}\n").as_bytes(),
+    );
     private(&home.join("token"), b"private-fixture-token");
     let out_parent = work.path().join("private");
     std::fs::create_dir(&out_parent).unwrap();
