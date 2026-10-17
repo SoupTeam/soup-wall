@@ -9,8 +9,8 @@ case "$backend" in sqlite|postgres) ;; *) echo 'usage: keycloak-saml-linux.sh [s
 cargo build --locked -p llm-firewall --bin llm-firewall --example keycloak-saml-bootstrap
 out="${SAML_EVIDENCE_DIR:-target/saml-evidence}"
 mkdir -p "$out"
-python3 scripts/keycloak-saml-linux.py --backend "$backend" \
+python3 scripts/sso_acceptance_batch.py --protocol saml --backend "$backend" --runs "${SSO_RUNS:-1}" \
   --gateway target/debug/llm-firewall \
   --bootstrap-helper target/debug/examples/keycloak-saml-bootstrap \
   --artifact-label "$(git rev-parse HEAD)" \
-  --out "$out/acceptance-$backend-$(date -u +%Y%m%dT%H%M%SZ).json"
+  --out "$out/batch-$backend-$(date -u +%Y%m%dT%H%M%SZ)-$$"
