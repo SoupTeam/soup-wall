@@ -60,7 +60,7 @@ fn safe_input(path: &Path) -> Result<Vec<u8>> {
     #[cfg(unix)] {
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
         ensure!(meta.uid() == unsafe { libc::geteuid() }
-            && meta.permissions().mode() & 0o022 == 0, "input owner or write permissions unsafe");
+            && meta.permissions().mode() & 0o077 == 0, "input owner or write permissions unsafe");
     }
     let mut reader = fs::File::open(path)?;
     let mut data = Vec::new();
@@ -231,38 +231,61 @@ fn private_write(path: &Path, data: &[u8]) -> Result<()> {
     Ok(())
 }
 
-pub fn compile(snapshot_path:&Path,declaration_path:&Path,directory:&Path)->Result<Value> {
-    let snapshot:Discovery=decode(snapshot_path)?;
-    let declaration:Declaration=decode(declaration_path)?;
-    let registry=verify_declaration(&declaration,&snapshot)?;
-    let summary=report(&snapshot,&declaration,&registry);
-    ensure!(directory.is_absolute() && !directory.exists(),"output directory already exists");
-    let parent=directory.parent().context("missing output parent")?;
-    ensure!(fs::symlink_metadata(parent)?.is_dir(),"unsafe output parent");
-    // A fresh private output directory is never an implicit active install.
-    #[cfg(unix)]{
-        use std::os::unix::fs::DirBuilderExt;
-        let mut b=fs::DirBuilder::new();b.mode(0o700);b.create(directory)?;
+pub fn compile(snapshot_path: &Path, declaration_path: &Path, directory: &Path) -> Result<Value> {
+    let snapshot: Discovery = decode(snapshot_path)?;
+    let declaration: Declaration = decode(declaration_path)?;
+    let registry = verify_declaration(&declaration, &snapshot)?;
+    let summary = report(&snapshot, &declaration, &registry);
+    ensure!(directory.is_absolute() && !directory.exists(), "output directory already exists");
+    let parent = directory.parent().context("missing output parent")?;
+    let meta = fs::symlink_metadata(parent)?;
+    ensure!(meta.is_dir() && !meta.file_type().is_symlink(), "unsafe output parent");
+
+    // Linux-only publication: private staging on the same filesystem followed
+    // by RENAME_NOREPLACE, so concurrent operators cannot replace a profile.
+    #[cfg(not(target_os = "linux"))]
+    anyhow::bail!("initial compiler requires Linux no-clobber publication");
+    #[cfg(target_os = "linux")]
+    {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
+        ensure!(meta.uid() == unsafe { libc::geteuid() }
+            && meta.permissions().mode() & 0o077 == 0,
+            "output parent must belong to the operator and remain private");
+
+        let staging = parent.join(format!(".sou65-{}", crate::token::generate()));
+        fs::DirBuilder::new().mode(0o700).create(&staging)?;
+        let publication = (|| -> Result<()> {
+            private_write(&staging.join("registry.json"), &canonical(&registry))?;
+            // Generate this fragment using the real NativeCfg type, and point
+            // to the FINAL path, never to a temporary staging location.
+            let native = crate::config::NativeCfg {
+                registry_path: directory.join("registry.json"),
+                registry_sha256: summary["registry_sha256"].as_str()
+                    .context("compiled registry digest absent")?.into(),
+                approval: None,
+            };
+            private_write(&staging.join("native-config.json"),
+                &canonical(&json!({"native":native})))?;
+            private_write(&staging.join("report.json"), &canonical(&summary))?;
+            fs::File::open(&staging)?.sync_all()?;
+            let src = CString::new(staging.as_os_str().as_bytes())?;
+            let dest = CString::new(directory.as_os_str().as_bytes())?;
+            let rc = unsafe {
+                libc::renameat2(libc::AT_FDCWD, src.as_ptr(), libc::AT_FDCWD,
+                    dest.as_ptr(), libc::RENAME_NOREPLACE)
+            };
+            if rc != 0 { return Err(std::io::Error::last_os_error()).context(
+                "profile publication conflict or unsupported filesystem");
+            }
+            fs::File::open(parent)?.sync_all()?;
+            Ok(())
+        })();
+        if publication.is_err() { let _ = fs::remove_dir_all(&staging); }
+        publication?;
+        Ok(summary)
     }
-    #[cfg(not(unix))] {anyhow::bail!("initial compiler requires Unix private output directories")}
-    let publication=(||->Result<()>{
-        private_write(&directory.join("registry.json"),&canonical(&registry))?;
-        // Emit the actual typed native configuration fragment. This is not an
-        // installation or a mutation of the host's selected configuration.
-        let native = crate::config::NativeCfg {
-            registry_path: directory.join("registry.json"),
-            registry_sha256: summary["registry_sha256"].as_str()
-                .context("compiled registry digest absent")?.into(),
-            approval: None,
-        };
-        private_write(&directory.join("native-config.json"),
-            &canonical(&json!({"native":native})))?;
-        private_write(&directory.join("report.json"),&canonical(&summary))?;
-        Ok(())
-    })();
-    if publication.is_err(){let _=fs::remove_dir_all(directory);}
-    publication?;
-    Ok(summary)
 }
 
 #[cfg(test)]
