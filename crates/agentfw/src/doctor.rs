@@ -9,7 +9,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use crate::lifecycle::{Manager, Status as LifecycleStatus};
-use crate::protection_status::{self, Expectations, Mode, Snapshot};
+use crate::protection_status::{self, Expectations, Mode};
 use crate::Config;
 
 #[derive(Args, Debug, Clone)]
@@ -197,7 +197,7 @@ fn hash_selected_file(path: &Path, limit: u64) -> anyhow::Result<String> {
         anyhow::ensure!(total <= limit, "asset too large");
         hash.update(&buf[..size]);
     }
-    Ok(format!("{hash:x}"))
+    Ok(format!("{:x}", hash.finalize()))
 }
 
 fn lifecycle_check(status: &LifecycleStatus) -> Check {
@@ -234,7 +234,7 @@ fn lifecycle_check(status: &LifecycleStatus) -> Check {
     }
 }
 
-fn setup(checks: &[Check]) -> Outcome {
+fn setup(checks: &[&Check]) -> Outcome {
     if checks.iter().any(|c| c.outcome == Outcome::Failed) {
         Outcome::Failed
     } else if checks.iter().any(|c| c.outcome == Outcome::Unsupported) {
@@ -579,16 +579,12 @@ async fn diagnose(args: &DoctorArgs) -> Report {
         Outcome::Unknown, "active_call_not_witnessed",
         "Configuration, heartbeat, counters and isolated tests are not active-host protection evidence.",
         "Exercise and audit an explicitly owned real host call separately, without doctor executing one."));
+    // Every explicitly supplied failed/unknown selector participates in setup
+    // readiness. Never silently discard a wrong classifier/host/binary pin.
     report.setup = setup(
         &checks
             .iter()
-            .filter(|c| {
-                c.id != "active_host_call"
-                    && c.id != "classifier"
-                    && c.id != "host_connection"
-                    && c.id != "binary"
-            })
-            .cloned()
+            .filter(|c| c.id != "active_host_call")
             .collect::<Vec<_>>(),
     );
     report.checks = checks;
