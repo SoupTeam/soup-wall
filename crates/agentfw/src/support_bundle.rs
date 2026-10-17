@@ -172,7 +172,7 @@ pub fn export(_report: &Report, _destination: &Path) -> anyhow::Result<()> {
     anyhow::bail!("private support export requires Linux")
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
     use crate::doctor::{Outcome, Report};
