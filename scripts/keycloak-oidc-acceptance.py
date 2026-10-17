@@ -140,6 +140,14 @@ class FixtureDatabase:
         raise RuntimeError("owned database did not restart")
 
 
+def retryable_browser_transport(observation):
+    failures = observation.get("network_failures", [])
+    return (bool(failures) and all(item == "net::ERR_NETWORK_CHANGED" for item in failures)
+            and observation.get("owned_location", False)
+            and not observation.get("callback_response")
+            and not observation.get("authentication_error"))
+
+
 def imported_credential(password):
     """Import a salted Keycloak credential; keep generated cleartext in memory."""
     salt = secrets.token_bytes(16)
@@ -475,29 +483,40 @@ def run(args):
                 ctx.route("**/*", route_request)
                 return ctx
 
-            def login(ctx, user, organization=None, workspace=None, success=True):
+            def login(ctx, user, organization=None, workspace=None, success=True, transport_retry=0):
                 page = ctx.new_page()
-
                 page.set_default_timeout(90000)
-
-                report["phase"] = "console-entry-" + user["username"]
-                output.publish(report)
-                page.goto(gateway_base + "/customer")
-                page.locator("#sign-in").wait_for(state="visible")
-                page.locator("#login-organization").fill(organization or scope["organization_id"])
-                page.locator("#login-workspace").fill(workspace or scope["workspace_id"])
-                report["phase"] = "idp-redirect-" + user["username"]
-                output.publish(report)
-                page.locator("#sign-in-form button").click()
-                page.locator("#username").fill(user["username"])
-                page.locator("#password").fill(user["password"])
-                callback_cookies[user["username"]] = "; ".join(
-                    cookie["name"] + "=" + cookie["value"] for cookie in ctx.cookies()
-                    if cookie["name"] == "__Host-llm-fw-oidc-flow")
-                report["phase"] = "idp-password-callback-" + user["username"]
-                output.publish(report)
-                page.locator("#kc-login").click()
+                observation = {"subject": user["username"], "attempt": transport_retry + 1,
+                               "network_failures": [], "callback_response": False}
+                def failed(request):
+                    if request.is_navigation_request() and len(observation["network_failures"]) < 8:
+                        observation["network_failures"].append(
+                            "net::ERR_NETWORK_CHANGED" if request.failure == "net::ERR_NETWORK_CHANGED" else "other")
+                def responded(response):
+                    parsed = urllib.parse.urlsplit(response.url)
+                    expected = urllib.parse.urlsplit(callback)
+                    if (parsed.scheme, parsed.netloc, parsed.path) == (expected.scheme, expected.netloc, expected.path):
+                        observation["callback_response"] = True
+                page.on("requestfailed", failed)
+                page.on("response", responded)
                 try:
+                    report["phase"] = "console-entry-" + user["username"]
+                    output.publish(report)
+                    page.goto(gateway_base + "/customer")
+                    page.locator("#sign-in").wait_for(state="visible")
+                    page.locator("#login-organization").fill(organization or scope["organization_id"])
+                    page.locator("#login-workspace").fill(workspace or scope["workspace_id"])
+                    report["phase"] = "idp-redirect-" + user["username"]
+                    output.publish(report)
+                    page.locator("#sign-in-form button").click()
+                    page.locator("#username").fill(user["username"])
+                    page.locator("#password").fill(user["password"])
+                    callback_cookies[user["username"]] = "; ".join(
+                        cookie["name"] + "=" + cookie["value"] for cookie in ctx.cookies()
+                        if cookie["name"] == "__Host-llm-fw-oidc-flow")
+                    report["phase"] = "idp-password-callback-" + user["username"]
+                    output.publish(report)
+                    page.locator("#kc-login").click()
                     if success:
                         page.wait_for_url(gateway_base + "/customer")
                         page.locator("#identity").wait_for(state="visible")
@@ -505,9 +524,22 @@ def run(args):
                     else:
                         page.wait_for_url(callback + "?**")
                 except Exception:
-                    report["browser_failure_path"] = urllib.parse.urlsplit(page.url).path
-                    report["browser_failure_controls"] = {selector: page.locator(selector).count()
-                        for selector in ("#username", "#input-error", "#kc-error-message", "#identity", "#sign-in")}
+                    parsed = urllib.parse.urlsplit(page.url)
+                    origin = parsed.scheme + "://" + parsed.netloc
+                    observation["owned_location"] = origin in origins or parsed.scheme in ("about", "chrome-error")
+                    try:
+                        visible = page.locator("body").inner_text(timeout=3000).lower()
+                    except Exception:
+                        visible = ""
+                    observation["authentication_error"] = any(label in visible for label in (
+                        "invalid username or password", "invalid user", "account is disabled",
+                        "account is not fully set up", "login could not be completed", "invalid signature"))
+                    if transport_retry == 0 and retryable_browser_transport(observation):
+                        report.setdefault("browser_transport_retries", []).append(observation)
+                        output.publish(report)
+                        page.close()
+                        return login(ctx, user, organization, workspace, success, transport_retry=1)
+                    report["failed_browser_transport"] = observation
                     raise
                 return page
 

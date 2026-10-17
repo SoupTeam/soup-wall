@@ -51,6 +51,18 @@ class SamlNavigationDiagnosticsTests(unittest.TestCase):
             self.assertFalse(driver.retryable_login_transport(dict(transient, **extra)))
 
 
+class OidcTransportRetryTests(unittest.TestCase):
+    def test_only_confirmed_pre_callback_network_change_is_retryable(self):
+        observation = {"network_failures": ["net::ERR_NETWORK_CHANGED"], "owned_location": True,
+                       "callback_response": False, "authentication_error": False}
+        self.assertTrue(DRIVER.retryable_browser_transport(observation))
+        for changed in ({"callback_response": True}, {"authentication_error": True},
+                        {"owned_location": False}, {"network_failures": []},
+                        {"network_failures": ["other"]},
+                        {"network_failures": ["net::ERR_NETWORK_CHANGED", "other"]}):
+            self.assertFalse(DRIVER.retryable_browser_transport(dict(observation, **changed)))
+
+
 class ImportedCredentialTests(unittest.TestCase):
     def test_realm_import_contains_salted_verifier_instead_of_cleartext(self):
         secret = "generated-only-for-this-unit-test"

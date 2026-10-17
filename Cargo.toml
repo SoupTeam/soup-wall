@@ -1,10 +1,11 @@
 [workspace]
 resolver = "2"
 members = ["crates/core", "crates/proxy", "crates/bench", "crates/agent", "crates/agentfw", "crates/adapter"]
-exclude = ["vendor/kryptering"]
+exclude = ["vendor/kryptering", "vendor/candle-core"]
 
 [patch.crates-io]
 kryptering = { path = "vendor/kryptering" }
+candle-core = { path = "vendor/candle-core" }
 
 [workspace.package]
 edition = "2021"
