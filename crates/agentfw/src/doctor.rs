@@ -92,7 +92,9 @@ fn check(
 }
 
 fn is_digest(s: &str) -> bool {
-    s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+    s.len() == 64
+        && s.bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
 }
 
 /// Open only a bounded private regular file. Never traverse a symlink parent or
@@ -110,7 +112,9 @@ pub(crate) fn read_private(path: &Path, max: u64) -> anyhow::Result<Vec<u8>> {
     anyhow::ensure!(path.is_absolute(), "absolute path required");
     let root = File::open("/")?;
     let mut dir = root;
-    let parent = path.parent().ok_or_else(|| anyhow::anyhow!("missing parent"))?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("missing parent"))?;
     for part in parent.components() {
         match part {
             Component::RootDir => (),
@@ -118,7 +122,8 @@ pub(crate) fn read_private(path: &Path, max: u64) -> anyhow::Result<Vec<u8>> {
                 let name = CString::new(name.as_bytes())?;
                 let fd = unsafe {
                     libc::openat(
-                        dir.as_raw_fd(), name.as_ptr(),
+                        dir.as_raw_fd(),
+                        name.as_ptr(),
                         libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
                     )
                 };
@@ -128,11 +133,14 @@ pub(crate) fn read_private(path: &Path, max: u64) -> anyhow::Result<Vec<u8>> {
             _ => anyhow::bail!("path alias not accepted"),
         }
     }
-    let leaf = path.file_name().ok_or_else(|| anyhow::anyhow!("missing filename"))?;
+    let leaf = path
+        .file_name()
+        .ok_or_else(|| anyhow::anyhow!("missing filename"))?;
     let leaf = CString::new(leaf.as_bytes())?;
     let fd = unsafe {
         libc::openat(
-            dir.as_raw_fd(), leaf.as_ptr(),
+            dir.as_raw_fd(),
+            leaf.as_ptr(),
             libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC,
         )
     };
@@ -140,7 +148,8 @@ pub(crate) fn read_private(path: &Path, max: u64) -> anyhow::Result<Vec<u8>> {
     let file = unsafe { File::from_raw_fd(fd) };
     let meta = file.metadata()?;
     anyhow::ensure!(
-        meta.is_file() && meta.nlink() == 1
+        meta.is_file()
+            && meta.nlink() == 1
             && meta.uid() == unsafe { libc::geteuid() }
             && meta.mode() & 0o077 == 0
             && meta.len() <= max,
@@ -161,7 +170,10 @@ fn hash_selected_file(path: &Path, limit: u64) -> anyhow::Result<String> {
     use std::io::Read;
     anyhow::ensure!(path.is_absolute(), "absolute path required");
     let meta = std::fs::symlink_metadata(path)?;
-    anyhow::ensure!(meta.file_type().is_file() && meta.len() <= limit, "invalid asset");
+    anyhow::ensure!(
+        meta.file_type().is_file() && meta.len() <= limit,
+        "invalid asset"
+    );
     // This additionally refuses a symlink swap at open time on Unix.
     let mut opts = std::fs::OpenOptions::new();
     opts.read(true);
@@ -190,9 +202,14 @@ fn hash_selected_file(path: &Path, limit: u64) -> anyhow::Result<String> {
 
 fn lifecycle_check(status: &LifecycleStatus) -> Check {
     if status.interrupted {
-        check("installation", "read_only_lifecycle_manifest", Outcome::Failed,
-              "lifecycle_interrupted", "An installed-version transaction was interrupted.",
-              "Review agentfw lifecycle status; only an operator may run lifecycle recover.")
+        check(
+            "installation",
+            "read_only_lifecycle_manifest",
+            Outcome::Failed,
+            "lifecycle_interrupted",
+            "An installed-version transaction was interrupted.",
+            "Review agentfw lifecycle status; only an operator may run lifecycle recover.",
+        )
     } else if status.active.is_none() {
         check("installation", "read_only_lifecycle_manifest", Outcome::Failed,
               "agent_not_installed", "No managed Agent version is selected.",
@@ -206,9 +223,14 @@ fn lifecycle_check(status: &LifecycleStatus) -> Check {
               "host_config_drift", "Disk configuration differs from recorded startup intent.",
               "Review agentfw lifecycle status; an operator must decide whether a controlled restart is appropriate.")
     } else {
-        check("installation", "read_only_lifecycle_manifest", Outcome::Ready,
-              "managed_selection_present", "Managed installation selection was read without modification.",
-              "Compare with authenticated runtime identity; selection alone is not protection.")
+        check(
+            "installation",
+            "read_only_lifecycle_manifest",
+            Outcome::Ready,
+            "managed_selection_present",
+            "Managed installation selection was read without modification.",
+            "Compare with authenticated runtime identity; selection alone is not protection.",
+        )
     }
 }
 
@@ -235,9 +257,14 @@ async fn diagnose(args: &DoctorArgs) -> Report {
         checks: Vec::new(),
     };
     if !cfg!(target_os = "linux") {
-        checks.push(check("platform", "compile_target", Outcome::Unsupported,
-            "platform_unsupported", "This doctor currently supports installed Linux Agents only.",
-            "Run on the owned Linux installation; do not infer coverage on another platform."));
+        checks.push(check(
+            "platform",
+            "compile_target",
+            Outcome::Unsupported,
+            "platform_unsupported",
+            "This doctor currently supports installed Linux Agents only.",
+            "Run on the owned Linux installation; do not infer coverage on another platform.",
+        ));
         report.setup = Outcome::Unsupported;
         report.checks = checks;
         return report;
@@ -246,9 +273,14 @@ async fn diagnose(args: &DoctorArgs) -> Report {
     let home = match args.home.clone().map(Ok).unwrap_or_else(Config::home_path) {
         Ok(p) if p.is_absolute() => p,
         _ => {
-            checks.push(check("profile", "selected_home", Outcome::Failed,
-                "invalid_profile_home", "An absolute installed profile is required.",
-                "Pass --home /absolute/path/to/.agentfw."));
+            checks.push(check(
+                "profile",
+                "selected_home",
+                Outcome::Failed,
+                "invalid_profile_home",
+                "An absolute installed profile is required.",
+                "Pass --home /absolute/path/to/.agentfw.",
+            ));
             report.setup = Outcome::Failed;
             report.checks = checks;
             return report;
@@ -256,11 +288,19 @@ async fn diagnose(args: &DoctorArgs) -> Report {
     };
     let config_bytes = read_private(&home.join("config.yaml"), 1024 * 1024);
     let config = match config_bytes {
-        Ok(bytes) => match std::str::from_utf8(&bytes).ok().and_then(|s| Config::from_yaml(s).ok()) {
+        Ok(bytes) => match std::str::from_utf8(&bytes)
+            .ok()
+            .and_then(|s| Config::from_yaml(s).ok())
+        {
             Some(cfg) => {
-                checks.push(check("configuration", "private_config_yaml", Outcome::Ready,
-                    "config_valid", "Local Agent configuration passed the production validator.",
-                    "Compare its digest and registry pin with the authenticated daemon."));
+                checks.push(check(
+                    "configuration",
+                    "private_config_yaml",
+                    Outcome::Ready,
+                    "config_valid",
+                    "Local Agent configuration passed the production validator.",
+                    "Compare its digest and registry pin with the authenticated daemon.",
+                ));
                 Some(cfg)
             }
             None => {
@@ -271,9 +311,14 @@ async fn diagnose(args: &DoctorArgs) -> Report {
             }
         },
         Err(_) => {
-            checks.push(check("configuration", "private_config_yaml", Outcome::Failed,
-                "config_missing_or_unsafe", "Config is absent, public, linked or unreadable.",
-                "Select a private installed .agentfw directory and owner-only config.yaml."));
+            checks.push(check(
+                "configuration",
+                "private_config_yaml",
+                Outcome::Failed,
+                "config_missing_or_unsafe",
+                "Config is absent, public, linked or unreadable.",
+                "Select a private installed .agentfw directory and owner-only config.yaml.",
+            ));
             None
         }
     };
@@ -295,36 +340,79 @@ async fn diagnose(args: &DoctorArgs) -> Report {
     let binary = if let Some(agent) = &args.agent {
         match hash_selected_file(agent, 512 * 1024 * 1024) {
             Ok(sha) => {
-                let matches = intent.as_ref().and_then(|i| i.active.as_ref())
+                let matches = intent
+                    .as_ref()
+                    .and_then(|i| i.active.as_ref())
                     .is_none_or(|a| a.digest == sha);
-                checks.push(check("binary", "selected_binary_bytes", if matches { Outcome::Ready } else { Outcome::Failed },
-                    if matches { "binary_verified" } else { "binary_pin_mismatch" },
-                    if matches { "Selected executable was hashed." } else { "Executable differs from managed selection." },
-                    "Compare the selected binary SHA-256 against agentfw lifecycle status."));
+                checks.push(check(
+                    "binary",
+                    "selected_binary_bytes",
+                    if matches {
+                        Outcome::Ready
+                    } else {
+                        Outcome::Failed
+                    },
+                    if matches {
+                        "binary_verified"
+                    } else {
+                        "binary_pin_mismatch"
+                    },
+                    if matches {
+                        "Selected executable was hashed."
+                    } else {
+                        "Executable differs from managed selection."
+                    },
+                    "Compare the selected binary SHA-256 against agentfw lifecycle status.",
+                ));
                 Some(sha)
             }
             Err(_) => {
-                checks.push(check("binary", "selected_binary_bytes", Outcome::Failed,
-                    "binary_missing_or_unverifiable", "Selected executable could not be securely hashed.",
-                    "Pass --agent /absolute/path/to/installed/agentfw, not a PATH alias."));
+                checks.push(check(
+                    "binary",
+                    "selected_binary_bytes",
+                    Outcome::Failed,
+                    "binary_missing_or_unverifiable",
+                    "Selected executable could not be securely hashed.",
+                    "Pass --agent /absolute/path/to/installed/agentfw, not a PATH alias.",
+                ));
                 None
             }
         }
     } else {
-        checks.push(check("binary", "explicit_binary_selection", Outcome::Unknown,
-            "binary_not_selected", "No Agent binary was selected for an independent hash.",
-            "Pass --agent /absolute/path/to/installed/agentfw."));
+        checks.push(check(
+            "binary",
+            "explicit_binary_selection",
+            Outcome::Unknown,
+            "binary_not_selected",
+            "No Agent binary was selected for an independent hash.",
+            "Pass --agent /absolute/path/to/installed/agentfw.",
+        ));
         None
     };
 
     if let (Some(path), Some(wanted)) = (&args.classifier_script, &args.classifier_sha256) {
         let actual = hash_selected_file(path, 16 * 1024 * 1024);
         let valid = is_digest(wanted) && actual.ok().as_deref() == Some(wanted.as_str());
-        checks.push(check("classifier", "selected_classifier_bytes",
-            if valid { Outcome::Ready } else { Outcome::Failed },
-            if valid { "classifier_pin_verified" } else { "classifier_pin_mismatch" },
-            if valid { "Selected classifier matches its declared digest." } else { "Classifier is missing or differs from the reviewed revision." },
-            "Review the classifier source independently; pass its reviewed SHA-256."));
+        checks.push(check(
+            "classifier",
+            "selected_classifier_bytes",
+            if valid {
+                Outcome::Ready
+            } else {
+                Outcome::Failed
+            },
+            if valid {
+                "classifier_pin_verified"
+            } else {
+                "classifier_pin_mismatch"
+            },
+            if valid {
+                "Selected classifier matches its declared digest."
+            } else {
+                "Classifier is missing or differs from the reviewed revision."
+            },
+            "Review the classifier source independently; pass its reviewed SHA-256.",
+        ));
     } else {
         checks.push(check("classifier", "classifier_selection", Outcome::Unknown,
             "classifier_not_selected", "No classifier revision was supplied for comparison.",
@@ -337,17 +425,38 @@ async fn diagnose(args: &DoctorArgs) -> Report {
                 "shadow_mode", "Disk configuration runs in shadow mode; it does not block calls.",
                 "Review outcomes before enabling enforcement; apply changes through the existing operator workflow."));
         } else {
-            checks.push(check("enforcement", "validated_disk_config", Outcome::Ready,
-                "enforce_requested_on_disk", "Disk configuration requests enforcement, not observed host coverage.",
-                "Compare with authenticated runtime; a live host-call witness is still required."));
+            checks.push(check(
+                "enforcement",
+                "validated_disk_config",
+                Outcome::Ready,
+                "enforce_requested_on_disk",
+                "Disk configuration requests enforcement, not observed host coverage.",
+                "Compare with authenticated runtime; a live host-call witness is still required.",
+            ));
         }
         if let Some(native) = &cfg.native {
             let registry = hash_selected_file(&native.registry_path, 8 * 1024 * 1024);
             let matches = registry.ok().as_deref() == Some(native.registry_sha256.as_str());
-            checks.push(check("registry", "selected_native_registry", if matches { Outcome::Ready } else { Outcome::Failed },
-                if matches { "registry_pin_verified" } else { "registry_pin_mismatch" },
-                if matches { "Selected native registry matches the configuration pin." } else { "Native registry bytes differ or are missing." },
-                "Review native.registry_path and its expected SHA-256 in private config.yaml."));
+            checks.push(check(
+                "registry",
+                "selected_native_registry",
+                if matches {
+                    Outcome::Ready
+                } else {
+                    Outcome::Failed
+                },
+                if matches {
+                    "registry_pin_verified"
+                } else {
+                    "registry_pin_mismatch"
+                },
+                if matches {
+                    "Selected native registry matches the configuration pin."
+                } else {
+                    "Native registry bytes differ or are missing."
+                },
+                "Review native.registry_path and its expected SHA-256 in private config.yaml.",
+            ));
         } else {
             checks.push(check("registry", "validated_disk_config", Outcome::Unknown,
                 "native_profile_not_selected", "No native registry is selected.",
@@ -355,17 +464,23 @@ async fn diagnose(args: &DoctorArgs) -> Report {
         }
 
         let token = read_private(&home.join("token"), 4096)
-            .ok().and_then(|b| String::from_utf8(b).ok())
+            .ok()
+            .and_then(|b| String::from_utf8(b).ok())
             .filter(|s| !s.trim().is_empty());
         if let Some(token) = token {
             let expected = Expectations {
                 config_sha256: Some(protection_status::config_digest(cfg)),
                 binary_sha256: binary.clone(),
-                instance: intent.as_ref().and_then(|i| i.process.as_ref()).map(|p| p.instance.clone()),
+                instance: intent
+                    .as_ref()
+                    .and_then(|i| i.process.as_ref())
+                    .map(|p| p.instance.clone()),
                 registry_sha256: cfg.native.as_ref().map(|n| n.registry_sha256.clone()),
                 ..Default::default()
             };
-            let snapshot = protection_status::query(cfg, token.trim(), &expected, Duration::from_secs(2)).await;
+            let snapshot =
+                protection_status::query(cfg, token.trim(), &expected, Duration::from_secs(2))
+                    .await;
             match snapshot {
                 Ok(value) => {
                     let is_enforcing = value.mode == Mode::Enforcing;
@@ -379,7 +494,8 @@ async fn diagnose(args: &DoctorArgs) -> Report {
                     if let Some(process) = selected {
                         let same = value.runtime.pid == process.pid
                             && value.runtime.instance == process.instance
-                            && value.runtime.binary_sha256.as_deref() == Some(process.binary_digest.as_str());
+                            && value.runtime.binary_sha256.as_deref()
+                                == Some(process.binary_digest.as_str());
                         checks.push(check("lifecycle_identity", "manifest_vs_authenticated_runtime",
                             if same { Outcome::Ready } else { Outcome::Failed },
                             if same { "runtime_matches_managed_process" } else { "runtime_not_managed_instance" },
@@ -390,18 +506,32 @@ async fn diagnose(args: &DoctorArgs) -> Report {
                 Err(code) => {
                     let probe_addr = if cfg.bind == "::1" {
                         std::net::SocketAddr::new(
-                            std::net::IpAddr::V6(std::net::Ipv6Addr::LOCALHOST), cfg.port)
+                            std::net::IpAddr::V6(std::net::Ipv6Addr::LOCALHOST),
+                            cfg.port,
+                        )
                     } else {
                         std::net::SocketAddr::from(([127, 0, 0, 1], cfg.port))
                     };
                     let occupied = std::net::TcpStream::connect_timeout(
-                        &probe_addr, Duration::from_millis(250)).is_ok();
+                        &probe_addr,
+                        Duration::from_millis(250),
+                    )
+                    .is_ok();
                     let (reason, explain) = if code == "status_identity_mismatch" {
-                        ("runtime_identity_mismatch", "Live daemon did not match selected disk intent.")
+                        (
+                            "runtime_identity_mismatch",
+                            "Live daemon did not match selected disk intent.",
+                        )
                     } else if occupied {
-                        ("listener_unverifiable", "An occupied port did not supply matching authenticated diagnostics.")
+                        (
+                            "listener_unverifiable",
+                            "An occupied port did not supply matching authenticated diagnostics.",
+                        )
                     } else {
-                        ("daemon_unavailable", "The selected daemon is unreachable or unauthenticated.")
+                        (
+                            "daemon_unavailable",
+                            "The selected daemon is unreachable or unauthenticated.",
+                        )
                     };
                     checks.push(check("authenticated_runtime", "protection_status_nonce_and_bearer",
                         Outcome::Failed, reason, explain,
@@ -416,7 +546,8 @@ async fn diagnose(args: &DoctorArgs) -> Report {
         }
     }
 
-    if let (Some(path), Some(server), Some(agent)) = (&args.host_config, &args.server, &args.agent) {
+    if let (Some(path), Some(server), Some(agent)) = (&args.host_config, &args.server, &args.agent)
+    {
         let options = crate::mcp::connection::Options {
             path: path.clone(),
             server: server.clone(),
@@ -448,32 +579,63 @@ async fn diagnose(args: &DoctorArgs) -> Report {
         Outcome::Unknown, "active_call_not_witnessed",
         "Configuration, heartbeat, counters and isolated tests are not active-host protection evidence.",
         "Exercise and audit an explicitly owned real host call separately, without doctor executing one."));
-    report.setup = setup(&checks.iter().filter(|c| c.id != "active_host_call" && c.id != "classifier" && c.id != "host_connection" && c.id != "binary").cloned().collect::<Vec<_>>());
+    report.setup = setup(
+        &checks
+            .iter()
+            .filter(|c| {
+                c.id != "active_host_call"
+                    && c.id != "classifier"
+                    && c.id != "host_connection"
+                    && c.id != "binary"
+            })
+            .cloned()
+            .collect::<Vec<_>>(),
+    );
     report.checks = checks;
     report
 }
 
 pub fn run(args: DoctorArgs) -> i32 {
-    let report = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+    let report = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
         Ok(runtime) => runtime.block_on(diagnose(&args)),
         Err(_) => Report {
-            schema: "sw-agent-doctor/1", observed_at_ms: protection_status::now_ms(),
-            setup: Outcome::Unknown, active_host_call_protection: "unknown",
+            schema: "sw-agent-doctor/1",
+            observed_at_ms: protection_status::now_ms(),
+            setup: Outcome::Unknown,
+            active_host_call_protection: "unknown",
             scope: "local_setup_and_authenticated_runtime_not_active_host_execution",
-            checks: vec![check("runtime", "local_process", Outcome::Unknown,
-                "diagnostics_unavailable", "Could not create bounded diagnostic runtime.",
-                "Try a known good installed Agent executable.")],
+            checks: vec![check(
+                "runtime",
+                "local_process",
+                Outcome::Unknown,
+                "diagnostics_unavailable",
+                "Could not create bounded diagnostic runtime.",
+                "Try a known good installed Agent executable.",
+            )],
         },
     };
-    let bundle_error = args.support_bundle.as_ref().and_then(|path| {
-        crate::support_bundle::export(&report, path).err()
-    });
+    let bundle_error = args
+        .support_bundle
+        .as_ref()
+        .and_then(|path| crate::support_bundle::export(&report, path).err());
     if args.json {
-        println!("{}", serde_json::to_string_pretty(&report).unwrap_or_else(|_| "{}".into()));
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&report).unwrap_or_else(|_| "{}".into())
+        );
     } else {
-        println!("Agent doctor (sw-agent-doctor/1): setup {:?}; active-host protection UNKNOWN", report.setup);
+        println!(
+            "Agent doctor (sw-agent-doctor/1): setup {:?}; active-host protection UNKNOWN",
+            report.setup
+        );
         for c in &report.checks {
-            println!("[{:?}] {} ({}): {}\n  Next: {}", c.outcome, c.id, c.reason_code, c.explanation, c.next_step);
+            println!(
+                "[{:?}] {} ({}): {}\n  Next: {}",
+                c.outcome, c.id, c.reason_code, c.explanation, c.next_step
+            );
         }
     }
     if bundle_error.is_some() {
@@ -493,8 +655,14 @@ mod tests {
     use super::*;
     #[test]
     fn sensitive_strings_are_not_in_reports() {
-        let c = check("auth", "test", Outcome::Failed, "auth_token_missing_or_unsafe",
-                      "Local credential cannot be read", "Inspect privately");
+        let c = check(
+            "auth",
+            "test",
+            Outcome::Failed,
+            "auth_token_missing_or_unsafe",
+            "Local credential cannot be read",
+            "Inspect privately",
+        );
         let serialized = serde_json::to_string(&c).unwrap();
         assert!(!serialized.contains("supersecret"));
         assert!(!serialized.contains("/home/alice"));
