@@ -9,8 +9,8 @@
 //! not Claude Code, model-context or live-model evidence.
 
 pub mod fixture;
-#[cfg(target_os = "linux")]
-mod linux;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod unix;
 
 use std::path::PathBuf;
 
@@ -20,7 +20,13 @@ use serde_json::{json, Value};
 pub use fixture::FixtureArgs;
 
 pub const SCHEMA: &str = "sw-self-test/1";
+
+#[cfg(target_os = "linux")]
 pub const PROFILE: &str = "linux-stdio-mcp-admission-v1";
+#[cfg(target_os = "macos")]
+pub const PROFILE: &str = "macos-stdio-mcp-admission-v1";
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+pub const PROFILE: &str = "unsupported-stdio-mcp-admission-v1";
 
 /// Stable exit codes. Clap reports usage errors with 2.
 pub const EXIT_PASSED: i32 = 0;
@@ -32,12 +38,22 @@ pub const CONTROLLED_PATH: &str = "scripted stdio MCP client -> agentfw mcp --na
 selected rule-baseline classifier -> owned agentfw serve daemon (/native/v1, shipped default policy, \
 bundled registry) -> bundled fixture MCP server -> owned 127.0.0.1 receiver";
 
+#[cfg(target_os = "linux")]
+const PLATFORM_LIMITATION: &str =
+    "Linux execution profile only; the collector is not an OS sandbox";
+#[cfg(target_os = "macos")]
+const PLATFORM_LIMITATION: &str =
+    "macOS execution profile only; the collector is not an OS sandbox";
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+const PLATFORM_LIMITATION: &str =
+    "Unsupported execution profile; the collector is not an OS sandbox";
+
 pub const LIMITATIONS: [&str; 6] = [
     "Scripted MCP client frames: not Claude Code, not model context and not live-model effectiveness",
     "One bundled fixture server, two fixture tools and synthetic data; other servers need their own review",
     "Result release is to the MCP client; the client's later use of a released result is outside this test",
     "Unattended Ask is enforced as a refusal; there is no approval channel",
-    "Linux execution profile only; the collector is not an OS sandbox",
+    PLATFORM_LIMITATION,
     "Configured and healthy daemon state is reported separately and is never counted as witnessed protection",
 ];
 
@@ -216,17 +232,17 @@ pub fn render_human(report: &Value) -> String {
 
 /// Entry point. Returns the stable process exit code.
 pub fn run(args: Args) -> i32 {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
-        linux::run(args)
+        unix::run(args)
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
         unsupported(args)
     }
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 fn unsupported(args: Args) -> i32 {
     let mut report = base_report(false);
     let scenarios = pending_scenarios(
@@ -239,7 +255,8 @@ fn unsupported(args: Args) -> i32 {
     report.insert(
         "explanation".into(),
         json!(
-        "Linux is the only supported self-test profile; nothing ran and no protection is claimed."),
+            "Linux and macOS are the supported self-test profiles; nothing ran and no protection is claimed."
+        ),
     );
     report.insert("scenarios".into(), json!(scenarios));
     let report = Value::Object(report);

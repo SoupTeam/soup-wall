@@ -21,6 +21,8 @@ pub const WINDOWS_CREATE_CONTRACT: &str = "sw-native/resources/5";
 pub const CREATE_FILE_EXECUTOR_PROFILE: &str = "sw-native/create-file/linux-root-child/1";
 pub const WINDOWS_READ_EXECUTOR_PROFILE: &str = "sw-native/read-document/windows-handles/1";
 pub const WINDOWS_CREATE_EXECUTOR_PROFILE: &str = "sw-native/create-file/windows-handles/1";
+pub const READ_DOCUMENT_EXECUTOR_PROFILE: &str = "sw-native/read-document/direct/1";
+pub const BINDING_CONTRACT: &str = "sw-native/binding/1";
 pub const WINDOWS_READ_MAX_CONTENT: usize = super::MAX_CONTENT;
 // Keep the complete original content within the selected rule classifier's
 // reviewed leaf bound; a truncated/unknown prediction must remain blocked.
@@ -186,12 +188,14 @@ impl NetworkBinding {
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionOperation {
     CreateFile,
+    ReadDocument,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionAction {
     Write,
+    Read,
 }
 
 /// Present only in the explicit v2 contract; absence preserves v1 read semantics.
@@ -202,6 +206,64 @@ pub struct ExecutionPolicy {
     pub action: ExecutionAction,
     pub max_content_bytes: usize,
     pub executor_profile: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path_selector: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_selector: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_contract: Option<String>,
+}
+
+fn default_binding_contract() -> String {
+    BINDING_CONTRACT.to_string()
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ToolBinding {
+    #[serde(default = "default_binding_contract")]
+    pub contract_version: String,
+    pub operation: ExecutionOperation,
+    #[serde(default)]
+    pub action: Option<ExecutionAction>,
+    pub path_selector: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_selector: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_contract: Option<String>,
+    #[serde(default)]
+    pub executor_profile: Option<String>,
+    #[serde(default)]
+    pub max_content_bytes: Option<usize>,
+}
+
+impl ToolBinding {
+    pub fn to_execution_policy(&self) -> ExecutionPolicy {
+        let action = self.action.unwrap_or(match self.operation {
+            ExecutionOperation::CreateFile => ExecutionAction::Write,
+            ExecutionOperation::ReadDocument => ExecutionAction::Read,
+        });
+        let executor_profile =
+            self.executor_profile
+                .clone()
+                .unwrap_or_else(|| match self.operation {
+                    ExecutionOperation::CreateFile => CREATE_FILE_EXECUTOR_PROFILE.to_string(),
+                    ExecutionOperation::ReadDocument => READ_DOCUMENT_EXECUTOR_PROFILE.to_string(),
+                });
+        let max_content_bytes = self.max_content_bytes.unwrap_or(match self.operation {
+            ExecutionOperation::CreateFile => CREATE_FILE_MAX_CONTENT,
+            ExecutionOperation::ReadDocument => super::MAX_CONTENT,
+        });
+        ExecutionPolicy {
+            operation: self.operation,
+            action,
+            max_content_bytes,
+            executor_profile,
+            path_selector: Some(self.path_selector.clone()),
+            content_selector: self.content_selector.clone(),
+            response_contract: self.response_contract.clone(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -219,17 +281,28 @@ pub struct ExecutionBinding {
 
 impl ExecutionPolicy {
     fn supported(&self) -> bool {
-        self.max_content_bytes == CREATE_FILE_MAX_CONTENT
+        (self.operation == ExecutionOperation::CreateFile
+            && self.action == ExecutionAction::Write
+            && self.max_content_bytes == CREATE_FILE_MAX_CONTENT
             && matches!(
                 self.executor_profile.as_str(),
                 CREATE_FILE_EXECUTOR_PROFILE | WINDOWS_CREATE_EXECUTOR_PROFILE
-            )
+            ))
+            || (self.operation == ExecutionOperation::ReadDocument
+                && self.action == ExecutionAction::Read
+                && self.max_content_bytes == super::MAX_CONTENT
+                && matches!(
+                    self.executor_profile.as_str(),
+                    READ_DOCUMENT_EXECUTOR_PROFILE | WINDOWS_READ_EXECUTOR_PROFILE
+                ))
     }
 }
 
 impl ExecutionBinding {
     fn valid(&self) -> bool {
-        self.max_content_bytes == CREATE_FILE_MAX_CONTENT
+        self.operation == ExecutionOperation::CreateFile
+            && self.action == ExecutionAction::Write
+            && self.max_content_bytes == CREATE_FILE_MAX_CONTENT
             && matches!(
                 self.executor_profile.as_str(),
                 CREATE_FILE_EXECUTOR_PROFILE | WINDOWS_CREATE_EXECUTOR_PROFILE
@@ -263,6 +336,8 @@ pub struct Policy {
     pub post: Option<crate::mcp::https_post::HttpsPostAuthority>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub windows_read: Option<WindowsReadPolicy>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub binding: Option<ToolBinding>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -366,20 +441,24 @@ impl Admission {
 }
 
 impl Policy {
+    pub fn effective_execution(&self) -> Option<ExecutionPolicy> {
+        match (&self.binding, &self.execution) {
+            (Some(binding), None) => Some(binding.to_execution_policy()),
+            (None, Some(execution)) => Some(execution.clone()),
+            _ => None,
+        }
+    }
+
     pub fn contract(&self) -> &'static str {
         if self.post.is_some() {
             POST_CONTRACT
-        } else if self.windows_read.is_some() {
+        } else if self.is_windows_read() {
             WINDOWS_READ_CONTRACT
         } else if self.network.is_some() {
             NETWORK_CONTRACT
-        } else if self
-            .execution
-            .as_ref()
-            .is_some_and(|execution| execution.executor_profile == WINDOWS_CREATE_EXECUTOR_PROFILE)
-        {
+        } else if self.is_windows_create() {
             WINDOWS_CREATE_CONTRACT
-        } else if self.execution.is_some() {
+        } else if self.is_create_file() {
             CREATE_CONTRACT
         } else {
             CONTRACT
@@ -387,7 +466,9 @@ impl Policy {
     }
 
     pub fn is_create_file(&self) -> bool {
-        self.execution.is_some()
+        self.effective_execution()
+            .as_ref()
+            .is_some_and(|e| e.operation == ExecutionOperation::CreateFile)
     }
 
     pub fn is_https_post(&self) -> bool {
@@ -400,16 +481,87 @@ impl Policy {
 
     pub fn is_windows_read(&self) -> bool {
         self.windows_read.is_some()
+            || self
+                .effective_execution()
+                .as_ref()
+                .is_some_and(|e| e.executor_profile == WINDOWS_READ_EXECUTOR_PROFILE)
     }
 
     pub fn is_windows_create(&self) -> bool {
-        self.execution
+        self.effective_execution()
             .as_ref()
             .is_some_and(|execution| execution.executor_profile == WINDOWS_CREATE_EXECUTOR_PROFILE)
     }
 
     pub fn is_windows_handles(&self) -> bool {
         self.is_windows_read() || self.is_windows_create()
+    }
+
+    pub fn path_selector(&self) -> &str {
+        if let Some(b) = &self.binding {
+            return &b.path_selector;
+        }
+        if let Some(e) = &self.execution {
+            if let Some(p) = &e.path_selector {
+                return p.as_str();
+            }
+        }
+        if let Some(first) = self.profile.selectors.first() {
+            return &first.pointer;
+        }
+        "/path"
+    }
+
+    pub fn content_selector(&self) -> &str {
+        if let Some(b) = &self.binding {
+            if let Some(c) = &b.content_selector {
+                return c.as_str();
+            }
+        }
+        if let Some(e) = &self.execution {
+            if let Some(c) = &e.content_selector {
+                return c.as_str();
+            }
+        }
+        "/content"
+    }
+
+    pub fn response_contract(&self) -> Option<&str> {
+        if let Some(b) = &self.binding {
+            return b.response_contract.as_deref();
+        }
+        if let Some(e) = &self.execution {
+            return e.response_contract.as_deref();
+        }
+        None
+    }
+
+    pub fn is_read_bound_or_named(&self, name: &str) -> bool {
+        if name == "read_document" {
+            return true;
+        }
+        if let Some(b) = &self.binding {
+            return b.operation == ExecutionOperation::ReadDocument
+                && self.profile.tool_name == name;
+        }
+        if let Some(e) = &self.execution {
+            return e.operation == ExecutionOperation::ReadDocument
+                && self.profile.tool_name == name;
+        }
+        false
+    }
+
+    pub fn is_create_bound_or_named(&self, name: &str) -> bool {
+        if name == "create_file" {
+            return true;
+        }
+        if let Some(b) = &self.binding {
+            return b.operation == ExecutionOperation::CreateFile && self.profile.tool_name == name;
+        }
+        if let Some(e) = &self.execution {
+            return e.operation == ExecutionOperation::CreateFile && self.profile.tool_name == name;
+        }
+        false
     }
 
     pub fn validate(&self, tool: &super::Tool) -> anyhow::Result<()> {
@@ -431,8 +583,9 @@ impl Policy {
             [
                 self.execution.is_some(),
                 self.post.is_some(),
+                self.binding.is_some(),
                 self.network.is_some(),
-                self.windows_read.is_some()
+                self.windows_read.is_some(),
             ]
             .into_iter()
             .filter(|present| *present)
@@ -440,6 +593,24 @@ impl Policy {
                 <= 1,
             "conflicting operator execution policies"
         );
+        if let Some(binding) = &self.binding {
+            anyhow::ensure!(
+                binding.contract_version == BINDING_CONTRACT,
+                "unsupported tool binding contract version"
+            );
+            if let Some(action) = binding.action {
+                match binding.operation {
+                    ExecutionOperation::CreateFile => anyhow::ensure!(
+                        action == ExecutionAction::Write,
+                        "create_file binding requires write action"
+                    ),
+                    ExecutionOperation::ReadDocument => anyhow::ensure!(
+                        action == ExecutionAction::Read,
+                        "read_document binding requires read action"
+                    ),
+                }
+            }
+        }
         if let Some(read) = &self.windows_read {
             anyhow::ensure!(
                 cfg!(windows),
@@ -448,7 +619,7 @@ impl Policy {
             let selector = &self.profile.selectors[0];
             anyhow::ensure!(
                 read.supported()
-                    && tool.name == "read_document"
+                    && tool.name == self.profile.tool_name
                     && tool.action_class == soup_wall_agent::ActionClass::ReadOnly
                     && matches!(tool.result_provenance, super::ResultProvenance::Untrusted)
                     && tool.egress.is_empty()
@@ -473,21 +644,46 @@ impl Policy {
                 "Windows create authority is unsupported on this platform"
             );
             let execution = self
-                .execution
-                .as_ref()
+                .effective_execution()
                 .expect("Windows create policy selected");
+            let path_sel = self.path_selector();
+            let content_sel = self.content_selector();
+            anyhow::ensure!(
+                crate::mcp::resources::valid_pointer(path_sel)
+                    && crate::mcp::resources::valid_pointer(content_sel),
+                "invalid selector pointer"
+            );
+            anyhow::ensure!(
+                path_sel != content_sel
+                    && !path_sel.starts_with(&format!("{content_sel}/"))
+                    && !content_sel.starts_with(&format!("{path_sel}/")),
+                "ambiguous or overlapping selectors"
+            );
+            if let Some(resp) = self.response_contract() {
+                anyhow::ensure!(
+                    resp == "sw-native/response/text/1" || resp == "mcp/text_result/1",
+                    "unsupported response contract"
+                );
+            }
             let selector = &self.profile.selectors[0];
+            let is_legacy_win_create =
+                tool.name == "create_file" && path_sel == "/path" && content_sel == "/content";
+            if is_legacy_win_create {
+                anyhow::ensure!(
+                    tool.schema_sha256 == super::canonical_digest(&create_file_schema()),
+                    "invalid operator Windows create policy"
+                );
+            }
             anyhow::ensure!(
                 execution.supported()
-                    && tool.name == "create_file"
+                    && tool.name == self.profile.tool_name
                     && tool.action_class == soup_wall_agent::ActionClass::SideEffecting
                     && matches!(tool.result_provenance, super::ResultProvenance::Untrusted)
                     && tool.egress.is_empty()
-                    && tool.schema_sha256 == super::canonical_digest(&create_file_schema())
                     && self.executor_sha256 == windows_create_executor_sha256()
                     && self.workspace == self.cwd
                     && self.profile.selectors.len() == 1
-                    && selector.pointer == "/path"
+                    && selector.pointer == path_sel
                     && selector.kind == crate::mcp::resources::ResourceKind::Path
                     && selector.aliases.is_empty()
                     && !selector.optional
@@ -614,21 +810,50 @@ impl Policy {
                 "HTTPS POST authority must select one exact URL"
             );
         }
-        if let Some(execution) = &self.execution {
+        if self.is_create_file() && !self.is_windows_create() {
+            let execution = self
+                .effective_execution()
+                .expect("create file policy selected");
+            let path_sel = self.path_selector();
+            let content_sel = self.content_selector();
+            anyhow::ensure!(
+                crate::mcp::resources::valid_pointer(path_sel)
+                    && crate::mcp::resources::valid_pointer(content_sel),
+                "invalid selector pointer"
+            );
+            anyhow::ensure!(
+                path_sel != content_sel
+                    && !path_sel.starts_with(&format!("{content_sel}/"))
+                    && !content_sel.starts_with(&format!("{path_sel}/")),
+                "ambiguous or overlapping selectors"
+            );
+            if let Some(resp) = self.response_contract() {
+                anyhow::ensure!(
+                    resp == "sw-native/response/text/1" || resp == "mcp/text_result/1",
+                    "unsupported response contract"
+                );
+            }
             let selector = self
                 .profile
                 .selectors
                 .first()
                 .expect("nonempty validated above");
+            let is_legacy_create =
+                tool.name == "create_file" && path_sel == "/path" && content_sel == "/content";
+            if is_legacy_create {
+                anyhow::ensure!(
+                    tool.schema_sha256 == super::canonical_digest(&create_file_schema()),
+                    "invalid operator create-file policy"
+                );
+            }
             anyhow::ensure!(
                 execution.supported()
-                    && tool.name == "create_file"
+                    && tool.name == self.profile.tool_name
                     && tool.action_class == soup_wall_agent::ActionClass::SideEffecting
                     && tool.egress.is_empty()
-                    && tool.schema_sha256 == super::canonical_digest(&create_file_schema())
                     && self.executor_sha256 == create_file_executor_sha256()
                     && self.profile.selectors.len() == 1
-                    && selector.pointer == "/path"
+                    && selector.pointer == path_sel
                     && selector.kind == crate::mcp::resources::ResourceKind::Path
                     && selector.aliases.is_empty()
                     && !selector.optional
@@ -655,6 +880,52 @@ impl Policy {
                 "create-file authority must select one direct workspace child"
             );
         }
+        if self
+            .effective_execution()
+            .as_ref()
+            .is_some_and(|e| e.operation == ExecutionOperation::ReadDocument)
+        {
+            let execution = self.effective_execution().unwrap();
+            let path_sel = self.path_selector();
+            anyhow::ensure!(
+                crate::mcp::resources::valid_pointer(path_sel),
+                "invalid selector pointer"
+            );
+            if let Some(resp) = self.response_contract() {
+                anyhow::ensure!(
+                    resp == "sw-native/response/text/1" || resp == "mcp/text_result/1",
+                    "unsupported response contract"
+                );
+            }
+            let selector = self
+                .profile
+                .selectors
+                .first()
+                .expect("nonempty validated above");
+            anyhow::ensure!(
+                execution.supported()
+                    && tool.name == self.profile.tool_name
+                    && tool.action_class == soup_wall_agent::ActionClass::ReadOnly
+                    && tool.egress.is_empty()
+                    && self.profile.selectors.len() == 1
+                    && selector.pointer == path_sel
+                    && selector.kind == crate::mcp::resources::ResourceKind::Path
+                    && selector.aliases.is_empty()
+                    && !selector.optional
+                    && selector.default.is_none()
+                    && !selector.allow_missing_leaf
+                    && !self.allowed_resources.is_empty(),
+                "invalid operator read-document policy"
+            );
+            if execution.executor_profile == WINDOWS_READ_EXECUTOR_PROFILE {
+                anyhow::ensure!(
+                    self.executor_sha256 == windows_read_executor_sha256()
+                        && self.workspace == self.cwd
+                        && self.allowed_resources.len() == 1,
+                    "invalid operator Windows read policy"
+                );
+            }
+        }
         Ok(())
     }
 }
@@ -663,29 +934,40 @@ fn windows_read_arguments<'a>(
     policy: &'a Policy,
     args: &'a Value,
 ) -> Result<(&'a str, &'a str), &'static str> {
-    let read = policy
-        .windows_read
-        .as_ref()
-        .ok_or("native_windows_read_authority_missing")?;
-    if !read.supported()
-        || policy.execution.is_some()
+    if !policy.is_windows_read() {
+        return Err("native_windows_read_authority_missing");
+    }
+    let supported = if let Some(read) = &policy.windows_read {
+        read.supported()
+    } else if let Some(exec) = policy.effective_execution() {
+        exec.supported()
+    } else {
+        false
+    };
+    if !supported
         || policy.network.is_some()
         || policy.executor_sha256 != windows_read_executor_sha256()
         || policy.workspace != policy.cwd
     {
         return Err("native_windows_read_executor_revision_mismatch");
     }
-    let object = args
-        .as_object()
+    let path_ptr = policy.path_selector();
+    let is_legacy = policy.profile.tool_name == "read_document" && path_ptr == "/path";
+    if is_legacy {
+        let object = args
+            .as_object()
+            .ok_or("native_windows_read_arguments_invalid")?;
+        if object.len() != 1 {
+            return Err("native_windows_read_arguments_invalid");
+        }
+    }
+    let path_val = crate::mcp::resources::selected(args, path_ptr)
+        .map_err(|_| "native_windows_read_arguments_invalid")?
         .ok_or("native_windows_read_arguments_invalid")?;
-    let original = args["path"]
+    let original = path_val
         .as_str()
         .ok_or("native_windows_read_arguments_invalid")?;
-    if object.len() != 1
-        || original.is_empty()
-        || original.len() > 4096
-        || original.chars().any(char::is_control)
-    {
+    if original.is_empty() || original.len() > 4096 || original.chars().any(char::is_control) {
         return Err("native_windows_read_arguments_invalid");
     }
     let [Resource::Path { canonical }] = policy.allowed_resources.as_slice() else {
@@ -756,7 +1038,7 @@ pub(crate) fn windows_read_evidence(
 ) -> Result<Vec<ResourceEvidence>, &'static str> {
     windows_read_binding_with_identity(policy, args, identity)?;
     Ok(vec![ResourceEvidence {
-        pointer: "/path".into(),
+        pointer: policy.path_selector().into(),
         source: crate::mcp::resources::EvidenceSource::Argument,
         resource: policy.allowed_resources[0].clone(),
     }])
@@ -769,8 +1051,7 @@ fn windows_create_arguments<'a>(
     args: &'a Value,
 ) -> Result<(&'a str, &'a str, &'a str), &'static str> {
     let execution = policy
-        .execution
-        .as_ref()
+        .effective_execution()
         .ok_or("native_windows_create_authority_missing")?;
     if !policy.is_windows_create()
         || !execution.supported()
@@ -781,17 +1062,32 @@ fn windows_create_arguments<'a>(
     {
         return Err("native_windows_create_executor_revision_mismatch");
     }
-    let object = args
-        .as_object()
+    let path_ptr = policy.path_selector();
+    let content_ptr = policy.content_selector();
+    let is_legacy = policy.profile.tool_name == "create_file"
+        && path_ptr == "/path"
+        && content_ptr == "/content";
+    if is_legacy {
+        let object = args
+            .as_object()
+            .ok_or("native_windows_create_arguments_invalid")?;
+        if object.len() != 2 {
+            return Err("native_windows_create_arguments_invalid");
+        }
+    }
+    let path_val = crate::mcp::resources::selected(args, path_ptr)
+        .map_err(|_| "native_windows_create_arguments_invalid")?
         .ok_or("native_windows_create_arguments_invalid")?;
-    let original = args["path"]
+    let original = path_val
         .as_str()
         .ok_or("native_windows_create_arguments_invalid")?;
-    let content = args["content"]
+    let content_val = crate::mcp::resources::selected(args, content_ptr)
+        .map_err(|_| "native_windows_create_arguments_invalid")?
+        .ok_or("native_windows_create_arguments_invalid")?;
+    let content = content_val
         .as_str()
         .ok_or("native_windows_create_arguments_invalid")?;
-    if object.len() != 2
-        || original.is_empty()
+    if original.is_empty()
         || original.len() > 4096
         || original.chars().any(char::is_control)
         || content.len() > CREATE_FILE_MAX_CONTENT
@@ -862,7 +1158,7 @@ pub(crate) fn windows_create_evidence(
 ) -> Result<Vec<ResourceEvidence>, &'static str> {
     windows_create_binding_with_identity(policy, args, identity)?;
     Ok(vec![ResourceEvidence {
-        pointer: "/path".into(),
+        pointer: policy.path_selector().into(),
         source: crate::mcp::resources::EvidenceSource::Argument,
         resource: policy.allowed_resources[0].clone(),
     }])
@@ -912,6 +1208,7 @@ pub fn https_post_binding(policy: &Policy, args: &Value) -> Result<PostBinding, 
     if policy.execution.is_some()
         || policy.windows_read.is_some()
         || policy.network.is_some()
+        || policy.binding.is_some()
         || policy.executor_sha256 != crate::mcp::https_post::executor_profile_sha256()
     {
         return Err("native_post_executor_revision_mismatch");
@@ -990,20 +1287,30 @@ pub fn create_file_binding(
         return windows_create_binding(policy, args);
     }
     let execution = policy
-        .execution
-        .as_ref()
+        .effective_execution()
         .ok_or("native_create_authority_missing")?;
     if !execution.supported() || policy.executor_sha256 != create_file_executor_sha256() {
         return Err("native_create_executor_revision_mismatch");
     }
-    let object = args.as_object().ok_or("native_create_arguments_invalid")?;
-    if object.len() != 2 || !object.contains_key("path") || !object.contains_key("content") {
-        return Err("native_create_arguments_invalid");
+    let path_ptr = policy.path_selector();
+    let content_ptr = policy.content_selector();
+    let is_legacy = policy.profile.tool_name == "create_file"
+        && path_ptr == "/path"
+        && content_ptr == "/content";
+    if is_legacy {
+        let object = args.as_object().ok_or("native_create_arguments_invalid")?;
+        if object.len() != 2 || !object.contains_key("path") || !object.contains_key("content") {
+            return Err("native_create_arguments_invalid");
+        }
     }
-    let path = args["path"]
-        .as_str()
+    let path_val = crate::mcp::resources::selected(args, path_ptr)
+        .map_err(|_| "native_create_arguments_invalid")?
         .ok_or("native_create_arguments_invalid")?;
-    let content = args["content"]
+    let path = path_val.as_str().ok_or("native_create_arguments_invalid")?;
+    let content_val = crate::mcp::resources::selected(args, content_ptr)
+        .map_err(|_| "native_create_arguments_invalid")?
+        .ok_or("native_create_arguments_invalid")?;
+    let content = content_val
         .as_str()
         .ok_or("native_create_arguments_invalid")?;
     if content.len() > execution.max_content_bytes || path.is_empty() || path.len() > 4096 {

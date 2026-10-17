@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Linux execution profile for `agentfw self-test`.
+//! Unix (Linux and macOS) execution profile for `agentfw self-test`.
 //!
 //! Every process, socket, file and directory used here is created by this run
 //! and owned by it. Children run in their own process groups with a cleared
@@ -83,19 +83,32 @@ fn exited_unreaped(pid: i32) -> bool {
     // SAFETY: waitid with WNOWAIT only inspects our own child; zeroed siginfo is valid.
     unsafe {
         let mut info: libc::siginfo_t = std::mem::zeroed();
-        let rc = libc::waitid(
-            libc::P_PID,
-            pid as libc::id_t,
-            &mut info,
-            libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
-        );
-        rc == 0 && info.si_pid() == pid
+        let mut rc;
+        loop {
+            rc = libc::waitid(
+                libc::P_PID,
+                pid as libc::id_t,
+                &mut info,
+                libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+            );
+            if rc != -1 || std::io::Error::last_os_error().raw_os_error() != Some(libc::EINTR) {
+                break;
+            }
+        }
+        #[cfg(target_os = "linux")]
+        let info_pid = info.si_pid();
+        #[cfg(target_os = "macos")]
+        let info_pid = info.si_pid;
+        rc == 0 && info_pid == pid
     }
 }
 
 fn group_empty(pgid: i32) -> bool {
     // SAFETY: signal 0 performs only an existence/permission check.
-    unsafe { libc::kill(-pgid, 0) == -1 && *libc::__errno_location() == libc::ESRCH }
+    unsafe {
+        libc::kill(-pgid, 0) == -1
+            && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH)
+    }
 }
 
 impl Owned {
@@ -251,12 +264,13 @@ impl Workspace {
             write_new(&ws.policy, fixture::SHIPPED_POLICY.as_bytes())?;
             Ok(())
         };
-        setup().map_err(|_| {
-            abort(
+        if let Err(err) = setup() {
+            let _ = std::fs::remove_dir_all(&ws.root);
+            return Err(abort(
                 Status::Unavailable,
-                "could not write the owned fixture files",
-            )
-        })?;
+                format!("could not write the owned fixture files: {err}"),
+            ));
+        }
         Ok(ws)
     }
 
@@ -372,10 +386,13 @@ impl LoopbackReceiver {
         let thread = std::thread::spawn(move || {
             while !s.load(Ordering::SeqCst) {
                 match listener.accept() {
-                    Ok((stream, _)) => {
+                    Ok((mut stream, _)) => {
                         if c.fetch_add(1, Ordering::SeqCst) < MAX_RECEIVER_CONNECTIONS {
-                            if let Some(body) = receive(stream) {
+                            if let Some(body) = receive(&mut stream) {
                                 b.lock().expect("receiver lock").push(body);
+                                // A successful acknowledgement must imply the delivery
+                                // witness is already visible to the client-side check.
+                                let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\naccepted");
                             }
                         }
                     }
@@ -413,7 +430,7 @@ impl LoopbackReceiver {
     }
 }
 
-fn receive(mut stream: TcpStream) -> Option<Vec<u8>> {
+fn receive(stream: &mut TcpStream) -> Option<Vec<u8>> {
     stream.set_nonblocking(false).ok()?;
     stream.set_read_timeout(Some(Duration::from_secs(2))).ok()?;
     stream
@@ -447,8 +464,6 @@ fn receive(mut stream: TcpStream) -> Option<Vec<u8>> {
     }
     let mut body = vec![0u8; length];
     reader.read_exact(&mut body).ok()?;
-    let _ = stream
-        .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\naccepted");
     Some(body)
 }
 
@@ -1408,8 +1423,12 @@ pub fn run(args: Args) -> i32 {
             }
         }
     }
-    let (status, code) = overall(true, &scenarios, cleanup_ok);
-    if explanation.is_empty() {
+    let (mut status, mut code) = overall(true, &scenarios, cleanup_ok);
+    if interrupted() && status == super::Status::Passed {
+        status = super::Status::Incomplete;
+        code = super::EXIT_INCOMPLETE;
+        explanation = "Interrupted by a signal before completion could be established.".into();
+    } else if explanation.is_empty() {
         explanation = match status {
             super::Status::Passed => "Every scenario was witnessed: useful reads completed, the protected send was refused before the MCP child and receiver, and daemon loss failed closed.".into(),
             super::Status::Failed => "At least one protection or useful-work expectation was contradicted by a witness; see scenarios.".into(),
@@ -1417,7 +1436,7 @@ pub fn run(args: Args) -> i32 {
             _ => "Not every scenario was witnessed; protection is not established by this run.".into(),
         };
     }
-    if interrupted() && status != super::Status::Failed {
+    if interrupted() && status != super::Status::Failed && !explanation.starts_with("Interrupted") {
         explanation = format!("Interrupted by a signal. {explanation}");
     }
     let summary: BTreeMap<&str, usize> = [
@@ -1767,9 +1786,20 @@ mod tests {
     #[test]
     fn owned_workspace_is_created_private_and_removed() {
         let parent = tempfile::tempdir().unwrap();
-        let ws = Workspace::create(parent.path()).unwrap();
+        let space_parent = parent.path().join("parent with space");
+        std::fs::create_dir(&space_parent).unwrap();
+        let ws = Workspace::create(&space_parent).unwrap();
         let mode = std::fs::metadata(&ws.root).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o700);
+        for sub in [
+            &ws.home,
+            &ws.notes,
+            &ws.root.join("tmp"),
+            &ws.root.join("xdg"),
+        ] {
+            let m = std::fs::metadata(sub).unwrap().permissions().mode() & 0o777;
+            assert_eq!(m, 0o700);
+        }
         assert_eq!(
             std::fs::read(ws.notes.join("project-notes.txt")).unwrap(),
             fixture::NOTE_PROJECT.as_bytes()
@@ -1780,7 +1810,7 @@ mod tests {
             .all(|(k, _)| !k.starts_with("AGENTFW_")));
         ws.remove().unwrap();
         assert!(!ws.root.exists());
-        assert!(std::fs::read_dir(parent.path()).unwrap().next().is_none());
+        assert!(std::fs::read_dir(&space_parent).unwrap().next().is_none());
     }
 
     #[test]
@@ -1790,6 +1820,47 @@ mod tests {
         assert_eq!(receiver.counts(), (1, 1));
         assert!(receiver.received(fixture::RECEIVER_CONTROL_BODY.as_bytes()));
         assert!(receiver.close());
+    }
+
+    #[test]
+    fn receiver_ack_waits_for_the_delivery_witness() {
+        let mut receiver = LoopbackReceiver::start().unwrap();
+        let address = receiver
+            .url
+            .strip_prefix("http://")
+            .unwrap()
+            .split('/')
+            .next()
+            .unwrap();
+        let mut stream = TcpStream::connect(address).unwrap();
+        let guard = receiver.bodies.lock().unwrap();
+        let body = fixture::RECEIVER_CONTROL_BODY;
+        write!(stream, "POST /capture HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_millis(200)))
+            .unwrap();
+        let mut byte = [0u8; 1];
+        let early = stream.read(&mut byte);
+        drop(guard);
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let mut response = Vec::new();
+        if let Ok(n) = &early {
+            response.extend_from_slice(&byte[..*n]);
+        }
+        stream.take(4096).read_to_end(&mut response).unwrap();
+        let observed = receiver.counts();
+        let recorded = receiver.received(body.as_bytes());
+        assert!(receiver.close());
+        assert!(
+            matches!(early, Err(ref error) if matches!(error.kind(),
+            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut)),
+            "receiver acknowledged delivery before recording its witness"
+        );
+        assert!(response.starts_with(b"HTTP/1.1 200 OK\r\n"));
+        assert_eq!(observed, (1, 1));
+        assert!(recorded);
     }
 
     #[test]

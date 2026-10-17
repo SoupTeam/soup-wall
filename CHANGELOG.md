@@ -4,6 +4,14 @@ Changes to the public Soup Wall source distribution are recorded here. Release a
 
 ## Unreleased
 
+- Added native macOS `agentfw self-test` profile (SOU-77): delivered the
+  `macos-stdio-mcp-admission-v1` profile with independent prevention witnesses,
+  process group management, and verified process cleanup. It exercises an
+  installed Agent on macOS end to end, verifying exact note reads, withheld
+  adversarial injections, refused secret egress, useful read resumption, and
+  fail-closed daemon loss, with process audit ensuring no orphaned child
+  processes retain the temporary workspace path.
+
 - Added `agentfw self-test` (Linux, SOU-61): one operator command that checks an
   installed Agent with an explicitly selected local classifier in an owned
   temporary workspace. It witnesses exact allowed reads, a withheld injected

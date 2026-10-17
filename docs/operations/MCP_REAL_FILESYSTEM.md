@@ -88,8 +88,10 @@ Use this command and environment in the selected Claude Code `mcpServers`
 entry. The server command, fixed entry point and `/workspace` argument must
 match the installed profile exactly. No package is downloaded during collector
 startup. Native receipts retain existing session, schema, original arguments,
-policy, exact binding and single-use grant checks. This task does not install a
-shared cross-server/hook context; that is SOU-63.
+policy, exact binding and single-use grant checks. This command uses an isolated
+collector by default. The accepted [SOU-63 host binding](MCP_STDIO_ADMISSION.md#authenticated-child-authority-and-host-session-binding-sou-63)
+adds shared cross-server/hook context only when a trusted launcher supplies both
+the host session and current-instance scoped child authority.
 
 The context-construction seam remains the common `Collector::new` and
 `Collector::event` methods in
@@ -100,9 +102,11 @@ selected-profile call receipt; it is neither a shared-session credential nor a
 source of provenance. Legacy registries refuse that field. The selected relay
 [fault fixtures](../../crates/agentfw/src/mcp/admission/real_server/fault_tests.rs)
 exercise the existing event boundary without introducing host context claims.
-SOU-63 owns authenticated host-session construction, hook sharing and context
-serialization. A combined host smoke test must follow acceptance of both
-increments; the current acceptance proves an isolated collector session.
+SOU-63 supplies authenticated host-session construction, hook sharing and context
+serialization. The original SOU-62 acceptance below proves the isolated profile;
+the separate combined procedure exercises that same selected server with scoped
+host identities and hooks. Its report is an additional required gate and does
+not replace the original transport, sandbox or actual-host acceptance.
 
 The shipped [scenario policy](../../profiles/mcp/filesystem-readonly-v1/policy.yaml)
 hard-denies destructive, side-effecting, network and privilege-changing actions,
@@ -222,7 +226,8 @@ original filesystem server from its lock and installs actual Claude Code
 The host's native Linux optional-package binary is launched directly; npm
 lifecycle scripts are not needed. It does not relax host sysctl/AppArmor policy.
 
-After building `agentfw` and the library test binary, run one command:
+After building `agentfw` and the library test binary, run the original isolated
+profile acceptance:
 
 ```sh
 python3 -B scripts/verify-sou62-real-mcp.py --run \
@@ -282,3 +287,42 @@ identities, pass/fail/skip counts, transport events, independent witnesses and
 cleanup. Raw owned transcripts/logs accompany it. Failed/incomplete reports are
 retained. Only accepted execution evidence supports support claims; the final
 PR's required workflow and retained artifact identify the tested source.
+
+
+## Combined SOU-62 and SOU-63 smoke
+
+The [combined driver](../../scripts/verify-sou62-sou63-combined.py) is a separate
+required step in the same Linux workflow. It reuses the exact pinned original
+server, Node, bubblewrap, Agent and Claude Code host. The original SOU-62 driver
+and its established checks still run unchanged.
+
+```sh
+python3 -B scripts/verify-sou62-sou63-combined.py --run \
+  --agentfw /absolute/agentfw \
+  --node /absolute/node-v22.22.0/bin/node \
+  --npm /absolute/node-v22.22.0/bin/npm \
+  --bwrap /absolute/bubblewrap-0.13.1/bwrap \
+  --claude /absolute/claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude \
+  --sandbox-test-binary /absolute/agentfw-library-test-binary \
+  --expected-commit '<exact clean source commit>' \
+  --output /absolute/new-combined-evidence-directory
+```
+
+This procedure requires two original server instances with scoped grants tied
+to the running daemon instance and the same host-session UUID. It checks a
+clean useful read, shared MCP and authenticated-hook provenance, taint-conditioned
+refusal with an independent absent FIFO-reader witness, and useful continuation.
+The actual pinned Claude Code process connects both servers under that scoped
+session using the owned scripted provider. It does not measure live-model
+protection efficacy.
+
+The combined proof uses a separate owned scenario policy to make the shared
+taint disposition observable. A refusal from the profile's ordinary unsupported
+write handling alone is not proof that provenance crossed a session boundary.
+The driver retains source and binary identities, sanitized binding digests,
+policy identity, exact owned call/result witnesses and cleanup outcomes. It
+never publishes child-authority tokens. Missing prerequisites, missing proof,
+failed cleanup or a missing actual host are failures; there is no skip or
+unsandboxed fallback. The workflow retains incomplete reports as well as logs.
+A support claim requires a passing combined report for the exact candidate;
+adding the procedure is not itself runtime acceptance.

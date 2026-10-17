@@ -404,10 +404,14 @@ fn policy_for(
                     action: resource::ExecutionAction::Write,
                     max_content_bytes: resource::CREATE_FILE_MAX_CONTENT,
                     executor_profile: resource::CREATE_FILE_EXECUTOR_PROFILE.into(),
+                    path_selector: None,
+                    content_selector: None,
+                    response_contract: None,
                 }),
                 network: None,
                 post: None,
                 windows_read: None,
+                binding: None,
             };
             Ok(("side_effecting".into(), Some(pol), vec![]))
         }
@@ -483,6 +487,7 @@ fn policy_for(
                 network: Some(net),
                 post: None,
                 windows_read: None,
+                binding: None,
             };
             Ok((
                 "network".into(),

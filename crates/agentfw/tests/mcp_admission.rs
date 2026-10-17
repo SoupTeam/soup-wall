@@ -155,6 +155,12 @@ schemas = {
  'delete_note': {'type':'object','properties':{'name':{'type':'string'}},'required':['name'],'additionalProperties':False}
 }
 if mode == 'classified-read': schemas['read_document'] = {'type':'object','properties':{'path':{'type':'string'}},'required':['path'],'additionalProperties':False}
+if mode == 'operator-binding':
+ del schemas['read_document']
+ schemas['fetch_document'] = {'type':'object','properties':{'path':{'type':'string'}},'required':['path'],'additionalProperties':False}
+if mode == 'operator-create-binding':
+ del schemas['read_document']
+ schemas['save_artifact'] = {'type':'object','properties':{'spec':{'type':'object','properties':{'destination':{'type':'string'},'payload':{'type':'string'}},'required':['destination','payload'],'additionalProperties':False}},'required':['spec'],'additionalProperties':False}
 if mode == 'nested-input':
  del schemas['read_document']
  schemas['inventory_lookup'] = json.loads(nested_schema)
@@ -326,6 +332,16 @@ fn fixture_state(
     enforce: bool,
     approval_ttl: Option<u64>,
 ) -> Arc<AppState> {
+    fixture_state_with_policy(home, port, enforce, approval_ttl, POLICY)
+}
+
+fn fixture_state_with_policy(
+    home: &Path,
+    port: u16,
+    enforce: bool,
+    approval_ttl: Option<u64>,
+    policy_str: &str,
+) -> Arc<AppState> {
     let bytes = std::fs::read(home.parent().unwrap().join("registry.json")).unwrap();
     let digest = sha(&bytes);
     let mut native = NativeState::from_bytes(&bytes, &digest, TOKEN.into()).unwrap();
@@ -337,7 +353,7 @@ fn fixture_state(
     Arc::new(AppState {
         native: Some(native),
         firewall: Mutex::new(AgentFirewall::new(
-            AgentPolicySet::from_yaml(POLICY).unwrap(),
+            AgentPolicySet::from_yaml(policy_str).unwrap(),
             DEFAULT_TAINT_CAP,
         )),
         sessions: Sessions::default(),
@@ -518,6 +534,32 @@ fn spawn_gateway_named(
                     .expect("workspace directory exists")
                     .join("rule_baseline/rule_baseline.py"),
             );
+        }
+        Some("rule-package") => {
+            // Install the pinned frozen package into this fixture's private profile.
+            let profile = directory.join(".agentfw");
+            if !profile.exists() {
+                std::fs::create_dir_all(&profile).unwrap();
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    std::fs::set_permissions(&profile, std::fs::Permissions::from_mode(0o700))
+                        .unwrap();
+                }
+            }
+            let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .parent()
+                .and_then(Path::parent)
+                .expect("workspace root is embedded in the test");
+            let archive = agentfw::classifier_runtime::package::build(
+                agentfw::classifier_runtime::package::Which::Frozen,
+                root,
+            )
+            .unwrap();
+            agentfw::classifier_runtime::package::Store::new(&profile)
+                .install(&archive, Path::new("/usr/bin/python3"))
+                .unwrap();
+            command.env("AGENTFW_CLASSIFIER", "rule-package");
         }
         Some(value) if value.starts_with("script:") => {
             command
@@ -804,6 +846,16 @@ impl Fixture {
         classifier: Option<&str>,
         policy_builder: impl FnOnce(&Path, &mut Value),
     ) -> Self {
+        Self::with_resource_policy_custom(mode, enforce, classifier, None, policy_builder).await
+    }
+
+    async fn with_resource_policy_custom(
+        mode: &str,
+        enforce: bool,
+        classifier: Option<&str>,
+        firewall_policy: Option<&str>,
+        policy_builder: impl FnOnce(&Path, &mut Value),
+    ) -> Self {
         let classified_read = classifier == Some("read") || mode == "classified-read";
         let root = std::env::temp_dir();
         #[cfg(unix)]
@@ -849,7 +901,13 @@ impl Fixture {
         let daemon_faults = Arc::new(DaemonFaults::default());
         let (daemon, daemon_shutdown) = start_daemon(
             listener,
-            fixture_state(&home, port, enforce, None),
+            fixture_state_with_policy(
+                &home,
+                port,
+                enforce,
+                None,
+                firewall_policy.unwrap_or(POLICY),
+            ),
             daemon_faults.clone(),
         );
         let path = registry_path.to_string_lossy().replace('\'', "''");
@@ -4911,4 +4969,497 @@ fn scoped_mint_accepts_hyphen_prefixed_instance_ids() {
     let proof = String::from_utf8(output.stdout).unwrap();
     let grant = agentfw::child_authority::decode_token(proof.trim()).unwrap();
     assert!(grant.nonce.starts_with("-test-instance."));
+}
+
+#[tokio::test]
+async fn sou67_operator_owned_tool_bindings_allow_arbitrary_tool_name_under_constrained_file_execution(
+) {
+    let mut fixture =
+        Fixture::with_resource_policy("operator-binding", true, None, |dir, registry| {
+            let file = dir.join("reviewed-input.txt");
+            std::fs::write(&file, "custom bound contents").unwrap();
+            let canonical_file = file.canonicalize().unwrap().to_str().unwrap().to_string();
+            let canonical_dir = dir.canonicalize().unwrap();
+            let schema = json!({
+                "type": "object",
+                "properties": { "path": { "type": "string" } },
+                "required": ["path"],
+                "additionalProperties": false
+            });
+            let profile = json!({
+                "server_id": "fixture",
+                "tool_name": "fetch_document",
+                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "selectors": [{ "pointer": "/path", "kind": "path" }]
+            });
+            registry["tools"][0] = json!({
+                "name": "fetch_document",
+                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "action_class": "read_only",
+                "result_provenance": "untrusted",
+                "egress": [],
+                "resource_policy": {
+                    "profile": profile,
+                    "workspace": canonical_dir,
+                    "cwd": canonical_dir,
+                    "executor_sha256": "e".repeat(64),
+                    "classifier_sha256": "c".repeat(64),
+                    "binding": {
+                        "contract_version": "sw-native/binding/1",
+                        "operation": "read_document",
+                        "path_selector": "/path"
+                    },
+                    "allowed_resources": [{
+                        "kind": "path",
+                        "canonical": canonical_file
+                    }]
+                }
+            });
+        })
+        .await;
+    fixture.ready().await;
+
+    // 1. Authorized read with arbitrary operator-bound tool name succeeds through constrained executor.
+    let target_file = fixture._dir.path().join("reviewed-input.txt");
+    let call = json!({
+        "jsonrpc": "2.0",
+        "id": "sou67-auth",
+        "method": "tools/call",
+        "params": {
+            "name": "fetch_document",
+            "arguments": {
+                "path": target_file.to_str().unwrap()
+            }
+        }
+    });
+    let reply: Value =
+        serde_json::from_str(&fixture.exchange(&call.to_string()).await.unwrap()).unwrap();
+    assert_eq!(reply["id"], "sou67-auth");
+    #[cfg(unix)]
+    {
+        assert!(reply["result"]["isError"].is_null() || reply["result"]["isError"] == false);
+        assert_eq!(
+            reply["result"]["content"][0]["text"].as_str().unwrap(),
+            "custom bound contents"
+        );
+        assert_eq!(
+            executed(&fixture.ledger).len(),
+            0,
+            "constrained executor handles read directly; child process must never execute"
+        );
+    }
+    #[cfg(not(unix))]
+    {
+        assert_eq!(reply["result"]["isError"], true);
+        assert!(reply.to_string().contains("resource_executor_unsupported"));
+    }
+
+    // 2. Traversal outside workspace fails closed.
+    let traversal_call = json!({
+        "jsonrpc": "2.0",
+        "id": "sou67-traversal",
+        "method": "tools/call",
+        "params": {
+            "name": "fetch_document",
+            "arguments": {
+                "path": "../outside.txt"
+            }
+        }
+    });
+    let trav_reply: Value =
+        serde_json::from_str(&fixture.exchange(&traversal_call.to_string()).await.unwrap())
+            .unwrap();
+    assert_eq!(trav_reply["id"], "sou67-traversal");
+    assert_eq!(trav_reply["result"]["isError"], true);
+    assert!(
+        trav_reply.to_string().contains("resource_path_traversal")
+            || trav_reply
+                .to_string()
+                .contains("native_resource_not_allowed")
+    );
+    assert_eq!(executed(&fixture.ledger).len(), 0);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn sou67_operator_owned_tool_bindings_allow_arbitrary_create_tool_name_under_constrained_execution(
+) {
+    use agentfw::native::resource::{
+        create_file_executor_sha256, CREATE_FILE_EXECUTOR_PROFILE, CREATE_FILE_MAX_CONTENT,
+    };
+
+    let rule_baseline_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("rule_baseline/rule_baseline.py");
+    let classifier_digest = sha(&std::fs::read(&rule_baseline_path).unwrap());
+
+    const CREATE_POLICY: &str = "agent_policies:
+  - name: fixture-mcp-reuse
+    when: { taint: [mcp], action_class: destructive }
+    action: deny
+  - name: fixture-secret-egress
+    when: { detector: secret, facet: tool_args, min_action_class: network }
+    action: deny
+  - name: fixture-destructive-confirmation
+    when: { action_class: destructive }
+    action: ask
+  - name: fixture-manifest-injection
+    when: { detector: injection, facet: tool_description }
+    action: ask
+  - name: fixture-result-injection
+    when: { detector: injection, facet: tool_result, min_severity: medium }
+    action: ask
+default: allow
+";
+
+    let mut fixture =
+        Fixture::with_resource_policy_custom("operator-create-binding", true, Some("rule-baseline"), Some(CREATE_POLICY), |dir, registry| {
+            let canonical_dir = dir.canonicalize().unwrap();
+            let canonical_file = canonical_dir.join("created-nested.txt").to_str().unwrap().to_string();
+            let schema = json!({
+                "type": "object",
+                "properties": {
+                    "spec": {
+                        "type": "object",
+                        "properties": {
+                            "destination": { "type": "string" },
+                            "payload": { "type": "string" }
+                        },
+                        "required": ["destination", "payload"],
+                        "additionalProperties": false
+                    }
+                },
+                "required": ["spec"],
+                "additionalProperties": false
+            });
+            let profile = json!({
+                "server_id": "fixture",
+                "tool_name": "save_artifact",
+                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "selectors": [{ "pointer": "/spec/destination", "kind": "path", "allow_missing_leaf": true }]
+            });
+            registry["tools"][0] = json!({
+                "name": "save_artifact",
+                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "action_class": "side_effecting",
+                "result_provenance": "untrusted",
+                "egress": [],
+                "resource_policy": {
+                    "profile": profile,
+                    "workspace": canonical_dir,
+                    "cwd": canonical_dir,
+                    "executor_sha256": create_file_executor_sha256(),
+                    "classifier_sha256": classifier_digest,
+                    "binding": {
+                        "contract_version": "sw-native/binding/1",
+                        "operation": "create_file",
+                        "action": "write",
+                        "path_selector": "/spec/destination",
+                        "content_selector": "/spec/payload",
+                        "response_contract": "sw-native/response/text/1",
+                        "executor_profile": CREATE_FILE_EXECUTOR_PROFILE,
+                        "max_content_bytes": CREATE_FILE_MAX_CONTENT
+                    },
+                    "allowed_resources": [{
+                        "kind": "path",
+                        "canonical": canonical_file
+                    }]
+                }
+            });
+        })
+        .await;
+    fixture.ready().await;
+
+    // 1. Authorized create with nested arguments under operator binding.
+    let target_dest = "created-nested.txt";
+    let call = json!({
+        "jsonrpc": "2.0",
+        "id": "sou67-create-auth",
+        "method": "tools/call",
+        "params": {
+            "name": "save_artifact",
+            "arguments": {
+                "spec": {
+                    "destination": target_dest,
+                    "payload": "nested create file payload\n"
+                }
+            }
+        }
+    });
+    let reply: Value =
+        serde_json::from_str(&fixture.exchange(&call.to_string()).await.unwrap()).unwrap();
+    assert_eq!(reply["id"], "sou67-create-auth");
+    #[cfg(target_os = "linux")]
+    {
+        assert!(reply["result"]["isError"].is_null() || reply["result"]["isError"] == false);
+        let created_path = fixture._dir.path().join(target_dest);
+        assert!(created_path.exists());
+        assert_eq!(
+            std::fs::read_to_string(&created_path).unwrap(),
+            "nested create file payload\n"
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                created_path.metadata().unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+        assert_eq!(
+            executed(&fixture.ledger).len(),
+            0,
+            "constrained executor handles create directly; child process must never execute"
+        );
+
+        // 2. Replay / no-overwrite: creating existing file fails closed.
+        let mut replay_call = call.clone();
+        replay_call["id"] = json!("sou67-create-replay");
+        let replay_reply: Value =
+            serde_json::from_str(&fixture.exchange(&replay_call.to_string()).await.unwrap())
+                .unwrap();
+        assert_eq!(replay_reply["id"], "sou67-create-replay");
+        assert_eq!(replay_reply["result"]["isError"], true);
+        assert!(replay_reply
+            .to_string()
+            .contains("native_create_target_exists_or_unavailable"));
+        assert_eq!(executed(&fixture.ledger).len(), 0);
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        assert_eq!(reply["result"]["isError"], true);
+        assert!(reply
+            .to_string()
+            .contains("resource_create_platform_unsupported"));
+        assert_eq!(
+            executed(&fixture.ledger).len(),
+            0,
+            "refused create must never execute hostile child process"
+        );
+    }
+
+    // 3. Traversal outside workspace fails closed.
+    let traversal_call = json!({
+        "jsonrpc": "2.0",
+        "id": "sou67-create-traversal",
+        "method": "tools/call",
+        "params": {
+            "name": "save_artifact",
+            "arguments": {
+                "spec": {
+                    "destination": "../outside.txt",
+                    "payload": "hostile"
+                }
+            }
+        }
+    });
+    let trav_reply: Value =
+        serde_json::from_str(&fixture.exchange(&traversal_call.to_string()).await.unwrap())
+            .unwrap();
+    assert_eq!(trav_reply["id"], "sou67-create-traversal");
+    assert_eq!(trav_reply["result"]["isError"], true);
+    assert_eq!(executed(&fixture.ledger).len(), 0);
+}
+
+#[tokio::test]
+async fn sou67_read_policy_server_id_mismatch_refused() {
+    let mut fixture =
+        Fixture::with_resource_policy("operator-binding", true, None, |dir, registry| {
+            let file = dir.join("reviewed-input.txt");
+            std::fs::write(&file, "custom bound contents").unwrap();
+            let canonical_file = file.canonicalize().unwrap().to_str().unwrap().to_string();
+            let canonical_dir = dir.canonicalize().unwrap();
+            let schema = json!({
+                "type": "object",
+                "properties": { "path": { "type": "string" } },
+                "required": ["path"],
+                "additionalProperties": false
+            });
+            let profile = json!({
+                "server_id": "other-server",
+                "tool_name": "fetch_document",
+                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "selectors": [{ "pointer": "/path", "kind": "path" }]
+            });
+            registry["tools"][0] = json!({
+                "name": "fetch_document",
+                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "action_class": "read_only",
+                "result_provenance": "untrusted",
+                "egress": [],
+                "resource_policy": {
+                    "profile": profile,
+                    "workspace": canonical_dir,
+                    "cwd": canonical_dir,
+                    "executor_sha256": "e".repeat(64),
+                    "classifier_sha256": "c".repeat(64),
+                    "binding": {
+                        "contract_version": "sw-native/binding/1",
+                        "operation": "read_document",
+                        "path_selector": "/path"
+                    },
+                    "allowed_resources": [{
+                        "kind": "path",
+                        "canonical": canonical_file
+                    }]
+                }
+            });
+        })
+        .await;
+    fixture.ready().await;
+
+    let target_file = fixture._dir.path().join("reviewed-input.txt");
+    let call = json!({
+        "jsonrpc": "2.0",
+        "id": "sou67-server-mismatch",
+        "method": "tools/call",
+        "params": {
+            "name": "fetch_document",
+            "arguments": {
+                "path": target_file.to_str().unwrap()
+            }
+        }
+    });
+    let reply: Value =
+        serde_json::from_str(&fixture.exchange(&call.to_string()).await.unwrap()).unwrap();
+    assert_eq!(reply["id"], "sou67-server-mismatch");
+    assert_eq!(reply["result"]["isError"], true);
+    assert!(reply
+        .to_string()
+        .contains("resource_server_identity_mismatch"));
+    assert_eq!(executed(&fixture.ledger).len(), 0);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn sou64_installed_package_classifies_in_the_real_collector_like_the_script() {
+    let calls = [
+        r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_document","arguments":{}}}"#,
+        r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"read_document","arguments":{}}}"#,
+    ];
+    let mut package_rows = Vec::new();
+    let mut script_rows = Vec::new();
+    for selection in ["rule-package", "rule-baseline"] {
+        let mut fixture = Fixture::with_classifier("normal", true, Some(selection)).await;
+        fixture.ready().await;
+        for call in calls {
+            fixture.exchange(call).await.unwrap();
+        }
+        let rows: Vec<Value> = std::fs::read_to_string(&fixture.stderr)
+            .unwrap()
+            .lines()
+            .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+            .filter(|row| row["event"] == "mcp_classification")
+            .collect();
+        assert_eq!(rows.len(), 2);
+        if selection == "rule-package" {
+            package_rows = rows;
+        } else {
+            script_rows = rows;
+        }
+    }
+    for (package, script) in package_rows.iter().zip(&script_rows) {
+        assert_eq!(package["source"], "rule-baseline/packaged-worker");
+        assert_eq!(script["source"], "rule-baseline/python");
+        assert_eq!(package["classification"], script["classification"]);
+        // The semantic revision is the classifier source digest, identical for both
+        // adapters; package identity is a separate property.
+        assert_eq!(package["classifier_sha256"], script["classifier_sha256"]);
+        // The prediction identity also binds the adapter source name, so it differs.
+        assert_ne!(package["input_sha256"], script["input_sha256"]);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn sou64_missing_package_is_a_selection_error_with_no_fallback() {
+    let directory = tempfile::tempdir().unwrap();
+    assert!(
+        agentfw::classifier_runtime::worker::PackagedClassifier::from_home(directory.path())
+            .is_err()
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn sou64_installed_package_satisfies_constrained_create_profile_and_wrong_revision_is_refused(
+) {
+    use agentfw::native::resource::{
+        create_file_executor_sha256, CREATE_FILE_EXECUTOR_PROFILE, CREATE_FILE_MAX_CONTENT,
+    };
+    let rule_baseline_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("workspace root is embedded in the test")
+        .join("rule_baseline/rule_baseline.py");
+    let real_digest = sha(&std::fs::read(&rule_baseline_path).unwrap());
+    const CREATE_POLICY: &str = "agent_policies:
+  - name: fixture-destructive-confirmation
+    when: { action_class: destructive }
+    action: ask
+default: allow
+";
+    for (pinned, expect_success) in [(real_digest.clone(), true), ("c".repeat(64), false)] {
+        let mut fixture = Fixture::with_resource_policy_custom(
+            "operator-create-binding",
+            true,
+            Some("rule-package"),
+            Some(CREATE_POLICY),
+            |dir, registry| {
+                let canonical_dir = dir.canonicalize().unwrap();
+                let canonical_file = canonical_dir
+                    .join("created-by-package.txt")
+                    .to_str()
+                    .unwrap()
+                    .to_string();
+                let schema = json!({"type":"object","properties":{"spec":{"type":"object",
+                    "properties":{"destination":{"type":"string"},"payload":{"type":"string"}},
+                    "required":["destination","payload"],"additionalProperties":false}},
+                    "required":["spec"],"additionalProperties":false});
+                let profile = json!({"server_id":"fixture","tool_name":"save_artifact",
+                    "schema_sha256":sha(schema.to_string().as_bytes()),
+                    "selectors":[{"pointer":"/spec/destination","kind":"path","allow_missing_leaf":true}]});
+                registry["tools"][0] = json!({"name":"save_artifact",
+                    "schema_sha256":sha(schema.to_string().as_bytes()),
+                    "action_class":"side_effecting","result_provenance":"untrusted","egress":[],
+                    "resource_policy":{"profile":profile,"workspace":canonical_dir,"cwd":canonical_dir,
+                        "executor_sha256":create_file_executor_sha256(),
+                        "classifier_sha256":pinned,
+                        "binding":{"contract_version":"sw-native/binding/1","operation":"create_file",
+                            "action":"write","path_selector":"/spec/destination",
+                            "content_selector":"/spec/payload",
+                            "response_contract":"sw-native/response/text/1",
+                            "executor_profile":CREATE_FILE_EXECUTOR_PROFILE,
+                            "max_content_bytes":CREATE_FILE_MAX_CONTENT},
+                        "allowed_resources":[{"kind":"path","canonical":canonical_file}]}});
+            },
+        )
+        .await;
+        fixture.ready().await;
+        let call = json!({"jsonrpc":"2.0","id":"sou64-create","method":"tools/call",
+            "params":{"name":"save_artifact","arguments":{"spec":{
+                "destination":"created-by-package.txt","payload":"package create\n"}}}});
+        let reply = fixture.exchange(&call.to_string()).await.unwrap();
+        let created = fixture._dir.path().join("created-by-package.txt");
+        if expect_success {
+            assert!(
+                created.exists(),
+                "installed package must satisfy the pinned profile: {reply}"
+            );
+            assert_eq!(
+                std::fs::read_to_string(&created).unwrap(),
+                "package create\n"
+            );
+        } else {
+            assert!(
+                reply.contains("resource_classifier_revision_mismatch"),
+                "wrong pin must be refused: {reply}"
+            );
+            assert!(!created.exists());
+        }
+        assert_eq!(executed(&fixture.ledger).len(), 0);
+    }
 }

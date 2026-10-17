@@ -16,7 +16,10 @@ use crate::egress::{hosts, is_allowed};
 use crate::event::{AgentEvent, EventKind, ToolDecl, Trust};
 use crate::facet::{facets, Facet};
 use crate::policy::{AgentDecision, AgentPolicySet, Signals, Verdict};
-use crate::taint::{TaintMark, TaintTracker};
+use crate::taint::{
+    LimitError, SessionTaintUsage, TaintLimits, TaintMark, TaintTracker, TaintUsage,
+    TrackingFailure,
+};
 
 /// Default per-session entry cap for each provenance index (not a byte limit).
 pub const DEFAULT_TAINT_CAP: usize = 10_000;
@@ -117,7 +120,18 @@ pub struct AgentFirewall {
 
 impl AgentFirewall {
     pub fn new(policy: AgentPolicySet, taint_cap: usize) -> Self {
-        Self {
+        Self::with_taint_limits(policy, taint_cap, TaintLimits::default())
+            .expect("default provenance limits are valid")
+    }
+
+    /// Construct with explicit retained-provenance and extraction limits.
+    /// Existing constructors use the same finite defaults.
+    pub fn with_taint_limits(
+        policy: AgentPolicySet,
+        taint_cap: usize,
+        limits: TaintLimits,
+    ) -> Result<Self, LimitError> {
+        Ok(Self {
             policy,
             // All four detectors derive `Default` AND expose `new()` (verified
             // against core 0.2.0 source, not assumed). `new()` is used here for
@@ -134,11 +148,11 @@ impl AgentFirewall {
                 Box::new(PiiDetector::new()),
                 Box::new(OutputDetector::new()),
             ],
-            taint: TaintTracker::new(taint_cap),
+            taint: TaintTracker::with_limits(taint_cap, limits)?,
             authority: Authority::default(),
             managed_active: None,
             managed_transport: None,
-        }
+        })
     }
 
     /// The policy shipped with the crate.
@@ -146,6 +160,13 @@ impl AgentFirewall {
         let yaml = include_str!("../policies/agent-default.yaml");
         let policy = AgentPolicySet::from_yaml(yaml).expect("shipped policy must parse");
         Self::new(policy, DEFAULT_TAINT_CAP)
+    }
+
+    /// Shipped policy with explicit provenance limits, for configured runtimes.
+    pub fn with_default_policy_and_taint_limits(limits: TaintLimits) -> Result<Self, LimitError> {
+        let policy = AgentPolicySet::from_yaml(include_str!("../policies/agent-default.yaml"))
+            .expect("shipped policy must parse");
+        Self::with_taint_limits(policy, DEFAULT_TAINT_CAP, limits)
     }
 
     /// Switch only the policy, preserving detector, taint, incomplete-history and
@@ -233,6 +254,34 @@ impl AgentFirewall {
         self.taint.mark_incomplete(session);
     }
 
+    /// Reserve a tracked context before authenticated native admission.
+    /// `true` identifies a newly created shell; an existing context is never reset.
+    pub fn try_register_provenance_context(
+        &mut self,
+        session: &str,
+    ) -> Result<bool, TrackingFailure> {
+        self.taint.try_register(session)
+    }
+
+    /// Retire only provenance storage. Native startup uses this solely to roll
+    /// back a newly created, unpublished shell; published contexts follow their
+    /// existing authenticated lifecycle and shared host history is preserved.
+    pub fn end_provenance_context(&mut self, session: &str) {
+        self.taint.end_session(session);
+    }
+
+    pub fn provenance_limits(&self) -> &TaintLimits {
+        self.taint.limits()
+    }
+
+    pub fn provenance_usage(&self) -> TaintUsage {
+        self.taint.usage()
+    }
+
+    pub fn provenance_session_usage(&self, session: &str) -> Option<SessionTaintUsage> {
+        self.taint.session_usage(session)
+    }
+
     /// Return whether every extracted destination is explicitly present in the
     /// policy egress allowlist. Typed network adapters use this after the normal
     /// verdict so a permissive `default: allow` policy cannot accidentally turn
@@ -309,7 +358,9 @@ impl AgentFirewall {
         self.inspect_inner(ev, None, false)
     }
 
-    /// Commit only content whose native admission and audit have succeeded.
+    /// Compatibility recorder for content already admitted by a legacy caller.
+    /// Selected runtimes use `try_admit_native_result` before auditing release so
+    /// a tracking refusal is observable and cannot silently become Allow.
     pub fn admit_native_result(&mut self, ev: &AgentEvent) {
         if let EventKind::ToolResult {
             content, source, ..
@@ -319,6 +370,36 @@ impl AgentFirewall {
                 self.taint.record(&ev.session, ev.seq, source, content);
             }
         }
+    }
+
+    /// Record a complete current native result before any release is audited.
+    /// A prior sticky loss marker remains independent of this input's success.
+    /// Callers must withhold the entire delivery if any required block/context
+    /// fails; conservative partial evidence may remain after refusal. After the
+    /// final block, recheck every event with `native_result_is_retained` before
+    /// releasing a multi-block delivery.
+    pub fn try_admit_native_result(&mut self, ev: &AgentEvent) -> Result<(), TrackingFailure> {
+        if let EventKind::ToolResult {
+            content, source, ..
+        } = &ev.kind
+        {
+            return self.taint.try_record(&ev.session, ev.seq, source, content);
+        }
+        Ok(())
+    }
+
+    /// Verify a whole current delivery after all its blocks and contexts have
+    /// been recorded. A later block must not evict an earlier block unnoticed.
+    pub fn native_result_is_retained(&self, ev: &AgentEvent) -> Result<bool, TrackingFailure> {
+        if let EventKind::ToolResult {
+            content, source, ..
+        } = &ev.kind
+        {
+            return self
+                .taint
+                .current_input_retained(&ev.session, ev.seq, source, content);
+        }
+        Ok(true)
     }
 
     fn inspect_inner(
@@ -408,15 +489,24 @@ impl AgentFirewall {
                     signals.egress_hosts.dedup();
                 }
                 signals.touches_sensitive_path = touches_sensitive_path(args);
-                // Taint check runs over every projected facet text for this call;
-                // the loop breaks on the first match. `facets()` yields one
+                // Check every projected argument leaf, including after a match:
+                // a later oversized leaf must not become a clean miss. `facets()` yields one
                 // `ToolArgs` facet per string leaf for a `ToolCall`, so this checks
                 // each argument leaf independently and reports the earliest-seq
                 // contributing source across all of them.
                 for (_, text) in &projected {
-                    if let Some(mark) = self.taint.check(&ev.session, text) {
-                        signals.taint = Some(mark);
-                        break;
+                    match self.taint.try_check(&ev.session, text) {
+                        Ok(Some(mark)) => {
+                            if signals.taint.as_ref().is_none_or(|old| mark.seq < old.seq) {
+                                signals.taint = Some(mark);
+                            }
+                        }
+                        Ok(None) => {}
+                        Err(_) => {
+                            // An unchecked argument is not evidence of clean
+                            // provenance. Preserve hard Deny and the Ask floor.
+                            self.taint.mark_incomplete(&ev.session);
+                        }
                     }
                 }
             }
@@ -1119,5 +1209,185 @@ mod tests {
             d.findings.iter().any(|(_, fd)| fd.owasp.is_some()),
             "expected an OWASP-tagged finding"
         );
+    }
+}
+
+#[cfg(test)]
+mod provenance_budget_tests {
+    use super::*;
+    use crate::event::Provenance;
+    use serde_json::json;
+
+    fn firewall(cap: usize, limits: TaintLimits) -> AgentFirewall {
+        let policy = AgentPolicySet::from_yaml(
+            "agent_policies:\n  - name: explicit-hard-deny\n    when: { action_class: destructive }\n    action: deny\negress_allowlist: []\ndefault: allow\n",
+        )
+        .unwrap();
+        AgentFirewall::with_taint_limits(policy, cap, limits).unwrap()
+    }
+
+    fn result(session: &str, seq: u64, content: &str) -> AgentEvent {
+        AgentEvent {
+            session: session.into(),
+            agent: "reader".into(),
+            parent: None,
+            seq,
+            at_ms: 0,
+            kind: EventKind::ToolResult {
+                tool: "read_metadata".into(),
+                content: content.into(),
+                source: Provenance::McpServer {
+                    name: "owned".into(),
+                },
+            },
+        }
+    }
+
+    fn call(session: &str, note: &str) -> AgentEvent {
+        AgentEvent {
+            session: session.into(),
+            agent: "reader".into(),
+            parent: None,
+            seq: 100,
+            at_ms: 0,
+            kind: EventKind::ToolCall {
+                tool: "publish_note".into(),
+                args: json!({"note": note}),
+            },
+        }
+    }
+
+    #[test]
+    fn rejected_typed_result_never_turns_the_next_protected_call_clean() {
+        let limits = TaintLimits {
+            max_literal_bytes: 16,
+            ..TaintLimits::default()
+        };
+        let mut fw = firewall(100, limits);
+        assert!(fw.try_register_provenance_context("host").unwrap());
+        let ev = result("host", 1, "/workspace/oversized-note.txt");
+        assert_eq!(fw.preview_native_result(&ev).verdict, Verdict::Allow);
+        assert!(fw.try_admit_native_result(&ev).is_err());
+        assert!(fw.provenance_incomplete("host"));
+        let out = fw.inspect_native_call(
+            &call("host", "ordinary note"),
+            ActionClass::SideEffecting,
+            &[],
+        );
+        assert_eq!(out.verdict, Verdict::Ask);
+        assert_eq!(out.rule.as_deref(), Some("taint-history-incomplete"));
+        let denied = fw.inspect_native_call(
+            &call("host", "ordinary note"),
+            ActionClass::Destructive,
+            &[],
+        );
+        assert_eq!(denied.verdict, Verdict::Deny);
+        assert_eq!(denied.rule.as_deref(), Some("explicit-hard-deny"));
+    }
+
+    #[test]
+    fn eviction_and_policy_reload_keep_loss_sticky_but_current_results_can_fit() {
+        let mut fw = firewall(1, TaintLimits::default());
+        let early = "/workspace/early.txt";
+        fw.try_admit_native_result(&result("host", 1, early))
+            .unwrap();
+        fw.try_admit_native_result(&result("host", 2, "/workspace/later.txt"))
+            .unwrap();
+        assert!(fw.provenance_incomplete("host"));
+        let out = fw.inspect_native_call(&call("host", early), ActionClass::SideEffecting, &[]);
+        assert!(
+            out.taint.is_none(),
+            "the early literal must actually be evicted"
+        );
+        assert_eq!(out.rule.as_deref(), Some("taint-history-incomplete"));
+        fw.replace_policy_preserving_provenance(
+            AgentPolicySet::from_yaml("default: allow\n").unwrap(),
+        );
+        assert!(!fw.try_register_provenance_context("host").unwrap());
+        assert!(
+            fw.inspect(&AgentEvent {
+                kind: EventKind::SessionStart,
+                ..call("host", "start")
+            })
+            .provenance_incomplete
+        );
+        assert_eq!(
+            fw.inspect_native_call(&call("host", early), ActionClass::SideEffecting, &[])
+                .verdict,
+            Verdict::Ask
+        );
+        fw.try_admit_native_result(&result("host", 3, "/workspace/later.txt"))
+            .unwrap();
+        let read =
+            fw.inspect_native_call(&call("host", "ordinary note"), ActionClass::ReadOnly, &[]);
+        assert_eq!(read.verdict, Verdict::Allow);
+        assert!(read.provenance_incomplete);
+    }
+
+    #[test]
+    fn typed_capacity_refusal_preserves_useful_registered_peer_and_end_recovers_slot() {
+        let limits = TaintLimits {
+            max_sessions: 1,
+            ..TaintLimits::default()
+        };
+        let mut fw = firewall(100, limits);
+        assert!(fw.try_register_provenance_context("live").unwrap());
+        assert!(fw.try_register_provenance_context("refused").is_err());
+        assert!(!fw.provenance_incomplete("live"));
+        assert_eq!(
+            fw.inspect_native_call(
+                &call("live", "ordinary note"),
+                ActionClass::SideEffecting,
+                &[]
+            )
+            .verdict,
+            Verdict::Allow
+        );
+        fw.end_provenance_context("live");
+        assert!(fw.provenance_session_usage("live").is_none());
+        assert!(fw.try_register_provenance_context("refused").unwrap());
+        assert!(!fw.provenance_incomplete("refused"));
+    }
+
+    #[test]
+    fn a_matched_argument_does_not_hide_a_later_uncheckable_leaf() {
+        let limits = TaintLimits {
+            max_input_bytes: 64,
+            max_literal_bytes: 64,
+            ..TaintLimits::default()
+        };
+        let mut fw = firewall(100, limits);
+        let path = "/workspace/tainted.txt";
+        fw.try_admit_native_result(&result("host", 1, path))
+            .unwrap();
+        let mut ev = call("host", path);
+        ev.kind = EventKind::ToolCall {
+            tool: "publish_note".into(),
+            args: json!({"a": path, "z": "ordinary text ".repeat(8)}),
+        };
+        let out = fw.inspect_native_call(&ev, ActionClass::SideEffecting, &[]);
+        assert!(out.taint.is_some());
+        assert!(out.provenance_incomplete);
+        assert_eq!(out.verdict, Verdict::Ask);
+        assert_eq!(out.rule.as_deref(), Some("taint-history-incomplete"));
+    }
+
+    #[test]
+    fn oversized_call_query_is_not_a_clean_provenance_miss() {
+        let limits = TaintLimits {
+            max_input_bytes: 64,
+            max_literal_bytes: 64,
+            ..TaintLimits::default()
+        };
+        let mut fw = firewall(100, limits);
+        fw.try_register_provenance_context("host").unwrap();
+        let out = fw.inspect_native_call(
+            &call("host", &"ordinary text ".repeat(8)),
+            ActionClass::SideEffecting,
+            &[],
+        );
+        assert!(out.provenance_incomplete);
+        assert_eq!(out.rule.as_deref(), Some("taint-history-incomplete"));
+        assert_eq!(out.verdict, Verdict::Ask);
     }
 }

@@ -2445,6 +2445,329 @@ async fn create_file_v2_native_refuses_downgrade_and_content_substitution() {
     assert_eq!(allowed["release"], true);
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn sou67_create_file_v2_native_operator_bound_tool_name_admits_and_binds() {
+    use agentfw::native::resource::{
+        create_file_executor_sha256, create_file_schema, CREATE_FILE_EXECUTOR_PROFILE,
+        CREATE_FILE_MAX_CONTENT,
+    };
+    let mut fixture = Fixture::new(ALLOW);
+    let workspace = fixture.dir.path().join("create-workspace");
+    std::fs::create_dir(&workspace).unwrap();
+    let workspace = workspace.canonicalize().unwrap();
+    let schema_sha256 = agentfw::native::canonical_digest(&create_file_schema());
+    let tool_name = "save_artifact";
+    let resource_policy = json!({
+        "profile":{"server_id":"create-native-fixture","tool_name":tool_name,
+            "schema_sha256":schema_sha256,"selectors":[{"pointer":"/path","kind":"path",
+            "allow_missing_leaf":true}]},
+        "workspace":workspace,"cwd":workspace,
+        "executor_sha256":create_file_executor_sha256(),"classifier_sha256":"c".repeat(64),
+        "allowed_resources":[{"kind":"path","canonical":workspace.join("new.txt")}],
+        "execution":{"operation":"create_file","action":"write",
+            "max_content_bytes":CREATE_FILE_MAX_CONTENT,"executor_profile":CREATE_FILE_EXECUTOR_PROFILE}
+    });
+    let policy: agentfw::native::resource::Policy =
+        serde_json::from_value(resource_policy.clone()).unwrap();
+    let mut configured = registry();
+    configured["tools"].as_array_mut().unwrap().push(json!({
+        "name":tool_name,"schema_sha256":schema_sha256,"action_class":"side_effecting",
+        "result_provenance":"local_project","egress":[],"resource_policy":resource_policy
+    }));
+    let bytes = serde_json::to_vec(&configured).unwrap();
+    fixture.registry_sha256 = sha(&bytes);
+    fixture.state = make_state(
+        fixture.dir.path(),
+        Config {
+            enforce: true,
+            ..Config::default()
+        },
+        ALLOW,
+        &bytes,
+        &fixture.registry_sha256,
+    );
+
+    fixture.start("write-bound").await;
+    let args = json!({"path":"new.txt","content":"exact bound UTF-8 ☃\n"});
+    let admission = agentfw::native::resource::Admission {
+        server_id: policy.profile.server_id.clone(),
+        host_call_id: json!("original-create-id"),
+        profile_sha256: agentfw::native::canonical_digest(
+            &serde_json::to_value(&policy.profile).unwrap(),
+        ),
+        executor_sha256: policy.executor_sha256.clone(),
+        classifier_sha256: policy.classifier_sha256.clone(),
+        snapshot_sha256: "d".repeat(64),
+        definition_sha256: "f".repeat(64),
+        input_sha256: "a".repeat(64),
+        resources: vec![agentfw::mcp::resources::ResourceEvidence {
+            pointer: "/path".into(),
+            source: agentfw::mcp::resources::EvidenceSource::Argument,
+            resource: policy.allowed_resources[0].clone(),
+        }],
+        execution: Some(agentfw::native::resource::create_file_binding(&policy, &args).unwrap()),
+        network: None,
+        windows_read: None,
+    };
+    let mut body = fixture.event("write-bound", "call");
+    body["contract_version"] = json!(agentfw::native::resource::CREATE_CONTRACT);
+    body["tool"] = json!(tool_name);
+    body["args"] = args.clone();
+    body["schema_sha256"] = json!(policy.profile.schema_sha256);
+    body["resource_admission"] = serde_json::to_value(admission).unwrap();
+
+    let (status, reply) = fixture.post(&body).await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert_eq!(reply["verdict"], "allow", "{reply}");
+    assert_eq!(reply["release"], true);
+    assert!(reply["binding_sha256"]
+        .as_str()
+        .is_some_and(agentfw::native::is_digest));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn sou67_create_file_v2_native_operator_bound_nested_schema_admits_and_binds() {
+    use agentfw::native::resource::{
+        create_file_executor_sha256, CREATE_FILE_EXECUTOR_PROFILE, CREATE_FILE_MAX_CONTENT,
+    };
+    let mut fixture = Fixture::new(ALLOW);
+    let workspace = fixture.dir.path().join("nested-workspace");
+    std::fs::create_dir(&workspace).unwrap();
+    let workspace = workspace.canonicalize().unwrap();
+    let tool_name = "publish_blob";
+    let schema = json!({
+        "type": "object",
+        "properties": {
+            "spec": {
+                "type": "object",
+                "properties": {
+                    "destination": { "type": "string" },
+                    "payload": { "type": "string" }
+                },
+                "required": ["destination", "payload"],
+                "additionalProperties": false
+            }
+        },
+        "required": ["spec"],
+        "additionalProperties": false
+    });
+    let schema_sha256 = agentfw::native::canonical_digest(&schema);
+    let resource_policy = json!({
+        "profile": {
+            "server_id": "nested-native-fixture",
+            "tool_name": tool_name,
+            "schema_sha256": schema_sha256,
+            "selectors": [{
+                "pointer": "/spec/destination",
+                "kind": "path",
+                "allow_missing_leaf": true
+            }]
+        },
+        "workspace": workspace,
+        "cwd": workspace,
+        "executor_sha256": create_file_executor_sha256(),
+        "classifier_sha256": "c".repeat(64),
+        "allowed_resources": [{
+            "kind": "path",
+            "canonical": workspace.join("nested_out.txt")
+        }],
+        "binding": {
+            "contract_version": "sw-native/binding/1",
+            "operation": "create_file",
+            "action": "write",
+            "path_selector": "/spec/destination",
+            "content_selector": "/spec/payload",
+            "response_contract": "sw-native/response/text/1",
+            "executor_profile": CREATE_FILE_EXECUTOR_PROFILE,
+            "max_content_bytes": CREATE_FILE_MAX_CONTENT
+        }
+    });
+
+    let policy: agentfw::native::resource::Policy =
+        serde_json::from_value(resource_policy.clone()).unwrap();
+    let mut configured = registry();
+    configured["tools"].as_array_mut().unwrap().push(json!({
+        "name": tool_name,
+        "schema_sha256": schema_sha256,
+        "action_class": "side_effecting",
+        "result_provenance": "local_project",
+        "egress": [],
+        "resource_policy": resource_policy
+    }));
+    let bytes = serde_json::to_vec(&configured).unwrap();
+    fixture.registry_sha256 = sha(&bytes);
+    // Explicitly proves that NativeState::from_bytes accepts nested create schema under SOU-67 operator binding.
+    fixture.state = make_state(
+        fixture.dir.path(),
+        Config {
+            enforce: true,
+            ..Config::default()
+        },
+        ALLOW,
+        &bytes,
+        &fixture.registry_sha256,
+    );
+
+    fixture.start("nested-write").await;
+    let args = json!({
+        "spec": {
+            "destination": "nested_out.txt",
+            "payload": "nested create bound content\n"
+        }
+    });
+    let admission = agentfw::native::resource::Admission {
+        server_id: policy.profile.server_id.clone(),
+        host_call_id: json!("nested-call-1"),
+        profile_sha256: agentfw::native::canonical_digest(
+            &serde_json::to_value(&policy.profile).unwrap(),
+        ),
+        executor_sha256: policy.executor_sha256.clone(),
+        classifier_sha256: policy.classifier_sha256.clone(),
+        snapshot_sha256: "d".repeat(64),
+        definition_sha256: "f".repeat(64),
+        input_sha256: "a".repeat(64),
+        resources: vec![agentfw::mcp::resources::ResourceEvidence {
+            pointer: "/spec/destination".into(),
+            source: agentfw::mcp::resources::EvidenceSource::Argument,
+            resource: policy.allowed_resources[0].clone(),
+        }],
+        execution: Some(agentfw::native::resource::create_file_binding(&policy, &args).unwrap()),
+        network: None,
+        windows_read: None,
+    };
+    let mut body = fixture.event("nested-write", "call");
+    body["contract_version"] = json!(agentfw::native::resource::CREATE_CONTRACT);
+    body["tool"] = json!(tool_name);
+    body["args"] = args.clone();
+    body["schema_sha256"] = json!(policy.profile.schema_sha256);
+    body["resource_admission"] = serde_json::to_value(admission).unwrap();
+
+    let (status, reply) = fixture.post(&body).await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert_eq!(reply["verdict"], "allow", "{reply}");
+    assert_eq!(reply["release"], true);
+    assert!(reply["binding_sha256"]
+        .as_str()
+        .is_some_and(agentfw::native::is_digest));
+
+    // Content substitution is denied
+    let mut mutated = body.clone();
+    mutated["args"]["spec"]["payload"] = json!("substituted payload\n");
+    let (mut_status, mut_reply) = fixture.post(&mutated).await;
+    assert_eq!(mut_status, StatusCode::OK, "{mut_reply}");
+    assert_eq!(mut_reply["verdict"], "deny");
+    assert_eq!(mut_reply["release"], false);
+    assert_eq!(
+        mut_reply["reason_codes"],
+        json!(["native_create_binding_mismatch"])
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn sou67_native_parser_rejects_dual_binding_and_execution() {
+    use agentfw::native::resource::{Policy, BINDING_CONTRACT, READ_DOCUMENT_EXECUTOR_PROFILE};
+
+    let (_fixture, policy) = create_file_fixture();
+    let legacy = serde_json::to_value(&policy).unwrap();
+
+    let mut binding_only = legacy.clone();
+    let mut binding = binding_only
+        .as_object_mut()
+        .unwrap()
+        .remove("execution")
+        .unwrap();
+    binding["contract_version"] = json!(BINDING_CONTRACT);
+    binding["path_selector"] = json!("/path");
+    binding["content_selector"] = json!("/content");
+    binding["response_contract"] = json!("sw-native/response/text/1");
+    binding_only["binding"] = binding;
+
+    let load = |resource_policy: &Value| {
+        let configured = json!({
+            "contract_version": CONTRACT,
+            "registry_id": "sou67-authority-parser",
+            "tools": [{
+                "name": "create_file",
+                "schema_sha256": policy.profile.schema_sha256,
+                "action_class": "side_effecting",
+                "result_provenance": "local_project",
+                "egress": [],
+                "resource_policy": resource_policy
+            }]
+        });
+        let bytes = serde_json::to_vec(&configured).unwrap();
+        NativeState::from_bytes(&bytes, &sha(&bytes), NATIVE_TOKEN.into())
+    };
+
+    // Positive production-parser controls prevent blanket rejection.
+    for (label, configured) in [("execution-only", &legacy), ("binding-only", &binding_only)] {
+        if let Err(error) = load(configured) {
+            panic!("{label} rejected: {error:#}");
+        }
+        let parsed: Policy = serde_json::from_value(configured.clone()).unwrap();
+        assert!(
+            parsed.effective_execution().is_some(),
+            "{label} lost its execution authority"
+        );
+    }
+
+    let equivalent = legacy["execution"].clone();
+
+    let mut read_document = equivalent.clone();
+    read_document["operation"] = json!("read_document");
+    read_document["action"] = json!("read");
+    read_document["executor_profile"] = json!(READ_DOCUMENT_EXECUTOR_PROFILE);
+    read_document["max_content_bytes"] = json!(MAX_CONTENT);
+
+    let mut unsupported_profile = equivalent.clone();
+    unsupported_profile["executor_profile"] = json!("unsupported-executor");
+
+    let mut incompatible_path = equivalent.clone();
+    incompatible_path["path_selector"] = json!("/other_path");
+
+    let mut undersized_content = equivalent.clone();
+    undersized_content["max_content_bytes"] = json!(1);
+
+    let mut reviewer_witness = read_document.clone();
+    reviewer_witness["executor_profile"] = json!("unsupported-executor");
+    reviewer_witness["path_selector"] = json!("/other_path");
+    reviewer_witness["max_content_bytes"] = json!(1);
+
+    for (label, execution) in [
+        ("equivalent", equivalent),
+        ("read-document", read_document),
+        ("unsupported-profile", unsupported_profile),
+        ("incompatible-path", incompatible_path),
+        ("undersized-content", undersized_content),
+        ("reviewer-witness", reviewer_witness),
+    ] {
+        let mut dual = binding_only.clone();
+        dual["execution"] = execution;
+
+        let parsed: Policy = serde_json::from_value(dual.clone()).unwrap();
+        assert!(
+            parsed.effective_execution().is_none(),
+            "{label}: silently selected a dual authority"
+        );
+
+        let error = match load(&dual) {
+            Ok(_) => panic!("{label}: production parser accepted dual authority"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            error.to_string(),
+            "conflicting operator execution policies",
+            "{label}: rejected for an unrelated reason"
+        );
+    }
+
+    // Registry parsing must never execute the configured operation.
+    assert!(!policy.workspace.join("new.txt").exists());
+}
+
 const HTTPS_NATIVE_URL: &str = "https://fixture.example/document.json?edition=approved";
 const HTTPS_ALLOW: &str =
     "agent_policies: []\negress_allowlist: [fixture.example]\ndefault: allow\n";
@@ -5482,6 +5805,64 @@ fn https_post_fixture(firewall_policy: &str) -> (Fixture, agentfw::native::resou
         &fixture.registry_sha256,
     );
     (fixture, policy)
+}
+
+#[test]
+fn https_post_rejects_other_operator_authorities_after_main_integration() {
+    use agentfw::native::resource::{
+        Policy, BINDING_CONTRACT, WINDOWS_READ_EXECUTOR_PROFILE, WINDOWS_READ_MAX_CONTENT,
+    };
+    let (_fixture, policy) = https_post_fixture("");
+    let original = serde_json::to_value(&policy).unwrap();
+    let execution = json!({"operation":"create_file", "action":"write",
+        "max_content_bytes":agentfw::native::resource::CREATE_FILE_MAX_CONTENT,
+        "executor_profile":agentfw::native::resource::CREATE_FILE_EXECUTOR_PROFILE});
+    let mut binding = execution.clone();
+    binding["contract_version"] = json!(BINDING_CONTRACT);
+    binding["path_selector"] = json!("/path");
+    binding["content_selector"] = json!("/content");
+    binding["response_contract"] = json!("sw-native/response/text/1");
+    let load = |resource_policy: Value| {
+        let configured = json!({"contract_version": CONTRACT, "registry_id":"post-authority-integration",
+            "tools":[{"name":"https_post", "schema_sha256":policy.profile.schema_sha256,
+                "action_class":"network", "result_provenance":"untrusted",
+                "egress":[{"pointer":"/url","kind":"url_host","optional":false}],
+                "resource_policy":resource_policy}]});
+        let bytes = serde_json::to_vec(&configured).unwrap();
+        NativeState::from_bytes(&bytes, &sha(&bytes), NATIVE_TOKEN.into())
+    };
+    assert!(load(original.clone()).is_ok());
+    for (field, authority) in [
+        ("binding", binding),
+        ("execution", execution),
+        ("network", original["post"]["endpoint"].clone()),
+        (
+            "windows_read",
+            json!({"executor_profile":WINDOWS_READ_EXECUTOR_PROFILE,
+            "max_content_bytes":WINDOWS_READ_MAX_CONTENT}),
+        ),
+    ] {
+        let mut dual = original.clone();
+        dual[field] = authority;
+        let parsed: Policy = serde_json::from_value(dual.clone()).unwrap();
+        assert!(
+            agentfw::native::resource::https_post_binding(
+                &parsed,
+                &json!({"url":HTTPS_NATIVE_URL,"body":"fixture"})
+            )
+            .is_err(),
+            "{field}"
+        );
+        let error = match load(dual) {
+            Ok(_) => panic!("accepted POST plus {field}"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            error.to_string(),
+            "conflicting operator execution policies",
+            "{field}"
+        );
+    }
 }
 
 fn https_post_call(
