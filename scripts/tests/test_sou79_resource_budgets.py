@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Negative controls for independent resource-budget evidence and bounded output."""
 import copy
+import errno
 import importlib.util
 import json
 import os
@@ -10,7 +11,7 @@ import sys
 import tempfile
 import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import mock_open, patch
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location('sou79_controls', ROOT / 'scripts/verify-sou79-resource-budgets.py')
@@ -199,6 +200,70 @@ class ObserverControls(unittest.TestCase):
                                                  'cpu.max', 'pids.max', 'pids.peak', 'cpu.max.burst'})
             self.assertTrue(all(value is False for value in capabilities.values()))
             self.assertEqual(list(root.iterdir()), [])
+
+    def test_mismatched_membership_is_normal_only_after_same_process_confirmed_exited(self):
+        live = {'start': 5, 'state': b'R', 'cpu_ticks': 12}
+        zombie = dict(live, state=b'Z')
+        path = Path('/sys/fs/cgroup/owned/leaf')
+        for ending in (None, zombie, dict(live, start=6)):
+            with patch.object(V, 'process_stat', side_effect=[live, live, ending]), patch.object(V.Path, 'open', mock_open(read_data=b'0::/deleted\n')):
+                self.assertIsNone(V.process_member(101, path))
+        with patch.object(V, 'process_stat', side_effect=[live, live, live]), patch.object(V.Path, 'open', mock_open(read_data=b'0::/outside\n')):
+            with self.assertRaisesRegex(ValueError, 'member_escaped_owned_leaf'):
+                V.process_member(101, path)
+
+    def test_procfs_exit_errno_requires_confirmed_disappearance_and_live_errors_fail(self):
+        live = {'start': 5, 'state': b'R', 'cpu_ticks': 12}
+        for code in (errno.ENOENT, errno.ESRCH):
+            with patch.object(V, 'process_stat', side_effect=[live, None]), patch.object(V.Path, 'open', side_effect=OSError(code, 'private text')):
+                self.assertIsNone(V.process_member(101, Path('/sys/fs/cgroup/owned/leaf')))
+            with patch.object(V, 'process_stat', side_effect=[live, live]), patch.object(V.Path, 'open', side_effect=OSError(code, 'private text')):
+                with self.assertRaises(OSError):
+                    V.process_member(101, Path('/sys/fs/cgroup/owned/leaf'))
+        with patch.object(V, 'process_stat', return_value=live), patch.object(V.Path, 'open', side_effect=OSError(errno.EACCES, 'private text')):
+            with self.assertRaises(PermissionError):
+                V.process_member(101, Path('/sys/fs/cgroup/owned/leaf'))
+
+    def test_leaf_read_race_requires_actual_removal_and_rejects_replacement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'leaf'
+            path.mkdir()
+            descriptor = os.open(path, os.O_RDONLY)
+            try:
+                info = os.fstat(descriptor)
+                identity = (info.st_dev, info.st_ino)
+                for code in (errno.ENOENT, errno.ENODEV):
+                    self.assertFalse(V.removed_leaf_read(OSError(code, 'private text'), path, identity))
+                path.rmdir()
+                for code in (errno.ENOENT, errno.ENODEV):
+                    self.assertTrue(V.removed_leaf_read(OSError(code, 'private text'), path, identity))
+                self.assertFalse(V.removed_leaf_read(OSError(errno.EACCES, 'private text'), path, identity))
+                path.mkdir()
+                with self.assertRaisesRegex(ValueError, 'owned_leaf_identity_changed'):
+                    V.removed_leaf_read(OSError(errno.ENODEV, 'private text'), path, identity)
+            finally:
+                os.close(descriptor)
+
+    def test_only_explicit_cpu_fault_can_observe_missing_cpu_interface(self):
+        def read(path):
+            if path.name == 'cpu.max':
+                raise FileNotFoundError(errno.ENOENT, 'private text')
+            if path.name in ('memory.events', 'pids.events', 'cpu.stat', 'cgroup.events'):
+                return 'max 0\n'
+            if path.name == 'cgroup.procs':
+                return ''
+            return '1\n'
+        with patch.object(V.Path, 'read_text', autospec=True, side_effect=read), patch.object(V.Path, 'exists', return_value=False):
+            with self.assertRaises(FileNotFoundError):
+                V.kernel_values(Path('/owned'))
+            self.assertIsNone(V.kernel_values(Path('/owned'), expected_cpu_loss=True)['cpu.max'])
+        def missing_memory(path):
+            if path.name == 'memory.peak':
+                raise FileNotFoundError(errno.ENOENT, 'private text')
+            return read(path)
+        with patch.object(V.Path, 'read_text', autospec=True, side_effect=missing_memory), patch.object(V.Path, 'exists', return_value=False):
+            with self.assertRaises(FileNotFoundError):
+                V.kernel_values(Path('/owned'), expected_cpu_loss=True)
 
 
 if __name__ == '__main__':

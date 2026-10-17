@@ -8,7 +8,9 @@
 
 #![cfg_attr(not(target_os = "linux"), allow(dead_code))]
 
-use std::path::{Component, Path, PathBuf};
+use std::path::PathBuf;
+#[cfg(target_os = "linux")]
+use std::path::{Component, Path};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -115,19 +117,23 @@ impl Config {
     }
 
     pub(crate) fn validate(&self) -> anyhow::Result<()> {
-        let path = &self.delegation_root;
-        let normalized: PathBuf = path.components().collect();
+        // This describes a Linux path even when parsed on Windows or macOS.
+        // Host Path rules would treat /sys/... as drive-relative on Windows and
+        // make the same frozen configuration mean different things by host.
+        let path = self
+            .delegation_root
+            .to_str()
+            .ok_or_else(|| refusal("mcp_budget_config_invalid"))?;
+        let relative = path.strip_prefix("/sys/fs/cgroup/");
         ensure!(
             self.format == FORMAT
-                && path.is_absolute()
-                && path.starts_with(CGROUP_ROOT)
-                && path != Path::new(CGROUP_ROOT)
-                && path.as_os_str() == normalized.as_os_str()
-                && path
-                    .components()
-                    .all(|c| { matches!(c, Component::RootDir | Component::Normal(_)) })
-                && path.to_str().is_some_and(|text| {
-                    text.len() <= 4_096 && !text.chars().any(char::is_control)
+                && path.len() <= 4_096
+                && !path.contains('\\')
+                && !path.chars().any(char::is_control)
+                && relative.is_some_and(|relative| {
+                    relative
+                        .split('/')
+                        .all(|part| !part.is_empty() && part != "." && part != "..")
                 })
                 && (64 * 1024 * 1024..=16 * 1024 * 1024 * 1024).contains(&self.memory_max_bytes)
                 && self.memory_max_bytes.is_multiple_of(65_536)
@@ -1107,6 +1113,12 @@ mod tests {
             "/sys/fs/cgroup/../escape",
             "/sys/fs/cgroup/./owned",
             "/sys/fs/cgroup//owned",
+            "/sys/fs/cgroup/owned/",
+            "/sys/fs/cgroup/owned/./leaf",
+            "/sys/fs/cgroup/owned/../leaf",
+            "/sys/fs/cgroup/owned\\leaf",
+            "/sys/fs/cgroup/",
+            "C:\\sys\\fs\\cgroup\\owned",
             "/sys/fs/cgroup/owned\n",
         ] {
             let mut value = valid();

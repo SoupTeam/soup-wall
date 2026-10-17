@@ -862,13 +862,35 @@ mod tests {
         let outside_json = serde_json::to_string(&outside).unwrap();
         let script = format!(
             r#"
-import asyncio, errno, json, os, pathlib, socket, subprocess
+import asyncio, ctypes, errno, json, os, pathlib, socket, subprocess
 def denied(fn):
     try:
         fn()
         return False
     except OSError:
         return True
+# The pinned portable Python build need not expose optional os wrappers.
+# Call the actual native syscalls; the Rust test supplies this architecture's
+# numbers rather than assuming an x86-64 ABI inside the Python fixture.
+native_libc = ctypes.CDLL(None, use_errno=True)
+native_libc.syscall.restype = ctypes.c_long
+def native_call(number, *arguments):
+    ctypes.set_errno(0)
+    result = native_libc.syscall(ctypes.c_long(number), *arguments)
+    if result == -1:
+        raise OSError(ctypes.get_errno(), 'owned syscall probe failed')
+    return result
+def memfd(flags):
+    return native_call({memfd_syscall}, ctypes.c_char_p(b'sou79-owned'), ctypes.c_uint(flags))
+def ordinary_memfd():
+    descriptor = memfd({memfd_cloexec})
+    os.close(descriptor)
+    return True
+class SchedulingParameter(ctypes.Structure):
+    _fields_ = [('sched_priority', ctypes.c_int)]
+def scheduler_change():
+    parameter = SchedulingParameter(0)
+    native_call({scheduler_syscall}, ctypes.c_int(0), ctypes.c_int({normal_scheduler}), ctypes.byref(parameter))
 def denied_by_filter(fn):
     try:
         descriptor = fn()
@@ -895,8 +917,9 @@ result = {{
  'asyncio_ready': True,
  'null_open_allowed': null_open(),
  'git_read': git.returncode == 0,
- 'hugetlb_creation_denied': denied_by_filter(lambda: os.memfd_create('sou79-owned', os.MFD_HUGETLB)),
- 'scheduler_change_denied': denied_by_filter(lambda: os.sched_setscheduler(0, os.SCHED_OTHER, os.sched_param(0))),
+ 'ordinary_memfd_allowed': ordinary_memfd(),
+ 'hugetlb_creation_denied': denied_by_filter(lambda: memfd({memfd_hugetlb})),
+ 'scheduler_change_denied': denied_by_filter(scheduler_change),
  'git_exit': git.returncode,
  'git_error': git.stderr[-2000:].decode('utf-8', 'replace'),
  'workspace_write_denied': denied(lambda: pathlib.Path('/workspace/sandbox-forbidden').write_text('denied')),
@@ -916,7 +939,12 @@ result = {{
 }}
 print(json.dumps(result))
 "#,
-            port = address.port()
+            port = address.port(),
+            memfd_syscall = libc::SYS_memfd_create,
+            scheduler_syscall = libc::SYS_sched_setscheduler,
+            memfd_cloexec = libc::MFD_CLOEXEC,
+            memfd_hugetlb = libc::MFD_HUGETLB,
+            normal_scheduler = libc::SCHED_OTHER,
         );
         let args = vec!["-I".into(), "-B".into(), "-c".into(), script];
         let mut prepared = prepare_linux_command(&profile, &args).unwrap();
@@ -981,6 +1009,7 @@ print(json.dumps(result))
             "null_open_allowed",
             "asyncio_ready",
             "git_read",
+            "ordinary_memfd_allowed",
             "hugetlb_creation_denied",
             "scheduler_change_denied",
             "workspace_write_denied",
@@ -1115,7 +1144,7 @@ print(json.dumps(result))
                     assert_eq!(evaluate(syscall, pid, 0, 0), deny);
                 }
             }
-            for extra in [0, 1, u32::MAX & !(libc::MAP_HUGETLB as u32)] {
+            for extra in [0, 1, !(libc::MAP_HUGETLB as u32)] {
                 assert_eq!(evaluate_full(libc::SYS_mmap, 0, 0, 0, extra, 0), allow);
                 assert_eq!(
                     evaluate_full(libc::SYS_mmap, 0, 0, 0, extra | libc::MAP_HUGETLB as u32, 0),
@@ -1126,7 +1155,7 @@ print(json.dumps(result))
                 (libc::SYS_memfd_create, libc::MFD_HUGETLB, 1),
                 (libc::SYS_shmget, libc::SHM_HUGETLB as u32, 2),
             ] {
-                for extra in [0, 1, u32::MAX & !flag] {
+                for extra in [0, 1, !flag] {
                     let evaluate_flags = |flags| {
                         if argument == 1 {
                             evaluate(syscall, 0, flags, 0)

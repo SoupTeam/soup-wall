@@ -319,10 +319,18 @@ class Capture:
                 'refusals': list(self.refusals)}
 
 
-def kernel_values(path):
+def kernel_values(path, expected_cpu_loss=False):
     values = {}
     for name in FILES:
-        raw = (path / name).read_text()
+        try:
+            raw = (path / name).read_text()
+        except FileNotFoundError:
+            # This one operator-injected fault deliberately removes cpu.max.
+            # Its absence is an observed value, not a successful limit read.
+            if expected_cpu_loss and name == 'cpu.max':
+                values[name] = None
+                continue
+            raise
         require(len(raw) <= 65536, 'kernel_observer_input_limit')
         if name in ('memory.events', 'pids.events', 'cpu.stat', 'cgroup.events'):
             values[name] = {key: int(value) for key, value in (row.split() for row in raw.splitlines())}
@@ -336,12 +344,75 @@ def kernel_values(path):
     return values
 
 
+def process_stat(pid):
+    try:
+        with Path(f'/proc/{pid}/stat').open('rb') as stream:
+            raw = stream.read(8193)
+    except OSError as error:
+        if error.errno in (errno.ENOENT, errno.ESRCH):
+            return None
+        raise
+    require(len(raw) <= 8192, 'process_stat_input_limit')
+    fields = raw.rsplit(b')', 1)[1].split()
+    return {'start': int(fields[19]), 'state': fields[0], 'cpu_ticks': int(fields[11]) + int(fields[12])}
+
+
+def process_ended(pid, start):
+    current = process_stat(pid)
+    return current is None or current['start'] != start or current['state'] in (b'Z', b'X', b'x')
+
+
+def process_member(pid, path):
+    initial = process_stat(pid)
+    if initial is None or initial['state'] in (b'Z', b'X', b'x'):
+        return None
+    start = initial['start']
+    try:
+        with Path(f'/proc/{pid}/cgroup').open('rb') as group:
+            raw = group.read(8193)
+        require(len(raw) <= 8192, 'process_cgroup_input_limit')
+        with Path(f'/proc/{pid}/cmdline').open('rb') as command:
+            argv = command.read(4096).split(b'\0')
+        current = process_stat(pid)
+        if current is None or current['start'] != start or current['state'] in (b'Z', b'X', b'x'):
+            return None
+        expected = ('0::' + str(path).removeprefix('/sys/fs/cgroup')).encode()
+        if raw.strip() != expected:
+            # Recheck AFTER an inconsistent read: procfs can return a deleted
+            # cgroup path while this exact process is concurrently exiting.
+            if process_ended(pid, start):
+                return None
+            raise ValueError('member_escaped_owned_leaf')
+        role = next((role for role in ('memory', 'cpu', 'sleep') if ('--worker-' + role).encode() in argv), None)
+        return {'pid': pid, 'start_time_ticks': start, 'worker_role': role, 'cpu_ticks': current['cpu_ticks']}
+    except OSError as error:
+        if error.errno in (errno.ENOENT, errno.ESRCH) and process_ended(pid, start):
+            return None
+        raise
+
+
+def leaf_state(path, identity):
+    try:
+        current = path.stat(follow_symlinks=False)
+    except FileNotFoundError:
+        return 'gone'
+    require(stat.S_ISDIR(current.st_mode) and (current.st_dev, current.st_ino) == identity, 'owned_leaf_identity_changed')
+    return 'live'
+
+
+def removed_leaf_read(error, path, identity):
+    return error.errno in (errno.ENOENT, errno.ENODEV) and leaf_state(path, identity) == 'gone'
+
+
 class KernelObserver:
     """Only the parent reads cgroupfs and host PID identities; bounded snapshots."""
     def __init__(self, root):
         self.root, self.existing = root, {p.name for p in root.iterdir() if p.is_dir()}
         self.path, self.first, self.last, self.failure = None, None, None, None
         self.leaf_seen_at, self.removed_at = None, None
+        self.leaf_fd = None
+        self.failure_phase, self.failure_errno = None, None
+        self.expected_cpu_loss, self.controller_loss_seen = False, False
         self.members, self.peak_memory, self.peak_tasks, self.samples = {}, 0, 0, 0
         self.counter_max = {'oom': 0, 'oom_kill': 0, 'pids_max': 0, 'throttled': 0}
         self.start, self.stop = time.monotonic(), threading.Event()
@@ -350,26 +421,38 @@ class KernelObserver:
 
     def run(self):
         while not self.stop.wait(0.002):
+            phase = 'leaf_discovery'
             try:
                 if self.path is None:
                     candidates = [p for p in self.root.iterdir() if p.is_dir() and p.name not in self.existing]
                     require(len(candidates) <= 1, 'ambiguous_owned_leaf')
                     if not candidates:
                         continue
-                    self.path = candidates[0]
+                    candidate = candidates[0]
+                    require(LEAF.fullmatch(candidate.name), 'unexpected_owned_leaf_name')
+                    try:
+                        descriptor = os.open(candidate, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+                    except FileNotFoundError:
+                        continue
+                    self.path, self.leaf_fd = candidate, descriptor
                     self.leaf_seen_at = time.monotonic()
-                    require(LEAF.fullmatch(self.path.name), 'unexpected_owned_leaf_name')
-                    self.inode = self.path.stat().st_ino
-                if not self.path.exists():
+                    pinned = os.fstat(self.leaf_fd)
+                    self.inode, self.device = pinned.st_ino, pinned.st_dev
+                phase = 'leaf_identity'
+                if leaf_state(self.path, (self.device, self.inode)) == 'gone':
                     if self.removed_at is None:
                         self.removed_at = time.monotonic()
                     continue
-                require(self.path.stat().st_ino == self.inode, 'owned_leaf_identity_changed')
+                phase = 'kernel_controls'
                 # Production configures the new leaf before attaching its child.
                 # An empty preparation directory is not evidence of execution.
                 if self.first is None and not (self.path / 'cgroup.procs').read_text().strip():
                     continue
-                value = kernel_values(self.path)
+                value = kernel_values(self.path, self.expected_cpu_loss)
+                if self.expected_cpu_loss and value['cpu.max'] is None:
+                    if leaf_state(self.path, (self.device, self.inode)) == 'gone':
+                        self.removed_at = self.removed_at or time.monotonic()
+                        continue
                 if self.first is None:
                     self.first = value
                 self.last, self.samples = value, self.samples + 1
@@ -379,32 +462,30 @@ class KernelObserver:
                         ('pids_max', 'pids.events', 'max'), ('throttled', 'cpu.stat', 'nr_throttled')):
                     self.counter_max[key] = max(self.counter_max[key], value[section].get(field, 0))
                 for pid in value['cgroup.procs']:
-                    start = BASE.ProcessWitness.identity(pid)
-                    if start is None:
+                    phase = 'process_member'
+                    member = process_member(pid, self.path)
+                    if member is None:
                         continue
-                    raw = Path(f'/proc/{pid}/cgroup').read_text().strip()
-                    with Path(f'/proc/{pid}/cmdline').open('rb') as command:
-                        argv = command.read(4096).split(b'\0')
-                    worker_role = next((role for role in ('memory', 'cpu', 'sleep') if ('--worker-' + role).encode() in argv), None)
-                    fields = Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()
-                    cpu_ticks = int(fields[11]) + int(fields[12])
-                    if BASE.ProcessWitness.identity(pid) != start:
-                        continue
-                    # A dying task may already report a deleted cgroup path.
-                    # Only a live same-identity member can witness an escape;
-                    # retained identities must still disappear at final cleanup.
-                    if fields[0] == 'Z':
-                        continue
-                    require(raw == '0::' + str(self.path).removeprefix('/sys/fs/cgroup'), 'member_escaped_owned_leaf')
+                    start = member['start_time_ticks']
                     require(len(self.members) < 256 or (pid, start) in self.members, 'observer_member_limit')
                     previous = self.members.get((pid, start), {})
-                    self.members[(pid, start)] = {'pid': pid, 'start_time_ticks': start, 'worker_role': worker_role or previous.get('worker_role'),
-                        'cpu_ticks': max(cpu_ticks, previous.get('cpu_ticks', 0))}
-            except FileNotFoundError:
-                # A process/leaf disappearing during normal cleanup is expected.
-                continue
-            except (OSError, ValueError, TypeError, IndexError):
+                    member['worker_role'] = member['worker_role'] or previous.get('worker_role')
+                    member['cpu_ticks'] = max(member['cpu_ticks'], previous.get('cpu_ticks', 0))
+                    self.members[(pid, start)] = member
+            except OSError as error:
+                if phase in ('leaf_identity', 'kernel_controls'):
+                    try:
+                        if self.leaf_fd is not None and removed_leaf_read(error, self.path, (self.device, self.inode)):
+                            if self.removed_at is None:
+                                self.removed_at = time.monotonic()
+                            continue
+                    except (OSError, ValueError):
+                        pass
                 self.failure = 'kernel_observation_failed'
+                self.failure_phase, self.failure_errno = phase, error.errno
+            except (ValueError, TypeError, IndexError):
+                self.failure = 'kernel_observation_failed'
+                self.failure_phase = phase
 
     def ready(self):
         until = time.monotonic() + 10
@@ -416,13 +497,28 @@ class KernelObserver:
     def finish(self):
         self.stop.set()
         self.thread.join(timeout=3)
-        remaining = [row for (pid, start), row in self.members.items() if BASE.ProcessWitness.identity(pid) == start]
+        removed, remaining = False, []
+        try:
+            if self.path is not None:
+                removed = leaf_state(self.path, (self.device, self.inode)) == 'gone'
+            for (pid, start), row in self.members.items():
+                current = process_stat(pid)
+                if current is not None and current['start'] == start:
+                    remaining.append(row)
+        except (OSError, ValueError, TypeError, IndexError):
+            self.failure, self.failure_phase = 'kernel_observation_failed', 'final_cleanup'
+        finally:
+            if not self.thread.is_alive() and self.leaf_fd is not None:
+                os.close(self.leaf_fd)
+                self.leaf_fd = None
         return {'leaf': self.path.name if self.path else None, 'inode': getattr(self, 'inode', None),
                 'first': self.first, 'last': self.last, 'samples': self.samples,
                 'memory_peak_bytes': self.peak_memory, 'tasks_peak': self.peak_tasks,
                 'counter_max': self.counter_max, 'members': list(self.members.values()),
-                'remaining': remaining, 'leaf_removed': self.path is not None and not self.path.exists(),
+                'remaining': remaining, 'leaf_removed': removed,
                 'error': self.failure, 'thread_stopped': not self.thread.is_alive(),
+                'error_phase': self.failure_phase, 'error_errno': self.failure_errno,
+                'controller_loss_seen': self.controller_loss_seen,
                 'leaf_duration_millis': int((self.removed_at - self.leaf_seen_at) * 1000) if self.removed_at and self.leaf_seen_at else None,
                 'elapsed_millis': int((time.monotonic() - self.start) * 1000)}
 
@@ -704,7 +800,9 @@ def exercise(rig, report):
             # Explicit operator fault injection in this one owned, idle workload.
             (client.kernel.path / 'memory.max').write_text(str(client.limits['memoryMaxBytes'] + 64 * 1024 * 1024))
         if mode == 'controller-loss':
+            client.kernel.expected_cpu_loss = True
             (selected_root / 'cgroup.subtree_control').write_text('-cpu')
+            client.kernel.controller_loss_seen = 'cpu' not in (selected_root / 'cgroup.subtree_control').read_text().split()
         client.close(expect_failure=True)
         if selected_root != rig.delegation:
             selected_root.rmdir()
@@ -793,6 +891,7 @@ def grade(report):
             require(row['exit_code'] == 0, 'useful_collector_failed')
     require(rows['memory']['kernel']['counter_max']['oom_kill'] > 0 and len(rows['memory']['kernel']['members']) >= 3, 'aggregate_memory_pressure_not_executed')
     require(rows['pids']['kernel']['counter_max']['pids_max'] > 0 and len(rows['pids']['kernel']['members']) >= 3, 'aggregate_task_pressure_not_executed')
+    require(rows['controller-loss']['kernel']['controller_loss_seen'] is True, 'owned_controller_loss_not_observed')
     for name, role, minimum in (('memory', 'memory', 2), ('pids', 'sleep', 1), ('cpu-wall', 'cpu', 2)):
         workers = [member for member in rows[name]['kernel']['members'] if member.get('worker_role') == role]
         require(len(workers) >= minimum, 'actual_owned_workers_not_observed')
