@@ -573,15 +573,16 @@ impl NativeState {
             }
             if let Some(profile) = &tool.mcp_result_profile {
                 anyhow::ensure!(
-                    profile == crate::mcp::server_profile::FORMAT
+                    crate::mcp::server_profile::selected(Some(profile))
                         && tool.action_class == ActionClass::ReadOnly
                         && matches!(tool.result_provenance, ResultProvenance::Untrusted)
                         && tool.egress.is_empty()
                         && tool.resource_policy.is_none(),
                     "invalid selected MCP result profile authority"
                 );
-                let manifest = crate::mcp::server_profile::original_manifest();
-                let profiles = crate::mcp::server_profile::classify_manifest(&manifest)?;
+                let manifest = crate::mcp::server_profile::original_manifest_for(profile)?;
+                let profiles =
+                    crate::mcp::server_profile::classify_manifest_for(profile, &manifest)?;
                 anyhow::ensure!(
                     profiles
                         .get(&tool.name)
@@ -1128,6 +1129,14 @@ fn mcp_host_text(content: &str, result_kind: &str) -> Result<Vec<String>, &'stat
 /// Both channels are decoded and independently inspected. Correlation and the
 /// receipt hash continue to bind the complete untouched JSON-RPC response.
 fn selected_mcp_host_text(content: &str, result_kind: &str) -> Result<Vec<String>, &'static str> {
+    selected_mcp_host_text_profile(content, result_kind, true)
+}
+
+fn selected_mcp_host_text_profile(
+    content: &str,
+    result_kind: &str,
+    structured_required: bool,
+) -> Result<Vec<String>, &'static str> {
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     struct SelectedEnvelope {
@@ -1181,7 +1190,10 @@ fn selected_mcp_host_text(content: &str, result_kind: &str) -> Result<Vec<String
                 || value["result"]
                     .get("structuredContent")
                     .is_some_and(|v| !v.is_object())
-                || (result.structured_content.is_none() && !result.is_error.unwrap_or(false))
+                || (structured_required
+                    && result.structured_content.is_none()
+                    && !result.is_error.unwrap_or(false))
+                || (!structured_required && result.structured_content.is_some())
             {
                 return Err("native_mcp_result_shape");
             }
@@ -1626,7 +1638,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             }
         }
         let selected_result =
-            tool.mcp_result_profile.as_deref() == Some(crate::mcp::server_profile::FORMAT);
+            crate::mcp::server_profile::selected(tool.mcp_result_profile.as_deref());
         if selected_result {
             if request.contract_version != CONTRACT
                 || !request
@@ -1824,7 +1836,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         .remove(id)
         .ok_or("native_call_unknown_or_spent")?;
     if request.event == "result"
-        && tool.mcp_result_profile.as_deref() == Some(crate::mcp::server_profile::FORMAT)
+        && crate::mcp::server_profile::selected(tool.mcp_result_profile.as_deref())
         && request.delivery.as_deref() != Some("mcp_host")
     {
         // A selected MCP grant cannot downgrade to the legacy opaque parent or
@@ -1864,7 +1876,14 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             return Err("native_delivery");
         }
         if request.delivery.as_deref() == Some("mcp_host") {
-            if tool.mcp_result_profile.as_deref() == Some(crate::mcp::server_profile::FORMAT) {
+            if tool.mcp_result_profile.as_deref() == Some(crate::mcp::server_profile::git::FORMAT) {
+                selected_mcp_host_text_profile(
+                    content,
+                    request.result_kind.as_deref().unwrap_or(""),
+                    false,
+                )?
+            } else if tool.mcp_result_profile.as_deref() == Some(crate::mcp::server_profile::FORMAT)
+            {
                 selected_mcp_host_text(content, request.result_kind.as_deref().unwrap_or(""))?
             } else {
                 mcp_host_text(content, request.result_kind.as_deref().unwrap_or(""))?
@@ -2554,6 +2573,32 @@ mod tests {
             let dir = tempfile::tempdir().unwrap();
             assert_eq!(
                 mcp_host_completion(&selected_fixture(dir.path()), original, "value").err(),
+                Some("native_mcp_result_shape")
+            );
+        }
+    }
+
+    #[test]
+    fn selected_git_text_only_result_does_not_weaken_filesystem_or_metadata_checks() {
+        let original = r#"{"jsonrpc":"2.0","id":"git-1","result":{"content":[{"type":"text","text":"original Git output"}],"isError":false}}"#;
+        assert_eq!(
+            selected_mcp_host_text_profile(original, "value", false).unwrap(),
+            ["original Git output"]
+        );
+        assert!(selected_mcp_host_text(original, "value").is_err());
+        assert_eq!(
+            selected_mcp_host_text_profile(original, "error", false).err(),
+            Some("native_mcp_result_kind")
+        );
+        for original in [
+            r#"{"jsonrpc":"2.0","id":1,"result":{"content":[],"_meta":{"hidden":"payload"}}}"#,
+            r#"{"jsonrpc":"2.0","id":1,"result":{"content":[],"structuredContent":{"content":"hidden"}}}"#,
+            r#"{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"image","text":"hidden"}]}}"#,
+            r#"{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"safe","text":"hidden"}]}}"#,
+            r#"{"jsonrpc":"2.0","id":true,"result":{"content":[]}}"#,
+        ] {
+            assert_eq!(
+                selected_mcp_host_text_profile(original, "value", false).err(),
                 Some("native_mcp_result_shape")
             );
         }

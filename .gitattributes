@@ -23,3 +23,7 @@ eval/fixtures/*.json text eol=lf
 profiles/mcp/filesystem-readonly-v1/** text eol=lf
 # Preserve original upstream legal notices, including their original whitespace.
 profiles/mcp/filesystem-readonly-v1/upstream-notices/** -text whitespace=-space-before-tab
+
+# SOU-68 original Git discovery and wheel lock are bound by raw-byte digests.
+profiles/mcp/git-readonly-v1/** -text whitespace=cr-at-eol
+profiles/mcp/git-readonly-v1/upstream-notices/** -text whitespace=-space-before-tab

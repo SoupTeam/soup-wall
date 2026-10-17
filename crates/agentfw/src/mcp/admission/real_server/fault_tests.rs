@@ -109,6 +109,7 @@ impl Harness {
                 &mut relay_host,
                 &mut BufReader::new(relay_server),
                 &mut relay_child,
+                server_profile::FORMAT,
             )
             .await
         });

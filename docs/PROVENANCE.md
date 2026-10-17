@@ -119,6 +119,28 @@ is needed. The Cargo dependency graph remains unchanged.
 
 ## Release evidence
 
+### Optional original Git MCP server
+
+The opt-in [Git profile](operations/GIT_MCP_PROFILE.md) uses the original
+`mcp-server-git` 2026.10.10 from
+[modelcontextprotocol/servers](https://github.com/modelcontextprotocol/servers/tree/main/src/git),
+MCP SDK 1.29.0 (MIT), and GitPython (BSD-3-Clause). Original notices are retained
+in [the profile assets](../profiles/mcp/git-readonly-v1/upstream-notices).
+The hash-locked wheel requirements and adjacent dependency-provenance inventory
+record the complete selected Python graph and its separate upstream licenses;
+the installer preserves package metadata and license files. Discovery bytes are
+behavioral fixtures, not a replacement server implementation.
+
+CPython 3.11.14 uses the pinned Astral python-build-standalone 20251014 original
+distribution, with Python/third-party distribution notices retained in the
+runtime tree. Git 2.51.2 is a separate GPL-2.0 executable built from its pinned
+official source archive; its COPYING file remains in the build source. The
+existing separately built bubblewrap 0.13.1 remains LGPL-2.0-or-later. These
+executables are not linked into or redistributed with the Apache-2.0 Agent.
+Redistributing an installed runtime requires reviewing its complete licenses and
+corresponding-source obligations separately. No model, provider account or
+customer data is needed. The Cargo dependency graph is unchanged.
+
 Review and retain the locked dependency graph, an SBOM, third-party license and notice inventory, model and dataset records, the upstream attribution, and security-scan findings for the **complete** workspace. Document any unresolved advisory or deployment limitation in the release notes.
 
 ## Optional SCIM interoperability client
