@@ -181,15 +181,10 @@ pub(crate) fn read_private(_path: &Path, _max: u64) -> anyhow::Result<Vec<u8>> {
 
 /// Hash only a verified local regular asset, streaming at most the maximum.
 /// Never use legacy unbounded lifecycle SHA-256 on the diagnostic path.
+#[cfg(unix)]
 pub(crate) fn hash_selected_file(path: &Path, limit: u64) -> anyhow::Result<String> {
     use std::io::Read;
-    #[cfg(unix)]
     let mut file = open_private_bounded(path, limit)?;
-    #[cfg(not(unix))]
-    {
-        let _ = (path, limit);
-        anyhow::bail!("installed diagnostic file hashing requires Unix")
-    }
     let mut hash = Sha256::new();
     let mut buf = [0u8; 16 * 1024];
     let mut total = 0u64;
@@ -203,6 +198,11 @@ pub(crate) fn hash_selected_file(path: &Path, limit: u64) -> anyhow::Result<Stri
         hash.update(&buf[..size]);
     }
     Ok(format!("{:x}", hash.finalize()))
+}
+
+#[cfg(not(unix))]
+pub(crate) fn hash_selected_file(_path: &Path, _limit: u64) -> anyhow::Result<String> {
+    anyhow::bail!("installed diagnostic file hashing requires Unix")
 }
 
 fn lifecycle_check(status: &LifecycleStatus) -> Check {
