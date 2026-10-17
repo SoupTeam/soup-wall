@@ -32,6 +32,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Claude HTTP-hook acceptance](operations/CLAUDE_HOST_ACCEPTANCE.md) | Actual host behavior with deterministic local model fixtures |
 | [Agent self-test](operations/SELF_TEST.md) | One Linux command: witnessed useful reads, a refused synthetic send, daemon loss and a versioned report |
 | [Opt-in stdio MCP admission](operations/MCP_STDIO_ADMISSION.md) | Reviewed schemas, pre-execution calls and result release to the MCP host |
+| [Native MCP diagnostic output](operations/NATIVE_MCP_STDERR.md) | Bounded discarded child stderr, safe metadata, owned cleanup and required Linux evidence |
 | [Sandboxed real filesystem MCP](operations/MCP_REAL_FILESYSTEM.md) | Explicit pinned Linux read-only server, bounded overlap/cancellation and required actual-host acceptance |
 | [Claude Code MCP connection](operations/CLAUDE_MCP_CONNECTION.md) | Selected-server preview, transactional setup, controlled verification and safe disconnect |
 | [Native resource admission](operations/NATIVE_RESOURCE_ADMISSION.md) | Resource permissions, receipt integrity and unsupported executor boundary |
