@@ -1,0 +1,34 @@
+name: SOU-65 profile authoring safety
+
+on:
+  pull_request:
+    paths:
+      - 'crates/agentfw/src/mcp/profile_authoring.rs'
+      - 'crates/agentfw/src/mcp/mod.rs'
+      - 'crates/agentfw/src/main.rs'
+      - 'scripts/verify-sou65-profile.py'
+      - '.github/workflows/sou65-profile.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  profile-authoring:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Rust formatting
+        run: cargo fmt --all -- --check
+      - name: Compile, test and lint operator CLI
+        run: |
+          cargo test --locked -p agentfw --lib mcp::profile_authoring
+          cargo clippy --locked -p agentfw --all-targets -- -D warnings
+          cargo build --locked -p agentfw
+      - name: Exercise import, validation, difference and no-clobber
+        run: python3 scripts/verify-sou65-profile.py
