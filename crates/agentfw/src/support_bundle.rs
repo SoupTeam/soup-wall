@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Explicit local-only support export. This is not a raw-log archive.
 
-use std::path::Path;
 use crate::doctor::Report;
+use std::path::Path;
 
 #[cfg(target_os = "linux")]
 pub fn export(report: &Report, destination: &Path) -> anyhow::Result<()> {
@@ -31,8 +31,11 @@ pub fn export(report: &Report, destination: &Path) -> anyhow::Result<()> {
                 Component::Normal(name) => {
                     let name = c(name)?;
                     let fd = unsafe {
-                        libc::openat(dir.as_raw_fd(), name.as_ptr(),
-                                     libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+                        libc::openat(
+                            dir.as_raw_fd(),
+                            name.as_ptr(),
+                            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                        )
                     };
                     ensure!(fd >= 0, "unsafe output parent");
                     dir = unsafe { File::from_raw_fd(fd) };
@@ -45,9 +48,12 @@ pub fn export(report: &Report, destination: &Path) -> anyhow::Result<()> {
 
     fn create_file(dir: &File, name: &std::ffi::CStr, bytes: &[u8]) -> anyhow::Result<()> {
         let fd = unsafe {
-            libc::openat(dir.as_raw_fd(), name.as_ptr(),
-                         libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC,
-                         0o600)
+            libc::openat(
+                dir.as_raw_fd(),
+                name.as_ptr(),
+                libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                0o600,
+            )
         };
         ensure!(fd >= 0, "cannot create new private support file");
         let mut file = unsafe { File::from_raw_fd(fd) };
@@ -74,7 +80,11 @@ pub fn export(report: &Report, destination: &Path) -> anyhow::Result<()> {
                 }
             }
             unsafe {
-                libc::unlinkat(self.parent.as_raw_fd(), self.stage.as_ptr(), libc::AT_REMOVEDIR);
+                libc::unlinkat(
+                    self.parent.as_raw_fd(),
+                    self.stage.as_ptr(),
+                    libc::AT_REMOVEDIR,
+                );
             }
         }
     }
@@ -85,13 +95,14 @@ pub fn export(report: &Report, destination: &Path) -> anyhow::Result<()> {
     }
 
     let parent_path = destination.parent().context("missing destination parent")?;
-    let target = c(destination.file_name().context("missing destination name")?)?;
+    let target = c(destination
+        .file_name()
+        .context("missing destination name")?)?;
     ensure!(!target.as_bytes().is_empty(), "empty destination name");
     let parent = open_dir(parent_path)?;
     let owner = parent.metadata()?;
     ensure!(
-        owner.is_dir() && owner.uid() == unsafe { libc::geteuid() }
-            && owner.mode() & 0o077 == 0,
+        owner.is_dir() && owner.uid() == unsafe { libc::geteuid() } && owner.mode() & 0o077 == 0,
         "support output parent must be owner-only"
     );
     let bytes = serde_json::to_vec_pretty(report)?;
@@ -113,27 +124,44 @@ pub fn export(report: &Report, destination: &Path) -> anyhow::Result<()> {
     let ok = unsafe { libc::mkdirat(parent.as_raw_fd(), stage.as_ptr(), 0o700) };
     ensure!(ok == 0, "unable to create private support stage");
     let fd = unsafe {
-        libc::openat(parent.as_raw_fd(), stage.as_ptr(),
-                     libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        libc::openat(
+            parent.as_raw_fd(),
+            stage.as_ptr(),
+            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+        )
     };
     if fd < 0 {
-        unsafe { libc::unlinkat(parent.as_raw_fd(), stage.as_ptr(), libc::AT_REMOVEDIR); }
+        unsafe {
+            libc::unlinkat(parent.as_raw_fd(), stage.as_ptr(), libc::AT_REMOVEDIR);
+        }
         anyhow::bail!("cannot open private support stage");
     }
     let output = unsafe { File::from_raw_fd(fd) };
-    let mut staging = Staging { parent, stage, output, published: false };
-    create_file(&staging.output, cstr(b"report.json\0"), &bytes)
-        .context("report write failed")?;
+    let mut staging = Staging {
+        parent,
+        stage,
+        output,
+        published: false,
+    };
+    create_file(&staging.output, cstr(b"report.json\0"), &bytes).context("report write failed")?;
     create_file(&staging.output, cstr(b"manifest.json\0"), &manifest_bytes)
         .context("manifest write failed")?;
     staging.output.sync_all()?;
     // Rename without clobbering an existing file, link or directory, even in a
     // concurrent publication. The directory is published in one atomic step.
     let moved = unsafe {
-        libc::renameat2(staging.parent.as_raw_fd(), staging.stage.as_ptr(),
-                        staging.parent.as_raw_fd(), target.as_ptr(), libc::RENAME_NOREPLACE)
+        libc::renameat2(
+            staging.parent.as_raw_fd(),
+            staging.stage.as_ptr(),
+            staging.parent.as_raw_fd(),
+            target.as_ptr(),
+            libc::RENAME_NOREPLACE,
+        )
     };
-    ensure!(moved == 0, "support destination already exists or cannot be published");
+    ensure!(
+        moved == 0,
+        "support destination already exists or cannot be published"
+    );
     staging.published = true;
     staging.parent.sync_all()?;
     Ok(())
@@ -173,8 +201,10 @@ mod tests {
         assert!(!String::from_utf8_lossy(&bytes).contains("secret-sentinel"));
         let value: serde_json::Value =
             serde_json::from_slice(&std::fs::read(path.join("manifest.json")).unwrap()).unwrap();
-        assert_eq!(value["files"][0]["sha256"].as_str().unwrap(),
-                   format!("{:x}", sha2::Sha256::digest(&bytes)));
+        assert_eq!(
+            value["files"][0]["sha256"].as_str().unwrap(),
+            format!("{:x}", sha2::Sha256::digest(&bytes))
+        );
         assert!(export(&sample(), &path).is_err());
         assert!(path.join("report.json").exists());
         let linked = dir.path().join("linked");
