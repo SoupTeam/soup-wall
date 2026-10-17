@@ -223,6 +223,15 @@ fn lifecycle_check(status: &LifecycleStatus) -> Check {
         check("installation", "read_only_lifecycle_manifest", Outcome::Failed,
               "installed_binary_mismatch", "Selected managed binary does not match its pin.",
               "Review agentfw lifecycle status and the installed binary; do not start an unverified version.")
+    } else if status.detail == "config snapshot unavailable" {
+        check(
+            "installation",
+            "bounded_config_snapshot",
+            Outcome::Unknown,
+            "managed_config_unverifiable",
+            "Recorded startup config cannot be compared with the rejected local input.",
+            "Replace an unsafe config only through the existing operator workflow; doctor will not reopen it.",
+        )
     } else if status.detail == "running with changed config; restart to apply it" {
         check("installation", "read_only_lifecycle_manifest", Outcome::Failed,
               "host_config_drift", "Disk configuration differs from recorded startup intent.",
