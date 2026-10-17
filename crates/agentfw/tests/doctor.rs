@@ -241,9 +241,8 @@ fn cancellation_before_completion_never_publishes_support_bundle() {
     use std::net::TcpListener;
     use std::time::{Duration, Instant};
     let work = tempfile::tempdir().unwrap();
-    let home = work.path().join(".agentfw");
-    std::fs::create_dir(&home).unwrap();
-    std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let (home, manifest) = recorded_process_fixture(work.path());
+    let manifest_before = std::fs::read(&manifest).unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let port = listener.local_addr().unwrap().port();
@@ -286,6 +285,8 @@ fn cancellation_before_completion_never_publishes_support_bundle() {
     assert!(!child.wait().unwrap().success());
     assert!(!bundle.exists());
     assert_eq!(std::fs::read_dir(&out_parent).unwrap().count(), 0);
+    assert_eq!(std::fs::read(&manifest).unwrap(), manifest_before);
+    assert!(!home.join("versions/.lock").exists());
 }
 
 /// An independently constructed, structurally valid recorded managed process.
