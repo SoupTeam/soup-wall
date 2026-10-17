@@ -264,6 +264,44 @@ impl Manager {
         state.active.context("rollback lost active version")
     }
 
+    /// Read-only snapshot for doctor. Unlike `status`, this does not create an
+    /// operation lock, change permissions, query a daemon or adopt a process.
+    /// Any recorded process still needs separate authenticated verification.
+    pub fn inspect_read_only(&self) -> Result<Status> {
+        if !self.home.exists() || !self.root.exists() {
+            return Ok(Status {
+                active: None, previous: None, process: None,
+                running: false, interrupted: false, detail: "not installed".into(),
+            });
+        }
+        ensure_dir(&self.home)?;
+        ensure_dir(&self.root)?;
+        let state = self.load()?;
+        let binary_changed = state.active.as_ref().is_some_and(|r| self.verify(r).is_err());
+        let config_changed = state.process.as_ref().is_some_and(|process| {
+            self.config_digest().ok().as_deref() != Some(process.config_digest.as_str())
+        });
+        let detail = if state.operation.is_some() || state.pending_stage.is_some() {
+            "interrupted operation; run recover"
+        } else if binary_changed {
+            "installed binary has changed"
+        } else if config_changed {
+            "running with changed config; restart to apply it"
+        } else if state.process.is_some() {
+            "process recorded; authenticated observation required"
+        } else if state.active.is_some() {
+            "installed and stopped"
+        } else {
+            "not installed"
+        };
+        Ok(Status {
+            active: state.active, previous: state.previous, process: state.process,
+            running: false,
+            interrupted: state.operation.is_some() || state.pending_stage.is_some(),
+            detail: detail.to_owned(),
+        })
+    }
+
     pub fn status(&self) -> Result<Status> {
         #[cfg(target_os = "linux")]
         if crate::service::registered(&self.home) {
