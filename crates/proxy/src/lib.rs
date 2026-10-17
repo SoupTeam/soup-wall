@@ -14,6 +14,7 @@ pub mod config;
 pub mod control_plane;
 pub mod customer_ui;
 pub mod events;
+pub mod fleet_api;
 pub mod handlers;
 pub mod invitation_ui;
 pub mod managed_agent_api;
@@ -184,6 +185,14 @@ pub fn app(state: Shared) -> Router {
             .route(
                 "/admin/v1/tenants/:tenant_id/tokens",
                 post(admin::issue_token).get(admin::list_tokens),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agent-fleet",
+                get(fleet_api::inventory),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agent-fleet/:agent_id",
+                get(fleet_api::detail),
             )
             .route(
                 "/admin/v1/tenants/:tenant_id/agents",
