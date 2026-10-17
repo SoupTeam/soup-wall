@@ -11,8 +11,10 @@ command makes no live-model or attack-effectiveness claim.
 
 ## Requirements
 
-- **Linux or macOS.** Supported profiles are `linux-stdio-mcp-admission-v1` on
-  Linux and `macos-stdio-mcp-admission-v1` on macOS. Other platforms print and
+- **Linux, macOS or native Windows.** Supported profiles are `linux-stdio-mcp-admission-v1` on
+  Linux, `macos-stdio-mcp-admission-v1` on macOS and `windows-stdio-mcp-admission-v1`
+  under a non-elevated Windows token. See the [Windows operator guide](WINDOWS_SELF_TEST.md).
+  Other platforms print and
   record `unsupported` (exit 5) and claim no protection.
 - An installed `agentfw` executable, selected explicitly with `--agent`. It is
   never discovered from `PATH`.
