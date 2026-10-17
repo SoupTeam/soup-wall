@@ -14,8 +14,8 @@ artificial toy families (`tests/toy/`, `artificial_toy: true`) that exist only t
 | `sou35/feasibility.py` | Split feasibility over leakage groups; reports impossible requirements, counts only |
 | `sou35/custody.py` | Sealed-test custody: declare, commit, draw (commit-reveal), custodian acceptance; public states carry no seed or family id |
 | `sou35/manifest.py` | Versioned family-disjoint manifest: deterministic draft, validation, freeze with an approval record, public view |
-| `sou35/export.py` | Development export: excludes all unreviewed cases; requires frozen v2 manifest, test proof and explicit authorisation |
-| `sou35/rulings.py` | Pool-bound, private semantic and case-evidence review decisions (recorded, not authenticated) |
+| `sou35/export.py` | Development export: primary evidence stratum only; requires frozen v2 manifest, test proof, explicit authorisation and the owner-recorded original generation provenance |
+| `sou35/rulings.py` | Pool-bound, private semantic and case-evidence review decisions (recorded, not authenticated); `evidence_stratum`, the single source of primary eligibility |
 | `sou35/release.py` | Thin custodian CLI over custody, manifest and export (see `docs/benchmarks/sou35/VALIDATION.md`) |
 
 The custodian CLI requires a private `--test-exclusions` policy cross-checked against its exact-SHA reviewer supplement. It applies the bans before future test commitment and draw; the low-level custody API also requires the ban parameter explicitly. No real v3 draw, freeze, scoring or export is authorised by this documentation.
@@ -44,6 +44,36 @@ only after `git check-ignore` confirms the path is ignored. Pool membership (dev
   approved, are never called Gold, and inherit no SOU-13 reviewer decision. The schema has no `confirmed` status
   and requires `human_semantic_approval: null`. Release tooling now also requires an external-decision
   register with exact per-case review digests; this is not a Gold declaration or a human signature.
+
+## Evidence strata (eligibility policy `sou35-strata-v1`)
+
+Every SOU-35 label is **synthetic** evidence from a declared program run by the frozen interpreter; no case executes
+a real tool or MCP server. A case's stratum is decided only by `rulings.evidence_stratum` and is used identically for
+split coverage (custody commit/draw, manifest), the development export and its counts:
+
+| Stratum | Meaning | Primary scoring / coverage / export |
+| --- | --- | --- |
+| `primary` | accepted human case review (v2), accepted rulings, basis `interface_supported`, mechanical safeguards pass | yes |
+| `technical_error` | accepted D06 schema-violation case | own channel; `technical_error` coverage only; not exported |
+| `diagnostic_disputed` | the excluded unmodelled full-unknown cases, or a human `disputed` review | no |
+| `diagnostic_program_only` | basis `program_only`, or capped by the hidden-default safeguard | no |
+| `diagnostic_information_limited` | basis `information_limited` | no |
+| `unresolved_ruling` / `rejected` / `unreviewed` / `basis_unrecorded` | open question, human rejection, no exact-digest review, v1 register | no |
+
+`interface_supported` means the label follows from what the classifier input exposes (identity, schema, argument
+values) under the accepted contract rules and is confirmed by the controlled synthetic trace; it is not real-tool
+evidence. An accepted review is necessary, not sufficient. The mechanical ceiling only lowers a basis: a reached
+optional `when` whose argument is absent is program-only unless the admitted schema declares a `default` under which
+an applying executor takes the branch the synthetic execution took; a consistent `default` never makes a case
+primary on its own. No diagnostic data export exists; non-primary strata are reported as dev-split counts only.
+
+Strata exist only for a validated, immutable `rulings.Ledger` (`rulings.load`/`validate`, which check the complete
+register once against the pool and the exact record inventory, including every entry's exact `row_sha256` and real
+ISO-8601 review times). `evidence_stratum`, `export.scored`, `feasibility.record_features`/`group_table`/`report`
+refuse a raw register; without any ledger, feasibility is the raw historical upper bound
+(`raw_unfiltered_historical`), never approved feasibility. Export provenance binds the owner-declared original
+generation to the pool and inventory but cannot authenticate its `source_commit` or `command`; a declared id-map
+digest is verified against the actual private file (`--id-map`).
 
 ## Pending human decisions
 

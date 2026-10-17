@@ -63,12 +63,43 @@ def _row_digest(row):
     return adapters.sha(row)
 
 
-def rulings_for(decls, recs=None, *, rejected=()):
-    """Artificial toy external-decision placeholders; NOT approvals for real cases."""
+def rulings_for(decls, recs=None, *, rejected=(), bases=None, statuses=None):
+    """Artificial toy v2 ledger; NOT approvals for real cases. Classification rows default to an
+    `interface_supported` basis (the mechanical ceiling still applies); `bases`/`statuses` map case id -> override."""
+    if recs is None:
+        recs = generate.generate(decls, {})
+    bases, statuses = bases or {}, statuses or {}
+    questions = sorted({q for r in recs for q in r['open_questions']})
+
+    def case(r):
+        technical = r['expected_outcome'] == 'technical_error'
+        return {'id': r['id'], 'row_sha256': _row_digest(r), 'status': statuses.get(r['id'], 'accepted'),
+                'evidence_basis': None if technical else bases.get(r['id'], 'interface_supported'),
+                'reviewed_by': 'toy-human-reviewer', 'reviewer_kind': 'human', 'independent_of_generation': True,
+                'reviewed_at': '2026-10-16T01:00:00Z', 'decision_ref': 'TOY-CASE-REVIEW',
+                'questions_considered': list(r['open_questions']), 'ai_technical_review_refs': []}
+    return {'version': rulings.VERSION_V2, 'scope': rulings.SCOPE,
+            'pool_digest': custody.pool_digest(decls),
+            'record_inventory_sha256': M.record_inventory_digest(recs),
+            'eligibility_policy': rulings.ELIGIBILITY_POLICY,
+            'decisions': [{'question_id': q, 'status': 'rejected' if q in rejected else 'accepted',
+                           'reviewed_by': 'toy-human-reviewer', 'reviewer_kind': 'human',
+                           'reviewed_at': '2026-10-16T01:00:00Z',
+                           'decision_ref': 'TOY-EXTERNAL-DECISION'} for q in questions],
+            'reviewed_cases': [case(r) for r in recs]}
+
+
+def ledger_for(decls, recs, **kw):
+    """The validated toy ledger (rulings.load) that every stratum-level API requires."""
+    return rulings.load(rulings_for(decls, recs, **kw), decls, recs)
+
+
+def rulings_v1_for(decls, recs=None, *, rejected=()):
+    """The preserved v1 toy register shape (no evidence basis); NOT approvals for real cases."""
     if recs is None:
         recs = generate.generate(decls, {})
     questions = sorted({q for r in recs for q in r['open_questions']})
-    return {'version': rulings.VERSION, 'scope': rulings.SCOPE,
+    return {'version': rulings.VERSION_V1, 'scope': rulings.SCOPE,
             'pool_digest': custody.pool_digest(decls),
             'decisions': [{'question_id': q, 'status': 'rejected' if q in rejected else 'accepted',
                            'reviewed_by': 'toy-human-reviewer', 'reviewed_at': '2026-10-16T01:00:00Z',
@@ -81,6 +112,26 @@ def rulings_for(decls, recs=None, *, rejected=()):
 def proof(priv, decls, recs):
     return {'test_families': priv['test_families'], 'nonce': priv['nonce'],
             'rulings_register': rulings_for(decls, recs)}
+
+
+TOY_TOOLING = {'tooling_commit': '2' * 40, 'tooling_source_dirty': False, 'note': 'toy export tooling'}
+
+
+def toy_provenance(decls, recs, **over):
+    """Artificial ORIGINAL generation provenance; deliberately differs from the toy export tooling commit."""
+    g = {'generator_version': recs[0]['source_material']['generator'], 'source_commit': '1' * 40,
+         'command': 'python -m sou35.check_pool --pool <toy> --out <toy>', 'generated_at': '2026-10-15T00:00:00Z',
+         'recorded_by': 'toy-owner', 'pool_digest': custody.pool_digest(decls),
+         'record_inventory_sha256': M.record_inventory_digest(recs), **over}
+    return {'provenance_version': export.PROVENANCE_VERSION, 'original_generation': g}
+
+
+def export_extra(decls, recs):
+    return {'generation_provenance': toy_provenance(decls, recs), 'export_tooling': dict(TOY_TOOLING)}
+
+
+def export_proof(priv, decls, recs):
+    return {**proof(priv, decls, recs), **export_extra(decls, recs)}
 
 
 def drawn(decls, table, groups, counts=COUNTS, req=REQ, seed=SEED, recs=None):
@@ -279,13 +330,19 @@ class DevelopmentExport(unittest.TestCase):
 
     def test_export_is_gated_deterministic_and_excludes_test(self):
         decls, recs, st, priv, m, auth = frozen_setup()
-        summary = export.write_export(recs, decls, m, st, auth, self.out, **proof(priv, decls, recs))
+        summary = export.write_export(recs, decls, m, st, auth, self.out, **export_proof(priv, decls, recs))
         test_ids = [r['id'] for r in recs if r['family_id'] in priv['test_families']]
         self.assertTrue(test_ids)
         self.assertEqual(export.verify_export(self.out, test_ids), [])
         dev_records = sum(r['family_id'] not in priv['test_families'] for r in recs)
         self.assertEqual(sum(c['scored'] + c['not_scored'] for c in summary['record_counts'].values()), dev_records)
-        again = export.plan_export(recs, decls, m, st, auth, **proof(priv, decls, recs))
+        self.assertEqual(sum(sum(c['by_stratum'].values()) for c in summary['record_counts'].values()), dev_records)
+        # Regression: strata are computed on the stored record, so reviewed primary rows are actually exported.
+        self.assertGreater(sum(c['scored'] for c in summary['record_counts'].values()), 0)
+        labels = [json.loads(line) for p in (self.out / 'labels').glob('*.jsonl')
+                  for line in p.read_text(encoding='utf-8').splitlines()]
+        self.assertEqual({x['id'] for x in labels}, set(summary['case_reviews']))
+        again = export.plan_export(recs, decls, m, st, auth, **export_proof(priv, decls, recs))
         for rel, data in again.items():
             self.assertEqual((self.out / rel).read_bytes(), data, rel)
         text = ''.join(p.read_text(encoding='utf-8') for p in self.out.rglob('*') if p.is_file())
@@ -299,34 +356,34 @@ class DevelopmentExport(unittest.TestCase):
         auth = {'scope': export.EXPORT_SCOPE, 'authorized_by': 'x', 'authorized_at': 't', 'decision_ref': 'r',
                 'manifest_sha256': draft['manifest_sha256'], 'rulings_sha256': draft['rulings_sha256']}
         with self.assertRaisesRegex(export.ExportError, 'FROZEN'):
-            export.plan_export(recs, decls, draft, accepted(st), auth, **proof(priv, decls, recs))
+            export.plan_export(recs, decls, draft, accepted(st), auth, **export_proof(priv, decls, recs))
 
     def test_authorization_required_and_bound(self):
         decls, recs, st, priv, m, auth = frozen_setup()
         for bad in (None, {}, dict(auth, decision_ref=''), dict(auth, scope='publish'),
                     dict(auth, manifest_sha256='0' * 64), dict(auth, authorized_by='ai_assisted_synthetic_draft')):
             with self.subTest(bad=bad), self.assertRaises(export.ExportError):
-                export.plan_export(recs, decls, m, st, bad, **proof(priv, decls, recs))
+                export.plan_export(recs, decls, m, st, bad, **export_proof(priv, decls, recs))
 
     def test_tampered_or_unaccepted_inputs_refused(self):
         decls, recs, st, priv, m, auth = frozen_setup()
         tampered = copy.deepcopy(m)
         tampered['counts']['train'] = 9
         with self.assertRaises(export.ExportError):
-            export.plan_export(recs, decls, tampered, st, auth, **proof(priv, decls, recs))
+            export.plan_export(recs, decls, tampered, st, auth, **export_proof(priv, decls, recs))
         drawn_only = {k: v for k, v in st.items() if k != 'acceptance'}
         drawn_only['state'] = 'drawn'
         with self.assertRaises(export.ExportError):
-            export.plan_export(recs, decls, m, drawn_only, auth, **proof(priv, decls, recs))
+            export.plan_export(recs, decls, m, drawn_only, auth, **export_proof(priv, decls, recs))
         changed = copy.deepcopy(decls)
         changed[0]['descriptions'] = dict(changed[0]['descriptions'], honest='Toy fixture: re-described.')
         with self.assertRaises(export.ExportError):
-            export.plan_export(recs, changed, m, st, auth, **proof(priv, decls, recs))
+            export.plan_export(recs, changed, m, st, auth, **export_proof(priv, decls, recs))
 
     def test_output_must_be_ignored_private_path(self):
         decls, recs, st, priv, m, auth = frozen_setup()
         with self.assertRaises(check_pool.PrivacyError):
-            export.write_export(recs, decls, m, st, auth, ROOT / 'tests' / 'export_out', **proof(priv, decls, recs))
+            export.write_export(recs, decls, m, st, auth, ROOT / 'tests' / 'export_out', **export_proof(priv, decls, recs))
         self.assertFalse((ROOT / 'tests' / 'export_out').exists())
 
 
@@ -354,24 +411,24 @@ class ReleaseSafeguardRegressions(unittest.TestCase):
     def test_rulings_are_pool_bound_and_unapproved_cases_are_not_scored(self):
         decls, recs, table, groups = pool()
         register = rulings_for(decls, recs)
-        self.assertEqual(rulings.errors(register, decls), [])
+        self.assertEqual(rulings.errors(register, decls, recs), [])
         self.assertTrue(all(rulings.is_admissible(r, register) for r in recs))
         question = next(q for d in register['decisions'] for q in [d['question_id']])
         pending = copy.deepcopy(register)
         next(d for d in pending['decisions'] if d['question_id'] == question)['status'] = 'pending'
         affected = [r for r in recs if question in r['open_questions']]
         self.assertTrue(affected)
-        self.assertTrue(all(not export.scored(r, pending) for r in affected))
+        self.assertTrue(all(not export.scored(r, rulings.load(pending, decls, recs)) for r in affected))
         removed = copy.deepcopy(register)
         removed['decisions'] = [d for d in removed['decisions'] if d['question_id'] != question]
-        self.assertTrue(all(not export.scored(r, removed) for r in affected))
+        self.assertTrue(all(not export.scored(r, rulings.load(removed, decls, recs)) for r in affected))
         wrong_pool = copy.deepcopy(register)
         wrong_pool['pool_digest'] = '0' * 64
-        self.assertTrue(rulings.errors(wrong_pool, decls))
+        self.assertTrue(rulings.errors(wrong_pool, decls, recs))
         forged = copy.deepcopy(register)
         forged['decisions'][0]['reviewed_by'] = 'ai_assisted_synthetic_draft'
-        self.assertTrue(rulings.errors(forged, decls))
-        self.assertFalse(feasibility.record_features(affected[0], pending))
+        self.assertTrue(rulings.errors(forged, decls, recs))
+        self.assertFalse(feasibility.record_features(affected[0], rulings.load(pending, decls, recs)))
 
     def test_freeze_and_export_need_rulings_custody_proof_and_exact_records(self):
         decls, recs, st, priv, m, auth = frozen_setup()
@@ -389,20 +446,20 @@ class ReleaseSafeguardRegressions(unittest.TestCase):
         errors = M.manifest_errors(m, decls, mutated, st, **kwargs)
         self.assertTrue(any('inventory' in e for e in errors))
         with self.assertRaises(export.ExportError):
-            export.plan_export(mutated, decls, m, st, auth, **kwargs)
+            export.plan_export(mutated, decls, m, st, auth, **kwargs, **export_extra(decls, mutated))
         reidentified = copy.deepcopy(recs)
         reidentified[0]['id'] = 'S35-' + 'E' * 32
         self.assertTrue(any('inventory' in e for e in
                             M.manifest_errors(m, decls, reidentified, st, **kwargs)))
         bad_auth = dict(auth, rulings_sha256='0' * 64)
         with self.assertRaises(export.ExportError):
-            export.plan_export(recs, decls, m, st, bad_auth, **kwargs)
+            export.plan_export(recs, decls, m, st, bad_auth, **kwargs, **export_extra(decls, recs))
         changed_rulings = copy.deepcopy(kwargs['rulings_register'])
         changed_rulings['decisions'][0]['decision_ref'] = 'OTHER-TOY-DECISION'
         with self.assertRaises(export.ExportError):
             export.plan_export(recs, decls, m, st, auth,
                                test_families=priv['test_families'], nonce=priv['nonce'],
-                               rulings_register=changed_rulings)
+                               rulings_register=changed_rulings, **export_extra(decls, recs))
 
     def test_library_export_rejects_resigned_test_swap(self):
         decls, recs, st, priv, m, auth = frozen_setup()
@@ -416,7 +473,7 @@ class ReleaseSafeguardRegressions(unittest.TestCase):
         tampered = resign(tampered)
         forged_auth = dict(auth, manifest_sha256=tampered['manifest_sha256'])
         with self.assertRaisesRegex(export.ExportError, 'custody draw'):
-            export.plan_export(recs, decls, tampered, st, forged_auth, **proof(priv, decls, recs))
+            export.plan_export(recs, decls, tampered, st, forged_auth, **export_proof(priv, decls, recs))
 
     def test_export_refuses_stale_files(self):
         decls, recs, st, priv, m, auth = frozen_setup()
@@ -427,7 +484,7 @@ class ReleaseSafeguardRegressions(unittest.TestCase):
             out.mkdir(parents=True)
             (out / 'leftover.txt').write_text('stale', encoding='utf-8')
             with self.assertRaisesRegex(export.ExportError, 'empty'):
-                export.write_export(recs, decls, m, st, auth, out, **proof(priv, decls, recs))
+                export.write_export(recs, decls, m, st, auth, out, **export_proof(priv, decls, recs))
         finally:
             shutil.rmtree(out, ignore_errors=True)
             if not original_existed and original.exists() and not any(original.iterdir()):

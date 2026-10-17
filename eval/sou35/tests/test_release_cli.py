@@ -11,9 +11,9 @@ import uuid
 import zipfile
 
 from _util import ROOT, TOY_DIR
-from test_release_workflow import TOY_VAULT, rulings_for
+from test_release_workflow import TOY_VAULT, rulings_for, toy_provenance
 
-from sou35 import custody, export, families, generate, release
+from sou35 import custody, export, families, generate, release, rulings
 
 COUNTS = '1/1/1/1'
 
@@ -53,6 +53,19 @@ class ReleaseCli(unittest.TestCase):
         }), encoding='utf-8')
         self.records = self.ws / 'records.jsonl'
         self.records.write_text(''.join(json.dumps(r) + '\n' for r in self.recs), encoding='utf-8')
+        self.provenance_file = self.ws / 'toy_generation_provenance.json'
+        self.provenance_file.write_text(json.dumps(toy_provenance(decls, self.recs)), encoding='utf-8')
+        self.prov = ['--generation-provenance', str(self.provenance_file)]
+        id_map = {generate.id_key(r['family_id'], r['source_material']['case_kind'],
+                                  r['source_material']['case_index']): r['id'] for r in self.recs}
+        self.id_map_file = self.ws / 'toy_id_map.json'
+        self.id_map_file.write_text(json.dumps(id_map, indent=1, sort_keys=True), encoding='utf-8')
+        self.prov_with_map = self.ws / 'toy_generation_provenance_id_map.json'
+        self.prov_with_map.write_text(json.dumps(toy_provenance(
+            decls, self.recs, id_map_sha256=hashlib.sha256(self.id_map_file.read_bytes()).hexdigest())),
+            encoding='utf-8')
+        self.register = rulings_for(decls, self.recs)
+        self.ledger = rulings.load(self.register, decls, self.recs)
         self.common = ['--workspace', str(self.ws), '--pool', str(pool), '--records', str(self.records), '--rulings', str(self.register_file), '--test-exclusions', str(self.exclusion_policy)]
 
     def tearDown(self):
@@ -116,7 +129,8 @@ class ReleaseCli(unittest.TestCase):
         self.assertEqual(self.freeze()[0], 0)
         self.ok('validate-manifest')
         self.ok('public-view')
-        printed = self.ok('export', '--authorization', self.auth(), '--out', str(self.out))
+        printed = self.ok('export', '--authorization', self.auth(), '--generation-provenance',
+                          str(self.prov_with_map), '--id-map', str(self.id_map_file), '--out', str(self.out))
         private = json.loads((self.ws / release.PRIVATE).read_text(encoding='utf-8'))
         test_ids = [r['id'] for r in self.recs if r['family_id'] in private['test_families']]
         secrets = private['test_families'] + test_ids + [private['seed'], private['nonce']]
@@ -126,14 +140,24 @@ class ReleaseCli(unittest.TestCase):
             for s in secrets:
                 self.assertNotIn(s, text, where)
             self.assertNotIn('frozen_assignment', text, where)  # the FULL manifest never leaves custody
-        self.assertEqual(export.verify_export(self.out, test_ids), [])
+        excluded = [r['id'] for r in self.recs if r['family_id'] not in private['test_families']
+                    and rulings.evidence_stratum(r, self.ledger) != rulings.PRIMARY]
+        self.assertTrue(excluded)  # the toy pool has disputed, program-only and technical dev rows
+        self.assertEqual(export.verify_export(self.out, test_ids, excluded), [])
+        summary = json.loads((self.out / 'EXPORT_MANIFEST.json').read_text(encoding='utf-8'))
+        # The owner-recorded original generation source is kept as given, separate from the current tooling.
+        self.assertEqual(summary['generation_provenance']['original_generation']['source_commit'], '1' * 40)
+        self.assertIn('tooling_commit', summary['export_tooling'])
+        self.assertNotEqual(summary['export_tooling']['tooling_commit'], '1' * 40)
+        self.assertEqual(set(summary['record_counts']), {'train', 'validation', 'calibration'})
+        self.assertIs(summary['id_map_verified'], True)
 
     def test_refusals_before_freeze(self):
         self.refused('commit')                                    # nothing declared
         self.to_drawn()
         self.refused('draw', '--confirm')                         # already drawn
         self.ok('build-manifest', '--salt', 'toy-salt')
-        self.refused('export', '--authorization', self.auth(), '--out', str(self.out))   # draft manifest
+        self.refused('export', '--authorization', self.auth(), *self.prov, '--out', str(self.out))   # draft manifest
         code, _, err = self.freeze()
         self.assertEqual(code, 1)
         self.assertIn('custody must be accepted', err)           # missing custody acceptance
@@ -145,12 +169,35 @@ class ReleaseCli(unittest.TestCase):
         self.accept()
         self.ok('build-manifest', '--salt', 'toy-salt')
         self.assertEqual(self.freeze()[0], 0)
-        out = ['--out', str(self.out)]
+        out = [*self.prov, '--out', str(self.out)]
         self.refused('export', '--authorization', str(self.ws / 'missing.json'), *out)        # no authorization
         self.refused('export', '--authorization', self.auth(scope='sou35_test_export'), *out)  # restricted scope
         self.refused('export', '--authorization', self.auth(manifest_sha256='0' * 64), *out)   # other manifest
         self.refused('export', '--authorization', self.auth(authorized_by='ai_assisted_synthetic_draft'), *out)
-        self.refused('export', '--authorization', self.auth(), '--out', str(ROOT / 'tests' / 'cli_out'))  # public path
+        for ai in ('AI_Assisted reviewer', ' ai_assisted_synthetic_draft', 'Claude'):
+            self.refused('export', '--authorization', self.auth(authorized_by=ai), *out)
+        self.refused('export', '--authorization', self.auth(), '--out', str(self.out))            # no provenance
+        self.refused('export', '--authorization', self.auth(), '--generation-provenance', str(self.prov_with_map),
+                     '--out', str(self.out))                                     # declared id map not supplied
+        wrong_map = self.ws / 'wrong_id_map.json'
+        wrong_map.write_text('{}', encoding='utf-8')
+        self.refused('export', '--authorization', self.auth(), '--generation-provenance', str(self.prov_with_map),
+                     '--id-map', str(wrong_map), '--out', str(self.out))         # id map bytes do not match
+        stale = self.ws / 'stale_provenance.json'
+        prov = json.loads(self.provenance_file.read_text(encoding='utf-8'))
+        prov['original_generation']['record_inventory_sha256'] = '0' * 64
+        stale.write_text(json.dumps(prov), encoding='utf-8')
+        self.refused('export', '--authorization', self.auth(), '--generation-provenance', str(stale),
+                     '--out', str(self.out))                                                    # not bound to records
+        public_prov = ROOT / 'tests' / f'_prov_{uuid.uuid4().hex}.json'
+        try:
+            public_prov.write_text(self.provenance_file.read_text(encoding='utf-8'), encoding='utf-8')
+            self.refused('export', '--authorization', self.auth(), '--generation-provenance', str(public_prov),
+                         '--out', str(self.out))                                                # provenance not private
+        finally:
+            public_prov.unlink(missing_ok=True)
+        self.refused('export', '--authorization', self.auth(), *self.prov,
+                     '--out', str(ROOT / 'tests' / 'cli_out'))  # public path
         self.assertFalse((ROOT / 'tests' / 'cli_out').exists())
         self.assertFalse(self.out.exists())
         full = self.ws / release.FULL

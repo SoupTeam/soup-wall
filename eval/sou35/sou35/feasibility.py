@@ -26,9 +26,16 @@ def default_requirements(features=FULL_HELD_OUT):
 
 
 def record_features(r, rulings_register=None):
+    """Coverage features. With a validated `rulings.Ledger`, only the `primary` and `technical_error` evidence strata
+    count: a diagnostic (disputed, program-only, information-limited), unresolved or unreviewed case never satisfies
+    coverage. A raw register dict is refused. Without a ledger the result is the RAW, unfiltered upper bound
+    (historical exploration only, never approved feasibility)."""
     if rulings_register is not None:
         from . import rulings
-        if not rulings.primary_scoring_admissible(r, rulings_register):
+        stratum = rulings.evidence_stratum(r, rulings_register)
+        if stratum == rulings.TECHNICAL:
+            return {'technical_error'}
+        if stratum != rulings.PRIMARY:
             return set()
     if r['expected_outcome'] == 'technical_error':
         return {'technical_error'}
@@ -179,18 +186,25 @@ def patterns(n_families, minimum=None):
             yield dict(zip(SPLITS, combo))
 
 
-def report(records, requirements=None, candidate_patterns=None, allowed=None):
+RAW_POLICY = 'raw_unfiltered_historical: no review filter; not feasibility under the v2 evidence policy'
+
+
+def report(records, requirements=None, candidate_patterns=None, allowed=None, rulings_register=None):
     """Counts only. `candidate_patterns`: list of family-count dicts (default: every pattern with >=1 family per
-    split). A pattern is feasible iff its count is > 0."""
+    split). A pattern is feasible iff its count is > 0. `rulings_register` must be a validated `rulings.Ledger`;
+    without one the counts are a RAW upper bound (RAW_POLICY), not approved feasibility."""
+    from . import rulings
     requirements = default_requirements() if requirements is None else requirements
-    table = group_table(records)
+    table = group_table(records, rulings_register)
     n = sum(size for size, _ in table.values())
     pats = list(patterns(n)) if candidate_patterns is None else candidate_patterns
     rows = []
     for p in pats:
         c = count_allocations(table, requirements, p, allowed)
         rows.append({'pattern': '/'.join(str(p[s]) for s in SPLITS), 'feasible_allocations': c})
-    return {'families': n, 'leakage_groups': len(table),
+    policy = {'evidence_policy': RAW_POLICY} if rulings_register is None else         {'evidence_policy': rulings.ELIGIBILITY_POLICY, 'rulings_sha256': rulings_register.digest}
+    return {**policy,
+            'families': n, 'leakage_groups': len(table),
             'requirements': {s: sorted(r) for s, r in requirements.items()},
             'impossible': necessary_condition_errors(table, requirements),
             'patterns': rows, 'feasible_patterns': [r['pattern'] for r in rows if r['feasible_allocations']]}

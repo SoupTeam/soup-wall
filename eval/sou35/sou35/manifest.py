@@ -39,7 +39,8 @@ def _profile(requirements):
 
 
 def build_draft(decls, records, custody_state, test_families, nonce, counts, requirements, salt, *, rulings_register):
-    if rulings.errors(rulings_register, decls):
+    ledger, _ = rulings.validate(rulings_register, decls, records)
+    if ledger is None:
         raise ManifestError('semantic rulings register is missing, invalid or out of scope')
     if record_validation.dataset_errors(records, decls):
         raise ManifestError('candidate records failed validation')
@@ -57,7 +58,7 @@ def build_draft(decls, records, custody_state, test_families, nonce, counts, req
     test_groups = {fam_group[f] for f in test_families}
     if sorted(f for g in test_groups for f in groups[g]) != sorted(test_families):
         raise ManifestError('test families must form whole leakage groups')
-    table = feasibility.group_table(records, rulings_register)
+    table = feasibility.group_table(records, ledger)
     allowed = {g: (('test',) if g in test_groups else DEV_SPLITS) for g in groups}
     order = sorted(groups, key=lambda g: (adapters.splits_module().hash_key(salt, g), g))
     alloc = feasibility.find_allocation(table, requirements, counts, allowed, order)
@@ -99,7 +100,8 @@ def manifest_errors(m, decls, records, custody_state, test_families=None, nonce=
     e = []
     if not isinstance(m, dict):
         return ['manifest is not an object']
-    if rulings.errors(rulings_register, decls):
+    ledger, _ = rulings.validate(rulings_register, decls, records)
+    if ledger is None:
         e.append('missing, invalid or out-of-scope semantic rulings register')
     elif m.get('rulings_sha256') != rulings.digest(rulings_register) or \
             custody_state.get('rulings_sha256') != rulings.digest(rulings_register):
@@ -139,7 +141,9 @@ def manifest_errors(m, decls, records, custody_state, test_families=None, nonce=
         e.append(f'split family counts {count} differ from recorded counts {m["counts"]}')
     req = _requirements(m)
     for s in feasibility.SPLITS:
-        feats = set().union(*(feasibility.record_features(r, rulings_register) for r in records if split[r['family_id']] == s)) \
+        # Fail closed: an invalid register supplies no coverage at all (never the raw, unfiltered features).
+        feats = set().union(*((feasibility.record_features(r, ledger) if ledger else set())
+                              for r in records if split[r['family_id']] == s)) \
             if any(split[r['family_id']] == s for r in records) else set()
         missing = req[s] - feats
         if missing:
@@ -176,7 +180,7 @@ def manifest_errors(m, decls, records, custody_state, test_families=None, nonce=
 def freeze(m, decls, records, custody_state, test_families, nonce, *, rulings_register, approved_by, approved_at, decision_ref):
     if not all(isinstance(v, str) and v.strip() for v in (approved_by, approved_at, decision_ref)):
         raise ManifestError('freeze requires approved_by, approved_at and decision_ref')
-    if approved_by.startswith('ai_assisted'):
+    if rulings.is_ai_identity(approved_by):
         raise ManifestError('an AI-assisted annotator cannot approve a freeze')
     if m.get('status') != 'DRAFT':
         raise ManifestError('only a DRAFT manifest can be frozen')

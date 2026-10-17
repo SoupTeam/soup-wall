@@ -10,10 +10,14 @@
     freeze           --approved-by A --approved-at T --decision-ref R --confirm
     validate-manifest
     public-view                                                   writes manifest.public.json after a leak check
-    export           --authorization auth.json --out private/<dir>
+    export           --authorization auth.json --generation-provenance private/<file>.json
+                     [--id-map private/ids/id_map.json] --out private/<dir>   (--id-map required if its digest is declared)
 
     All commands require --test-exclusions private/<policy>.json (verified private review package).
     After declare, commands also require --rulings sealed/<name>/rulings.json (external human decisions; private).
+    Primary scoring needs a v2 rulings register (case-level status and evidence basis); a v1 register still
+    validates but makes no case primary. Export also needs the owner-recorded ORIGINAL generation provenance;
+    the current tooling commit is recorded separately and never substitutes for it.
 
 ROLES AND TRUST BOUNDARY. The workspace holds the custodian's private material (seed, nonce, test families) and the
 FULL manifest, which names test families: only the sealed-test custodian may hold it, so draw, accept, freeze and the
@@ -28,11 +32,12 @@ import argparse
 import hashlib
 import io
 import json
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
 
-from . import check_pool, custody, export, families, feasibility, records
+from . import ROOT, check_pool, custody, export, families, feasibility, records
 from . import manifest as M, rulings
 
 STATE, PRIVATE, FULL, PUBLIC = 'custody_state.json', 'custody_private.json', 'manifest.full.json', 'manifest.public.json'
@@ -72,13 +77,14 @@ def _pool(args):
     return decls, recs
 
 
-def _rulings(args, decls):
+def _rulings(args, decls, recs):
     if not args.rulings:
         raise Refused('semantic rulings register is required')
     reg = _read(args.rulings)
-    if rulings.errors(reg, decls):
+    ledger, _ = rulings.validate(reg, decls, recs)
+    if ledger is None:
         raise Refused('semantic rulings register is invalid or out of scope')
-    return reg
+    return reg, ledger
 
 
 def _test_exclusions(args, decls, recs):
@@ -112,7 +118,7 @@ def _test_exclusions(args, decls, recs):
     if set(family_group) != fids:
         raise Refused('test-exclusion pool records are incomplete')
 
-    # The policy is not itself proof of which families Baubek reviewed. Cross-check
+    # The policy is not itself proof of which families the reviewer restricted. Cross-check
     # it against the actual, SHA-pinned private review supplement before any CLI
     # custody operation. A forged/empty list in an otherwise well-formed JSON
     # policy is refused, even before the seed has been committed.
@@ -152,6 +158,40 @@ def _test_exclusions(args, decls, recs):
     return frozenset(family_group[f] for f in banned)
 
 
+def _provenance(args):
+    """Owner-recorded ORIGINAL generation provenance (private file); validated by export.provenance_errors."""
+    if not args.generation_provenance:
+        raise Refused('original generation provenance is required for export')
+    path = Path(args.generation_provenance).resolve()
+    check_pool.ensure_private_out(path.parent)
+    return _read(path)
+
+
+def _id_map(args):
+    """Bytes of the private id map, read only when supplied; a declared id_map_sha256 without it is refused."""
+    if not args.id_map:
+        return None
+    path = Path(args.id_map).resolve()
+    check_pool.ensure_private_out(path.parent)
+    try:
+        return path.read_bytes()
+    except OSError:
+        raise Refused(f'missing required file: {path.name}')
+
+
+def _tooling():
+    """CURRENT export tooling identity, recorded separately from the original generation source."""
+    def git(*a):
+        try:
+            done = subprocess.run(['git', *a], cwd=ROOT, capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return done.stdout.strip() if done.returncode == 0 else None
+    status = git('status', '--porcelain', '--', str(ROOT / 'sou35'))
+    return {'tooling_commit': git('rev-parse', 'HEAD'), 'tooling_source_dirty': None if status is None else bool(status),
+            'note': 'current export tooling; NOT the original generation source'}
+
+
 def _private(ws):
     p = _read(ws / PRIVATE)
     return p.get('test_families'), p.get('nonce')
@@ -162,8 +202,9 @@ def run(args):
     ws.mkdir(parents=True, exist_ok=True)
     decls, recs = _pool(args)
     test_exclusions = _test_exclusions(args, decls, recs)
-    reg = _rulings(args, decls) if args.command != 'declare' else None
-    table = feasibility.group_table(recs, reg) if reg else feasibility.group_table(recs)
+    reg, ledger = _rulings(args, decls, recs) if args.command != 'declare' else (None, None)
+    # Coverage always comes from the validated ledger; `declare` builds no table-dependent state.
+    table = feasibility.group_table(recs, ledger) if ledger else None
     groups = M._groups(recs)
     cmd = args.command
     if cmd == 'declare':
@@ -239,9 +280,13 @@ def run(args):
         return {'written': PUBLIC, 'status': view['status']}
     if cmd == 'export':
         summary = export.write_export(recs, decls, m, state, _read(args.authorization), args.out,
-                                      test_families=test_families, nonce=nonce, rulings_register=reg)
+                                      test_families=test_families, nonce=nonce, rulings_register=reg,
+                                      generation_provenance=_provenance(args), export_tooling=_tooling(),
+                                      id_map_bytes=_id_map(args))
         test_ids = [r['id'] for r in recs if r['family_id'] in set(test_families)]
-        if export.verify_export(args.out, test_ids):
+        excluded = [r['id'] for r in recs if r['family_id'] not in set(test_families)
+                    and rulings.evidence_stratum(r, ledger) != rulings.PRIMARY]
+        if export.verify_export(args.out, test_ids, excluded):
             raise Refused('export failed verification')
         return {'exported': summary['record_counts']}
     raise Refused(f'unknown command {cmd}')
@@ -257,7 +302,8 @@ def parser():
     ap.add_argument('--pool', required=True)
     ap.add_argument('--records', required=True)
     for opt in ('--custodian', '--counts', '--held-out-features', '--accepted-at', '--decision-ref', '--salt',
-                '--approved-by', '--approved-at', '--authorization', '--out'):
+                '--approved-by', '--approved-at', '--authorization', '--generation-provenance', '--id-map',
+                '--out'):
         ap.add_argument(opt)
     ap.add_argument('--confirm', action='store_true')
     ap.add_argument('--verbose-errors', action='store_true',

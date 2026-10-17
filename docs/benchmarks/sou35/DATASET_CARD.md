@@ -70,6 +70,10 @@ and no SOU-13/SOU-16 sealed material was used or opened; the tooling refuses to 
   semantic truth. AI-assisted technical review never confirms labels.
 - Overlap with the restricted SOU-13 test families cannot be checked without that custodian.
 - Held-out splits will hold a few families each; results will be family-level evidence with wide uncertainty.
+- No case executes a real tool. The primary stratum is **interface-supported synthetic** evidence (the label follows
+  from the visible tool input and the controlled synthetic trace), never observed real-tool or MCP behaviour.
+  Program-only, information-limited and disputed cases are kept as separate diagnostic strata and never pooled into
+  primary results (see `eval/sou35/README.md`).
 
 ## Label statuses and decisions still open
 
@@ -111,8 +115,10 @@ development export. None of it has been run on the candidate pool.
 
 A versioned, **private** rulings register must bind to the declaration-pool digest and contain accepted decisions
 for any questions affecting a scored record plus case-level evidence-review attestations bound to each exact
-record digest. Missing, pending, rejected or unreviewed cases cannot count towards accepted split coverage and are
-excluded completely from development exports. Real `accepted` entries must be transcribed from independently
+record digest. Primary scoring additionally requires a v2 ledger with an `interface_supported` evidence basis that
+passes the mechanical safeguards. Missing, pending, rejected, disputed, unresolved, program-only,
+information-limited and unreviewed cases cannot count towards accepted split coverage and are excluded completely
+from development exports (dev-split counts per stratum only). Real `accepted` entries must be transcribed from independently
 recorded human decisions, never created automatically.
 
 The v2 full manifest binds the canonical record inventory and the rulings register. Custody commitments bind the

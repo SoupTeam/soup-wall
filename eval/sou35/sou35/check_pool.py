@@ -87,7 +87,8 @@ def aggregate(recs, decls, patterns=()):
     for sc in ('as_designed', 'conservative'):
         table = scenario_table(recs, sc)
         req = feasibility.default_requirements()
-        res = {'families_per_feature': {f: sum(f in v for _, v in table.values())
+        res = {'evidence_policy': feasibility.RAW_POLICY,
+               'families_per_feature': {f: sum(f in v for _, v in table.values())
                                         for f in sorted(feasibility.FULL_HELD_OUT)},
                'impossible': feasibility.necessary_condition_errors(table, req), 'patterns': {}}
         for p in patterns:
