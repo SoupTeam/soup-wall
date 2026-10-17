@@ -439,11 +439,9 @@ fn policy_for(
                 // Independently parse the DER framing at authoring time:
                 // reqwest's PEM constructor may defer invalid PEM rejection
                 // until the actual rustls TLS configuration is constructed.
-                let certs = rustls_pki_types::CertificateDer::pem_slice_iter(
-                    pem.as_bytes(),
-                )
-                .collect::<std::result::Result<Vec<_>, _>>()
-                .context("operator CA contains malformed PEM certificate")?;
+                let certs = rustls_pki_types::CertificateDer::pem_slice_iter(pem.as_bytes())
+                    .collect::<std::result::Result<Vec<_>, _>>()
+                    .context("operator CA contains malformed PEM certificate")?;
                 ensure!(!certs.is_empty(), "operator CA must contain certificates");
             }
             let net = crate::mcp::https_get::HttpsGetAuthority {
