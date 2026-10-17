@@ -2,12 +2,12 @@
 //! Operator-owned MCP admission authoring. Discovery is *never* authority.
 //! Outputs are inert files until an operator separately configures a collector.
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::net::IpAddr;
 use std::path::{Component, Path, PathBuf};
 
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::{ensure, Context, Result};
 use clap::Subcommand;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -147,6 +147,7 @@ struct ProfileTool {
     action_class: String,
     result_provenance: String,
     authority_sha256: String,
+    review_sha256: String,
 }
 
 struct Prepared {
@@ -154,6 +155,8 @@ struct Prepared {
     registry: Vec<u8>,
     policies: Vec<resource::Policy>,
     schemas: BTreeMap<String, Value>,
+    source_snapshot: Value,
+    declaration_document: Value,
 }
 
 fn sha(bytes: &[u8]) -> String {
@@ -333,7 +336,13 @@ fn policy_for(
     authority: &Authority,
 ) -> Result<(String, Option<resource::Policy>, Vec<Value>)> {
     match authority {
-        Authority::ReadOnly => Ok(("read_only".into(), None, vec![])),
+        Authority::ReadOnly => {
+            ensure!(
+                name != "create_file" && name != "https_get",
+                "privileged MCP executor tools cannot be relabeled read-only"
+            );
+            Ok(("read_only".into(), None, vec![]))
+        }
         Authority::CreateFile {
             workspace,
             path,
@@ -461,6 +470,7 @@ fn policy_for(
 fn prepare(snapshot_path: &Path, declaration_path: &Path) -> Result<Prepared> {
     let (snapshot, raw, source_hash) = load_snapshot(snapshot_path)?;
     let (decl, decl_hash) = load_declarations(declaration_path)?;
+    let declaration_document = strict(&read_file(declaration_path)?)?;
     ensure!(
         decl.server_id == snapshot.server_id
             && decl.server_version == snapshot.server_version
@@ -538,6 +548,7 @@ fn prepare(snapshot_path: &Path, declaration_path: &Path) -> Result<Prepared> {
                 action_class: action,
                 result_provenance: "untrusted".into(),
                 authority_sha256: digest(&entry),
+                review_sha256: sha(d.operator_review.as_deref().unwrap().as_bytes()),
             },
         );
         schemas.insert(d.name.clone(), schema.clone());
@@ -574,6 +585,8 @@ fn prepare(snapshot_path: &Path, declaration_path: &Path) -> Result<Prepared> {
         registry,
         policies,
         schemas,
+        source_snapshot: raw,
+        declaration_document,
     })
 }
 fn validate_example(prepared: &Prepared, raw: &[u8]) -> Result<Value> {
@@ -699,7 +712,7 @@ fn publish_dir(out: &Path, files: &[(&str, Vec<u8>)]) -> Result<()> {
     #[cfg(not(target_os = "linux"))]
     {
         let _ = files;
-        bail!("private atomic profile publication currently requires Linux")
+        anyhow::bail!("private atomic profile publication currently requires Linux")
     }
 }
 pub fn run(cmd: Command) -> Result<()> {
@@ -817,12 +830,17 @@ pub fn run(cmd: Command) -> Result<()> {
         } => {
             let p = prepare(&snapshot, &declarations)?;
             let profile = json_bytes(&serde_json::to_value(&p.profile)?)?;
-            let policies = json_bytes(&serde_json::to_value(&p.policies)?)?;
+            let policies = json_bytes(&serde_json::to_value(
+                p.policies.iter().map(|p| &p.profile).collect::<Vec<_>>())?)?;
+            let source_snapshot = json_bytes(&p.source_snapshot)?;
+            let declaration_document = json_bytes(&p.declaration_document)?;
             publish_dir(
                 &out,
                 &[
                     ("registry.json", p.registry),
                     ("resource-profiles.json", policies),
+                    ("source-snapshot.json", source_snapshot),
+                    ("operator-declarations.json", declaration_document),
                     ("profile.json", profile),
                 ],
             )?;
