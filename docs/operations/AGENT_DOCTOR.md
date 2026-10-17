@@ -102,6 +102,27 @@ private, regular, single-linked and bounded. Symlinks, FIFOs, oversize inputs,
 parent aliases and pre-existing support targets are refused. An output path is
 printed nowhere inside the bundle.
 
+### Bounded lifecycle inspection (review hardening)
+
+The doctor-specific lifecycle snapshot uses the **same descriptor-relative,
+no-follow, nonblocking, owner-private file reader** as diagnostic configuration
+and token checks. It accepts at most 1 MiB of `versions/lifecycle.json`
+then performs the normal structural validation in memory. The selected managed
+binary is hashed in chunks with a strict 512 MiB limit and checked ownership,
+file type, mode and single-link requirements; normal `lifecycle` operations
+remain unchanged. The config SHA-256 is calculated from the **original bounded
+`config.yaml` bytes** and supplied to lifecycle inspection; a rejected FIFO,
+link or oversize config is never silently reopened through legacy `fs::read`.
+An unsafe or missing config with a recorded process becomes
+`managed_config_unverifiable`, never a verified running configuration.
+
+Linux outside-checkout CLI regression controls use a valid recorded managed
+process and inject FIFO, symlink and sparse oversized config, manifest and
+managed binary inputs. Each diagnostic subprocess has an explicit three-second
+timeout, confirms sanitized reason codes and checks that the manifest and
+owner configuration were not rewritten. Cancellation is also covered by the
+independent pre-publication private support bundle test.
+
 **Excluded:** bearer tokens, approval grants/nonces, private keys, raw
 prompts/arguments/results, full host settings or environment, raw forensic
 audit fields, log archives, identifying hostnames and user file paths.
