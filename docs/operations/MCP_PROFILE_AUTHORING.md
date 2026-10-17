@@ -49,6 +49,13 @@ unsupported schema keywords, aliases, unconstrained paths and destinations,
 are **not** silently translated to a weaker read permission. No synthetic
 semantic declaration is attestation for an unrelated real server.
 
+Compilation now also emits `native-config.json`, a typed, inert
+`NativeCfg` fragment containing the final registry path and exact digest.
+The owned acceptance starts the Agent with this generated fragment, instead
+of hand-assembling its registry identity; compiling still does **not** install
+or modify the user's active configuration. Strict duplicate-key JSON and
+schema-drift refusals are covered by the CLI acceptance.
+
 ## Example workflow
 
 Create an owned private directory and place the reviewed discovery snapshot
