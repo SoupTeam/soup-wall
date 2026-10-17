@@ -85,8 +85,8 @@ def proof(priv, decls, recs):
 
 def drawn(decls, table, groups, counts=COUNTS, req=REQ, seed=SEED, recs=None):
     st = custody.declare(decls, 'toy-custodian', req, counts)
-    st, _ = custody.commit(st, table, req, counts, seed, rulings_sha256=rulings.digest(rulings_for(decls, recs)))
-    return custody.draw(st, table, req, counts, seed, groups)
+    st, _ = custody.commit(st, table, req, counts, seed, rulings_sha256=rulings.digest(rulings_for(decls, recs)), test_exclusions=())
+    return custody.draw(st, table, req, counts, seed, groups, test_exclusions=())
 
 
 def accepted(st):
@@ -116,10 +116,10 @@ class Custody(unittest.TestCase):
         decls, recs, table, groups = pool()
         st = custody.declare(decls, 'toy-custodian', REQ, COUNTS)
         self.assertEqual(custody.public_state_errors(st), [])
-        st, private = custody.commit(st, table, REQ, COUNTS, SEED, rulings_sha256=rulings.digest(rulings_for(decls, recs)))
+        st, private = custody.commit(st, table, REQ, COUNTS, SEED, rulings_sha256=rulings.digest(rulings_for(decls, recs)), test_exclusions=())
         self.assertEqual(custody.public_state_errors(st), [])
         self.assertNotIn(SEED, json.dumps(st))
-        st, private = custody.draw(st, table, REQ, COUNTS, SEED, groups)
+        st, private = custody.draw(st, table, REQ, COUNTS, SEED, groups, test_exclusions=())
         self.assertEqual(custody.public_state_errors(st), [])
         for f in private['test_families']:
             self.assertNotIn(f, json.dumps(st))
@@ -137,15 +137,15 @@ class Custody(unittest.TestCase):
         decls, recs, table, groups = pool()
         st = custody.declare(decls, 'toy-custodian', REQ, COUNTS)
         with self.assertRaises(custody.CustodyError):
-            custody.draw(st, table, REQ, COUNTS, SEED, groups)       # draw before commit
+            custody.draw(st, table, REQ, COUNTS, SEED, groups, test_exclusions=())       # draw before commit
         with self.assertRaises(custody.CustodyError):
             accepted(st)                                              # accept before draw
-        committed, _ = custody.commit(st, table, REQ, COUNTS, SEED, rulings_sha256=rulings.digest(rulings_for(decls, recs)))
+        committed, _ = custody.commit(st, table, REQ, COUNTS, SEED, rulings_sha256=rulings.digest(rulings_for(decls, recs)), test_exclusions=())
         with self.assertRaises(custody.CustodyError):
-            custody.commit(committed, table, REQ, COUNTS, SEED, rulings_sha256=rulings.digest(rulings_for(decls, recs)))      # commit twice
-        done, _ = custody.draw(committed, table, REQ, COUNTS, SEED, groups)
+            custody.commit(committed, table, REQ, COUNTS, SEED, rulings_sha256=rulings.digest(rulings_for(decls, recs)), test_exclusions=())      # commit twice
+        done, _ = custody.draw(committed, table, REQ, COUNTS, SEED, groups, test_exclusions=())
         with self.assertRaises(custody.CustodyError):
-            custody.draw(done, table, REQ, COUNTS, SEED, groups)     # draw twice
+            custody.draw(done, table, REQ, COUNTS, SEED, groups, test_exclusions=())     # draw twice
         with self.assertRaises(custody.CustodyError):
             custody.accept(done, custodian='someone-else', accepted_at='t', decision_ref='r')
         with self.assertRaises(custody.CustodyError):
@@ -158,28 +158,28 @@ class Custody(unittest.TestCase):
         st = custody.declare(decls, 'toy-custodian', REQ, COUNTS)
         for bad in ('xyz', SEED.upper(), SEED[:-2], 7):
             with self.assertRaises(custody.CustodyError):
-                custody.commit(st, table, REQ, COUNTS, bad, rulings_sha256=rulings.digest(rulings_for(decls, recs)))
-        committed, _ = custody.commit(st, table, REQ, COUNTS, SEED, rulings_sha256=rulings.digest(rulings_for(decls, recs)))
+                custody.commit(st, table, REQ, COUNTS, bad, rulings_sha256=rulings.digest(rulings_for(decls, recs)), test_exclusions=())
+        committed, _ = custody.commit(st, table, REQ, COUNTS, SEED, rulings_sha256=rulings.digest(rulings_for(decls, recs)), test_exclusions=())
         with self.assertRaises(custody.CustodyError):
-            custody.draw(committed, table, REQ, COUNTS, OTHER_SEED, groups)  # seed does not open the commitment
+            custody.draw(committed, table, REQ, COUNTS, OTHER_SEED, groups, test_exclusions=())  # seed does not open the commitment
         tampered = dict(committed, commitment='not-a-digest')
         self.assertTrue(custody.public_state_errors(tampered))
         with self.assertRaises(custody.CustodyError):
-            custody.draw(tampered, table, REQ, COUNTS, SEED, groups)
+            custody.draw(tampered, table, REQ, COUNTS, SEED, groups, test_exclusions=())
         leaky = dict(committed, seed=SEED)
         self.assertTrue(any('private material' in e for e in custody.public_state_errors(leaky)))
         smaller = {g: v for g, v in table.items() if g != sorted(table)[0]}
         with self.assertRaises(custody.CustodyError):
-            custody.draw(committed, smaller, REQ, COUNTS, SEED, groups)      # pool changed after commitment
+            custody.draw(committed, smaller, REQ, COUNTS, SEED, groups, test_exclusions=())      # pool changed after commitment
         with self.assertRaises(custody.CustodyError):
-            custody.commit(st, table, REQ, dict(COUNTS, train=2), SEED, rulings_sha256=rulings.digest(rulings_for(decls, recs)))       # rule differs from the declaration
+            custody.commit(st, table, REQ, dict(COUNTS, train=2), SEED, rulings_sha256=rulings.digest(rulings_for(decls, recs)), test_exclusions=())       # rule differs from the declaration
 
     def test_impossible_requirements_are_not_relaxed(self):
         decls, recs, table, _ = pool()
         full = feasibility.default_requirements()
         st = custody.declare(decls, 'toy-custodian', full, COUNTS)
         with self.assertRaisesRegex(custody.CustodyError, 'IMPOSSIBLE'):
-            custody.commit(st, table, full, COUNTS, SEED, rulings_sha256=rulings.digest(rulings_for(decls, recs)))
+            custody.commit(st, table, full, COUNTS, SEED, rulings_sha256=rulings.digest(rulings_for(decls, recs)), test_exclusions=())
 
 
 class Manifest(unittest.TestCase):

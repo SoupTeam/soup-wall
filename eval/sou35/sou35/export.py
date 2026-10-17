@@ -43,7 +43,7 @@ def _jsonl(rows):
 
 def scored(r, rulings_register):
     # Mechanical statuses are retained; a separately recorded human ruling determines admissibility.
-    return r['expected_outcome'] == 'classification' and rulings.is_admissible(r, rulings_register)
+    return r['expected_outcome'] == 'classification' and rulings.primary_scoring_admissible(r, rulings_register)
 
 
 def plan_export(records, decls, m, custody_state, authorization, *, test_families, nonce, rulings_register):

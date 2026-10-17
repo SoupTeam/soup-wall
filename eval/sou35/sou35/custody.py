@@ -21,7 +21,8 @@ HEX64 = re.compile(r'^[0-9a-f]{64}$')
 PRIVATE_KEYS = frozenset({'seed', 'nonce', 'test_families', 'test_groups'})
 REQUIRED = {
     'declared': {'custody_kind', 'state', 'custodian', 'pool_digest', 'rule_digest'},
-    'committed': {'feasible_sets_digest', 'n_feasible_sets', 'commitment', 'rulings_sha256'},
+    'committed': {'feasible_sets_digest', 'n_feasible_sets', 'commitment', 'rulings_sha256',
+                  'test_exclusions_commitment'},
     'drawn': {'test_set_commitment', 'test_family_count'},
     'custody_accepted': {'acceptance'},
 }
@@ -65,7 +66,7 @@ def public_state_errors(state):
     missing = _required_for(state['state']) - set(state)
     if missing:
         e.append(f'custody state {state["state"]} lacks {sorted(missing)}')
-    for k in ('pool_digest', 'rule_digest', 'feasible_sets_digest', 'commitment', 'test_set_commitment', 'rulings_sha256'):
+    for k in ('pool_digest', 'rule_digest', 'feasible_sets_digest', 'commitment', 'test_set_commitment', 'rulings_sha256', 'test_exclusions_commitment'):
         if k in state and not (isinstance(state[k], str) and HEX64.match(state[k])):
             e.append(f'{k} is not a 64-hex sha256 commitment')
     if not (isinstance(state.get('custodian'), str) and state['custodian'].strip()):
@@ -88,12 +89,35 @@ def declare(decls, custodian, requirements, counts):
             'pool_digest': pool_digest(decls), 'rule_digest': rule_digest(requirements, counts)}
 
 
-def _feasible(table, requirements, counts):
-    sets = feasibility.feasible_test_sets(table, requirements, counts)
+def _validated_exclusions(table, test_exclusions):
+    """Convert a PRIVATE, group-level ban list into a canonical set; fail closed."""
+    if not isinstance(test_exclusions, (tuple, list, set, frozenset)):
+        raise CustodyError('test exclusions must be an explicit group sequence')
+    if any(not isinstance(g, str) or not g for g in test_exclusions):
+        raise CustodyError('test exclusions contain an invalid group')
+    if len(set(test_exclusions)) != len(test_exclusions):
+        raise CustodyError('test exclusions contain duplicates')
+    if not set(test_exclusions) <= set(table):
+        raise CustodyError('test exclusions do not match the current group table')
+    return frozenset(test_exclusions)
+
+
+def _exclusions_commitment(seed, blocked):
+    """A seed-keyed commitment prevents dictionary attacks on the small private ban list."""
+    return _h(seed, 'sou35-test-exclusions-v1', json.dumps(sorted(blocked)))
+
+
+def _feasible(table, requirements, counts, test_exclusions=()):
+    blocked = _validated_exclusions(table, test_exclusions)
+    # A test set is feasible iff its complement has at least one valid full split.
+    # Excluding whole leakage groups from test never changes the feasibility of
+    # the complement, so safely filter the exact feasible-test-set enumeration.
+    sets = [s for s in feasibility.feasible_test_sets(table, requirements, counts)
+            if not blocked.intersection(s)]
     return sets, adapters.sha([list(s) for s in sets])
 
 
-def commit(state, table, requirements, counts, seed, *, rulings_sha256):
+def commit(state, table, requirements, counts, seed, *, rulings_sha256, test_exclusions):
     """-> (public_state, private_part). Fails if no test set can satisfy the recorded requirements (never relaxed)."""
     _expect(state, 'declared')
     if not (isinstance(seed, str) and HEX64.match(seed)):
@@ -102,26 +126,40 @@ def commit(state, table, requirements, counts, seed, *, rulings_sha256):
         raise CustodyError('valid semantic rulings digest is required before commit')
     if rule_digest(requirements, counts) != state['rule_digest']:
         raise CustodyError('requirements/counts differ from the declared split rule')
-    sets, digest = _feasible(table, requirements, counts)
+    blocked = _validated_exclusions(table, test_exclusions)
+    sets, digest = _feasible(table, requirements, counts, blocked)
     if not sets:
         raise CustodyError('IMPOSSIBLE: no test set satisfies the declared requirements; nothing committed')
+    exclusions_commitment = _exclusions_commitment(seed, blocked)
     public = dict(state, state='committed', feasible_sets_digest=digest, n_feasible_sets=len(sets),
-                  commitment=_h(seed, state['pool_digest'], state['rule_digest'], digest, rulings_sha256),
+                  test_exclusions_commitment=exclusions_commitment,
+                  commitment=_h(seed, state['pool_digest'], state['rule_digest'], digest,
+                                rulings_sha256, exclusions_commitment),
                   rulings_sha256=rulings_sha256)
     return public, {'seed': seed}
 
 
-def draw(state, table, requirements, counts, seed, group_families):
+def draw(state, table, requirements, counts, seed, group_families, *, test_exclusions):
     """Reveal-and-select: the seed must open the commitment and the feasible list must be unchanged.
     `group_families` maps leakage group -> family ids. -> (public_state, private_part)."""
     _expect(state, 'committed')
-    if not (isinstance(seed, str) and HEX64.match(seed)) or \
-            _h(seed, state['pool_digest'], state['rule_digest'], state['feasible_sets_digest'], state['rulings_sha256']) != state['commitment']:
+    blocked = _validated_exclusions(table, test_exclusions)
+    if not (isinstance(seed, str) and HEX64.match(seed)):
         raise CustodyError('seed does not open the commitment')
-    sets, digest = _feasible(table, requirements, counts)
+    exclusions_commitment = _exclusions_commitment(seed, blocked)
+    if exclusions_commitment != state['test_exclusions_commitment']:
+        raise CustodyError('private test-exclusion policy changed after commitment')
+    if _h(seed, state['pool_digest'], state['rule_digest'], state['feasible_sets_digest'],
+          state['rulings_sha256'], exclusions_commitment) != state['commitment']:
+        raise CustodyError('seed does not open the commitment')
+    sets, digest = _feasible(table, requirements, counts, blocked)
     if digest != state['feasible_sets_digest'] or rule_digest(requirements, counts) != state['rule_digest']:
         raise CustodyError('pool, rule or feasible test sets changed after commitment')
+    if not sets:
+        raise CustodyError('IMPOSSIBLE: no eligible test sets remain')
     groups = sets[int(_h(seed, 'draw'), 16) % len(sets)]
+    if blocked.intersection(groups):
+        raise CustodyError('restricted leakage group reached test draw')
     families = sorted(f for g in groups for f in group_families[g])
     nonce = _h(seed, 'nonce')
     public = dict(state, state='drawn', test_set_commitment=test_set_commitment(families, nonce),

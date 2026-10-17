@@ -35,7 +35,7 @@ and records; a refusal exits 1 and prints only an error category.
 
 ```sh
 cd eval/sou35
-R="--workspace sealed/<name> --pool private/pool --records private/records/candidates.jsonl --rulings sealed/<name>/rulings.json"
+R="--workspace sealed/<name> --pool private/pool --records private/records/candidates.jsonl --rulings sealed/<name>/rulings.json --test-exclusions private/<policy>.json"
 python -m sou35.release declare $R --custodian <name> --counts T/V/C/S      # full coverage requirements by default
 python -m sou35.release commit  $R                                          # seed stays in the workspace
 python -m sou35.release draw    $R --confirm
@@ -46,6 +46,8 @@ python -m sou35.release validate-manifest $R
 python -m sou35.release public-view $R                                      # writes manifest.public.json
 python -m sou35.release export  $R --authorization <auth.json> --out private/<dir>
 ```
+
+The mandatory private `--test-exclusions` policy must match the exact-SHA reviewed supplement and current pool; an absent, incomplete or modified restriction list is refused before `declare`/`commit`. The source supplement must remain accessible to the custodian. The low-level `custody.commit`/`custody.draw` APIs require explicit group exclusions; `()` is appropriate only for artificial tests or genuinely unrestricted policies. **Do not run this example on v3 until the team authorizes custody operations.**
 
 The export authorization file needs `scope: sou35_internal_dev_export`, `authorized_by`, `authorized_at`,
 `decision_ref` and the frozen manifest's `manifest_sha256` and `rulings_sha256`. These fields are recorded, not authenticated (see the

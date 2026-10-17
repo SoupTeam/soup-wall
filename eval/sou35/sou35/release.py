@@ -12,7 +12,8 @@
     public-view                                                   writes manifest.public.json after a leak check
     export           --authorization auth.json --out private/<dir>
 
-    After declare, commands require --rulings sealed/<name>/rulings.json (external human decisions; private).
+    All commands require --test-exclusions private/<policy>.json (verified private review package).
+    After declare, commands also require --rulings sealed/<name>/rulings.json (external human decisions; private).
 
 ROLES AND TRUST BOUNDARY. The workspace holds the custodian's private material (seed, nonce, test families) and the
 FULL manifest, which names test families: only the sealed-test custodian may hold it, so draw, accept, freeze and the
@@ -24,8 +25,11 @@ Every command re-validates the pool and records first. Exit 0 = success, 1 = ref
 Standard output never prints a seed, nonce, case id or test family id; refusals print only an error category unless
 --verbose-errors is given (custodian console only)."""
 import argparse
+import hashlib
+import io
 import json
 import sys
+import zipfile
 from pathlib import Path
 
 from . import check_pool, custody, export, families, feasibility, records
@@ -77,6 +81,77 @@ def _rulings(args, decls):
     return reg
 
 
+def _test_exclusions(args, decls, recs):
+    """Private, pool-bound policy. Mandatory for every CLI custody operation.
+
+    The public code knows nothing about real family identities; group bans are
+    derived only from the verified candidate records and private policy.
+    """
+    if not args.test_exclusions:
+        raise Refused('private test-exclusions policy is mandatory')
+    policy_path = Path(args.test_exclusions).resolve()
+    check_pool.ensure_private_out(policy_path.parent)
+    policy = _read(policy_path)
+    if not isinstance(policy, dict) or policy.get('policy_version') != 'sou35-test-exclusions-v1':
+        raise Refused('unrecognized private test-exclusions policy')
+    if policy.get('pool_digest') != custody.pool_digest(decls):
+        raise Refused('test exclusions not bound to current pool')
+    if not (isinstance(policy.get('source_review_package_sha256'), str)
+            and custody.HEX64.match(policy['source_review_package_sha256'])):
+        raise Refused('test exclusions missing review-package digest')
+    banned = policy.get('excluded_family_ids')
+    fids = {d['family_id'] for d in decls}
+    if (not isinstance(banned, list) or any(not isinstance(f, str) for f in banned)
+            or len(banned) != len(set(banned)) or not set(banned) <= fids):
+        raise Refused('invalid family exclusions; no operation permitted')
+    family_group = {}
+    for r in recs:
+        old = family_group.setdefault(r['family_id'], r['leakage_group_id'])
+        if old != r['leakage_group_id']:
+            raise Refused('candidate leakage group mismatch')
+    if set(family_group) != fids:
+        raise Refused('test-exclusion pool records are incomplete')
+
+    # The policy is not itself proof of which families Baubek reviewed. Cross-check
+    # it against the actual, SHA-pinned private review supplement before any CLI
+    # custody operation. A forged/empty list in an otherwise well-formed JSON
+    # policy is refused, even before the seed has been committed.
+    review_path = policy.get('source_review_package_path')
+    if not isinstance(review_path, str) or not review_path.strip():
+        raise Refused('test exclusions missing original private review package path')
+    try:
+        review_bytes = Path(review_path).read_bytes()
+        review_sha256 = hashlib.sha256(review_bytes).hexdigest()
+        if review_sha256 != policy['source_review_package_sha256']:
+            raise Refused('test-exclusion review package SHA-256 mismatch')
+        with zipfile.ZipFile(io.BytesIO(review_bytes)) as archive:
+            members = [name for name in archive.namelist()
+                       if name.endswith('near_transfer_test_exclusions.PRIVATE.json')]
+            if len(members) != 1:
+                raise Refused('verified review package lacks a unique private restriction list')
+            source = json.loads(archive.read(members[0]))
+    except (OSError, ValueError, zipfile.BadZipFile, KeyError, UnicodeError) as exc:
+        raise Refused('private test-exclusion review package unavailable or invalid') from exc
+    if not isinstance(source, dict) or source.get('test_allowed') is not False:
+        raise Refused('private review package has no valid closed-test restriction')
+    entries = source.get('families')
+    if not isinstance(entries, list) or not entries:
+        raise Refused('private review package restriction list is empty or invalid')
+    reviewed = {}
+    for entry in entries:
+        if (not isinstance(entry, dict)
+                or not isinstance(entry.get('family_id'), str)
+                or not isinstance(entry.get('leakage_group_id'), str)
+                or entry['family_id'] in reviewed):
+            raise Refused('invalid or duplicate private review-package family')
+        reviewed[entry['family_id']] = entry['leakage_group_id']
+    if (set(reviewed) != set(banned) or source.get('family_count') != len(reviewed)
+            or source.get('leakage_group_count') != len(set(reviewed.values()))
+            or any(family_group.get(fid) != gid for fid, gid in reviewed.items())):
+        raise Refused('test-exclusion policy does not match the reviewed private restrictions')
+    return frozenset(family_group[f] for f in banned)
+
+
 def _private(ws):
     p = _read(ws / PRIVATE)
     return p.get('test_families'), p.get('nonce')
@@ -86,6 +161,7 @@ def run(args):
     ws = check_pool.ensure_private_out(args.workspace)
     ws.mkdir(parents=True, exist_ok=True)
     decls, recs = _pool(args)
+    test_exclusions = _test_exclusions(args, decls, recs)
     reg = _rulings(args, decls) if args.command != 'declare' else None
     table = feasibility.group_table(recs, reg) if reg else feasibility.group_table(recs)
     groups = M._groups(recs)
@@ -104,16 +180,24 @@ def run(args):
     req, counts = _rule(state)
     if state.get('state') != 'declared' and state.get('rulings_sha256') != rulings.digest(reg):
         raise Refused('rulings changed since custody commitment; new custody workflow required')
+    if state['state'] in ('committed', 'drawn', 'custody_accepted'):
+        private_seed = _read(ws / PRIVATE).get('seed')
+        if (not isinstance(private_seed, str) or not custody.HEX64.match(private_seed)
+                or custody._exclusions_commitment(private_seed, test_exclusions)
+                != state['test_exclusions_commitment']):
+            raise Refused('private test-exclusion policy changed after commitment')
     if cmd == 'commit':
         state, private = custody.commit(state, table, req, counts, custody.new_seed(),
-                                        rulings_sha256=rulings.digest(reg))
+                                        rulings_sha256=rulings.digest(reg),
+                                        test_exclusions=test_exclusions)
         _write(ws / PRIVATE, private)
         _write(ws / STATE, state)
         return {'state': state['state'], 'n_feasible_sets': state['n_feasible_sets']}
     if cmd == 'draw':
         if not args.confirm:
             raise Refused('draw is irreversible: re-run with --confirm (custodian only)')
-        state, private = custody.draw(state, table, req, counts, _read(ws / PRIVATE).get('seed'), groups)
+        state, private = custody.draw(state, table, req, counts, _read(ws / PRIVATE).get('seed'), groups,
+                                      test_exclusions=test_exclusions)
         _write(ws / PRIVATE, private)
         _write(ws / STATE, state)
         return {'state': state['state'], 'test_family_count': state['test_family_count']}
@@ -123,6 +207,9 @@ def run(args):
         _write(ws / STATE, state)
         return {'state': state['state']}
     test_families, nonce = _private(ws)
+    if test_families is not None and any(
+            f in set(test_families) for g in test_exclusions for f in groups[g]):
+        raise Refused('restricted family was present in the test selection')
     if cmd == 'build-manifest':
         m = M.build_draft(decls, recs, state, test_families, nonce, counts, req, args.salt, rulings_register=reg)
         _write(ws / FULL, m)
@@ -166,6 +253,7 @@ def parser():
                                         'validate-manifest', 'public-view', 'export'])
     ap.add_argument('--workspace', required=True)
     ap.add_argument('--rulings', help='private, pool-bound external human decisions (required after declare)')
+    ap.add_argument('--test-exclusions', help='mandatory private pool-bound closed-test exclusion policy')
     ap.add_argument('--pool', required=True)
     ap.add_argument('--records', required=True)
     for opt in ('--custodian', '--counts', '--held-out-features', '--accepted-at', '--decision-ref', '--salt',

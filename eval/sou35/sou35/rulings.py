@@ -80,3 +80,30 @@ def unresolved(record, register):
 
 def is_admissible(record, register):
     return not unresolved(record, register)
+
+
+def excluded_from_primary_scoring(record):
+    """V3 P0: unmodelled-mode *full* unknown stays diagnostic, never primary-scored.
+
+    Do not exclude partial unknowns with established actions. This predicate is an
+    eligibility safeguard, NOT a human semantic ruling or a declaration of Gold.
+    Private candidate coverage is verified by an owner-only preflight, not embedded here.
+    Future equivalent cases are deliberately fail-closed pending their own adjudication.
+    """
+    if record.get('expected_outcome') != 'classification':
+        return False
+    if 'Q-S35-UNMODELLED-MODE' not in record.get('open_questions', ()):
+        return False
+    if 'unmodelled_mode' not in record.get('scenario_tags', ()):
+        return False
+    annotation = record.get('annotation') or {}
+    targets = annotation.get('per_action_targets')
+    actions = ('read', 'write', 'delete', 'send_data', 'change_permissions')
+    return (annotation.get('unknown') is True and isinstance(targets, dict)
+            and set(targets) == set(actions)
+            and all(targets[action] is None for action in actions))
+
+
+def primary_scoring_admissible(record, register):
+    """Requires independent human case evidence AND the SOU-35 primary-scoring policy."""
+    return not excluded_from_primary_scoring(record) and is_admissible(record, register)

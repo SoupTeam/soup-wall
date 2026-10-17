@@ -18,6 +18,8 @@ artificial toy families (`tests/toy/`, `artificial_toy: true`) that exist only t
 | `sou35/rulings.py` | Pool-bound, private semantic and case-evidence review decisions (recorded, not authenticated) |
 | `sou35/release.py` | Thin custodian CLI over custody, manifest and export (see `docs/benchmarks/sou35/VALIDATION.md`) |
 
+The custodian CLI requires a private `--test-exclusions` policy cross-checked against its exact-SHA reviewer supplement. It applies the bans before future test commitment and draw; the low-level custody API also requires the ban parameter explicitly. No real v3 draw, freeze, scoring or export is authorised by this documentation.
+
 Approver, custodian and authorizer fields are recorded text bound into sha256 digests; they do not authenticate a
 person and nothing is signed. The full manifest names test families and stays with the sealed-test custodian.
 

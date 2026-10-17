@@ -2,16 +2,18 @@
 
 Runs in a uniquely named, git-ignored sealed/ workspace that is removed afterwards."""
 import contextlib
+import hashlib
 import io
 import json
 import shutil
 import unittest
 import uuid
+import zipfile
 
 from _util import ROOT, TOY_DIR
 from test_release_workflow import TOY_VAULT, rulings_for
 
-from sou35 import export, families, generate, release
+from sou35 import custody, export, families, generate, release
 
 COUNTS = '1/1/1/1'
 
@@ -31,9 +33,27 @@ class ReleaseCli(unittest.TestCase):
         self.recs = generate.generate(decls, {})
         self.register_file = self.ws / 'toy_rulings.json'
         self.register_file.write_text(json.dumps(rulings_for(decls, self.recs)), encoding='utf-8')
+        # Artificial reviewer supplement: the CLI must verify the actual archive,
+        # not just trust a mutable first-commit policy file.
+        banned_toy = 'f35.write.toy_batch'
+        group = next(r['leakage_group_id'] for r in self.recs if r['family_id'] == banned_toy)
+        self.toy_review_package = self.ws / 'toy_review_supplement.zip'
+        restriction = {'test_allowed': False, 'family_count': 1, 'leakage_group_count': 1,
+                       'families': [{'family_id': banned_toy, 'leakage_group_id': group}]}
+        with zipfile.ZipFile(self.toy_review_package, 'w') as archive:
+            archive.writestr('near_transfer_test_exclusions.PRIVATE.json', json.dumps(restriction))
+        review_sha = hashlib.sha256(self.toy_review_package.read_bytes()).hexdigest()
+        self.exclusion_policy = self.ws / 'toy_test_exclusions.json'
+        self.exclusion_policy.write_text(json.dumps({
+            'policy_version': 'sou35-test-exclusions-v1',
+            'pool_digest': custody.pool_digest(decls),
+            'source_review_package_sha256': review_sha,
+            'source_review_package_path': str(self.toy_review_package),
+            'excluded_family_ids': [banned_toy],
+        }), encoding='utf-8')
         self.records = self.ws / 'records.jsonl'
         self.records.write_text(''.join(json.dumps(r) + '\n' for r in self.recs), encoding='utf-8')
-        self.common = ['--workspace', str(self.ws), '--pool', str(pool), '--records', str(self.records), '--rulings', str(self.register_file)]
+        self.common = ['--workspace', str(self.ws), '--pool', str(pool), '--records', str(self.records), '--rulings', str(self.register_file), '--test-exclusions', str(self.exclusion_policy)]
 
     def tearDown(self):
         for path, existed in ((self.ws, None), (self.out, None)):
@@ -155,6 +175,49 @@ class ReleaseCli(unittest.TestCase):
         self.ok('declare', '--custodian', 'toy-custodian', '--counts', COUNTS)
         err = self.refused('commit')
         self.assertIn('IMPOSSIBLE', err)
+
+    def test_explicit_private_test_exclusion_policy_is_required(self):
+        common = list(self.common)
+        self.common = [x for x in common if x not in ('--test-exclusions', str(self.exclusion_policy))]
+        try:
+            self.refused('declare', '--custodian', 'toy-custodian', '--counts', COUNTS,
+                         '--held-out-features', 'technical_error')
+        finally:
+            self.common = common
+
+    def test_private_test_exclusions_integrated_and_bound_after_commit(self):
+        policy = json.loads(self.exclusion_policy.read_text(encoding='utf-8'))
+        # Toy-only: one existing family restricted from test.
+        policy['excluded_family_ids'] = ['f35.write.toy_batch']
+        self.exclusion_policy.write_text(json.dumps(policy), encoding='utf-8')
+        self.ok('declare', '--custodian', 'toy-custodian', '--counts', COUNTS,
+                '--held-out-features', 'technical_error')
+        self.ok('commit')
+        policy['excluded_family_ids'] = []
+        self.exclusion_policy.write_text(json.dumps(policy), encoding='utf-8')
+        self.refused('draw', '--confirm')
+        policy['excluded_family_ids'] = ['f35.write.toy_batch']
+        self.exclusion_policy.write_text(json.dumps(policy), encoding='utf-8')
+        self.ok('draw', '--confirm')
+        self.assertNotIn('f35.write.toy_batch', self.test_families())
+
+    def test_cannot_commit_against_empty_or_wrong_private_ban_list(self):
+        saved = json.loads(self.exclusion_policy.read_text(encoding='utf-8'))
+        for wrong in ([], ['f35.multimode.toy_switch']):
+            changed = dict(saved, excluded_family_ids=wrong)
+            self.exclusion_policy.write_text(json.dumps(changed), encoding='utf-8')
+            self.refused('declare', '--custodian', 'toy-custodian', '--counts', COUNTS,
+                         '--held-out-features', 'technical_error')
+        self.exclusion_policy.write_text(json.dumps(saved), encoding='utf-8')
+
+    def test_missing_or_tampered_original_review_package_is_refused(self):
+        original = self.toy_review_package.read_bytes()
+        self.toy_review_package.write_bytes(b'corrupted')
+        try:
+            self.refused('declare', '--custodian', 'toy-custodian', '--counts', COUNTS,
+                         '--held-out-features', 'technical_error')
+        finally:
+            self.toy_review_package.write_bytes(original)
 
 
 if __name__ == '__main__':

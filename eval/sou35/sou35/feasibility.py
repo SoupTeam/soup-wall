@@ -28,7 +28,7 @@ def default_requirements(features=FULL_HELD_OUT):
 def record_features(r, rulings_register=None):
     if rulings_register is not None:
         from . import rulings
-        if not rulings.is_admissible(r, rulings_register):
+        if not rulings.primary_scoring_admissible(r, rulings_register):
             return set()
     if r['expected_outcome'] == 'technical_error':
         return {'technical_error'}
