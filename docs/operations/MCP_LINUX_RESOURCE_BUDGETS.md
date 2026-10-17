@@ -127,7 +127,12 @@ acceptance must independently observe every server leaf removed before returning
 The parent observer reads effective controls, kernel OOM/PID/CPU counters, charged
 memory peak, task peak, actual host PID/start-time membership and disappearance.
 Its 2 ms sampling interval is not a hard real-time guarantee; event counters and
-kernel peak accounting supplement samples. The owned memory test permits at most
+kernel peak accounting supplement samples.
+Control-read `ENOENT`/`ENODEV` during kernel teardown is quarantined for at most
+250 ms without accepting further resource samples. Only independently observed
+disappearance of the same pinned leaf resolves it; a live or replaced leaf, late
+disappearance, or permission error fails acceptance.
+The owned memory test permits at most
 32 MiB observed accounting overshoot beyond its requested cap; this is an explicit
 acceptance bound, not a claim of a universal kernel overshoot ABI. CPU evidence
 requires actual nonzero workload, throttling and measured aggregate usage within

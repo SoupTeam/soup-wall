@@ -404,6 +404,34 @@ def removed_leaf_read(error, path, identity):
     return error.errno in (errno.ENOENT, errno.ENODEV) and leaf_state(path, identity) == 'gone'
 
 
+class ShutdownRead:
+    """Quarantine one uncertain control read; never accept recovered samples."""
+    MILLIS = 250
+
+    def __init__(self, code, now):
+        self.errno, self.started = code, now
+        self.deadline, self.status, self.settled = now + self.MILLIS / 1000, 'pending', None
+
+    def advance(self, removed, now):
+        if self.status != 'pending':
+            return self.status
+        if now > self.deadline or (now >= self.deadline and not removed):
+            self.status = 'failed'
+        elif removed:
+            self.status = 'resolved'
+        if self.status != 'pending':
+            self.settled = now
+        return self.status
+
+    def reject(self, now):
+        self.status, self.settled = 'failed', now
+
+    def metadata(self):
+        return {'errno': self.errno, 'deadline_millis': self.MILLIS, 'status': self.status,
+                'elapsed_millis': int(((self.settled or self.deadline) - self.started) * 1000),
+                'resolved_within_deadline': self.status == 'resolved'}
+
+
 class KernelObserver:
     """Only the parent reads cgroupfs and host PID identities; bounded snapshots."""
     def __init__(self, root):
@@ -413,6 +441,7 @@ class KernelObserver:
         self.leaf_fd = None
         self.failure_phase, self.failure_errno = None, None
         self.expected_cpu_loss, self.controller_loss_seen = False, False
+        self.shutdown_read = None
         self.members, self.peak_memory, self.peak_tasks, self.samples = {}, 0, 0, 0
         self.counter_max = {'oom': 0, 'oom_kill': 0, 'pids_max': 0, 'throttled': 0}
         self.start, self.stop = time.monotonic(), threading.Event()
@@ -423,6 +452,10 @@ class KernelObserver:
         while not self.stop.wait(0.002):
             phase = 'leaf_discovery'
             try:
+                if self.shutdown_read is not None and self.shutdown_read.status == 'pending':
+                    phase = 'shutdown_identity'
+                    self.settle_shutdown_read()
+                    continue
                 if self.path is None:
                     candidates = [p for p in self.root.iterdir() if p.is_dir() and p.name not in self.existing]
                     require(len(candidates) <= 1, 'ambiguous_owned_leaf')
@@ -473,11 +506,19 @@ class KernelObserver:
                     member['cpu_ticks'] = max(member['cpu_ticks'], previous.get('cpu_ticks', 0))
                     self.members[(pid, start)] = member
             except OSError as error:
-                if phase in ('leaf_identity', 'kernel_controls'):
+                if phase == 'kernel_controls' and error.errno in (errno.ENOENT, errno.ENODEV) and self.shutdown_read is None:
                     try:
-                        if self.leaf_fd is not None and removed_leaf_read(error, self.path, (self.device, self.inode)):
-                            if self.removed_at is None:
-                                self.removed_at = time.monotonic()
+                        if self.leaf_fd is not None:
+                            now = time.monotonic()
+                            removed = removed_leaf_read(error, self.path, (self.device, self.inode))
+                            self.shutdown_read = ShutdownRead(error.errno, now)
+                            observed = time.monotonic()
+                            status = self.shutdown_read.advance(removed, observed)
+                            if status == 'resolved':
+                                self.removed_at = self.removed_at or observed
+                            elif status == 'failed':
+                                self.failure, self.failure_phase = 'kernel_observation_failed', 'kernel_controls'
+                                self.failure_errno = error.errno
                             continue
                     except (OSError, ValueError):
                         pass
@@ -486,6 +527,22 @@ class KernelObserver:
             except (ValueError, TypeError, IndexError):
                 self.failure = 'kernel_observation_failed'
                 self.failure_phase = phase
+
+    def settle_shutdown_read(self):
+        pending = self.shutdown_read
+        try:
+            removed = leaf_state(self.path, (self.device, self.inode)) == 'gone'
+        except (OSError, ValueError):
+            pending.reject(time.monotonic())
+            raise
+        now = time.monotonic()
+        status = pending.advance(removed, now)
+        if status == 'resolved':
+            self.removed_at = self.removed_at or now
+        elif status == 'failed':
+            self.failure, self.failure_phase = 'kernel_observation_failed', 'kernel_controls'
+            self.failure_errno = pending.errno
+        return status
 
     def ready(self):
         until = time.monotonic() + 10
@@ -497,6 +554,15 @@ class KernelObserver:
     def finish(self):
         self.stop.set()
         self.thread.join(timeout=3)
+        if not self.thread.is_alive() and self.shutdown_read is not None:
+            while self.shutdown_read.status == 'pending':
+                try:
+                    self.settle_shutdown_read()
+                except (OSError, ValueError):
+                    self.failure, self.failure_phase = 'kernel_observation_failed', 'shutdown_identity'
+                    self.failure_errno = self.shutdown_read.errno
+                if self.shutdown_read.status == 'pending':
+                    time.sleep(max(0, min(0.002, self.shutdown_read.deadline - time.monotonic())))
         removed, remaining = False, []
         try:
             if self.path is not None:
@@ -519,6 +585,7 @@ class KernelObserver:
                 'error': self.failure, 'thread_stopped': not self.thread.is_alive(),
                 'error_phase': self.failure_phase, 'error_errno': self.failure_errno,
                 'controller_loss_seen': self.controller_loss_seen,
+                'shutdown_read': self.shutdown_read.metadata() if self.shutdown_read else None,
                 'leaf_duration_millis': int((self.removed_at - self.leaf_seen_at) * 1000) if self.removed_at and self.leaf_seen_at else None,
                 'elapsed_millis': int((time.monotonic() - self.start) * 1000)}
 
@@ -831,6 +898,10 @@ def grade_kernel(row):
     observed, requested = row['kernel'], row['budget']
     require(observed and observed['thread_stopped'] and observed['error'] is None and observed['samples'] > 0,
             'independent_kernel_observer_incomplete')
+    shutdown = observed.get('shutdown_read')
+    require(shutdown is None or (shutdown['status'] == 'resolved' and shutdown['resolved_within_deadline'] is True
+            and shutdown['errno'] in (errno.ENOENT, errno.ENODEV) and shutdown['deadline_millis'] == ShutdownRead.MILLIS
+            and 0 <= shutdown['elapsed_millis'] <= ShutdownRead.MILLIS), 'kernel_shutdown_uncertainty_unresolved')
     require(observed['leaf_removed'] and not observed['remaining'] and observed['members'], 'owned_kernel_cleanup_incomplete')
     first = observed['first']
     require(first['memory.max'] == requested['memoryMaxBytes'] and first['memory.swap.max'] == 0

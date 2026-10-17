@@ -265,6 +265,49 @@ class ObserverControls(unittest.TestCase):
             with self.assertRaises(FileNotFoundError):
                 V.kernel_values(Path('/owned'), expected_cpu_loss=True)
 
+    def test_shutdown_read_quarantine_resolves_only_removed_leaf_within_fixed_bound(self):
+        pending = V.ShutdownRead(errno.ENODEV, 10)
+        self.assertEqual(pending.advance(False, 10.05), 'pending')
+        self.assertEqual(pending.advance(True, 10.1), 'resolved')
+        self.assertEqual(pending.metadata()['errno'], errno.ENODEV)
+        self.assertTrue(pending.metadata()['resolved_within_deadline'])
+        self.assertEqual(pending.metadata()['deadline_millis'], 250)
+
+    def test_live_or_late_disappearance_cannot_extend_or_repair_shutdown_deadline(self):
+        pending = V.ShutdownRead(errno.ENODEV, 10)
+        deadline = pending.deadline
+        for now in (10.01, 10.1, 10.24):
+            self.assertEqual(pending.advance(False, now), 'pending')
+            self.assertEqual(pending.deadline, deadline)
+        self.assertEqual(pending.advance(False, 10.25), 'failed')
+        self.assertEqual(pending.advance(True, 10.26), 'failed')
+        self.assertFalse(pending.metadata()['resolved_within_deadline'])
+        late = V.ShutdownRead(errno.ENOENT, 10)
+        self.assertEqual(late.advance(True, 10.251), 'failed')
+
+    def test_pending_shutdown_replacement_is_fatal_even_when_final_cleanup_later_happens(self):
+        observer = V.KernelObserver.__new__(V.KernelObserver)
+        observer.path, observer.device, observer.inode = Path('/owned/leaf'), 1, 2
+        observer.shutdown_read = V.ShutdownRead(errno.ENODEV, 10)
+        with patch.object(V, 'leaf_state', side_effect=ValueError('owned_leaf_identity_changed')), patch.object(V.time, 'monotonic', return_value=10.01):
+            with self.assertRaisesRegex(ValueError, 'owned_leaf_identity_changed'):
+                observer.settle_shutdown_read()
+        self.assertEqual(observer.shutdown_read.status, 'failed')
+        self.assertEqual(observer.shutdown_read.advance(True, 10.02), 'failed')
+
+    def test_failed_or_late_shutdown_metadata_never_passes_kernel_grading(self):
+        pending = V.ShutdownRead(errno.ENODEV, 10)
+        pending.advance(True, 10.1)
+        value = kernel()
+        value['kernel']['shutdown_read'] = pending.metadata()
+        V.grade_kernel(value)
+        for change in ({'status': 'pending'}, {'status': 'failed'}, {'elapsed_millis': 251},
+                       {'deadline_millis': 300}, {'errno': errno.EACCES}, {'resolved_within_deadline': False}):
+            candidate = copy.deepcopy(value)
+            candidate['kernel']['shutdown_read'].update(change)
+            with self.assertRaisesRegex(ValueError, 'kernel_shutdown_uncertainty_unresolved'):
+                V.grade_kernel(candidate)
+
 
 if __name__ == '__main__':
     unittest.main()
