@@ -313,8 +313,9 @@ impl ProfileManager {
         }
         let bytes = fs::read(&self.state_path)
             .with_context(|| format!("failed to read state: {}", self.state_path.display()))?;
-        let state: ProfileState = serde_json::from_slice(&bytes)
-            .with_context(|| format!("invalid profile state json: {}", self.state_path.display()))?;
+        let state: ProfileState = serde_json::from_slice(&bytes).with_context(|| {
+            format!("invalid profile state json: {}", self.state_path.display())
+        })?;
         ensure!(
             state.schema_version == CURRENT_SCHEMA_VERSION,
             "unsupported profile state schema version: {}",
@@ -325,9 +326,7 @@ impl ProfileManager {
 
     pub fn save_state(&self, state: &ProfileState) -> Result<()> {
         let json = serde_json::to_string_pretty(state)?;
-        let tmp_path = self
-            .root
-            .join(format!(".state.tmp-{}", std::process::id()));
+        let tmp_path = self.root.join(format!(".state.tmp-{}", std::process::id()));
         let mut file = File::create(&tmp_path)?;
         file.write_all(json.as_bytes())?;
         file.sync_all()?;
@@ -468,11 +467,11 @@ impl ProfileManager {
     ) -> Result<()> {
         lifecycle.restart()?;
         let st = lifecycle.status()?;
-        ensure!(
-            st.running,
-            "daemon reported not running after restart"
-        );
-        let proc = st.process.as_ref().context("missing running daemon process record")?;
+        ensure!(st.running, "daemon reported not running after restart");
+        let proc = st
+            .process
+            .as_ref()
+            .context("missing running daemon process record")?;
         ensure!(
             proc.config_digest == expected_config_digest,
             "daemon restarted with mismatched config digest: expected {}, got {}",
@@ -911,8 +910,9 @@ impl ProfileManager {
                 } else {
                     None
                 };
-                let current_digest =
-                    current_config.as_deref().map(|c| sha256_bytes(c.as_bytes()));
+                let current_digest = current_config
+                    .as_deref()
+                    .map(|c| sha256_bytes(c.as_bytes()));
                 if current_digest.as_deref() == Some(&journal.target_config_digest) {
                     self.restore_config(journal.pre_operation_config.as_deref())?;
                     if journal.was_daemon_running {
@@ -1023,12 +1023,32 @@ mod tests {
             }
         });
 
-        fs::write(dir.join("registry.json"), serde_json::to_vec(&registry).unwrap()).unwrap();
-        fs::write(dir.join("profile.json"), serde_json::to_vec(&profile).unwrap()).unwrap();
-        fs::write(dir.join("native-config.json"), serde_json::to_vec(&native_config).unwrap()).unwrap();
-        fs::write(dir.join("operator-declarations.json"), b"{\"format\":\"sw-mcp/operator-declaration/1\"}\n").unwrap();
+        fs::write(
+            dir.join("registry.json"),
+            serde_json::to_vec(&registry).unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            dir.join("profile.json"),
+            serde_json::to_vec(&profile).unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            dir.join("native-config.json"),
+            serde_json::to_vec(&native_config).unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            dir.join("operator-declarations.json"),
+            b"{\"format\":\"sw-mcp/operator-declaration/1\"}\n",
+        )
+        .unwrap();
         fs::write(dir.join("resource-profiles.json"), b"[]\n").unwrap();
-        fs::write(dir.join("source-snapshot.json"), b"{\"format\":\"sw-mcp/operator-discovery/1\"}\n").unwrap();
+        fs::write(
+            dir.join("source-snapshot.json"),
+            b"{\"format\":\"sw-mcp/operator-discovery/1\"}\n",
+        )
+        .unwrap();
 
         bundle_digest(dir).unwrap()
     }
@@ -1155,7 +1175,10 @@ mod tests {
         let state2 = mgr.load_state().unwrap();
         assert_eq!(state2.generation, 2);
         assert_eq!(state2.active_bundle_sha256.as_deref(), Some(hash2.as_str()));
-        assert_eq!(state2.previous_bundle_sha256.as_deref(), Some(hash1.as_str()));
+        assert_eq!(
+            state2.previous_bundle_sha256.as_deref(),
+            Some(hash1.as_str())
+        );
 
         // 3. Rollback to Bundle 1
         // ZERO STALE AUTHORITY: generation MUST strictly increment to 3!
@@ -1167,7 +1190,10 @@ mod tests {
         let state3 = mgr.load_state().unwrap();
         assert_eq!(state3.generation, 3);
         assert_eq!(state3.active_bundle_sha256.as_deref(), Some(hash1.as_str()));
-        assert_eq!(state3.previous_bundle_sha256.as_deref(), Some(hash2.as_str()));
+        assert_eq!(
+            state3.previous_bundle_sha256.as_deref(),
+            Some(hash2.as_str())
+        );
 
         // Status
         let status = mgr.status().unwrap();

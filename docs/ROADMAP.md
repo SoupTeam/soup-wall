@@ -257,6 +257,12 @@ send that never reaches the MCP child or receiver, and fail-closed daemon loss, 
 versioned report. It uses scripted client frames, so host and model coverage and the
 other readiness items above remain open.
 
+The transactional MCP profile lifecycle manager ([`agentfw mcp-profile`](operations/MCP_PROFILE_LIFECYCLE.md), SOU-78)
+delivers safe installation, semantic upgrade, and rollback of operator admission profiles without
+stale authority. Every activation strictly increments a monotonic generation counter, invalidating
+lingering client and collector sessions, while state journaling guarantees atomic baseline recovery
+if daemon startup fails.
+
 ### Phase 6 — Complete team rollout and operational validation
 
 **Depends on:** Phases 1–5 and selected deployment/identity environments.

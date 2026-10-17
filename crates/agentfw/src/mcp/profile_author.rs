@@ -898,8 +898,11 @@ pub fn run(cmd: Command, home: &Path) -> Result<()> {
             accept_diff,
         } => {
             let manager = crate::mcp::profile_lifecycle::ProfileManager::new(home);
-            let record =
-                manager.rollback(revision.as_deref(), expect_generation, accept_diff.as_deref())?;
+            let record = manager.rollback(
+                revision.as_deref(),
+                expect_generation,
+                accept_diff.as_deref(),
+            )?;
             println!("{}", serde_json::to_string_pretty(&record)?);
         }
         Command::Status => {

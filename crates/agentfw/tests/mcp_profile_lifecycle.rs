@@ -59,12 +59,32 @@ fn create_test_profile_bundle(dir: &Path, server_id: &str, tool_name: &str) -> S
         }
     });
 
-    fs::write(dir.join("registry.json"), serde_json::to_vec(&registry).unwrap()).unwrap();
-    fs::write(dir.join("profile.json"), serde_json::to_vec(&profile).unwrap()).unwrap();
-    fs::write(dir.join("native-config.json"), serde_json::to_vec(&native_config).unwrap()).unwrap();
-    fs::write(dir.join("operator-declarations.json"), b"{\"format\":\"sw-mcp/operator-declaration/1\"}\n").unwrap();
+    fs::write(
+        dir.join("registry.json"),
+        serde_json::to_vec(&registry).unwrap(),
+    )
+    .unwrap();
+    fs::write(
+        dir.join("profile.json"),
+        serde_json::to_vec(&profile).unwrap(),
+    )
+    .unwrap();
+    fs::write(
+        dir.join("native-config.json"),
+        serde_json::to_vec(&native_config).unwrap(),
+    )
+    .unwrap();
+    fs::write(
+        dir.join("operator-declarations.json"),
+        b"{\"format\":\"sw-mcp/operator-declaration/1\"}\n",
+    )
+    .unwrap();
     fs::write(dir.join("resource-profiles.json"), b"[]\n").unwrap();
-    fs::write(dir.join("source-snapshot.json"), b"{\"format\":\"sw-mcp/operator-discovery/1\"}\n").unwrap();
+    fs::write(
+        dir.join("source-snapshot.json"),
+        b"{\"format\":\"sw-mcp/operator-discovery/1\"}\n",
+    )
+    .unwrap();
 
     bundle_digest(dir).unwrap()
 }
@@ -99,12 +119,7 @@ fn cli_mcp_profile_lifecycle_e2e() {
 
     // 2. Status via CLI
     let status_output = Command::new(agent_binary())
-        .args([
-            "mcp-profile",
-            "--home",
-            home.to_str().unwrap(),
-            "status",
-        ])
+        .args(["mcp-profile", "--home", home.to_str().unwrap(), "status"])
         .output()
         .expect("failed to execute agentfw mcp-profile status");
     assert!(status_output.status.success());
@@ -126,7 +141,10 @@ fn cli_mcp_profile_lifecycle_e2e() {
         ])
         .output()
         .expect("failed to execute upgrade");
-    assert!(!upgrade_fail.status.success(), "upgrade without accept-diff should fail");
+    assert!(
+        !upgrade_fail.status.success(),
+        "upgrade without accept-diff should fail"
+    );
 
     // Now upgrade with --accept-diff yes
     let upgrade_success = Command::new(agent_binary())
@@ -188,7 +206,10 @@ fn cli_mcp_profile_lifecycle_e2e() {
     assert!(cfg.native.is_some());
     assert_eq!(
         cfg.native.unwrap().registry_path,
-        home.join("mcp-profiles").join("revisions").join(&h1).join("registry.json")
+        home.join("mcp-profiles")
+            .join("revisions")
+            .join(&h1)
+            .join("registry.json")
     );
 }
 
@@ -242,12 +263,7 @@ fn crash_recovery_restores_clean_baseline() {
 
     // Trigger recover via CLI when no operation was pending -> succeeds as no-op
     let rec_output = Command::new(agent_binary())
-        .args([
-            "mcp-profile",
-            "--home",
-            home.to_str().unwrap(),
-            "recover",
-        ])
+        .args(["mcp-profile", "--home", home.to_str().unwrap(), "recover"])
         .output()
         .unwrap();
     assert!(rec_output.status.success());
@@ -263,8 +279,12 @@ fn crash_recovery_restores_clean_baseline() {
         source_bundle_sha256: state.active_bundle_sha256.clone(),
         target_bundle_sha256: "0".repeat(64),
         pre_operation_config: Some(baseline_config.clone()),
-        pre_operation_config_digest: Some(agentfw::mcp::profile_lifecycle::sha256_bytes(baseline_config.as_bytes())),
-        target_config_digest: agentfw::mcp::profile_lifecycle::sha256_bytes(b"invalid: [yaml: broken\n"),
+        pre_operation_config_digest: Some(agentfw::mcp::profile_lifecycle::sha256_bytes(
+            baseline_config.as_bytes(),
+        )),
+        target_config_digest: agentfw::mcp::profile_lifecycle::sha256_bytes(
+            b"invalid: [yaml: broken\n",
+        ),
         was_daemon_running: false,
         pre_daemon_instance: None,
         started_at_utc: "12345".into(),
@@ -273,12 +293,7 @@ fn crash_recovery_restores_clean_baseline() {
 
     // Run recover via CLI
     let rec_output2 = Command::new(agent_binary())
-        .args([
-            "mcp-profile",
-            "--home",
-            home.to_str().unwrap(),
-            "recover",
-        ])
+        .args(["mcp-profile", "--home", home.to_str().unwrap(), "recover"])
         .output()
         .unwrap();
     assert!(rec_output2.status.success());
