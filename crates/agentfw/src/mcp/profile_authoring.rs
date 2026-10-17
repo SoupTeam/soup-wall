@@ -2,11 +2,11 @@
 //! SOU-65: operator-owned, fail-closed MCP discovery/profile authoring.
 //! This tool never starts servers, grants permissions, or installs a profile.
 
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::{ensure, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use std::{collections::{BTreeMap, BTreeSet}, fs, io::Read, path::{Path, PathBuf}};
+use std::{collections::{BTreeMap, BTreeSet}, fs, io::Read, path::Path};
 
 const FORMAT: &str = "sw-mcp-operator-profile/1";
 const LIMIT: u64 = 262_144;
@@ -38,7 +38,7 @@ pub struct DeclaredTool {
     pub schema_sha256: String,
     pub action_class: String,
     pub result_provenance: String,
-    pub egress: Vec<crate::native::Egress>,
+    pub egress: Vec<Value>,
     #[serde(default)]
     pub resource_policy: Option<crate::native::resource::Policy>,
     #[serde(default)]
@@ -244,7 +244,7 @@ pub fn compile(snapshot_path:&Path,declaration_path:&Path,directory:&Path)->Resu
         use std::os::unix::fs::DirBuilderExt;
         let mut b=fs::DirBuilder::new();b.mode(0o700);b.create(directory)?;
     }
-    #[cfg(not(unix))] {bail!("initial compiler requires Unix private output directories")}
+    #[cfg(not(unix))] {anyhow::bail!("initial compiler requires Unix private output directories")}
     let publication=(||->Result<()>{
         private_write(&directory.join("registry.json"),&canonical(&registry))?;
         private_write(&directory.join("report.json"),&canonical(&summary))?;
