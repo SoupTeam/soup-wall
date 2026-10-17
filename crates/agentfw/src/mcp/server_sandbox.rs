@@ -469,7 +469,9 @@ fn validate_budget_mounts(bytes: &[u8], exposed_roots: &[&Path]) -> anyhow::Resu
         if major.parse::<u64>().is_err() || minor.parse::<u64>().is_err() {
             return Err(invalid());
         }
-        mount_path(words[3])?;
+        // The filesystem's show_path may emit an opaque root description:
+        // nsfs legitimately uses "net:[inode]" rather than an absolute path.
+        // Only the absolute mountpoint determines exposure to our bind roots.
         let mount = mount_path(words[4])?;
         if words[separator + 1] == "hugetlbfs"
             && exposed_roots
@@ -764,6 +766,21 @@ mod tests {
     fn budget_mountinfo_accepts_regular_and_unexposed_hugetlb_filesystems() {
         let records = b"29 0 0:25 / / rw shared:1 - ext4 /dev/root rw\n30 29 0:26 / /path\\040with\\040space ro - tmpfs tmpfs ro,size=1024\n31 29 0:27 / /dev/hugepages rw - hugetlbfs hugetlbfs rw\n";
         validate_budget_mounts(records, &[Path::new("/workspace"), Path::new("/package")]).unwrap();
+    }
+
+    #[test]
+    fn budget_mountinfo_accepts_nsfs_roots_and_still_refuses_exposed_hugetlbfs() {
+        let namespace =
+            b"32 29 0:28 net:[4026531993] /run/docker/netns/default rw shared:1 - nsfs nsfs rw\n";
+        validate_budget_mounts(namespace, &[Path::new("/workspace")]).unwrap();
+        let mut mixed = namespace.to_vec();
+        mixed.extend_from_slice(b"33 29 0:29 / /workspace/nested rw - hugetlbfs hugetlbfs rw\n");
+        assert_eq!(
+            validate_budget_mounts(&mixed, &[Path::new("/workspace")])
+                .unwrap_err()
+                .to_string(),
+            "mcp_budget_hugetlb_mount_unsupported"
+        );
     }
 
     #[test]
