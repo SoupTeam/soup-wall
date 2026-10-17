@@ -131,7 +131,10 @@ def safe_file(path: Path, limit: int) -> bytes:
             "input must be a regular, singly linked file")
     require(not (getattr(info, "st_file_attributes", 0) & 0x400), "reparse input refused")
     require(info.st_size <= limit, "input byte limit exceeded")
-    fd = os.open(absolute, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0))
+    # A file may become a FIFO between lstat and open: do not block before
+    # the descriptor type/identity checks can reject the replacement.
+    fd = os.open(absolute, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) |
+                 getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0))
     try:
         opened = os.fstat(fd)
         require(stat.S_ISREG(opened.st_mode) and opened.st_nlink == 1 and

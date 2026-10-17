@@ -6,6 +6,9 @@ import copy
 import hashlib
 import importlib.util
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 import shutil
 import tempfile
@@ -184,6 +187,38 @@ class RoadmapSupportTests(unittest.TestCase):
         second.unlink()
         path.write_bytes(b"x" * (support.MAX_REPORT + 1))
         self.assertEqual(self.status("https-get-linux")["status"], "invalid")
+
+    @unittest.skipUnless(os.name == "posix" and hasattr(os, "mkfifo"), "POSIX FIFO control")
+    def test_fifo_swap_between_stat_and_open_is_refused_without_blocking(self):
+        # Exercise the real OS open after a deterministic filesystem replacement.
+        # The subprocess deadline also catches a regression before fstat runs.
+        script = r"""
+import importlib.util, os, pathlib, sys
+spec = importlib.util.spec_from_file_location("support", sys.argv[1])
+support = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(support)
+path = pathlib.Path(sys.argv[2])
+original = os.open
+def swap(selected, flags, *args, **kwargs):
+    if pathlib.Path(selected) == path:
+        path.unlink()
+        os.mkfifo(path, 0o600)
+    return original(selected, flags, *args, **kwargs)
+support.os.open = swap
+try:
+    support.safe_file(path, 128)
+except support.Invalid:
+    print("unsafe replacement refused")
+else:
+    raise AssertionError("replacement accepted")
+"""
+        selected = Path(self.tmp.name) / "swapped.json"
+        selected.write_text("{}", encoding="utf-8")
+        run = subprocess.run([sys.executable, "-B", "-c", script,
+                              str(REPO / "scripts/roadmap_support.py"), str(selected)],
+                             capture_output=True, text=True, timeout=3)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertEqual(run.stdout.strip(), "unsafe replacement refused")
 
     def test_profile_input_drift_is_detected(self):
         support.validate_profile_inputs(self.index, REPO)
