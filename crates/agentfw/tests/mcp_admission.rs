@@ -553,7 +553,7 @@ fn spawn_gateway_named(
                 .expect("workspace root is embedded in the test");
             let archive = agentfw::classifier_runtime::package::build(
                 agentfw::classifier_runtime::package::Which::Frozen,
-                &root,
+                root,
             )
             .unwrap();
             agentfw::classifier_runtime::package::Store::new(&profile)
