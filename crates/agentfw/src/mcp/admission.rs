@@ -2110,9 +2110,9 @@ where
                                 continue;
                             }
                             if !((installed.action_class == ActionClass::ReadOnly
-                                && name == "read_document" && !creating)
+                                && !creating)
                                 || (installed.action_class == ActionClass::SideEffecting
-                                    && name == "create_file" && creating))
+                                    && creating))
                             {
                                 let reasons = json!(["resource_executor_unsupported"]);
                                 write_resource_reply(client, host, resource_reply, &withheld(request_id, "invocation", &reasons)).await?;
@@ -2174,7 +2174,7 @@ where
                                 continue;
                             };
                             if policy.is_windows_create() {
-                                ensure!(installed.action_class == ActionClass::SideEffecting && name == "create_file",
+                                ensure!(installed.action_class == ActionClass::SideEffecting && policy.profile.tool_name == name,
                                     "Windows create tool semantics changed");
                                 let prepared = prepared_create.as_ref().context("Windows create parent not pinned before admission")?;
                                 let bound = crate::native::resource::windows_create_binding_with_identity(

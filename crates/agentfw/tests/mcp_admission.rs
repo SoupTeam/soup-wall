@@ -155,6 +155,9 @@ schemas = {
  'delete_note': {'type':'object','properties':{'name':{'type':'string'}},'required':['name'],'additionalProperties':False}
 }
 if mode == 'classified-read': schemas['read_document'] = {'type':'object','properties':{'path':{'type':'string'}},'required':['path'],'additionalProperties':False}
+if mode == 'operator-binding':
+ del schemas['read_document']
+ schemas['fetch_document'] = {'type':'object','properties':{'path':{'type':'string'}},'required':['path'],'additionalProperties':False}
 if mode == 'nested-input':
  del schemas['read_document']
  schemas['inventory_lookup'] = json.loads(nested_schema)
@@ -4911,4 +4914,108 @@ fn scoped_mint_accepts_hyphen_prefixed_instance_ids() {
     let proof = String::from_utf8(output.stdout).unwrap();
     let grant = agentfw::child_authority::decode_token(proof.trim()).unwrap();
     assert!(grant.nonce.starts_with("-test-instance."));
+}
+
+#[tokio::test]
+async fn sou67_operator_owned_tool_bindings_allow_arbitrary_tool_name_under_constrained_file_execution(
+) {
+    let mut fixture =
+        Fixture::with_resource_policy("operator-binding", true, None, |dir, registry| {
+            let file = dir.join("reviewed-input.txt");
+            std::fs::write(&file, "custom bound contents").unwrap();
+            let canonical_file = file.canonicalize().unwrap().to_str().unwrap().to_string();
+            let canonical_dir = dir.canonicalize().unwrap();
+            let schema = json!({
+                "type": "object",
+                "properties": { "path": { "type": "string" } },
+                "required": ["path"],
+                "additionalProperties": false
+            });
+            let profile = json!({
+                "server_id": "fixture",
+                "tool_name": "fetch_document",
+                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "selectors": [{ "pointer": "/path", "kind": "path" }]
+            });
+            registry["tools"][0] = json!({
+                "name": "fetch_document",
+                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "action_class": "read_only",
+                "result_provenance": "untrusted",
+                "egress": [],
+                "resource_policy": {
+                    "profile": profile,
+                    "workspace": canonical_dir,
+                    "cwd": canonical_dir,
+                    "executor_sha256": "e".repeat(64),
+                    "classifier_sha256": "c".repeat(64),
+                    "allowed_resources": [{
+                        "kind": "path",
+                        "canonical": canonical_file
+                    }]
+                }
+            });
+        })
+        .await;
+    fixture.ready().await;
+
+    // 1. Authorized read with arbitrary operator-bound tool name succeeds through constrained executor.
+    let target_file = fixture._dir.path().join("reviewed-input.txt");
+    let call = json!({
+        "jsonrpc": "2.0",
+        "id": "sou67-auth",
+        "method": "tools/call",
+        "params": {
+            "name": "fetch_document",
+            "arguments": {
+                "path": target_file.to_str().unwrap()
+            }
+        }
+    });
+    let reply: Value =
+        serde_json::from_str(&fixture.exchange(&call.to_string()).await.unwrap()).unwrap();
+    assert_eq!(reply["id"], "sou67-auth");
+    #[cfg(unix)]
+    {
+        assert!(reply["result"]["isError"].is_null() || reply["result"]["isError"] == false);
+        assert_eq!(
+            reply["result"]["content"][0]["text"].as_str().unwrap(),
+            "custom bound contents"
+        );
+        assert_eq!(
+            executed(&fixture.ledger).len(),
+            0,
+            "constrained executor handles read directly; child process must never execute"
+        );
+    }
+    #[cfg(not(unix))]
+    {
+        assert_eq!(reply["result"]["isError"], true);
+        assert!(reply.to_string().contains("resource_executor_unsupported"));
+    }
+
+    // 2. Traversal outside workspace fails closed.
+    let traversal_call = json!({
+        "jsonrpc": "2.0",
+        "id": "sou67-traversal",
+        "method": "tools/call",
+        "params": {
+            "name": "fetch_document",
+            "arguments": {
+                "path": "../outside.txt"
+            }
+        }
+    });
+    let trav_reply: Value =
+        serde_json::from_str(&fixture.exchange(&traversal_call.to_string()).await.unwrap())
+            .unwrap();
+    assert_eq!(trav_reply["id"], "sou67-traversal");
+    assert_eq!(trav_reply["result"]["isError"], true);
+    assert!(
+        trav_reply.to_string().contains("resource_path_traversal")
+            || trav_reply
+                .to_string()
+                .contains("native_resource_not_allowed")
+    );
+    assert_eq!(executed(&fixture.ledger).len(), 0);
 }

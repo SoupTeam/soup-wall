@@ -392,7 +392,7 @@ impl Policy {
             let selector = &self.profile.selectors[0];
             anyhow::ensure!(
                 read.supported()
-                    && tool.name == "read_document"
+                    && tool.name == self.profile.tool_name
                     && tool.action_class == soup_wall_agent::ActionClass::ReadOnly
                     && matches!(tool.result_provenance, super::ResultProvenance::Untrusted)
                     && tool.egress.is_empty()
@@ -423,7 +423,7 @@ impl Policy {
             let selector = &self.profile.selectors[0];
             anyhow::ensure!(
                 execution.supported()
-                    && tool.name == "create_file"
+                    && tool.name == self.profile.tool_name
                     && tool.action_class == soup_wall_agent::ActionClass::SideEffecting
                     && matches!(tool.result_provenance, super::ResultProvenance::Untrusted)
                     && tool.egress.is_empty()
@@ -530,7 +530,7 @@ impl Policy {
                 .expect("nonempty validated above");
             anyhow::ensure!(
                 execution.supported()
-                    && tool.name == "create_file"
+                    && tool.name == self.profile.tool_name
                     && tool.action_class == soup_wall_agent::ActionClass::SideEffecting
                     && tool.egress.is_empty()
                     && tool.schema_sha256 == super::canonical_digest(&create_file_schema())
