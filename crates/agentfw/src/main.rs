@@ -117,6 +117,12 @@ enum ClassifierPackageCmd {
 
 #[derive(Subcommand)]
 enum Cmd {
+    /// Verify and resume an opt-in Linux audit segment store after a stopped writer.
+    AuditRetentionRecover {
+        /// Agent profile containing config.yaml.
+        #[arg(long)]
+        home: Option<PathBuf>,
+    },
     /// Install and manage the verified rule-classifier package (SOU-64).
     ClassifierPackage {
         #[command(subcommand)]
@@ -404,6 +410,25 @@ enum ServiceCommand {
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.cmd {
+        Cmd::AuditRetentionRecover { home } => {
+            let home = home.unwrap_or(Config::home_path()?);
+            let cfg = Config::from_yaml(&std::fs::read_to_string(home.join("config.yaml"))?)?;
+            let retention = cfg
+                .audit_retention
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("audit_retention is not configured"))?;
+            #[cfg(target_os = "linux")]
+            {
+                agentfw::audit::recover_retention(retention)?;
+                println!("Audit retention verified and ready");
+                Ok(())
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                let _ = retention;
+                anyhow::bail!("bounded audit retention is supported on Linux only")
+            }
+        }
         Cmd::Doctor(args) => std::process::exit(agentfw::doctor::run(args)),
         Cmd::ProtectionStatus(args) => {
             std::process::exit(agentfw::protection_status::run_cli(args))
@@ -1216,7 +1241,10 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
             .transpose()?,
         firewall: Mutex::new(firewall),
         sessions: Sessions::default(),
-        audit: AuditSink::open(&audit_path)?,
+        audit: match &cfg.audit_retention {
+            Some(retention) => AuditSink::open_retained(retention)?,
+            None => AuditSink::open(&audit_path)?,
+        },
         spans: agentfw::spans::SpanCache::new(64, cfg.judge.max_span_bytes),
         judge: agentfw::judge::Judge::new(cfg.judge.clone()),
         manifests: agentfw::mcp::store::ManifestStore::new(&home.join("manifests")),

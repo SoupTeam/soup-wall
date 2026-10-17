@@ -595,6 +595,7 @@ pub async fn health(State(st): State<Shared>) -> Json<serde_json::Value> {
         "enforce": st.config.enforce,
         "managed_policy": active,
         "managed_transport": transport,
+        "audit": st.audit.health(),
     }))
 }
 
