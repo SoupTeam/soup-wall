@@ -104,6 +104,9 @@ def main():
         with sync_playwright() as playwright, ExitStack() as browser_stack:
             browser=playwright.chromium.launch(headless=True);browser_stack.callback(browser.close)
             context=browser.new_context(viewport={'width':1440,'height':1000});page=context.new_page()
+            page.clock.install(time=datetime.now(timezone.utc))
+            fleet_reads=[]
+            page.on('request',lambda request: fleet_reads.append(request.url) if '/agent-fleet' in request.url else None)
             page.goto(console+'/admin');page.locator('#admin-token').fill(viewer);page.locator('#unlock-form button').click();expect(page.locator('#console')).to_be_visible()
             page.locator('#tenant-list button').filter(has_text='Fleet Alpha').click()
             expect(page.locator('#fleet-list')).to_contain_text('agent-demo');page.get_by_role('button',name='agent-demo',exact=True).click()
@@ -148,12 +151,16 @@ def main():
             check('real-Agent-keeps-previous-active-policy',D.wait_for('restarted Agent health listener',lambda: D.request('GET',agent+'/health')[1].get('managed_policy'),timeout=90)['deployment_sequence']==1)
             page.locator('#fleet-refresh').click();expect(page.locator('#fleet-list')).to_contain_text('rejected');page.get_by_role('button',name='agent-demo',exact=True).click();expect(page.locator('#fleet-agent-detail')).to_contain_text('Latest deployment was rejected')
             page.clock.set_fixed_time(datetime.fromtimestamp(rejected['agent']['last_reported_applied']['reported_applied_at_unix']+600, tz=timezone.utc))
-            page.get_by_role('button',name='agent-demo',exact=True).click();expect(page.locator('#fleet-agent-detail')).to_contain_text('10 min old — historical evidence (5+ min)')
+            reads_before_clock=len(fleet_reads)
+            page.clock.fast_forward(60_000)
+            expect(page.locator('#fleet-list')).to_contain_text('10 min old — historical evidence (5+ min)')
+            expect(page.locator('#fleet-agent-detail')).to_contain_text('10 min old — historical evidence (5+ min)')
+            check('browser-evidence-age-updates-without-network-refresh',len(fleet_reads)==reads_before_clock)
             page.locator('#fleet-panel').screenshot(path=str(args.output/'rejected-historical.png'))
             check('browser-loading-empty-error-pending-rejected-and-stale-walkthrough',True)
         for item in evidence.values():
             raw=json.dumps(item);check('sanitized-'+item['agent']['latest_issued']['recorded_state'],all(s not in raw for s in [owner,viewer,*credentials.values(),env['SOUP_AGENT_POLICY_SEED_HEX'],env['SOUP_AGENT_POLICY_SEED_HEX_UNTRUSTED'],'token_hash','policy_yaml','bundle_json','signature_hex','default: deny',str(temp)]))
             check('unknown-runtime-'+item['agent']['latest_issued']['recorded_state'],item['agent']['current_liveness']=='unknown' and item['agent']['runtime_coverage']=='unknown' and item['agent']['registry_identity'] is None)
-        report={'scope':'synthetic real Console/Agent and Chromium; not live fleet coverage','backend':args.backend,'source':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),'checks':checks,'snapshots':evidence,'browser_age_control':'browser clock advanced 10 minutes; stored ACK unchanged','config_sha256':{'console':hashlib.sha256((cd/'firewall.yaml').read_bytes()).hexdigest(),'agent':hashlib.sha256((home/'.agentfw/config.yaml').read_bytes()).hexdigest()},'binary_sha256':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in [console_binary,agent_binary]}}
+        report={'scope':'synthetic real Console/Agent and Chromium; not live fleet coverage','backend':args.backend,'source':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),'checks':checks,'snapshots':evidence,'browser_age_control':'browser clock advanced 10 minutes; list/detail ages update without network; stored ACK unchanged','config_sha256':{'console':hashlib.sha256((cd/'firewall.yaml').read_bytes()).hexdigest(),'agent':hashlib.sha256((home/'.agentfw/config.yaml').read_bytes()).hexdigest()},'binary_sha256':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in [console_binary,agent_binary]}}
         (args.output/'report.json').write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
 if __name__=='__main__':main()

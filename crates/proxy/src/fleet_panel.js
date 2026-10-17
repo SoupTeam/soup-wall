@@ -10,6 +10,17 @@ const fleet = (() => {
     const minutes = Math.max(0, Math.floor((Date.now()/1000-value)/60));
     return `${minutes} min old${minutes >= 5 ? " — historical evidence (5+ min); refresh does not renew it" : " — historical evidence"}`;
   };
+  const ageNode = (tag, value, className) => {
+    const node = make(tag, age(value), className);
+    if (value != null) node.dataset.fleetAppliedAt = String(value);
+    return node;
+  };
+  // Recompute elapsed time locally; refreshing the clock never renews an ACK.
+  setInterval(() => {
+    document.querySelectorAll("#fleet-panel [data-fleet-applied-at]").forEach(node => {
+      node.textContent = age(Number(node.dataset.fleetAppliedAt));
+    });
+  }, 30_000);
   const identity = d => d ? `#${d.sequence} · ${d.revision} · ${d.recorded_state}` : "No deployment history";
   const url = () => `/admin/v1/tenants/${encodeURIComponent(tenant)}/agent-fleet`;
   const valid = (data, id) => data?.contract_version === "sw-agent-fleet/1" && id === tenant;
@@ -26,7 +37,7 @@ const fleet = (() => {
     values.forEach(a => {
       const row=make("tr"), cell=make("td"), button=make("button",a.agent_id,"secondary tiny");
       button.type="button"; button.addEventListener("click",()=>loadAgent(a.agent_id)); cell.append(button);
-      row.append(cell,make("td",a.revoked_at_unix == null ? "Enrolled" : "Revoked"),make("td",identity(a.latest_issued)),make("td",a.last_reported_applied ? identity(a.last_reported_applied) : "No applied acknowledgement"),make("td",age(a.last_reported_applied?.reported_applied_at_unix)));
+      row.append(cell,make("td",a.revoked_at_unix == null ? "Enrolled" : "Revoked"),make("td",identity(a.latest_issued)),make("td",a.last_reported_applied ? identity(a.last_reported_applied) : "No applied acknowledgement"),ageNode("td",a.last_reported_applied?.reported_applied_at_unix));
       body.append(row);
     }); table.append(body); root.append(table);
   };
@@ -66,7 +77,7 @@ const fleet = (() => {
         if(d)card.append(make("p",`Issued: ${when(d.issued_at_unix)} · Applied report: ${when(d.reported_applied_at_unix)}`));
         summaries.append(card);
       });root.append(summaries);
-      root.append(make("p",age(a.last_reported_applied?.reported_applied_at_unix),"note"));
+      root.append(ageNode("p",a.last_reported_applied?.reported_applied_at_unix,"note"));
       root.append(make("p","Current liveness: unknown · Active protection: unknown · Registry identity: unknown. An acknowledgement records a past report, not a heartbeat.","note"));
       if(a.latest_issued && ["issued","delivered"].includes(a.latest_issued.recorded_state))root.append(make("p","Latest deployment is pending: no matching applied acknowledgement recorded.","outcome-other"));
       if(a.latest_issued?.recorded_state==="rejected")root.append(make("p","Latest deployment was rejected. Any older applied identity remains historical.","outcome-block"));
