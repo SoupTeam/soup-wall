@@ -792,85 +792,8 @@ pub fn run(cmd: Command) -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&p.profile)?);
         }
         Command::Diff { old, new } => {
-            let read = |p: PathBuf| -> Result<Profile> {
-                let v = strict(&read_file(&p)?)?;
-                let profile: Profile = serde_json::from_value(v)?;
-                ensure!(
-                    profile.format == OUTPUT_FORMAT,
-                    "unsupported profile format"
-                );
-                Ok(profile)
-            };
-            let a = read(old)?;
-            let b = read(new)?;
-            let mut additions = Vec::new();
-            let mut removals = Vec::new();
-            let mut changes = Vec::new();
-            for name in b.tools.keys() {
-                if !a.tools.contains_key(name) {
-                    additions.push(name.clone())
-                }
-            }
-            for name in a.tools.keys() {
-                if !b.tools.contains_key(name) {
-                    removals.push(name.clone())
-                }
-            }
-            for (name, new_tool) in &b.tools {
-                if let Some(old_tool) = a.tools.get(name) {
-                    let fields = [
-                        ("schema", old_tool.schema_sha256 != new_tool.schema_sha256),
-                        (
-                            "definition",
-                            old_tool.definition_sha256 != new_tool.definition_sha256,
-                        ),
-                        ("action", old_tool.action_class != new_tool.action_class),
-                        (
-                            "provenance",
-                            old_tool.result_provenance != new_tool.result_provenance,
-                        ),
-                        (
-                            "authority",
-                            old_tool.authority_sha256 != new_tool.authority_sha256,
-                        ),
-                        ("workspace", old_tool.workspace != new_tool.workspace),
-                        (
-                            "resources",
-                            old_tool.scoped_resources != new_tool.scoped_resources,
-                        ),
-                        (
-                            "egress",
-                            old_tool.egress_selectors != new_tool.egress_selectors,
-                        ),
-                        (
-                            "operator_review",
-                            old_tool.review_sha256 != new_tool.review_sha256,
-                        ),
-                    ]
-                    .into_iter()
-                    .filter_map(|(k, c)| c.then_some(k))
-                    .collect::<Vec<_>>();
-                    if !fields.is_empty() {
-                        changes.push(json!({"tool":name,"fields":fields,"requires_review":true,
-                            "prior_workspace":old_tool.workspace,"next_workspace":new_tool.workspace,
-                            "prior_resources":old_tool.scoped_resources,"next_resources":new_tool.scoped_resources,
-                            "prior_egress":old_tool.egress_selectors,"next_egress":new_tool.egress_selectors}))
-                    }
-                }
-            }
-            let drift = a.snapshot_sha256 != b.snapshot_sha256
-                || a.server_id != b.server_id
-                || a.server_version != b.server_version;
-            // Even a description/review change needs explicit operator review.
-            // Never call a changed discovery/authority profile compatible.
-            let broader = !additions.is_empty() || !changes.is_empty();
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json!({"format":"sw-mcp/operator-diff/1",
-                "added":additions,"removed":removals,"changed":changes,
-                "discovery_drift":drift,"authority_change_requires_review":broader,
-                "compatible_without_review":!drift&&!broader&&removals.is_empty()&&changes.is_empty()}))?
-            );
+            let summary = compute_profile_diff(&old, &new)?;
+            println!("{}", serde_json::to_string_pretty(&summary)?);
         }
         Command::Compile {
             snapshot,
@@ -917,6 +840,108 @@ pub fn run(cmd: Command) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProfileDiffSummary {
+    pub format: String,
+    pub added: Vec<String>,
+    pub removed: Vec<String>,
+    pub changed: Vec<Value>,
+    pub discovery_drift: bool,
+    pub authority_change_requires_review: bool,
+    pub compatible_without_review: bool,
+}
+
+pub fn compute_profile_diff(old_path: &Path, new_path: &Path) -> Result<ProfileDiffSummary> {
+    let resolve = |p: &Path| -> PathBuf {
+        if p.is_dir() {
+            p.join("profile.json")
+        } else {
+            p.to_path_buf()
+        }
+    };
+    let read = |p: &Path| -> Result<Profile> {
+        let actual = resolve(p);
+        let v = strict(&read_file(&actual)?)?;
+        let profile: Profile = serde_json::from_value(v)?;
+        ensure!(
+            profile.format == OUTPUT_FORMAT,
+            "unsupported profile format"
+        );
+        Ok(profile)
+    };
+    let a = read(old_path)?;
+    let b = read(new_path)?;
+    let mut additions = Vec::new();
+    let mut removals = Vec::new();
+    let mut changes = Vec::new();
+    for name in b.tools.keys() {
+        if !a.tools.contains_key(name) {
+            additions.push(name.clone())
+        }
+    }
+    for name in a.tools.keys() {
+        if !b.tools.contains_key(name) {
+            removals.push(name.clone())
+        }
+    }
+    for (name, new_tool) in &b.tools {
+        if let Some(old_tool) = a.tools.get(name) {
+            let fields = [
+                ("schema", old_tool.schema_sha256 != new_tool.schema_sha256),
+                (
+                    "definition",
+                    old_tool.definition_sha256 != new_tool.definition_sha256,
+                ),
+                ("action", old_tool.action_class != new_tool.action_class),
+                (
+                    "provenance",
+                    old_tool.result_provenance != new_tool.result_provenance,
+                ),
+                (
+                    "authority",
+                    old_tool.authority_sha256 != new_tool.authority_sha256,
+                ),
+                ("workspace", old_tool.workspace != new_tool.workspace),
+                (
+                    "resources",
+                    old_tool.scoped_resources != new_tool.scoped_resources,
+                ),
+                (
+                    "egress",
+                    old_tool.egress_selectors != new_tool.egress_selectors,
+                ),
+                (
+                    "operator_review",
+                    old_tool.review_sha256 != new_tool.review_sha256,
+                ),
+            ]
+            .into_iter()
+            .filter_map(|(k, c)| c.then_some(k))
+            .collect::<Vec<_>>();
+            if !fields.is_empty() {
+                changes.push(json!({"tool":name,"fields":fields,"requires_review":true,
+                    "prior_workspace":old_tool.workspace,"next_workspace":new_tool.workspace,
+                    "prior_resources":old_tool.scoped_resources,"next_resources":new_tool.scoped_resources,
+                    "prior_egress":old_tool.egress_selectors,"next_egress":new_tool.egress_selectors}))
+            }
+        }
+    }
+    let drift = a.snapshot_sha256 != b.snapshot_sha256
+        || a.server_id != b.server_id
+        || a.server_version != b.server_version;
+    let broader = !additions.is_empty() || !changes.is_empty();
+    Ok(ProfileDiffSummary {
+        format: "sw-mcp/operator-diff/1".to_string(),
+        added: additions,
+        removed: removals.clone(),
+        changed: changes.clone(),
+        discovery_drift: drift,
+        authority_change_requires_review: broader,
+        compatible_without_review: !drift && !broader && removals.is_empty() && changes.is_empty(),
+    })
 }
 
 #[cfg(test)]
