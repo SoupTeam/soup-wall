@@ -11,8 +11,9 @@ command makes no live-model or attack-effectiveness claim.
 
 ## Requirements
 
-- **Linux.** Other platforms print and record `unsupported` (exit 5) and claim
-  no protection.
+- **Linux or macOS.** Supported profiles are `linux-stdio-mcp-admission-v1` on
+  Linux and `macos-stdio-mcp-admission-v1` on macOS. Other platforms print and
+  record `unsupported` (exit 5) and claim no protection.
 - An installed `agentfw` executable, selected explicitly with `--agent`. It is
   never discovered from `PATH`.
 - The locally installed Task 1 classifier `rule_baseline.py`, its expected
@@ -25,12 +26,26 @@ downloaded.
 
 ## Run it
 
+On Linux:
+
 ```sh
 agentfw self-test \
   --agent /opt/soup-wall/bin/agentfw \
   --classifier rule-baseline \
   --classifier-script /opt/soup-wall/classifier/rule_baseline.py \
   --classifier-sha256 "$(sha256sum /opt/soup-wall/classifier/rule_baseline.py | cut -d' ' -f1)" \
+  --classifier-python /usr/bin/python3 \
+  --report ./agentfw-self-test.json
+```
+
+On macOS:
+
+```sh
+agentfw self-test \
+  --agent /opt/soup-wall/bin/agentfw \
+  --classifier rule-baseline \
+  --classifier-script /opt/soup-wall/classifier/rule_baseline.py \
+  --classifier-sha256 "$(shasum -a 256 /opt/soup-wall/classifier/rule_baseline.py | cut -d' ' -f1)" \
   --classifier-python /usr/bin/python3 \
   --report ./agentfw-self-test.json
 ```
@@ -155,4 +170,5 @@ The integration suite runs the built binary from a temporary directory outside
 the repository. It covers a full pass after a forced port collision,
 interruption, a missing and a wrong classifier revision, a daemon that cannot
 start, refusal to replace an existing report and the fixture server's
-destination check. See the [SOU-61 evidence](evidence/SOU61_SELF_TEST_2026-10-16.md).
+destination check. See the [SOU-61 Linux evidence](evidence/SOU61_SELF_TEST_2026-10-16.md)
+and [SOU-77 macOS evidence](evidence/sou-77-evidence.md).

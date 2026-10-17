@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! `agentfw self-test` end-to-end checks against the built binary, run from
 //! outside the repository with explicit classifier inputs.
-#![cfg(target_os = "linux")]
+#![cfg(any(target_os = "linux", target_os = "macos"))]
 
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
@@ -29,10 +29,21 @@ fn sha(path: &Path) -> String {
 }
 
 fn python() -> Option<PathBuf> {
-    ["/usr/bin/python3", "/usr/local/bin/python3"]
-        .iter()
-        .map(PathBuf::from)
-        .find(|p| p.is_file())
+    [
+        "/usr/bin/python3",
+        "/usr/local/bin/python3",
+        "/opt/homebrew/bin/python3",
+    ]
+    .iter()
+    .map(PathBuf::from)
+    .find(|p| {
+        p.is_file()
+            && Command::new(p)
+                .arg("--version")
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+    })
 }
 
 struct Run {
@@ -94,11 +105,33 @@ fn statuses(report: &Value) -> Vec<String> {
 /// No process may still reference this run's workspace after the command exits.
 fn no_owned_processes(work: &Path) -> bool {
     let needle = work.to_string_lossy().into_owned();
-    std::fs::read_dir("/proc").unwrap().flatten().all(|entry| {
-        std::fs::read(entry.path().join("cmdline"))
-            .map(|cmdline| !String::from_utf8_lossy(&cmdline).contains(&needle))
-            .unwrap_or(true)
-    })
+    let canonical = work
+        .canonicalize()
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| needle.clone());
+    #[cfg(target_os = "linux")]
+    {
+        std::fs::read_dir("/proc").unwrap().flatten().all(|entry| {
+            std::fs::read(entry.path().join("cmdline"))
+                .map(|cmdline| {
+                    let s = String::from_utf8_lossy(&cmdline);
+                    !s.contains(&needle) && !s.contains(&canonical)
+                })
+                .unwrap_or(true)
+        })
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let output = Command::new("/bin/ps")
+            .args(["-axww", "-o", "command="])
+            .output()
+            .expect("ps command failed");
+        assert!(output.status.success(), "ps exit failure");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        !stdout
+            .lines()
+            .any(|line| line.contains(&needle) || line.contains(&canonical))
+    }
 }
 
 #[test]
@@ -336,6 +369,7 @@ fn agent_without_a_working_daemon_is_incomplete_with_start_attempts() {
 #[test]
 fn existing_report_is_never_replaced() {
     let run = Run::new();
+    let py = python().unwrap_or_else(|| PathBuf::from("/usr/bin/python3"));
     std::fs::write(run.report_path(), b"operator data").unwrap();
     let output = Command::new(AGENT)
         .args([
@@ -351,8 +385,8 @@ fn existing_report_is_never_replaced() {
             "--classifier-sha256",
             &"0".repeat(64),
             "--classifier-python",
-            "/usr/bin/python3",
         ])
+        .arg(&py)
         .arg("--report")
         .arg(run.report_path())
         .arg("--work-parent")
@@ -380,4 +414,31 @@ fn fixture_server_refuses_destinations_other_than_its_receiver() {
         .output()
         .unwrap();
     assert!(!output.status.success());
+}
+
+#[test]
+fn no_owned_processes_witness_detects_live_process_and_clears_on_exit() {
+    let Some(py) = python() else {
+        return;
+    };
+    let temp = tempfile::tempdir().unwrap();
+    let work = temp.path().join("work");
+    std::fs::create_dir(&work).unwrap();
+    assert!(no_owned_processes(&work));
+    let mut child = Command::new(&py)
+        .args(["-c", "import time; time.sleep(5)"])
+        .arg(&work)
+        .spawn()
+        .unwrap();
+    std::thread::sleep(Duration::from_millis(200));
+    assert!(
+        !no_owned_processes(&work),
+        "scanner must detect live process with work path in args"
+    );
+    let _ = child.kill();
+    let _ = child.wait();
+    assert!(
+        no_owned_processes(&work),
+        "scanner must clear after process exits"
+    );
 }
