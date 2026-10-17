@@ -1100,11 +1100,12 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
     };
 
     let firewall = match &cfg.policy {
-        Some(p) => AgentFirewall::new(
+        Some(p) => AgentFirewall::with_taint_limits(
             AgentPolicySet::from_yaml(&std::fs::read_to_string(p)?)?,
             DEFAULT_TAINT_CAP,
-        ),
-        None => AgentFirewall::with_default_policy(),
+            cfg.provenance.clone(),
+        )?,
+        None => AgentFirewall::with_default_policy_and_taint_limits(cfg.provenance.clone())?,
     };
 
     let token = agentfw::token::load_or_create(&home.join("token"))?;

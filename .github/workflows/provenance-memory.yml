@@ -1,0 +1,110 @@
+name: Provenance memory budgets
+
+on:
+  pull_request:
+    paths:
+      - 'crates/agent/**'
+      - 'crates/agentfw/**'
+      - 'scripts/verify-sou72-provenance-budget.py'
+      - 'scripts/tests/test_sou72_provenance_budget.py'
+      - 'scripts/verify-sou62-real-mcp.py'
+      - 'scripts/mcp-admission-demo.py'
+      - 'docs/operations/PROVENANCE_MEMORY.md'
+      - '.github/workflows/provenance-memory.yml'
+      - 'Cargo.lock'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: provenance-memory-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  required-linux-native-mcp-budget:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      RUSTUP_TOOLCHAIN: '1.94.1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@1.94.1
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the exact production runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD > "$RUNNER_TEMP/sou72-source.txt"
+          rustc --version > "$RUNNER_TEMP/sou72-rust.txt"
+          python3 --version > "$RUNNER_TEMP/sou72-python.txt"
+          cargo build --locked -p agentfw --bin agentfw --message-format=json > "$RUNNER_TEMP/sou72-build.jsonl"
+          sha256sum target/debug/agentfw > "$RUNNER_TEMP/sou72-binary.txt"
+      - name: Required evidence controls
+        run: |
+          python3 -B - <<'PY'
+          import unittest
+          suite = unittest.defaultTestLoader.discover('scripts/tests', pattern='test_sou72_provenance_budget.py')
+          if suite.countTestCases() == 0:
+              raise SystemExit('provenance controls are required; zero tests discovered')
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          raise SystemExit(0 if result.wasSuccessful() else 1)
+          PY
+      - name: Required actual native and MCP budget enforcement with independent files
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/verify-sou72-provenance-budget.py --run --agentfw "$PWD/target/debug/agentfw" \
+            --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou72-acceptance" \
+            2>&1 | tee "$RUNNER_TEMP/sou72-acceptance.log"
+      - name: Publish bounded outcome and charged-retention samples
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          path = Path(os.environ['RUNNER_TEMP']) / 'sou72-acceptance/report.json'
+          data = json.loads(path.read_text()) if path.exists() else {'status':'incomplete','error':'required acceptance produced no report'}
+          selected = {key:data.get(key) for key in ('status','passed','failed','skipped','source_before','source_after','binary_sha256','driver_sha256','fixture_sha256')}
+          selected['error'] = str(data.get('error'))[:2000] if data.get('error') else None
+          selected['rigs'] = {}
+          for name, rig in list((data.get('rigs') or {}).items())[:4]:
+              samples = rig.get('samples') or []
+              selected['rigs'][name] = {'limits':rig.get('limits'),'config_sha256':rig.get('config_sha256'),'registry_sha256':rig.get('registry_sha256'),
+                  'sample_count':len(samples),'last_accounting':samples[-1] if samples else None,
+                  'max_charged_retained_bytes':max((sample.get('usage',{}).get('retained_bytes',0) for sample in samples),default=None),
+                  'max_session_retained_bytes':max((sample.get('usage',{}).get('max_session_retained_bytes',0) for sample in samples),default=None),
+                  'sampled_daemon_rss_bytes':rig.get('rss',{}).get('daemon',{}).get('max_rss_bytes'),
+                  'cleanup':{key:rig.get('cleanup',{}).get(key) for key in ('all_stopped','daemon_stopped','private_profile_removed')}}
+          capacity = data.get('capacity') or {}
+          probe = capacity.get('capacity_probe') or {}
+          selected['capacity'] = {key:capacity.get(key) for key in ('refused_exit_code','refused_no_execution','replacement_useful','retirement_epoch')}
+          selected['capacity'].update(sessions_before=capacity.get('before',{}).get('usage',{}).get('sessions'),
+              sessions_after_end=capacity.get('after_end',{}).get('usage',{}).get('sessions'),
+              native_probe_status=probe.get('status'),native_probe_response=probe.get('response'),
+              probe_accounting_unchanged=probe.get('before_usage') == probe.get('after_usage') if probe else None)
+          selected['checks'] = data.get('checks') or []
+          rendered = json.dumps(selected,indent=2)
+          print(rendered)
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as stream:
+              stream.write('```json\n'+rendered+'\n```\n')
+          PY
+      - name: Retain sanitized owned evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou72-provenance-memory-evidence
+          path: |
+            ${{ runner.temp }}/sou72-*.txt
+            ${{ runner.temp }}/sou72-*.jsonl
+            ${{ runner.temp }}/sou72-*.log
+            ${{ runner.temp }}/sou72-acceptance/*.json
+            ${{ runner.temp }}/sou72-acceptance/*.log
+          if-no-files-found: warn
+          retention-days: 30

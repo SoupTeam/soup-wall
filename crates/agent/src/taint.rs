@@ -5,7 +5,13 @@
 //! it is now showing up inside a tool call's arguments.
 
 use std::collections::{HashMap, VecDeque};
-use std::sync::OnceLock;
+use std::mem::size_of;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    OnceLock,
+};
+
+use serde::{Deserialize, Serialize};
 
 use regex::Regex;
 
@@ -73,7 +79,7 @@ const SENSITIVE_PATH_MARKERS: &[&str] = &[
 /// is covered by egress host extraction and the unknown-host `ask` policy rule.
 /// Do not re-add a bare-hostname branch without checking filename and code-token
 /// false positives.
-fn literals(text: &str) -> Vec<String> {
+fn bounded_literals(text: &str, limit: usize) -> Result<Vec<String>, TrackingFailure> {
     static RE: OnceLock<Regex> = OnceLock::new();
     let re = RE.get_or_init(|| {
         Regex::new(
@@ -98,6 +104,14 @@ fn literals(text: &str) -> Vec<String> {
         // technically case-sensitive, so this can in principle miss a case-only
         // path difference — that false-negative risk is far smaller than leaving
         // a one-keystroke case bypass on every URL and host.
+        let normalized_len = s
+            .chars()
+            .flat_map(char::to_lowercase)
+            .try_fold(0usize, |n, ch| n.checked_add(ch.len_utf8()))
+            .ok_or(TrackingFailure::Arithmetic)?;
+        if normalized_len > limit {
+            return Err(TrackingFailure::Literal);
+        }
         let lower = s.to_lowercase();
 
         if !is_path {
@@ -135,198 +149,783 @@ fn literals(text: &str) -> Vec<String> {
             out.push(lower);
         }
     }
-    out
+    Ok(out)
+}
+
+#[cfg(test)]
+fn literals(text: &str) -> Vec<String> {
+    bounded_literals(text, usize::MAX).expect("unbounded test-only literal extraction")
+}
+
+/// Reviewed limits for retained provenance, separately from whole-process RSS.
+/// Zero byte/session limits disable registration without allocating loss markers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct TaintLimits {
+    pub per_session_bytes: usize,
+    pub total_bytes: usize,
+    pub max_sessions: usize,
+    pub max_input_bytes: usize,
+    pub max_source_bytes: usize,
+    pub max_literal_bytes: usize,
+    pub max_session_id_bytes: usize,
+}
+
+impl Default for TaintLimits {
+    fn default() -> Self {
+        Self {
+            per_session_bytes: 8 * 1024 * 1024,
+            total_bytes: 64 * 1024 * 1024,
+            max_sessions: 512,
+            max_input_bytes: 262_144,
+            max_source_bytes: 1024,
+            max_literal_bytes: 4096,
+            max_session_id_bytes: 256,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LimitError(&'static str);
+impl std::fmt::Display for LimitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.0)
+    }
+}
+impl std::error::Error for LimitError {}
+
+impl TaintLimits {
+    pub fn validate(&self) -> Result<(), LimitError> {
+        if self.per_session_bytes > isize::MAX as usize || self.total_bytes > isize::MAX as usize {
+            return Err(LimitError(
+                "provenance byte budgets exceed the addressable allocation range",
+            ));
+        }
+        if self.max_sessions > 65_536 || self.max_session_id_bytes > 4096 {
+            return Err(LimitError(
+                "provenance session limits exceed reviewed maxima",
+            ));
+        }
+        if self.max_input_bytes > 1024 * 1024
+            || self.max_source_bytes > 65_536
+            || self.max_literal_bytes > 65_536
+        {
+            return Err(LimitError(
+                "provenance extraction limits exceed reviewed maxima",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TrackingFailure {
+    SessionCapacity,
+    SessionId,
+    Input,
+    Source,
+    Literal,
+    EntryCapacity,
+    SessionBytes,
+    GlobalBytes,
+    Arithmetic,
+    Allocation,
+}
+impl TrackingFailure {
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::SessionCapacity => "session_capacity",
+            Self::SessionId => "session_id",
+            Self::Input => "input",
+            Self::Source => "source",
+            Self::Literal => "literal",
+            Self::EntryCapacity => "entry_capacity",
+            Self::SessionBytes => "session_bytes",
+            Self::GlobalBytes => "global_bytes",
+            Self::Arithmetic => "arithmetic",
+            Self::Allocation => "allocation",
+        }
+    }
+}
+impl std::fmt::Display for TrackingFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.code())
+    }
+}
+impl std::error::Error for TrackingFailure {}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct TaintUsage {
+    pub retained_bytes: usize,
+    pub max_session_retained_bytes: usize,
+    pub sessions: usize,
+    pub incomplete_sessions: usize,
+    pub fingerprints: usize,
+    pub literals: usize,
+    pub legacy_unknown_history: bool,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SessionTaintUsage {
+    pub retained_bytes: usize,
+    pub fingerprints: usize,
+    pub literals: usize,
+    pub incomplete: bool,
+}
+
+fn add(a: usize, b: usize) -> Result<usize, TrackingFailure> {
+    a.checked_add(b).ok_or(TrackingFailure::Arithmetic)
+}
+fn sub(a: usize, b: usize) -> Result<usize, TrackingFailure> {
+    a.checked_sub(b).ok_or(TrackingFailure::Arithmetic)
+}
+fn mul(a: usize, b: usize) -> Result<usize, TrackingFailure> {
+    a.checked_mul(b).ok_or(TrackingFailure::Arithmetic)
+}
+
+/// Conservative std table allocation model: round the FRESH usable capacity to
+/// buckets, charge all bucket payload/control bytes and 256 bytes of alignment /
+/// group-control slack. The charge is saved at allocation, never recomputed after
+/// tombstones lower `HashMap::capacity()`. Allocator bookkeeping and RSS are not
+/// represented by this owned-storage metric. Fixed tracker headers are excluded.
+fn table_bytes<K, V>(fresh_capacity: usize) -> Result<usize, TrackingFailure> {
+    if fresh_capacity == 0 {
+        return Ok(0);
+    }
+    let buckets = add(fresh_capacity, 1)?
+        .checked_next_power_of_two()
+        .ok_or(TrackingFailure::Arithmetic)?;
+    add(mul(buckets, add(size_of::<(K, V)>(), 1)?)?, 256)
+}
+fn map_plan<K, V>(needed: usize) -> Result<usize, TrackingFailure> {
+    table_bytes::<K, V>(mul(
+        needed
+            .checked_next_power_of_two()
+            .ok_or(TrackingFailure::Arithmetic)?,
+        2,
+    )?)
+}
+fn queue_plan<T>(needed: usize) -> Result<usize, TrackingFailure> {
+    mul(
+        mul(
+            needed
+                .checked_next_power_of_two()
+                .ok_or(TrackingFailure::Arithmetic)?,
+            2,
+        )?,
+        size_of::<T>(),
+    )
+}
+fn source_bytes(source: &Provenance, capacity: bool) -> Result<usize, TrackingFailure> {
+    let bytes = |s: &String| if capacity { s.capacity() } else { s.len() };
+    match source {
+        Provenance::Network { host } => Ok(bytes(host)),
+        Provenance::McpServer { name } | Provenance::Subagent { name } => Ok(bytes(name)),
+        Provenance::Native { registry, tool } => add(bytes(registry), bytes(tool)),
+        _ => Ok(0),
+    }
+}
+fn owned_string(text: &str) -> Result<String, TrackingFailure> {
+    let mut out = String::new();
+    out.try_reserve_exact(text.len())
+        .map_err(|_| TrackingFailure::Allocation)?;
+    out.push_str(text);
+    Ok(out)
+}
+fn grow_map<K: std::hash::Hash + Eq, V>(
+    map: &mut HashMap<K, V>,
+    allocated: &mut usize,
+    plan: usize,
+) -> Result<(), TrackingFailure> {
+    let mut next = HashMap::new();
+    next.try_reserve(add(map.len(), 1)?)
+        .map_err(|_| TrackingFailure::Allocation)?;
+    let actual = table_bytes::<K, V>(next.capacity())?;
+    if actual > plan {
+        return Err(TrackingFailure::Allocation);
+    }
+    next.extend(map.drain());
+    *map = next;
+    *allocated = actual;
+    Ok(())
+}
+fn grow_queue<T>(
+    queue: &mut VecDeque<T>,
+    allocated: &mut usize,
+    plan: usize,
+) -> Result<(), TrackingFailure> {
+    let mut next = VecDeque::new();
+    next.try_reserve_exact(add(queue.len(), 1)?)
+        .map_err(|_| TrackingFailure::Allocation)?;
+    let actual = mul(next.capacity(), size_of::<T>())?;
+    if actual > plan {
+        return Err(TrackingFailure::Allocation);
+    }
+    next.append(queue);
+    *queue = next;
+    *allocated = actual;
+    Ok(())
 }
 
 #[derive(Debug, Default)]
 struct SessionTaint {
-    /// Sticky, content-free loss marker; cleared only by ending this session.
-    incomplete: bool,
-    /// fingerprint -> mark
+    incomplete: AtomicBool,
     marks: HashMap<u64, TaintMark>,
-    /// insertion order, for FIFO eviction (oldest fingerprint evicted first —
-    /// *not* LRU/least-recently-used, nothing here is touched on read).
-    /// Eviction sets `incomplete`: no later miss can establish clean provenance.
     order: VecDeque<u64>,
-    /// distinctive literal -> mark, matched by containment at any length.
-    /// Stored lowercase — see `literals()`.
     literals: HashMap<String, TaintMark>,
-    /// insertion order, for FIFO eviction. Also sets `incomplete`.
     literal_order: VecDeque<String>,
+    marks_allocation: usize,
+    order_allocation: usize,
+    literals_allocation: usize,
+    literal_order_allocation: usize,
+    /// Includes this session's inline table entry, identifier heap and all child
+    /// backing allocations / owned strings. The outer table is charged globally.
+    retained: usize,
 }
 
-/// Tracks untrusted content per session. Bounded; state is dropped at session end.
+impl SessionTaint {
+    fn lose(&self) {
+        self.incomplete.store(true, Ordering::Relaxed);
+    }
+    fn fits(
+        &self,
+        extra: usize,
+        total: usize,
+        limits: &TaintLimits,
+    ) -> Result<(), TrackingFailure> {
+        if add(self.retained, extra)? > limits.per_session_bytes {
+            return Err(TrackingFailure::SessionBytes);
+        }
+        if add(total, extra)? > limits.total_bytes {
+            return Err(TrackingFailure::GlobalBytes);
+        }
+        Ok(())
+    }
+    fn charge(&mut self, total: &mut usize, bytes: usize) -> Result<(), TrackingFailure> {
+        let retained = add(self.retained, bytes)?;
+        let global = add(*total, bytes)?;
+        self.retained = retained;
+        *total = global;
+        Ok(())
+    }
+    fn release(&mut self, total: &mut usize, bytes: usize) -> Result<(), TrackingFailure> {
+        let retained = sub(self.retained, bytes)?;
+        let global = sub(*total, bytes)?;
+        self.retained = retained;
+        *total = global;
+        Ok(())
+    }
+    fn evict(&mut self, total: &mut usize, literal_first: bool) -> Result<bool, TrackingFailure> {
+        if literal_first {
+            if let Some(key) = self.literal_order.pop_front() {
+                let (stored, mark) = self
+                    .literals
+                    .remove_entry(&key)
+                    .ok_or(TrackingFailure::Arithmetic)?;
+                self.release(
+                    total,
+                    add(
+                        add(key.capacity(), stored.capacity())?,
+                        source_bytes(&mark.source, true)?,
+                    )?,
+                )?;
+                self.lose();
+                return Ok(true);
+            }
+        }
+        if let Some(key) = self.order.pop_front() {
+            let mark = self.marks.remove(&key).ok_or(TrackingFailure::Arithmetic)?;
+            self.release(total, source_bytes(&mark.source, true)?)?;
+            self.lose();
+            return Ok(true);
+        }
+        if !literal_first && !self.literal_order.is_empty() {
+            return self.evict(total, true);
+        }
+        Ok(false)
+    }
+    fn room(
+        &mut self,
+        total: &mut usize,
+        limits: &TaintLimits,
+        payload: usize,
+        literal: bool,
+    ) -> Result<(), TrackingFailure> {
+        loop {
+            let (map_len, map_capacity, queue_len, queue_capacity) = if literal {
+                (
+                    self.literals.len(),
+                    self.literals.capacity(),
+                    self.literal_order.len(),
+                    self.literal_order.capacity(),
+                )
+            } else {
+                (
+                    self.marks.len(),
+                    self.marks.capacity(),
+                    self.order.len(),
+                    self.order.capacity(),
+                )
+            };
+            let map_grow = map_len >= map_capacity;
+            let queue_grow = queue_len >= queue_capacity;
+            let map_charge = if map_grow {
+                if literal {
+                    map_plan::<String, TaintMark>(add(map_len, 1)?)?
+                } else {
+                    map_plan::<u64, TaintMark>(add(map_len, 1)?)?
+                }
+            } else {
+                0
+            };
+            let queue_charge = if queue_grow {
+                if literal {
+                    queue_plan::<String>(add(queue_len, 1)?)?
+                } else {
+                    queue_plan::<u64>(add(queue_len, 1)?)?
+                }
+            } else {
+                0
+            };
+            let result = self.fits(
+                add(payload, add(map_charge, queue_charge)?)?,
+                *total,
+                limits,
+            );
+            if let Err(failure) = result {
+                if self.evict(total, literal)? {
+                    continue;
+                }
+                return Err(failure);
+            }
+            // The old and empty replacement allocations BOTH fit before growth.
+            // No old evidence is moved until the replacement capacity is checked.
+            if literal {
+                if map_grow {
+                    let old = self.literals_allocation;
+                    grow_map(
+                        &mut self.literals,
+                        &mut self.literals_allocation,
+                        map_charge,
+                    )?;
+                    self.charge(total, self.literals_allocation)?;
+                    self.release(total, old)?;
+                }
+                if queue_grow {
+                    let old = self.literal_order_allocation;
+                    grow_queue(
+                        &mut self.literal_order,
+                        &mut self.literal_order_allocation,
+                        queue_charge,
+                    )?;
+                    self.charge(total, self.literal_order_allocation)?;
+                    self.release(total, old)?;
+                }
+            } else {
+                if map_grow {
+                    let old = self.marks_allocation;
+                    grow_map(&mut self.marks, &mut self.marks_allocation, map_charge)?;
+                    self.charge(total, self.marks_allocation)?;
+                    self.release(total, old)?;
+                }
+                if queue_grow {
+                    let old = self.order_allocation;
+                    grow_queue(&mut self.order, &mut self.order_allocation, queue_charge)?;
+                    self.charge(total, self.order_allocation)?;
+                    self.release(total, old)?;
+                }
+            }
+            return Ok(());
+        }
+    }
+    fn replace_source(
+        &mut self,
+        total: &mut usize,
+        limits: &TaintLimits,
+        old: usize,
+        new: usize,
+    ) -> Result<(), TrackingFailure> {
+        if new > old {
+            let delta = sub(new, old)?;
+            self.fits(delta, *total, limits)?;
+            self.charge(total, delta)
+        } else {
+            self.release(total, sub(old, new)?)
+        }
+    }
+    fn record(
+        &mut self,
+        cap: usize,
+        limits: &TaintLimits,
+        total: &mut usize,
+        seq: u64,
+        source: &Provenance,
+        text: &str,
+    ) -> Result<(), TrackingFailure> {
+        if cap == 0 {
+            return Err(TrackingFailure::EntryCapacity);
+        }
+        if text.len() > limits.max_input_bytes {
+            return Err(TrackingFailure::Input);
+        }
+        if source_bytes(source, false)? > limits.max_source_bytes {
+            return Err(TrackingFailure::Source);
+        }
+        // Reject huge URL/path matches before lowercase / fingerprint allocation.
+        let required_literals = bounded_literals(text, limits.max_literal_bytes)?;
+        let required_marks = fingerprints(text);
+        for fp in &required_marks {
+            if let Some(existing) = self.marks.get(fp) {
+                if seq < existing.seq {
+                    let old = source_bytes(&existing.source, true)?;
+                    let next = TaintMark {
+                        source: source.clone(),
+                        seq,
+                    };
+                    self.replace_source(total, limits, old, source_bytes(&next.source, true)?)?;
+                    self.marks.insert(*fp, next);
+                }
+                continue;
+            }
+            if self.marks.len() >= cap {
+                self.evict(total, false)?;
+            }
+            let next = TaintMark {
+                source: source.clone(),
+                seq,
+            };
+            let bytes = source_bytes(&next.source, true)?;
+            self.room(total, limits, bytes, false)?;
+            self.charge(total, bytes)?;
+            self.marks.insert(*fp, next);
+            self.order.push_back(*fp);
+        }
+        for lit in &required_literals {
+            if let Some(existing) = self.literals.get(lit) {
+                if seq < existing.seq {
+                    let old = source_bytes(&existing.source, true)?;
+                    let next = TaintMark {
+                        source: source.clone(),
+                        seq,
+                    };
+                    self.replace_source(total, limits, old, source_bytes(&next.source, true)?)?;
+                    self.literals.insert(owned_string(lit)?, next);
+                }
+                continue;
+            }
+            if self.literals.len() >= cap {
+                self.evict(total, true)?;
+            }
+            let next = TaintMark {
+                source: source.clone(),
+                seq,
+            };
+            let key = owned_string(lit)?;
+            let queued = owned_string(lit)?;
+            let bytes = add(
+                source_bytes(&next.source, true)?,
+                add(key.capacity(), queued.capacity())?,
+            )?;
+            self.room(total, limits, bytes, true)?;
+            self.charge(total, bytes)?;
+            self.literals.insert(key, next);
+            self.literal_order.push_back(queued);
+        }
+        if required_marks.iter().any(|fp| !self.marks.contains_key(fp))
+            || required_literals
+                .iter()
+                .any(|lit| !self.literals.contains_key(lit))
+        {
+            return Err(TrackingFailure::EntryCapacity);
+        }
+        Ok(())
+    }
+}
+
+/// Bounded retained provenance. No active context or loss marker is evicted to
+/// make room for another context. Unknown exposed legacy contexts use ONE sticky
+/// fallback flag, never an unbounded tombstone map.
 #[derive(Debug)]
 pub struct TaintTracker {
     cap: usize,
+    limits: TaintLimits,
     sessions: HashMap<SessionId, SessionTaint>,
+    sessions_allocation: usize,
+    retained: usize,
+    legacy_unknown_history: AtomicBool,
 }
 
 impl TaintTracker {
-    /// `cap` bounds each of the fingerprint and literal entry counts per session.
-    /// Keys, queues and provenance metadata add storage beyond fingerprint bytes.
-    /// Zero retains no evidence and marks every untrusted record incomplete.
     pub fn new(cap: usize) -> Self {
-        Self {
+        Self::with_limits(cap, TaintLimits::default()).expect("reviewed provenance defaults")
+    }
+    pub fn with_limits(cap: usize, limits: TaintLimits) -> Result<Self, LimitError> {
+        limits.validate()?;
+        Ok(Self {
             cap,
+            limits,
             sessions: HashMap::new(),
+            sessions_allocation: 0,
+            retained: 0,
+            legacy_unknown_history: AtomicBool::new(false),
+        })
+    }
+    pub fn limits(&self) -> &TaintLimits {
+        &self.limits
+    }
+    pub fn usage(&self) -> TaintUsage {
+        TaintUsage {
+            retained_bytes: self.retained,
+            max_session_retained_bytes: self
+                .sessions
+                .values()
+                .map(|s| s.retained)
+                .max()
+                .unwrap_or(0),
+            sessions: self.sessions.len(),
+            incomplete_sessions: self
+                .sessions
+                .values()
+                .filter(|s| s.incomplete.load(Ordering::Relaxed))
+                .count(),
+            fingerprints: self
+                .sessions
+                .values()
+                .fold(0usize, |n, s| n.saturating_add(s.marks.len())),
+            literals: self
+                .sessions
+                .values()
+                .fold(0usize, |n, s| n.saturating_add(s.literals.len())),
+            legacy_unknown_history: self.legacy_unknown_history.load(Ordering::Relaxed),
         }
     }
-
-    /// Record content that entered from `source`. Trusted sources are ignored —
-    /// the human's own words are not taint.
-    ///
-    /// If the same fingerprint or literal is recorded again under a lower `seq`
-    /// (out-of-order arrival, or the same distinctive string reappearing in two
-    /// separate untrusted documents), the mark is updated to the lower `seq` —
-    /// `check()` promises the earliest contributing source, so this must hold
-    /// regardless of insertion order, not just for in-order arrival.
-    pub fn record(&mut self, session: &str, seq: u64, source: &Provenance, text: &str) {
+    pub fn session_usage(&self, session: &str) -> Option<SessionTaintUsage> {
+        if session.len() > self.limits.max_session_id_bytes {
+            return None;
+        }
+        self.sessions.get(session).map(|s| SessionTaintUsage {
+            retained_bytes: s.retained,
+            fingerprints: s.marks.len(),
+            literals: s.literals.len(),
+            incomplete: s.incomplete.load(Ordering::Relaxed),
+        })
+    }
+    /// Reserve a shell before selected-runtime authority is published. `true`
+    /// means newly created and permits rollback of this unpublished shell only.
+    pub fn try_register(&mut self, session: &str) -> Result<bool, TrackingFailure> {
+        if session.is_empty() || session.len() > self.limits.max_session_id_bytes {
+            return Err(TrackingFailure::SessionId);
+        }
+        if self.sessions.contains_key(session) {
+            return Ok(false);
+        }
+        if self.sessions.len() >= self.limits.max_sessions {
+            return Err(TrackingFailure::SessionCapacity);
+        }
+        let id = owned_string(session)?;
+        let base = add(size_of::<(String, SessionTaint)>(), id.capacity())?;
+        if base > self.limits.per_session_bytes {
+            return Err(TrackingFailure::SessionBytes);
+        }
+        let grow = self.sessions.len() >= self.sessions.capacity();
+        let plan = if grow {
+            map_plan::<String, SessionTaint>(add(self.sessions.len(), 1)?)?
+        } else {
+            0
+        };
+        if add(self.retained, add(id.capacity(), plan)?)? > self.limits.total_bytes {
+            return Err(TrackingFailure::GlobalBytes);
+        }
+        if grow {
+            let old = self.sessions_allocation;
+            grow_map(&mut self.sessions, &mut self.sessions_allocation, plan)?;
+            self.retained = sub(add(self.retained, self.sessions_allocation)?, old)?;
+        }
+        self.retained = add(self.retained, id.capacity())?;
+        let entry = SessionTaint {
+            retained: base,
+            incomplete: AtomicBool::new(self.legacy_unknown_history.load(Ordering::Relaxed)),
+            ..Default::default()
+        };
+        self.sessions.insert(id, entry);
+        Ok(true)
+    }
+    pub fn try_record(
+        &mut self,
+        session: &str,
+        seq: u64,
+        source: &Provenance,
+        text: &str,
+    ) -> Result<(), TrackingFailure> {
         if source.trust() != Trust::Untrusted {
-            return;
+            return Ok(());
         }
-        let entry = self.sessions.entry(session.to_string()).or_default();
-        if self.cap == 0 {
-            entry.incomplete = true;
-            return;
-        }
-        for fp in fingerprints(text) {
-            match entry.marks.get_mut(&fp) {
-                Some(existing) => {
-                    if seq < existing.seq {
-                        *existing = TaintMark {
-                            source: source.clone(),
-                            seq,
-                        };
-                    }
-                }
-                None => {
-                    entry.marks.insert(
-                        fp,
-                        TaintMark {
-                            source: source.clone(),
-                            seq,
-                        },
-                    );
-                    entry.order.push_back(fp);
-                    while entry.order.len() > self.cap {
-                        if let Some(old) = entry.order.pop_front() {
-                            entry.marks.remove(&old);
-                            entry.incomplete = true;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Literals close the short-argument gap fingerprinting cannot.
-        for lit in literals(text) {
-            match entry.literals.get_mut(&lit) {
-                Some(existing) => {
-                    if seq < existing.seq {
-                        *existing = TaintMark {
-                            source: source.clone(),
-                            seq,
-                        };
-                    }
-                }
-                None => {
-                    entry.literals.insert(
-                        lit.clone(),
-                        TaintMark {
-                            source: source.clone(),
-                            seq,
-                        },
-                    );
-                    entry.literal_order.push_back(lit);
-                    while entry.literal_order.len() > self.cap {
-                        if let Some(old) = entry.literal_order.pop_front() {
-                            entry.literals.remove(&old);
-                            entry.incomplete = true;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /// Is this text derived from untrusted content seen earlier in the session?
-    /// Returns the mark of the earliest contributing source.
-    ///
-    /// Two independent mechanisms, either of which is sufficient:
-    /// - **Fingerprints**, needing `MIN_MATCHES` distinct hits (~50 characters of
-    ///   verbatim shared text). Survives reformatting; catches reused prose.
-    /// - **Literals**, by containment at any length. Catches the short high-signal
-    ///   strings — a bare exfil URL, a credential path — that winnowing cannot see
-    ///   at all, because it guarantees nothing below 39 characters.
-    ///
-    /// A miss is not proof of clean provenance; also inspect `is_incomplete()`.
-    pub fn check(&self, session: &str, text: &str) -> Option<TaintMark> {
-        let entry = self.sessions.get(session)?;
-
-        let mut hits: Vec<&TaintMark> = fingerprints(text)
-            .iter()
-            .filter_map(|fp| entry.marks.get(fp))
-            .collect();
-        if hits.len() < MIN_MATCHES {
-            hits.clear();
-        }
-
-        // A literal hit stands alone — no MIN_MATCHES threshold. These strings are
-        // distinctive enough (>= MIN_LITERAL_LEN, URL- or path-shaped) that a single
-        // containment match is real evidence of provenance. Literals are stored
-        // lowercase (see `literals()`), so the argument text is lowercased here too
-        // — otherwise a poisoned page writing `HTTPS://EXFIL.EXAMPLE.COM/COLLECT`
-        // would never match the lowercase form an agent naturally reuses.
-        let text_lc = text.to_lowercase();
-        hits.extend(
-            entry
-                .literals
-                .iter()
-                .filter(|(lit, _)| text_lc.contains(lit.as_str()))
-                .map(|(_, mark)| mark),
+        self.try_register(session)?;
+        let entry = self
+            .sessions
+            .get_mut(session)
+            .ok_or(TrackingFailure::Arithmetic)?;
+        let result = entry.record(
+            self.cap,
+            &self.limits,
+            &mut self.retained,
+            seq,
+            source,
+            text,
         );
-
-        hits.sort_by_key(|m| m.seq);
-        hits.first().map(|m| (*m).clone())
+        if result.is_err() {
+            entry.lose();
+        }
+        result
     }
-
-    /// Drop all state for a finished session.
+    /// Compatibility entry point for already-exposed hook/library content. A
+    /// failed unrepresented context poisons unknown history conservatively.
+    pub fn record(&mut self, session: &str, seq: u64, source: &Provenance, text: &str) {
+        if self.try_record(session, seq, source, text).is_err()
+            && (session.len() > self.limits.max_session_id_bytes
+                || !self.sessions.contains_key(session))
+        {
+            self.legacy_unknown_history.store(true, Ordering::Relaxed);
+        }
+    }
+    pub fn try_check(
+        &self,
+        session: &str,
+        text: &str,
+    ) -> Result<Option<TaintMark>, TrackingFailure> {
+        if session.is_empty() || session.len() > self.limits.max_session_id_bytes {
+            self.legacy_unknown_history.store(true, Ordering::Relaxed);
+            return Err(TrackingFailure::SessionId);
+        }
+        if text.len() > self.limits.max_input_bytes {
+            if let Some(entry) = self.sessions.get(session) {
+                entry.lose();
+            } else {
+                self.legacy_unknown_history.store(true, Ordering::Relaxed);
+            }
+            return Err(TrackingFailure::Input);
+        }
+        let Some(entry) = self.sessions.get(session) else {
+            return Ok(None);
+        };
+        let mut earliest: Option<&TaintMark> = None;
+        let mut hits = 0usize;
+        for fp in fingerprints(text) {
+            if let Some(mark) = entry.marks.get(&fp) {
+                hits += 1;
+                if earliest.is_none_or(|old| mark.seq < old.seq) {
+                    earliest = Some(mark);
+                }
+            }
+        }
+        if hits < MIN_MATCHES {
+            earliest = None;
+        }
+        let lower = text.to_lowercase();
+        for (literal, mark) in &entry.literals {
+            if lower.contains(literal) && earliest.is_none_or(|old| mark.seq < old.seq) {
+                earliest = Some(mark);
+            }
+        }
+        Ok(earliest.cloned())
+    }
+    /// Recheck every required part of an admitted batch AFTER all its records.
+    /// Another block in the same original delivery may have evicted an earlier
+    /// block even though each individual record succeeded at the time.
+    pub fn current_input_retained(
+        &self,
+        session: &str,
+        seq: u64,
+        source: &Provenance,
+        text: &str,
+    ) -> Result<bool, TrackingFailure> {
+        if source.trust() != Trust::Untrusted {
+            return Ok(true);
+        }
+        if session.is_empty() || session.len() > self.limits.max_session_id_bytes {
+            return Err(TrackingFailure::SessionId);
+        }
+        let Some(entry) = self.sessions.get(session) else {
+            return Ok(false);
+        };
+        let result = (|| {
+            if self.cap == 0 {
+                return Err(TrackingFailure::EntryCapacity);
+            }
+            if text.len() > self.limits.max_input_bytes {
+                return Err(TrackingFailure::Input);
+            }
+            if source_bytes(source, false)? > self.limits.max_source_bytes {
+                return Err(TrackingFailure::Source);
+            }
+            let required_literals = bounded_literals(text, self.limits.max_literal_bytes)?;
+            Ok(fingerprints(text)
+                .iter()
+                .all(|fp| entry.marks.get(fp).is_some_and(|mark| mark.seq <= seq))
+                && required_literals
+                    .iter()
+                    .all(|lit| entry.literals.get(lit).is_some_and(|mark| mark.seq <= seq)))
+        })();
+        if !matches!(result, Ok(true)) {
+            entry.lose();
+        }
+        result
+    }
+    pub fn check(&self, session: &str, text: &str) -> Option<TaintMark> {
+        self.try_check(session, text).ok().flatten()
+    }
+    /// The caller must authenticate actual retirement; duplicate starts and one
+    /// child ending are NOT permission to call this for a shared active host.
     pub fn end_session(&mut self, session: &str) {
-        self.sessions.remove(session);
+        if session.len() > self.limits.max_session_id_bytes {
+            return;
+        }
+        if let Some(entry) = self.sessions.remove(session) {
+            let dynamic = entry
+                .retained
+                .checked_sub(size_of::<(String, SessionTaint)>())
+                .expect("owned provenance accounting invariant");
+            self.retained = self
+                .retained
+                .checked_sub(dynamic)
+                .expect("owned provenance accounting invariant");
+        }
+        // Retained outer table capacity stays charged after removal. When all
+        // contexts retire, replace it so even that backing allocation is freed.
+        if self.sessions.is_empty() {
+            self.sessions = HashMap::new();
+            self.retained = self
+                .retained
+                .checked_sub(self.sessions_allocation)
+                .expect("owned provenance accounting invariant");
+            self.sessions_allocation = 0;
+        }
     }
-
-    /// Fingerprints currently retained for a session. Exposed for tests and metrics.
-    /// Counts fingerprints only, **not** literals — see `literal_len`. The two are
-    /// capped and evicted independently, so this is not the total retained state.
     pub fn len(&self, session: &str) -> usize {
-        self.sessions.get(session).map_or(0, |s| s.marks.len())
+        self.session_usage(session).map_or(0, |s| s.fingerprints)
     }
-
-    /// Distinctive literals currently retained for a session. Separate from
-    /// `len()`, which counts fingerprints — the two are capped independently, so
-    /// retained evidence entries are bounded by `2 * cap` per session (not bytes).
     pub fn literal_len(&self, session: &str) -> usize {
-        self.sessions.get(session).map_or(0, |s| s.literals.len())
+        self.session_usage(session).map_or(0, |s| s.literals)
     }
-
-    /// Evidence has been evicted, or tracking was disabled for untrusted input.
-    /// This fixed-size marker contains no source, content or growing counter.
     pub fn is_incomplete(&self, session: &str) -> bool {
-        self.sessions.get(session).is_some_and(|s| s.incomplete)
+        if session.is_empty() || session.len() > self.limits.max_session_id_bytes {
+            return true;
+        }
+        self.sessions.get(session).map_or_else(
+            || self.legacy_unknown_history.load(Ordering::Relaxed),
+            |s| s.incomplete.load(Ordering::Relaxed),
+        )
     }
-
-    /// Explicitly mark history as incomplete for this session.
     pub fn mark_incomplete(&mut self, session: &str) {
-        let entry = self.sessions.entry(session.to_string()).or_default();
-        entry.incomplete = true;
+        if self.try_register(session).is_ok() {
+            if let Some(entry) = self.sessions.get(session) {
+                entry.lose();
+            }
+        } else {
+            self.legacy_unknown_history.store(true, Ordering::Relaxed);
+        }
     }
-
-    /// No retained evidence and no sticky loss marker.
     pub fn is_empty(&self, session: &str) -> bool {
-        self.sessions
-            .get(session)
-            .is_none_or(|s| !s.incomplete && s.marks.is_empty() && s.literals.is_empty())
+        !self.is_incomplete(session) && self.len(session) == 0 && self.literal_len(session) == 0
     }
 }
 
@@ -342,6 +941,262 @@ mod tests {
         Provenance::Network {
             host: "evil.com".into(),
         }
+    }
+
+    fn assert_accounting(tracker: &TaintTracker) {
+        let mut actual = tracker.sessions_allocation;
+        for (id, state) in &tracker.sessions {
+            let source_heaps: usize = state
+                .marks
+                .values()
+                .chain(state.literals.values())
+                .map(|mark| source_bytes(&mark.source, true).unwrap())
+                .sum();
+            let literal_heaps: usize = state
+                .literals
+                .keys()
+                .chain(state.literal_order.iter())
+                .map(String::capacity)
+                .sum();
+            let dynamic = state.marks_allocation
+                + state.order_allocation
+                + state.literals_allocation
+                + state.literal_order_allocation
+                + source_heaps
+                + literal_heaps;
+            assert_eq!(
+                state.retained,
+                size_of::<(String, SessionTaint)>() + id.capacity() + dynamic
+            );
+            assert!(state.retained <= tracker.limits.per_session_bytes);
+            assert!(
+                state.marks_allocation
+                    >= table_bytes::<u64, TaintMark>(state.marks.capacity()).unwrap()
+            );
+            assert!(
+                state.literals_allocation
+                    >= table_bytes::<String, TaintMark>(state.literals.capacity()).unwrap()
+            );
+            assert_eq!(
+                state.order_allocation,
+                state.order.capacity() * size_of::<u64>()
+            );
+            assert_eq!(
+                state.literal_order_allocation,
+                state.literal_order.capacity() * size_of::<String>()
+            );
+            actual += id.capacity() + dynamic;
+        }
+        assert_eq!(tracker.usage().retained_bytes, actual);
+        assert!(actual <= tracker.limits.total_bytes);
+    }
+
+    #[test]
+    fn reviewed_limits_are_additive_validated_and_zero_budget_refuses_without_heap_markers() {
+        let defaults = TaintLimits::default();
+        assert_eq!(defaults.per_session_bytes, 8 * 1024 * 1024);
+        assert_eq!(defaults.total_bytes, 64 * 1024 * 1024);
+        assert_eq!(defaults.max_sessions, 512);
+        assert_eq!(serde_json::from_str::<TaintLimits>("{}").unwrap(), defaults);
+        assert!(serde_json::from_str::<TaintLimits>(r#"{"misspelled":1}"#).is_err());
+        let mut limits = defaults.clone();
+        limits.max_input_bytes = usize::MAX;
+        assert!(limits.validate().is_err());
+        limits = defaults;
+        limits.per_session_bytes = 0;
+        limits.total_bytes = 0;
+        let mut tracker = TaintTracker::with_limits(100, limits).unwrap();
+        assert!(tracker.try_register("typed").is_err());
+        assert_eq!(tracker.usage().retained_bytes, 0);
+        assert!(!tracker.usage().legacy_unknown_history);
+        tracker.record("legacy", 1, &net(), "https://x.io/x");
+        assert_eq!(tracker.usage().retained_bytes, 0);
+        assert!(tracker.is_incomplete("legacy"));
+        assert!(tracker.is_incomplete("other-unknown"));
+        assert_eq!(tracker.usage().sessions, 0);
+        assert!(table_bytes::<u64, TaintMark>(usize::MAX).is_err());
+        assert!(map_plan::<String, SessionTaint>(usize::MAX).is_err());
+    }
+
+    #[test]
+    fn byte_fifo_plateaus_and_evicted_backing_capacity_is_still_charged() {
+        let limits = TaintLimits {
+            per_session_bytes: 16_384,
+            total_bytes: 131_072,
+            ..Default::default()
+        };
+        let mut tracker = TaintTracker::with_limits(10_000, limits).unwrap();
+        let source = Provenance::McpServer {
+            name: "m".repeat(400),
+        };
+        tracker
+            .try_record("s", 1, &source, "https://h1.io/x")
+            .unwrap();
+        for seq in 2..1000 {
+            tracker
+                .try_record("s", seq, &source, &format!("https://h{seq}.io/x"))
+                .unwrap();
+            assert_accounting(&tracker);
+        }
+        assert!(tracker.is_incomplete("s"));
+        assert!(tracker.check("s", "https://h1.io/x").is_none());
+        assert!(tracker.check("s", "https://h999.io/x").is_some());
+        let allocation = tracker.sessions["s"].literals_allocation;
+        assert!(allocation > 0);
+        assert!(tracker.usage().max_session_retained_bytes <= 16_384);
+        tracker.end_session("s");
+        assert_eq!(tracker.usage().retained_bytes, 0);
+        assert_eq!(tracker.usage().sessions, 0);
+    }
+
+    #[test]
+    fn repeated_values_do_not_grow_but_earlier_source_replacement_is_charged() {
+        let mut tracker = TaintTracker::new(1000);
+        let text = "https://owned.io/x";
+        tracker.try_record("s", 10, &net(), text).unwrap();
+        let before = tracker.usage().retained_bytes;
+        for seq in 11..1000 {
+            tracker.try_record("s", seq, &net(), text).unwrap();
+        }
+        assert_eq!(tracker.usage().retained_bytes, before);
+        let large = Provenance::Native {
+            registry: "r".repeat(300),
+            tool: "t".repeat(300),
+        };
+        tracker.try_record("s", 2, &large, text).unwrap();
+        assert!(tracker.usage().retained_bytes > before);
+        assert_eq!(
+            tracker.check("s", text).unwrap(),
+            TaintMark {
+                source: large,
+                seq: 2
+            }
+        );
+        assert_accounting(&tracker);
+        let stable = tracker.usage().retained_bytes;
+        let huge = Provenance::McpServer {
+            name: "x".repeat(1025),
+        };
+        assert_eq!(
+            tracker.try_record("s", 1, &huge, text),
+            Err(TrackingFailure::Source)
+        );
+        assert_eq!(tracker.usage().retained_bytes, stable);
+        assert_eq!(tracker.check("s", text).unwrap().seq, 2);
+        assert!(tracker.is_incomplete("s"));
+    }
+
+    #[test]
+    fn oversized_input_and_unicode_literal_fail_before_retention_and_query_failure_is_sticky() {
+        let limits = TaintLimits {
+            max_input_bytes: 512,
+            max_literal_bytes: 80,
+            ..Default::default()
+        };
+        let mut tracker = TaintTracker::with_limits(100, limits).unwrap();
+        tracker.try_register("s").unwrap();
+        let baseline = tracker.usage().retained_bytes;
+        assert_eq!(
+            tracker.try_record("s", 1, &net(), &"a".repeat(513)),
+            Err(TrackingFailure::Input)
+        );
+        assert_eq!(tracker.usage().retained_bytes, baseline);
+        let expanding = format!("https://example.test/{}", "İ".repeat(30));
+        assert!(expanding.len() <= 81);
+        assert_eq!(
+            tracker.try_record("s", 2, &net(), &expanding),
+            Err(TrackingFailure::Literal)
+        );
+        assert_eq!(tracker.usage().retained_bytes, baseline);
+        tracker.try_register("peer").unwrap();
+        assert!(!tracker.is_incomplete("peer"));
+        assert!(tracker.check("peer", &"x".repeat(513)).is_none());
+        assert!(tracker.is_incomplete("peer"));
+        assert_accounting(&tracker);
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<TaintTracker>();
+    }
+
+    #[test]
+    fn session_capacity_refusal_does_not_evict_markers_or_poison_known_peers() {
+        let limits = TaintLimits {
+            max_sessions: 1,
+            ..Default::default()
+        };
+        let mut tracker = TaintTracker::with_limits(100, limits).unwrap();
+        assert_eq!(tracker.try_register("peer"), Ok(true));
+        assert_eq!(tracker.try_register("peer"), Ok(false));
+        assert_eq!(
+            tracker.try_register("typed-refused"),
+            Err(TrackingFailure::SessionCapacity)
+        );
+        assert!(!tracker.is_incomplete("peer"));
+        assert!(!tracker.usage().legacy_unknown_history);
+        tracker.record("legacy-exposed", 1, &net(), "short");
+        assert!(tracker.is_incomplete("legacy-exposed"));
+        assert!(!tracker.is_incomplete("peer"));
+        tracker.end_session("unrelated");
+        assert!(tracker.is_incomplete("legacy-exposed"));
+        tracker.end_session("peer");
+        assert_eq!(tracker.try_register("legacy-exposed"), Ok(true));
+        assert!(tracker.is_incomplete("legacy-exposed"));
+        assert_accounting(&tracker);
+    }
+
+    #[test]
+    fn current_delivery_recheck_detects_cross_block_eviction_and_keeps_earlier_legitimate_marks() {
+        let mut tracker = TaintTracker::new(1);
+        let first = "https://first.io/x";
+        let second = "https://other.io/x";
+        tracker.try_record("s", 10, &net(), first).unwrap();
+        assert_eq!(
+            tracker.current_input_retained("s", 11, &net(), first),
+            Ok(true)
+        );
+        tracker.try_record("s", 11, &net(), second).unwrap();
+        assert_eq!(
+            tracker.current_input_retained("s", 10, &net(), first),
+            Ok(false)
+        );
+        assert_eq!(
+            tracker.current_input_retained("s", 11, &net(), second),
+            Ok(true)
+        );
+        assert!(tracker.is_incomplete("s"));
+        assert!(tracker.try_record("s", 12, &net(), POISON).is_err());
+        assert!(tracker.is_incomplete("s"));
+        assert_accounting(&tracker);
+    }
+
+    #[test]
+    fn global_pressure_never_reclaims_an_unrelated_active_context() {
+        let limits = TaintLimits {
+            per_session_bytes: 65_536,
+            total_bytes: 16_384,
+            ..Default::default()
+        };
+        let mut tracker = TaintTracker::with_limits(1000, limits).unwrap();
+        tracker
+            .try_record("peer", 1, &net(), "https://peer.io/x")
+            .unwrap();
+        let peer = tracker.session_usage("peer").unwrap();
+        tracker.try_register("s").unwrap();
+        let source = Provenance::McpServer {
+            name: "n".repeat(500),
+        };
+        for seq in 1..100 {
+            let _ = tracker.try_record("s", seq, &source, &format!("https://h{seq}.io/x"));
+        }
+        assert_eq!(tracker.session_usage("peer").unwrap(), peer);
+        assert!(tracker.check("peer", "https://peer.io/x").is_some());
+        assert!(!tracker.is_incomplete("peer"));
+        assert_accounting(&tracker);
+        tracker.end_session("s");
+        tracker
+            .try_record("fresh", 1, &net(), "https://new.io/x")
+            .unwrap();
+        assert!(!tracker.is_incomplete("fresh"));
+        assert_accounting(&tracker);
     }
 
     #[test]
