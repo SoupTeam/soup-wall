@@ -55,8 +55,8 @@ def close(proc):
             proc.wait(timeout=5)
 
 class MCPClient:
-    def __init__(self,command,env,stderr):
-        self.proc=subprocess.Popen(command,cwd=ROOT,env=env,stdin=subprocess.PIPE,
+    def __init__(self,command,env,stderr,cwd=ROOT):
+        self.proc=subprocess.Popen(command,cwd=cwd,env=env,stdin=subprocess.PIPE,
                                    stdout=subprocess.PIPE,stderr=stderr)
         self.queue=queue.Queue()
         def reader():
@@ -153,6 +153,95 @@ def real_collector_proof(binary,root,compiled,check):
             check("native-agent-stayed-live",daemon.poll() is None)
         finally:close(daemon)
 
+def real_create_file_proof(binary,root,run,check):
+    """Execute one actual broker write and refuse an out-of-scope path."""
+    import importlib.util
+    fixture=ROOT/"scripts/fixtures/mcp_create_file_probe_server.py"
+    spec=importlib.util.spec_from_file_location("sou65_owned_create_fixture",fixture)
+    module=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    workspace=root/"write-workspace"
+    workspace.mkdir(mode=0o700)
+    target=workspace/"new.txt"
+    source=root/"write-source.json"
+    declarations=root/"write-declarations.json"
+    compiled=root/"write-profile"
+    dump(source,{"format":"sw-mcp/operator-discovery/1",
+        "server_id":"sou65-create","server_version":"1","tools":module.TOOLS})
+    run("import","--snapshot",source,"--server-id","sou65-create",
+        "--server-version","1","--out",declarations)
+    review=json.loads(declarations.read_text())
+    classifier=ROOT/"rule_baseline/rule_baseline.py"
+    for tool in review["tools"]:
+        tool["reviewed"]=True
+        tool["operator_review"]="Owned source scripts/fixtures/mcp_create_file_probe_server.py reviewed"
+        tool["authority"]=({"kind":"create_file","workspace":str(workspace),
+            "path":str(target),"classifier_sha256":digest(classifier)}
+            if tool["name"]=="create_file" else {"kind":"read_only"})
+    dump(declarations,review)
+    run("validate","--snapshot",source,"--declarations",declarations)
+    run("compile","--snapshot",source,"--declarations",declarations,"--out",compiled)
+    policy=json.loads((compiled/"registry.json").read_text())
+    create=next(x for x in policy["tools"] if x["name"]=="create_file")
+    check("generated-create-uses-native-resource-contract",
+          create["resource_policy"]["execution"]["operation"]=="create_file"
+          and create["resource_policy"]["allowed_resources"]==[
+              {"kind":"path","canonical":str(target)}])
+    home=root/"write-agent"
+    home.mkdir(mode=0o700)
+    env={k:v for k,v in os.environ.items() if not k.startswith("AGENTFW_")}
+    env["HOME"]=env["USERPROFILE"]=str(home)
+    subprocess.run([str(binary),"install"],env=env,check=True,
+                   stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=30)
+    port=available_port()
+    policy_path=home/"policy.yaml"
+    policy_path.write_text("agent_policies: []\ndefault: allow\n")
+    dump(home/".agentfw/config.yaml",{"port":port,"enforce":True,
+        "policy":str(policy_path),"native":{"registry_path":str(compiled/"registry.json"),
+            "registry_sha256":digest(compiled/"registry.json")}})
+    collector_env=env.copy()
+    collector_env.update(AGENTFW_CLASSIFIER="rule-baseline",
+        AGENTFW_RULE_BASELINE=str(classifier),
+        AGENTFW_CLASSIFIER_PYTHON=sys.executable,
+        AGENTFW_WORKSPACE=str(workspace))
+    ledger=root/"create-ledger"
+    with (root/"create-agent.log").open("wb") as daemon_log, (root/"create-collector.log").open("wb") as collector_log:
+        daemon=subprocess.Popen([str(binary),"serve"],env=env,stdout=daemon_log,
+                                stderr=daemon_log,cwd=workspace)
+        try:
+            wait_for_health(port,daemon)
+            command=[str(binary),"mcp","--native-admission","--id","sou65-create",
+                "--",sys.executable,"-I","-u",str(fixture),"--ledger",str(ledger)]
+            client=MCPClient(command,collector_env,collector_log,cwd=workspace)
+            try:
+                hello=client.send({"jsonrpc":"2.0","id":"init","method":"initialize",
+                    "params":{"protocolVersion":"2024-11-05","capabilities":{},
+                        "clientInfo":{"name":"sou65-owned","version":"1"}}})
+                check("write-profile-original-initialize",
+                      hello is not None and bool(json.loads(hello).get("result")))
+                client.send({"jsonrpc":"2.0","method":"notifications/initialized"},reply=False)
+                listing=client.send({"jsonrpc":"2.0","id":"list","method":"tools/list"})
+                check("write-profile-original-tool-manifest",
+                      listing is not None and json.loads(listing)["result"]["tools"]==module.TOOLS)
+                good=client.send({"jsonrpc":"2.0","id":"create1","method":"tools/call",
+                    "params":{"name":"create_file","arguments":{
+                        "path":"new.txt","content":"SOU65 bounded broker write"},"_meta":{
+                            "claudecode/toolUseId":"toolu_sou65_create1","progressToken":11}}})
+                check("real-native-broker-create",
+                      target.is_file() and target.read_text()=="SOU65 bounded broker write" and good is not None)
+                check("no-child-write-executed",ledger.is_file() and ledger.stat().st_size==0)
+                outside=root/"outside-refused.txt"
+                denied=client.send({"jsonrpc":"2.0","id":"create2","method":"tools/call",
+                    "params":{"name":"create_file","arguments":{
+                        "path":"../outside-refused.txt","content":"must never appear"},"_meta":{
+                            "claudecode/toolUseId":"toolu_sou65_create2","progressToken":12}}})
+                check("out-of-scope-write-refused-before-effect",
+                      not outside.exists() and ledger.stat().st_size==0)
+            finally:client.close()
+            check("write-agent-remained-running",daemon.poll() is None)
+        finally:close(daemon)
+
+
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument("--no-build",action="store_true")
@@ -210,6 +299,7 @@ def main():
         check("exact-binary-hash",hashlib.sha256(reg_bytes).hexdigest()==
               json.loads((profile/"profile.json").read_text())["registry_sha256"])
         real_collector_proof(binary,root,profile,check)
+        real_create_file_proof(binary,root,run,check)
         check("source-and-operator-doc-preserved",
               json.loads((profile/"source-snapshot.json").read_text())==discovery
               and json.loads((profile/"operator-declarations.json").read_text())==review)
