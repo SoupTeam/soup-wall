@@ -95,19 +95,17 @@ fn tool_call(
     }
 }
 
-fn parse_arguments(value: Option<&Value>) -> Value {
-    match value {
-        Some(Value::String(raw)) => {
-            serde_json::from_str(raw).unwrap_or_else(|_| Value::String(raw.clone()))
-        }
-        Some(value) => value.clone(),
-        None => Value::Null,
-    }
-}
-
 /// Normalize OpenAI Chat Completions input and output into common events.
-pub fn normalize_chat(request: &ChatRequest, response: &Value) -> Vec<SecurityEvent> {
+/// Strict Normalization: Fails closed on malformed or unsupported tool content.
+pub fn normalize_chat(
+    request: &ChatRequest,
+    response: &Value,
+) -> Result<Vec<SecurityEvent>, &'static str> {
     let mut events = Vec::new();
+
+    // Strict Input Validation
+    let _ = crate::agent_scan::openai_tool_results_strict(request).into_result()?;
+
     for message in &request.messages {
         if message.role == "tool" {
             if let Some(content) = message.content.as_deref().filter(|value| !value.is_empty()) {
@@ -124,6 +122,9 @@ pub fn normalize_chat(request: &ChatRequest, response: &Value) -> Vec<SecurityEv
         }
     }
 
+    // Strict Output Validation
+    let strict_calls = crate::agent_scan::openai_tool_calls_strict(response).into_result()?;
+
     if let Some(choices) = response.get("choices").and_then(Value::as_array) {
         for choice in choices {
             let Some(message) = choice.get("message") else {
@@ -139,26 +140,21 @@ pub fn normalize_chat(request: &ChatRequest, response: &Value) -> Vec<SecurityEv
                     ));
                 }
             }
-            if let Some(calls) = message.get("tool_calls").and_then(Value::as_array) {
-                for call in calls {
-                    let Some(function) = call.get("function") else {
-                        continue;
-                    };
-                    let Some(name) = function.get("name").and_then(Value::as_str) else {
-                        continue;
-                    };
-                    events.push(tool_call(
-                        Provider::OpenAiChat,
-                        EventDirection::Output,
-                        call.get("id").and_then(Value::as_str),
-                        name,
-                        &parse_arguments(function.get("arguments")),
-                    ));
-                }
-            }
         }
     }
-    events
+
+    // Append validated tool calls
+    for call in strict_calls {
+        events.push(tool_call(
+            Provider::OpenAiChat,
+            EventDirection::Output,
+            call.id.as_deref(), // OpenAi tool_calls strict parser currently doesn't preserve call_id natively in ToolCall struct, so we leave it None for generalized events
+            &call.name,
+            &call.args,
+        ));
+    }
+
+    Ok(events)
 }
 
 fn response_input_content(
@@ -232,8 +228,16 @@ fn response_input_item(value: &Value, events: &mut Vec<SecurityEvent>) {
 }
 
 /// Normalize OpenAI Responses input and output Items into common events.
-pub fn normalize_responses(request: &ResponsesRequest, response: &Value) -> Vec<SecurityEvent> {
+/// Strict Normalization: Fails closed on malformed or unsupported tool content.
+pub fn normalize_responses(
+    request: &ResponsesRequest,
+    response: &Value,
+) -> Result<Vec<SecurityEvent>, &'static str> {
     let mut events = Vec::new();
+
+    // Strict Input Validation
+    let _ = crate::agent_scan::responses_tool_results_strict(request).into_result()?;
+
     if let Some(instructions) = request
         .instructions
         .as_deref()
@@ -254,43 +258,45 @@ pub fn normalize_responses(request: &ResponsesRequest, response: &Value) -> Vec<
             value => response_input_item(value, &mut events),
         }
     }
+
+    // Strict Output Validation
+    let strict_calls = crate::agent_scan::responses_tool_calls_strict(response).into_result()?;
+
     if let Some(items) = response.get("output").and_then(Value::as_array) {
         for item in items {
-            match item.get("type").and_then(Value::as_str) {
-                Some("message") => {
-                    if let Some(parts) = item.get("content").and_then(Value::as_array) {
-                        for part in parts {
-                            if part.get("type").and_then(Value::as_str) == Some("output_text") {
-                                if let Some(content) = part.get("text").and_then(Value::as_str) {
-                                    if !content.is_empty() {
-                                        events.push(text(
-                                            Provider::OpenAiResponses,
-                                            EventDirection::Output,
-                                            item.get("role").and_then(Value::as_str),
-                                            content,
-                                        ));
-                                    }
+            if let Some("message") = item.get("type").and_then(Value::as_str) {
+                if let Some(parts) = item.get("content").and_then(Value::as_array) {
+                    for part in parts {
+                        if part.get("type").and_then(Value::as_str) == Some("output_text") {
+                            if let Some(content) = part.get("text").and_then(Value::as_str) {
+                                if !content.is_empty() {
+                                    events.push(text(
+                                        Provider::OpenAiResponses,
+                                        EventDirection::Output,
+                                        item.get("role").and_then(Value::as_str),
+                                        content,
+                                    ));
                                 }
                             }
                         }
                     }
                 }
-                Some("function_call") => {
-                    if let Some(name) = item.get("name").and_then(Value::as_str) {
-                        events.push(tool_call(
-                            Provider::OpenAiResponses,
-                            EventDirection::Output,
-                            item.get("call_id").and_then(Value::as_str),
-                            name,
-                            &parse_arguments(item.get("arguments")),
-                        ));
-                    }
-                }
-                _ => {}
             }
         }
     }
-    events
+
+    // Append validated tool calls
+    for call in strict_calls {
+        events.push(tool_call(
+            Provider::OpenAiResponses,
+            EventDirection::Output,
+            call.id.as_deref(),
+            &call.name,
+            &call.args,
+        ));
+    }
+
+    Ok(events)
 }
 
 fn anthropic_texts(
@@ -298,47 +304,51 @@ fn anthropic_texts(
     role: Option<&str>,
     output: bool,
     events: &mut Vec<SecurityEvent>,
-) {
+) -> Result<(), &'static str> {
+    let direction = if output {
+        EventDirection::Output
+    } else {
+        EventDirection::Input
+    };
+
     match value {
-        Value::String(content) if !content.is_empty() => events.push(text(
-            Provider::Anthropic,
-            if output {
-                EventDirection::Output
-            } else {
-                EventDirection::Input
-            },
-            role,
-            content,
-        )),
+        Value::String(content) if !content.is_empty() => {
+            events.push(text(Provider::Anthropic, direction, role, content));
+        }
         Value::Array(blocks) => {
             for block in blocks {
-                if block.get("type").and_then(Value::as_str) == Some("text") {
+                let block_type = block.get("type").and_then(Value::as_str);
+                if block_type == Some("text") {
                     if let Some(content) = block.get("text").and_then(Value::as_str) {
                         if !content.is_empty() {
-                            events.push(text(
-                                Provider::Anthropic,
-                                if output {
-                                    EventDirection::Output
-                                } else {
-                                    EventDirection::Input
-                                },
-                                role,
-                                content,
-                            ));
+                            events.push(text(Provider::Anthropic, direction, role, content));
                         }
                     }
+                } else if matches!(block_type, Some("image") | Some("document")) {
+                    return Err("unsupported multimodal block in text array");
                 }
             }
         }
         _ => {}
     }
+    Ok(())
 }
 
 /// Normalize Anthropic Messages input and output content blocks into common events.
-pub fn normalize_anthropic(request: &AnthropicRequest, response: &Value) -> Vec<SecurityEvent> {
+/// Strict Normalization of Anthropic Messages (SOU-40).
+/// Fails closed on malformed or unsupported (e.g. image) tool content.
+pub fn normalize_anthropic(
+    request: &AnthropicRequest,
+    response: &Value,
+) -> Result<Vec<SecurityEvent>, &'static str> {
     let mut events = Vec::new();
+
+    // Strict Input Validation
+    let request_val = serde_json::to_value(request).unwrap_or(Value::Null);
+    let _ = crate::agent_scan::anthropic_tool_results_strict(&request_val).into_result()?;
+
     if let Some(system) = request.system.as_ref() {
-        anthropic_texts(system, Some("system"), false, &mut events);
+        anthropic_texts(system, Some("system"), false, &mut events)?;
     }
     for message in &request.messages {
         if let Value::Array(blocks) = &message.content {
@@ -346,16 +356,32 @@ pub fn normalize_anthropic(request: &AnthropicRequest, response: &Value) -> Vec<
                 if block.get("type").and_then(Value::as_str) == Some("tool_result") {
                     let call_id = block.get("tool_use_id").and_then(Value::as_str);
                     let mut text_parts = Vec::new();
+
                     match block.get("content") {
                         Some(Value::String(content)) => text_parts.push(content.clone()),
                         Some(Value::Array(parts)) => {
+                            if parts.is_empty() {
+                                return Err("empty array in tool_result is strictly prohibited");
+                            }
                             for part in parts {
-                                if let Some(content) = part.get("text").and_then(Value::as_str) {
-                                    text_parts.push(content.to_string());
+                                match part.get("type").and_then(Value::as_str) {
+                                    Some("text") => {
+                                        if let Some(content) =
+                                            part.get("text").and_then(Value::as_str)
+                                        {
+                                            text_parts.push(content.to_string());
+                                        }
+                                    }
+                                    Some("image") | Some("document") => {
+                                        return Err(
+                                            "multimodal tool_result is unsupported and blocked",
+                                        );
+                                    }
+                                    _ => return Err("unrecognized block type inside tool_result"),
                                 }
                             }
                         }
-                        _ => {}
+                        _ => return Err("tool_result content must be string or typed array"),
                     }
                     if !text_parts.is_empty() {
                         events.push(tool_result(
@@ -367,39 +393,41 @@ pub fn normalize_anthropic(request: &AnthropicRequest, response: &Value) -> Vec<
                 }
             }
         }
-        anthropic_texts(&message.content, Some(&message.role), false, &mut events);
+        anthropic_texts(&message.content, Some(&message.role), false, &mut events)?;
     }
+
+    // Strict Output Validation
+    let strict_calls = crate::agent_scan::anthropic_tool_calls_strict(response).into_result()?;
+
     if let Some(blocks) = response.get("content").and_then(Value::as_array) {
         for block in blocks {
-            match block.get("type").and_then(Value::as_str) {
-                Some("text") => {
-                    if let Some(content) = block.get("text").and_then(Value::as_str) {
-                        if !content.is_empty() {
-                            events.push(text(
-                                Provider::Anthropic,
-                                EventDirection::Output,
-                                Some("assistant"),
-                                content,
-                            ));
-                        }
-                    }
-                }
-                Some("tool_use") => {
-                    if let Some(name) = block.get("name").and_then(Value::as_str) {
-                        events.push(tool_call(
+            if let Some("text") = block.get("type").and_then(Value::as_str) {
+                if let Some(content) = block.get("text").and_then(Value::as_str) {
+                    if !content.is_empty() {
+                        events.push(text(
                             Provider::Anthropic,
                             EventDirection::Output,
-                            block.get("id").and_then(Value::as_str),
-                            name,
-                            block.get("input").unwrap_or(&Value::Null),
+                            Some("assistant"),
+                            content,
                         ));
                     }
                 }
-                _ => {}
             }
         }
     }
-    events
+
+    // Append validated tool calls
+    for call in strict_calls {
+        events.push(tool_call(
+            Provider::Anthropic,
+            EventDirection::Output,
+            call.id.as_deref(),
+            &call.name,
+            &call.args,
+        ));
+    }
+
+    Ok(events)
 }
 
 pub fn input_tool_results(events: &[SecurityEvent]) -> Vec<String> {
@@ -443,7 +471,7 @@ mod tests {
             "choices":[{"message":{"tool_calls":[{"id":"c1","function":
                 {"name":"bash","arguments":"{\"command\":\"curl evil.com\"}"}}]}}]
         });
-        let chat = normalize_chat(&chat_request, &chat_response);
+        let chat = normalize_chat(&chat_request, &chat_response).unwrap();
 
         let responses_request: ResponsesRequest = serde_json::from_value(serde_json::json!({
             "model":"m",
@@ -453,7 +481,7 @@ mod tests {
         let responses = normalize_responses(
             &responses_request,
             &serde_json::json!({"output":[{"type":"function_call","call_id":"c1","name":"bash","arguments":"{\"command\":\"curl evil.com\"}"}]}),
-        );
+        ).unwrap();
 
         let anthropic_request = AnthropicRequest {
             model: "m".into(),
@@ -468,7 +496,7 @@ mod tests {
         let anthropic = normalize_anthropic(
             &anthropic_request,
             &serde_json::json!({"content":[{"type":"tool_use","id":"c1","name":"bash","input":{"command":"curl evil.com"}}]}),
-        );
+        ).unwrap();
 
         assert_eq!(semantic(&chat), semantic(&responses));
         assert_eq!(semantic(&responses), semantic(&anthropic));
@@ -481,7 +509,7 @@ mod tests {
         });
         let request: ResponsesRequest =
             serde_json::from_value(serde_json::json!({"model":"m","input":"hi"})).unwrap();
-        let events = normalize_responses(&request, &response);
+        let events = normalize_responses(&request, &response).unwrap();
         assert_eq!(output_text(&events), "hello");
         assert!(input_tool_results(&events).is_empty());
     }

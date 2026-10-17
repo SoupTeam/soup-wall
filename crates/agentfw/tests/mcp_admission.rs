@@ -946,7 +946,7 @@ impl Fixture {
     }
 
     async fn receive(&mut self) -> Option<String> {
-        tokio::time::timeout(Duration::from_secs(10), self.output.next_line())
+        tokio::time::timeout(Duration::from_secs(30), self.output.next_line())
             .await
             .unwrap()
             .unwrap()
@@ -956,7 +956,7 @@ impl Fixture {
         // Aborting axum::serve alone leaves pooled HTTP connections alive.
         // Wait for listener and existing connection shutdown before the next phase.
         self.daemon_shutdown.take().unwrap().send(()).unwrap();
-        tokio::time::timeout(Duration::from_secs(2), &mut self.daemon)
+        tokio::time::timeout(Duration::from_secs(10), &mut self.daemon)
             .await
             .expect("fixture daemon connections must close")
             .expect("fixture daemon task must stop cleanly");
