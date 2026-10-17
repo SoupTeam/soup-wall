@@ -5,6 +5,7 @@
 //! agent layer; all verdict logic lives in `soup-wall-agent`.
 
 pub mod audit;
+pub mod classifier_runtime;
 pub mod config;
 pub mod decision;
 pub mod doctor;

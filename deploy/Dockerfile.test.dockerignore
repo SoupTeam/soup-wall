@@ -34,6 +34,8 @@
 !scripts/tests/test_test_environment.py
 !rule_baseline/
 !rule_baseline/rule_baseline.py
+!rule_baseline/runtime/
+!rule_baseline/runtime/worker.py
 !deploy/
 !deploy/Dockerfile.test
 !deploy/Dockerfile.test.dockerignore

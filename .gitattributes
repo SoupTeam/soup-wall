@@ -40,3 +40,4 @@ profiles/mcp/filesystem-readonly-v1/upstream-notices/** -text whitespace=-space-
 # SOU-68 original Git discovery and wheel lock are bound by raw-byte digests.
 profiles/mcp/git-readonly-v1/** -text whitespace=cr-at-eol
 profiles/mcp/git-readonly-v1/upstream-notices/** -text whitespace=-space-before-tab
+rule_baseline/runtime/** text eol=lf

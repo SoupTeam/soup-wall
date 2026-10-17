@@ -75,7 +75,53 @@ enum ChildAuthorityCmd {
 }
 
 #[derive(Subcommand)]
+enum ClassifierPackageCmd {
+    /// Build the deterministic package archive from a source checkout (writes one file).
+    Build {
+        /// `frozen` (SOU-14) or `rev2` (SOU-34).
+        #[arg(long)]
+        classifier: String,
+        #[arg(long, default_value = ".")]
+        source: std::path::PathBuf,
+        #[arg(long)]
+        out: std::path::PathBuf,
+    },
+    /// Validate an archive and show what install would do; writes nothing.
+    Preview {
+        archive: std::path::PathBuf,
+        #[arg(long)]
+        python: std::path::PathBuf,
+    },
+    /// Install and select a package under ~/.agentfw/classifier (private, atomic).
+    Install {
+        archive: std::path::PathBuf,
+        #[arg(long)]
+        python: std::path::PathBuf,
+    },
+    /// Re-verify the selected package, its files, permissions and interpreter.
+    Verify,
+    /// Show selected, previous and installed packages.
+    Inspect,
+    /// Select the previous package (verified first).
+    Rollback,
+    /// Clear leftovers of an interrupted install.
+    Recover,
+    /// Remove one non-selected package, or everything with --all.
+    Remove {
+        #[arg(long)]
+        package: Option<String>,
+        #[arg(long)]
+        all: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum Cmd {
+    /// Install and manage the verified rule-classifier package (SOU-64).
+    ClassifierPackage {
+        #[command(subcommand)]
+        action: ClassifierPackageCmd,
+    },
     /// Run the daemon.
     Serve,
     /// Diagnose an installed Agent without modifying host settings or starting tools.
@@ -560,6 +606,38 @@ fn main() -> anyhow::Result<()> {
                 ttl_minutes,
                 path.display()
             );
+            Ok(())
+        }
+        Cmd::ClassifierPackage { action } => {
+            use agentfw::classifier_runtime::package as pkg;
+            let value = match action {
+                ClassifierPackageCmd::Build {
+                    classifier,
+                    source,
+                    out,
+                } => {
+                    let bytes = pkg::build(pkg::Which::parse(&classifier)?, &source)?;
+                    std::fs::write(&out, &bytes)?;
+                    serde_json::json!({"action":"build","archive_sha256":pkg::sha(&bytes),
+                        "package":pkg::parse(&bytes)?.id(),"out":out})
+                }
+                ClassifierPackageCmd::Preview { archive, python } => {
+                    let store = pkg::Store::new(&Config::home()?);
+                    store.preview(&pkg::read_archive_file(&archive)?, &python)?
+                }
+                ClassifierPackageCmd::Install { archive, python } => {
+                    let store = pkg::Store::new(&Config::home()?);
+                    store.install(&pkg::read_archive_file(&archive)?, &python)?
+                }
+                ClassifierPackageCmd::Verify => pkg::Store::new(&Config::home()?).verify()?,
+                ClassifierPackageCmd::Inspect => pkg::Store::new(&Config::home()?).inspect()?,
+                ClassifierPackageCmd::Rollback => pkg::Store::new(&Config::home()?).rollback()?,
+                ClassifierPackageCmd::Recover => pkg::Store::new(&Config::home()?).recover()?,
+                ClassifierPackageCmd::Remove { package, all } => {
+                    pkg::Store::new(&Config::home()?).remove(package.as_deref(), all)?
+                }
+            };
+            println!("{}", serde_json::to_string_pretty(&value)?);
             Ok(())
         }
         Cmd::NativeApproval { action } => {
