@@ -1735,29 +1735,30 @@ mod tests {
     fn cleanup_refuses_directories_it_does_not_own() {
         let parent = tempfile::tempdir().unwrap();
         let parent_path = parent.path().canonicalize().unwrap();
+        let nonce = random_hex(16);
         let foreign = parent_path.join("agentfw-self-test-foreign");
         std::fs::create_dir(&foreign).unwrap();
         std::fs::write(foreign.join("keep.txt"), b"unrelated").unwrap();
         assert_eq!(
-            verify_owned(&foreign, &parent_path, "nonce"),
+            verify_owned(&foreign, &parent_path, &nonce),
             Err("workspace_owner_marker_missing")
         );
         std::fs::write(foreign.join(OWNER_MARKER), b"other").unwrap();
         assert_eq!(
-            verify_owned(&foreign, &parent_path, "nonce"),
+            verify_owned(&foreign, &parent_path, &nonce),
             Err("workspace_owner_marker_mismatch")
         );
         let unprefixed = parent_path.join("other");
         std::fs::create_dir(&unprefixed).unwrap();
-        std::fs::write(unprefixed.join(OWNER_MARKER), b"nonce").unwrap();
+        std::fs::write(unprefixed.join(OWNER_MARKER), nonce.as_bytes()).unwrap();
         assert_eq!(
-            verify_owned(&unprefixed, &parent_path, "nonce"),
+            verify_owned(&unprefixed, &parent_path, &nonce),
             Err("workspace_not_owned")
         );
         let link = parent_path.join("agentfw-self-test-link");
         std::os::unix::fs::symlink(&foreign, &link).unwrap();
         assert_eq!(
-            verify_owned(&link, &parent_path, "nonce"),
+            verify_owned(&link, &parent_path, &nonce),
             Err("workspace_not_a_directory")
         );
         assert!(foreign.join("keep.txt").exists());
