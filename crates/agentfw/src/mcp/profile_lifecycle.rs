@@ -299,6 +299,79 @@ pub fn verify_bundle_files(dir: &Path) -> Result<BundleFiles> {
         "unsupported source-snapshot.json format"
     );
 
+    // 5. registry.json: validate using production NativeState::from_bytes
+    crate::native::NativeState::from_bytes(
+        &file_bytes["registry.json"],
+        &registry_sha256,
+        "profile-validation-only".into(),
+    )
+    .context("registry.json failed native validation")?;
+
+    // Cross-verify each tool entry in registry.json with profile.json
+    let reg_val: Value = serde_json::from_slice(&file_bytes["registry.json"])
+        .context("invalid JSON in registry.json")?;
+    let reg_tools = reg_val
+        .get("tools")
+        .and_then(|t| t.as_array())
+        .context("registry.json missing or invalid 'tools' array")?;
+
+    let profile_tools = profile_val
+        .get("tools")
+        .and_then(|t| t.as_object())
+        .context("profile.json missing or invalid 'tools' object")?;
+
+    ensure!(
+        reg_tools.len() == profile_tools.len(),
+        "tool count mismatch between registry.json ({}) and profile.json ({})",
+        reg_tools.len(),
+        profile_tools.len()
+    );
+
+    for tool_entry in reg_tools {
+        let name = tool_entry
+            .get("name")
+            .and_then(|n| n.as_str())
+            .context("tool entry in registry.json missing 'name'")?;
+        let prof_tool = profile_tools.get(name).context(format!(
+            "tool '{name}' in registry.json not found in profile.json"
+        ))?;
+        let expected_auth_sha = prof_tool
+            .get("authority_sha256")
+            .and_then(|a| a.as_str())
+            .context(format!(
+                "profile.json tool '{name}' missing 'authority_sha256'"
+            ))?;
+        let computed_auth_sha = crate::mcp::profile_author::digest(tool_entry);
+        ensure!(
+            expected_auth_sha == computed_auth_sha,
+            "cross-file authority mismatch: tool '{name}' in registry.json authority hash ({computed_auth_sha}) does not match profile.json ({expected_auth_sha})"
+        );
+        let reg_action = tool_entry.get("action_class").and_then(|a| a.as_str());
+        let prof_action = prof_tool.get("action_class").and_then(|a| a.as_str());
+        ensure!(
+            reg_action == prof_action,
+            "cross-file action mismatch for tool '{name}': registry {:?} vs profile {:?}",
+            reg_action,
+            prof_action
+        );
+        let reg_prov = tool_entry.get("result_provenance").and_then(|p| p.as_str());
+        let prof_prov = prof_tool.get("result_provenance").and_then(|p| p.as_str());
+        ensure!(
+            reg_prov == prof_prov,
+            "cross-file result provenance mismatch for tool '{name}': registry {:?} vs profile {:?}",
+            reg_prov,
+            prof_prov
+        );
+        let reg_schema = tool_entry.get("schema_sha256").and_then(|s| s.as_str());
+        let prof_schema = prof_tool.get("schema_sha256").and_then(|s| s.as_str());
+        ensure!(
+            reg_schema == prof_schema,
+            "cross-file schema hash mismatch for tool '{name}': registry {:?} vs profile {:?}",
+            reg_schema,
+            prof_schema
+        );
+    }
+
     let mut bundle_hasher = Sha256::new();
     for (filename, digest) in &file_digests {
         let line = format!("{}:{}\n", filename, digest);
@@ -418,6 +491,7 @@ impl ProfileManager {
     }
 
     pub fn save_state(&self, state: &ProfileState) -> Result<()> {
+        ensure_safe_managed_dir(&self.root)?;
         let json = serde_json::to_string_pretty(state)?;
         let temp = self.root.join(format!(".{}.tmp", crate::token::generate()));
         let mut file = create_private(&temp)?;
@@ -475,6 +549,16 @@ impl ProfileManager {
             "staged bundle verification failed"
         );
         Ok(bundle)
+    }
+
+    /// Reads current on-disk config.yaml and returns its SHA-256 digest, or None if absent.
+    fn config_digest(&self) -> Result<Option<String>> {
+        if self.config_path.exists() {
+            let bytes = fs::read(&self.config_path)?;
+            Ok(Some(sha256_bytes(&bytes)))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Prepares config mutation, returning (pre_config, pre_config_digest, target_config_yaml, target_config_digest).
@@ -659,6 +743,13 @@ impl ProfileManager {
             state.in_progress.as_mut().unwrap().phase = OperationPhase::DaemonRestarting;
             self.save_state(&state)?;
             if let Err(e) = self.restart_and_verify_daemon(&lifecycle, &target_config_digest) {
+                // Check for supersession before automatic compensation
+                let cur_digest = self.config_digest()?;
+                if cur_digest.as_deref() != Some(&target_config_digest) {
+                    state.in_progress.as_mut().unwrap().phase = OperationPhase::Failed;
+                    self.save_state(&state)?;
+                    bail!("candidate daemon failed to boot ({e:#}); config.yaml was modified externally, refusing to overwrite");
+                }
                 // Automatic compensation: rollback config and restart baseline daemon
                 state.in_progress.as_mut().unwrap().phase = OperationPhase::RollingBack;
                 self.save_state(&state)?;
@@ -669,6 +760,11 @@ impl ProfileManager {
                     self.save_state(&state)?;
                     bail!("candidate daemon failed to boot ({e:#}) and baseline recovery failed to restart ({re:#})");
                 }
+                let st = lifecycle.status()?;
+                ensure!(
+                    st.running,
+                    "candidate daemon failed to boot ({e:#}); restored baseline configuration but daemon is not running"
+                );
                 state.in_progress.as_mut().unwrap().phase = OperationPhase::Failed;
                 self.save_state(&state)?;
                 bail!("daemon failed to start with new profile ({e:#}); automatically rolled back configuration");
@@ -756,6 +852,11 @@ impl ProfileManager {
 
         // Compute semantic diff against active revision
         let active_dir = self.revisions.join(&active_bundle);
+        let active_meta = verify_bundle_files(&active_dir)?;
+        ensure!(
+            active_meta.bundle_sha256 == active_bundle,
+            "active profile bundle corrupted on disk"
+        );
         let new_dir = self.revisions.join(&bundle.bundle_sha256);
         let diff = compute_profile_diff(&active_dir, &new_dir)?;
 
@@ -816,6 +917,13 @@ impl ProfileManager {
             state.in_progress.as_mut().unwrap().phase = OperationPhase::DaemonRestarting;
             self.save_state(&state)?;
             if let Err(e) = self.restart_and_verify_daemon(&lifecycle, &target_config_digest) {
+                // Check for supersession before automatic compensation
+                let cur_digest = self.config_digest()?;
+                if cur_digest.as_deref() != Some(&target_config_digest) {
+                    state.in_progress.as_mut().unwrap().phase = OperationPhase::Failed;
+                    self.save_state(&state)?;
+                    bail!("candidate daemon failed to boot ({e:#}); config.yaml was modified externally, refusing to overwrite");
+                }
                 // Automatic compensation: rollback config and restart daemon
                 state.in_progress.as_mut().unwrap().phase = OperationPhase::RollingBack;
                 self.save_state(&state)?;
@@ -826,6 +934,11 @@ impl ProfileManager {
                     self.save_state(&state)?;
                     bail!("candidate daemon failed to boot ({e:#}) and baseline recovery failed to restart ({re:#})");
                 }
+                let st = lifecycle.status()?;
+                ensure!(
+                    st.running,
+                    "candidate daemon failed to boot ({e:#}); restored baseline configuration but daemon is not running"
+                );
                 state.in_progress.as_mut().unwrap().phase = OperationPhase::Failed;
                 self.save_state(&state)?;
                 bail!("daemon failed to start with upgraded profile ({e:#}); automatically rolled back to healthy baseline");
@@ -926,6 +1039,11 @@ impl ProfileManager {
 
         // Compute diff
         let active_dir = self.revisions.join(&active_bundle);
+        let active_meta = verify_bundle_files(&active_dir)?;
+        ensure!(
+            active_meta.bundle_sha256 == active_bundle,
+            "active profile bundle corrupted on disk"
+        );
         let diff = compute_profile_diff(&active_dir, &target_dir)?;
         if diff.authority_change_requires_review || !diff.compatible_without_review {
             let approval_token = format!(
@@ -986,6 +1104,13 @@ impl ProfileManager {
             state.in_progress.as_mut().unwrap().phase = OperationPhase::DaemonRestarting;
             self.save_state(&state)?;
             if let Err(e) = self.restart_and_verify_daemon(&lifecycle, &target_config_digest) {
+                // Check for supersession before automatic compensation
+                let cur_digest = self.config_digest()?;
+                if cur_digest.as_deref() != Some(&target_config_digest) {
+                    state.in_progress.as_mut().unwrap().phase = OperationPhase::Failed;
+                    self.save_state(&state)?;
+                    bail!("rolled-back candidate daemon failed to boot ({e:#}); config.yaml was modified externally, refusing to overwrite");
+                }
                 state.in_progress.as_mut().unwrap().phase = OperationPhase::RollingBack;
                 self.save_state(&state)?;
                 self.restore_config(pre_config.as_deref())?;
@@ -995,6 +1120,11 @@ impl ProfileManager {
                     self.save_state(&state)?;
                     bail!("rolled-back candidate daemon failed to boot ({e:#}) and baseline recovery failed ({re:#})");
                 }
+                let st = lifecycle.status()?;
+                ensure!(
+                    st.running,
+                    "rolled-back candidate daemon failed to boot ({e:#}); restored baseline configuration but daemon is not running"
+                );
                 state.in_progress.as_mut().unwrap().phase = OperationPhase::Failed;
                 self.save_state(&state)?;
                 bail!("daemon failed to start with rolled-back profile ({e:#}); restored baseline");
@@ -1088,16 +1218,33 @@ impl ProfileManager {
                     "recovery restored configuration but daemon is not running"
                 );
             }
-        } else if let Some(pre_digest) = &journal.pre_operation_config_digest {
-            if current_digest.as_deref() != Some(pre_digest) {
-                // External conflict! Refuse to silently discard journal
-                journal.phase = OperationPhase::Failed;
-                state.in_progress = Some(journal);
-                self.save_state(&state)?;
-                bail!(
-                    "conflict during recovery: current config.yaml does not match target or baseline digest; refusing to clear journal"
-                );
+        } else if current_digest == journal.pre_operation_config_digest {
+            // Configuration matches baseline (including when both are None)!
+            if journal.was_daemon_running {
+                let st = lifecycle.status()?;
+                if !st.running {
+                    let restart_res = lifecycle.restart();
+                    if let Err(re) = restart_res {
+                        journal.phase = OperationPhase::Failed;
+                        state.in_progress = Some(journal);
+                        self.save_state(&state)?;
+                        bail!("recovery confirmed baseline configuration but baseline daemon restart failed: {re:#}");
+                    }
+                    let st = lifecycle.status()?;
+                    ensure!(
+                        st.running,
+                        "recovery confirmed baseline configuration but daemon is not running"
+                    );
+                }
             }
+        } else {
+            // External conflict! Neither target nor baseline matched.
+            journal.phase = OperationPhase::Failed;
+            state.in_progress = Some(journal);
+            self.save_state(&state)?;
+            bail!(
+                "conflict during recovery: current config.yaml does not match target or baseline digest; refusing to clear journal"
+            );
         }
 
         self.save_state(&state)?;
@@ -1148,14 +1295,20 @@ mod tests {
 
     fn create_test_profile(dir: &Path, server_id: &str, tool_name: &str) -> String {
         fs::create_dir_all(dir).unwrap();
-        let registry = json!([
-            {
-                "name": tool_name,
-                "description": "test tool",
-                "authority": "ReadOnly",
-                "inputSchema": { "type": "object" }
-            }
-        ]);
+        let entry = json!({
+            "name": tool_name,
+            "schema_sha256": "1".repeat(64),
+            "action_class": "read_only",
+            "result_provenance": "untrusted",
+            "egress": [],
+            "resource_policy": null
+        });
+        let auth_sha = crate::mcp::profile_author::digest(&entry);
+        let registry = json!({
+            "contract_version": crate::native::CONTRACT,
+            "registry_id": format!("{server_id}-reg"),
+            "tools": [entry]
+        });
         let reg_bytes = serde_json::to_vec(&registry).unwrap();
         let reg_hash = sha256_bytes(&reg_bytes);
 
@@ -1168,11 +1321,11 @@ mod tests {
             "registry_sha256": reg_hash,
             "tools": {
                 tool_name: {
-                    "schema_sha256": "0".repeat(64),
+                    "schema_sha256": "1".repeat(64),
                     "definition_sha256": "0".repeat(64),
-                    "action_class": "read",
+                    "action_class": "read_only",
                     "result_provenance": "untrusted",
-                    "authority_sha256": "0".repeat(64),
+                    "authority_sha256": auth_sha,
                     "review_sha256": "0".repeat(64),
                     "workspace": null,
                     "scoped_resources": [],
@@ -1444,5 +1597,94 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("concurrent modification detected"));
+    }
+
+    #[test]
+    fn bundle_fails_when_tool_authority_tampered_in_registry() {
+        let temp = tempdir().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let p1 = root.join("p1");
+        create_test_profile(&p1, "srv-1", "tool_a");
+
+        // Subtle tamper: keep registry valid sw-native/1, but change action_class to network
+        let tampered_entry = json!({
+            "name": "tool_a",
+            "schema_sha256": "1".repeat(64),
+            "action_class": "network",
+            "result_provenance": "untrusted",
+            "egress": [],
+            "resource_policy": null
+        });
+        let reg = json!({
+            "contract_version": crate::native::CONTRACT,
+            "registry_id": "srv-1-reg",
+            "tools": [tampered_entry]
+        });
+        let reg_bytes = serde_json::to_vec(&reg).unwrap();
+        let reg_hash = sha256_bytes(&reg_bytes);
+
+        // Update registry.json and matching hashes in profile.json and native-config.json
+        fs::write(p1.join("registry.json"), &reg_bytes).unwrap();
+        let mut prof: Value =
+            serde_json::from_slice(&fs::read(p1.join("profile.json")).unwrap()).unwrap();
+        prof["registry_sha256"] = json!(reg_hash);
+        fs::write(p1.join("profile.json"), serde_json::to_vec(&prof).unwrap()).unwrap();
+        let mut nat: Value =
+            serde_json::from_slice(&fs::read(p1.join("native-config.json")).unwrap()).unwrap();
+        nat["native"]["registry_sha256"] = json!(reg_hash);
+        fs::write(
+            p1.join("native-config.json"),
+            serde_json::to_vec(&nat).unwrap(),
+        )
+        .unwrap();
+
+        // Must fail with cross-file authority mismatch despite valid JSON and matching registry_sha256!
+        let err = verify_bundle_files(&p1);
+        assert!(err.is_err());
+        let msg = err.unwrap_err().to_string();
+        assert!(msg.contains("cross-file authority mismatch") || msg.contains("action mismatch"));
+    }
+
+    #[test]
+    fn recover_preserves_journal_on_foreign_config_when_initial_was_absent() {
+        let home_temp = tempdir().unwrap();
+        let home = home_temp.path().canonicalize().unwrap();
+        let mgr = ProfileManager::new(&home);
+
+        let mut state = mgr.load_state().unwrap();
+        state.in_progress = Some(OperationJournal {
+            operation_id: "op-interrupted-install".into(),
+            kind: OperationKind::Install,
+            phase: OperationPhase::ConfigWritten,
+            reserved_generation: 1,
+            source_bundle_sha256: None,
+            target_bundle_sha256: "b".repeat(64),
+            pre_operation_config: None,
+            pre_operation_config_digest: None,
+            target_config_digest: "c".repeat(64),
+            was_daemon_running: false,
+            pre_daemon_instance: None,
+            started_at_utc: now_utc(),
+        });
+        mgr.save_state(&state).unwrap();
+
+        // Foreign rogue config appears on disk
+        fs::write(&mgr.config_path, "rogue: config\n").unwrap();
+
+        // recover() must detect external conflict because current_digest != None and != target
+        let err = mgr.recover();
+        assert!(err.is_err());
+        assert!(err
+            .unwrap_err()
+            .to_string()
+            .contains("conflict during recovery"));
+
+        // Journal must be preserved in Failed phase
+        let state_after = mgr.load_state().unwrap();
+        assert!(state_after.in_progress.is_some());
+        assert_eq!(
+            state_after.in_progress.unwrap().phase,
+            OperationPhase::Failed
+        );
     }
 }

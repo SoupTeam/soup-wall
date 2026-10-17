@@ -209,7 +209,7 @@ fn canonical(value: &Value) -> Value {
         other => other.clone(),
     }
 }
-fn digest(value: &Value) -> String {
+pub fn digest(value: &Value) -> String {
     sha(canonical(value).to_string().as_bytes())
 }
 

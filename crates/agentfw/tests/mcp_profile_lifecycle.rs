@@ -21,14 +21,20 @@ fn agent_binary() -> PathBuf {
 
 fn create_test_profile_bundle(dir: &Path, server_id: &str, tool_name: &str) -> String {
     fs::create_dir_all(dir).unwrap();
-    let registry = json!([
-        {
-            "name": tool_name,
-            "description": format!("test tool {tool_name}"),
-            "authority": "ReadOnly",
-            "inputSchema": { "type": "object" }
-        }
-    ]);
+    let entry = json!({
+        "name": tool_name,
+        "schema_sha256": "1".repeat(64),
+        "action_class": "read_only",
+        "result_provenance": "untrusted",
+        "egress": [],
+        "resource_policy": null
+    });
+    let auth_sha = agentfw::mcp::profile_author::digest(&entry);
+    let registry = json!({
+        "contract_version": agentfw::native::CONTRACT,
+        "registry_id": format!("{server_id}-reg"),
+        "tools": [entry]
+    });
     let reg_bytes = serde_json::to_vec(&registry).unwrap();
     let reg_hash = agentfw::mcp::profile_lifecycle::sha256_bytes(&reg_bytes);
 
@@ -41,11 +47,11 @@ fn create_test_profile_bundle(dir: &Path, server_id: &str, tool_name: &str) -> S
         "registry_sha256": reg_hash,
         "tools": {
             tool_name: {
-                "schema_sha256": "0".repeat(64),
+                "schema_sha256": "1".repeat(64),
                 "definition_sha256": "0".repeat(64),
-                "action_class": "read",
+                "action_class": "read_only",
                 "result_provenance": "untrusted",
-                "authority_sha256": "0".repeat(64),
+                "authority_sha256": auth_sha,
                 "review_sha256": "0".repeat(64),
                 "workspace": null,
                 "scoped_resources": [],
