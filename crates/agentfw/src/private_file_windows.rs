@@ -19,8 +19,8 @@ use windows_sys::Win32::Foundation::{
     CloseHandle, LocalFree, ERROR_ALREADY_EXISTS, ERROR_FILE_EXISTS, HANDLE, INVALID_HANDLE_VALUE,
 };
 use windows_sys::Win32::Security::Authorization::{
-    ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW, GetSecurityInfo,
-    SetSecurityInfo, SDDL_REVISION_1, SE_FILE_OBJECT,
+    ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW,
+    ConvertStringSidToSidW, GetSecurityInfo, SetSecurityInfo, SDDL_REVISION_1, SE_FILE_OBJECT,
 };
 use windows_sys::Win32::Security::{
     AclSizeInformation, GetAclInformation, GetSecurityDescriptorControl, GetSecurityDescriptorDacl,
@@ -33,7 +33,7 @@ use windows_sys::Win32::Storage::FileSystem::{
     CREATE_NEW, FILE_APPEND_DATA, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL,
     FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
     FILE_READ_ATTRIBUTES, FILE_READ_DATA, FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_WRITE_DATA,
-    OPEN_EXISTING, READ_CONTROL, WRITE_DAC,
+    OPEN_EXISTING, READ_CONTROL, WRITE_DAC, WRITE_OWNER,
 };
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
@@ -202,7 +202,7 @@ impl PrivateAcl {
         Ok(Self { descriptor, dacl })
     }
 
-    fn attributes(&self) -> SECURITY_ATTRIBUTES {
+    pub(crate) fn attributes(&self) -> SECURITY_ATTRIBUTES {
         SECURITY_ATTRIBUTES {
             nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
             lpSecurityDescriptor: self.descriptor.0,
@@ -231,7 +231,7 @@ impl PrivateAcl {
     }
 }
 
-fn current_user_sid() -> io::Result<String> {
+pub(crate) fn current_user_sid() -> io::Result<String> {
     let mut raw_token: HANDLE = null_mut();
     // SAFETY: The process pseudo-handle is valid and `raw_token` is writable.
     if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut raw_token) } == 0 {
@@ -266,7 +266,7 @@ fn current_user_sid() -> io::Result<String> {
     sid_to_string(user.User.Sid)
 }
 
-fn sid_to_string(sid: PSID) -> io::Result<String> {
+pub(crate) fn sid_to_string(sid: PSID) -> io::Result<String> {
     if sid.is_null() {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "missing SID"));
     }
@@ -455,7 +455,8 @@ pub fn ensure_private_directory(path: &Path) -> io::Result<()> {
     let attributes = acl.attributes();
     // SAFETY: The path and security descriptor remain live for this call.
     // Existing directories are never replaced or modified here.
-    if unsafe { CreateDirectoryW(wide.as_ptr(), &attributes) } == 0 {
+    let created = unsafe { CreateDirectoryW(wide.as_ptr(), &attributes) } != 0;
+    if !created {
         let error = io::Error::last_os_error();
         if !matches!(
             error.raw_os_error(),
@@ -469,9 +470,38 @@ pub fn ensure_private_directory(path: &Path) -> io::Result<()> {
     // return path. Backup semantics permit opening directories as files.
     let _directory = unsafe { File::from_raw_handle(raw) };
     check_kind(raw, true)?;
+    if created {
+        set_current_owner(raw)?;
+    }
     check_owner(raw)?;
     acl.apply(raw)?;
     check_owner(raw)?;
+    Ok(())
+}
+
+fn set_current_owner(handle: HANDLE) -> io::Result<()> {
+    let sid = current_user_sid()?;
+    let wide: Vec<u16> = sid.encode_utf16().chain(Some(0)).collect();
+    let mut raw_sid: PSID = null_mut();
+    if unsafe { ConvertStringSidToSidW(wide.as_ptr(), &mut raw_sid) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let sid_memory = LocalMemory(raw_sid.cast());
+    let code = unsafe {
+        SetSecurityInfo(
+            handle,
+            SE_FILE_OBJECT,
+            OWNER_SECURITY_INFORMATION,
+            raw_sid,
+            null_mut(),
+            null_mut(),
+            null(),
+        )
+    };
+    drop(sid_memory);
+    if code != 0 {
+        return Err(io::Error::from_raw_os_error(code as i32));
+    }
     Ok(())
 }
 
@@ -481,7 +511,7 @@ fn open_directory_handle(wide: &[u16]) -> io::Result<HANDLE> {
     let raw = unsafe {
         CreateFileW(
             wide.as_ptr(),
-            FILE_READ_ATTRIBUTES | READ_CONTROL | WRITE_DAC,
+            FILE_READ_ATTRIBUTES | READ_CONTROL | WRITE_DAC | WRITE_OWNER,
             FILE_SHARE_READ | FILE_SHARE_WRITE,
             null(),
             OPEN_EXISTING,
