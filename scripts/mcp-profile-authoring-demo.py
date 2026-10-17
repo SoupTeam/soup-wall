@@ -7,6 +7,11 @@ import argparse
 import hashlib
 import json
 import os
+import queue
+import socket
+import threading
+import time
+import urllib.request
 from pathlib import Path
 import subprocess
 import sys
@@ -20,6 +25,130 @@ def dump(path, obj):
 
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def available_port():
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1",0))
+        return sock.getsockname()[1]
+
+def wait_for_health(port,daemon):
+    end=time.monotonic()+50
+    opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    while time.monotonic()<end:
+        if daemon.poll() is not None:
+            raise AssertionError("owned Agent failed to launch")
+        try:
+            with opener.open(f"http://127.0.0.1:{port}/health",timeout=1):
+                return
+        except OSError:
+            time.sleep(.1)
+    raise AssertionError("owned Agent readiness timeout")
+
+def close(proc):
+    if proc.poll() is None:
+        proc.terminate()
+        try:
+            proc.wait(timeout=8)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=5)
+
+class MCPClient:
+    def __init__(self,command,env,stderr):
+        self.proc=subprocess.Popen(command,cwd=ROOT,env=env,stdin=subprocess.PIPE,
+                                   stdout=subprocess.PIPE,stderr=stderr)
+        self.queue=queue.Queue()
+        def reader():
+            for line in self.proc.stdout:
+                self.queue.put(line)
+            self.queue.put(None)
+        threading.Thread(target=reader,daemon=True).start()
+    def send(self,frame,reply=True):
+        try:
+            self.proc.stdin.write(json.dumps(frame,separators=(",",":")).encode()+b"\\n")
+            self.proc.stdin.flush()
+        except OSError:
+            return None
+        if not reply:return None
+        try:return self.queue.get(timeout=18)
+        except queue.Empty:return None
+    def close(self):
+        if self.proc.stdin and not self.proc.stdin.closed:
+            self.proc.stdin.close()
+        close(self.proc)
+
+def real_collector_proof(binary,root,compiled,check):
+    # Uses the actual generated registry in the real Agent process and
+    # accepted native MCP stdio collector; no user host configurations.
+    home=root/"real-agent"
+    home.mkdir(mode=0o700)
+    env={k:v for k,v in os.environ.items() if not k.startswith("AGENTFW_")}
+    env["HOME"]=env["USERPROFILE"]=str(home)
+    subprocess.run([str(binary),"install"],env=env,check=True,
+                   stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=30)
+    port=available_port()
+    policy=home/"policy.yaml"
+    policy.write_text("default: allow\\n")
+    conf=home/".agentfw/config.yaml"
+    dump(conf,{"port":port,"enforce":True,"policy":str(policy),"native":{
+        "registry_path":str(compiled/"registry.json"),
+        "registry_sha256":digest(compiled/"registry.json")}})
+    fixture=ROOT/"scripts/fixtures/mcp_profile_author_server.py"
+    emitter=env.copy()
+    emitter["AGENTFW_TEST_CLASSIFIER_READ"]="1"
+    with (root/"agent.stderr").open("wb") as log, (root/"collector.stderr").open("wb") as collector_log:
+        daemon=subprocess.Popen([str(binary),"serve"],env=env,stdout=log,stderr=log)
+        try:
+            wait_for_health(port,daemon)
+            first=root/"read-ledger"
+            def collector(ledger,other=False):
+                args=[str(binary),"mcp","--native-admission","--id","sou65-owned","--",
+                      sys.executable,"-I","-u",str(fixture),"--ledger",str(ledger)]
+                if other:args.append("--unreviewed")
+                return MCPClient(args,emitter,collector_log)
+            def init(client):
+                hello=client.send({"jsonrpc":"2.0","id":1,"method":"initialize",
+                    "params":{"protocolVersion":"2024-11-05","capabilities":{},
+                        "clientInfo":{"name":"claude-code","version":"sou65"}}})
+                check("original-mcp-initialize",bool(hello and json.loads(hello).get("result")))
+                client.send({"jsonrpc":"2.0","method":"notifications/initialized"},reply=False)
+                listed=client.send({"jsonrpc":"2.0","id":2,"method":"tools/list"})
+                return json.loads(listed) if listed else None
+            def call(client,num,tool,args):
+                return client.send({"jsonrpc":"2.0","id":num,"method":"tools/call","params":{
+                    "name":tool,"arguments":args,"_meta":{
+                        "claudecode/toolUseId":f"toolu_sou65_{num}","progressToken":num}}})
+            c=collector(first)
+            try:
+                listing=init(c)
+                check("compiled-profile-original-manifest-matched",
+                    listing is not None and
+                    [t["name"] for t in listing.get("result",{}).get("tools",[])]==["read_document"])
+                observed=call(c,3,"read_document",{"name":"inventory"})
+                check("read-allowed-through-real-production-collector",
+                    bool(observed and "Inventory: 7 red widgets." in observed.decode()))
+                count=len(first.read_bytes().splitlines())
+                check("one-exact-original-tool-call-executed",count==1)
+                malformed=call(c,4,"read_document",{"name":"inventory","unknown":True})
+                check("schema-refusal-caused-zero-child-effects",
+                    len(first.read_bytes().splitlines())==count)
+            finally:c.close()
+            other=root/"undeclared-ledger"
+            c2=collector(other,other=True)
+            try:
+                # A malicious real server cannot add an unreviewed send tool.
+                c2.send({"jsonrpc":"2.0","id":21,"method":"initialize",
+                    "params":{"protocolVersion":"2024-11-05","capabilities":{},
+                        "clientInfo":{"name":"claude-code","version":"sou65"}}})
+                c2.send({"jsonrpc":"2.0","method":"notifications/initialized"},reply=False)
+                c2.send({"jsonrpc":"2.0","id":22,"method":"tools/list"})
+                check("undeclared-tool-fails-manifest-cover",not other.exists() or len(other.read_bytes())==0)
+                call(c2,23,"send_private",{"recipients":["ops@example.com"],"message":"private"})
+                check("unreviewed-send-zero-child-effects",not other.exists() or len(other.read_bytes())==0)
+            finally:c2.close()
+            check("native-agent-stayed-live",daemon.poll() is None)
+        finally:close(daemon)
 
 def main():
     parser=argparse.ArgumentParser()
@@ -77,6 +206,7 @@ def main():
               and len(reg["tools"])==1 and reg["tools"][0]["name"]=="read_document")
         check("exact-binary-hash",hashlib.sha256(reg_bytes).hexdigest()==
               json.loads((profile/"profile.json").read_text())["registry_sha256"])
+        real_collector_proof(binary,root,profile,check)
         check("source-and-operator-doc-preserved",
               json.loads((profile/"source-snapshot.json").read_text())==discovery
               and json.loads((profile/"operator-declarations.json").read_text())==review)
