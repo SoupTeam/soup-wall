@@ -21,7 +21,6 @@ fn agent_binary() -> PathBuf {
 
 fn create_test_profile_bundle(dir: &Path, server_id: &str, tool_name: &str) -> String {
     fs::create_dir_all(dir).unwrap();
-    let dummy_hash = "0".repeat(64);
     let registry = json!([
         {
             "name": tool_name,
@@ -30,21 +29,24 @@ fn create_test_profile_bundle(dir: &Path, server_id: &str, tool_name: &str) -> S
             "inputSchema": { "type": "object" }
         }
     ]);
+    let reg_bytes = serde_json::to_vec(&registry).unwrap();
+    let reg_hash = agentfw::mcp::profile_lifecycle::sha256_bytes(&reg_bytes);
+
     let profile = json!({
         "format": "sw-mcp/operator-profile/1",
         "server_id": server_id,
         "server_version": "1.0",
-        "snapshot_sha256": dummy_hash,
-        "declaration_sha256": dummy_hash,
-        "registry_sha256": dummy_hash,
+        "snapshot_sha256": "0".repeat(64),
+        "declaration_sha256": "0".repeat(64),
+        "registry_sha256": reg_hash,
         "tools": {
             tool_name: {
-                "schema_sha256": dummy_hash,
-                "definition_sha256": dummy_hash,
+                "schema_sha256": "0".repeat(64),
+                "definition_sha256": "0".repeat(64),
                 "action_class": "read",
                 "result_provenance": "untrusted",
-                "authority_sha256": dummy_hash,
-                "review_sha256": dummy_hash,
+                "authority_sha256": "0".repeat(64),
+                "review_sha256": "0".repeat(64),
                 "workspace": null,
                 "scoped_resources": [],
                 "egress_selectors": []
@@ -55,15 +57,11 @@ fn create_test_profile_bundle(dir: &Path, server_id: &str, tool_name: &str) -> S
     let native_config = json!({
         "native": {
             "registry_path": dir.join("registry.json"),
-            "registry_sha256": dummy_hash
+            "registry_sha256": reg_hash
         }
     });
 
-    fs::write(
-        dir.join("registry.json"),
-        serde_json::to_vec(&registry).unwrap(),
-    )
-    .unwrap();
+    fs::write(dir.join("registry.json"), reg_bytes).unwrap();
     fs::write(
         dir.join("profile.json"),
         serde_json::to_vec(&profile).unwrap(),
