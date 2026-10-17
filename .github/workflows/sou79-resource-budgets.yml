@@ -1,0 +1,120 @@
+name: Linux MCP aggregate resource budgets
+
+on:
+  pull_request:
+    paths:
+      - 'crates/agentfw/**'
+      - 'crates/agent/**'
+      - 'scripts/verify-sou79-resource-budgets.py'
+      - 'scripts/tests/test_sou79_resource_budgets.py'
+      - 'scripts/verify-sou62-real-mcp.py'
+      - 'scripts/install-sou62-filesystem-profile.py'
+      - 'profiles/mcp/filesystem-readonly-v1/**'
+      - 'docs/operations/MCP_LINUX_RESOURCE_BUDGETS.md'
+      - '.github/workflows/sou79-resource-budgets.yml'
+      - 'Cargo.lock'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sou79-resource-budgets-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  required-disposable-delegated-linux:
+    # This job explicitly prepares ONE disposable, owned delegated service.
+    # Other hosted checks retain their existing permissions and prerequisites.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    env:
+      RUSTUP_TOOLCHAIN: '1.94.1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@1.94.1
+      - uses: Swatinem/rust-cache@v2
+      - name: Build pinned Node and unprivileged bubblewrap prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends meson ninja-build libcap-dev pkg-config
+          mkdir "$RUNNER_TEMP/sou79-node" "$RUNNER_TEMP/sou79-bwrap-source"
+          curl --fail --location --retry 3 https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz --output "$RUNNER_TEMP/sou79-node.tar.xz"
+          printf '%s  %s\n' 9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37 "$RUNNER_TEMP/sou79-node.tar.xz" | sha256sum --check
+          tar --extract --xz --file "$RUNNER_TEMP/sou79-node.tar.xz" --directory "$RUNNER_TEMP/sou79-node" --strip-components=1 --no-same-owner --no-same-permissions
+          curl --fail --location --retry 3 https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz --output "$RUNNER_TEMP/sou79-bwrap.tar.xz"
+          printf '%s  %s\n' 0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d "$RUNNER_TEMP/sou79-bwrap.tar.xz" | sha256sum --check
+          tar --extract --xz --file "$RUNNER_TEMP/sou79-bwrap.tar.xz" --directory "$RUNNER_TEMP/sou79-bwrap-source" --strip-components=1 --no-same-owner --no-same-permissions
+          meson setup "$RUNNER_TEMP/sou79-bwrap-build" "$RUNNER_TEMP/sou79-bwrap-source" -Dtests=false -Dman=disabled -Dselinux=disabled -Dbash_completion=disabled -Dzsh_completion=disabled
+          meson compile -C "$RUNNER_TEMP/sou79-bwrap-build"
+          sha256sum "$RUNNER_TEMP/sou79-node.tar.xz" "$RUNNER_TEMP/sou79-node/bin/node" "$RUNNER_TEMP/sou79-bwrap.tar.xz" "$RUNNER_TEMP/sou79-bwrap-build/bwrap" > "$RUNNER_TEMP/sou79-runtime-hashes.txt"
+      - name: Build exact candidate and require nonempty observer controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD > "$RUNNER_TEMP/sou79-source.txt"
+          rustc --version > "$RUNNER_TEMP/sou79-rust.txt"
+          python3 --version > "$RUNNER_TEMP/sou79-python.txt"
+          systemd --version > "$RUNNER_TEMP/sou79-systemd.txt"
+          cargo build --locked -p agentfw --bin agentfw --message-format=json > "$RUNNER_TEMP/sou79-build.jsonl"
+          sha256sum target/debug/agentfw > "$RUNNER_TEMP/sou79-binary.txt"
+          python3 -B - <<'PY'
+          import unittest
+          suite=unittest.defaultTestLoader.discover('scripts/tests',pattern='test_sou79_resource_budgets.py')
+          if not suite.countTestCases(): raise SystemExit('required observer controls missing')
+          result=unittest.TextTestRunner(verbosity=2).run(suite)
+          raise SystemExit(0 if result.wasSuccessful() else 1)
+          PY
+      - name: Explicitly prepare disposable delegation and run as ordinary user
+        shell: bash
+        run: |
+          set -euo pipefail
+          unit="sou79-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          # This unit alone receives delegation. No chmod/chown of cgroupfs,
+          # global controller writes, sysctl changes or AppArmor relaxation.
+          sudo systemd-run --quiet --wait --pipe --collect --unit="$unit" \
+            --property="User=$(id -un)" --property="Group=$(id -gn)" \
+            --property='Delegate=cpu memory pids' \
+            --property=MemoryMax=2G --property=MemorySwapMax=0 \
+            --property=TasksMax=256 --property=CPUQuota=200% \
+            --property=RuntimeMaxSec=15min --property=KillMode=control-group \
+            --working-directory="$GITHUB_WORKSPACE" \
+            /usr/bin/env "PATH=$PATH" "TMPDIR=$RUNNER_TEMP" \
+            python3 -B scripts/verify-sou79-resource-budgets.py --run \
+            --agentfw "$GITHUB_WORKSPACE/target/debug/agentfw" \
+            --node "$RUNNER_TEMP/sou79-node/bin/node" --npm "$RUNNER_TEMP/sou79-node/bin/npm" \
+            --bwrap "$RUNNER_TEMP/sou79-bwrap-build/bwrap" \
+            --expected-commit "$(git rev-parse HEAD)" --disposable-systemd-unit="$unit.service" \
+            --output "$RUNNER_TEMP/sou79-acceptance"
+      - name: Publish bounded sanitized kernel evidence
+        if: always()
+        run: |
+          python3 -B - <<'PY'
+          import importlib.util,json,os
+          from pathlib import Path
+          spec=importlib.util.spec_from_file_location('sou79','scripts/verify-sou79-resource-budgets.py')
+          driver=importlib.util.module_from_spec(spec);spec.loader.exec_module(driver)
+          path=Path(os.environ['RUNNER_TEMP'])/'sou79-acceptance/report.json'
+          report=json.loads(path.read_text()) if path.exists() else {'status':'incomplete','error':'required_report_missing','passed':0,'failed':1,'skipped':0}
+          rendered=json.dumps(driver.summary(report),indent=2)
+          print(rendered)
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as stream: stream.write('```json\n'+rendered+'\n```\n')
+          PY
+      - name: Retain source identities and sanitized owned observations
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou79-linux-resource-budget-evidence
+          path: |
+            ${{ runner.temp }}/sou79-*.txt
+            ${{ runner.temp }}/sou79-build.jsonl
+            ${{ runner.temp }}/sou79-acceptance/report.json
+          if-no-files-found: warn
+          retention-days: 30

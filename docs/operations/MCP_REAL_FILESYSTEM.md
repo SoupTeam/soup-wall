@@ -12,6 +12,12 @@ This profile is selected by `AGENTFW_MCP_SERVER_PROFILE`, in addition to
 contract. Built-in Linux/Windows file and HTTPS executors are separate profiles;
 this increment does not certify arbitrary MCP commands or complete Phase 4.
 
+Without an explicit budget this compatibility profile has no aggregate CPU,
+memory or task limit. Select the separate versioned
+[Linux resource budget](MCP_LINUX_RESOURCE_BUDGETS.md) with
+`AGENTFW_MCP_LINUX_BUDGET` to require a prepared cgroup-v2 delegation. Missing
+delegation or unsupported controls refuse startup before the server executes.
+
 ## Exact upstream and runtime identities
 
 The committed [upstream identity](../../profiles/mcp/filesystem-readonly-v1/upstream-identity.json)
