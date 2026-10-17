@@ -432,7 +432,10 @@ pub fn compile(snapshot_path: &Path, declaration_path: &Path, directory: &Path) 
     // Linux-only publication: private staging on the same filesystem followed
     // by RENAME_NOREPLACE, so concurrent operators cannot replace a profile.
     #[cfg(not(target_os = "linux"))]
-    anyhow::bail!("initial compiler requires Linux no-clobber publication");
+    {
+        let _ = &summary;
+        anyhow::bail!("initial compiler requires Linux no-clobber publication");
+    }
     #[cfg(target_os = "linux")]
     {
         use std::ffi::CString;
@@ -525,13 +528,13 @@ mod tests {
                 },"additionalProperties":false}
             },"additionalProperties":false}
         },"additionalProperties":false});
-        assert!(selector_shape(&schema,"/message/to").is_ok());
-        assert!(selector_shape(&schema,"/message/metadata/recipient").is_ok());
-        assert!(selector_shape(&schema,"/message/to/0").is_ok());
-        assert!(selector_shape(&schema,"/message/to/-").is_err());
-        assert!(selector_shape(&schema,"/message/missing").is_err());
-        assert!(selector_shape(&schema,"/message/metadata").is_err());
-        assert!(selector_shape(&schema,"/message/~2recipient").is_err());
+        assert!(selector_shape(&schema, "/message/to").is_ok());
+        assert!(selector_shape(&schema, "/message/metadata/recipient").is_ok());
+        assert!(selector_shape(&schema, "/message/to/0").is_ok());
+        assert!(selector_shape(&schema, "/message/to/-").is_err());
+        assert!(selector_shape(&schema, "/message/missing").is_err());
+        assert!(selector_shape(&schema, "/message/metadata").is_err());
+        assert!(selector_shape(&schema, "/message/~2recipient").is_err());
     }
 
     #[test] fn drift_is_rejected() {
