@@ -107,24 +107,22 @@ fn is_digest(s: &str) -> bool {
             .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
 }
 
-/// Open only a bounded private regular file. Never traverse a symlink parent or
-/// follow a leaf symlink. Nothing here creates, chmods or repairs user files.
+/// Open an owner-private, bounded, single-linked regular file by pinned
+/// descriptors. Never follow symlinks in any path component; a FIFO/socket
+/// cannot block an open because O_NONBLOCK is set before the fstat check.
+/// Only the new doctor path consumes this API; normal lifecycle is unchanged.
 #[cfg(unix)]
-pub(crate) fn read_private(path: &Path, max: u64) -> anyhow::Result<Vec<u8>> {
+fn open_private_bounded(path: &Path, max: u64) -> anyhow::Result<std::fs::File> {
     use std::ffi::CString;
     use std::fs::File;
-    use std::io::Read;
     use std::os::fd::{AsRawFd, FromRawFd};
     use std::os::unix::ffi::OsStrExt;
     use std::os::unix::fs::MetadataExt;
     use std::path::Component;
 
-    anyhow::ensure!(path.is_absolute(), "absolute path required");
-    let root = File::open("/")?;
-    let mut dir = root;
-    let parent = path
-        .parent()
-        .ok_or_else(|| anyhow::anyhow!("missing parent"))?;
+    anyhow::ensure!(safe_selected_path(path), "absolute canonical path required");
+    let mut dir = File::open("/")?;
+    let parent = path.parent().ok_or_else(|| anyhow::anyhow!("missing parent"))?;
     for part in parent.components() {
         match part {
             Component::RootDir => (),
@@ -143,9 +141,7 @@ pub(crate) fn read_private(path: &Path, max: u64) -> anyhow::Result<Vec<u8>> {
             _ => anyhow::bail!("path alias not accepted"),
         }
     }
-    let leaf = path
-        .file_name()
-        .ok_or_else(|| anyhow::anyhow!("missing filename"))?;
+    let leaf = path.file_name().ok_or_else(|| anyhow::anyhow!("missing filename"))?;
     let leaf = CString::new(leaf.as_bytes())?;
     let fd = unsafe {
         libc::openat(
@@ -165,6 +161,13 @@ pub(crate) fn read_private(path: &Path, max: u64) -> anyhow::Result<Vec<u8>> {
             && meta.len() <= max,
         "input must be an owner-private bounded regular file"
     );
+    Ok(file)
+}
+
+#[cfg(unix)]
+pub(crate) fn read_private(path: &Path, max: u64) -> anyhow::Result<Vec<u8>> {
+    use std::io::Read;
+    let file = open_private_bounded(path, max)?;
     let mut data = Vec::new();
     file.take(max + 1).read_to_end(&mut data)?;
     anyhow::ensure!(data.len() as u64 <= max, "input too large");
@@ -176,25 +179,17 @@ pub(crate) fn read_private(_path: &Path, _max: u64) -> anyhow::Result<Vec<u8>> {
     anyhow::bail!("private file inspection unsupported on this platform")
 }
 
-fn hash_selected_file(path: &Path, limit: u64) -> anyhow::Result<String> {
+/// Hash only a verified local regular asset, streaming at most the maximum.
+/// Never use legacy unbounded lifecycle SHA-256 on the diagnostic path.
+pub(crate) fn hash_selected_file(path: &Path, limit: u64) -> anyhow::Result<String> {
     use std::io::Read;
-    anyhow::ensure!(path.is_absolute(), "absolute path required");
-    let meta = std::fs::symlink_metadata(path)?;
-    anyhow::ensure!(
-        meta.file_type().is_file() && meta.len() <= limit,
-        "invalid asset"
-    );
-    // This additionally refuses a symlink swap at open time on Unix.
-    let mut opts = std::fs::OpenOptions::new();
-    opts.read(true);
     #[cfg(unix)]
+    let mut file = open_private_bounded(path, limit)?;
+    #[cfg(not(unix))]
     {
-        use std::os::unix::fs::OpenOptionsExt;
-        opts.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+        let _ = (path, limit);
+        anyhow::bail!("installed diagnostic file hashing requires Unix")
     }
-    let mut file = opts.open(path)?;
-    let opened = file.metadata()?;
-    anyhow::ensure!(opened.is_file() && opened.len() <= limit, "invalid asset");
     let mut hash = Sha256::new();
     let mut buf = [0u8; 16 * 1024];
     let mut total = 0u64;
@@ -297,6 +292,10 @@ async fn diagnose(args: &DoctorArgs) -> Report {
         }
     };
     let config_bytes = read_private(&home.join("config.yaml"), 1024 * 1024);
+    // Snapshot once. A rejected config must never be reopened by lifecycle:
+    // that would follow a link or hang on a FIFO after initial safe refusal.
+    let observed_config_sha256 = config_bytes.as_ref().ok()
+        .map(|bytes| format!("{:x}", Sha256::digest(bytes)));
     let config = match config_bytes {
         Ok(bytes) => match std::str::from_utf8(&bytes)
             .ok()
@@ -333,7 +332,7 @@ async fn diagnose(args: &DoctorArgs) -> Report {
         }
     };
 
-    let intent = Manager::new(&home).inspect_read_only();
+    let intent = Manager::new(&home).inspect_read_only(observed_config_sha256.as_deref());
     let intent = match intent {
         Ok(value) => {
             checks.push(lifecycle_check(&value));
