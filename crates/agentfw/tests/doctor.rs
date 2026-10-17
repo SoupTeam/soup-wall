@@ -288,7 +288,6 @@ fn cancellation_before_completion_never_publishes_support_bundle() {
     assert_eq!(std::fs::read_dir(&out_parent).unwrap().count(), 0);
 }
 
-
 /// An independently constructed, structurally valid recorded managed process.
 /// No service, daemon or external traffic is started for refusal controls.
 fn recorded_process_fixture(root: &Path) -> (std::path::PathBuf, std::path::PathBuf) {
@@ -323,7 +322,10 @@ fn recorded_process_fixture(root: &Path) -> (std::path::PathBuf, std::path::Path
         "operation":null, "pending_stage":null
     });
     let manifest = versions.join("lifecycle.json");
-    private(&manifest, serde_json::to_vec_pretty(&data).unwrap().as_slice());
+    private(
+        &manifest,
+        serde_json::to_vec_pretty(&data).unwrap().as_slice(),
+    );
     (home, manifest)
 }
 
@@ -333,10 +335,16 @@ fn doctor_with_deadline(home: &Path, cwd: &Path, args: &[&str]) -> Output {
     use std::process::Stdio;
     use std::time::{Duration, Instant};
     let mut child = Command::new(env!("CARGO_BIN_EXE_agentfw"))
-        .arg("doctor").arg("--json").arg("--home").arg(home)
-        .args(args).current_dir(cwd)
-        .stdout(Stdio::piped()).stderr(Stdio::piped())
-        .spawn().unwrap();
+        .arg("doctor")
+        .arg("--json")
+        .arg("--home")
+        .arg(home)
+        .args(args)
+        .current_dir(cwd)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
     let deadline = Instant::now() + Duration::from_secs(3);
     loop {
         if child.try_wait().unwrap().is_some() {
@@ -371,22 +379,36 @@ fn recorded_process_refuses_fifo_symlink_and_oversize_config_promptly() {
                 let target = home.join("reviewed-config.yaml");
                 private(&target, b"enforce: true\n# raw-config-SENTINEL\n");
                 std::os::unix::fs::symlink(&target, &selected).unwrap();
-            },
+            }
             "oversize" => {
                 let file = std::fs::File::create(&selected).unwrap();
                 file.set_len(1024 * 1024 + 1).unwrap();
-                std::fs::set_permissions(&selected, std::fs::Permissions::from_mode(0o600)).unwrap();
-            },
+                std::fs::set_permissions(&selected, std::fs::Permissions::from_mode(0o600))
+                    .unwrap();
+            }
             _ => unreachable!(),
         }
         let output = doctor_with_deadline(&home, work.path(), &[]);
         assert_eq!(output.status.code(), Some(3), "{kind}");
         let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
         let checks = report["checks"].as_array().unwrap();
-        assert!(checks.iter().any(|c| c["reason_code"] == "config_missing_or_unsafe"), "{kind}");
-        assert!(checks.iter().any(|c| c["reason_code"] == "managed_config_unverifiable"), "{kind}");
+        assert!(
+            checks
+                .iter()
+                .any(|c| c["reason_code"] == "config_missing_or_unsafe"),
+            "{kind}"
+        );
+        assert!(
+            checks
+                .iter()
+                .any(|c| c["reason_code"] == "managed_config_unverifiable"),
+            "{kind}"
+        );
         assert_eq!(report["active_host_call_protection"], "unknown");
-        for sentinel in ["raw-config-SENTINEL", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"] {
+        for sentinel in [
+            "raw-config-SENTINEL",
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        ] {
             assert!(!String::from_utf8_lossy(&output.stdout).contains(sentinel));
         }
         assert_eq!(std::fs::read(&manifest).unwrap(), before_manifest);
@@ -408,21 +430,31 @@ fn recorded_process_refuses_fifo_symlink_and_oversize_manifest_promptly() {
                 let target = home.join("versions/safe-manifest.json");
                 private(&target, b"manifest-secret-SENTINEL");
                 std::os::unix::fs::symlink(&target, &manifest).unwrap();
-            },
+            }
             "oversize" => {
                 let file = std::fs::File::create(&manifest).unwrap();
                 file.set_len(1024 * 1024 + 1).unwrap();
-                std::fs::set_permissions(&manifest, std::fs::Permissions::from_mode(0o600)).unwrap();
-            },
+                std::fs::set_permissions(&manifest, std::fs::Permissions::from_mode(0o600))
+                    .unwrap();
+            }
             _ => unreachable!(),
         }
         let output = doctor_with_deadline(&home, work.path(), &[]);
         assert_eq!(output.status.code(), Some(3), "{kind}");
         let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-        assert!(report["checks"].as_array().unwrap()
-            .iter().any(|c| c["reason_code"] == "lifecycle_unverifiable"), "{kind}");
+        assert!(
+            report["checks"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|c| c["reason_code"] == "lifecycle_unverifiable"),
+            "{kind}"
+        );
         assert!(!String::from_utf8_lossy(&output.stdout).contains("manifest-secret-SENTINEL"));
-        assert_eq!(std::fs::read(home.join("config.yaml")).unwrap(), config_before);
+        assert_eq!(
+            std::fs::read(home.join("config.yaml")).unwrap(),
+            config_before
+        );
         assert!(!home.join("versions/.lock").exists());
         assert!(std::fs::symlink_metadata(&manifest).is_ok());
     }
@@ -441,19 +473,25 @@ fn recorded_process_rejects_unsafe_managed_binary_without_unbounded_hash() {
             "symlink" => {
                 private(&home.join("binary-source"), b"binary-secret-SENTINEL");
                 std::os::unix::fs::symlink(home.join("binary-source"), &binary).unwrap();
-            },
+            }
             "oversize" => {
                 let file = std::fs::File::create(&binary).unwrap();
                 file.set_len(512 * 1024 * 1024 + 1).unwrap(); // sparse, no 512 MiB allocation
                 std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700)).unwrap();
-            },
+            }
             _ => unreachable!(),
         }
         let output = doctor_with_deadline(&home, work.path(), &[]);
         assert_eq!(output.status.code(), Some(3), "{kind}");
         let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-        assert!(report["checks"].as_array().unwrap()
-            .iter().any(|c| c["reason_code"] == "installed_binary_mismatch"), "{kind}");
+        assert!(
+            report["checks"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|c| c["reason_code"] == "installed_binary_mismatch"),
+            "{kind}"
+        );
         assert!(!String::from_utf8_lossy(&output.stdout).contains("binary-secret-SENTINEL"));
         assert_eq!(std::fs::read(&manifest).unwrap(), before_manifest);
         assert!(!home.join("versions/.lock").exists());
