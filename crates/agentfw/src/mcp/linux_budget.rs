@@ -223,6 +223,15 @@ impl std::fmt::Debug for OwnedBudget {
 }
 
 impl OwnedBudget {
+    /// Transfer only this owned leaf's cleanup capability to its crash owner.
+    /// Quota configuration and live accounting remain in this module.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn crash_cleanup(
+        &self,
+    ) -> anyhow::Result<(super::linux_owner::CleanupSpec, Vec<std::fs::File>)> {
+        self.linux.crash_cleanup().map_err(refusal)
+    }
+
     pub(crate) fn prepare(config: &Config) -> anyhow::Result<Self> {
         config.validate()?;
         #[cfg(target_os = "linux")]
@@ -629,6 +638,42 @@ mod linux {
     }
 
     impl Boundary {
+        pub(super) fn crash_cleanup(
+            &self,
+        ) -> Checked<(super::super::linux_owner::CleanupSpec, Vec<File>)> {
+            self.identity()?;
+            let files = vec![
+                self.root
+                    .try_clone()
+                    .map_err(|_| "mcp_budget_observation_failed")?,
+                self.leaf
+                    .try_clone()
+                    .map_err(|_| "mcp_budget_observation_failed")?,
+                self.kill
+                    .try_clone()
+                    .map_err(|_| "mcp_budget_observation_failed")?,
+                self.procs
+                    .try_clone()
+                    .map_err(|_| "mcp_budget_observation_failed")?,
+                open_control(&self.leaf, "cgroup.events", READ)?,
+            ];
+            let metadata = self
+                .leaf
+                .metadata()
+                .map_err(|_| "mcp_budget_observation_failed")?;
+            let cleanup = super::super::linux_owner::CleanupSpec {
+                root_fd: files[0].as_raw_fd(),
+                leaf_fd: files[1].as_raw_fd(),
+                kill_fd: files[2].as_raw_fd(),
+                procs_fd: files[3].as_raw_fd(),
+                events_fd: files[4].as_raw_fd(),
+                name: self.name.clone(),
+                device: metadata.dev(),
+                inode: metadata.ino(),
+            };
+            Ok((cleanup, files))
+        }
+
         pub(super) fn create(config: &Config) -> anyhow::Result<Self> {
             let (root, parent) = directory(&config.delegation_root).map_err(refusal)?;
             cgroup_fs(&root).map_err(refusal)?;

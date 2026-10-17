@@ -12,6 +12,8 @@ pub mod https_get;
 pub mod input;
 pub mod jsonrpc;
 pub(crate) mod linux_budget;
+#[doc(hidden)]
+pub mod linux_owner;
 pub mod manifest;
 mod native_child;
 pub mod profile_author;

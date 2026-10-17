@@ -17,7 +17,9 @@ use std::process::Stdio;
 use anyhow::{bail, Context};
 #[cfg(target_os = "linux")]
 use sha2::{Digest, Sha256};
-use tokio::process::{Child, Command};
+use tokio::process::Child;
+#[cfg(target_os = "linux")]
+use tokio::process::Command;
 
 use super::server_profile::ProfileConfig;
 #[cfg(target_os = "linux")]
@@ -40,10 +42,16 @@ pub(crate) fn profile_name(format: &str) -> &'static str {
 /// the descriptors before the fork/exec boundary.
 #[derive(Debug)]
 pub(crate) struct PreparedServerSandbox {
+    #[cfg(target_os = "linux")]
     command: Command,
     _pins: Vec<File>,
     workspace: PathBuf,
+    #[cfg(target_os = "linux")]
     budget: Option<super::linux_budget::OwnedBudget>,
+    #[cfg(target_os = "linux")]
+    bwrap_fd: std::os::fd::RawFd,
+    #[cfg(target_os = "linux")]
+    owner_executable_fd: std::os::fd::RawFd,
 }
 
 impl PreparedServerSandbox {
@@ -51,16 +59,61 @@ impl PreparedServerSandbox {
         &self.workspace
     }
 
-    pub(crate) fn spawn(
+    pub(crate) async fn spawn(
         mut self,
-    ) -> anyhow::Result<(Child, Option<super::linux_budget::OwnedBudget>)> {
-        // The owner stays armed if spawn/pre-exec fails; dropping it cannot
-        // leave an executing child outside the requested budget.
-        let child = self
-            .command
-            .spawn()
-            .context("failed to start the selected MCP server sandbox")?;
-        Ok((child, self.budget.take()))
+    ) -> anyhow::Result<(
+        Child,
+        Option<super::linux_budget::OwnedBudget>,
+        super::linux_owner::OwnerGuard,
+        u32,
+    )> {
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::fd::AsRawFd;
+            let cleanup = if let Some(budget) = self.budget.as_ref() {
+                let (spec, files) = budget.crash_cleanup()?;
+                self._pins.extend(files);
+                Some(spec)
+            } else {
+                None
+            };
+            let mut inherited_fds: Vec<_> = self._pins.iter().map(AsRawFd::as_raw_fd).collect();
+            let attach = self
+                .budget
+                .as_ref()
+                .map(super::linux_budget::OwnedBudget::attach_fd);
+            inherited_fds.extend(attach);
+            let bwrap_args = self
+                .command
+                .as_std()
+                .get_args()
+                .map(|arg| {
+                    arg.to_str()
+                        .map(str::to_owned)
+                        .context("mcp_owner_launch_invalid")
+                })
+                .collect::<anyhow::Result<Vec<_>>>()?;
+            let owner = super::linux_owner::spawn(super::linux_owner::LaunchSpec {
+                bwrap_fd: self.bwrap_fd,
+                owner_executable_fd: self.owner_executable_fd,
+                inherited_fds,
+                bwrap_args,
+                budget_attach_fd: attach,
+                budget_cleanup: cleanup,
+            })
+            .await?;
+            Ok((
+                owner.child,
+                self.budget.take(),
+                owner.guard,
+                owner.sandbox_pid,
+            ))
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = &mut self;
+            bail!("mcp_owner_platform_unsupported")
+        }
     }
 }
 
@@ -553,7 +606,19 @@ fn prepare_linux_command(
     }
     let runtime_pin = open_verified_file(&profile.runtime_path, &profile.runtime_sha256, true)?;
     let bwrap_pin = open_verified_file(&profile.bwrap_path, &profile.bwrap_sha256, true)?;
-    let mut pins = vec![workspace_pin, package_pin, runtime_pin];
+    // The trusted namespace PID 1 is this exact running Agent image, never a
+    // separately resolved pathname or an executable from the server package.
+    #[cfg(not(test))]
+    let owner_image = PathBuf::from("/proc/self/exe");
+    // The ignored native probes execute in libtest, whose main entry point is
+    // not the Agent CLI. Their driver supplies its exact candidate explicitly.
+    #[cfg(test)]
+    let owner_image = std::env::var_os("SOU86_TEST_AGENTFW")
+        .map(PathBuf::from)
+        .context("explicit candidate Agent image required for native owner probe")?;
+    let owner_pin = File::open(owner_image).context("mcp_owner_image_unavailable")?;
+    let owner_executable_fd = owner_pin.as_raw_fd();
+    let mut pins = vec![workspace_pin, package_pin, runtime_pin, owner_pin];
     let mut mounts = vec![
         (0, PathBuf::from(SANDBOX_WORKSPACE)),
         (1, PathBuf::from("/mcp-server")),
@@ -565,6 +630,7 @@ fn prepare_linux_command(
                 "/mcp-runtime/node"
             }),
         ),
+        (3, PathBuf::from("/mcp-runtime/owner")),
     ];
     if let Some(git) = &profile.git {
         let pin = open_verified_file(&git.path, &git.sha256, true)?;
@@ -601,6 +667,9 @@ fn prepare_linux_command(
     let mut command = Command::new(descriptor_path(&bwrap_pin));
     command.args([
         "--die-with-parent",
+        "--as-pid-1",
+        "--sync-fd",
+        super::linux_owner::LEASE_FD_PLACEHOLDER,
         "--new-session",
         "--unshare-all",
         "--unshare-user",
@@ -671,11 +740,19 @@ fn prepare_linux_command(
             command.args(["--setenv", name, value]);
         }
     }
-    command.arg("--").arg(if git_profile {
-        "/mcp-runtime/git-profile-launcher"
-    } else {
-        "/mcp-runtime/node"
-    });
+    command
+        .args([
+            "--",
+            "/mcp-runtime/owner",
+            "--agentfw-mcp-pid1-v1",
+            super::linux_owner::LEASE_FD_PLACEHOLDER,
+            "--",
+        ])
+        .arg(if git_profile {
+            "/mcp-runtime/git-profile-launcher"
+        } else {
+            "/mcp-runtime/node"
+        });
     command
         .args(node_args)
         .env_clear()
@@ -694,67 +771,17 @@ fn prepare_linux_command(
         .as_ref()
         .map(super::linux_budget::OwnedBudget::prepare)
         .transpose()?;
-    // cgroup.procs deliberately is NOT part of the inherited mount/filter
-    // descriptors. The trusted fork stub consumes it; CLOEXEC then closes it.
-    let budget_fd = budget
-        .as_ref()
-        .map(super::linux_budget::OwnedBudget::attach_fd);
-    let fds: Vec<_> = pins.iter().map(AsRawFd::as_raw_fd).collect();
-    // Only async-signal-safe syscalls run in the forked child. Parent descriptor
-    // flags remain CLOEXEC, avoiding cross-spawn inheritance in other threads.
-    unsafe {
-        command.pre_exec(move || {
-            if let Some(fd) = budget_fd {
-                // "0" attaches the writing process itself. This runs before
-                // exec, so bubblewrap and every descendant inherit the limits.
-                // Parent-side attachment after spawn would leave a race;
-                // blocking here for the parent would deadlock spawn's exec pipe.
-                let attached = libc::write(fd, b"0\n".as_ptr().cast(), 2);
-                if attached != 2 {
-                    return Err(std::io::Error::from_raw_os_error(libc::EACCES));
-                }
-                let scheduling = libc::sched_param { sched_priority: 0 };
-                if libc::sched_setscheduler(0, libc::SCHED_OTHER, &scheduling) != 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
-                let no_realtime = libc::rlimit {
-                    rlim_cur: 0,
-                    rlim_max: 0,
-                };
-                if libc::setrlimit(libc::RLIMIT_RTPRIO, &no_realtime) != 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
-            }
-            // Mark every ambient non-stdio descriptor CLOEXEC, including any
-            // supplied by foreign libraries. Only the explicit, consumed mount
-            // and filter descriptors below survive into bubblewrap.
-            if libc::syscall(libc::SYS_close_range, 3_u32, u32::MAX, 4_u32) != 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            if libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            let no_core = libc::rlimit {
-                rlim_cur: 0,
-                rlim_max: 0,
-            };
-            if libc::setrlimit(libc::RLIMIT_CORE, &no_core) != 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            for fd in &fds {
-                if libc::fcntl(*fd, libc::F_SETFD, 0) < 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
-            }
-            Ok(())
-        });
-    }
+    // The synchronous outside owner performs the same trusted fork-stub
+    // restrictions before bubblewrap exec, while retaining cleanup authority.
+    let bwrap_fd = bwrap_pin.as_raw_fd();
     pins.push(bwrap_pin);
     Ok(PreparedServerSandbox {
         command,
         _pins: pins,
         workspace,
         budget,
+        bwrap_fd,
+        owner_executable_fd,
     })
 }
 
@@ -972,21 +999,24 @@ print(json.dumps(result))
         prepared
             .command
             .env("SOU68_INHERITED_SECRET", "must-not-reach-server");
-        let (mut child, mut budget) = prepared.spawn().unwrap();
+        let (mut child, mut budget, mut owner, _sandbox_pid) = prepared.spawn().await.unwrap();
         let mut stdout = child.stdout.take().unwrap();
         let mut stderr = child.stderr.take().unwrap();
         drop(child.stdin.take());
         let collected = tokio::time::timeout(std::time::Duration::from_secs(15), async {
             let mut output = Vec::new();
             let mut errors = Vec::new();
-            let (out, err, status) = tokio::join!(
+            let (out, err) = tokio::join!(
                 stdout.read_to_end(&mut output),
                 stderr.read_to_end(&mut errors),
-                child.wait()
             );
             out.unwrap();
             err.unwrap();
-            (output, errors, status.unwrap())
+            if let Some(budget) = budget.as_mut() {
+                budget.finish().await.unwrap();
+            }
+            owner.finish().await.unwrap();
+            (output, errors, child.wait().await.unwrap())
         })
         .await;
         let budget_cleanup = if let Some(budget) = budget.as_mut() {
@@ -999,6 +1029,7 @@ print(json.dumps(result))
             panic!("real Git/Python sandbox timed out");
         }
         budget_cleanup.unwrap();
+        owner.finish().await.unwrap();
         let (output, errors, status) = collected.unwrap();
         let mut forbidden_bytes = [0_u8; 32];
         assert_eq!(fifo_reader.read(&mut forbidden_bytes).unwrap(), 0);
@@ -1342,21 +1373,24 @@ Promise.all([probe({{host:'127.0.0.1',port:{port}}}), probe({{path:'/workspace/e
         prepared
             .command
             .env("SOU62_INHERITED_SECRET", "must-not-reach-server");
-        let (mut child, mut budget) = prepared.spawn().unwrap();
+        let (mut child, mut budget, mut owner, _sandbox_pid) = prepared.spawn().await.unwrap();
         let mut stdout = child.stdout.take().unwrap();
         let mut stderr = child.stderr.take().unwrap();
         drop(child.stdin.take());
         let collected = tokio::time::timeout(Duration::from_secs(10), async {
             let mut output = Vec::new();
             let mut errors = Vec::new();
-            let (read_out, read_err, status) = tokio::join!(
+            let (read_out, read_err) = tokio::join!(
                 stdout.read_to_end(&mut output),
                 stderr.read_to_end(&mut errors),
-                child.wait(),
             );
             read_out.unwrap();
             read_err.unwrap();
-            (output, errors, status.unwrap())
+            if let Some(budget) = budget.as_mut() {
+                budget.finish().await.unwrap();
+            }
+            owner.finish().await.unwrap();
+            (output, errors, child.wait().await.unwrap())
         })
         .await;
         let budget_cleanup = if let Some(budget) = budget.as_mut() {
@@ -1369,6 +1403,7 @@ Promise.all([probe({{host:'127.0.0.1',port:{port}}}), probe({{path:'/workspace/e
             panic!("real Node sandbox positive acceptance timed out");
         }
         budget_cleanup.unwrap();
+        owner.finish().await.unwrap();
         let (output, errors, status) = collected.unwrap();
         assert!(
             status.success(),

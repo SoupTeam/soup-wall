@@ -464,7 +464,8 @@ def run(args):
             INSTALL.install(install, workspace, args.git, args.git_sha256, args.bwrap, args.git_launcher)
             report["installation"] = json.loads((install / "installation.json").read_text())
             positive = subprocess.run([str(args.sandbox_test_binary), "selected_git_sandbox_isolates_real_python_and_git", "--ignored", "--nocapture"],
-                env=dict(env, SOU68_SANDBOX_TEST_PROFILE=str(install / "profile.json")), capture_output=True, timeout=90)
+                env=dict(env, SOU68_SANDBOX_TEST_PROFILE=str(install / "profile.json"),
+                         SOU86_TEST_AGENTFW=str(args.agentfw.resolve())), capture_output=True, timeout=90)
             (output / "sandbox-positive.log").write_bytes(positive.stdout + positive.stderr)
             require(positive.returncode == 0 and b"SOU68_SANDBOX_POSITIVE" in positive.stdout and b"1 passed; 0 failed" in positive.stdout,
                     "real Git/Python OS isolation failed: " + positive.stderr[-2000:].decode("utf-8", "replace"))

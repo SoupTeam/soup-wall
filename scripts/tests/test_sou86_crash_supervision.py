@@ -38,6 +38,7 @@ def complete_inventory():
                      'observation_bound_millis': V.INVENTORY_MILLIS, 'target': {'pid': 101, 'start_time_ticks': 5},
                      'leaf_removed_within_bound': restart, 'useful_wire_sha256': 'a' * 64})
     return {'format': V.FORMAT, 'mode': 'baseline-inventory', 'runtime_source_commit': V.ACCEPTED,
+            'failed': 0, 'skipped': 0, 'required_cases': len(V.INVENTORY_CASES),
             'source_before': {'commit': 'c' * 40, 'dirty': False},
             'source_after': {'commit': 'c' * 40, 'dirty': False}, 'binary_unchanged': True,
             'delegation': {'unprivileged': True, 'manager_membership_verified': True},
@@ -49,7 +50,89 @@ def complete_inventory():
                         'daemon_stderr': copy.deepcopy(stream), 'audit': {'marker_leak': False}}}
 
 
+def complete_acceptance():
+    report = complete_inventory()
+    report.update(mode='acceptance', protection_acceptance=True, runtime_source_commit='c' * 40,
+                  required_cases=len(V.CASES),
+                  git_original_unchanged=True, git_workspace_unchanged=True, original_controls=[],
+                  acceptance=[], startup_inventory={'protection_acceptance': False, 'empty_at_deadline': True,
+                                                    'live_at_deadline': []})
+    report['git_cleanup'] = copy.deepcopy(report['cleanup'])
+    for key in ('binary_sha256', 'driver_sha256', 'fixture_sha256', 'fixture_package_tree_sha256',
+                'config_sha256', 'git_config_sha256', 'git_binary_sha256', 'git_launcher_sha256'):
+        report[key] = 'a' * 64
+    for key in ('original_server', 'original_git_server'):
+        report[key] = dict(profile_sha256='a' * 64, registry_sha256='a' * 64, policy_sha256='a' * 64,
+                           profile={'packageTreeSha256': 'a' * 64})
+    template = complete_inventory()['inventory'][0]['client']
+    template['process'] = {'all_stopped': True, 'remaining': []}
+    template['kernel'].update(leaf_removed=True, remaining=[])
+    for index, name in enumerate(sorted(V.CASES), 1):
+        fixture = name.startswith('owned-') or name.startswith('repeat-')
+        ordinary = name.endswith('-useful') or name in ('fixture-private-boundary', 'restart-after-crash', 'peer-isolation')
+        owner = {'format': V.OWNER_FORMAT, 'instance': f'{index:032x}',
+                 'owner_pid': 101, 'owner_start_ticks': 5, 'sandbox_pid': 102, 'sandbox_start_ticks': 6,
+                 'pid1_pid': 103, 'pid1_start_ticks': 7}
+        client = copy.deepcopy(template)
+        client.update(exit_code=0 if ordinary else -9, server_kind='git' if 'original-git' in name else 'filesystem',
+                      budgeted='unbudgeted' not in name, owner=owner, epoch=f'mcp:epoch-{index}',
+                      direct_original_control=False)
+        client['stderr']['events'] = [{'event': 'mcp_real_server_end', 'cleanup_verified': True}]
+        row = {'case': name, 'client': client, 'protection_acceptance': True}
+        if not ordinary:
+            row.update(armed_before_signal=True, observation_bound_millis=V.ACCEPTANCE_MILLIS,
+                stdin_held_open_at_injection=True, protected_work_stopped_within_bound=True,
+                all_identities_gone_within_bound=True, leaf_removed_within_bound=True,
+                live_at_deadline=[], identities_present_at_deadline=[], acceptance_fallback_used=False,
+                process_stop_millis=5, identities_gone_millis=8, leaf_remove_millis=7,
+                owner=owner, target={'signal_delivered': True}, cleanup_race=name == 'cleanup-race',
+                signal_target='owner' if 'owner' in name else 'collector', signal='SIGSTOP' if name == 'owned-owner-stop' else 'SIGKILL',
+                guardian_stop_observed=name == 'owned-owner-stop', in_flight=fixture,
+                immediate_native_retirement_claimed=False, previous_effects_rolled_back=False,
+                native_retirement='existing_300s_idle_expiry_on_next_authenticated_event',
+                observed_processes=[{'pid': 101, 'start_time_ticks': 5, 'fixture_role': 'direct' if fixture else None},
+                                    {'pid': 102, 'start_time_ticks': 6, 'fixture_role': 'detached' if fixture else None},
+                                    {'pid': 103, 'start_time_ticks': 7, 'fixture_role': None}])
+        if name.endswith('-useful') or name == 'restart-after-crash':
+            row['useful_wire_sha256'] = 'a' * 64
+        if name == 'cancel-crash':
+            row['cancellation'] = {'independent_inflight_fifo_readers': 8, 'cancelled_ids': [28, 20],
+                                    'queued_reader_absent': True, 'bytes_written_before_crash': 0}
+        if name == 'fixture-private-boundary':
+            row['private_boundary'] = {'private_lease_absent': True, 'host_control_fds_absent': True,
+                                       'pid1_private_fds_denied': True, 'pid1_memory_denied': True}
+        report['acceptance'].append(row)
+    peer = next(row for row in report['acceptance'] if row['case'] == 'peer-isolation')
+    peer_cases = {row['case'] for row in report['acceptance'] if row.get('signal_target')} | {'restart-after-crash', 'prearm-startup-inventory'}
+    report['peer_checks'] = []
+    for index, name in enumerate(sorted(peer_cases), 1):
+        before, after = {'id': 100 + index * 2, 'sha256': 'a' * 64}, {'id': 101 + index * 2, 'sha256': 'a' * 64}
+        report['peer_checks'].append({'case': name, 'before': before, 'after': after})
+        peer['client']['stdout']['records'].extend([{**item, 'successful_result': True} for item in (before, after)])
+    peer['useful_followups'] = len(peer_cases)
+    for kind in ('filesystem', 'git'):
+        client = copy.deepcopy(template)
+        client.update(direct_original_control=True, exit_code=0)
+        report['original_controls'].append({'kind': kind, 'wire_sha256': 'a' * 64, 'client': client})
+    return report
+
+
 class InventoryControls(unittest.TestCase):
+    def test_zombie_cmdline_cannot_erase_witnessed_detached_identity(self):
+        original = {'pid': 102, 'start_time_ticks': 6, 'fixture_role': 'detached', 'trusted_role': None,
+                    'state': 'S', 'session': 102, 'process_group': 102}
+        observed = {}
+        V.merge_members(observed, {(102, 6): original})
+        zombie = dict(original, state='Z', fixture_role=None)
+        V.merge_members(observed, {(102, 6): zombie})
+        self.assertEqual(observed[(102, 6)]['state'], 'Z')
+        self.assertEqual(observed[(102, 6)]['fixture_role'], 'detached')
+        self.assertTrue(observed[(102, 6)]['detached_session_verified'])
+        reused = dict(zombie, start_time_ticks=7, session=100, process_group=100)
+        V.merge_members(observed, {(102, 7): reused})
+        self.assertIsNone(observed[(102, 7)]['fixture_role'])
+        self.assertFalse(observed[(102, 7)]['detached_session_verified'])
+
     def test_complete_inventory_retains_explicit_non_acceptance(self):
         report = complete_inventory()
         V.grade_inventory(report)
@@ -150,10 +233,10 @@ class InventoryControls(unittest.TestCase):
         with patch.object(V.platform, 'system', return_value='Darwin'):
             with self.assertRaisesRegex(ValueError, 'unprivileged_linux_required'):
                 V.prepare_delegation('sou86-1-1.service')
-        with patch.object(V.platform, 'system', return_value='Linux'), patch.object(V.os, 'geteuid', return_value=0):
+        with patch.object(V.platform, 'system', return_value='Linux'), patch.object(V.os, 'geteuid', return_value=0, create=True):
             with self.assertRaisesRegex(ValueError, 'unprivileged_linux_required'):
                 V.prepare_delegation('sou86-1-1.service')
-        with patch.object(V.platform, 'system', return_value='Linux'), patch.object(V.os, 'geteuid', return_value=1000):
+        with patch.object(V.platform, 'system', return_value='Linux'), patch.object(V.os, 'geteuid', return_value=1000, create=True):
             for unit in ('ssh.service', 'sou79-1-1.service', '../sou86-1-1.service', 'sou86-1-1.service/child'):
                 with self.assertRaisesRegex(ValueError, 'owned_disposable_unit_required'):
                     V.prepare_delegation(unit)
@@ -180,6 +263,115 @@ class InventoryControls(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             with self.assertRaisesRegex(ValueError, 'unsafe_evidence_payload'):
                 V.write(Path(temporary) / 'report.json', {'raw': V.RESOURCE.MARKERS[0].decode()})
+
+
+class AcceptanceControls(unittest.TestCase):
+    def test_no_failed_skipped_or_empty_denominators_count_as_complete(self):
+        for key, value in (('failed', 1), ('skipped', 1), ('required_cases', 0)):
+            for builder, grader in ((complete_acceptance, V.grade_acceptance), (complete_inventory, V.grade_inventory)):
+                report = builder()
+                report[key] = value
+                with self.assertRaises(ValueError):
+                    grader(report)
+
+    def test_unexpected_guardian_wrapper_pid1_failure_cannot_return_success(self):
+        for name in ('owned-owner-kill', 'owned-wrapper-kill', 'owned-pid1-kill', 'owned-owner-stop'):
+            report = complete_acceptance()
+            next(row for row in report['acceptance'] if row['case'] == name)['client']['exit_code'] = 0
+            with self.assertRaisesRegex(ValueError, 'unexpected_owner_failure_reported_success'):
+                V.grade_acceptance(report)
+
+    def test_complete_candidate_requires_all_nonempty_protected_cases(self):
+        report = complete_acceptance()
+        V.grade_acceptance(report)
+        self.assertEqual(len(report['checks']), 22)
+        self.assertTrue(all(row['protection_acceptance'] for row in report['checks']))
+
+    def test_baseline_inventory_cannot_count_as_candidate_acceptance(self):
+        with self.assertRaisesRegex(ValueError, 'required_protection_acceptance_missing'):
+            V.grade_acceptance(complete_inventory())
+
+    def test_missing_crash_case_and_either_original_server_control_fail(self):
+        for change in (lambda report: report['acceptance'].pop(), lambda report: report['original_controls'].pop()):
+            report = complete_acceptance()
+            change(report)
+            with self.assertRaises(ValueError):
+                V.grade_acceptance(report)
+
+    def test_no_parent_fallback_or_incomplete_cleanup_can_pass(self):
+        for change in (lambda row: row.update(live_at_deadline=[{'pid': 101}]),
+                       lambda row: row.update(identities_present_at_deadline=[{'pid': 101}]),
+                       lambda row: row.update(leaf_removed_within_bound=False),
+                       lambda row: row.update(acceptance_fallback_used=True),
+                       lambda row: row.update(all_identities_gone_within_bound=False),
+                       lambda row: row.update(identities_gone_millis=10001),
+                       lambda row: row.update(armed_before_signal=False)):
+            report = complete_acceptance()
+            change(next(row for row in report['acceptance'] if row.get('signal_target')))
+            with self.assertRaises(ValueError):
+                V.grade_acceptance(report)
+
+    def test_guardian_stop_must_be_independently_observed_and_recovered(self):
+        report = complete_acceptance()
+        stopped = next(row for row in report['acceptance'] if row['case'] == 'owned-owner-stop')
+        stopped['guardian_stop_observed'] = False
+        with self.assertRaisesRegex(ValueError, 'guardian_liveness_failure_not_exercised'):
+            V.grade_acceptance(report)
+
+    def test_signal_delivery_and_all_trusted_process_identities_required(self):
+        for change in (lambda row: row['target'].update(signal_delivered=False),
+                       lambda row: row['observed_processes'].pop()):
+            report = complete_acceptance()
+            change(next(row for row in report['acceptance'] if row['case'] == 'owned-owner-kill'))
+            with self.assertRaises(ValueError):
+                V.grade_acceptance(report)
+
+    def test_cleanup_never_claims_rollback_or_immediate_authority_retirement(self):
+        for key in ('immediate_native_retirement_claimed', 'previous_effects_rolled_back'):
+            report = complete_acceptance()
+            next(row for row in report['acceptance'] if row.get('signal_target'))[key] = True
+            with self.assertRaisesRegex(ValueError, 'process_cleanup_misrepresented_as_authority_or_rollback'):
+                V.grade_acceptance(report)
+
+    def test_restart_cannot_reuse_owner_instance_or_native_epoch(self):
+        for key in ('epoch', 'owner'):
+            report = complete_acceptance()
+            rows = report['acceptance']
+            rows[1]['client'][key] = copy.deepcopy(rows[0]['client'][key])
+            with self.assertRaises(ValueError):
+                V.grade_acceptance(report)
+
+    def test_unaffected_peer_requires_wire_witness_before_and_after_each_crash(self):
+        for change in (lambda report: report['peer_checks'].pop(),
+                       lambda report: report['peer_checks'][0]['after'].update(sha256='b' * 64)):
+            report = complete_acceptance()
+            change(report)
+            with self.assertRaises(ValueError):
+                V.grade_acceptance(report)
+
+    def test_private_leaked_fd_or_accessible_pid1_memory_cannot_pass(self):
+        for key in ('private_lease_absent', 'host_control_fds_absent', 'pid1_private_fds_denied', 'pid1_memory_denied'):
+            report = complete_acceptance()
+            next(row for row in report['acceptance'] if row['case'] == 'fixture-private-boundary')['private_boundary'][key] = False
+            with self.assertRaisesRegex(ValueError, 'private_owner_lease_boundary_failed'):
+                V.grade_acceptance(report)
+
+    def test_zero_samples_lost_cgroup_or_missing_source_identity_fail(self):
+        for change in (lambda report: report['acceptance'][0]['client']['kernel'].update(samples=0),
+                       lambda report: report['acceptance'][0]['client']['kernel'].update(leaf_removed=False),
+                       lambda report: report.update(git_launcher_sha256=None)):
+            report = complete_acceptance()
+            change(report)
+            with self.assertRaises(ValueError):
+                V.grade_acceptance(report)
+
+    def test_safe_owner_metadata_discards_any_source_path_and_invalid_identity(self):
+        owner = V.safe_owner({'format': V.OWNER_FORMAT, 'instance': 'a' * 32, 'owner_pid': 101,
+                              'owner_start_ticks': 5, 'source': 'must-not-copy', 'path': '/private/secret',
+                              'reason': 'arbitrary-child-error', 'cleanup': {'format': V.OWNER_FORMAT}})
+        self.assertEqual(owner, {'format': V.OWNER_FORMAT, 'instance': 'a' * 32, 'owner_pid': 101,
+                                 'owner_start_ticks': 5, 'cleanup': {'format': V.OWNER_FORMAT}})
+        self.assertIsNone(V.safe_owner({'format': 'arbitrary'}))
 
 
 if __name__ == '__main__':
