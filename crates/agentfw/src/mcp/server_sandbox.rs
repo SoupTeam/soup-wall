@@ -43,6 +43,7 @@ pub(crate) struct PreparedServerSandbox {
     command: Command,
     _pins: Vec<File>,
     workspace: PathBuf,
+    budget: Option<super::linux_budget::OwnedBudget>,
 }
 
 impl PreparedServerSandbox {
@@ -50,10 +51,16 @@ impl PreparedServerSandbox {
         &self.workspace
     }
 
-    pub(crate) fn spawn(mut self) -> anyhow::Result<Child> {
-        self.command
+    pub(crate) fn spawn(
+        mut self,
+    ) -> anyhow::Result<(Child, Option<super::linux_budget::OwnedBudget>)> {
+        // The owner stays armed if spawn/pre-exec fails; dropping it cannot
+        // leave an executing child outside the requested budget.
+        let child = self
+            .command
             .spawn()
-            .context("failed to start the selected MCP server sandbox")
+            .context("failed to start the selected MCP server sandbox")?;
+        Ok((child, self.budget.take()))
     }
 }
 
@@ -67,6 +74,9 @@ pub(crate) fn prepare(profile: &ProfileConfig) -> anyhow::Result<PreparedServerS
     #[cfg(not(target_os = "linux"))]
     {
         let _ = profile;
+        if super::linux_budget::Config::load_from_env()?.is_some() {
+            bail!("mcp_budget_platform_unsupported");
+        }
         bail!("the selected MCP server profile requires Linux bubblewrap");
     }
 }
@@ -245,9 +255,29 @@ fn filter_instructions(git_landlock: bool) -> anyhow::Result<Vec<(u16, u8, u8, u
         libc::SYS_sendmmsg,
         libc::SYS_io_uring_setup,
         libc::SYS_openat2,
+        // The selected read-only servers do not change scheduling class.
+        // In particular they cannot escape fair-class CPU bandwidth accounting.
+        libc::SYS_sched_setscheduler,
+        libc::SYS_sched_setattr,
     ] {
         instructions.push((0x15, 0, 1, syscall as u32));
         instructions.push((0x06, 0, 0, deny));
+    }
+    // HugeTLB allocations are not included in memory.max on every supported
+    // kernel. Block their explicit creation while preserving ordinary mmap,
+    // memfd and SysV shared memory for the pinned runtimes.
+    for (syscall, offset, flag) in [
+        (libc::SYS_mmap, 40_u32, libc::MAP_HUGETLB as u32),
+        (libc::SYS_memfd_create, 24_u32, libc::MFD_HUGETLB),
+        (libc::SYS_shmget, 32_u32, libc::SHM_HUGETLB as u32),
+    ] {
+        instructions.extend([
+            (0x15, 0, 4, syscall as u32),
+            (0x20, 0, 0, offset),
+            (0x45, 0, 1, flag),
+            (0x06, 0, 0, deny),
+            (0x20, 0, 0, 0), // Restore syscall number for subsequent rules.
+        ]);
     }
     if git_landlock {
         // asyncio wakes its loop from worker threads through an anonymous
@@ -370,6 +400,111 @@ fn network_filter(git_landlock: bool) -> anyhow::Result<File> {
     Ok(file)
 }
 
+#[cfg(any(target_os = "linux", all(test, unix)))]
+const MAX_MOUNTINFO_BYTES: usize = 1024 * 1024;
+
+/// Decode the kernel's escaped mount path without interpreting arbitrary shell
+/// or JSON escapes. Every accepted path is absolute and normalized.
+#[cfg(any(target_os = "linux", all(test, unix)))]
+fn mount_path(encoded: &str) -> anyhow::Result<PathBuf> {
+    use std::os::unix::ffi::OsStringExt;
+    let invalid = || anyhow::anyhow!("mcp_budget_mount_observation_failed");
+    let raw = encoded.as_bytes();
+    let mut decoded = Vec::with_capacity(raw.len());
+    let mut position = 0;
+    while position < raw.len() {
+        if raw[position] == b'\\' {
+            let escape = raw.get(position + 1..position + 4).ok_or_else(invalid)?;
+            decoded.push(match escape {
+                b"040" => b' ',
+                b"011" => b'\t',
+                b"012" => b'\n',
+                b"134" => b'\\',
+                _ => return Err(invalid()),
+            });
+            position += 4;
+        } else {
+            decoded.push(raw[position]);
+            position += 1;
+        }
+    }
+    let path = PathBuf::from(std::ffi::OsString::from_vec(decoded));
+    if !path.is_absolute()
+        || !path
+            .components()
+            .all(|part| matches!(part, Component::RootDir | Component::Normal(_)))
+    {
+        return Err(invalid());
+    }
+    Ok(path)
+}
+
+/// HugeTLB file mappings need not carry MAP_HUGETLB and are not charged to
+/// memory.max on every kernel. Reject backing mounts exposed through either
+/// recursive directory bind; unrelated host mounts are outside this sandbox.
+#[cfg(any(target_os = "linux", all(test, unix)))]
+fn validate_budget_mounts(bytes: &[u8], exposed_roots: &[&Path]) -> anyhow::Result<()> {
+    let invalid = || anyhow::anyhow!("mcp_budget_mount_observation_failed");
+    if bytes.is_empty() || bytes.len() > MAX_MOUNTINFO_BYTES || !bytes.ends_with(b"\n") {
+        return Err(invalid());
+    }
+    let text = std::str::from_utf8(bytes).map_err(|_| invalid())?;
+    if text.contains('\0') {
+        return Err(invalid());
+    }
+    for line in text.lines() {
+        let words: Vec<_> = line.split_ascii_whitespace().collect();
+        let separator = words
+            .iter()
+            .position(|word| *word == "-")
+            .ok_or_else(invalid)?;
+        if separator < 6
+            || words.len() != separator + 4
+            || words[0].parse::<u64>().is_err()
+            || words[1].parse::<u64>().is_err()
+        {
+            return Err(invalid());
+        }
+        let (major, minor) = words[2].split_once(':').ok_or_else(invalid)?;
+        if major.parse::<u64>().is_err() || minor.parse::<u64>().is_err() {
+            return Err(invalid());
+        }
+        mount_path(words[3])?;
+        let mount = mount_path(words[4])?;
+        if words[separator + 1] == "hugetlbfs"
+            && exposed_roots
+                .iter()
+                .any(|root| mount.starts_with(root) || root.starts_with(&mount))
+        {
+            bail!("mcp_budget_hugetlb_mount_unsupported");
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn require_budget_mount_support(exposed_roots: &[&Path], pins: &[&File]) -> anyhow::Result<()> {
+    use std::io::Read;
+    use std::os::fd::AsRawFd;
+    let mut bytes = Vec::new();
+    File::open("/proc/self/mountinfo")
+        .map_err(|_| anyhow::anyhow!("mcp_budget_mount_observation_failed"))?
+        .take(MAX_MOUNTINFO_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| anyhow::anyhow!("mcp_budget_mount_observation_failed"))?;
+    validate_budget_mounts(&bytes, exposed_roots)?;
+    for pin in pins {
+        let mut filesystem = std::mem::MaybeUninit::<libc::statfs>::uninit();
+        if unsafe { libc::fstatfs(pin.as_raw_fd(), filesystem.as_mut_ptr()) } != 0 {
+            bail!("mcp_budget_mount_observation_failed");
+        }
+        if unsafe { filesystem.assume_init() }.f_type == 0x9584_58f6_u32 as libc::c_long {
+            bail!("mcp_budget_hugetlb_mount_unsupported");
+        }
+    }
+    Ok(())
+}
+
 #[cfg(target_os = "linux")]
 fn prepare_linux(profile: &ProfileConfig) -> anyhow::Result<PreparedServerSandbox> {
     if profile.format == super::server_profile::git::FORMAT {
@@ -409,7 +544,7 @@ fn prepare_linux_command(
             &descriptor_path(&workspace_pin).join("."),
         )?;
     }
-    let (_, package_pin) = open_directory(&profile.package_root)?;
+    let (package_root, package_pin) = open_directory(&profile.package_root)?;
     if package_tree_sha256(&descriptor_path(&package_pin).join("."))? != profile.package_tree_sha256
     {
         bail!("MCP server installed package tree digest mismatch");
@@ -548,11 +683,46 @@ fn prepare_linux_command(
         .stderr(Stdio::piped())
         .kill_on_drop(true)
         .process_group(0);
+    let budget_config = super::linux_budget::Config::load_from_env()?;
+    if budget_config.is_some() {
+        let budget_pins: Vec<_> = pins.iter().chain(std::iter::once(&bwrap_pin)).collect();
+        require_budget_mount_support(&[&workspace, &package_root], &budget_pins)?;
+    }
+    let budget = budget_config
+        .as_ref()
+        .map(super::linux_budget::OwnedBudget::prepare)
+        .transpose()?;
+    // cgroup.procs deliberately is NOT part of the inherited mount/filter
+    // descriptors. The trusted fork stub consumes it; CLOEXEC then closes it.
+    let budget_fd = budget
+        .as_ref()
+        .map(super::linux_budget::OwnedBudget::attach_fd);
     let fds: Vec<_> = pins.iter().map(AsRawFd::as_raw_fd).collect();
     // Only async-signal-safe syscalls run in the forked child. Parent descriptor
     // flags remain CLOEXEC, avoiding cross-spawn inheritance in other threads.
     unsafe {
         command.pre_exec(move || {
+            if let Some(fd) = budget_fd {
+                // "0" attaches the writing process itself. This runs before
+                // exec, so bubblewrap and every descendant inherit the limits.
+                // Parent-side attachment after spawn would leave a race;
+                // blocking here for the parent would deadlock spawn's exec pipe.
+                let attached = libc::write(fd, b"0\n".as_ptr().cast(), 2);
+                if attached != 2 {
+                    return Err(std::io::Error::from_raw_os_error(libc::EACCES));
+                }
+                let scheduling = libc::sched_param { sched_priority: 0 };
+                if libc::sched_setscheduler(0, libc::SCHED_OTHER, &scheduling) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                let no_realtime = libc::rlimit {
+                    rlim_cur: 0,
+                    rlim_max: 0,
+                };
+                if libc::setrlimit(libc::RLIMIT_RTPRIO, &no_realtime) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+            }
             // Mark every ambient non-stdio descriptor CLOEXEC, including any
             // supplied by foreign libraries. Only the explicit, consumed mount
             // and filter descriptors below survive into bubblewrap.
@@ -582,12 +752,67 @@ fn prepare_linux_command(
         command,
         _pins: pins,
         workspace,
+        budget,
     })
 }
 
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn budget_mountinfo_accepts_regular_and_unexposed_hugetlb_filesystems() {
+        let records = b"29 0 0:25 / / rw shared:1 - ext4 /dev/root rw\n30 29 0:26 / /path\\040with\\040space ro - tmpfs tmpfs ro,size=1024\n31 29 0:27 / /dev/hugepages rw - hugetlbfs hugetlbfs rw\n";
+        validate_budget_mounts(records, &[Path::new("/workspace"), Path::new("/package")]).unwrap();
+    }
+
+    #[test]
+    fn budget_mountinfo_refuses_exposed_hugetlbfs_without_logging_mount_paths() {
+        for mount in [
+            "/workspace",
+            "/workspace/nested",
+            "/package/nested",
+            "/",
+            "/workspace\\040space/huge",
+        ] {
+            let record = format!("29 0 0:25 / {mount} rw - hugetlbfs hugetlbfs rw\n");
+            let error = validate_budget_mounts(
+                record.as_bytes(),
+                &[
+                    Path::new("/workspace"),
+                    Path::new("/package"),
+                    Path::new("/workspace space"),
+                ],
+            )
+            .unwrap_err()
+            .to_string();
+            assert_eq!(error, "mcp_budget_hugetlb_mount_unsupported");
+            assert!(!error.contains("workspace"));
+        }
+        let ancestor = b"29 0 0:25 / /host rw - hugetlbfs hugetlbfs rw\n";
+        assert!(validate_budget_mounts(ancestor, &[Path::new("/host/workspace")]).is_err());
+        let sibling = b"29 0 0:25 / /workspace-other rw - hugetlbfs hugetlbfs rw\n";
+        validate_budget_mounts(sibling, &[Path::new("/workspace")]).unwrap();
+    }
+
+    #[test]
+    fn budget_mountinfo_refuses_partial_malformed_or_unbounded_observations() {
+        for record in [
+            b"".as_slice(),
+            b"\n",
+            b"29 0 0:25 / / rw ext4 /dev/root rw\n",
+            b"29 0 0:25 / / rw - ext4 /dev/root rw",
+            b"29 0 invalid / / rw - ext4 /dev/root rw\n",
+            b"x 0 0:25 / / rw - ext4 /dev/root rw\n",
+            b"29 0 0:25 / / rw - ext4 /dev/root rw extra\n",
+            b"29 0 0:25 / / rw - ext4 /dev/root \xff\n",
+            b"29 0 0:25 / /bad\\04 rw - ext4 /dev/root rw\n",
+            b"29 0 0:25 / /bad\\057path rw - ext4 /dev/root rw\n",
+        ] {
+            assert!(validate_budget_mounts(record, &[Path::new("/workspace")]).is_err());
+        }
+        assert!(validate_budget_mounts(&vec![b'\n'; MAX_MOUNTINFO_BYTES + 1], &[]).is_err());
+    }
 
     #[cfg(target_os = "linux")]
     #[tokio::test]
@@ -620,13 +845,21 @@ mod tests {
         let outside_json = serde_json::to_string(&outside).unwrap();
         let script = format!(
             r#"
-import asyncio, json, os, pathlib, socket, subprocess
+import asyncio, errno, json, os, pathlib, socket, subprocess
 def denied(fn):
     try:
         fn()
         return False
     except OSError:
         return True
+def denied_by_filter(fn):
+    try:
+        descriptor = fn()
+        if type(descriptor) is int:
+            os.close(descriptor)
+        return False
+    except OSError as error:
+        return error.errno == errno.EACCES
 def descriptors():
     result = []
     for entry in pathlib.Path('/proc/self/fd').iterdir():
@@ -645,6 +878,8 @@ result = {{
  'asyncio_ready': True,
  'null_open_allowed': null_open(),
  'git_read': git.returncode == 0,
+ 'hugetlb_creation_denied': denied_by_filter(lambda: os.memfd_create('sou79-owned', os.MFD_HUGETLB)),
+ 'scheduler_change_denied': denied_by_filter(lambda: os.sched_setscheduler(0, os.SCHED_OTHER, os.sched_param(0))),
  'git_exit': git.returncode,
  'git_error': git.stderr[-2000:].decode('utf-8', 'replace'),
  'workspace_write_denied': denied(lambda: pathlib.Path('/workspace/sandbox-forbidden').write_text('denied')),
@@ -692,7 +927,7 @@ print(json.dumps(result))
         prepared
             .command
             .env("SOU68_INHERITED_SECRET", "must-not-reach-server");
-        let mut child = prepared.spawn().unwrap();
+        let (mut child, mut budget) = prepared.spawn().unwrap();
         let mut stdout = child.stdout.take().unwrap();
         let mut stderr = child.stderr.take().unwrap();
         drop(child.stdin.take());
@@ -709,10 +944,16 @@ print(json.dumps(result))
             (output, errors, status.unwrap())
         })
         .await;
+        let budget_cleanup = if let Some(budget) = budget.as_mut() {
+            budget.finish().await
+        } else {
+            Ok(())
+        };
         if collected.is_err() {
             terminate(&mut child).await.unwrap();
             panic!("real Git/Python sandbox timed out");
         }
+        budget_cleanup.unwrap();
         let (output, errors, status) = collected.unwrap();
         let mut forbidden_bytes = [0_u8; 32];
         assert_eq!(fifo_reader.read(&mut forbidden_bytes).unwrap(), 0);
@@ -723,6 +964,8 @@ print(json.dumps(result))
             "null_open_allowed",
             "asyncio_ready",
             "git_read",
+            "hugetlb_creation_denied",
+            "scheduler_change_denied",
             "workspace_write_denied",
             "runtime_write_denied",
             "tmp_write_denied",
@@ -801,7 +1044,7 @@ print(json.dumps(result))
         for git_landlock in [false, true] {
             let instructions = filter_instructions(git_landlock).unwrap();
             let evaluate_full =
-                |syscall: i64, first: u32, second: u32, third: u32, address: u64| {
+                |syscall: i64, first: u32, second: u32, third: u32, fourth: u32, address: u64| {
                     let mut data = [0_u8; 64];
                     let architecture = instructions[1].3;
                     for (offset, value) in [
@@ -810,6 +1053,7 @@ print(json.dumps(result))
                         (16, first),
                         (24, second),
                         (32, third),
+                        (40, fourth),
                         (48, address as u32),
                         (52, (address >> 32) as u32),
                     ] {
@@ -838,7 +1082,7 @@ print(json.dumps(result))
                     }
                 };
             let evaluate =
-                |syscall, first, second, third| evaluate_full(syscall, first, second, third, 0);
+                |syscall, first, second, third| evaluate_full(syscall, first, second, third, 0, 0);
             let allow = 0x7fff_0000;
             let deny = 0x0005_0000 | libc::EACCES as u32;
             assert_eq!(
@@ -846,9 +1090,37 @@ print(json.dumps(result))
                 if git_landlock { allow } else { deny }
             );
             for address in [1, 1_u64 << 32, u64::MAX] {
-                assert_eq!(evaluate_full(libc::SYS_sendto, 5, 0, 1, address), deny);
+                assert_eq!(evaluate_full(libc::SYS_sendto, 5, 0, 1, 0, address), deny);
             }
             assert_eq!(evaluate(libc::SYS_sendmsg, 5, 0, 0), deny);
+            for syscall in [libc::SYS_sched_setscheduler, libc::SYS_sched_setattr] {
+                for pid in [0, 1, u32::MAX] {
+                    assert_eq!(evaluate(syscall, pid, 0, 0), deny);
+                }
+            }
+            for extra in [0, 1, u32::MAX & !(libc::MAP_HUGETLB as u32)] {
+                assert_eq!(evaluate_full(libc::SYS_mmap, 0, 0, 0, extra, 0), allow);
+                assert_eq!(
+                    evaluate_full(libc::SYS_mmap, 0, 0, 0, extra | libc::MAP_HUGETLB as u32, 0),
+                    deny
+                );
+            }
+            for (syscall, flag, argument) in [
+                (libc::SYS_memfd_create, libc::MFD_HUGETLB, 1),
+                (libc::SYS_shmget, libc::SHM_HUGETLB as u32, 2),
+            ] {
+                for extra in [0, 1, u32::MAX & !flag] {
+                    let evaluate_flags = |flags| {
+                        if argument == 1 {
+                            evaluate(syscall, 0, flags, 0)
+                        } else {
+                            evaluate(syscall, 0, 0, flags)
+                        }
+                    };
+                    assert_eq!(evaluate_flags(extra), allow);
+                    assert_eq!(evaluate_flags(extra | flag), deny);
+                }
+            }
             for fd in [0, 1, 2] {
                 assert_eq!(
                     evaluate(libc::SYS_ioctl, fd, libc::FIONBIO as u32, 0),
@@ -1024,7 +1296,7 @@ Promise.all([probe({{host:'127.0.0.1',port:{port}}}), probe({{path:'/workspace/e
         prepared
             .command
             .env("SOU62_INHERITED_SECRET", "must-not-reach-server");
-        let mut child = prepared.spawn().unwrap();
+        let (mut child, mut budget) = prepared.spawn().unwrap();
         let mut stdout = child.stdout.take().unwrap();
         let mut stderr = child.stderr.take().unwrap();
         drop(child.stdin.take());
@@ -1041,10 +1313,16 @@ Promise.all([probe({{host:'127.0.0.1',port:{port}}}), probe({{path:'/workspace/e
             (output, errors, status.unwrap())
         })
         .await;
+        let budget_cleanup = if let Some(budget) = budget.as_mut() {
+            budget.finish().await
+        } else {
+            Ok(())
+        };
         if collected.is_err() {
             terminate(&mut child).await.unwrap();
             panic!("real Node sandbox positive acceptance timed out");
         }
+        budget_cleanup.unwrap();
         let (output, errors, status) = collected.unwrap();
         assert!(
             status.success(),

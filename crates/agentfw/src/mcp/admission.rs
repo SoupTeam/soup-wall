@@ -2689,6 +2689,10 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
         if let Some(profile) = super::server_profile::ProfileConfig::load_from_env()? {
             return real_server::run(&collector, &profile, &workspace).await;
         }
+        ensure!(
+            std::env::var_os(super::linux_budget::ENVIRONMENT).is_none(),
+            "Linux MCP resource budgets require a selected filesystem or Git server profile"
+        );
         #[cfg(windows)]
         let windows_spawn_pins = {
             let normal = |path: &std::path::Path| {
