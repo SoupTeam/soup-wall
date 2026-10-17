@@ -1,0 +1,54 @@
+name: Agent fleet projection
+on:
+  pull_request:
+    paths:
+      - 'crates/proxy/**'
+      - 'scripts/fleet-console-acceptance.py'
+      - '.github/workflows/agent-fleet.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: fleet-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  fleet:
+    name: Fleet API and real dual-store browser witness
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Retain formatting diagnostics without changing tested source
+        run: |
+          mkdir -p target/fleet-evidence
+          cargo fmt --all
+          git diff --binary > target/fleet-evidence/format.patch
+          git restore .
+          git rev-parse HEAD > target/fleet-evidence/source.txt
+      - name: Fleet storage and authorization regressions
+        run: cargo test --locked -p llm-firewall --test fleet_projection
+      - name: Build real Console and Agent
+        run: cargo build --locked -p llm-firewall -p agentfw
+      - name: Prepare isolated browser driver
+        run: |
+          python3 -m venv "$RUNNER_TEMP/fleet-driver"
+          "$RUNNER_TEMP/fleet-driver/bin/python" -m pip install playwright==1.55.0 cryptography==50.0.2
+          "$RUNNER_TEMP/fleet-driver/bin/python" -m playwright install --with-deps chromium
+      - name: SQLite real processes and browser
+        run: '"$RUNNER_TEMP/fleet-driver/bin/python" scripts/fleet-console-acceptance.py --backend sqlite --output target/fleet-evidence/sqlite'
+      - name: PostgreSQL TLS real processes and browser
+        run: '"$RUNNER_TEMP/fleet-driver/bin/python" scripts/fleet-console-acceptance.py --backend postgres --output target/fleet-evidence/postgres'
+      - name: Require clean formatting
+        run: test ! -s target/fleet-evidence/format.patch
+      - name: Retain sanitized fleet evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-fleet-evidence
+          path: target/fleet-evidence/
+          retention-days: 30
+          if-no-files-found: error

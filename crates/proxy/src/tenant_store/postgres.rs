@@ -6,6 +6,8 @@
 //! client handle in memory: tenants, hashed tokens, policies, and audit events
 //! live in PostgreSQL and are therefore shared by every proxy instance.
 
+#[path = "fleet_postgres.rs"]
+mod fleet;
 #[path = "managed_postgres.rs"]
 mod managed;
 
