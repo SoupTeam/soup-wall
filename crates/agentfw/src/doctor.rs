@@ -579,12 +579,22 @@ async fn diagnose(args: &DoctorArgs) -> Report {
         Outcome::Unknown, "active_call_not_witnessed",
         "Configuration, heartbeat, counters and isolated tests are not active-host protection evidence.",
         "Exercise and audit an explicitly owned real host call separately, without doctor executing one."));
-    // Every explicitly supplied failed/unknown selector participates in setup
-    // readiness. Never silently discard a wrong classifier/host/binary pin.
+    // Missing optional selectors are not proof of failure. However, whenever
+    // an operator explicitly selected an asset/host, its failed or uncertain
+    // check must participate in setup readiness.
     report.setup = setup(
         &checks
             .iter()
-            .filter(|c| c.id != "active_host_call")
+            .filter(|c| {
+                c.id != "active_host_call"
+                    && !matches!(
+                        c.reason_code,
+                        "binary_not_selected"
+                            | "classifier_not_selected"
+                            | "host_connection_not_selected"
+                            | "native_profile_not_selected"
+                    )
+            })
             .collect::<Vec<_>>(),
     );
     report.checks = checks;
