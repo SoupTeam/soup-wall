@@ -532,7 +532,7 @@ fn prepare(snapshot_path: &Path, declaration_path: &Path) -> Result<Prepared> {
             policy_for(&snapshot.server_id, &d.name, &schema_hash, authority)?;
         let policy_json = policy
             .as_ref()
-            .map(|p| serde_json::to_value(p))
+            .map(serde_json::to_value)
             .transpose()?;
         let entry = json!({"name":d.name,"schema_sha256":schema_hash,
             "action_class":action,"result_provenance":"untrusted","egress":egress,
