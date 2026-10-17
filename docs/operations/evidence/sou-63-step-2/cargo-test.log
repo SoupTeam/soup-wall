@@ -1,0 +1,309 @@
+   Compiling agentfw v0.3.0 (/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/crates/agentfw)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.36s
+     Running unittests src/lib.rs (target/debug/deps/agentfw-ce7c945f51d60e4c)
+
+running 270 tests
+test audit::tests::an_unnamed_origin_omits_the_name_rather_than_emitting_an_empty_one ... ok
+test audit::tests::a_taint_record_carries_structured_origin_and_trust ... ok
+test audit::tests::the_audit_file_is_not_world_readable ... ok
+test audit::tests::requesting_0o600_is_not_an_umask_accident ... ok
+test config::tests::a_config_without_a_judge_block_still_parses ... ok
+test config::tests::a_disabled_judge_with_an_oversized_timeout_does_not_block_boot ... ok
+test config::tests::an_empty_file_is_all_defaults ... ok
+test config::tests::an_empty_file_still_equals_default_with_judge_added ... ok
+test config::tests::a_non_loopback_bind_is_rejected ... ok
+test config::tests::a_judge_timeout_that_would_outlast_the_hook_is_rejected ... ok
+test config::tests::defaults_are_safe ... ok
+test config::tests::a_judge_url_must_be_loopback_when_enabled ... ok
+test config::tests::a_lookalike_loopback_hostname_is_not_fooled_by_a_prefix_check ... ok
+test config::tests::ipv6_formatting_does_not_expand_the_allowed_bind_list ... ok
+test config::tests::an_unknown_key_inside_the_judge_block_is_rejected ... ok
+test config::tests::parses_a_partial_file_and_keeps_defaults ... ok
+test audit::tests::preserves_raw_bytes_when_explicitly_supplied ... ok
+test config::tests::raw_unknown_capture_requires_explicit_opt_in ... ok
+test config::tests::loopback_urls_with_ports_and_ipv6_are_accepted ... ok
+test config::tests::the_judge_is_disabled_by_default ... ok
+test audit::tests::appends_rather_than_truncating_on_reopen ... ok
+test decision::tests::a_deferred_decision_omits_the_reason_field ... ok
+test decision::tests::allow_maps_to_defer_never_to_allow ... ok
+test audit::tests::writes_one_json_object_per_line ... ok
+test decision::tests::ask_and_deny_map_directly_and_carry_a_reason ... ok
+test decision::tests::enforcing_mode_reports_shadow_false ... ok
+test decision::tests::escalate_must_be_resolved_before_reaching_a_decision ... ok
+test config::tests::each_supported_bind_formats_a_valid_socket_and_endpoint_authority ... ok
+test decision::tests::serializes_to_the_documented_hook_output_shape ... ok
+test decision::tests::shadow_mode_never_enforces_anything ... ok
+test grant::tests::a_grant_from_a_different_key_is_refused ... ok
+test grant::tests::an_expired_grant_is_refused ... ok
+test grant::tests::a_fresh_grant_verifies_for_the_action_it_was_issued_for ... ok
+test grant::tests::a_grant_does_not_authorize_different_arguments ... ok
+test grant::tests::a_forged_and_expired_grant_reports_the_forgery_first ... ok
+test grant::tests::argument_key_order_does_not_change_the_fingerprint ... ok
+test grant::tests::a_future_dated_grant_is_refused_beyond_clock_skew ... ok
+test grant::tests::a_grant_does_not_cross_sessions_or_tools ... ok
+test grant::tests::a_grant_that_fails_verification_is_not_recorded_as_spent ... ok
+test grant::tests::field_boundaries_cannot_be_shifted_between_session_and_tool ... ok
+test handlers::tests::a_judgement_of_documentation_takes_the_fallback ... ok
+test handlers::tests::a_judgement_of_injection_becomes_ask ... ok
+test grant::tests::the_tool_is_part_of_the_fingerprint ... ok
+test handlers::tests::a_missing_fallback_requires_review ... ok
+test handlers::tests::an_unavailable_judge_takes_the_fallback ... ok
+test handlers::tests::the_judge_can_only_tighten_never_soften ... ok
+test grant::tests::tampering_with_any_field_breaks_the_signature ... ok
+test handlers::tests::session_sequence_numbers_are_monotonic_and_per_session ... ok
+test handlers::tests::ending_a_session_resets_its_sequence ... ok
+test hook::tests::a_plain_string_tool_response_is_read_as_text ... ok
+test hook::tests::a_missing_session_id_is_an_error ... ok
+test hook::tests::an_absent_tool_response_yields_empty_text ... ok
+test grant::tests::a_grant_can_only_be_redeemed_once ... ok
+test hook::tests::an_array_shaped_tool_response_stringifies_to_useful_text ... ok
+test grant::tests::nonces_are_already_in_the_preserved_alphabet ... ok
+test hook::tests::an_empty_session_id_still_parses_but_is_not_a_valid_session ... ok
+test hook::tests::parses_post_tool_use_with_a_structured_response ... ok
+test hook::tests::as_str_is_pinned_and_snake_case_for_every_variant ... ok
+test hook::tests::an_unknown_event_name_parses_as_other_rather_than_erroring ... ok
+test hook::tests::parses_subagent_stop ... ok
+test hook::tests::parses_pre_tool_use ... ok
+test grant::tests::a_spent_grant_stays_spent_across_a_restart ... ok
+test hook::tests::unexpected_extra_fields_are_ignored ... ok
+test install::tests::configured_installation_preserves_each_supported_bind_for_every_event ... ok
+test install::tests::emits_all_five_events_pointing_at_the_daemon ... ok
+test install::tests::honours_a_custom_port ... ok
+test grant::tests::corrupt_epoch_fails_closed_for_claims_and_issuance ... ok
+test install::tests::instructions_disclaim_the_hook_and_point_at_preflight ... ok
+test install::tests::instructions_carry_the_promotion_sequence_and_its_evidence_bar ... ok
+test grant::tests::spent_entries_are_pruned_once_they_can_no_longer_matter ... ok
+test install::tests::instructions_mention_shadow_mode_and_the_timeout_cost ... ok
+test install::tests::matches_all_tools ... ok
+test install::tests::instructions_never_print_a_literal_token ... ok
+test install::tests::passes_the_token_by_env_var_never_inline ... ok
+test install::tests::token_command_quotes_paths_instead_of_evaluating_them ... ok
+test install::tests::sets_a_short_timeout_so_a_stalled_daemon_cannot_hang_the_loop ... ok
+test judge::tests::anything_else_is_unavailable_not_a_guess ... ok
+test judge::tests::a_huge_span_is_capped ... ok
+test judge::tests::delimiters_appearing_in_content_are_neutralized ... ok
+test judge::tests::parses_the_two_accepted_answers_case_insensitively ... ok
+test judge::tests::the_prompt_does_not_include_the_tool_call ... ok
+test judge::tests::the_prompt_names_the_source_and_the_answer_contract ... ok
+test judge::tests::the_span_is_truncated_on_a_utf8_boundary ... ok
+test lifecycle::tests::managed_identity_requires_every_field ... ok
+test managed_policy::tests::keyring_parse_and_serialize_round_trip ... ok
+test managed_policy::tests::keyring_rejects_empty_or_invalid_entries ... ok
+test managed_policy::tests::keyring_versioned_format_supports_schema_version_and_denies_unknown_fields ... ok
+test managed_policy::tests::rejects_cross_tenant_or_agent ... ok
+test grant::tests::approvals_issued_under_current_policy_work_and_old_issuance_is_refused ... ok
+test managed_policy::tests::rejects_expiry_and_excessive_ttl ... ok
+test grant::tests::cached_approval_cannot_be_redeemed_after_policy_switch_or_restart ... ok
+test grant::tests::concurrent_issuer_observes_new_generation_after_switch_lock_releases ... ok
+test managed_policy::tests::rejects_policy_tampering ... ok
+test managed_policy::tests::rejects_invalid_signature ... ok
+test managed_policy::tests::rejects_invalid_policy_yaml_even_with_valid_signature ... ok
+test managed_policy::tests::rejects_replay_and_stale_sequence ... ok
+test managed_policy::tests::rejects_signed_metadata_tampering ... ok
+test managed_policy::tests::rejects_unknown_or_revoked_signing_key ... ok
+test managed_policy::tests::multi_key_verification_supports_rotation_and_revocation ... ok
+test managed_policy::tests::rejects_unknown_fields_and_oversize_input ... ok
+test map::tests::an_empty_session_id_maps_to_none_rather_than_a_shared_bucket ... ok
+test map::tests::an_unknown_event_maps_to_none_so_the_daemon_can_skip_it ... ok
+test managed_sync::https_transport_tests::accepts_https_remote_and_existing_loopback_http ... ok
+test map::tests::lifecycle_events_map_across ... ok
+test managed_sync::https_transport_tests::rejects_remote_plaintext_credentials_and_ambiguous_origins ... ok
+test managed_policy::tests::valid_signed_agent_policy_is_verified ... ok
+test map::tests::pre_tool_use_becomes_a_tool_call ... ok
+test map::tests::oversized_content_is_truncated_at_the_cap ... ok
+test map::tests::post_tool_use_becomes_a_tool_result_with_provenance ... ok
+test map::tests::small_content_is_not_reported_as_truncated ... ok
+test map::tests::subagent_stop_becomes_a_subagent_report ... ok
+test map::tests::truncation_at_max_zero_one_and_full_length_never_panics ... ok
+test map::tests::truncation_handles_a_four_byte_character_at_the_cut_point ... ok
+test map::tests::truncation_respects_utf8_boundaries ... ok
+test mcp::admission::input_identity_tests::compose_production_policy_rules ... ok
+test managed_policy::tests::read_keyring_file_enforces_bounds_and_regular_file ... ok
+test managed_sync::https_transport_tests::private_ca_fifo_is_refused_without_waiting_for_a_writer ... ok
+test mcp::admission::input_identity_tests::sou54_write_authority_preserves_hard_denials_and_unknown_refusal ... ok
+test managed_sync::https_transport_tests::private_ca_file_validation_uses_the_real_loader ... ok
+test mcp::admission::input_identity_tests::sou56_https_profile_requires_exact_read_prediction_and_retains_hard_denials ... ok
+test mcp::https_get::tests::default_denies_private_reserved_and_embedded_addresses ... ok
+test mcp::https_get::tests::current_dns_must_equal_the_frozen_set ... ok
+test mcp::create_file::tests::unsupported_platform_refuses_without_creating_any_entry ... ok
+test mcp::create_file::tests::validates_content_and_exact_direct_leaf_before_any_effects ... ok
+test mcp::admission::input_identity_tests::changed_schema_tool_list_and_unsupported_annotations_require_readmission ... ok
+test mcp::admission::resource_receipt_tests::canonical_resource_digest_is_independent_of_property_order_and_legacy_stays_closed ... ok
+test mcp::https_get::tests::errors_do_not_disclose_endpoint_or_response ... ok
+test mcp::https_get::tests::exact_url_scope_rejects_parser_and_authority_aliases ... ok
+test mcp::https_get::tests::literal_addresses_cannot_override_the_url ... ok
+test mcp::https_get::tests::metadata_and_special_ranges_cannot_use_private_fixture_exception ... ok
+test mcp::https_get::tests::non_linux_never_dispatches ... ok
+test mcp::https_get::tests::authority_is_closed_and_identity_binds_all_fields ... ok
+test mcp::https_get::tests::private_exception_is_exact_and_never_a_global_switch ... ok
+test mcp::input::tests::explicit_create_string_bound_accepts_4_kib_and_authority_checks_bytes ... ok
+test mcp::input::tests::malformed_inconsistent_or_unbounded_string_constraints_are_refused ... ok
+test mcp::jsonrpc::tests::a_non_tools_list_message_yields_none ... ok
+test mcp::input::tests::string_lengths_count_unicode_scalars_without_changing_unbounded_profile ... ok
+test mcp::jsonrpc::tests::extracts_the_tool_manifest_from_a_tools_list_response ... ok
+test mcp::admission::input_identity_tests::original_discovery_schema_and_annotations_are_retained ... ok
+test mcp::https_get::tests::strict_response_framing_refuses_unsupported_or_ambiguous_material ... ok
+test mcp::https_get::tests::response_scope_requires_one_explicit_utf8_text_or_json_type ... ok
+test mcp::manifest::tests::a_changed_description_changes_the_hash ... ok
+test mcp::manifest::tests::a_changed_schema_changes_the_hash ... ok
+test mcp::manifest::tests::an_unchanged_manifest_diffs_to_nothing ... ok
+test mcp::manifest::tests::description_poisoning_shows_the_new_text_not_just_the_tool_name ... ok
+test mcp::manifest::tests::a_widened_schema_is_reported_as_a_schema_change ... ok
+test mcp::manifest::tests::reordering_schema_keys_is_not_a_change ... ok
+test mcp::manifest::tests::reordering_tools_does_not_change_the_hash ... ok
+test mcp::manifest::tests::a_huge_or_multiline_description_cannot_flood_the_record ... ok
+test mcp::proxy::tests::withholds_only_when_enforcing_and_not_allowed ... ok
+test mcp::manifest::tests::the_diff_names_added_removed_and_changed_tools ... ok
+test mcp::manifest::tests::a_wholesale_rewrite_is_capped_and_says_how_much_is_hidden ... ok
+test mcp::stdio::tests::no_io_drop_restores_entire_status_and_preserves_original_descriptor_flags ... ok
+test mcp::admission::resource_receipt_tests::missing_or_changed_resource_hash_and_old_contract_are_refused_over_http ... FAILED
+test mcp::store::tests::a_long_id_is_bounded_and_still_unique ... ok
+test mcp::store::tests::the_registry_flags_a_name_owned_by_another_server_or_a_builtin ... ok
+test mcp::stdio::tests::non_pollable_stdio_is_explicitly_refused_without_flag_changes ... ok
+test mcp::store::tests::a_legacy_hash_only_pin_still_detects_drift ... ok
+test mcp::admission::input_identity_tests::prediction_identity_binds_server_arguments_metadata_and_classifier_revision ... ok
+test mcp::store::tests::a_pin_round_trips_through_disk ... ok
+test mcp::store::tests::the_pinned_manifest_survives_a_restart_so_drift_can_be_diffed ... ok
+test mcp::store::tests::a_record_written_before_the_discriminator_is_migrated_not_lost ... ok
+test mcp::store::tests::re_pinning_an_identical_manifest_adds_no_history ... ok
+test mcp::store::tests::ids_differing_only_in_replaced_characters_do_not_share_a_record ... ok
+test mcp::stdio::tests::cancelled_read_keeps_immediate_sequential_reply_and_eof_useful ... ok
+test native::child_authority::tests::concurrent_verification_keeps_session_bindings_isolated ... ok
+test native::child_authority::tests::every_claim_is_authenticated ... ok
+test native::child_authority::tests::expiry_and_future_skew_boundaries ... ok
+test native::child_authority::tests::key_derivation_known_vector_and_separation ... ok
+test native::child_authority::tests::reasons_are_distinct_and_nonempty ... ok
+test mcp::store::tests::a_superseded_manifest_moves_into_bounded_history ... ok
+test native::child_authority::tests::rejects_authenticated_invalid_contract_and_interval ... ok
+test native::child_authority::tests::rejects_malformed_wire_data ... ok
+test native::child_authority::tests::rejects_mismatched_authority_and_wrong_key ... ok
+test native::child_authority::tests::token_round_trip_and_verification ... ok
+test native::child_authority::tests::signing_boundaries_cannot_be_shifted ... ok
+test native::resource::tests::create_authority_refuses_existing_nested_and_linked_destinations ... ok
+test native::resource::tests::create_authority_rejects_args_content_destination_and_workspace_substitution ... ok
+test native::resource::tests::create_authority_rejects_normalized_path_spellings_before_execution ... ok
+test native::resource::tests::create_authority_requires_reviewed_schema_action_profile_and_executor ... ok
+test native::resource::tests::create_binding_detects_replaced_workspace_inode_at_the_same_path ... ok
+test native::resource::windows_create_contract_tests::windows_create_v5_arguments_enforce_original_fields_and_utf8_byte_cap ... ok
+test native::resource::windows_create_contract_tests::windows_create_v5_binding_refuses_other_platforms_without_filesystem_effects ... ok
+test native::resource::windows_create_contract_tests::windows_create_v5_binding_shape_keeps_linux_contract_distinct ... ok
+test native::resource::windows_create_contract_tests::windows_create_v5_policy_requires_explicit_closed_write_semantics ... ok
+test native::resource::windows_read_contract_tests::windows_read_authority_requires_explicit_reviewed_semantics ... ok
+test native::resource::windows_read_contract_tests::windows_read_v4_binding_shape_preserves_distinct_contracts ... ok
+test native::resource::tests::create_binding_is_v2_exact_and_uses_utf8_byte_bounds ... ok
+test native::tests::expired_native_session_clears_taint_and_invalidates_pending_calls ... ok
+test native::tests::audit_write_failure_withholds_result_and_does_not_commit_taint_or_spans ... ok
+test native::tests::mcp_host_rejects_uninspected_fields_and_content_without_spending_again ... ok
+test native::tests::mcp_host_error_kind_matches_both_rpc_and_tool_errors ... ok
+test native::tests::mcp_host_result_admits_original_decoded_text_and_spends_invocation ... ok
+test native::tests::mcp_host_unicode_escaped_injection_is_withheld_before_admission ... ok
+test native::tests::registry_rejects_invalid_pointer_escapes_and_semantic_caller_claims ... ok
+test preflight::tests::a_missing_enforcement_flag_is_unhealthy_rather_than_assumed_enforcing ... ok
+test preflight::tests::a_non_200_answer_is_unhealthy ... ok
+test preflight::tests::an_enforcing_daemon_passes_either_way ... ok
+test preflight::tests::an_unreachable_daemon_fails_and_says_the_hook_fails_open ... ok
+test preflight::tests::shadow_mode_warns_by_default_and_fails_only_when_enforcement_is_required ... ok
+test preflight::tests::something_else_on_the_port_is_unhealthy_not_healthy ... ok
+test provenance::tests::a_path_tool_with_no_cwd_falls_through_to_local_system ... ok
+test provenance::tests::a_read_inside_the_project_is_local_project ... ok
+test provenance::tests::a_read_outside_the_project_is_local_system ... ok
+test provenance::tests::a_relative_path_in_project_is_local_project ... ok
+test provenance::tests::a_relative_traversal_path_is_still_outside_the_project ... ok
+test provenance::tests::a_sibling_directory_sharing_a_prefix_is_outside ... ok
+test provenance::tests::a_traversal_path_is_not_treated_as_inside_the_project ... ok
+test provenance::tests::bash_and_unknown_tools_are_local_system_not_untrusted ... ok
+test provenance::tests::host_of_handles_userinfo_port_case_and_missing_scheme ... ok
+test provenance::tests::mcp_name_parsing_edge_cases ... ok
+test provenance::tests::mcp_tools_carry_their_server_name ... ok
+test provenance::tests::no_tool_result_is_ever_marked_user_prompt ... ok
+test provenance::tests::notebook_read_uses_the_notebook_path_key ... ok
+test provenance::tests::relative_path_against_absolute_root_does_not_match_is_inside_directly ... ok
+test provenance::tests::root_itself_is_inside_root ... ok
+test provenance::tests::trailing_slashes_do_not_change_the_result ... ok
+test provenance::tests::web_fetch_is_network_with_the_host ... ok
+test provenance::tests::web_fetch_without_a_parsable_url_is_still_network ... ok
+test replay::tests::a_thin_log_never_recommends_enforcing_however_clean_it_looks ... ok
+test replay::tests::an_empty_log_has_a_zero_interruption_rate_and_does_not_divide_by_zero ... ok
+test replay::tests::an_unrecognized_verdict_string_counts_toward_total_but_no_bucket ... ok
+test replay::tests::counts_verdicts_and_sessions ... ok
+test replay::tests::denial_rate_is_reported_separately_from_asks ... ok
+test replay::tests::enough_quiet_traffic_supports_enforcing ... ok
+test native::tests::pending_call_cap_rejects_new_invocation_without_eviction ... ok
+test replay::tests::ranks_rules_by_how_often_they_fired ... ok
+test replay::tests::reports_latency_percentiles ... ok
+test replay::tests::reports_the_interruption_rate ... ok
+test replay::tests::round_trips_through_the_real_audit_line_serializer ... ok
+test replay::tests::the_observed_window_comes_from_recorded_timestamps ... ok
+test replay::tests::tolerates_blank_and_malformed_lines ... ok
+test replay::tests::one_interruption_in_a_large_window_demands_review_not_promotion ... ok
+test native::approval::tests::default_config_keeps_the_refusal_and_has_no_approval_route ... ok
+test sandbox::tests::guarded_file_mutations_fail_closed_when_policy_denies ... ok
+test sandbox::tests::guarded_file_delete_and_rename_stay_inside_the_workspace ... ok
+test sandbox::tests::guarded_file_write_is_confined_to_the_workspace ... ok
+test sandbox::tests::guarded_file_write_rejects_traversal_and_symlink_targets ... ok
+test sandbox::tests::guarded_network_fetch_refuses_unknown_hosts_before_proxy_io ... FAILED
+test sandbox::tests::guarded_network_fetch_uses_the_proxy_and_bounds_the_response ... FAILED
+test sandbox::tests::guarded_network_fetch_requires_a_policy_egress_allowlist ... FAILED
+test sandbox::tests::guarded_network_urls_fail_closed_on_insecure_or_ambiguous_inputs ... ok
+test sandbox::tests::rejects_the_host_root_as_a_workspace ... ok
+test native::approval::tests::hook_key_and_hook_grants_cannot_authorize_native_calls ... ok
+test native::approval::tests::classifier_source_requires_the_same_exact_approval ... ok
+test sandbox::tests::rejects_a_network_allowlist_instead_of_sharing_the_host_net ... ok
+test spans::tests::an_absent_entry_is_none ... ok
+test spans::tests::content_is_truncated_on_a_utf8_boundary ... ok
+test spans::tests::ending_a_session_drops_its_spans ... ok
+test spans::tests::putting_the_same_seq_twice_does_not_grow_the_eviction_queue_unboundedly ... ok
+test spans::tests::sessions_are_isolated ... ok
+test spans::tests::stores_and_retrieves_by_sequence_number ... ok
+test spans::tests::the_oldest_entry_is_evicted_at_capacity ... ok
+test token::tests::a_prefix_of_the_token_does_not_verify ... ok
+test token::tests::generated_tokens_are_long_and_unique ... ok
+test native::approval::tests::changed_arguments_and_other_sessions_get_no_release ... ok
+test sandbox::tests::test_guarded_file_open_refuses_fifo_without_blocking ... ok
+test token::tests::matching_tokens_verify ... ok
+test token::tests::wrong_missing_and_malformed_headers_all_fail ... ok
+test token::tests::an_existing_nonempty_token_is_restricted_before_reuse ... ok
+test token::tests::a_whitespace_only_existing_file_is_regenerated_not_returned_empty ... ok
+test token::tests::load_or_create_round_trips_and_is_stable ... ok
+test native::approval::tests::policy_switch_hard_deny_and_unsupported_cannot_be_rescued ... ok
+test token::tests::the_token_file_is_not_world_readable ... ok
+test native::approval::tests::restart_session_end_and_second_pending_close_or_refuse ... ok
+test sandbox::tests::guarded_shell_refuses_before_process_creation ... ok
+test native::approval::tests::exact_approval_releases_the_original_call_exactly_once ... ok
+test native::approval::tests::concurrent_redemption_releases_exactly_one ... ok
+test mcp::admission::classifier_revision_tests::classifier_changed_between_parent_check_and_launch_never_executes ... ok
+test native::approval::tests::reject_and_expiry_cannot_be_rescued ... ok
+
+failures:
+
+---- mcp::admission::resource_receipt_tests::missing_or_changed_resource_hash_and_old_contract_are_refused_over_http stdout ----
+
+thread 'mcp::admission::resource_receipt_tests::missing_or_changed_resource_hash_and_old_contract_are_refused_over_http' (16630278) panicked at /Users/sidzuya/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wiremock-0.6.5/src/mock_server/builder.rs:107:46:
+Failed to bind an OS port for a mock server.: Os { code: 1, kind: PermissionDenied, message: "Operation not permitted" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- sandbox::tests::guarded_network_fetch_refuses_unknown_hosts_before_proxy_io stdout ----
+
+thread 'sandbox::tests::guarded_network_fetch_refuses_unknown_hosts_before_proxy_io' (16630427) panicked at /Users/sidzuya/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wiremock-0.6.5/src/mock_server/builder.rs:107:46:
+Failed to bind an OS port for a mock server.: Os { code: 1, kind: PermissionDenied, message: "Operation not permitted" }
+
+---- sandbox::tests::guarded_network_fetch_uses_the_proxy_and_bounds_the_response stdout ----
+
+thread 'sandbox::tests::guarded_network_fetch_uses_the_proxy_and_bounds_the_response' (16630429) panicked at /Users/sidzuya/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wiremock-0.6.5/src/mock_server/builder.rs:107:46:
+Failed to bind an OS port for a mock server.: Os { code: 1, kind: PermissionDenied, message: "Operation not permitted" }
+
+---- sandbox::tests::guarded_network_fetch_requires_a_policy_egress_allowlist stdout ----
+
+thread 'sandbox::tests::guarded_network_fetch_requires_a_policy_egress_allowlist' (16630428) panicked at /Users/sidzuya/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wiremock-0.6.5/src/mock_server/builder.rs:107:46:
+Failed to bind an OS port for a mock server.: Os { code: 1, kind: PermissionDenied, message: "Operation not permitted" }
+
+
+failures:
+    mcp::admission::resource_receipt_tests::missing_or_changed_resource_hash_and_old_contract_are_refused_over_http
+    sandbox::tests::guarded_network_fetch_refuses_unknown_hosts_before_proxy_io
+    sandbox::tests::guarded_network_fetch_requires_a_policy_egress_allowlist
+    sandbox::tests::guarded_network_fetch_uses_the_proxy_and_bounds_the_response
+
+test result: FAILED. 266 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.36s
+
+error: test failed, to rerun pass `-p agentfw --lib`

@@ -19,6 +19,7 @@ pub mod managed_sync;
 pub mod map;
 pub mod mcp;
 pub mod native;
+pub use native::child_authority;
 pub mod preflight;
 #[cfg(windows)]
 mod private_file_windows;
@@ -47,14 +48,22 @@ pub fn app(state: Shared) -> Router {
     app_with_diagnostics(state, runtime)
 }
 
+pub const MAX_ROUTE_BODY: usize = 16 * 1024 * 1024;
+
 /// Attach immutable startup identity and bounded read-only transport observations.
 pub fn app_with_diagnostics(
     state: Shared,
     runtime: std::sync::Arc<protection_status::Runtime>,
 ) -> Router {
     Router::new()
-        .route("/hook", post(handlers::hook))
-        .route("/mcp", post(handlers::mcp))
+        .route(
+            "/hook",
+            post(handlers::hook).layer(axum::extract::DefaultBodyLimit::max(MAX_ROUTE_BODY)),
+        )
+        .route(
+            "/mcp",
+            post(handlers::mcp).layer(axum::extract::DefaultBodyLimit::max(MAX_ROUTE_BODY)),
+        )
         .route(
             "/native/approval/v1",
             post(native::approval::handler)
@@ -64,6 +73,7 @@ pub fn app_with_diagnostics(
             "/native/v1",
             post(native::handler).layer(axum::extract::DefaultBodyLimit::max(native::MAX_BODY)),
         )
+        .route("/native/v1/instance", get(native::instance))
         .route("/health", get(handlers::health))
         .route(protection_status::ENDPOINT, get(protection_status::handler))
         .layer(axum::Extension(runtime.clone()))

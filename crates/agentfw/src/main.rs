@@ -39,6 +39,42 @@ enum NativeApprovalCmd {
 }
 
 #[derive(Subcommand)]
+enum ChildAuthorityCmd {
+    /// Mint a signed grant for one host session and MCP server.
+    Mint {
+        #[arg(long)]
+        session: String,
+        #[arg(long)]
+        server: String,
+        #[arg(long, default_value_t = 300)]
+        ttl_seconds: u64,
+        #[arg(long, value_delimiter = ',')]
+        tools: Vec<String>,
+        #[arg(long)]
+        agent_id: Option<String>,
+        #[arg(long)]
+        parent_id: Option<String>,
+        #[arg(long, value_delimiter = ',')]
+        resources: Option<Vec<String>>,
+        /// Current /native/v1/instance identifier; required for scoped grants.
+        #[arg(long, allow_hyphen_values = true)]
+        instance_id: Option<String>,
+        /// Exact live parent binding from /native/v1/instance.
+        #[arg(long)]
+        parent_binding: Option<String>,
+    },
+    /// Authenticate a grant and print its verified claims.
+    Verify {
+        #[arg(long)]
+        session: String,
+        #[arg(long)]
+        server: String,
+        #[arg(long)]
+        token: String,
+    },
+}
+
+#[derive(Subcommand)]
 enum Cmd {
     /// Run the daemon.
     Serve,
@@ -109,6 +145,12 @@ enum Cmd {
         /// This opt-in path fails closed; result release is to the MCP host, not model context.
         #[arg(long)]
         native_admission: bool,
+        /// Parent host session to bind this collector and its provenance to.
+        #[arg(long)]
+        host_session: Option<String>,
+        /// Authenticated child authority grant token minted for this session and server.
+        #[arg(long)]
+        child_authority: Option<String>,
         /// With --native-admission: hold one Ask call up to N seconds for a
         /// single-use operator approval (needs `native.approval` in the daemon
         /// config). 0 or absent keeps the default correlated refusal.
@@ -117,6 +159,11 @@ enum Cmd {
         /// The real server command and its args, after `--`.
         #[arg(last = true, required = true)]
         command: Vec<String>,
+    },
+    /// Manage authenticated child authority grants.
+    ChildAuthority {
+        #[command(subcommand)]
+        action: ChildAuthorityCmd,
     },
     /// Operator commands for pending native MCP Ask approvals (SOU-48).
     /// Approval is explicit single-use authorization, not proof of human presence.
@@ -540,12 +587,102 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Cmd::McpConnection { command } => agentfw::mcp::connection::run(command),
+        Cmd::ChildAuthority { action } => {
+            use agentfw::native::child_authority;
+            let home = Config::home()?;
+            let path = home.join("native-token");
+            let token = std::fs::read_to_string(&path).map_err(|_| {
+                anyhow::anyhow!("child authority needs the existing daemon native token")
+            })?;
+            let token = token.trim();
+            anyhow::ensure!(!token.is_empty(), "daemon native token is empty");
+            let key = child_authority::derive_key(token);
+            match action {
+                ChildAuthorityCmd::Mint {
+                    session,
+                    server,
+                    ttl_seconds,
+                    tools,
+                    agent_id,
+                    parent_id,
+                    resources,
+                    instance_id,
+                    parent_binding,
+                } => {
+                    let scoped = agent_id.is_some() || parent_id.is_some() || resources.is_some();
+                    anyhow::ensure!(!scoped || instance_id.as_ref().is_some_and(|id| !id.is_empty() && id.len() <= 128 && id.bytes().all(|b| b.is_ascii_alphanumeric() || b"_-".contains(&b))),
+                        "scoped child authority requires --instance-id from the running daemon's authenticated /native/v1/instance endpoint");
+                    anyhow::ensure!(
+                        agent_id.is_some() || (parent_id.is_none() && resources.is_none()),
+                        "scoped parent/resource authority requires --agent-id"
+                    );
+                    anyhow::ensure!(
+                        parent_id.is_some() == parent_binding.is_some(),
+                        "--parent-id and --parent-binding are required together"
+                    );
+                    anyhow::ensure!(
+                        parent_binding
+                            .as_deref()
+                            .is_none_or(agentfw::native::is_digest),
+                        "invalid parent binding digest"
+                    );
+                    let nonce = if scoped {
+                        let instance = instance_id.unwrap();
+                        match parent_binding {
+                            Some(binding) => {
+                                format!("{instance}.{binding}.{}", agentfw::token::generate())
+                            }
+                            None => format!("{instance}.{}", agentfw::token::generate()),
+                        }
+                    } else {
+                        agentfw::token::generate()
+                    };
+                    let grant = child_authority::mint_scoped(
+                        &key,
+                        &session,
+                        &server,
+                        &tools,
+                        now_ms(),
+                        ttl_seconds.saturating_mul(1000),
+                        nonce,
+                        agent_id,
+                        parent_id,
+                        resources,
+                    );
+                    println!("{}", child_authority::encode_token(&grant));
+                }
+                ChildAuthorityCmd::Verify {
+                    session,
+                    server,
+                    token,
+                } => {
+                    let grant =
+                        child_authority::verify_token(&key, &token, &session, &server, now_ms())
+                            .map_err(|error| anyhow::anyhow!(error.reason()))?;
+                    println!("{}", serde_json::to_string(&grant)?);
+                }
+            }
+            Ok(())
+        }
         Cmd::Mcp {
             id,
+            host_session,
+            child_authority,
             native_admission,
             native_approval_wait_seconds,
             command,
         } => {
+            let host_session = host_session.or_else(|| std::env::var("AGENTFW_HOST_SESSION").ok());
+            let child_authority =
+                child_authority.or_else(|| std::env::var("AGENTFW_CHILD_AUTHORITY").ok());
+            if !native_admission && (host_session.is_some() || child_authority.is_some()) {
+                anyhow::bail!("--host-session and --child-authority require --native-admission");
+            }
+            if host_session.is_some() != child_authority.is_some() {
+                anyhow::bail!(
+                    "both --host-session and --child-authority must be provided together for authenticated binding"
+                );
+            }
             let (cmd, args) = command
                 .split_first()
                 .ok_or_else(|| anyhow::anyhow!("no server command given after --"))?;
@@ -578,6 +715,8 @@ fn main() -> anyhow::Result<()> {
                 );
                 let manifest_token = agentfw::token::load_or_create(&manifest_token_path)?;
                 let admission = agentfw::mcp::admission::AdmissionCfg {
+                    host_session,
+                    child_authority,
                     daemon_url: cfg.endpoint_url("/native/v1"),
                     manifest_url: cfg.endpoint_url("/mcp"),
                     manifest_token,

@@ -1,0 +1,43 @@
+{
+  "commit": "36d02ae4eed49ed6fa9aa63524d3d9b4cfa182d4",
+  "verdict": "REQUEST CHANGES",
+  "findings": {
+    "P1": 4,
+    "P2": 1
+  },
+  "baseline": {
+    "native_endpoint": {
+      "passed": 92,
+      "failed": 0
+    },
+    "hook_endpoint": {
+      "passed": 13,
+      "failed": 0
+    },
+    "lib": {
+      "passed": 280,
+      "failed": 0
+    },
+    "real_process_sou63": {
+      "passed": 2,
+      "failed": 0
+    },
+    "previous_review8dd_witnesses": {
+      "passed": 6,
+      "failed": 0
+    },
+    "clippy_all_targets_D_warnings": "PASS",
+    "fmt_all_check": "PASS"
+  },
+  "new_witnesses": {
+    "review36_unknown_hook_agent_must_not_bypass_binding": "FAIL (confirmed defect)",
+    "review36_missing_parent_must_not_register_child_as_root": "FAIL (confirmed defect)",
+    "review36_parent_end_must_not_drop_resource_constraints": "FAIL (confirmed defect)",
+    "review36_unknown_parent_scope_must_not_become_proven_child_scope": "FAIL (confirmed defect)",
+    "review36_legitimate_mailbox_narrowing_must_be_usable": "FAIL (confirmed defect)",
+    "review36_expired_child_authority_must_not_authorize_hooks": "FAIL (confirmed defect)",
+    "review36_conflicting_posttool_identity_must_mark_history_loss": "FAIL (confirmed defect)"
+  },
+  "execution": "Tracked commit exported to /private/tmp/sou63-review/36d02ae; writes confined to /private/tmp/sou63-review; external networking denied; baseline socket fixtures and real-process tests loopback only. Additional witnesses all networking denied. No product source changes.",
+  "limits": "Full workspace tests, protection_status and remaining 67 mcp_admission tests not independently rerun."
+}

@@ -4,22 +4,490 @@
 //! HTTP surface: `POST /hook` for every hook event, `GET /health` for liveness.
 //! No detection logic lives here — verdicts come from `soup-wall-agent`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
 use axum::Json;
-use soup_wall_agent::{AgentFirewall, EventKind, Trust, Verdict};
+use soup_wall_agent::{AgentFirewall, EventKind, Outcome, Trust, Verdict};
 
 use crate::audit::{AuditFinding, AuditLine, AuditSink, AuditTaint};
 use crate::config::Config;
 use crate::decision;
 use crate::hook::{HookEvent, HookPayload};
+use futures_util::StreamExt;
+
 use crate::judge::{Judge, Judgement};
 use crate::map;
 use crate::spans::SpanCache;
+
+/// Bounded structural scanner for root-level JSON fields (depth 1 only).
+/// Does not mistake nested fields, escaped quotes, or substrings for root fields.
+#[derive(Debug, Default)]
+pub struct RootJsonScan {
+    pub string_fields: HashMap<String, String>,
+    pub all_string_fields: HashMap<String, Vec<String>>,
+    pub duplicate_keys: HashSet<String>,
+    pub incomplete_keys: HashSet<String>,
+    pub root_keys: HashSet<String>,
+    pub opened_object: bool,
+    pub closed_object: bool,
+}
+
+impl RootJsonScan {
+    pub fn scan(raw: &str) -> Self {
+        let mut scan = Self::default();
+        let bytes = raw.as_bytes();
+        let n = bytes.len();
+        let mut i = 0;
+
+        while i < n && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+
+        if i >= n || bytes[i] != b'{' {
+            return scan;
+        }
+
+        scan.opened_object = true;
+        i += 1; // skip opening '{'
+
+        enum State {
+            Key,
+            Colon(String),
+            Value(String),
+            CommaOrEnd,
+        }
+
+        let mut state = State::Key;
+
+        while i < n {
+            match state {
+                State::Key => {
+                    while i < n && bytes[i].is_ascii_whitespace() {
+                        i += 1;
+                    }
+                    if i >= n {
+                        break;
+                    }
+                    if bytes[i] == b'}' {
+                        scan.closed_object = true;
+                        break;
+                    }
+                    if bytes[i] == b',' {
+                        i += 1;
+                        continue;
+                    }
+                    if bytes[i] == b'"' {
+                        let (key_opt, next_i) = parse_json_string(bytes, i);
+                        i = next_i;
+                        if let Some(key) = key_opt {
+                            if scan.root_keys.contains(&key) {
+                                scan.duplicate_keys.insert(key.clone());
+                            } else {
+                                scan.root_keys.insert(key.clone());
+                            }
+                            state = State::Colon(key);
+                        } else {
+                            scan.incomplete_keys.insert("<incomplete_key>".to_string());
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                State::Colon(key) => {
+                    while i < n && bytes[i].is_ascii_whitespace() {
+                        i += 1;
+                    }
+                    if i >= n {
+                        scan.incomplete_keys.insert(key);
+                        break;
+                    }
+                    if bytes[i] == b':' {
+                        i += 1;
+                        state = State::Value(key);
+                    } else {
+                        scan.incomplete_keys.insert(key);
+                        break;
+                    }
+                }
+                State::Value(key) => {
+                    while i < n && bytes[i].is_ascii_whitespace() {
+                        i += 1;
+                    }
+                    if i >= n {
+                        scan.incomplete_keys.insert(key);
+                        break;
+                    }
+                    let b = bytes[i];
+                    if b == b'"' {
+                        let (val_opt, next_i) = parse_json_string(bytes, i);
+                        i = next_i;
+                        if let Some(val) = val_opt {
+                            scan.all_string_fields
+                                .entry(key.clone())
+                                .or_default()
+                                .push(val.clone());
+                            scan.string_fields.insert(key, val);
+                            state = State::CommaOrEnd;
+                        } else {
+                            scan.incomplete_keys.insert(key);
+                            break;
+                        }
+                    } else if b == b'{' || b == b'[' {
+                        let (complete, next_i) = skip_composite(bytes, i);
+                        i = next_i;
+                        if complete {
+                            state = State::CommaOrEnd;
+                        } else {
+                            scan.incomplete_keys.insert(key);
+                            break;
+                        }
+                    } else if b == b',' || b == b'}' {
+                        scan.incomplete_keys.insert(key);
+                        if b == b'}' {
+                            scan.closed_object = true;
+                        }
+                        break;
+                    } else {
+                        let next_i = skip_primitive(bytes, i);
+                        i = next_i;
+                        state = State::CommaOrEnd;
+                    }
+                }
+                State::CommaOrEnd => {
+                    while i < n && bytes[i].is_ascii_whitespace() {
+                        i += 1;
+                    }
+                    if i >= n {
+                        break;
+                    }
+                    if bytes[i] == b',' {
+                        i += 1;
+                        state = State::Key;
+                    } else if bytes[i] == b'}' {
+                        scan.closed_object = true;
+                        break;
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+
+        scan
+    }
+
+    pub fn get_root_string(&self, key: &str) -> Option<&str> {
+        if self.duplicate_keys.contains(key) || self.incomplete_keys.contains(key) {
+            return None;
+        }
+        self.string_fields.get(key).map(|s| s.as_str())
+    }
+
+    pub fn is_proven_non_pre(&self) -> bool {
+        if !self.opened_object {
+            return false;
+        }
+        if self.duplicate_keys.contains("hook_event_name")
+            || self.duplicate_keys.contains("event")
+            || self.incomplete_keys.contains("hook_event_name")
+            || self.incomplete_keys.contains("event")
+        {
+            return false;
+        }
+        let event = self
+            .string_fields
+            .get("hook_event_name")
+            .or_else(|| self.string_fields.get("event"));
+        matches!(
+            event.map(|s| s.as_str()),
+            Some("PostToolUse" | "SessionStart" | "SessionEnd")
+        )
+    }
+
+    pub fn is_protected_pretooluse(&self, _raw: &str) -> bool {
+        if !self.opened_object {
+            return false;
+        }
+        let event = self
+            .get_root_string("hook_event_name")
+            .or_else(|| self.get_root_string("event"));
+        if event != Some("PreToolUse") {
+            return false;
+        }
+        let tool = self
+            .get_root_string("tool_name")
+            .or_else(|| self.get_root_string("tool"));
+        let Some(tool) = tool else {
+            return false;
+        };
+        const READ_ONLY: &[&str] = &[
+            "Read",
+            "Grep",
+            "Glob",
+            "NotebookRead",
+            "TodoRead",
+            "WebFetch",
+            "WebSearch",
+        ];
+        if READ_ONLY.contains(&tool) {
+            return false;
+        }
+        true
+    }
+
+    pub fn has_protected_tool(&self, raw: &str) -> bool {
+        if self.duplicate_keys.contains("tool_name")
+            || self.duplicate_keys.contains("tool")
+            || self.incomplete_keys.contains("tool_name")
+            || self.incomplete_keys.contains("tool")
+            || self
+                .incomplete_keys
+                .iter()
+                .any(|k| k.starts_with("tool") || k == "<incomplete_key>")
+        {
+            return true;
+        }
+
+        let has_tool_key = self.root_keys.contains("tool_name") || self.root_keys.contains("tool");
+
+        let mut tools = Vec::new();
+        if let Some(t) = self
+            .string_fields
+            .get("tool_name")
+            .or_else(|| self.string_fields.get("tool"))
+        {
+            tools.push(t.clone());
+        }
+        if let Some(all_t) = self.all_string_fields.get("tool_name") {
+            for t in all_t {
+                if !tools.contains(t) {
+                    tools.push(t.clone());
+                }
+            }
+        }
+        if let Some(all_t) = self.all_string_fields.get("tool") {
+            for t in all_t {
+                if !tools.contains(t) {
+                    tools.push(t.clone());
+                }
+            }
+        }
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(raw) {
+            if let Some(t) = v
+                .get("tool_name")
+                .or_else(|| v.get("tool"))
+                .and_then(|t| t.as_str())
+            {
+                if !tools.iter().any(|x| x == t) {
+                    tools.push(t.to_string());
+                }
+            }
+        }
+
+        if has_tool_key && tools.is_empty() {
+            return true;
+        }
+
+        if tools.is_empty() {
+            return false;
+        }
+
+        const READ_ONLY: &[&str] = &[
+            "Read",
+            "Grep",
+            "Glob",
+            "NotebookRead",
+            "TodoRead",
+            "WebFetch",
+            "WebSearch",
+        ];
+        for tool in &tools {
+            if !READ_ONLY.contains(&tool.as_str()) {
+                return true;
+            }
+        }
+        false
+    }
+}
+
+fn parse_json_string(bytes: &[u8], start: usize) -> (Option<String>, usize) {
+    let n = bytes.len();
+    if start >= n || bytes[start] != b'"' {
+        return (None, start);
+    }
+    let mut i = start + 1;
+    let mut has_escapes = false;
+    let content_start = i;
+    while i < n {
+        let b = bytes[i];
+        if b == b'"' {
+            let res = if has_escapes {
+                let slice = &bytes[start..=i];
+                if let Ok(s) = std::str::from_utf8(slice) {
+                    serde_json::from_str::<String>(s).ok()
+                } else {
+                    None
+                }
+            } else {
+                let slice = &bytes[content_start..i];
+                String::from_utf8(slice.to_vec()).ok()
+            };
+            return (res, i + 1);
+        } else if b == b'\\' {
+            has_escapes = true;
+            i += 1;
+            if i >= n {
+                return (None, n);
+            }
+            i += 1;
+        } else {
+            i += 1;
+        }
+    }
+    (None, n)
+}
+
+fn skip_composite(bytes: &[u8], start: usize) -> (bool, usize) {
+    let n = bytes.len();
+    let mut depth: usize = 0;
+    let mut i = start;
+    let mut in_string = false;
+    let mut escape = false;
+
+    while i < n {
+        let b = bytes[i];
+        if in_string {
+            if escape {
+                escape = false;
+            } else if b == b'\\' {
+                escape = true;
+            } else if b == b'"' {
+                in_string = false;
+            }
+        } else if b == b'"' {
+            in_string = true;
+        } else if b == b'{' || b == b'[' {
+            depth += 1;
+        } else if b == b'}' || b == b']' {
+            depth = depth.saturating_sub(1);
+            if depth == 0 {
+                return (true, i + 1);
+            }
+        }
+        i += 1;
+    }
+    (false, n)
+}
+
+fn skip_primitive(bytes: &[u8], start: usize) -> usize {
+    let n = bytes.len();
+    let mut i = start;
+    while i < n {
+        let b = bytes[i];
+        if b == b',' || b == b'}' || b == b']' || b.is_ascii_whitespace() {
+            break;
+        }
+        i += 1;
+    }
+    i
+}
+
+fn mark_lossy_provenance(st: &AppState, scan: &RootJsonScan) {
+    let is_unambiguous = scan.opened_object
+        && scan.closed_object
+        && scan.duplicate_keys.is_empty()
+        && scan.incomplete_keys.is_empty();
+
+    let mut sessions_to_mark = Vec::new();
+
+    if is_unambiguous {
+        if let Some(session_id) = scan.get_root_string("session_id").filter(|s| !s.is_empty()) {
+            sessions_to_mark.push(session_id.to_string());
+        }
+    }
+
+    if !is_unambiguous || sessions_to_mark.is_empty() {
+        if let Some(vals) = scan.all_string_fields.get("session_id") {
+            for sid in vals {
+                if !sid.is_empty() && !sessions_to_mark.contains(sid) {
+                    sessions_to_mark.push(sid.clone());
+                }
+            }
+        }
+        if let Some(sid) = scan.string_fields.get("session_id") {
+            if !sid.is_empty() && !sessions_to_mark.contains(sid) {
+                sessions_to_mark.push(sid.clone());
+            }
+        }
+        // Snapshot active hosts before acquiring firewall lock to prevent deadlock
+        if let Some(ref native) = st.native {
+            for host in native.active_host_sessions() {
+                if !sessions_to_mark.contains(&host) {
+                    sessions_to_mark.push(host);
+                }
+            }
+        }
+    }
+
+    if sessions_to_mark.is_empty() {
+        return;
+    }
+
+    let mut fw = st.firewall.lock().expect("firewall mutex");
+    for host in sessions_to_mark {
+        fw.mark_provenance_incomplete(&host);
+    }
+}
+
+#[derive(Debug)]
+pub enum BodyReadError {
+    Oversized { prefix: Vec<u8>, total_len: usize },
+    Io { prefix: Vec<u8>, error: String },
+    InvalidUtf8 { prefix: Vec<u8> },
+}
+
+async fn read_bounded_string(
+    body: axum::body::Body,
+    max_bytes: usize,
+) -> Result<String, BodyReadError> {
+    let mut stream = body.into_data_stream();
+    let mut buf = Vec::new();
+    let mut total_len = 0;
+    while let Some(chunk_res) = stream.next().await {
+        let chunk = match chunk_res {
+            Ok(c) => c,
+            Err(e) => {
+                return Err(BodyReadError::Io {
+                    prefix: buf,
+                    error: e.to_string(),
+                });
+            }
+        };
+        total_len += chunk.len();
+        if buf.len() < max_bytes + 4096 {
+            let to_take = chunk.len().min((max_bytes + 4096) - buf.len());
+            buf.extend_from_slice(&chunk[..to_take]);
+        }
+        if total_len > max_bytes {
+            drop(stream);
+            return Err(BodyReadError::Oversized {
+                prefix: buf,
+                total_len,
+            });
+        }
+    }
+    match String::from_utf8(buf) {
+        Ok(s) => Ok(s),
+        Err(e) => Err(BodyReadError::InvalidUtf8 {
+            prefix: e.into_bytes(),
+        }),
+    }
+}
 
 /// Turn a judgement plus the rule's declared fallback into a final verdict.
 ///
@@ -130,13 +598,59 @@ pub async fn health(State(st): State<Shared>) -> Json<serde_json::Value> {
     }))
 }
 
-/// Every hook event lands here. On ANY internal failure this returns 200 with an
-/// empty body, which Claude Code treats as "no opinion" — a security tool that
-/// wedges the agent loop gets uninstalled the same day.
+// Refused identity cannot silently discard retrospectively delivered content.
+fn hook_identity_refusal(
+    st: &AppState,
+    payload: &HookPayload,
+    body: &str,
+    reason: &str,
+    started: Instant,
+) -> (StatusCode, Json<serde_json::Value>) {
+    // PostToolUse already happened: a refusal cannot retract content.
+    // Preserve sticky history loss even in shadow mode and for lifecycle events.
+    mark_lossy_provenance(st, &RootJsonScan::scan(body));
+    let _ = st.audit.write(&AuditLine {
+        at_ms: now_ms(),
+        session: payload.session_id.clone(),
+        agent_id: payload.agent_id.clone(),
+        parent_id: payload.parent_id.clone(),
+        seq: 0,
+        event: payload.event.as_str().into(),
+        tool: payload.tool_name.clone(),
+        verdict: "deny".into(),
+        shadow: !st.config.enforce,
+        rule: Some(reason.into()),
+        risk_score: 0,
+        findings: vec![],
+        taint: None,
+        judge: None,
+        approval: None,
+        egress_hosts: vec![],
+        latency_us: started.elapsed().as_micros(),
+        truncated: false,
+        raw: None,
+    });
+    if payload.event == HookEvent::PreToolUse && st.config.enforce {
+        let out = decision::Decision {
+            permission_decision: "deny",
+            reason: Some(reason.into()),
+            shadow: false,
+            would_have_been: Verdict::Deny,
+        }
+        .to_hook_output();
+        return (
+            StatusCode::OK,
+            Json(serde_json::to_value(out).unwrap_or_default()),
+        );
+    }
+    (StatusCode::OK, Json(serde_json::json!({})))
+}
+
+/// Inspect authenticated hook traffic; unsupported protected requests receive an explicit disposition.
 pub async fn hook(
     State(st): State<Shared>,
     headers: HeaderMap,
-    body: String,
+    body: axum::body::Body,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let auth = headers
         .get("authorization")
@@ -147,23 +661,223 @@ pub async fn hook(
         return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({})));
     }
 
-    if body.len() > st.config.max_body_bytes {
-        tracing::warn!(
-            len = body.len(),
-            "hook body over cap; proceeding without inspection"
-        );
-        return (StatusCode::OK, Json(serde_json::json!({})));
-    }
-
-    let started = Instant::now();
-
-    let payload: HookPayload = match serde_json::from_str(&body) {
-        Ok(p) => p,
-        Err(e) => {
-            tracing::warn!(error = %e, "unparsable hook payload; proceeding");
+    let body = match read_bounded_string(body, st.config.max_body_bytes).await {
+        Ok(s) => s,
+        Err(err) => {
+            let (prefix, reason_msg) = match err {
+                BodyReadError::Oversized { prefix, total_len } => {
+                    tracing::warn!(
+                        len = total_len,
+                        "hook body over cap; proceeding without inspection"
+                    );
+                    (prefix, "hook body exceeds configured max_body_bytes")
+                }
+                BodyReadError::Io { prefix, error } => {
+                    tracing::warn!(error = %error, "hook body stream error");
+                    (prefix, "hook body stream read error; refused by policy")
+                }
+                BodyReadError::InvalidUtf8 { prefix } => {
+                    tracing::warn!("hook body contains invalid UTF-8");
+                    (prefix, "invalid UTF-8 in hook body; refused by policy")
+                }
+            };
+            let lossy_prefix = String::from_utf8_lossy(&prefix);
+            let scan = RootJsonScan::scan(&lossy_prefix);
+            mark_lossy_provenance(&st, &scan);
+            let is_proven_non_pre = scan.is_proven_non_pre() && scan.closed_object;
+            if st.config.enforce && !is_proven_non_pre {
+                let out = decision::Decision {
+                    permission_decision: "deny",
+                    reason: Some(reason_msg.into()),
+                    shadow: false,
+                    would_have_been: Verdict::Deny,
+                }
+                .to_hook_output();
+                return (
+                    StatusCode::OK,
+                    Json(serde_json::to_value(out).unwrap_or_default()),
+                );
+            }
             return (StatusCode::OK, Json(serde_json::json!({})));
         }
     };
+
+    let started = Instant::now();
+
+    let mut payload: HookPayload = match serde_json::from_str(&body) {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!(error = %e, "unparsable hook payload; proceeding");
+            let scan = RootJsonScan::scan(&body);
+            mark_lossy_provenance(&st, &scan);
+            let is_proven_non_pre = scan.is_proven_non_pre() && scan.closed_object;
+            let has_protected_tool = scan.has_protected_tool(&body);
+            if st.config.enforce && (!is_proven_non_pre && has_protected_tool) {
+                let out = decision::Decision {
+                    permission_decision: "deny",
+                    reason: Some("unparsable hook payload; refused by policy".into()),
+                    shadow: false,
+                    would_have_been: Verdict::Deny,
+                }
+                .to_hook_output();
+                return (
+                    StatusCode::OK,
+                    Json(serde_json::to_value(out).unwrap_or_default()),
+                );
+            }
+            return (StatusCode::OK, Json(serde_json::json!({})));
+        }
+    };
+
+    let claimed_agent = payload.agent_id.clone();
+    let claimed_parent = payload.parent_id.clone();
+    // A shared hook bearer authenticates the transport, not an agent/parent.
+    // Scoped hooks must present the exact signed grant of an active collector.
+    let proof = headers
+        .get("x-agentfw-child-authority")
+        .map(|h| h.to_str().unwrap_or(""));
+    let identity = match &st.native {
+        Some(native) => native.resolve_hook_identity(
+            &payload.session_id,
+            payload.agent_id.as_deref(),
+            payload.parent_id.as_deref(),
+            proof,
+            (payload.event == HookEvent::PreToolUse).then(|| {
+                (
+                    payload.tool_name.as_deref().unwrap_or(""),
+                    &payload.tool_input,
+                )
+            }),
+        ),
+        None if proof.is_some() || payload.agent_id.is_some() || payload.parent_id.is_some() => {
+            Err("native_hook_identity_unsupported")
+        }
+        None => Ok((
+            payload.agent_id.clone().unwrap_or_else(|| "main".into()),
+            None,
+            None,
+        )),
+    };
+    let provenance_server = match identity {
+        Ok((agent, parent, server)) => {
+            payload.agent_id = Some(agent);
+            payload.parent_id = parent;
+            server
+        }
+        Err(reason) => return hook_identity_refusal(&st, &payload, &body, reason, started),
+    };
+
+    let is_pre = payload.event == HookEvent::PreToolUse;
+    let tool_opt = payload
+        .tool_name
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+    let is_read_only = tool_opt.is_some_and(|tool| {
+        const READ_ONLY: &[&str] = &[
+            "Read",
+            "Grep",
+            "Glob",
+            "NotebookRead",
+            "TodoRead",
+            "WebFetch",
+            "WebSearch",
+        ];
+        READ_ONLY.contains(&tool)
+    });
+    let valid_bash_command = tool_opt == Some("Bash")
+        && payload
+            .tool_input
+            .as_object()
+            .and_then(|obj| obj.get("command"))
+            .and_then(|c| c.as_str())
+            .is_some();
+    let is_supported_pre =
+        is_read_only || valid_bash_command || (tool_opt.is_some() && tool_opt != Some("Bash"));
+
+    if is_pre && !is_supported_pre {
+        tracing::warn!(
+            session = %payload.session_id,
+            tool = ?payload.tool_name,
+            "unsupported or malformed PreToolUse shape"
+        );
+        if st.config.enforce {
+            let out = decision::Decision {
+                permission_decision: "deny",
+                reason: Some("unsupported PreToolUse shape; refused by policy".into()),
+                shadow: false,
+                would_have_been: Verdict::Deny,
+            }
+            .to_hook_output();
+            let _ = st.audit.write(&AuditLine {
+                at_ms: now_ms(),
+                session: payload.session_id.clone(),
+                agent_id: payload.agent_id.clone(),
+                parent_id: payload.parent_id.clone(),
+                seq: 0,
+                event: payload.event.as_str().to_string(),
+                tool: payload.tool_name.clone(),
+                verdict: "deny".into(),
+                shadow: false,
+                rule: Some("unsupported-pre-tool-use-shape".into()),
+                risk_score: 0,
+                findings: vec![],
+                taint: None,
+                judge: None,
+                approval: None,
+                egress_hosts: vec![],
+                latency_us: started.elapsed().as_micros(),
+                truncated: false,
+                raw: st.config.capture_unknown_raw.then_some(body),
+            });
+            return (
+                StatusCode::OK,
+                Json(serde_json::to_value(out).unwrap_or_default()),
+            );
+        }
+        return (StatusCode::OK, Json(serde_json::json!({})));
+    }
+
+    let is_protected = is_pre && !is_read_only;
+
+    if payload.session_id.is_empty() {
+        tracing::warn!("hook payload missing or empty session_id");
+        if st.config.enforce && is_protected {
+            let out = decision::Decision {
+                permission_decision: "deny",
+                reason: Some("protected PreToolUse missing valid session_id".into()),
+                shadow: false,
+                would_have_been: Verdict::Deny,
+            }
+            .to_hook_output();
+            let _ = st.audit.write(&AuditLine {
+                at_ms: now_ms(),
+                session: String::new(),
+                agent_id: payload.agent_id.clone(),
+                parent_id: payload.parent_id.clone(),
+                seq: 0,
+                event: payload.event.as_str().to_string(),
+                tool: payload.tool_name.clone(),
+                verdict: "deny".into(),
+                shadow: false,
+                rule: Some("invalid-session".into()),
+                risk_score: 0,
+                findings: vec![],
+                taint: None,
+                judge: None,
+                approval: None,
+                egress_hosts: vec![],
+                latency_us: started.elapsed().as_micros(),
+                truncated: false,
+                raw: st.config.capture_unknown_raw.then_some(body),
+            });
+            return (
+                StatusCode::OK,
+                Json(serde_json::to_value(out).unwrap_or_default()),
+            );
+        }
+        return (StatusCode::OK, Json(serde_json::json!({})));
+    }
 
     // An event kind this build does not know about, or a session id too degenerate
     // to key taint by (see `map::to_event`): proceed without blocking. Raw bodies
@@ -171,9 +885,49 @@ pub async fn hook(
     let seq = st.sessions.next(&payload.session_id);
     let Some(mapped) = map::to_event(&payload, seq, now_ms(), st.config.max_record_bytes) else {
         tracing::warn!(session = %payload.session_id, "unrecognized hook event");
+        {
+            let mut fw = st.firewall.lock().expect("firewall mutex");
+            fw.mark_provenance_incomplete(&payload.session_id);
+        }
+        if st.config.enforce && is_protected {
+            let out = decision::Decision {
+                permission_decision: "deny",
+                reason: Some("unrecognized protected hook event; refused by policy".into()),
+                shadow: false,
+                would_have_been: Verdict::Deny,
+            }
+            .to_hook_output();
+            let _ = st.audit.write(&AuditLine {
+                at_ms: now_ms(),
+                session: payload.session_id.clone(),
+                agent_id: payload.agent_id.clone(),
+                parent_id: payload.parent_id.clone(),
+                seq,
+                event: "unknown".into(),
+                tool: payload.tool_name.clone(),
+                verdict: "deny".into(),
+                shadow: false,
+                rule: Some("unrecognized-protected-event".into()),
+                risk_score: 0,
+                findings: vec![],
+                taint: None,
+                judge: None,
+                approval: None,
+                egress_hosts: vec![],
+                latency_us: started.elapsed().as_micros(),
+                truncated: false,
+                raw: st.config.capture_unknown_raw.then_some(body),
+            });
+            return (
+                StatusCode::OK,
+                Json(serde_json::to_value(out).unwrap_or_default()),
+            );
+        }
         let _ = st.audit.write(&AuditLine {
             at_ms: now_ms(),
             session: payload.session_id.clone(),
+            agent_id: payload.agent_id.clone(),
+            parent_id: payload.parent_id.clone(),
             seq,
             event: "unknown".into(),
             tool: payload.tool_name.clone(),
@@ -192,13 +946,18 @@ pub async fn hook(
         });
         return (StatusCode::OK, Json(serde_json::json!({})));
     };
-    let event = mapped.event;
+    let mut event = mapped.event;
+    if let (Some(server), EventKind::ToolResult { source, .. }) =
+        (provenance_server, &mut event.kind)
+    {
+        *source = soup_wall_agent::Provenance::McpServer { name: server };
+    }
+    if mapped.truncated {
+        let mut fw = st.firewall.lock().expect("firewall mutex");
+        fw.mark_provenance_incomplete(&payload.session_id);
+    }
 
     let is_pre = payload.event == HookEvent::PreToolUse;
-    if payload.event == HookEvent::SessionEnd {
-        st.sessions.end(&payload.session_id);
-        st.spans.end_session(&payload.session_id);
-    }
 
     // Retain untrusted content by the same sequence number the taint tracker
     // will fingerprint it under, so a later `Escalate` has something to hand the
@@ -224,8 +983,47 @@ pub async fn hook(
     // the call. Scoped in its own block so the `std::sync::Mutex` guard is dropped
     // before the function's first `.await` — nothing here awaits while it is held.
     let (outcome, inspected_deployment) = {
+        let authority = match st
+            .native
+            .as_ref()
+            .map(|n| n.lock_hook_authority())
+            .transpose()
+        {
+            Ok(guard) => guard,
+            Err(reason) => return hook_identity_refusal(&st, &payload, &body, reason, started),
+        };
+        if let Some(guard) = &authority {
+            if let Err(reason) = guard.resolve(
+                &payload.session_id,
+                claimed_agent.as_deref(),
+                claimed_parent.as_deref(),
+                proof,
+                is_pre.then(|| {
+                    (
+                        payload.tool_name.as_deref().unwrap_or(""),
+                        &payload.tool_input,
+                    )
+                }),
+            ) {
+                drop(authority);
+                return hook_identity_refusal(&st, &payload, &body, reason, started);
+            }
+        }
+        let has_active_bound_children = authority
+            .as_ref()
+            .is_some_and(|g| g.has_host(&payload.session_id));
+        if payload.event == HookEvent::SessionEnd && !has_active_bound_children {
+            st.sessions.end(&payload.session_id);
+            st.spans.end_session(&payload.session_id);
+        }
         let mut fw = st.firewall.lock().expect("firewall mutex");
-        let outcome = fw.inspect(&event);
+        let outcome = if payload.event == HookEvent::SessionEnd && has_active_bound_children {
+            Outcome::allow()
+        } else if let Some(guard) = authority.as_ref().filter(|_| proof.is_some()) {
+            guard.inspect_call(&mut fw, &event)
+        } else {
+            fw.inspect(&event)
+        };
         let deployment = fw.active_managed_policy().map(|p| p.deployment_sequence);
         (outcome, deployment)
     };
@@ -265,6 +1063,32 @@ pub async fn hook(
     // firewall mutex. Recheck the authoritative live deployment and serialize
     // approval redemption + final decision against activation; never emit an
     // old-policy Allow after a concurrent switch. No await is held under lock.
+    let final_authority = match st
+        .native
+        .as_ref()
+        .map(|n| n.lock_hook_authority())
+        .transpose()
+    {
+        Ok(guard) => guard,
+        Err(reason) => return hook_identity_refusal(&st, &payload, &body, reason, started),
+    };
+    if let Some(guard) = &final_authority {
+        if let Err(reason) = guard.resolve(
+            &payload.session_id,
+            claimed_agent.as_deref(),
+            claimed_parent.as_deref(),
+            proof,
+            is_pre.then(|| {
+                (
+                    payload.tool_name.as_deref().unwrap_or(""),
+                    &payload.tool_input,
+                )
+            }),
+        ) {
+            drop(final_authority);
+            return hook_identity_refusal(&st, &payload, &body, reason, started);
+        }
+    }
     let _final_policy_guard = st.firewall.lock().expect("firewall mutex");
     let changed_while_in_flight = is_pre
         && _final_policy_guard
@@ -330,6 +1154,8 @@ pub async fn hook(
     let _ = st.audit.write(&AuditLine {
         at_ms: event.at_ms,
         session: payload.session_id.clone(),
+        agent_id: Some(event.agent.clone()),
+        parent_id: event.parent.clone(),
         seq,
         event: payload.event.as_str().to_string(),
         tool: payload.tool_name.clone(),
@@ -386,7 +1212,7 @@ pub struct McpHandshakeReq {
 pub async fn mcp(
     State(st): State<Shared>,
     headers: HeaderMap,
-    body: String,
+    body: axum::body::Body,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let auth = headers
         .get("authorization")
@@ -395,6 +1221,30 @@ pub async fn mcp(
     if !crate::token::verify(&st.token, auth) {
         return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({})));
     }
+    let body = match read_bounded_string(body, st.config.max_body_bytes).await {
+        Ok(s) => s,
+        Err(BodyReadError::Oversized { .. }) => {
+            tracing::warn!("mcp body over cap; rejecting");
+            return (
+                StatusCode::PAYLOAD_TOO_LARGE,
+                Json(serde_json::json!({ "verdict": "deny", "error": "mcp_body_over_cap" })),
+            );
+        }
+        Err(BodyReadError::Io { error, .. }) => {
+            tracing::warn!(error = %error, "mcp stream error; rejecting");
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "verdict": "deny", "error": "mcp_read_error" })),
+            );
+        }
+        Err(BodyReadError::InvalidUtf8 { .. }) => {
+            tracing::warn!("mcp invalid utf8; rejecting");
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "verdict": "deny", "error": "invalid_utf8" })),
+            );
+        }
+    };
     let req: McpHandshakeReq = match serde_json::from_str(&body) {
         Ok(r) => r,
         Err(e) => {
@@ -460,6 +1310,8 @@ pub async fn mcp(
     let _ = st.audit.write(&AuditLine {
         at_ms: now_ms(),
         session: req.server.clone(),
+        agent_id: None,
+        parent_id: None,
         seq: 0,
         event: "mcp_handshake".into(),
         tool: None,
@@ -570,5 +1422,68 @@ mod tests {
         s.next("a");
         s.end("a");
         assert_eq!(s.next("a"), 1);
+    }
+
+    #[test]
+    fn root_json_scan_basic_and_proven_non_pre() {
+        let raw = r#"{"session_id": "s1", "hook_event_name": "PostToolUse"}"#;
+        let scan = RootJsonScan::scan(raw);
+        assert_eq!(scan.get_root_string("session_id"), Some("s1"));
+        assert_eq!(scan.get_root_string("hook_event_name"), Some("PostToolUse"));
+        assert!(scan.is_proven_non_pre());
+    }
+
+    #[test]
+    fn root_json_scan_ignores_nested_fields() {
+        let raw = r#"{"metadata": {"hook_event_name": "PostToolUse", "session_id": "nested"}, "session_id": "root"}"#;
+        let scan = RootJsonScan::scan(raw);
+        assert_eq!(scan.get_root_string("session_id"), Some("root"));
+        assert_eq!(scan.get_root_string("hook_event_name"), None);
+        assert!(!scan.is_proven_non_pre());
+    }
+
+    #[test]
+    fn root_json_scan_handles_escaped_quotes_in_strings() {
+        let raw = r#"{"note": "nested \"hook_event_name\":\"PostToolUse\"", "hook_event_name": "PreToolUse"}"#;
+        let scan = RootJsonScan::scan(raw);
+        assert_eq!(scan.get_root_string("hook_event_name"), Some("PreToolUse"));
+        assert_eq!(
+            scan.get_root_string("note"),
+            Some("nested \"hook_event_name\":\"PostToolUse\"")
+        );
+        assert!(!scan.is_proven_non_pre());
+    }
+
+    #[test]
+    fn root_json_scan_duplicate_keys_are_ambiguous() {
+        let raw = r#"{"hook_event_name": "PostToolUse", "session_id": "s1", "hook_event_name": "PreToolUse"}"#;
+        let scan = RootJsonScan::scan(raw);
+        assert!(scan.duplicate_keys.contains("hook_event_name"));
+        assert_eq!(scan.get_root_string("hook_event_name"), None);
+        assert_eq!(scan.get_root_string("session_id"), Some("s1"));
+        assert!(!scan.is_proven_non_pre());
+    }
+
+    #[test]
+    fn root_json_scan_incomplete_keys_and_values() {
+        let raw_val = r#"{"hook_event_name": "Post"#;
+        let scan_val = RootJsonScan::scan(raw_val);
+        assert!(scan_val.incomplete_keys.contains("hook_event_name"));
+        assert_eq!(scan_val.get_root_string("hook_event_name"), None);
+        assert!(!scan_val.is_proven_non_pre());
+
+        let raw_key = r#"{"hook_eve"#;
+        let scan_key = RootJsonScan::scan(raw_key);
+        assert!(!scan_key.incomplete_keys.is_empty());
+        assert!(!scan_key.is_proven_non_pre());
+    }
+
+    #[test]
+    fn root_json_scan_skips_arrays_and_objects() {
+        let raw = r#"{"items": [{"hook_event_name": "PostToolUse"}], "session_id": "s1"}"#;
+        let scan = RootJsonScan::scan(raw);
+        assert_eq!(scan.get_root_string("session_id"), Some("s1"));
+        assert_eq!(scan.get_root_string("hook_event_name"), None);
+        assert!(!scan.is_proven_non_pre());
     }
 }

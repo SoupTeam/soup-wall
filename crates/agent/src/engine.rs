@@ -42,6 +42,21 @@ pub struct Outcome {
 }
 
 impl Outcome {
+    pub fn allow() -> Self {
+        Self {
+            verdict: Verdict::Allow,
+            rule: None,
+            message: None,
+            findings: Vec::new(),
+            taint: None,
+            provenance_incomplete: false,
+            risk_score: 0,
+            egress_hosts: Vec::new(),
+            fallback: None,
+            authority_pending: false,
+        }
+    }
+
     /// Project the local decision onto the provider-neutral adapter contract.
     ///
     /// This projection is intentionally local: it carries no raw content and no
@@ -184,6 +199,27 @@ impl AgentFirewall {
         self.authority.set_root(session, agent, tools);
     }
 
+    /// Register a delegated child agent's tool grant under a parent agent.
+    pub fn spawn(
+        &mut self,
+        session: &str,
+        parent: &str,
+        child: &str,
+        tools: &[String],
+    ) -> Option<crate::authority::Escalation> {
+        self.authority.spawn(session, parent, child, tools)
+    }
+
+    /// Look up granted tools for an agent in a session.
+    pub fn agent_tools(&self, session: &str, agent: &str) -> Option<Vec<String>> {
+        self.authority.tools(session, agent)
+    }
+
+    /// Revoke one completed native runtime without erasing shared taint.
+    pub fn end_agent(&mut self, session: &str, agent: &str) {
+        self.authority.end_agent(session, agent);
+    }
+
     /// Fingerprints retained for a session. Exposed for tests and metrics.
     pub fn taint_len(&self, session: &str) -> usize {
         self.taint.len(session)
@@ -191,6 +227,10 @@ impl AgentFirewall {
 
     pub fn provenance_incomplete(&self, session: &str) -> bool {
         self.taint.is_incomplete(session)
+    }
+
+    pub fn mark_provenance_incomplete(&mut self, session: &str) {
+        self.taint.mark_incomplete(session);
     }
 
     /// Return whether every extracted destination is explicitly present in the

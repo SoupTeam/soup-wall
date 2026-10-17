@@ -9,6 +9,23 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
+/// Releases ownership explicitly before closing the descriptor. A concurrent
+/// fork may inherit the open-file description until exec; close alone would
+/// otherwise let an unrelated child prolong the lifecycle lock.
+pub struct OperationLock(File);
+
+impl OperationLock {
+    pub(crate) fn held(file: File) -> Self {
+        Self(file)
+    }
+}
+
+impl Drop for OperationLock {
+    fn drop(&mut self) {
+        let _ = self.0.unlock();
+    }
+}
+
 const MANIFEST: &str = "lifecycle.json";
 const MAX_CANDIDATE_BYTES: u64 = 512 * 1024 * 1024;
 const START_TIMEOUT: Duration = Duration::from_secs(30);
@@ -739,7 +756,7 @@ impl Manager {
     }
 
     #[cfg(target_os = "linux")]
-    pub fn direct_serve_guard(&self) -> Result<File> {
+    pub fn direct_serve_guard(&self) -> Result<OperationLock> {
         let lock = self.lock()?;
         crate::service::require_unregistered(&self.home)?;
         Ok(lock)
@@ -954,7 +971,7 @@ impl Manager {
         self.verify(state.active.as_ref().context("Agent is not installed")?)
     }
 
-    pub(crate) fn lock(&self) -> Result<File> {
+    pub(crate) fn lock(&self) -> Result<OperationLock> {
         if self.home.exists() {
             ensure_dir(&self.home)?;
         } else {
@@ -984,7 +1001,7 @@ impl Manager {
             .open(path)?;
         file.try_lock()
             .context("another lifecycle operation is in progress")?;
-        Ok(file)
+        Ok(OperationLock::held(file))
     }
 
     fn load(&self) -> Result<State> {
@@ -1270,6 +1287,27 @@ mod tests {
         let state = manager.load().unwrap();
         assert_eq!(state.active, Some(first));
         assert!(state.process.is_none() && state.pending_stage.is_none());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn operation_owner_release_is_not_prolonged_by_an_inherited_descriptor() {
+        let temp = tempfile::tempdir().unwrap();
+        let manager = Manager::new(temp.path());
+        let owner = manager.lock().unwrap();
+        let inherited = owner.0.try_clone().unwrap();
+        assert!(manager.lock().is_err(), "live owner must remain exclusive");
+        drop(owner);
+        let replacement = manager
+            .lock()
+            .expect("an unrelated inherited descriptor must not retain ownership");
+        assert!(
+            manager.lock().is_err(),
+            "replacement must own the same exclusive lock"
+        );
+        drop(replacement);
+        drop(inherited);
+        manager.lock().unwrap();
     }
 
     #[test]

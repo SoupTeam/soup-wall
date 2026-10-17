@@ -1,0 +1,30 @@
+{
+  "head": "e358055ff937cc9cc4eafb29163f5866970949ea",
+  "verdict": "REQUEST_CHANGES",
+  "baseline": {
+    "native_endpoint_passed": 76,
+    "hook_endpoint_passed": 13,
+    "failed": 0
+  },
+  "additional_controls": {
+    "router_passed": 0,
+    "router_failed": 2,
+    "controlled_lock_order_failed": 1
+  },
+  "observations": {
+    "complete_duplicate_event": "RootJsonScan detects duplicate hook_event_name; serde rejects duplicate; handler still returns HTTP 200 {}",
+    "partial_root_with_unseen_duplicate": "closed_object=false but is_proven_non_pre=true; unseen duplicate PreToolUse tail gets no refusal",
+    "lock_order": "controlled native.sessions owner observes lossy hook acquiring firewall and waiting on native.sessions; actual native inspect next needs that firewall. Guard released by witness to terminate."
+  },
+  "patch_sha256": "cbf5d5d63dd4bee40150f01b7d8551a7e67923505c1e7f2f1f32ed5678f7ef7a",
+  "source_sha256": {
+    "crates/agentfw/src/handlers.rs": "525821507e9d14585e5e14a1bb8ff6120cc8811dd32acc6cc0be71ad1d06b4df",
+    "crates/agentfw/src/native.rs": "747dfab45c1a29dddc46f6328ea9faaa9ca3d45e6e7443fe8a5d79201370b3fe",
+    "crates/agentfw/src/lib.rs": "d85027e78d6c65f74c1c3ba74ac966a9bf30d9fdeacf78ed5535f1de9d7b3fa2"
+  },
+  "isolation": "Exact HEAD archived in /private/tmp/sou63-review/e358055. Tests-only additions in scratch, network denied and writes outside scratch denied. Product sources unchanged. No real destructive execution or external message.",
+  "limitations": [
+    "Focused endpoint/parser/concurrency review; no independent full-workspace or Clippy rerun",
+    "Not a certification of broader original identity/delegation/restart/revocation deliverables"
+  ]
+}

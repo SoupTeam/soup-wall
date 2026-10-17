@@ -1,0 +1,28 @@
+{
+  "head": "b2c8c121885efd40af83330fbd3ebcd74c0e0d68",
+  "verdict": "REQUEST_CHANGES",
+  "shipped_native_endpoint": {
+    "passed": 74,
+    "failed": 0
+  },
+  "additional_controls": {
+    "passed": 0,
+    "failed": 2
+  },
+  "observations": {
+    "nested_event": "valid top-level PreToolUse with nested metadata.hook_event_name=PostToolUse in retained prefix gets HTTP 200 {} instead of deny",
+    "nested_session": "oversized PostToolUse targeting host marks metadata.session_id=unrelated incomplete; actual host remains complete despite an existing signed child binding"
+  },
+  "root_cause": "substring fallback does not validate top-level JSON field identity; recovered prefix values are not proof of event or session authority",
+  "patch_sha256": "3bbbc32557fd18459f16332a3640afcf463aa09b39d2c467491aa36deb924c06",
+  "source_sha256": {
+    "crates/agentfw/src/handlers.rs": "945fb2775febf585e4ad4867b84218297db247e792ff4b2feeafebd4357d77d6",
+    "crates/agentfw/src/native.rs": "b52c82588816bd2b282059e64b02b6bcd4d2b57c408fd6e61a2abeac4f8eb60e",
+    "crates/agentfw/src/lib.rs": "d85027e78d6c65f74c1c3ba74ac966a9bf30d9fdeacf78ed5535f1de9d7b3fa2"
+  },
+  "isolation": "Exact HEAD source archive in /private/tmp/sou63-review/b2c8c12; network and writes outside scratch denied by macOS sandbox; separate Cargo target; no product changes or real tool execution.",
+  "limitations": [
+    "Focused router review; no independent full-workspace, Clippy or stdio-suite rerun",
+    "Review does not close broader original host/actual-agent/parent authentication and delegation/revocation support-matrix requirements"
+  ]
+}

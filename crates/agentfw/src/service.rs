@@ -636,7 +636,7 @@ impl Service {
         report
     }
 
-    fn operation_lock(&self) -> Result<File> {
+    fn operation_lock(&self) -> Result<crate::lifecycle::OperationLock> {
         make_directory(&self.root)?;
         let path = self.root.join("operation.lock");
         if exists(&path)? {
@@ -652,7 +652,7 @@ impl Service {
             .open(path)?;
         file.try_lock()
             .context("another service operation is in progress")?;
-        Ok(file)
+        Ok(crate::lifecycle::OperationLock::held(file))
     }
 
     fn load(&self) -> Result<Ownership> {

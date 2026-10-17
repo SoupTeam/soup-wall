@@ -1,0 +1,29 @@
+{
+  "head": "2c5b64fc3f217db3b2fede6aaeb6e2a56bd293e3",
+  "verdict": "REQUEST_CHANGES",
+  "baseline": {
+    "native_endpoint_passed": 78,
+    "hook_endpoint_passed": 13,
+    "previous_lock_order_passed": 1,
+    "failed": 0
+  },
+  "additional_controls": {
+    "passed": 0,
+    "failed": 2
+  },
+  "observations": {
+    "escaped_command": "same decoded Bash command, missing required session; ASCII command key gets deny, Unicode escaped command key gets HTTP 200 {}",
+    "partial_session_proof": "partial root with session_id=unrelated and unseen duplicate host marks unrelated incomplete but not active host; later host-bound destructive call gets allow, release=true and a receipt"
+  },
+  "patch_sha256": "642fac8ebca806d5b2680e4e1f044bd34222a1823bd4765a47683fad7e45dc84",
+  "source_sha256": {
+    "crates/agentfw/src/handlers.rs": "79c4422b2480d486155a0d99cc305a1d7e707658ca5c173c739d2050516a22a9",
+    "crates/agentfw/src/native.rs": "e3aff692da3bab075a34e1bd8a1255d208be328d6553a99b851217c32e2ed046",
+    "crates/agentfw/src/lib.rs": "d85027e78d6c65f74c1c3ba74ac966a9bf30d9fdeacf78ed5535f1de9d7b3fa2"
+  },
+  "isolation": "Exact HEAD archived under /private/tmp/sou63-review/2c5b64f; separate Cargo target; no network and no writes outside scratch. Product source/tests unchanged; no destructive execution or external messaging.",
+  "limitations": [
+    "Focused local endpoint and lock-order review; full workspace, stdio suite and Clippy not independently rerun",
+    "Full original actual-agent/parent authentication and delegated resource/destination/revocation support matrix not certified by these controls"
+  ]
+}

@@ -1,0 +1,17 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s
+     Running unittests src/lib.rs (target/debug/deps/agentfw-51d72a1a25ec0b5b)
+
+running 10 tests
+test native::child_authority::tests::reasons_are_distinct_and_nonempty ... ok
+test native::child_authority::tests::key_derivation_known_vector_and_separation ... ok
+test native::child_authority::tests::rejects_authenticated_invalid_contract_and_interval ... ok
+test native::child_authority::tests::token_round_trip_and_verification ... ok
+test native::child_authority::tests::rejects_mismatched_authority_and_wrong_key ... ok
+test native::child_authority::tests::rejects_malformed_wire_data ... ok
+test native::child_authority::tests::concurrent_verification_keeps_session_bindings_isolated ... ok
+test native::child_authority::tests::every_claim_is_authenticated ... ok
+test native::child_authority::tests::expiry_and_future_skew_boundaries ... ok
+test native::child_authority::tests::signing_boundaries_cannot_be_shifted ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 260 filtered out; finished in 0.00s
+

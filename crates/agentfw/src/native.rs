@@ -4,7 +4,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use axum::extract::State;
@@ -19,6 +19,7 @@ use crate::config::NativeCfg;
 use crate::handlers::Shared;
 
 pub mod approval;
+pub mod child_authority;
 pub mod resource;
 
 pub const CONTRACT: &str = "sw-native/1";
@@ -219,6 +220,150 @@ fn declared_hosts(tool: &Tool, args: &Value) -> Result<Vec<String>, &'static str
     Ok(hosts.into_iter().collect())
 }
 
+// Scope strings retain the wire format, but containment is typed: a host may
+// narrow to an exact URL/mailbox; URLs and mailboxes never widen to a host.
+fn scope_host(value: &str) -> Option<String> {
+    if let Ok(ip) = value.parse::<std::net::IpAddr>() {
+        return Some(ip.to_string());
+    }
+    if value.contains(['/', ':', '@', '?', '#']) {
+        return None;
+    }
+    crate::mcp::resources::canonical_url(&format!("http://{value}"))
+        .ok()
+        .map(|(_, host, _)| host)
+}
+
+fn scope_contains(parent: &str, child: &str) -> bool {
+    let cp = std::path::Path::new(child);
+    let pp = std::path::Path::new(parent);
+    if cp.is_absolute() || pp.is_absolute() {
+        let clean = |p: &std::path::Path| {
+            !p.components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
+        };
+        return cp.is_absolute()
+            && pp.is_absolute()
+            && clean(cp)
+            && clean(pp)
+            && cp.starts_with(pp);
+    }
+    if let Ok((canonical, host, _)) = crate::mcp::resources::canonical_url(child) {
+        return crate::mcp::resources::canonical_url(parent)
+            .map(|(p, _, _)| p == canonical)
+            .unwrap_or_else(|_| scope_host(parent).is_some_and(|p| p == host));
+    }
+    if let Ok((address, domain)) = crate::mcp::resources::canonical_recipient(child) {
+        return crate::mcp::resources::canonical_recipient(parent)
+            .map(|(p, _)| p == address)
+            .unwrap_or_else(|_| scope_host(parent).is_some_and(|p| p == domain));
+    }
+    scope_host(parent)
+        .zip(scope_host(child))
+        .is_some_and(|(p, c)| p == c)
+}
+
+enum EgressDestination {
+    Url { canonical: String },
+    Email { address: String },
+}
+
+impl EgressDestination {
+    fn matches_grant(&self, g: &str) -> bool {
+        match self {
+            EgressDestination::Url { canonical, .. } => scope_contains(g, canonical),
+            EgressDestination::Email { address, .. } => scope_contains(g, address),
+        }
+    }
+}
+
+fn declared_destinations(
+    tool: &Tool,
+    args: &Value,
+) -> Result<Vec<EgressDestination>, &'static str> {
+    let mut destinations = Vec::new();
+    for selector in &tool.egress {
+        let selected = match crate::mcp::resources::selected(args, &selector.pointer)
+            .map_err(|_| "native_egress_type")?
+        {
+            None | Some(Value::Null) if selector.optional => continue,
+            Some(value) => value,
+            None => return Err("native_egress_missing"),
+        };
+        let values: Vec<&Value> = match selected {
+            Value::Array(items) if items.len() <= 256 => items.iter().collect(),
+            Value::String(_) => vec![selected],
+            _ => return Err("native_egress_type"),
+        };
+        if values.is_empty() && !selector.optional {
+            return Err("native_egress_missing");
+        }
+        for value in values {
+            let text = value
+                .as_str()
+                .filter(|s| !s.is_empty() && s.len() <= 4096 && !s.chars().any(char::is_control))
+                .ok_or("native_egress_type")?;
+            match selector.kind {
+                EgressKind::UrlHost => {
+                    let (canonical, _, _) = crate::mcp::resources::canonical_url(text)
+                        .map_err(|_| "native_egress_url")?;
+                    destinations.push(EgressDestination::Url { canonical });
+                }
+                EgressKind::EmailDomain => {
+                    let (address, _) = crate::mcp::resources::canonical_recipient(text)
+                        .map_err(|_| "native_egress_email")?;
+                    destinations.push(EgressDestination::Email { address });
+                }
+            }
+        }
+    }
+    if destinations.is_empty()
+        && (tool.action_class == ActionClass::Network || !tool.egress.is_empty())
+    {
+        return Err("native_egress_missing");
+    }
+    Ok(destinations)
+}
+
+fn child_resources_authorized(
+    granted: &[String],
+    policy: Option<&resource::Policy>,
+    tool: &Tool,
+    args: &Value,
+    admission: Option<&resource::Admission>,
+) -> bool {
+    if policy.is_some() {
+        let Some(admission) = admission else {
+            return false;
+        };
+        for ev in &admission.resources {
+            let target = match &ev.resource {
+                crate::mcp::resources::Resource::Path { canonical }
+                | crate::mcp::resources::Resource::Url { canonical, .. } => canonical,
+                crate::mcp::resources::Resource::Domain { host } => host,
+                crate::mcp::resources::Resource::Recipient { address, .. } => address,
+            };
+            let matched = granted.iter().any(|g| scope_contains(g, target));
+            if !matched {
+                return false;
+            }
+        }
+    }
+    if !tool.egress.is_empty() || tool.action_class == ActionClass::Network {
+        match declared_destinations(tool, args) {
+            Ok(destinations) => {
+                for dest in destinations {
+                    if !granted.iter().any(|g| dest.matches_grant(g)) {
+                        return false;
+                    }
+                }
+            }
+            Err(_) => return false,
+        }
+    }
+    true
+}
+
 #[derive(Clone, Copy, PartialEq)]
 enum Stage {
     Result,
@@ -237,23 +382,167 @@ struct Call {
 }
 
 struct Session {
+    pub host_session: Option<String>,
+    pub server_id: Option<String>,
+    pub agent_id: Option<String>,
+    pub parent_id: Option<String>,
+    pub granted_tools: Vec<String>,
+    pub granted_resources: Option<Vec<String>>,
+    pub authority_expires_at_ms: Option<u64>,
+    parent_epoch: Option<String>,
+    authority_digest: Option<String>,
     epoch: String,
     seq: u64,
     touched: Instant,
     calls: BTreeMap<String, Call>,
 }
 
+impl Session {
+    fn event_at(&self, seq: u64, kind: EventKind) -> AgentEvent {
+        event_scoped(
+            &self.epoch,
+            self.agent_id.as_deref().unwrap_or("native-runtime"),
+            self.parent_id.as_deref(),
+            seq,
+            kind,
+        )
+    }
+
+    fn event(&self, kind: EventKind) -> AgentEvent {
+        self.event_at(self.seq, kind)
+    }
+
+    fn host_event(&self, host_session: &str, seq: u64, kind: EventKind) -> AgentEvent {
+        event_scoped(
+            host_session,
+            self.agent_id.as_deref().unwrap_or("native-runtime"),
+            self.parent_id.as_deref(),
+            seq,
+            kind,
+        )
+    }
+}
+
 #[derive(Default)]
 struct Sessions {
     entries: BTreeMap<String, Session>,
+    // Bounded tombstones prevent a completed scoped host from silently reverting
+    // to unsigned hooks. Reaching the cap refuses new host IDs until restart.
+    scoped_hosts: BTreeSet<String>,
+}
+
+fn wall_time_ms() -> Result<u64, &'static str> {
+    Ok(SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| "native_clock_unavailable")?
+        .as_millis() as u64)
+}
+
+fn validate_lineage(
+    state: &Sessions,
+    session: &Session,
+    now_ms: u64,
+    now: Instant,
+) -> Result<(), &'static str> {
+    let mut current = session;
+    for _ in 0..=MAX_SESSIONS {
+        if now.duration_since(current.touched) >= TTL
+            || current
+                .authority_expires_at_ms
+                .is_some_and(|expires| now_ms >= expires)
+        {
+            return Err("native_child_authority_expired");
+        }
+        let Some(parent) = &current.parent_id else {
+            return Ok(());
+        };
+        current = state
+            .entries
+            .values()
+            .find(|p| {
+                p.host_session == current.host_session
+                    && p.agent_id.as_ref() == Some(parent)
+                    && current.parent_epoch.as_ref() == Some(&p.epoch)
+            })
+            .ok_or("native_child_parent_unavailable")?;
+    }
+    Err("native_child_parent_unavailable")
 }
 
 pub struct NativeState {
     pub registry: Registry,
     pub registry_sha256: String,
     pub token: String,
+    instance_id: String,
     sessions: Mutex<Sessions>,
     pub(crate) approval: Option<approval::ApprovalState>,
+}
+
+/// Keeps authority and parent epochs stable through a synchronous hook decision.
+/// Always acquire before the firewall mutex, and never hold across an await.
+pub(crate) struct HookAuthorityGuard<'a> {
+    native: &'a NativeState,
+    sessions: MutexGuard<'a, Sessions>,
+}
+
+impl HookAuthorityGuard<'_> {
+    pub fn resolve(
+        &self,
+        session: &str,
+        agent: Option<&str>,
+        parent: Option<&str>,
+        proof: Option<&str>,
+        call: Option<(&str, &Value)>,
+    ) -> Result<(String, Option<String>, Option<String>), &'static str> {
+        self.native.resolve_hook_identity_locked(
+            &self.sessions,
+            session,
+            agent,
+            parent,
+            proof,
+            call,
+        )
+    }
+
+    pub fn inspect_call(
+        &self,
+        firewall: &mut soup_wall_agent::AgentFirewall,
+        event: &AgentEvent,
+    ) -> Outcome {
+        if let EventKind::ToolCall { tool: name, args } = &event.kind {
+            let tool = self
+                .sessions
+                .entries
+                .values()
+                .find(|s| {
+                    s.host_session.as_deref() == Some(&event.session)
+                        && s.agent_id.as_deref() == Some(&event.agent)
+                })
+                .and_then(|s| s.server_id.as_deref())
+                .and_then(|server| self.native.hook_tool(server, name));
+            if let Some(tool) = tool {
+                if let Ok(hosts) = declared_hosts(tool, args) {
+                    let mut canonical = event.clone();
+                    if let EventKind::ToolCall { tool: name, .. } = &mut canonical.kind {
+                        *name = tool.name.clone();
+                    }
+                    return firewall.inspect_native_call(&canonical, tool.action_class, &hosts);
+                }
+            }
+            let mut refused = Outcome::allow();
+            refused.verdict = Verdict::Deny;
+            refused.rule = Some("native_hook_tool_unsupported".into());
+            return refused;
+        }
+        firewall.inspect(event)
+    }
+
+    pub fn has_host(&self, host: &str) -> bool {
+        self.sessions
+            .entries
+            .values()
+            .any(|s| s.host_session.as_deref() == Some(host))
+    }
 }
 
 impl NativeState {
@@ -322,9 +611,16 @@ impl NativeState {
             registry,
             registry_sha256: expected.into(),
             token,
+            instance_id: crate::token::generate(),
             sessions: Mutex::default(),
             approval: None,
         })
+    }
+
+    /// Public runtime identifier, authenticated by the native transport endpoint.
+    /// Scoped grant nonces bind to it without changing the HMAC wire encoding.
+    pub fn instance_id(&self) -> &str {
+        &self.instance_id
     }
 
     /// Enable the opt-in pending-approval lifecycle (SOU-48). Absent = refusal.
@@ -336,6 +632,132 @@ impl NativeState {
     ) -> anyhow::Result<Self> {
         self.approval = Some(approval::ApprovalState::new(home, grant_key, ttl_seconds)?);
         Ok(self)
+    }
+
+    pub fn has_active_host_session(&self, host_session: &str) -> bool {
+        let Ok(sessions) = self.sessions.lock() else {
+            return false;
+        };
+        sessions
+            .entries
+            .values()
+            .any(|s| s.host_session.as_deref() == Some(host_session))
+    }
+
+    pub fn active_host_sessions(&self) -> Vec<String> {
+        let Ok(sessions) = self.sessions.lock() else {
+            return Vec::new();
+        };
+        let mut hosts = Vec::new();
+        for s in sessions.entries.values() {
+            if let Some(ref h) = s.host_session {
+                if !hosts.contains(h) {
+                    hosts.push(h.clone());
+                }
+            }
+        }
+        hosts
+    }
+
+    pub fn resolve_hook_identity(
+        &self,
+        session_id: &str,
+        agent_id: Option<&str>,
+        parent_id: Option<&str>,
+        proof: Option<&str>,
+        call: Option<(&str, &Value)>,
+    ) -> Result<(String, Option<String>, Option<String>), &'static str> {
+        self.lock_hook_authority()?
+            .resolve(session_id, agent_id, parent_id, proof, call)
+    }
+
+    pub(crate) fn lock_hook_authority(&self) -> Result<HookAuthorityGuard<'_>, &'static str> {
+        Ok(HookAuthorityGuard {
+            native: self,
+            sessions: self
+                .sessions
+                .lock()
+                .map_err(|_| "native_state_unavailable")?,
+        })
+    }
+
+    fn hook_tool(&self, server: &str, name: &str) -> Option<&Tool> {
+        let qualified = format!("mcp__{server}__");
+        let name = if name.starts_with("mcp__") {
+            name.strip_prefix(&qualified)?
+        } else {
+            name
+        };
+        self.registry.tools.iter().find(|tool| tool.name == name)
+    }
+
+    fn resolve_hook_identity_locked(
+        &self,
+        sessions: &Sessions,
+        session_id: &str,
+        agent_id: Option<&str>,
+        parent_id: Option<&str>,
+        proof: Option<&str>,
+        call: Option<(&str, &Value)>,
+    ) -> Result<(String, Option<String>, Option<String>), &'static str> {
+        let Some(proof) = proof else {
+            if sessions.scoped_hosts.contains(session_id)
+                || agent_id.is_some()
+                || parent_id.is_some()
+            {
+                return Err("native_hook_authority_required");
+            }
+            return Ok(("main".into(), None, None));
+        };
+        let now_ms = wall_time_ms()?;
+        let decoded =
+            child_authority::decode_token(proof).map_err(|_| "native_hook_authority_invalid")?;
+        let grant = child_authority::verify_token(
+            &child_authority::derive_key(&self.token),
+            proof,
+            session_id,
+            &decoded.server_id,
+            now_ms,
+        )
+        .map_err(|_| "native_hook_authority_invalid")?;
+        let agent = grant
+            .agent_id
+            .as_deref()
+            .ok_or("native_hook_identity_unsupported")?;
+        if agent_id.is_some_and(|id| id != agent)
+            || parent_id.is_some_and(|id| Some(id) != grant.parent_id.as_deref())
+        {
+            return Err("native_hook_identity_mismatch");
+        }
+        let digest = hash(proof.as_bytes());
+        let session = sessions
+            .entries
+            .values()
+            .find(|s| {
+                s.host_session.as_deref() == Some(session_id)
+                    && s.agent_id.as_deref() == Some(agent)
+                    && s.authority_digest.as_ref() == Some(&digest)
+            })
+            .ok_or("native_hook_session_unknown")?;
+        validate_lineage(sessions, session, now_ms, Instant::now())?;
+        if let Some((name, args)) = call {
+            let tool = self
+                .hook_tool(&grant.server_id, name)
+                .ok_or("native_hook_tool_unsupported")?;
+            if !session.granted_tools.iter().any(|t| t == &tool.name)
+                || tool.resource_policy.is_some()
+                || !child_resources_authorized(
+                    session.granted_resources.as_deref().unwrap_or(&[]),
+                    None,
+                    tool,
+                    args,
+                    None,
+                )
+            {
+                return Err("native_child_authority_escalation");
+            }
+        }
+        Ok((agent.into(), grant.parent_id, Some(grant.server_id)))
     }
 
     pub fn load(config: &NativeCfg, token: String) -> anyhow::Result<Self> {
@@ -382,6 +804,11 @@ struct Request {
     delivery: Option<String>,
     resource_admission: Option<resource::Admission>,
     approval_id: Option<String>,
+    pub host_session: Option<String>,
+    pub child_authority: Option<String>,
+    pub server_id: Option<String>,
+    pub agent_id: Option<String>,
+    pub parent_id: Option<String>,
     mcp_host_call_id: Option<Value>,
 }
 
@@ -400,7 +827,20 @@ fn parse(body: &str) -> Result<Request, &'static str> {
     let mut keys = BTreeSet::from(["contract_version", "registry_sha256", "session_id", "event"]);
     let object = value.as_object().ok_or("native_invalid_json")?;
     match event {
-        "session_start" | "session_end" => {}
+        "session_start" => {
+            for key in [
+                "host_session",
+                "child_authority",
+                "server_id",
+                "agent_id",
+                "parent_id",
+            ] {
+                if object.contains_key(key) {
+                    keys.insert(key);
+                }
+            }
+        }
+        "session_end" => {}
         "call" => {
             keys.extend(["tool", "args", "schema_sha256"]);
             if object.contains_key("mcp_host_call_id") {
@@ -436,6 +876,21 @@ fn parse(body: &str) -> Result<Request, &'static str> {
     }
     if object.keys().map(String::as_str).collect::<BTreeSet<_>>() != keys {
         return Err("native_invalid_fields");
+    }
+    if request
+        .host_session
+        .as_ref()
+        .is_some_and(|id| !identifier(id))
+        || request.server_id.as_ref().is_some_and(|id| !identifier(id))
+        || request.agent_id.as_ref().is_some_and(|id| !identifier(id))
+        || request.parent_id.as_ref().is_some_and(|id| !identifier(id))
+    {
+        return Err("native_invalid_identity");
+    }
+    if (request.parent_id.is_some() || request.child_authority.is_some())
+        && (request.host_session.is_none() || request.child_authority.is_none())
+    {
+        return Err("native_invalid_identity");
     }
     if !identifier(&request.session_id)
         || !matches!(
@@ -759,6 +1214,35 @@ fn failure(code: &'static str, status: StatusCode) -> (StatusCode, Json<Value>) 
     )
 }
 
+/// Trusted issuer bootstrap; the identifier itself conveys no authority.
+pub async fn instance(State(st): State<Shared>, headers: HeaderMap) -> (StatusCode, Json<Value>) {
+    let Some(native) = &st.native else {
+        return failure("native_not_configured", StatusCode::NOT_FOUND);
+    };
+    let auth = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    if !crate::token::verify(&native.token, auth) {
+        return failure("native_unauthorized", StatusCode::UNAUTHORIZED);
+    }
+    let Ok(sessions) = native.sessions.lock() else {
+        return failure("native_state_unavailable", StatusCode::SERVICE_UNAVAILABLE);
+    };
+    let Ok(now_ms) = wall_time_ms() else {
+        return failure("native_clock_unavailable", StatusCode::SERVICE_UNAVAILABLE);
+    };
+    let bindings: Vec<Value> = sessions.entries.values()
+        .filter(|s| s.host_session.is_some() && s.agent_id.is_some() && validate_lineage(&sessions, s, now_ms, Instant::now()).is_ok())
+        .map(|s| json!({"host_session":s.host_session,"agent_id":s.agent_id,"binding_sha256":hash(s.epoch.as_bytes())})).collect();
+    (
+        StatusCode::OK,
+        Json(
+            json!({"instance_id":native.instance_id(), "registry_sha256":native.registry_sha256,"bindings":bindings}),
+        ),
+    )
+}
+
 pub async fn handler(
     State(st): State<Shared>,
     headers: HeaderMap,
@@ -838,7 +1322,10 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             if let Some(approval) = &native.approval {
                 approval.close_session(&id, "session_expired");
             }
-            firewall.inspect(&event(&old.epoch, old.seq + 1, EventKind::SessionEnd));
+            if let (Some(host), Some(agent)) = (&old.host_session, &old.agent_id) {
+                firewall.end_agent(host, agent);
+            }
+            firewall.inspect(&old.event_at(old.seq + 1, EventKind::SessionEnd));
             st.spans.end_session(&old.epoch);
         }
     }
@@ -873,25 +1360,201 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         if state.entries.len() >= MAX_SESSIONS {
             return Err("native_session_cap");
         }
-        let epoch = format!("native:{}", crate::token::generate());
+        let (granted_tools, granted_resources, agent_id, parent_id, authority_expires_at_ms) =
+            if let Some(host_session) = &request.host_session {
+                let token = request
+                    .child_authority
+                    .as_deref()
+                    .ok_or("native_child_authority_missing")?;
+                let key = child_authority::derive_key(&native.token);
+                let now_ms = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map_err(|_| "native_clock_unavailable")?
+                    .as_millis() as u64;
+                let grant = child_authority::verify_token(
+                    &key,
+                    token,
+                    host_session,
+                    request.server_id.as_deref().unwrap_or(""),
+                    now_ms,
+                )
+                .map_err(|error| {
+                    use child_authority::ChildAuthorityError;
+                    match error {
+                        ChildAuthorityError::BadSignature => "native_child_authority_bad_signature",
+                        ChildAuthorityError::Expired => "native_child_authority_expired",
+                        ChildAuthorityError::NotYetValid => "native_child_authority_not_yet_valid",
+                        ChildAuthorityError::HostSessionMismatch => {
+                            "native_child_authority_host_mismatch"
+                        }
+                        ChildAuthorityError::ServerIdMismatch => {
+                            "native_child_authority_server_mismatch"
+                        }
+                        ChildAuthorityError::InvalidContract => {
+                            "native_child_authority_invalid_contract"
+                        }
+                        ChildAuthorityError::MalformedToken => "native_child_authority_malformed",
+                    }
+                })?;
+                if let Some(req_agent) = &request.agent_id {
+                    if grant.agent_id.as_ref() != Some(req_agent) {
+                        return Err("native_invalid_identity");
+                    }
+                }
+                if let Some(req_parent) = &request.parent_id {
+                    if grant.parent_id.as_ref() != Some(req_parent) {
+                        return Err("native_invalid_identity");
+                    }
+                }
+                // Every host-bound collector shares authoritative provenance.
+                // A legacy grant lacks authenticated agent/lifecycle authority
+                // and must never be used as an alternate shared-host bootstrap.
+                if grant.agent_id.is_none() {
+                    return Err("native_child_authority_identity_required");
+                }
+                if grant.nonce.split_once('.').map(|(instance, _)| instance)
+                    != Some(native.instance_id())
+                {
+                    return Err("native_child_authority_instance_mismatch");
+                }
+                let agent_id = grant.agent_id.or_else(|| request.agent_id.clone());
+                let parent_id = grant.parent_id.or_else(|| request.parent_id.clone());
+                if agent_id.as_deref().is_some_and(|id| !identifier(id))
+                    || parent_id.as_deref().is_some_and(|id| !identifier(id))
+                    || ((parent_id.is_some() || grant.granted_resources.is_some())
+                        && agent_id.is_none())
+                {
+                    return Err("native_invalid_identity");
+                }
+                if let Some(agent) = &agent_id {
+                    if state.entries.values().any(|s| {
+                        s.host_session.as_ref() == Some(host_session)
+                            && s.agent_id.as_ref() == Some(agent)
+                    }) {
+                        return Err("native_agent_already_bound");
+                    }
+                    if !state.scoped_hosts.contains(host_session)
+                        && state.scoped_hosts.len() >= MAX_SESSIONS
+                    {
+                        return Err("native_host_binding_cap");
+                    }
+                }
+                if grant
+                    .granted_resources
+                    .as_ref()
+                    .is_some_and(|rs| rs.iter().any(|r| !scope_contains(r, r)))
+                {
+                    return Err("native_child_authority_escalation");
+                }
+                if let Some(ref parent) = parent_id {
+                    let ps = state
+                        .entries
+                        .values()
+                        .find(|s| {
+                            s.host_session.as_ref() == Some(host_session)
+                                && s.agent_id.as_ref() == Some(parent)
+                        })
+                        .ok_or("native_child_parent_unavailable")?;
+                    if grant.nonce.split('.').nth(1) != Some(hash(ps.epoch.as_bytes()).as_str()) {
+                        return Err("native_child_parent_binding_mismatch");
+                    }
+                    validate_lineage(&state, ps, now_ms, now)?;
+                    if grant
+                        .granted_tools
+                        .iter()
+                        .any(|t| !ps.granted_tools.contains(t))
+                    {
+                        return Err("native_child_authority_escalation");
+                    }
+                    for cr in grant.granted_resources.as_deref().unwrap_or(&[]) {
+                        if !ps
+                            .granted_resources
+                            .as_deref()
+                            .unwrap_or(&[])
+                            .iter()
+                            .any(|pr| scope_contains(pr, cr))
+                        {
+                            return Err("native_child_authority_escalation");
+                        }
+                    }
+                }
+                (
+                    grant.granted_tools,
+                    grant.granted_resources,
+                    agent_id,
+                    parent_id,
+                    Some(grant.expires_at_ms),
+                )
+            } else {
+                (
+                    Vec::new(),
+                    None,
+                    request.agent_id.clone(),
+                    request.parent_id.clone(),
+                    None,
+                )
+            };
+        let parent_epoch = parent_id.as_ref().and_then(|parent| {
+            state
+                .entries
+                .values()
+                .find(|s| {
+                    s.host_session == request.host_session && s.agent_id.as_ref() == Some(parent)
+                })
+                .map(|s| s.epoch.clone())
+        });
+        let session = Session {
+            parent_epoch,
+            authority_digest: request
+                .child_authority
+                .as_ref()
+                .map(|proof| hash(proof.as_bytes())),
+            epoch: format!("native:{}", crate::token::generate()),
+            seq: 1,
+            touched: now,
+            calls: BTreeMap::new(),
+            host_session: request.host_session.clone(),
+            server_id: request.server_id.clone(),
+            agent_id,
+            parent_id,
+            granted_tools,
+            granted_resources,
+            authority_expires_at_ms,
+        };
         audit(
             st,
             &request,
-            &epoch,
-            1,
+            &session,
             &response,
             None,
             started.elapsed().as_micros(),
         )?;
-        state.entries.insert(
-            request.session_id,
-            Session {
-                epoch,
-                seq: 1,
-                touched: now,
-                calls: BTreeMap::new(),
-            },
-        );
+        let agent_name = session.agent_id.as_deref().unwrap_or("native-runtime");
+        if let (Some(host), Some(agent)) = (&session.host_session, &session.agent_id) {
+            if let Some(parent) = &session.parent_id {
+                if firewall
+                    .spawn(host, parent, agent, &session.granted_tools)
+                    .is_some()
+                {
+                    return Err("native_child_authority_escalation");
+                }
+            } else {
+                firewall.set_root(host, agent, &session.granted_tools);
+            }
+            state.scoped_hosts.insert(host.clone());
+        }
+        let tools = if session.host_session.is_some() {
+            session.granted_tools.clone()
+        } else {
+            native
+                .registry
+                .tools
+                .iter()
+                .map(|t| t.name.clone())
+                .collect()
+        };
+        firewall.set_root(&session.epoch, agent_name, &tools);
+        state.entries.insert(request.session_id, session);
         return Ok(response);
     }
     if request.event == "session_end" {
@@ -902,17 +1565,18 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         if let Some(approval) = &native.approval {
             approval.close_session(&request.session_id, "session_ended");
         }
-        firewall.inspect(&event(
-            &session.epoch,
-            session.seq + 1,
-            EventKind::SessionEnd,
-        ));
+        if let (Some(host), Some(agent)) = (&session.host_session, &session.agent_id) {
+            firewall.end_agent(host, agent);
+        }
+        firewall.inspect(&session.event_at(session.seq + 1, EventKind::SessionEnd));
         st.spans.end_session(&session.epoch);
         audit(
             st,
             &request,
-            &session.epoch,
-            session.seq + 1,
+            &Session {
+                seq: session.seq + 1,
+                ..session
+            },
             &response,
             None,
             started.elapsed().as_micros(),
@@ -920,6 +1584,11 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         return Ok(response);
     }
     let total_calls: usize = state.entries.values().map(|s| s.calls.len()).sum();
+    let session = state
+        .entries
+        .get(&request.session_id)
+        .ok_or("native_session_unknown")?;
+    validate_lineage(&state, session, wall_time_ms()?, now)?;
     let session = state
         .entries
         .get_mut(&request.session_id)
@@ -935,6 +1604,27 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         .ok_or("native_tool_unknown")?;
     let args = request.args.as_ref().ok_or("native_args_missing")?;
     if request.event == "call" {
+        if session.host_session.is_some() {
+            if !session.granted_tools.iter().any(|tool| tool == name) {
+                return Err("native_child_authority_escalation");
+            }
+            if let Some(ref granted_res) = session.granted_resources {
+                if !child_resources_authorized(
+                    granted_res,
+                    tool.resource_policy.as_ref(),
+                    tool,
+                    args,
+                    request.resource_admission.as_ref(),
+                ) {
+                    return Err("native_child_authority_escalation");
+                }
+            } else if tool.resource_policy.is_some()
+                || ((session.agent_id.is_some() || session.parent_id.is_some())
+                    && (!tool.egress.is_empty() || tool.action_class == ActionClass::Network))
+            {
+                return Err("native_child_authority_escalation");
+            }
+        }
         let selected_result =
             tool.mcp_result_profile.as_deref() == Some(crate::mcp::server_profile::FORMAT);
         if selected_result {
@@ -968,8 +1658,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                 audit(
                     st,
                     &request,
-                    &session.epoch,
-                    session.seq,
+                    session,
                     &response,
                     None,
                     started.elapsed().as_micros(),
@@ -983,15 +1672,55 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             return Err("native_call_cap");
         }
         let hosts = declared_hosts(tool, args)?;
-        let ev = event(
-            &session.epoch,
-            session.seq,
-            EventKind::ToolCall {
-                tool: name.into(),
-                args: args.clone(),
-            },
-        );
-        let outcome = firewall.inspect_native_call(&ev, tool.action_class, &hosts);
+        let ev = session.event(EventKind::ToolCall {
+            tool: name.into(),
+            args: args.clone(),
+        });
+        let mut outcome = firewall.inspect_native_call(&ev, tool.action_class, &hosts);
+        if let Some(host) = &session.host_session {
+            let ev_host = session.host_event(
+                host,
+                session.seq,
+                EventKind::ToolCall {
+                    tool: name.into(),
+                    args: args.clone(),
+                },
+            );
+            let outcome_host = firewall.inspect_native_call(&ev_host, tool.action_class, &hosts);
+            fn verdict_rank(v: Verdict) -> u8 {
+                match v {
+                    Verdict::Deny => 3,
+                    Verdict::Ask => 2,
+                    Verdict::Escalate => 1,
+                    Verdict::Allow => 0,
+                }
+            }
+            let host_rank = verdict_rank(resolved(&outcome_host));
+            let local_rank = verdict_rank(resolved(&outcome));
+            if host_rank > local_rank {
+                let mut merged = outcome_host;
+                if outcome.provenance_incomplete {
+                    merged.provenance_incomplete = true;
+                }
+                if outcome.taint.is_some() && merged.taint.is_none() {
+                    merged.taint = outcome.taint;
+                }
+                if merged.rule.is_none() && outcome.rule.is_some() {
+                    merged.rule = outcome.rule;
+                }
+                outcome = merged;
+            } else {
+                if outcome_host.provenance_incomplete {
+                    outcome.provenance_incomplete = true;
+                }
+                if outcome_host.taint.is_some() && outcome.taint.is_none() {
+                    outcome.taint = outcome_host.taint.clone();
+                }
+                if outcome.rule.is_none() && outcome_host.rule.is_some() {
+                    outcome.rule = outcome_host.rule.clone();
+                }
+            }
+        }
         let verdict = resolved(&outcome);
         response.verdict = verdict_label(verdict);
         response.release = verdict == Verdict::Allow;
@@ -1060,8 +1789,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         audit(
             st,
             &request,
-            &session.epoch,
-            session.seq,
+            session,
             &response,
             Some(&outcome),
             started.elapsed().as_micros(),
@@ -1158,7 +1886,16 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         }
         context_text(content, name)?
     };
-    let provenance = source(&native.registry, tool);
+    let provenance = match (
+        request.delivery.as_deref(),
+        &tool.result_provenance,
+        &session.server_id,
+    ) {
+        (Some("mcp_host"), ResultProvenance::Untrusted, Some(server)) => Provenance::McpServer {
+            name: server.clone(),
+        },
+        _ => source(&native.registry, tool),
+    };
     let mut events = Vec::new();
     let mut strongest = Verdict::Allow;
     let mut representative = None;
@@ -1166,15 +1903,11 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
     let mut max_block_risk = 0;
     for text in texts {
         session.seq += 1;
-        let ev = event(
-            &session.epoch,
-            session.seq,
-            EventKind::ToolResult {
-                tool: name.into(),
-                content: text,
-                source: provenance.clone(),
-            },
-        );
+        let ev = session.event(EventKind::ToolResult {
+            tool: name.into(),
+            content: text,
+            source: provenance.clone(),
+        });
         let outcome = firewall.preview_native_result(&ev);
         max_block_risk = max_block_risk.max(outcome.risk_score);
         for (facet, finding) in &outcome.findings {
@@ -1213,8 +1946,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
     audit(
         st,
         &request,
-        &session.epoch,
-        session.seq,
+        session,
         &response,
         representative.as_ref(),
         started.elapsed().as_micros(),
@@ -1235,6 +1967,29 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                     if source.trust() == Trust::Untrusted {
                         st.spans.put(&session.epoch, ev.seq, content);
                     }
+                    if request.event == "result" && request.delivery.as_deref() == Some("mcp_host")
+                    {
+                        if let Some(host_session) = &session.host_session {
+                            let host_seq = st.sessions.next(host_session);
+                            let tool_name = match &session.server_id {
+                                Some(server) => format!("mcp__{server}__{name}"),
+                                None => name.to_string(),
+                            };
+                            let ev_host = session.host_event(
+                                host_session,
+                                host_seq,
+                                EventKind::ToolResult {
+                                    tool: tool_name,
+                                    content: content.clone(),
+                                    source: source.clone(),
+                                },
+                            );
+                            firewall.admit_native_result(&ev_host);
+                            if source.trust() == Trust::Untrusted {
+                                st.spans.put(host_session, host_seq, content);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1247,11 +2002,17 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
     Ok(response)
 }
 
-fn event(session: &str, seq: u64, kind: EventKind) -> AgentEvent {
+fn event_scoped(
+    session: &str,
+    agent: &str,
+    parent: Option<&str>,
+    seq: u64,
+    kind: EventKind,
+) -> AgentEvent {
     AgentEvent {
         session: session.into(),
-        agent: "native-runtime".into(),
-        parent: None,
+        agent: agent.into(),
+        parent: parent.map(Into::into),
         seq,
         at_ms: SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -1261,16 +2022,21 @@ fn event(session: &str, seq: u64, kind: EventKind) -> AgentEvent {
     }
 }
 
+fn event(session: &str, seq: u64, kind: EventKind) -> AgentEvent {
+    event_scoped(session, "native-runtime", None, seq, kind)
+}
+
 fn audit(
     st: &Shared,
     request: &Request,
-    epoch: &str,
-    seq: u64,
+    session: &Session,
     response: &Response,
     outcome: Option<&Outcome>,
     latency_us: u128,
 ) -> Result<(), &'static str> {
-    let record = json!({"at_ms": event(epoch, seq, EventKind::Unknown).at_ms, "session": epoch,
+    let epoch = &session.epoch;
+    let seq = session.seq;
+    let mut record = json!({"at_ms": event(epoch, seq, EventKind::Unknown).at_ms, "session": epoch,
         "seq": seq, "event": format!("native_{}", request.event), "tool": request.tool,
         "verdict": response.verdict, "shadow": false, "released": response.release,
         "rule": outcome.and_then(|o| o.rule.as_ref()),
@@ -1284,6 +2050,15 @@ fn audit(
         "delivery": request.delivery,
         "call_id": response.call_id, "binding_sha256": response.binding_sha256,
         "content_sha256": response.content_sha256, "reason_codes": response.reason_codes});
+    if let Some(host_session) = &session.host_session {
+        record["host_session"] = json!(host_session);
+    }
+    if let Some(agent_id) = &session.agent_id {
+        record["agent_id"] = json!(agent_id);
+    }
+    if let Some(parent_id) = &session.parent_id {
+        record["parent_id"] = json!(parent_id);
+    }
     st.audit
         .write_native(&record)
         .map_err(|_| "native_audit_unavailable")
@@ -1299,6 +2074,40 @@ mod tests {
     };
     use soup_wall_agent::AgentFirewall;
     use std::sync::Arc;
+
+    #[test]
+    fn delegated_scope_containment_is_typed_and_canonical() {
+        for (parent, child, allowed) in [
+            ("internal.corp", "alice@internal.corp", true),
+            ("INTERNAL.corp", "https://internal.corp/private", true),
+            ("internal.corp", "https://other.corp/private", false),
+            ("alice@internal.corp", "internal.corp", false),
+            ("alice@internal.corp", "bob@internal.corp", false),
+            ("https://internal.corp/a", "https://internal.corp/a", true),
+            ("https://internal.corp/a", "https://internal.corp/b", false),
+            ("https://internal.corp/a", "http://internal.corp/a", false),
+            ("https://internal.corp/a", "internal.corp", false),
+        ] {
+            assert_eq!(
+                scope_contains(parent, child),
+                allowed,
+                "{parent} -> {child}"
+            );
+        }
+        let root = std::env::temp_dir().join("scope-fixture");
+        let parent = root.join("allowed");
+        for (child, allowed) in [
+            (parent.join("file"), true),
+            (root.join("allowed-secret"), false),
+            (parent.join("..").join("secret"), false),
+            (std::path::PathBuf::from("relative-path"), false),
+        ] {
+            assert_eq!(
+                scope_contains(&parent.to_string_lossy(), &child.to_string_lossy()),
+                allowed
+            );
+        }
+    }
 
     fn fixture(dir: &std::path::Path) -> Shared {
         let bytes = json!({"contract_version": CONTRACT, "registry_id": "unit-suite", "tools": [{
@@ -1632,6 +2441,49 @@ mod tests {
         );
         assert!(parse(&duplicate).is_err());
     }
+    #[test]
+    fn reviewe358_lossy_hook_must_not_take_firewall_before_native_mutex() {
+        let dir = tempfile::tempdir().unwrap();
+        let st = fixture(dir.path());
+        // This is the native inspect preemption point: native.sessions has
+        // been acquired, and its next operation needs st.firewall.
+        let native_guard = st.native.as_ref().unwrap().sessions.lock().unwrap();
+        let hook_st = st.clone();
+        let worker = std::thread::spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            runtime.block_on(async move {
+                let mut headers = axum::http::HeaderMap::new();
+                headers.insert("authorization", "Bearer hook-unit-key".parse().unwrap());
+                crate::handlers::hook(
+                    axum::extract::State(hook_st),
+                    headers,
+                    axum::body::Body::from("{"),
+                )
+                .await
+            })
+        });
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(250);
+        let mut hook_holds_firewall = false;
+        while std::time::Instant::now() < deadline {
+            if st.firewall.try_lock().is_err() {
+                hook_holds_firewall = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        // Release the controlled native owner so this witness can terminate.
+        // An actual native inspect would instead wait for the hook's firewall
+        // guard, completing the wait cycle indefinitely.
+        drop(native_guard);
+        let response = worker.join().unwrap();
+        assert_eq!(response.0, axum::http::StatusCode::OK);
+        assert!(!hook_holds_firewall,
+            "lock inversion: lossy hook holds firewall while waiting for native.sessions; native inspect holds native.sessions and next waits for firewall");
+    }
+
     fn selected_fixture(dir: &std::path::Path) -> Shared {
         let manifest = crate::mcp::server_profile::original_manifest();
         let definition = manifest["tools"]

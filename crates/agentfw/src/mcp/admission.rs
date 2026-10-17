@@ -559,6 +559,8 @@ pub fn classification_to_adapter(
 }
 
 pub struct AdmissionCfg {
+    pub host_session: Option<String>,
+    pub child_authority: Option<String>,
     pub daemon_url: String,
     pub manifest_url: String,
     pub manifest_token: String,
@@ -856,14 +858,23 @@ struct ClassificationAuthority {
 
 struct Collector<'a> {
     config: &'a AdmissionCfg,
+    host_session: Option<String>,
+    child_authority: Option<String>,
     client: reqwest::Client,
     session: String,
 }
 
 impl<'a> Collector<'a> {
     fn new(config: &'a AdmissionCfg) -> anyhow::Result<Self> {
+        if config.host_session.is_some() != config.child_authority.is_some() {
+            anyhow::bail!(
+                "both host_session and child_authority must be provided together for authenticated binding"
+            );
+        }
         Ok(Self {
             config,
+            host_session: config.host_session.clone(),
+            child_authority: config.child_authority.clone(),
             client: reqwest::Client::builder()
                 .no_proxy()
                 .redirect(reqwest::redirect::Policy::none())
@@ -2550,7 +2561,22 @@ where
 
 pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
     let collector = Collector::new(&config)?;
-    collector.event("session_start", json!({})).await?;
+    if let (Some(host_session), Some(child_authority)) =
+        (&collector.host_session, &collector.child_authority)
+    {
+        collector
+            .event(
+                "session_start",
+                json!({
+                    "host_session": host_session,
+                    "child_authority": child_authority,
+                    "server_id": collector.config.server_id,
+                }),
+            )
+            .await?;
+    } else {
+        collector.event("session_start", json!({})).await?;
+    }
     // Fail closed before spawning the server if the native daemon cannot admit a session.
     let operation = async {
         let cwd = std::env::current_dir()?;
@@ -2624,6 +2650,8 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
             .current_dir(&workspace)
             .env_remove("AGENTFW_TOKEN")
             .env_remove("AGENTFW_NATIVE_TOKEN")
+            .env_remove("AGENTFW_CHILD_AUTHORITY")
+            .env_remove("AGENTFW_HOST_SESSION")
             .env_remove("AGENTFW_TEST_CLASSIFIER_READ")
             .env_remove("AGENTFW_TEST_CLASSIFIER")
             .stdin(Stdio::piped())
@@ -3262,6 +3290,8 @@ mod resource_receipt_tests {
             )
             .unwrap();
             let config = AdmissionCfg {
+                host_session: None,
+                child_authority: None,
                 server_id: "resource-fixture".into(),
                 daemon_url: format!("{}/native/v1", server.uri()),
                 manifest_url: format!("{}/mcp/manifest", server.uri()),

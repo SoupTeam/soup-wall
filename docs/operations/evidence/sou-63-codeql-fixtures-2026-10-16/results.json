@@ -1,0 +1,18 @@
+{
+  "previous_head": "ea1f6eb",
+  "codeql_check": "https://github.com/SoupTeam/soup-wall/runs/117082578392",
+  "original_findings": 59,
+  "affected_scope": "test fixtures only",
+  "production_crypto_unchanged": true,
+  "local_tests": {
+    "lib": 312,
+    "native_endpoint": 109,
+    "failed": 0
+  },
+  "clippy": "PASS -D warnings",
+  "fmt": "PASS",
+  "changed_files_sha256": {
+    "crates/agentfw/src/native/child_authority.rs": "e91dda0222760297ccd315882d48b5432af09b5409d7624461a26d34d602f9f1",
+    "crates/agentfw/tests/native_endpoint.rs": "80a6874c4fa8f53ec9177d704ed96abb37c3e0099723b837e91f1d0a6a02922a"
+  }
+}

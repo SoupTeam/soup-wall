@@ -43,6 +43,7 @@ aws-lc-rs = { version = "1", features = ["prebuilt-nasm"] }
 # Already present in the locked graph and license-reviewed in PROVENANCE.md
 # for the proxy CSRF proofs; declared here for the approval-grant HMAC.
 hmac = "0.12"
+base64 = "0.22"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

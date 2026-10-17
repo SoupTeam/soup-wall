@@ -1,0 +1,22 @@
+{
+  "archive_sha256": "5ecb245093b0f791b89d3420c3df9c6d49c60ab63ba54db896bf8a3baf486706",
+  "compared_files": 111,
+  "changed_files": {
+    "Cargo.toml": {
+      "upstream_sha256": "b0557a816df73784924576be4e8f2686957f9906c8080b5543c4bf2cd40f8859",
+      "local_sha256": "a8998aad832836eaef669ae25329fd812319087fc1698d532fd42511ac96b9cb"
+    },
+    "src/cpu/erf.rs": {
+      "upstream_sha256": "e034235ab4045d75ff82f2c5ff4ca446a6a4b6f4f983e4ae5055e93a38eb3ed3",
+      "local_sha256": "76682497d42eac75e101cb88948cfecea1845a28322b194b4fb75f50e8f1bda4"
+    },
+    "src/npy.rs": {
+      "upstream_sha256": "46df77176b957a8d3abc6f453a8fc6a081e124a3ab47b5df7b1520de7ee58f80",
+      "local_sha256": "2e078576e9530201f8ecf22ecfc9e0ae558bb4a67b4428ab4cec3c4f0d2a8277"
+    },
+    "src/pickle.rs": {
+      "upstream_sha256": "7fcb931fb616c35c7817e5461cc6173d7c6635339223c360a6c22fb077c07d63",
+      "local_sha256": "017be74bd919390bfde629846fd89067fa0f76abf602775e02f129d10ae072cf"
+    }
+  }
+}
