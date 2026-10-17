@@ -4,9 +4,11 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import tarfile
 import tempfile
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -49,7 +51,7 @@ class GitProfile(unittest.TestCase):
                     INSTALL.extract_python(archive, destination)
                 self.assertEqual(list(destination.iterdir()), [])
 
-    def test_archive_keeps_original_regular_bytes_and_internal_alias(self):
+    def test_archive_keeps_original_regular_bytes(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             archive = root / "runtime.tar.gz"
@@ -67,6 +69,25 @@ class GitProfile(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "no isolation fallback"):
                 INSTALL.install(Path("unused"), Path("unused"), Path("unused"), "a" * 64, Path("unused"))
             download.assert_not_called()
+
+    @unittest.skipUnless(sys.platform == "linux", "independent inotify witness requires Linux")
+    def test_repository_witness_calibrates_actual_open_and_empty_interval(self):
+        spec = importlib.util.spec_from_file_location("sou68_witness_tests", ROOT / "scripts/verify-sou68-real-mcp.py")
+        verify = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(verify)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / "index"
+            target.write_bytes(b"synthetic index")
+            witness = verify.RepositoryWitness(root)
+            try:
+                self.assertEqual(witness.drain(), 0)
+                descriptor = os.open(target, os.O_RDONLY)
+                os.close(descriptor)
+                self.assertGreater(witness.drain(), 0)
+                self.assertEqual(witness.drain(), 0)
+            finally:
+                witness.close()
 
 
 if __name__ == "__main__":

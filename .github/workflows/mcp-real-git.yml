@@ -36,6 +36,8 @@ jobs:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@1.94.1
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
       - name: Build explicitly pinned Git and bubblewrap
         shell: bash
         run: |

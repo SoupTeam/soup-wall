@@ -170,9 +170,9 @@ def protected(stack, report):
             poison, _ = original.exchange(call(8, "git_show", {"revision": stack.poison}, stack.workspace))
             require(INJECTION in text(poison), "original result-injection calibration failed")
             for identifier, (tool, args, fragment) in enumerate(READS, 10):
-                result, _ = original.exchange(call(identifier, tool, args, stack.workspace))
+                result, raw = original.exchange(call(identifier, tool, args, stack.workspace))
                 require(fragment in text(result), "unwrapped read calibration failed: " + tool)
-                originals[tool] = result
+                originals[tool] = raw
             index_before = sha(stack.workspace / ".git/index")
             witness.drain()
             result, _ = original.exchange(call(90, "git_add", {"files": ["notes.txt"]}, stack.workspace))
@@ -207,11 +207,9 @@ def protected(stack, report):
             require("SOU-68 synthetic" in text(followup), "result refusal broke useful follow-up")
             report["result_injection_withheld"] = True
             for identifier, (tool, args, fragment) in enumerate(READS, 10):
-                response, _ = client.exchange(call(identifier, tool, args))
+                response, raw = client.exchange(call(identifier, tool, args))
                 require(fragment in text(response), "protected useful read failed: " + tool)
-                # Status includes the original repository path; compare all other original fields.
-                expected = json.dumps(originals[tool], sort_keys=True).replace(str(stack.workspace), "/workspace")
-                require(json.dumps(response, sort_keys=True) == expected, "original result changed: " + tool)
+                require(raw == originals[tool], "original result bytes changed: " + tool)
                 report["reads"].append({"tool": tool, "response": response, "passed": True})
             overlap(client, log_path, report)
             refusals = [

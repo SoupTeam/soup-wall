@@ -583,6 +583,8 @@ def descriptors():
 git = subprocess.run(['/mcp-runtime/git', 'status', '--porcelain'], cwd='/workspace', capture_output=True, timeout=5)
 result = {{
  'git_read': git.returncode == 0,
+ 'git_exit': git.returncode,
+ 'git_error': git.stderr[-2000:].decode('utf-8', 'replace'),
  'workspace_write_denied': denied(lambda: pathlib.Path('/workspace/sandbox-forbidden').write_text('denied')),
  'runtime_write_denied': denied(lambda: pathlib.Path('/mcp-runtime/git').open('wb')),
  'outside_read_denied': denied(lambda: pathlib.Path({outside_json}).read_bytes()),
@@ -639,7 +641,10 @@ print(json.dumps(result))
             "ambient_env_absent",
             "home_absent",
         ] {
-            assert_eq!(result[key], true, "Git boundary failed: {key}");
+            assert_eq!(
+                result[key], true,
+                "Git boundary failed: {key}; owned probe: {result}"
+            );
         }
         for namespace in ["net", "pid"] {
             let host = std::fs::read_link(format!("/proc/self/ns/{namespace}")).unwrap();
