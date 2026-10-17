@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import ctypes
 import importlib.util
 import os
 from pathlib import Path
@@ -92,6 +93,8 @@ class ReportChecks(unittest.TestCase):
 @unittest.skipUnless(os.name == "nt" and shutil.which("pwsh"), "native Windows PowerShell required")
 class LauncherCleanupChecks(unittest.TestCase):
     def test_standard_user_removes_private_temp_on_success_and_failure(self):
+        if ctypes.windll.shell32.IsUserAnAdmin():
+            self.skipTest("requires the non-elevated account used by native acceptance")
         launcher = PATH.with_name("ci-windows-self-test.ps1").read_text(encoding="utf-8")
         child = launcher.split("    @'\n", 1)[1].split("\n'@", 1)[0]
         start = child.index("try {\n") + len("try {\n")

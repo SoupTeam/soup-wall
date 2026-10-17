@@ -107,7 +107,12 @@ still failed: the administrator could not remove the standard user's private
 temporary directory. Cleanup now runs in the owning child process, including
 failure paths; the launcher checks that the directory is gone. A native
 regression covers successful and failed child runs without changing the ACL
-rules. The corrected workflow must pass before acceptance.
+rules. The [corrected workflow](https://github.com/SoupTeam/soup-wall/actions/runs/39056404158)
+passed with 19 checks, no administrator group membership, and confirmed account
+and staging removal. The broader Windows suite also exposed short-path aliases
+in unit-test temporary paths. Those fixtures now resolve the temporary parent
+and create an explicitly owned private directory. Production path validation
+is unchanged; the complete Windows regression job remains required.
 
 These results cover the scripted MCP fixture path. They do not establish
 live-model effectiveness, an OS sandbox or completion of Phase 4.

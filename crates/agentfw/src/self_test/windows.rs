@@ -1749,9 +1749,18 @@ mod tests {
         }
     }
 
-    fn workspace() -> (Parent, Workspace) {
-        let parent = Parent(std::env::temp_dir().join(format!("sw71-unit-{}", random_hex(16))));
+    fn private_parent() -> Parent {
+        let temporary = std::env::temp_dir().canonicalize().unwrap();
+        let temporary = temporary.to_str().unwrap();
+        let temporary = Path::new(temporary.strip_prefix(r"\\?\").unwrap_or(temporary));
+        let parent = Parent(temporary.join(format!("sw71-unit-{}", random_hex(16))));
         safety::new_directory(&parent.0).unwrap();
+        safety::check_private(&parent.0, true).unwrap();
+        parent
+    }
+
+    fn workspace() -> (Parent, Workspace) {
+        let parent = private_parent();
         let ws = Workspace::create(&parent.0).unwrap();
         (parent, ws)
     }
@@ -1794,10 +1803,10 @@ mod tests {
 
     #[test]
     fn new_report_never_opens_an_existing_file_or_hardlink() {
-        let parent = tempfile::tempdir().unwrap();
-        let original = parent.path().join("original");
+        let parent = private_parent();
+        let original = parent.0.join("original");
         write_new(&original, b"keep").unwrap();
-        let alias = parent.path().join("alias");
+        let alias = parent.0.join("alias");
         std::fs::hard_link(&original, &alias).unwrap();
         assert!(safety::new_file(&original).is_err());
         assert!(safety::new_file(&alias).is_err());
