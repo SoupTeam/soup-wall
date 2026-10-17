@@ -1,0 +1,47 @@
+﻿name: scim-directory
+on:
+  pull_request:
+    paths:
+      - 'crates/proxy/**'
+      - 'scripts/scim-directory*'
+      - '.github/workflows/scim-directory.yml'
+      - 'Cargo.lock'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  interoperability:
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [sqlite, postgres]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build actual SCIM fixture and run native regressions
+        run: |
+          cargo test --locked -p llm-firewall scim
+          cargo build --locked -p llm-firewall --example scim-directory-fixture
+      - name: Install independent client
+        run: |
+          python3 -m venv "$RUNNER_TEMP/scim-client"
+          "$RUNNER_TEMP/scim-client/bin/python" -m pip install -r scripts/scim-directory-requirements.txt
+      - name: Run genuine client lifecycle
+        run: |
+          "$RUNNER_TEMP/scim-client/bin/python" scripts/scim-directory-acceptance.py --backend "${{ matrix.backend }}" --fixture target/debug/examples/scim-directory-fixture --out "$RUNNER_TEMP/scim-evidence/${{ matrix.backend }}.json"
+      - name: Retain sanitized evidence only
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: scim-directory-${{ matrix.backend }}
+          path: ${{ runner.temp }}/scim-evidence/*.json
+          if-no-files-found: warn
+          retention-days: 30
