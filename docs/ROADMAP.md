@@ -83,7 +83,7 @@ See [architecture](ARCHITECTURE.md), [methodology](methodology.md),
 | --- | --- | --- |
 | Core | Detection, normalization, masking, text policy and optional ML code | Reviewed detector use and pinned optional assets for the accepted scope; no classifier-only security claims |
 | Agent | Taint, action/egress policy, grants, audit/replay and Linux guarded execution | Complete selected real-tool semantics, runtime child identity/authority, and policy composition |
-| Native and MCP integration | Immutable registry, authenticated admission and correlated result receipts; legacy sequential stdio and an explicit selected real-server Linux profile | Extend reviewed runtime coverage, authenticate shared host-session provenance, and retain independent execution/prevention witnesses with useful continuation |
+| Native and MCP integration | Immutable registry, authenticated admission and correlated result receipts; selected real-server Linux profiles and scoped shared host-session provenance | Extend reviewed runtime coverage and combined original-server/shared-session evidence; retain independent execution/prevention witnesses with useful continuation |
 | Gateway | Chat Completions, Responses and Messages inspection with bounded streaming | Accepted provider/platform behavior, compatibility and operational checks on the final candidate |
 | Console | Tenants, roles, identity, tenant policy versions, webhook queues and usage evidence | Authenticated Agent enrollment, verified policy bundles, observed application, staged rollout and confirmed rollback |
 | Evaluation | Synthetic regressions, pinned historical importer, runtime adapters and scripted integration proofs | Frozen matched live evaluation using original independent attack/task evaluators |
