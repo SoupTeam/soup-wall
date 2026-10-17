@@ -19,6 +19,19 @@ policy/third-party-notices/vcpkg-0.2.15/LICENSE-MIT -text whitespace=cr-at-eol,-
 # Task 1 public fixtures are pinned by SHA-256 (SOU-31 checker): keep LF on every platform.
 eval/fixtures/*.json text eol=lf
 
+# SOU-80 hashes these exact public evidence and ROADMAP bytes on every platform.
+docs/ROADMAP.md text eol=lf
+docs/operations/evidence/MCP_CREATE_FILE_2026-10-15.followup.json text eol=lf
+docs/operations/evidence/MCP_HTTPS_GET_2026-10-15.json text eol=lf
+docs/operations/evidence/sou61/self-test-report.json text eol=lf
+docs/operations/evidence/sou77/self-test-report.json text eol=lf
+docs/operations/evidence/sou-63-final-hardening-2026-10-16/results.json text eol=lf
+docs/operations/roadmap-support-index.json text eol=lf
+scripts/roadmap_support.py text eol=lf
+scripts/roadmap_support_assets/** text eol=lf
+scripts/tests/test_roadmap_support.py text eol=lf
+scripts/tests/test_roadmap_support_browser.js text eol=lf
+
 # SOU-62 package/discovery pins have byte identities on every platform.
 profiles/mcp/filesystem-readonly-v1/** text eol=lf
 # Preserve original upstream legal notices, including their original whitespace.
