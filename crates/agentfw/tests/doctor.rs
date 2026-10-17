@@ -287,3 +287,175 @@ fn cancellation_before_completion_never_publishes_support_bundle() {
     assert!(!bundle.exists());
     assert_eq!(std::fs::read_dir(&out_parent).unwrap().count(), 0);
 }
+
+
+/// An independently constructed, structurally valid recorded managed process.
+/// No service, daemon or external traffic is started for refusal controls.
+fn recorded_process_fixture(root: &Path) -> (std::path::PathBuf, std::path::PathBuf) {
+    use sha2::{Digest, Sha256};
+    let home = root.join(".agentfw");
+    let versions = home.join("versions");
+    std::fs::create_dir(&home).unwrap();
+    std::fs::create_dir(&versions).unwrap();
+    for dir in [&home, &versions] {
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let config = b"enforce: true\nport: 43214\n";
+    private(&home.join("config.yaml"), config);
+    let name = "agentfw-reviewed";
+    let binary = versions.join(name);
+    private(&binary, b"small reviewed binary bytes");
+    std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let digest = format!("{:x}", Sha256::digest(std::fs::read(&binary).unwrap()));
+    let instance = "A".repeat(43);
+    let record = serde_json::json!({
+        "version":"reviewed", "binary":name, "digest":digest,
+    });
+    let data = serde_json::json!({
+        "active":record.clone(), "previous":null, "owned":[record],
+        "process":{
+            "pid":42424, "instance":instance,
+            "binary_digest":digest,
+            "config_digest":format!("{:x}", Sha256::digest(config)),
+            "port":43214, "bind":"127.0.0.1",
+            "launch_log":format!(".launch-{instance}.log")
+        },
+        "operation":null, "pending_stage":null
+    });
+    let manifest = versions.join("lifecycle.json");
+    private(&manifest, serde_json::to_vec_pretty(&data).unwrap().as_slice());
+    (home, manifest)
+}
+
+/// Terminate the child after a strict deadline, even if a regression opens a
+/// FIFO and blocks forever. Deliberately run outside the repository checkout.
+fn doctor_with_deadline(home: &Path, cwd: &Path, args: &[&str]) -> Output {
+    use std::process::Stdio;
+    use std::time::{Duration, Instant};
+    let mut child = Command::new(env!("CARGO_BIN_EXE_agentfw"))
+        .arg("doctor").arg("--json").arg("--home").arg(home)
+        .args(args).current_dir(cwd)
+        .stdout(Stdio::piped()).stderr(Stdio::piped())
+        .spawn().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        if child.try_wait().unwrap().is_some() {
+            return child.wait_with_output().unwrap();
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("doctor blocked on an invalid selected input");
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+fn fifo(path: &Path) {
+    use std::os::unix::ffi::OsStrExt;
+    let name = std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap();
+    assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o600) }, 0);
+}
+
+#[test]
+fn recorded_process_refuses_fifo_symlink_and_oversize_config_promptly() {
+    for kind in ["fifo", "symlink", "oversize"] {
+        let work = tempfile::tempdir().unwrap();
+        let (home, manifest) = recorded_process_fixture(work.path());
+        let before_manifest = std::fs::read(&manifest).unwrap();
+        let selected = home.join("config.yaml");
+        std::fs::remove_file(&selected).unwrap();
+        match kind {
+            "fifo" => fifo(&selected),
+            "symlink" => {
+                let target = home.join("reviewed-config.yaml");
+                private(&target, b"enforce: true\n# raw-config-SENTINEL\n");
+                std::os::unix::fs::symlink(&target, &selected).unwrap();
+            },
+            "oversize" => {
+                let file = std::fs::File::create(&selected).unwrap();
+                file.set_len(1024 * 1024 + 1).unwrap();
+                std::fs::set_permissions(&selected, std::fs::Permissions::from_mode(0o600)).unwrap();
+            },
+            _ => unreachable!(),
+        }
+        let output = doctor_with_deadline(&home, work.path(), &[]);
+        assert_eq!(output.status.code(), Some(3), "{kind}");
+        let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        let checks = report["checks"].as_array().unwrap();
+        assert!(checks.iter().any(|c| c["reason_code"] == "config_missing_or_unsafe"), "{kind}");
+        assert!(checks.iter().any(|c| c["reason_code"] == "managed_config_unverifiable"), "{kind}");
+        assert_eq!(report["active_host_call_protection"], "unknown");
+        for sentinel in ["raw-config-SENTINEL", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"] {
+            assert!(!String::from_utf8_lossy(&output.stdout).contains(sentinel));
+        }
+        assert_eq!(std::fs::read(&manifest).unwrap(), before_manifest);
+        assert!(!home.join("versions/.lock").exists());
+        assert!(std::fs::symlink_metadata(&selected).is_ok());
+    }
+}
+
+#[test]
+fn recorded_process_refuses_fifo_symlink_and_oversize_manifest_promptly() {
+    for kind in ["fifo", "symlink", "oversize"] {
+        let work = tempfile::tempdir().unwrap();
+        let (home, manifest) = recorded_process_fixture(work.path());
+        let config_before = std::fs::read(home.join("config.yaml")).unwrap();
+        std::fs::remove_file(&manifest).unwrap();
+        match kind {
+            "fifo" => fifo(&manifest),
+            "symlink" => {
+                let target = home.join("versions/safe-manifest.json");
+                private(&target, b"manifest-secret-SENTINEL");
+                std::os::unix::fs::symlink(&target, &manifest).unwrap();
+            },
+            "oversize" => {
+                let file = std::fs::File::create(&manifest).unwrap();
+                file.set_len(1024 * 1024 + 1).unwrap();
+                std::fs::set_permissions(&manifest, std::fs::Permissions::from_mode(0o600)).unwrap();
+            },
+            _ => unreachable!(),
+        }
+        let output = doctor_with_deadline(&home, work.path(), &[]);
+        assert_eq!(output.status.code(), Some(3), "{kind}");
+        let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert!(report["checks"].as_array().unwrap()
+            .iter().any(|c| c["reason_code"] == "lifecycle_unverifiable"), "{kind}");
+        assert!(!String::from_utf8_lossy(&output.stdout).contains("manifest-secret-SENTINEL"));
+        assert_eq!(std::fs::read(home.join("config.yaml")).unwrap(), config_before);
+        assert!(!home.join("versions/.lock").exists());
+        assert!(std::fs::symlink_metadata(&manifest).is_ok());
+    }
+}
+
+#[test]
+fn recorded_process_rejects_unsafe_managed_binary_without_unbounded_hash() {
+    for kind in ["fifo", "symlink", "oversize"] {
+        let work = tempfile::tempdir().unwrap();
+        let (home, manifest) = recorded_process_fixture(work.path());
+        let before_manifest = std::fs::read(&manifest).unwrap();
+        let binary = home.join("versions/agentfw-reviewed");
+        std::fs::remove_file(&binary).unwrap();
+        match kind {
+            "fifo" => fifo(&binary),
+            "symlink" => {
+                private(&home.join("binary-source"), b"binary-secret-SENTINEL");
+                std::os::unix::fs::symlink(home.join("binary-source"), &binary).unwrap();
+            },
+            "oversize" => {
+                let file = std::fs::File::create(&binary).unwrap();
+                file.set_len(512 * 1024 * 1024 + 1).unwrap(); // sparse, no 512 MiB allocation
+                std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700)).unwrap();
+            },
+            _ => unreachable!(),
+        }
+        let output = doctor_with_deadline(&home, work.path(), &[]);
+        assert_eq!(output.status.code(), Some(3), "{kind}");
+        let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert!(report["checks"].as_array().unwrap()
+            .iter().any(|c| c["reason_code"] == "installed_binary_mismatch"), "{kind}");
+        assert!(!String::from_utf8_lossy(&output.stdout).contains("binary-secret-SENTINEL"));
+        assert_eq!(std::fs::read(&manifest).unwrap(), before_manifest);
+        assert!(!home.join("versions/.lock").exists());
+    }
+}
