@@ -52,15 +52,20 @@ Implementation was developed in pair-programming collaboration with local Codex 
 
 ### Unit Tests
 ```text
-running 6 tests
+running 11 tests
 test mcp::profile_lifecycle::tests::profile_state_serde_roundtrip ... ok
 test mcp::profile_lifecycle::tests::bundle_digest_fails_on_missing_file ... ok
-test mcp::profile_lifecycle::tests::bundle_digest_fails_on_symlink ... ok
 test mcp::profile_lifecycle::tests::bundle_digest_computes_deterministic_sha256 ... ok
+test mcp::profile_lifecycle::tests::bundle_fails_when_tool_authority_tampered_in_registry ... ok
+test mcp::profile_lifecycle::tests::bundle_digest_fails_on_symlink ... ok
+test mcp::profile_lifecycle::tests::recover_preserves_journal_on_foreign_config_when_initial_was_absent ... ok
+test mcp::profile_lifecycle::tests::bundle_digest_fails_on_cross_file_mismatch ... ok
+test mcp::profile_lifecycle::tests::profile_manager_cas_rejects_concurrent_config_mutation ... ok
 test mcp::profile_lifecycle::tests::profile_manager_crash_recovery_restores_config ... ok
+test mcp::profile_lifecycle::tests::upgrade_fails_when_active_registry_externally_superseded ... ok
 test mcp::profile_lifecycle::tests::profile_manager_lifecycle_install_upgrade_rollback ... ok
 
-test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; finished in 0.26s
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; finished in 0.49s
 ```
 
 ```text
@@ -79,9 +84,26 @@ test zero_stale_authority_monotonicity ... ok
 test crash_recovery_restores_clean_baseline ... ok
 test cli_mcp_profile_lifecycle_e2e ... ok
 
-test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; finished in 1.28s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; finished in 1.33s
 ```
 
 ### Formatting & Linting
 - `cargo fmt --all -- --check`: **PASS (exit code 0)**
 - `cargo clippy --workspace --all-features --all-targets --locked -- -D warnings`: **PASS (exit code 0, 0 warnings)**
+
+---
+
+## 4. Codex Review Resolution
+1. **Binding Approval to Actual Registry Authority:**
+   - Bundles are validated using production `NativeState::from_bytes`.
+   - Every tool in `registry.json` is cross-verified against `profile.json`, checking that `digest(tool_entry) == authority_sha256`, `action_class`, `result_provenance`, and `schema_sha256`. Any subtle modification of authority in `registry.json` fails bundle verification immediately.
+2. **Crash Recovery Baseline Daemon Restart:**
+   - Evaluates whether daemon was running or stopped; uses `restart_or_start_daemon` so it correctly starts if the candidate daemon exited or cleared process state.
+   - Verifies the running process's `config_digest` matches the baseline digest before declaring recovery success.
+3. **Supersession Checks Before Automatic Compensation:**
+   - During failure rollback in `install`, `upgrade`, and `rollback`, verifies current on-disk `config.yaml` digest matches target before restoring baseline. If modified externally, refuses to overwrite and retains failed journal.
+4. **Active Registry Supersession Check:**
+   - `upgrade` and `rollback` check that `config.yaml`'s `native.registry_path` and `registry_sha256` still match the active bundle on disk; foreign configuration modifications fail closed with conflict.
+5. **Lifecycle Ownership Coordination:**
+   - Coordinates `lifecycle.lock()` during journal creation and `config.yaml` write; checks post-write status to detect any concurrent start.
+

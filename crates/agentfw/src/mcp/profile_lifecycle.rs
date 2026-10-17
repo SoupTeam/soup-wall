@@ -649,12 +649,21 @@ impl ProfileManager {
         Ok(())
     }
 
+    fn restart_or_start_daemon(&self, lifecycle: &crate::lifecycle::Manager) -> Result<()> {
+        let st = lifecycle.status()?;
+        if st.running {
+            lifecycle.restart()
+        } else {
+            lifecycle.start()
+        }
+    }
+
     fn restart_and_verify_daemon(
         &self,
         lifecycle: &crate::lifecycle::Manager,
         expected_config_digest: &str,
     ) -> Result<()> {
-        lifecycle.restart()?;
+        self.restart_or_start_daemon(lifecycle)?;
         let st = lifecycle.status()?;
         ensure!(st.running, "daemon reported not running after restart");
         let proc = st
@@ -715,6 +724,11 @@ impl ProfileManager {
         let (pre_config, pre_config_digest, target_yaml, target_config_digest) =
             self.prepare_config(&bundle.bundle_sha256, &bundle.registry_sha256)?;
 
+        // Hold coordinated lifecycle ownership across journal write and config write
+        let lifecycle_lock = lifecycle
+            .lock()
+            .context("failed to acquire lifecycle lock for profile installation")?;
+
         // 1. Durably record in_progress journal
         state.in_progress = Some(OperationJournal {
             operation_id: op_id.clone(),
@@ -737,9 +751,14 @@ impl ProfileManager {
         state.in_progress.as_mut().unwrap().phase = OperationPhase::ConfigWritten;
         self.save_state(&state)?;
 
+        // Release lifecycle lock so restart_and_verify_daemon can acquire it internally
+        drop(lifecycle_lock);
+
         // 3. Daemon restart & verification if running
         let mut verified = true;
-        if was_running {
+        let post_st = lifecycle.status()?;
+        let needs_verification = was_running || post_st.running;
+        if needs_verification {
             state.in_progress.as_mut().unwrap().phase = OperationPhase::DaemonRestarting;
             self.save_state(&state)?;
             if let Err(e) = self.restart_and_verify_daemon(&lifecycle, &target_config_digest) {
@@ -754,16 +773,18 @@ impl ProfileManager {
                 state.in_progress.as_mut().unwrap().phase = OperationPhase::RollingBack;
                 self.save_state(&state)?;
                 self.restore_config(pre_config.as_deref())?;
-                let baseline_restart = lifecycle.restart();
+                let baseline_restart = self.restart_or_start_daemon(&lifecycle);
                 if let Err(re) = baseline_restart {
                     state.in_progress.as_mut().unwrap().phase = OperationPhase::Failed;
                     self.save_state(&state)?;
                     bail!("candidate daemon failed to boot ({e:#}) and baseline recovery failed to restart ({re:#})");
                 }
                 let st = lifecycle.status()?;
+                let process_digest = st.process.as_ref().map(|p| p.config_digest.as_str());
+                let baseline_digest = pre_config_digest.as_deref();
                 ensure!(
-                    st.running,
-                    "candidate daemon failed to boot ({e:#}); restored baseline configuration but daemon is not running"
+                    st.running && (baseline_digest.is_none() || process_digest == baseline_digest),
+                    "candidate daemon failed to boot ({e:#}); restored baseline configuration but daemon is not running with baseline configuration"
                 );
                 state.in_progress.as_mut().unwrap().phase = OperationPhase::Failed;
                 self.save_state(&state)?;
@@ -857,6 +878,21 @@ impl ProfileManager {
             active_meta.bundle_sha256 == active_bundle,
             "active profile bundle corrupted on disk"
         );
+        // Check for external supersession: verify config.yaml's current native registry matches active_bundle
+        if self.config_path.exists() {
+            let text = fs::read_to_string(&self.config_path)?;
+            let current_cfg = Config::from_yaml(&text)?;
+            if let Some(nat) = &current_cfg.native {
+                let expected_path = active_dir.join("registry.json");
+                ensure!(
+                    nat.registry_path == expected_path && nat.registry_sha256 == active_meta.registry_sha256,
+                    "conflict: active profile deployment was externally superseded in config.yaml; refusing to overwrite foreign configuration"
+                );
+            } else {
+                bail!("conflict: config.yaml has no native registry configuration; active profile was disabled or superseded externally");
+            }
+        }
+
         let new_dir = self.revisions.join(&bundle.bundle_sha256);
         let diff = compute_profile_diff(&active_dir, &new_dir)?;
 
@@ -889,6 +925,11 @@ impl ProfileManager {
         let (pre_config, pre_config_digest, target_yaml, target_config_digest) =
             self.prepare_config(&bundle.bundle_sha256, &bundle.registry_sha256)?;
 
+        // Hold coordinated lifecycle ownership across journal write and config write
+        let lifecycle_lock = lifecycle
+            .lock()
+            .context("failed to acquire lifecycle lock for profile upgrade")?;
+
         // 1. Durably record in_progress journal
         state.in_progress = Some(OperationJournal {
             operation_id: op_id.clone(),
@@ -911,9 +952,14 @@ impl ProfileManager {
         state.in_progress.as_mut().unwrap().phase = OperationPhase::ConfigWritten;
         self.save_state(&state)?;
 
+        // Release lifecycle lock so restart_and_verify_daemon can acquire it internally
+        drop(lifecycle_lock);
+
         // 3. Daemon restart & verification if running
         let mut verified = true;
-        if was_running {
+        let post_st = lifecycle.status()?;
+        let needs_verification = was_running || post_st.running;
+        if needs_verification {
             state.in_progress.as_mut().unwrap().phase = OperationPhase::DaemonRestarting;
             self.save_state(&state)?;
             if let Err(e) = self.restart_and_verify_daemon(&lifecycle, &target_config_digest) {
@@ -928,16 +974,18 @@ impl ProfileManager {
                 state.in_progress.as_mut().unwrap().phase = OperationPhase::RollingBack;
                 self.save_state(&state)?;
                 self.restore_config(pre_config.as_deref())?;
-                let baseline_restart = lifecycle.restart();
+                let baseline_restart = self.restart_or_start_daemon(&lifecycle);
                 if let Err(re) = baseline_restart {
                     state.in_progress.as_mut().unwrap().phase = OperationPhase::Failed;
                     self.save_state(&state)?;
                     bail!("candidate daemon failed to boot ({e:#}) and baseline recovery failed to restart ({re:#})");
                 }
                 let st = lifecycle.status()?;
+                let process_digest = st.process.as_ref().map(|p| p.config_digest.as_str());
+                let baseline_digest = pre_config_digest.as_deref();
                 ensure!(
-                    st.running,
-                    "candidate daemon failed to boot ({e:#}); restored baseline configuration but daemon is not running"
+                    st.running && (baseline_digest.is_none() || process_digest == baseline_digest),
+                    "candidate daemon failed to boot ({e:#}); restored baseline configuration but daemon is not running with baseline configuration"
                 );
                 state.in_progress.as_mut().unwrap().phase = OperationPhase::Failed;
                 self.save_state(&state)?;
@@ -1044,6 +1092,21 @@ impl ProfileManager {
             active_meta.bundle_sha256 == active_bundle,
             "active profile bundle corrupted on disk"
         );
+        // Check for external supersession: verify config.yaml's current native registry matches active_bundle
+        if self.config_path.exists() {
+            let text = fs::read_to_string(&self.config_path)?;
+            let current_cfg = Config::from_yaml(&text)?;
+            if let Some(nat) = &current_cfg.native {
+                let expected_path = active_dir.join("registry.json");
+                ensure!(
+                    nat.registry_path == expected_path && nat.registry_sha256 == active_meta.registry_sha256,
+                    "conflict: active profile deployment was externally superseded in config.yaml; refusing to overwrite foreign configuration"
+                );
+            } else {
+                bail!("conflict: config.yaml has no native registry configuration; active profile was disabled or superseded externally");
+            }
+        }
+
         let diff = compute_profile_diff(&active_dir, &target_dir)?;
         if diff.authority_change_requires_review || !diff.compatible_without_review {
             let approval_token = format!(
@@ -1076,6 +1139,11 @@ impl ProfileManager {
         let (pre_config, pre_config_digest, target_yaml, target_config_digest) =
             self.prepare_config(&target_bundle.bundle_sha256, &target_bundle.registry_sha256)?;
 
+        // Hold coordinated lifecycle ownership across journal write and config write
+        let lifecycle_lock = lifecycle
+            .lock()
+            .context("failed to acquire lifecycle lock for profile rollback")?;
+
         // 1. Durably record in_progress journal
         state.in_progress = Some(OperationJournal {
             operation_id: op_id.clone(),
@@ -1098,9 +1166,14 @@ impl ProfileManager {
         state.in_progress.as_mut().unwrap().phase = OperationPhase::ConfigWritten;
         self.save_state(&state)?;
 
+        // Release lifecycle lock so restart_and_verify_daemon can acquire it internally
+        drop(lifecycle_lock);
+
         // 3. Daemon restart & verification if running
         let mut verified = true;
-        if was_running {
+        let post_st = lifecycle.status()?;
+        let needs_verification = was_running || post_st.running;
+        if needs_verification {
             state.in_progress.as_mut().unwrap().phase = OperationPhase::DaemonRestarting;
             self.save_state(&state)?;
             if let Err(e) = self.restart_and_verify_daemon(&lifecycle, &target_config_digest) {
@@ -1114,16 +1187,18 @@ impl ProfileManager {
                 state.in_progress.as_mut().unwrap().phase = OperationPhase::RollingBack;
                 self.save_state(&state)?;
                 self.restore_config(pre_config.as_deref())?;
-                let baseline_restart = lifecycle.restart();
+                let baseline_restart = self.restart_or_start_daemon(&lifecycle);
                 if let Err(re) = baseline_restart {
                     state.in_progress.as_mut().unwrap().phase = OperationPhase::Failed;
                     self.save_state(&state)?;
                     bail!("rolled-back candidate daemon failed to boot ({e:#}) and baseline recovery failed ({re:#})");
                 }
                 let st = lifecycle.status()?;
+                let process_digest = st.process.as_ref().map(|p| p.config_digest.as_str());
+                let baseline_digest = pre_config_digest.as_deref();
                 ensure!(
-                    st.running,
-                    "rolled-back candidate daemon failed to boot ({e:#}); restored baseline configuration but daemon is not running"
+                    st.running && (baseline_digest.is_none() || process_digest == baseline_digest),
+                    "rolled-back candidate daemon failed to boot ({e:#}); restored baseline configuration but daemon is not running with baseline configuration"
                 );
                 state.in_progress.as_mut().unwrap().phase = OperationPhase::Failed;
                 self.save_state(&state)?;
@@ -1204,7 +1279,7 @@ impl ProfileManager {
         if current_digest.as_deref() == Some(&journal.target_config_digest) {
             self.restore_config(journal.pre_operation_config.as_deref())?;
             if journal.was_daemon_running {
-                let restart_res = lifecycle.restart();
+                let restart_res = self.restart_or_start_daemon(&lifecycle);
                 if let Err(re) = restart_res {
                     // Do not discard error and do not clear journal
                     journal.phase = OperationPhase::Failed;
@@ -1213,17 +1288,21 @@ impl ProfileManager {
                     bail!("recovery restored configuration but baseline daemon restart failed: {re:#}");
                 }
                 let st = lifecycle.status()?;
+                let process_digest = st.process.as_ref().map(|p| p.config_digest.as_str());
+                let baseline_digest = journal.pre_operation_config_digest.as_deref();
                 ensure!(
-                    st.running,
-                    "recovery restored configuration but daemon is not running"
+                    st.running && (baseline_digest.is_none() || process_digest == baseline_digest),
+                    "recovery restored configuration but daemon is not running with baseline digest"
                 );
             }
         } else if current_digest == journal.pre_operation_config_digest {
             // Configuration matches baseline (including when both are None)!
             if journal.was_daemon_running {
                 let st = lifecycle.status()?;
-                if !st.running {
-                    let restart_res = lifecycle.restart();
+                let process_digest = st.process.as_ref().map(|p| p.config_digest.as_str());
+                let baseline_digest = journal.pre_operation_config_digest.as_deref();
+                if !st.running || (baseline_digest.is_some() && process_digest != baseline_digest) {
+                    let restart_res = self.restart_or_start_daemon(&lifecycle);
                     if let Err(re) = restart_res {
                         journal.phase = OperationPhase::Failed;
                         state.in_progress = Some(journal);
@@ -1231,9 +1310,10 @@ impl ProfileManager {
                         bail!("recovery confirmed baseline configuration but baseline daemon restart failed: {re:#}");
                     }
                     let st = lifecycle.status()?;
+                    let process_digest = st.process.as_ref().map(|p| p.config_digest.as_str());
                     ensure!(
-                        st.running,
-                        "recovery confirmed baseline configuration but daemon is not running"
+                        st.running && (baseline_digest.is_none() || process_digest == baseline_digest),
+                        "recovery confirmed baseline configuration but daemon is not running with baseline digest"
                     );
                 }
             }
@@ -1686,5 +1766,32 @@ mod tests {
             state_after.in_progress.unwrap().phase,
             OperationPhase::Failed
         );
+    }
+
+    #[test]
+    fn upgrade_fails_when_active_registry_externally_superseded() {
+        let home_temp = tempdir().unwrap();
+        let home = home_temp.path().canonicalize().unwrap();
+        let mgr = ProfileManager::new(&home);
+
+        let p1_dir = home.join("bundle1");
+        let _ = create_test_profile(&p1_dir, "srv-1", "tool_1");
+        mgr.install(&p1_dir, None).unwrap();
+
+        let p2_dir = home.join("bundle2");
+        let _ = create_test_profile(&p2_dir, "srv-1", "tool_2");
+
+        // Operator externally modifies config.yaml to point to foreign registry
+        let mut cfg = Config::from_yaml(&fs::read_to_string(&mgr.config_path).unwrap()).unwrap();
+        cfg.native.as_mut().unwrap().registry_path = home.join("foreign/registry.json");
+        fs::write(&mgr.config_path, serde_yaml::to_string(&cfg).unwrap()).unwrap();
+
+        // Upgrade must reject foreign registry supersession
+        let err = mgr.upgrade(&p2_dir, None, None, None);
+        assert!(err.is_err());
+        assert!(err
+            .unwrap_err()
+            .to_string()
+            .contains("active profile deployment was externally superseded in config.yaml"));
     }
 }
