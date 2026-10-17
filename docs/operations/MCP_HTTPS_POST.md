@@ -5,6 +5,14 @@ SOU-73 adds the Linux-only `sw-native/resources/6` contract and the separate
 `afa00125264b227cdc3e249c1cd010a9c59d65a3`. Existing GET, read and create contracts
 are unchanged. This is a candidate for review, not release acceptance.
 
+The [sanitized exact-source report](evidence/SOU73_HTTPS_POST_2026-10-17.json)
+records 55/55 passing owned Linux scenarios at
+`78906f3580dedbb070cb0ea5cd5614ec760e5266`, with zero skips. The same workflow
+passed 386 native unit tests (two existing ignored tests), 115 native router
+tests, clippy, and 21 evidence/receiver controls. It retains the earlier failed
+fixture run separately. Documentation-only successors do not change the tested
+executor, driver or fixture. This evidence does not replace independent review.
+
 ## Supported call and operator authority
 
 The original MCP tool is `https_post`; arguments contain exactly `url` and `body`.
@@ -75,6 +83,11 @@ The existing single-flight protocol closes a session on unsupported pipelining,
 cancellation or replay; recovery uses a fresh session. Result inspection remains
 mandatory before MCP response release.
 
+The production write helper also has a deterministic partial-write cancellation
+test: after a body prefix is accepted, dropping the pending write preserves the
+prefix count and performs no resend. This is a bounded-writer unit test; the real
+TLS cancellation case separately verifies cancellation after receiver commit.
+
 ## Reproduction
 
 Build a clean committed candidate on Linux with Python 3 and OpenSSL available:
@@ -92,6 +105,10 @@ independent receiver payload digests and counts, child ledgers, cleanup and usef
 continuation. Exit 0 requires complete passing evidence; 1 indicates a failed
 check and 2 incomplete/unsupported evidence. Windows compilation and synthetic
 grader controls do not establish Linux execution acceptance.
+
+A private append-only `.partial.jsonl` checkpoint retains each completed case
+while the driver runs. Its header always says incomplete and never grants
+acceptance; only the complete final report can pass.
 
 The `Constrained MCP HTTPS POST` workflow retains failed/incomplete runs as well
 as successful ones. Its controls deliberately falsify receiver, payload, policy,
