@@ -66,7 +66,7 @@ class MCPClient:
         threading.Thread(target=reader,daemon=True).start()
     def send(self,frame,reply=True):
         try:
-            self.proc.stdin.write(json.dumps(frame,separators=(",",":")).encode()+b"\\n")
+            self.proc.stdin.write(json.dumps(frame,separators=(",",":")).encode()+b"\n")
             self.proc.stdin.flush()
         except OSError:
             return None
@@ -89,7 +89,7 @@ def real_collector_proof(binary,root,compiled,check):
                    stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=30)
     port=available_port()
     policy=home/"policy.yaml"
-    policy.write_text("default: allow\\n")
+    policy.write_text("default: allow\n")
     conf=home/".agentfw/config.yaml"
     dump(conf,{"port":port,"enforce":True,"policy":str(policy),"native":{
         "registry_path":str(compiled/"registry.json"),
