@@ -860,6 +860,14 @@ pub fn run(cmd: Command) -> Result<()> {
                 .context("source tool inventory missing")?.len(),
                 "the production collector requires a reviewed declaration for every original tool; partial registry is unsupported");
             let profile = json_bytes(&serde_json::to_value(&p.profile)?)?;
+            // Complete typed, inert Agent config fragment. Registry path names the
+            // FINAL no-clobber directory, not temporary publication staging.
+            let native = crate::config::NativeCfg {
+                registry_path: out.join("registry.json"),
+                registry_sha256: p.profile.registry_sha256.clone(),
+                approval: None,
+            };
+            let native_config = json_bytes(&json!({"native":native}))?;
             let policies = json_bytes(&serde_json::to_value(
                 p.policies.iter().map(|p| &p.profile).collect::<Vec<_>>(),
             )?)?;
@@ -869,6 +877,7 @@ pub fn run(cmd: Command) -> Result<()> {
                 &out,
                 &[
                     ("registry.json", p.registry),
+                    ("native-config.json", native_config),
                     ("resource-profiles.json", policies),
                     ("source-snapshot.json", source_snapshot),
                     ("operator-declarations.json", declaration_document),
