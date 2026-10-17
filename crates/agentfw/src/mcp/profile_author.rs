@@ -148,6 +148,9 @@ struct ProfileTool {
     result_provenance: String,
     authority_sha256: String,
     review_sha256: String,
+    workspace: Option<PathBuf>,
+    scoped_resources: Vec<Resource>,
+    egress_selectors: Vec<Value>,
 }
 
 struct Prepared {
@@ -537,6 +540,8 @@ fn prepare(snapshot_path: &Path, declaration_path: &Path) -> Result<Prepared> {
         let entry = json!({"name":d.name,"schema_sha256":schema_hash,
             "action_class":action,"result_provenance":"untrusted","egress":egress,
             "resource_policy":policy_json});
+        let workspace = policy.as_ref().map(|p| p.workspace.clone());
+        let scoped_resources = policy.as_ref().map_or_else(Vec::new, |p| p.allowed_resources.clone());
         if let Some(p) = policy {
             policies.push(p);
         }
@@ -549,6 +554,9 @@ fn prepare(snapshot_path: &Path, declaration_path: &Path) -> Result<Prepared> {
                 result_provenance: "untrusted".into(),
                 authority_sha256: digest(&entry),
                 review_sha256: sha(d.operator_review.as_deref().unwrap().as_bytes()),
+                workspace,
+                scoped_resources,
+                egress_selectors: egress,
             },
         );
         schemas.insert(d.name.clone(), schema.clone());
@@ -801,20 +809,28 @@ pub fn run(cmd: Command) -> Result<()> {
                             "authority",
                             old_tool.authority_sha256 != new_tool.authority_sha256,
                         ),
+                        ("workspace", old_tool.workspace != new_tool.workspace),
+                        ("resources", old_tool.scoped_resources != new_tool.scoped_resources),
+                        ("egress", old_tool.egress_selectors != new_tool.egress_selectors),
+                        ("operator_review", old_tool.review_sha256 != new_tool.review_sha256),
                     ]
                     .into_iter()
                     .filter_map(|(k, c)| c.then_some(k))
                     .collect::<Vec<_>>();
                     if !fields.is_empty() {
-                        changes.push(json!({"tool":name,"fields":fields,"requires_review":true}))
+                        changes.push(json!({"tool":name,"fields":fields,"requires_review":true,
+                            "prior_workspace":old_tool.workspace,"next_workspace":new_tool.workspace,
+                            "prior_resources":old_tool.scoped_resources,"next_resources":new_tool.scoped_resources,
+                            "prior_egress":old_tool.egress_selectors,"next_egress":new_tool.egress_selectors}))
                     }
                 }
             }
             let drift = a.snapshot_sha256 != b.snapshot_sha256
                 || a.server_id != b.server_id
                 || a.server_version != b.server_version;
-            let broader = !additions.is_empty()
-                || changes.iter().any(|v| v["fields"] != json!(["definition"]));
+            // Even a description/review change needs explicit operator review.
+            // Never call a changed discovery/authority profile compatible.
+            let broader = !additions.is_empty() || !changes.is_empty();
             println!(
                 "{}",
                 serde_json::to_string_pretty(&json!({"format":"sw-mcp/operator-diff/1",
@@ -829,6 +845,12 @@ pub fn run(cmd: Command) -> Result<()> {
             out,
         } => {
             let p = prepare(&snapshot, &declarations)?;
+            // Current native collector pins the *complete* tools/list. A partial
+            // registry would fail the manifest coverage handshake and cannot be
+            // described as an installed, enforcing profile.
+            ensure!(p.profile.tools.len() == p.source_snapshot["tools"].as_array()
+                .context("source tool inventory missing")?.len(),
+                "the production collector requires a reviewed declaration for every original tool; partial registry is unsupported");
             let profile = json_bytes(&serde_json::to_value(&p.profile)?)?;
             let policies = json_bytes(&serde_json::to_value(
                 p.policies.iter().map(|p| &p.profile).collect::<Vec<_>>(),
