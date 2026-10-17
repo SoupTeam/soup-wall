@@ -2662,6 +2662,109 @@ async fn sou67_create_file_v2_native_operator_bound_nested_schema_admits_and_bin
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn sou67_native_parser_rejects_dual_binding_and_execution() {
+    use agentfw::native::resource::{Policy, BINDING_CONTRACT, READ_DOCUMENT_EXECUTOR_PROFILE};
+
+    let (_fixture, policy) = create_file_fixture();
+    let legacy = serde_json::to_value(&policy).unwrap();
+
+    let mut binding_only = legacy.clone();
+    let mut binding = binding_only
+        .as_object_mut()
+        .unwrap()
+        .remove("execution")
+        .unwrap();
+    binding["contract_version"] = json!(BINDING_CONTRACT);
+    binding["path_selector"] = json!("/path");
+    binding["content_selector"] = json!("/content");
+    binding["response_contract"] = json!("sw-native/response/text/1");
+    binding_only["binding"] = binding;
+
+    let load = |resource_policy: &Value| {
+        let configured = json!({
+            "contract_version": CONTRACT,
+            "registry_id": "sou67-authority-parser",
+            "tools": [{
+                "name": "create_file",
+                "schema_sha256": policy.profile.schema_sha256,
+                "action_class": "side_effecting",
+                "result_provenance": "local_project",
+                "egress": [],
+                "resource_policy": resource_policy
+            }]
+        });
+        let bytes = serde_json::to_vec(&configured).unwrap();
+        NativeState::from_bytes(&bytes, &sha(&bytes), NATIVE_TOKEN.into())
+    };
+
+    // Positive production-parser controls prevent blanket rejection.
+    for (label, configured) in [("execution-only", &legacy), ("binding-only", &binding_only)] {
+        if let Err(error) = load(configured) {
+            panic!("{label} rejected: {error:#}");
+        }
+        let parsed: Policy = serde_json::from_value(configured.clone()).unwrap();
+        assert!(
+            parsed.effective_execution().is_some(),
+            "{label} lost its execution authority"
+        );
+    }
+
+    let equivalent = legacy["execution"].clone();
+
+    let mut read_document = equivalent.clone();
+    read_document["operation"] = json!("read_document");
+    read_document["action"] = json!("read");
+    read_document["executor_profile"] = json!(READ_DOCUMENT_EXECUTOR_PROFILE);
+    read_document["max_content_bytes"] = json!(MAX_CONTENT);
+
+    let mut unsupported_profile = equivalent.clone();
+    unsupported_profile["executor_profile"] = json!("unsupported-executor");
+
+    let mut incompatible_path = equivalent.clone();
+    incompatible_path["path_selector"] = json!("/other_path");
+
+    let mut undersized_content = equivalent.clone();
+    undersized_content["max_content_bytes"] = json!(1);
+
+    let mut reviewer_witness = read_document.clone();
+    reviewer_witness["executor_profile"] = json!("unsupported-executor");
+    reviewer_witness["path_selector"] = json!("/other_path");
+    reviewer_witness["max_content_bytes"] = json!(1);
+
+    for (label, execution) in [
+        ("equivalent", equivalent),
+        ("read-document", read_document),
+        ("unsupported-profile", unsupported_profile),
+        ("incompatible-path", incompatible_path),
+        ("undersized-content", undersized_content),
+        ("reviewer-witness", reviewer_witness),
+    ] {
+        let mut dual = binding_only.clone();
+        dual["execution"] = execution;
+
+        let parsed: Policy = serde_json::from_value(dual.clone()).unwrap();
+        assert!(
+            parsed.effective_execution().is_none(),
+            "{label}: silently selected a dual authority"
+        );
+
+        let error = match load(&dual) {
+            Ok(_) => panic!("{label}: production parser accepted dual authority"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            error.to_string(),
+            "conflicting operator execution policies",
+            "{label}: rejected for an unrelated reason"
+        );
+    }
+
+    // Registry parsing must never execute the configured operation.
+    assert!(!policy.workspace.join("new.txt").exists());
+}
+
 const HTTPS_NATIVE_URL: &str = "https://fixture.example/document.json?edition=approved";
 const HTTPS_ALLOW: &str =
     "agent_policies: []\negress_allowlist: [fixture.example]\ndefault: allow\n";

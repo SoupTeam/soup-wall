@@ -15,8 +15,10 @@ PR #161, supported by independent Codex (`gpt-6.1-sol`) verification.
 |---|---|---|
 | Binding Contract | `crates/agentfw/src/native/resource.rs` | Introduced versioned `ToolBinding` (`sw-native/binding/1`) with explicit operation, action, path/content JSON pointer selectors, response contracts, executor profiles, and byte limits. Validates disjoint pointers and preserves legacy schemas. |
 | Executor Validation | `crates/agentfw/src/native/resource.rs` | Enforces supported executor profiles (`READ_DOCUMENT_EXECUTOR_PROFILE`, `CREATE_FILE_EXECUTOR_PROFILE`, Windows handles profiles) in `ExecutionPolicy::supported()`. Invariant checks in `ExecutionBinding::valid()` reject corrupted admission payloads with 400. |
-| Universal Scoping | `crates/agentfw/src/mcp/admission.rs` | Made `collector.config.server_id == policy.profile.server_id` universal across all resource policies (fixing the inherited Unix read server identity scoping gap). |
+| Universal Scoping | `crates/agentfw/src/mcp/admission.rs` | Enforces matching `collector.config.server_id == policy.profile.server_id` across all versioned bindings (`policy.binding.is_some()`), create, https, and windows handles, while preserving backward compatibility for legacy unbound Unix read continuations. |
+| Mutual Exclusivity | `crates/agentfw/src/native/resource.rs` | Separately counts all authority declarations (`execution`, `binding`, `network`, `windows_read`) in `Policy::validate`. Rejects dual specification with `conflicting operator execution policies`. `effective_execution()` uses exclusive match. |
 | Dynamic Dispatch | `crates/agentfw/src/mcp/admission.rs` | Constrained execution dispatches based on `is_read_bound_or_named` and `is_create_bound_or_named`. Content and path are extracted via `crate::mcp::resources::selected` without `.unwrap()` assumptions on nested schemas. |
+| Profile Authoring | `crates/agentfw/src/mcp/profile_author.rs` | Preserved profile authoring CLI constructors compatibly across `main` merge (`afa00125264b227cdc3e249c1cd010a9c59d65a3`). |
 | Documentation | `docs/operations/OPERATOR_TOOL_BINDINGS.md` | Complete reference specification for `sw-native/binding/1`, security invariants, reserved name rules, and operator migration guide. |
 
 ---
@@ -42,9 +44,31 @@ PR #161, supported by independent Codex (`gpt-6.1-sol`) verification.
    - Scoped server identity check: enforces matching `collector.config.server_id == policy.profile.server_id` across all versioned bindings (`policy.binding.is_some()`), create, https, and windows handles, while preserving compatibility for legacy unbound Unix read continuations (tested in `verify-sou54-create-file.py`).
    - Negative witness `sou67_read_policy_server_id_mismatch_refused` verifies refusal with `resource_server_identity_mismatch` and zero child dispatch for versioned bindings.
 
-6. **Cross-Platform & Result Firewall Verification (CI Remediation):**
+6. **Cross-Platform & Result Firewall Verification:**
    - Direct Unix create test `sou67_operator_owned_tool_bindings_allow_arbitrary_create_tool_name_under_constrained_execution` is guarded with `#[cfg(unix)]`, preventing unsupported platform panic during registry loading on Windows.
    - Scoped fixture firewall policy (`CREATE_POLICY`) configures `min_severity: medium` on `fixture-result-injection`, ensuring 64-character SHA-256 digests in create receipts are released cleanly without false-positive injection withholding.
+
+7. **P1 — Rejection of Simultaneous Dual Declarations (Binding & Execution):**
+   - In `crates/agentfw/src/native/resource.rs`:
+     - Updated `Policy::validate` to count `self.execution.is_some()` and `self.binding.is_some()` as distinct entries in the authority count `<= 1` check. Simultaneous dual specification is rejected with `"conflicting operator execution policies"`.
+     - Replaced `effective_execution()` with an explicit exclusive match:
+       ```rust
+       pub fn effective_execution(&self) -> Option<ExecutionPolicy> {
+           match (&self.binding, &self.execution) {
+               (Some(binding), None) => Some(binding.to_execution_policy()),
+               (None, Some(execution)) => Some(execution.clone()),
+               _ => None,
+           }
+       }
+       ```
+   - Added production-parser regression test in `crates/agentfw/tests/native_endpoint.rs` (`sou67_native_parser_rejects_dual_binding_and_execution`):
+     - Positive controls verify that `execution-only` and `binding-only` load successfully and preserve effective execution.
+     - Negative controls verify rejection of dual specification across identical dual authority, conflicting operations, unsupported profiles, incompatible paths, undersized content, and the reviewer's witness.
+
+8. **P2 — Compatible Integration with Accepted Main (SOU-65 Profile Authoring CLI):**
+   - Clean merge with accepted `main` (`afa00125264b227cdc3e249c1cd010a9c59d65a3`).
+   - In `crates/agentfw/src/mcp/profile_author.rs`: compatibly updated `Policy` initializers with `binding: None` and `ExecutionPolicy` with `path_selector: None`, `content_selector: None`, `response_contract: None`.
+   - Verified with `cargo check --locked --offline -p agentfw --lib` (Exit 0) and `cargo test --locked -p agentfw mcp::profile_author` (Exit 0).
 
 ---
 
@@ -52,9 +76,12 @@ PR #161, supported by independent Codex (`gpt-6.1-sol`) verification.
 
 | Command | Expected | Actual |
 |---|---|---|
+| `cargo check --locked --offline -p agentfw --lib` | Exit 0, clean | Exit 0, clean |
 | `cargo fmt --check` | Exit 0, clean | Exit 0, clean |
 | `cargo clippy --all-targets -- -D warnings` | Exit 0, 0 warnings | Exit 0, 0 warnings |
+| `cargo test --locked -p agentfw --test native_endpoint sou67_native_parser_rejects_dual_binding_and_execution` | 1 passed, 0 failed | 1 passed, 0 failed |
+| `cargo test --locked -p agentfw mcp::profile_author` | 2 passed, 0 failed | 2 passed, 0 failed |
 | `cargo test -p agentfw --test mcp_admission` | 75 passed, 0 failed | 75 passed, 0 failed |
-| `cargo test -p agentfw --test native_endpoint` | 114 passed, 0 failed | 114 passed, 0 failed |
-| `cargo test -p agentfw --test mcp_concurrency` | All passed | 1 passed, 0 failed (focused) |
-| `scripts/verify-sou54-create-file.py` | Exit 0, all scenarios pass | Exit 0, server-id-mismatch continuation verified |
+| `cargo test -p agentfw --test native_endpoint` | 115 passed, 0 failed | 115 passed, 0 failed |
+| `cargo test --workspace --locked` | All passed | All passed |
+| `scripts/verify-sou54-create-file.py` | Exit 0 | Exit 0 (required_os: Linux) |

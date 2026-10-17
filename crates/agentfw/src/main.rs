@@ -171,11 +171,23 @@ enum Cmd {
         #[command(subcommand)]
         action: NativeApprovalCmd,
     },
+    /// Exercise an installed Agent end to end in an owned temporary workspace (Linux).
+    ///
+    /// Writes a versioned JSON report. Exit 0 passed, 3 failed, 4 incomplete, 5 unsupported.
+    SelfTest(agentfw::self_test::Args),
+    /// Bundled harmless stdio MCP fixture server used by `self-test`.
+    #[command(hide = true)]
+    SelfTestFixture(agentfw::self_test::FixtureArgs),
     /// Inspect a selected Claude-style MCP JSON config without starting servers.
     /// Only server names and supported transport flags are printed.
     McpInspectConfig {
         #[arg(long)]
         path: PathBuf,
+    },
+    /// Review and compile one operator-owned MCP admission profile (no installation).
+    McpProfile {
+        #[command(subcommand)]
+        command: agentfw::mcp::profile_author::Command,
     },
     /// Manage one explicitly selected Claude Code stdio MCP entry.
     McpConnection {
@@ -347,6 +359,8 @@ fn main() -> anyhow::Result<()> {
         Cmd::ProtectionStatus(args) => {
             std::process::exit(agentfw::protection_status::run_cli(args))
         }
+        Cmd::SelfTest(args) => std::process::exit(agentfw::self_test::run(args)),
+        Cmd::SelfTestFixture(args) => agentfw::self_test::fixture::serve(args),
         Cmd::Serve => {
             #[cfg(target_os = "linux")]
             let _direct_guard =
@@ -587,6 +601,7 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Cmd::McpConnection { command } => agentfw::mcp::connection::run(command),
+        Cmd::McpProfile { command } => agentfw::mcp::profile_author::run(command),
         Cmd::ChildAuthority { action } => {
             use agentfw::native::child_authority;
             let home = Config::home()?;

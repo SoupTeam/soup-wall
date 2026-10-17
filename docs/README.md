@@ -30,6 +30,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Guarded execution](operations/SANDBOX.md) | Supported process, file and retrieval boundaries |
 | [Windows Agent acceptance](operations/WINDOWS_AGENT_ACCEPTANCE.md) | Native installation, ACLs, hook posture and loopback configuration |
 | [Claude HTTP-hook acceptance](operations/CLAUDE_HOST_ACCEPTANCE.md) | Actual host behavior with deterministic local model fixtures |
+| [Agent self-test](operations/SELF_TEST.md) | One Linux command: witnessed useful reads, a refused synthetic send, daemon loss and a versioned report |
 | [Opt-in stdio MCP admission](operations/MCP_STDIO_ADMISSION.md) | Reviewed schemas, pre-execution calls and result release to the MCP host |
 | [Sandboxed real filesystem MCP](operations/MCP_REAL_FILESYSTEM.md) | Explicit pinned Linux read-only server, bounded overlap/cancellation and required actual-host acceptance |
 | [Claude Code MCP connection](operations/CLAUDE_MCP_CONNECTION.md) | Selected-server preview, transactional setup, controlled verification and safe disconnect |
@@ -65,6 +66,8 @@ overview. Choose a guide below for development, operation or evaluation.
 | [SOU-13 family-held-out pilot](benchmarks/sou13/README.md) | Candidate CP1/CP2 source, public data-free checks, private validation procedure and acceptance status (no released data or gold labels) |
 
 ## Status and retained evidence
+
+- [Read-only Git MCP profile](operations/GIT_MCP_PROFILE.md): original-server pins, bounded operations, private installation and exact-source Linux acceptance.
 
 [ROADMAP](ROADMAP.md) records the tagged baseline, product principles,
 dependency-ordered phases, open decisions and one final release gate. Internal

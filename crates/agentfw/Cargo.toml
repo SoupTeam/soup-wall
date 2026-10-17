@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Agent firewall daemon: inspects Claude Code tool calls via native hooks."
+default-run = "agentfw"
 
 [lib]
 name = "agentfw"
@@ -13,6 +14,10 @@ path = "src/lib.rs"
 [[bin]]
 name = "agentfw"
 path = "src/main.rs"
+
+[[bin]]
+name = "agentfw-git-sandbox"
+path = "src/git_sandbox_main.rs"
 
 [dependencies]
 soup-wall-adapter = { path = "../adapter", version = "0.1.0" }

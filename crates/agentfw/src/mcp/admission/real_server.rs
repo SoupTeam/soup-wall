@@ -39,6 +39,7 @@ enum Phase {
 }
 
 struct Call {
+    profile: String,
     id: Value,
     tool: String,
     args: Value,
@@ -121,7 +122,7 @@ fn error(id: &Value, code: i64, message: &'static str) -> Vec<u8> {
 fn audit(call: &Call, state: &str, active: usize, queued: usize) {
     eprintln!(
         "{}",
-        json!({"event":"mcp_real_call","profile":server_profile::FORMAT,
+        json!({"event":"mcp_real_call","profile":call.profile,
         "host_call_id":call.id,"id_type":if call.id.is_string(){"string"}else{"integer"},
         "state":state,"active":active,"queued":queued,"execution_dispatched":call.dispatched,
         "arguments_sha256":sha(canonical(&call.args).to_string().as_bytes())})
@@ -256,6 +257,7 @@ async fn reclaim(collector: &Collector<'_>, call: &Call, grant: Grant) -> anyhow
 
 fn detached(call: &Call) -> Call {
     Call {
+        profile: call.profile.clone(),
         id: call.id.clone(),
         tool: call.tool.clone(),
         args: call.args.clone(),
@@ -274,6 +276,7 @@ fn validate_registry(
     collector: &Collector<'_>,
     profiles: &BTreeMap<String, server_profile::ToolProfile>,
     tools: &[Value],
+    format: &str,
 ) -> anyhow::Result<()> {
     ensure!(
         collector.config.resource_profiles.is_empty(),
@@ -300,7 +303,7 @@ fn validate_registry(
                         tool.result_provenance,
                         crate::native::ResultProvenance::Untrusted
                     )
-                    && tool.mcp_result_profile.as_deref() == Some(server_profile::FORMAT),
+                    && tool.mcp_result_profile.as_deref() == Some(format),
                 "selected read authority is not explicitly installed"
             );
         }
@@ -335,6 +338,7 @@ async fn relay<R, W, S, T>(
     host: &mut W,
     server: &mut S,
     child: &mut T,
+    format: &str,
 ) -> anyhow::Result<()>
 where
     R: AsyncBufRead + Unpin,
@@ -649,6 +653,7 @@ where
                             continue;
                         }
                         let call = Call {
+                            profile: format.to_owned(),
                             id: request_id.clone(),
                             tool: name.into(),
                             args,
@@ -835,7 +840,7 @@ where
                                 value.get("error").is_none(),
                                 "selected server initialization failed"
                             );
-                            server_profile::validate_initialization(&value["result"])?;
+                            server_profile::validate_initialization_for(format, &value["result"])?;
                             server_info = value["result"]["serverInfo"].clone();
                             initialized = true;
                             write(host, &raw).await?;
@@ -879,12 +884,13 @@ where
                                 continue;
                             }
                             let aggregate = json!({"tools":current.tools});
-                            let validated = server_profile::classify_manifest(&aggregate);
+                            let validated = server_profile::classify_manifest_for(format, &aggregate);
                             match validated.and_then(|profiles| {
                                 validate_registry(
                                     collector,
                                     &profiles,
                                     aggregate["tools"].as_array().expect("tools"),
+                                    format,
                                 )?;
                                 Ok(profiles)
                             }) {
@@ -1073,8 +1079,8 @@ pub(super) async fn run(
     let mut stderr_task = None;
     eprintln!(
         "{}",
-        json!({"event":"mcp_real_server_start","profile":server_profile::FORMAT,
-        "sandbox":server_sandbox::SANDBOX_PROFILE,"sandbox_workspace":server_sandbox::SANDBOX_WORKSPACE,
+        json!({"event":"mcp_real_server_start","profile":profile.format,
+        "sandbox":server_sandbox::profile_name(&profile.format),"sandbox_workspace":server_sandbox::SANDBOX_WORKSPACE,
         "sandbox_pid":process.id(),
         "active_limit":ACTIVE_LIMIT,"queued_limit":QUEUE_LIMIT,"wire_limit":WIRE_LIMIT,
         "forwarded_cancellation_limit":FORWARDED_CANCELLATIONS})
@@ -1093,7 +1099,7 @@ pub(super) async fn run(
         #[cfg(not(unix))]
         let mut host = tokio::io::stdout();
         let result = {
-            let exchange = relay(collector, &mut client, &mut host, &mut server, &mut child);
+            let exchange = relay(collector, &mut client, &mut host, &mut server, &mut child, &profile.format);
             tokio::pin!(exchange);
             tokio::select! {
                 result = &mut exchange => result,
@@ -1134,7 +1140,7 @@ pub(super) async fn run(
     };
     eprintln!(
         "{}",
-        json!({"event":"mcp_real_server_end","profile":server_profile::FORMAT,
+        json!({"event":"mcp_real_server_end","profile":profile.format,
         "cleanup_verified":cleanup.is_ok()&&stderr_cleanup.is_ok(),"transport_complete":operation.is_ok()})
     );
     operation?;

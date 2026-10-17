@@ -393,10 +393,11 @@ impl Admission {
 
 impl Policy {
     pub fn effective_execution(&self) -> Option<ExecutionPolicy> {
-        self.binding
-            .as_ref()
-            .map(|b| b.to_execution_policy())
-            .or_else(|| self.execution.clone())
+        match (&self.binding, &self.execution) {
+            (Some(binding), None) => Some(binding.to_execution_policy()),
+            (None, Some(execution)) => Some(execution.clone()),
+            _ => None,
+        }
     }
 
     pub fn contract(&self) -> &'static str {
@@ -525,9 +526,10 @@ impl Policy {
         );
         anyhow::ensure!(
             [
-                self.execution.is_some() || self.binding.is_some(),
+                self.execution.is_some(),
+                self.binding.is_some(),
                 self.network.is_some(),
-                self.windows_read.is_some()
+                self.windows_read.is_some(),
             ]
             .into_iter()
             .filter(|present| *present)
