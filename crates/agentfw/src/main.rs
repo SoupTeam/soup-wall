@@ -177,6 +177,11 @@ enum Cmd {
         #[arg(long)]
         path: PathBuf,
     },
+    /// Review and compile one operator-owned MCP admission profile (no installation).
+    McpProfile {
+        #[command(subcommand)]
+        command: agentfw::mcp::profile_author::Command,
+    },
     /// Manage one explicitly selected Claude Code stdio MCP entry.
     McpConnection {
         #[command(subcommand)]
