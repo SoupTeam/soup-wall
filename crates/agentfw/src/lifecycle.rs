@@ -270,14 +270,21 @@ impl Manager {
     pub fn inspect_read_only(&self) -> Result<Status> {
         if !self.home.exists() || !self.root.exists() {
             return Ok(Status {
-                active: None, previous: None, process: None,
-                running: false, interrupted: false, detail: "not installed".into(),
+                active: None,
+                previous: None,
+                process: None,
+                running: false,
+                interrupted: false,
+                detail: "not installed".into(),
             });
         }
         ensure_dir(&self.home)?;
         ensure_dir(&self.root)?;
         let state = self.load()?;
-        let binary_changed = state.active.as_ref().is_some_and(|r| self.verify(r).is_err());
+        let binary_changed = state
+            .active
+            .as_ref()
+            .is_some_and(|r| self.verify(r).is_err());
         let config_changed = state.process.as_ref().is_some_and(|process| {
             self.config_digest().ok().as_deref() != Some(process.config_digest.as_str())
         });
@@ -295,7 +302,9 @@ impl Manager {
             "not installed"
         };
         Ok(Status {
-            active: state.active, previous: state.previous, process: state.process,
+            active: state.active,
+            previous: state.previous,
+            process: state.process,
             running: false,
             interrupted: state.operation.is_some() || state.pending_stage.is_some(),
             detail: detail.to_owned(),
