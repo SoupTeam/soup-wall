@@ -91,7 +91,8 @@ The [native report](sou71/self-test-report.json),
 [native unit log](sou71/native-tests.log),
 [Windows regression log](sou71/windows-regressions.log) and
 [source manifest](sou71/source-manifest.json) bind these results to the selected
-binary, classifier, policy, registry, fixtures and changed source files.
+binary, classifier, policy, registry, fixtures and the initial candidate's source files
+at commit `a0d7e85`.
 The [operator guide](../WINDOWS_SELF_TEST.md) gives the reproduction commands.
 
 The local account used a non-elevated UAC token and retains administrator
@@ -99,6 +100,14 @@ group membership. This record does not replace acceptance under a clean
 standard account. The added Windows workflow provisions that account, rejects
 administrator membership and retains its evidence. That CI run and review
 remain required before SOU-71 can be accepted.
+
+The [first Windows CI run](https://github.com/SoupTeam/soup-wall/actions/runs/39055938409)
+passed all 19 acceptance checks under a clean standard account. The launcher
+still failed: the administrator could not remove the standard user's private
+temporary directory. Cleanup now runs in the owning child process, including
+failure paths; the launcher checks that the directory is gone. A native
+regression covers successful and failed child runs without changing the ACL
+rules. The corrected workflow must pass before acceptance.
 
 These results cover the scripted MCP fixture path. They do not establish
 live-model effectiveness, an OS sandbox or completion of Phase 4.

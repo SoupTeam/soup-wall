@@ -82,17 +82,27 @@ $python = Join-Path $Root 'python/python.exe'
 $source = Join-Path $Root 'source'
 $output = Join-Path $Root 'acceptance.json'
 $env:SELF_TEST_PYTHON = $python
-& (Join-Path $Root 'native-tests.exe') 'self_test::' --test-threads=1 *> (Join-Path $Root 'native-tests.log')
-if ($LASTEXITCODE -ne 0) { throw 'Self-test unit regressions failed' }
-& $python -B (Join-Path $source 'scripts/test-windows-self-test.py') `
-    --agent (Join-Path $Root 'agentfw.exe') --baseline (Join-Path $source 'rule_baseline/rule_baseline.py') `
-    --out (Join-Path $Root 'results') *> (Join-Path $Root 'driver.log')
-$driverCode = $LASTEXITCODE
-Copy-Item -LiteralPath (Join-Path $Root 'results/acceptance.json') -Destination $output
-$global:LASTEXITCODE = $driverCode
-$code = $LASTEXITCODE
-[ordered]@{ user_sid = $identity.User.Value; profile_owner_sid = $owner; exit_code = $code } |
-    ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Root 'identity.json') -Encoding utf8
+try {
+    & $python -B (Join-Path $source 'scripts/tests/test_windows_self_test.py') *> (Join-Path $Root 'launcher-tests.log')
+    if ($LASTEXITCODE -ne 0) { throw 'Self-test launcher regressions failed' }
+    & (Join-Path $Root 'native-tests.exe') 'self_test::' --test-threads=1 *> (Join-Path $Root 'native-tests.log')
+    if ($LASTEXITCODE -ne 0) { throw 'Self-test unit regressions failed' }
+    & $python -B (Join-Path $source 'scripts/test-windows-self-test.py') `
+        --agent (Join-Path $Root 'agentfw.exe') --baseline (Join-Path $source 'rule_baseline/rule_baseline.py') `
+        --out (Join-Path $Root 'results') *> (Join-Path $Root 'driver.log')
+    $code = $LASTEXITCODE
+    Copy-Item -LiteralPath (Join-Path $Root 'results/acceptance.json') -Destination $output
+    [ordered]@{ user_sid = $identity.User.Value; profile_owner_sid = $owner; exit_code = $code } |
+        ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Root 'identity.json') -Encoding utf8
+} finally {
+    $resolvedTemporary = [IO.Path]::GetFullPath($temporary)
+    if ([IO.Path]::GetDirectoryName($resolvedTemporary) -ne [IO.Path]::GetFullPath($Root).TrimEnd('\') -or
+        [IO.Path]::GetFileName($resolvedTemporary) -ne 'owned-temp') {
+        throw 'Refusing temporary cleanup outside owned CI staging'
+    }
+    Remove-Item -LiteralPath $resolvedTemporary -Recurse -Force
+    if (Test-Path -LiteralPath $resolvedTemporary) { throw 'Owned temporary cleanup did not finish' }
+}
 exit $code
 '@ | Set-Content -LiteralPath $childScript -Encoding utf8
     $arguments = "-NoLogo -NoProfile -NonInteractive -File `"$childScript`" -Root `"$stage`" -ExpectedCommit $Commit"
@@ -105,6 +115,9 @@ exit $code
         throw 'Standard-user native Windows self-test acceptance exceeded the 1200-second deadline'
     }
     $report.child_exit_code = $process.ExitCode
+    if (Test-Path -LiteralPath (Join-Path $stage 'owned-temp')) {
+        throw 'The standard user did not remove its private temporary directory'
+    }
     $child = Get-Content -LiteralPath (Join-Path $stage 'acceptance.json') -Raw | ConvertFrom-Json
     $childIdentity = Get-Content -LiteralPath (Join-Path $stage 'identity.json') -Raw | ConvertFrom-Json
     $report.child = [ordered]@{ status = $child.status; passed = $child.passed; failed = $child.failed
@@ -122,7 +135,7 @@ exit $code
     Write-Warning $report.error
 } finally {
     try {
-        foreach ($file in @('acceptance.json', 'identity.json', 'driver.log', 'native-tests.log')) {
+        foreach ($file in @('acceptance.json', 'identity.json', 'driver.log', 'native-tests.log', 'launcher-tests.log')) {
             $path = Join-Path $stage $file
             if (Test-Path -LiteralPath $path) { Copy-Item -LiteralPath $path -Destination (Join-Path $out $file) }
         }
@@ -145,7 +158,7 @@ exit $code
             }
         }
     } catch {
-        $report.error = "Could not retain read acceptance evidence: $($_.Exception.Message)"
+        $report.error = "Could not retain self-test acceptance evidence: $($_.Exception.Message)"
         $report.status = 'incomplete'
         $exitCode = 1
     }

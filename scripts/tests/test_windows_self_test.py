@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import copy
 import importlib.util
+import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -85,6 +87,31 @@ class ReportChecks(unittest.TestCase):
             mutate(report)
             with self.assertRaises(AssertionError):
                 self.probe.complete(self.result, report)
+
+
+@unittest.skipUnless(os.name == "nt" and shutil.which("pwsh"), "native Windows PowerShell required")
+class LauncherCleanupChecks(unittest.TestCase):
+    def test_standard_user_removes_private_temp_on_success_and_failure(self):
+        launcher = PATH.with_name("ci-windows-self-test.ps1").read_text(encoding="utf-8")
+        child = launcher.split("    @'\n", 1)[1].split("\n'@", 1)[0]
+        start = child.index("try {\n") + len("try {\n")
+        end = child.index("} finally {", start)
+        for failure in (False, True):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                sentinel = root / "sentinel.txt"
+                sentinel.write_text("unchanged", encoding="utf-8")
+                body = "throw 'controlled test failure'\n" if failure else "$code = 0\n"
+                script = root / "run.ps1"
+                script.write_text(child[:start] + body + child[end:], encoding="utf-8")
+                result = subprocess.run(
+                    ["pwsh", "-NoLogo", "-NoProfile", "-NonInteractive", "-File", str(script),
+                     "-Root", str(root), "-ExpectedCommit", "0" * 40],
+                    capture_output=True, timeout=30,
+                )
+                self.assertEqual(result.returncode == 0, not failure, result.stderr.decode(errors="replace"))
+                self.assertFalse((root / "owned-temp").exists())
+                self.assertEqual(sentinel.read_text(encoding="utf-8"), "unchanged")
 
 
 if __name__ == "__main__":
