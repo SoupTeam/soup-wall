@@ -831,7 +831,8 @@ pub fn run(cmd: Command) -> Result<()> {
             let p = prepare(&snapshot, &declarations)?;
             let profile = json_bytes(&serde_json::to_value(&p.profile)?)?;
             let policies = json_bytes(&serde_json::to_value(
-                p.policies.iter().map(|p| &p.profile).collect::<Vec<_>>())?)?;
+                p.policies.iter().map(|p| &p.profile).collect::<Vec<_>>(),
+            )?)?;
             let source_snapshot = json_bytes(&p.source_snapshot)?;
             let declaration_document = json_bytes(&p.declaration_document)?;
             publish_dir(
