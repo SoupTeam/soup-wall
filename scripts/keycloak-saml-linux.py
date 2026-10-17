@@ -42,31 +42,16 @@ FixtureDatabase = shared.FixtureDatabase
 start_child = shared.start_child
 stop_child = shared.stop_child
 imported_credential = shared.imported_credential
+diagnostics = shared.diagnostics
 import xml.etree.ElementTree as ET
 
 def navigation_location(url, gateway_base, vendor_base):
     """Return fixed labels only; never retain paths, query parameters or tokens."""
-    parsed = urllib.parse.urlsplit(url)
-    origin = parsed.scheme + "://" + parsed.netloc
-    if origin == gateway_base:
-        return {"/auth/saml/start": "gateway_start", "/auth/saml/acs": "gateway_acs",
-                "/customer": "gateway_console"}.get(parsed.path, "gateway_other")
-    if origin == vendor_base:
-        return "vendor"
-    if parsed.scheme in ("about", "chrome-error"):
-        return "browser_error"
-    return "other"
+    return diagnostics.location(url, gateway_base, vendor_base)
 
 
 def network_failure_category(failure):
-    known = {"net::ERR_EMPTY_RESPONSE", "net::ERR_CONNECTION_CLOSED", "net::ERR_CONNECTION_RESET",
-             "net::ERR_CONNECTION_REFUSED", "net::ERR_CERT_AUTHORITY_INVALID",
-             "net::ERR_CERT_COMMON_NAME_INVALID", "net::ERR_ABORTED", "net::ERR_FAILED",
-             "net::ERR_BLOCKED_BY_CLIENT", "net::ERR_HTTP_RESPONSE_CODE_FAILURE",
-             "net::ERR_HTTP2_PROTOCOL_ERROR", "net::ERR_TIMED_OUT", "net::ERR_INTERNET_DISCONNECTED",
-             "net::ERR_NAME_NOT_RESOLVED", "net::ERR_NETWORK_CHANGED", "net::ERR_CONNECTION_TIMED_OUT",
-             "net::ERR_CACHE_MISS"}
-    return failure if failure in known else "other"
+    return diagnostics.network_category(failure)
 
 
 def retryable_login_transport(observation):
@@ -74,10 +59,12 @@ def retryable_login_transport(observation):
     # runner's network interfaces. Only retry a browser transport failure before
     # any ACS response; authorization/signature failures must remain failures.
     return (observation.get("final_location") in ("browser_error", "vendor", "gateway_start")
+            and not observation.get("callback_requested")
             and "acs_status" not in observation
             and not observation.get("local_authorization_error")
             and not observation.get("validation_error_categories")
             and not observation.get("vendor_error_categories")
+            and not observation.get("server_error_categories")
             and bool(observation.get("network_failures"))
             and all(item.get("category") == "net::ERR_NETWORK_CHANGED"
                     for item in observation.get("network_failures", [])))
@@ -103,10 +90,11 @@ def run(args):
                               "Gateway and HTTP driver verify TLS with an explicit ephemeral CA",
                               "Session expiry is advanced only in this run's disposable database fixture"]}
     output = vendor.ReportOutput(args.out, [args.gateway, args.bootstrap_helper, Path(__file__)], report)
+    evidence = diagnostics.Diagnostics(report, output, ROOT)
 
     def check(name, condition):
         report["checks"].append({"name": name, "passed": bool(condition)})
-        output.publish(report)
+        evidence.publish()
         print(json.dumps({"check": name, "passed": bool(condition)}), flush=True)
         if not condition:
             raise RuntimeError(name)
@@ -115,13 +103,14 @@ def run(args):
         if os.name != "posix" or not shutil.which("docker") or not shutil.which("certutil"):
             raise RuntimeError("Linux Docker and NSS certutil are required")
         import requests
-        from playwright.sync_api import sync_playwright
+        from playwright.sync_api import Error as PlaywrightError, sync_playwright
 
         for name in ("gateway", "bootstrap_helper"):
             report[name + "_sha256"] = vendor.sha256(getattr(args, name))
         report["source_sha256"] = {str(path.relative_to(ROOT)).replace("\\", "/"): vendor.sha256(path)
                                   for path in [Path(__file__), ROOT / "scripts/keycloak-saml-acceptance.py",
                                                ROOT / "scripts/keycloak-oidc-acceptance.py",
+                                               ROOT / "scripts/sso_diagnostics.py",
                                                ROOT / "Cargo.lock", ROOT / "crates/proxy/examples/keycloak-saml-bootstrap.rs",
                                                ROOT / "crates/proxy/src/saml_auth.rs",
                                                ROOT / "crates/proxy/src/oidc_auth.rs",
@@ -132,15 +121,18 @@ def run(args):
                                                ROOT / ".github/workflows/keycloak-saml.yml"]}
         scratch = vendor.scratch_directory(ROOT)
         children = []
-        with ExitStack() as resources:
+        evidence.phase("fixture-startup")
+        with diagnostics.RunResources(evidence) as resources:
             directory = Path(tempfile.mkdtemp(prefix="soup-wall-keycloak-session-", dir=scratch)).resolve()
             resources.callback(vendor.cleanup_new_directory, directory, scratch, children)
             docker = shutil.which("docker")
+            network = diagnostics.owned_network(docker, resources)
+            report["owned_network_id"] = network
             subprocess.run([docker, "pull", "--platform", "linux/amd64", KEYCLOAK_IMAGE],
                            check=True, capture_output=True, timeout=240)
             check("pinned-container-image-pulled-by-digest", True)
             ca, (cert, key), (sp_cert, sp_key) = vendor.certificate_files(directory)
-            gateway_port, vendor_port, vendor_http_port = vendor.free_port(), vendor.free_port(), vendor.free_port()
+            gateway_port, vendor_port = vendor.free_port(), vendor.free_port()
             # Different sites exercise the real cross-site POST cookie boundary;
             # different ports alone would still be same-site and share cookies.
             vendor_base = f"https://localhost:{vendor_port}"
@@ -212,26 +204,22 @@ def run(args):
             temporary.mkdir()
             environment = {"HOME": str(profile), "TMPDIR": str(temporary), "PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"}
             vendor_log = resources.enter_context((directory / "vendor.log").open("wb"))
-            created = subprocess.run([docker, "create", "--platform", "linux/amd64", "--network", "host",
+            evidence.logs.append(("keycloak", directory / "vendor.log"))
+            container_id = shared.owned_container(docker, ["--platform", "linux/amd64", "--network", network,
+                "--publish", f"127.0.0.1:{vendor_port}:8443",
                 "--name", "soup-saml-" + uuid.uuid4().hex, "--user", "0:0", "--cap-drop=ALL",
                 "--security-opt=no-new-privileges", "--memory=1536m",
                 "--mount", f"type=bind,src={import_dir},dst=/opt/keycloak/data/import,readonly",
                 "--mount", f"type=bind,src={cert},dst=/fixture-cert.pem,readonly",
                 "--mount", f"type=bind,src={key},dst=/fixture-key.pem,readonly",
                 KEYCLOAK_IMAGE, "start-dev", "--import-realm", "--http-enabled=false",
-                "--http-host=127.0.0.1", f"--http-port={vendor_http_port}",
-                f"--https-port={vendor_port}", f"--hostname={vendor_base}",
+                "--http-host=0.0.0.0", "--https-port=8443", f"--hostname={vendor_base}",
                 "--https-certificate-file=/fixture-cert.pem", "--https-certificate-key-file=/fixture-key.pem",
-                "--log-level=warn"], check=True, capture_output=True, text=True, timeout=30)
-            container_id = created.stdout.strip()
-            if len(container_id) != 64 or any(c not in "0123456789abcdef" for c in container_id):
-                raise RuntimeError("Docker did not return a created container ID")
-            def remove_container():
-                subprocess.run([docker, "rm", "--force", container_id], check=True,
-                               capture_output=True, timeout=30)
-            resources.callback(remove_container)
+                "--log-level=warn"], resources)
+            evidence.container("keycloak", docker, container_id)
             child = start_child([docker, "start", "--attach", container_id], directory, environment, vendor_log, resources)
             children.append(child)
+            evidence.process("keycloak-launcher", child)
             session = resources.enter_context(requests.Session())
             session.trust_env = False
             session.verify = str(ca)
@@ -253,12 +241,13 @@ def run(args):
                     time.sleep(.25)
                 return False
 
-            report["phase"] = "vendor-startup"
+            evidence.phase("vendor-discovery")
             check("real-keycloak-https-discovery", ready(issuer + "/protocol/saml/descriptor", child, 120))
             environment["LLM_FW_POSTGRES_CA_CERT_FILE"] = str(ca)
-            report["phase"] = "database-startup"
+            evidence.phase("database-startup")
             database = FixtureDatabase(directory, environment, resources,
-                                       postgres=args.backend == "postgres", cert=cert, key=key)
+                                       postgres=args.backend == "postgres", cert=cert, key=key,
+                                       network=network, evidence=evidence)
             gateway_environment = dict(environment, SOUP_FIXTURE_ADMIN_TOKEN=secrets.token_urlsafe(32),
                 LLM_FW_OIDC_STATE_KEY=secrets.token_urlsafe(32), LLM_FW_OIDC_CA_CERT_FILE=str(ca), LLM_FW_SAML_SP_ENTITY_ID=client_id, LLM_FW_SAML_ACS_URL=callback,
                 LLM_FW_SAML_SP_PRIVATE_KEY_PEM=sp_key.read_text(),
@@ -305,10 +294,13 @@ def run(args):
                 "firewall_yaml_sha256": vendor.sha256(directory / "firewall.yaml"),
                 "realm_configuration_sha256": vendor.sha256(import_dir / "realm.json")}
             gateway_log = resources.enter_context((directory / "gateway.log").open("wb"))
+            evidence.logs.append(("gateway", directory / "gateway.log"))
 
             def start_gateway():
+                evidence.phase("gateway-startup")
                 process = start_child([str(args.gateway)], directory, gateway_environment, gateway_log, resources)
                 children.append(process)
+                evidence.process("gateway", process)
                 check("gateway-ready", ready(gateway_base + "/readyz", process, 30))
                 return process
 
@@ -347,6 +339,7 @@ def run(args):
                   json=connection, headers=admin_headers).status_code == 200)
             start_url = gateway_base + "/auth/saml/start?" + urllib.parse.urlencode({
                 "organization_id": scope["organization_id"], "workspace_id": scope["workspace_id"]})
+            evidence.phase("browser-startup")
             pw = resources.enter_context(sync_playwright())
             nss = Path(environment["HOME"]) / ".pki/nssdb"
             nss.mkdir(parents=True)
@@ -374,9 +367,15 @@ def run(args):
             def login(ctx, user, organization=None, workspace=None, success=True, capture=None, network_retry=0):
                 page = ctx.new_page()
                 page.set_default_timeout(45000)
+                started = time.monotonic()
                 log_offset = (directory / "gateway.log").stat().st_size
                 observation = {"subject": user["username"], "transport_attempt": network_retry + 1,
-                               "navigation_statuses": [], "network_failures": []}
+                               "navigation_statuses": [], "network_failures": [], "callback_requested": False}
+                report.setdefault("login_attempts", []).append(observation)
+                def requested(request):
+                    if diagnostics.same_endpoint(request.url, callback):
+                        observation["callback_requested"] = True
+                page.on("request", requested)
                 def observe(response):
                     if response.request.is_navigation_request() and len(observation["navigation_statuses"]) < 12:
                         observation["navigation_statuses"].append({
@@ -404,26 +403,31 @@ def run(args):
                 url = gateway_base + "/auth/saml/start?" + urllib.parse.urlencode({
                     "organization_id": organization or scope["organization_id"],
                     "workspace_id": workspace or scope["workspace_id"]})
-                report["phase"] = "saml-browser-login-" + user["username"]
-                output.publish(report)
+                evidence.phase("idp-redirect-" + user["username"])
                 try:
                     page.goto(url)
+                    diagnostics.wait_for_browser(page, lambda: page.locator("#username").is_visible(),
+                                                 observation, 45000)
+                    evidence.phase("credentials-" + user["username"])
                     page.locator("#username").fill(user["username"])
                     page.locator("#password").fill(user["password"])
-                    page.locator("#kc-login").click()
+                    evidence.phase("callback-" + user["username"])
+                    page.locator("#kc-login").click(no_wait_after=True)
+                    diagnostics.wait_for_browser(page, lambda: "acs_status" in observation and (
+                        page.url == gateway_base + "/customer" if success and capture is None else page.url == callback),
+                                                 observation, 45000)
                     if capture is not None:
-                        page.wait_for_url(callback)
                         page.get_by_text("Synthetic callback held", exact=True).wait_for()
                         if "SAMLResponse" not in capture.get("fields", {}):
                             raise RuntimeError("genuine vendor callback absent")
                     elif success:
-                        page.wait_for_url(gateway_base + "/customer")
+                        evidence.phase("server-session-" + user["username"])
                         page.locator("#identity").wait_for(state="visible")
                         page.locator("#role").wait_for(state="visible")
                     else:
-                        page.wait_for_url(callback)
                         page.get_by_text("SAML login could not be completed", exact=False).wait_for()
-                except Exception:
+                    observation["outcome"] = "completed"
+                except Exception as error:
                     # Keep bounded diagnostics, never cookies, assertions,
                     # raw error text or private runtime logs in evidence.
                     observation["final_location"] = navigation_location(page.url, gateway_base, vendor_base)
@@ -438,19 +442,26 @@ def run(args):
                         "invalid username or password", "invalid user", "account is disabled", "account is not fully set up",
                         "expired", "timed out", "cookie", "invalid requester", "invalid signature", "unexpected error",
                         "verify your email", "update password", "update account information") if label in visible]
-                    log_text = (directory / "gateway.log").read_bytes()[log_offset:].decode(errors="replace").lower()
-                    last = log_text.rsplit("saml response validation failed", 1)
-                    observation["validation_error_categories"] = [word for word in
-                        ("expired", "signature", "audience", "issuer", "destination", "recipient", "request", "replay", "notbefore", "not yet valid")
-                        if len(last) == 2 and word in last[-1]]
-                    observation["local_authorization_error"] = "failed to authorize saml identity" in log_text
-                    if network_retry == 0 and retryable_login_transport(observation):
+                    errors = diagnostics.log_categories(directory / "gateway.log", log_offset)
+                    observation["validation_error_categories"] = errors["validation"]
+                    observation["server_error_categories"] = errors["categories"]
+                    observation["local_authorization_error"] = "failed to authorize saml identity" in errors["categories"]
+                    observation["outcome"] = "failed"
+                    observation["duration_ms"] = round((time.monotonic() - started) * 1000)
+                    if (network_retry == 0 and isinstance(error, (PlaywrightError, diagnostics.BrowserTransportFailure))
+                            and retryable_login_transport(observation)):
                         report.setdefault("browser_transport_retries", []).append(observation)
                         output.publish(report)
                         page.close()
                         return login(ctx, user, organization, workspace, success, capture, network_retry=1)
                     report["failed_login"] = observation
                     raise
+                finally:
+                    page.remove_listener("request", requested)
+                    page.remove_listener("requestfailed", failed)
+                    page.remove_listener("response", observe)
+                    observation.setdefault("duration_ms", round((time.monotonic() - started) * 1000))
+                    evidence.publish()
                 return page
 
             def browser_fetch(page, path, method="GET", headers=None, body=None):
@@ -518,7 +529,7 @@ def run(args):
             check("pending-saml-login-remains-single-use-after-restart", submit(pending_restart).status_code == 400)
             check("session-persists-across-gateway-restart", browser_fetch(page, "/customer/v1/session")["status"] == 200)
             active_cookie = next(c["value"] for c in owner.cookies() if c["name"] == "__Host-llm-fw-session")
-            report["phase"] = "console-logout"
+            evidence.phase("console-logout")
             page.locator("#logout").click()
             page.get_by_text("You have been logged out of this workspace.", exact=True).wait_for(state="visible")
             check("console-logout-clears-workspace-ui", not page.locator("#identity").is_visible()
@@ -664,16 +675,18 @@ def run(args):
             check("expired-session-returns-to-sign-in", not analyst_page.locator("#identity").is_visible())
         report["cleanup_passed"] = True
         report["passed"] = True
-        report["phase"] = "complete"
-        output.publish(report)
+        report["outcome"] = "completed"
+        evidence.phase("complete")
         print(json.dumps({"passed": True, "checks": len(report["checks"]), "cleanup_passed": True}), flush=True)
         return 0
     except Exception as error:
+        report["outcome"] = ("incomplete" if isinstance(error, diagnostics.RunCancelled)
+                             or report["phase"] == "prerequisites" else "failed")
         report["error_type"] = type(error).__name__
         report["error_locations"] = [{"file": Path(frame.filename).name, "line": frame.lineno,
                                       "function": frame.name}
                                      for frame in traceback.extract_tb(error.__traceback__)]
-        output.publish(report)
+        evidence.publish()
         print(json.dumps({"passed": False, "phase": report.get("phase"), "error_type": type(error).__name__}), flush=True)
         return 1
 
@@ -686,8 +699,8 @@ def main():
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--artifact-label", required=True)
     args = parser.parse_args()
-    args.gateway = args.gateway.resolve(strict=True)
-    args.bootstrap_helper = args.bootstrap_helper.resolve(strict=True)
+    args.gateway = args.gateway.resolve()
+    args.bootstrap_helper = args.bootstrap_helper.resolve()
     return run(args)
 
 if __name__ == "__main__":

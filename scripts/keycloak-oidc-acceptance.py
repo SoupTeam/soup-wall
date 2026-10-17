@@ -32,6 +32,9 @@ ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("vendor_helpers", Path(__file__).with_name("keycloak-saml-acceptance.py"))
 vendor = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(vendor)
+spec = importlib.util.spec_from_file_location("sso_diagnostics", Path(__file__).with_name("sso_diagnostics.py"))
+diagnostics = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(diagnostics)
 KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak@sha256:ad1b0f0fa4bb5eff10f7a78eaafbb6d65b25431c1f824b0710836d74373a7dfb"
 POSTGRES_IMAGE = "postgres@sha256:ec9f656f17c8b4dfebf49e58cf5c46d493d4846d4ea6d8b85d0637f68ee33bfc"
 
@@ -49,7 +52,8 @@ def owned_container(docker, arguments, resources, environment=None):
 
 class FixtureDatabase:
     """Only the newly created file/container; no operator-supplied DSN or SQL CLI."""
-    def __init__(self, directory, environment, resources, postgres=False, cert=None, key=None):
+    def __init__(self, directory, environment, resources, postgres=False, cert=None, key=None,
+                 network=None, evidence=None):
         self.path = directory / "gateway.sqlite"
         self.container = None
         self.environment = environment
@@ -62,6 +66,7 @@ class FixtureDatabase:
         password = secrets.token_urlsafe(32)
         port = vendor.free_port()
         self.container = owned_container(self.docker, ["--platform", "linux/amd64",
+            *(["--network", network] if network else []),
             "--name", "soup-oidc-postgres-" + uuid.uuid4().hex,
             "--publish", f"127.0.0.1:{port}:5432", "--memory=512m",
             "--security-opt=no-new-privileges", "--cap-drop=ALL",
@@ -80,6 +85,8 @@ class FixtureDatabase:
             "chmod 600 /tmp/oidc-server.crt /tmp/oidc-server.key; exec docker-entrypoint.sh postgres "
             "-c ssl=on -c ssl_cert_file=/tmp/oidc-server.crt -c ssl_key_file=/tmp/oidc-server.key"], resources,
             environment=dict(os.environ, POSTGRES_PASSWORD=password))
+        if evidence:
+            evidence.container("postgres", self.docker, self.container)
         subprocess.run([self.docker, "start", self.container], check=True, capture_output=True, timeout=30)
         environment.update(SOUP_OIDC_FIXTURE_DATABASE_URL=
             f"postgresql://oidc_fixture:{password}@127.0.0.1:{port}/{self.name}?sslmode=require",
@@ -144,8 +151,10 @@ def retryable_browser_transport(observation):
     failures = observation.get("network_failures", [])
     return (bool(failures) and all(item == "net::ERR_NETWORK_CHANGED" for item in failures)
             and observation.get("owned_location", False)
+            and not observation.get("callback_requested")
             and not observation.get("callback_response")
-            and not observation.get("authentication_error"))
+            and not observation.get("authentication_error")
+            and not observation.get("server_error_categories"))
 
 
 def imported_credential(password):
@@ -200,10 +209,11 @@ def run(args):
                               "Session expiry is advanced only in this run's disposable database fixture"]}
     output = vendor.ReportOutput(args.out, [args.gateway, args.bootstrap_helper, args.keycloak_zip,
                                           args.jdk_zip, Path(__file__)], report)
+    evidence = diagnostics.Diagnostics(report, output, ROOT)
 
     def check(name, condition):
         report["checks"].append({"name": name, "passed": bool(condition)})
-        output.publish(report)
+        evidence.publish()
         print(json.dumps({"check": name, "passed": bool(condition)}), flush=True)
         if not condition:
             raise RuntimeError(name)
@@ -219,12 +229,13 @@ def run(args):
         import requests
         from cryptography import x509
         from cryptography.hazmat.primitives import serialization
-        from playwright.sync_api import sync_playwright
+        from playwright.sync_api import Error as PlaywrightError, sync_playwright
 
         for name in ("gateway", "bootstrap_helper"):
             report[name + "_sha256"] = vendor.sha256(getattr(args, name))
         report["source_sha256"] = {str(path.relative_to(ROOT)).replace("\\", "/"): vendor.sha256(path)
                                   for path in [Path(__file__), ROOT / "scripts/keycloak-saml-acceptance.py",
+                                               ROOT / "scripts/sso_diagnostics.py",
                                                ROOT / "Cargo.lock", ROOT / "crates/proxy/examples/keycloak-oidc-bootstrap.rs",
                                                ROOT / "crates/proxy/src/oidc.rs",
                                                ROOT / "crates/proxy/src/oidc_auth.rs",
@@ -235,9 +246,12 @@ def run(args):
                                                ROOT / ".github/workflows/keycloak-oidc.yml"]}
         scratch = vendor.scratch_directory(ROOT)
         children = []
-        with ExitStack() as resources:
+        evidence.phase("fixture-startup")
+        with diagnostics.RunResources(evidence) as resources:
             directory = Path(tempfile.mkdtemp(prefix="soup-wall-keycloak-session-", dir=scratch)).resolve()
             resources.callback(vendor.cleanup_new_directory, directory, scratch, children)
+            network = diagnostics.owned_network(shutil.which("docker"), resources) if args.docker else None
+            report["owned_network_id"] = network
             if args.docker:
                 docker = shutil.which("docker")
                 subprocess.run([docker, "pull", "--platform", "linux/amd64", KEYCLOAK_IMAGE],
@@ -309,24 +323,20 @@ def run(args):
             else:
                 environment = vendor.child_environment(directory)
             vendor_log = resources.enter_context((directory / "vendor.log").open("wb"))
+            evidence.logs.append(("keycloak", directory / "vendor.log"))
             if args.docker:
-                created = subprocess.run([docker, "create", "--platform", "linux/amd64", "--network", "host",
+                container_id = owned_container(docker, ["--platform", "linux/amd64", "--network", network,
+                    "--publish", f"127.0.0.1:{vendor_port}:8443",
                     "--name", "soup-oidc-" + uuid.uuid4().hex, "--user", "0:0", "--cap-drop=ALL",
                     "--security-opt=no-new-privileges", "--memory=1536m",
                     "--mount", f"type=bind,src={import_dir},dst=/opt/keycloak/data/import,readonly",
                     "--mount", f"type=bind,src={cert},dst=/fixture-cert.pem,readonly",
                     "--mount", f"type=bind,src={key},dst=/fixture-key.pem,readonly",
                     KEYCLOAK_IMAGE, "start-dev", "--import-realm", "--http-enabled=false",
-                    "--http-host=127.0.0.1", f"--https-port={vendor_port}", f"--hostname={vendor_base}",
+                    "--http-host=0.0.0.0", "--https-port=8443", f"--hostname={vendor_base}",
                     "--https-certificate-file=/fixture-cert.pem", "--https-certificate-key-file=/fixture-key.pem",
-                    "--log-level=warn"], check=True, capture_output=True, text=True, timeout=30)
-                container_id = created.stdout.strip()
-                if len(container_id) != 64 or any(c not in "0123456789abcdef" for c in container_id):
-                    raise RuntimeError("Docker did not return a created container ID")
-                def remove_container():
-                    subprocess.run([docker, "rm", "--force", container_id], check=True,
-                                   capture_output=True, timeout=30)
-                resources.callback(remove_container)
+                    "--log-level=warn"], resources)
+                evidence.container("keycloak", docker, container_id)
                 child = start_child([docker, "start", "--attach", container_id], directory, environment, vendor_log, resources)
             else:
                 vendor_environment = dict(environment, JAVA_HOME=str(jdk),
@@ -338,6 +348,7 @@ def run(args):
                     f"--https-certificate-file={cert}", f"--https-certificate-key-file={key}",
                     "--log-level=warn"], directory, vendor_environment, vendor_log, resources)
             children.append(child)
+            evidence.process("keycloak-launcher", child)
             session = resources.enter_context(requests.Session())
             session.trust_env = False
             session.verify = str(ca)
@@ -359,14 +370,15 @@ def run(args):
                     time.sleep(.25)
                 return False
 
-            report["phase"] = "vendor-startup"
+            evidence.phase("vendor-discovery")
             check("real-keycloak-https-discovery", ready(issuer + "/.well-known/openid-configuration", child, 120))
             environment["LLM_FW_POSTGRES_CA_CERT_FILE"] = str(ca)
-            report["phase"] = "database-startup"
+            evidence.phase("database-startup")
             database = FixtureDatabase(directory, environment, resources,
-                                       postgres=args.backend == "postgres", cert=cert, key=key)
+                                       postgres=args.backend == "postgres", cert=cert, key=key,
+                                       network=network, evidence=evidence)
             gateway_environment = dict(environment, SOUP_FIXTURE_ADMIN_TOKEN=secrets.token_urlsafe(32),
-                LLM_FW_OIDC_STATE_KEY=secrets.token_urlsafe(32), LLM_FW_OIDC_CA_CERT_FILE=str(ca), RUST_LOG="error")
+                LLM_FW_OIDC_STATE_KEY=secrets.token_urlsafe(32), LLM_FW_OIDC_CA_CERT_FILE=str(ca), RUST_LOG="warn")
             (directory / "policy.yaml").write_text("policies: []\ndefault: allow\n", encoding="utf-8")
             (directory / "firewall.yaml").write_text(
                 f'bind: "127.0.0.1:{gateway_port}"\ntenant_store:\n  enabled: true\n'
@@ -409,10 +421,13 @@ def run(args):
                 "firewall_yaml_sha256": vendor.sha256(directory / "firewall.yaml"),
                 "realm_configuration_sha256": vendor.sha256(import_dir / "realm.json")}
             gateway_log = resources.enter_context((directory / "gateway.log").open("wb"))
+            evidence.logs.append(("gateway", directory / "gateway.log"))
 
             def start_gateway():
+                evidence.phase("gateway-startup")
                 process = start_child([str(args.gateway)], directory, gateway_environment, gateway_log, resources)
                 children.append(process)
+                evidence.process("gateway", process)
                 check("gateway-ready", ready(gateway_base + "/readyz", process, 30))
                 return process
 
@@ -421,7 +436,7 @@ def run(args):
                 check("gateway-postgres-connections-use-tls", database.sql(
                     "SELECT count(*) FROM pg_stat_ssl s JOIN pg_stat_activity a USING(pid) "
                     "WHERE a.application_name = 'llm-firewall-control-plane' AND s.ssl") != "0")
-            report["phase"] = "real-provider-negative-flow"
+            evidence.phase("real-provider-negative-flow")
             start_url = gateway_base + "/auth/oidc/start?" + urllib.parse.urlencode({
                 "organization_id": scope["organization_id"], "workspace_id": scope["workspace_id"]})
             started = request("GET", start_url)
@@ -486,44 +501,57 @@ def run(args):
             def login(ctx, user, organization=None, workspace=None, success=True, transport_retry=0):
                 page = ctx.new_page()
                 page.set_default_timeout(90000)
+                started = time.monotonic()
+                log_offset = (directory / "gateway.log").stat().st_size
                 observation = {"subject": user["username"], "attempt": transport_retry + 1,
-                               "network_failures": [], "callback_response": False}
+                               "network_failures": [], "navigation_statuses": [],
+                               "callback_requested": False, "callback_response": False}
+                report.setdefault("login_attempts", []).append(observation)
+                def requested(request):
+                    if diagnostics.same_endpoint(request.url, callback):
+                        observation["callback_requested"] = True
                 def failed(request):
                     if request.is_navigation_request() and len(observation["network_failures"]) < 8:
                         observation["network_failures"].append(
-                            "net::ERR_NETWORK_CHANGED" if request.failure == "net::ERR_NETWORK_CHANGED" else "other")
+                            diagnostics.network_category(request.failure))
                 def responded(response):
-                    parsed = urllib.parse.urlsplit(response.url)
-                    expected = urllib.parse.urlsplit(callback)
-                    if (parsed.scheme, parsed.netloc, parsed.path) == (expected.scheme, expected.netloc, expected.path):
+                    if response.request.is_navigation_request() and len(observation["navigation_statuses"]) < 12:
+                        observation["navigation_statuses"].append({
+                            "location": diagnostics.location(response.url, gateway_base, vendor_base),
+                            "status": response.status})
+                    if diagnostics.same_endpoint(response.url, callback):
                         observation["callback_response"] = True
+                        observation["callback_status"] = response.status
+                page.on("request", requested)
                 page.on("requestfailed", failed)
                 page.on("response", responded)
                 try:
-                    report["phase"] = "console-entry-" + user["username"]
-                    output.publish(report)
+                    evidence.phase("console-entry-" + user["username"])
                     page.goto(gateway_base + "/customer")
                     page.locator("#sign-in").wait_for(state="visible")
                     page.locator("#login-organization").fill(organization or scope["organization_id"])
                     page.locator("#login-workspace").fill(workspace or scope["workspace_id"])
-                    report["phase"] = "idp-redirect-" + user["username"]
-                    output.publish(report)
-                    page.locator("#sign-in-form button").click()
+                    evidence.phase("idp-redirect-" + user["username"])
+                    page.locator("#sign-in-form button").click(no_wait_after=True)
+                    diagnostics.wait_for_browser(page, lambda: page.locator("#username").is_visible(),
+                                                 observation, 90000)
+                    evidence.phase("credentials-" + user["username"])
                     page.locator("#username").fill(user["username"])
                     page.locator("#password").fill(user["password"])
                     callback_cookies[user["username"]] = "; ".join(
                         cookie["name"] + "=" + cookie["value"] for cookie in ctx.cookies()
                         if cookie["name"] == "__Host-llm-fw-oidc-flow")
-                    report["phase"] = "idp-password-callback-" + user["username"]
-                    output.publish(report)
-                    page.locator("#kc-login").click()
+                    evidence.phase("callback-" + user["username"])
+                    page.locator("#kc-login").click(no_wait_after=True)
+                    diagnostics.wait_for_browser(page, lambda: observation["callback_response"] and (
+                        page.url == gateway_base + "/customer" if success else diagnostics.same_endpoint(page.url, callback)),
+                                                 observation, 90000)
                     if success:
-                        page.wait_for_url(gateway_base + "/customer")
+                        evidence.phase("server-session-" + user["username"])
                         page.locator("#identity").wait_for(state="visible")
                         page.wait_for_load_state("networkidle")
-                    else:
-                        page.wait_for_url(callback + "?**")
-                except Exception:
+                    observation["outcome"] = "completed"
+                except Exception as error:
                     parsed = urllib.parse.urlsplit(page.url)
                     origin = parsed.scheme + "://" + parsed.netloc
                     observation["owned_location"] = origin in origins or parsed.scheme in ("about", "chrome-error")
@@ -534,13 +562,25 @@ def run(args):
                     observation["authentication_error"] = any(label in visible for label in (
                         "invalid username or password", "invalid user", "account is disabled",
                         "account is not fully set up", "login could not be completed", "invalid signature"))
-                    if transport_retry == 0 and retryable_browser_transport(observation):
+                    observation["server_error_categories"] = diagnostics.log_categories(
+                        directory / "gateway.log", log_offset)["categories"]
+                    observation["outcome"] = "failed"
+                    observation["duration_ms"] = round((time.monotonic() - started) * 1000)
+                    observation["final_location"] = diagnostics.location(page.url, gateway_base, vendor_base)
+                    if (transport_retry == 0 and isinstance(error, (PlaywrightError, diagnostics.BrowserTransportFailure))
+                            and retryable_browser_transport(observation)):
                         report.setdefault("browser_transport_retries", []).append(observation)
                         output.publish(report)
                         page.close()
                         return login(ctx, user, organization, workspace, success, transport_retry=1)
                     report["failed_browser_transport"] = observation
                     raise
+                finally:
+                    page.remove_listener("request", requested)
+                    page.remove_listener("requestfailed", failed)
+                    page.remove_listener("response", responded)
+                    observation.setdefault("duration_ms", round((time.monotonic() - started) * 1000))
+                    evidence.publish()
                 return page
 
             def browser_fetch(page, path, method="GET", headers=None, body=None):
@@ -551,7 +591,7 @@ def run(args):
                     return {status:response.status, data};
                 }""", {"path": path, "method": method, "headers": headers or {}, "body": body})
 
-            report["phase"] = "browser-login"
+            evidence.phase("browser-startup")
             owner = context()
             callbacks = []
             callback_cookies = {}
@@ -581,7 +621,7 @@ def run(args):
             gateway = start_gateway()
             check("session-persists-across-gateway-restart", browser_fetch(page, "/customer/v1/session")["status"] == 200)
             active_cookie = next(c["value"] for c in owner.cookies() if c["name"] == "__Host-llm-fw-session")
-            report["phase"] = "console-logout"
+            evidence.phase("console-logout")
             page.locator("#logout").click()
             page.get_by_text("You have been logged out of this workspace.", exact=True).wait_for(state="visible")
             check("console-logout-clears-workspace-ui", not page.locator("#identity").is_visible()
@@ -664,16 +704,18 @@ def run(args):
             check("expired-session-returns-to-sign-in", not analyst_page.locator("#identity").is_visible())
         report["cleanup_passed"] = True
         report["passed"] = True
-        report["phase"] = "complete"
-        output.publish(report)
+        report["outcome"] = "completed"
+        evidence.phase("complete")
         print(json.dumps({"passed": True, "checks": len(report["checks"]), "cleanup_passed": True}), flush=True)
         return 0
     except Exception as error:
+        report["outcome"] = ("incomplete" if isinstance(error, diagnostics.RunCancelled)
+                             or report["phase"] == "prerequisites" else "failed")
         report["error_type"] = type(error).__name__
         report["error_locations"] = [{"file": Path(frame.filename).name, "line": frame.lineno,
                                       "function": frame.name}
                                      for frame in traceback.extract_tb(error.__traceback__)]
-        output.publish(report)
+        evidence.publish()
         print(json.dumps({"passed": False, "phase": report.get("phase"), "error_type": type(error).__name__}), flush=True)
         return 1
 

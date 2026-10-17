@@ -43,7 +43,7 @@ class SamlNavigationDiagnosticsTests(unittest.TestCase):
         self.assertTrue(driver.retryable_login_transport(transient))
         self.assertTrue(driver.retryable_login_transport(dict(transient, final_location="vendor")))
         self.assertTrue(driver.retryable_login_transport(dict(transient, final_location="gateway_start")))
-        for extra in ({"acs_status": 400}, {"acs_status": 303}, {"local_authorization_error": True},
+        for extra in ({"callback_requested": True}, {"acs_status": 400}, {"acs_status": 303}, {"local_authorization_error": True},
                       {"validation_error_categories": ["signature"]},
                       {"vendor_error_categories": ["invalid username or password"]},
                       {"final_location": "gateway_acs"},
@@ -56,7 +56,7 @@ class OidcTransportRetryTests(unittest.TestCase):
         observation = {"network_failures": ["net::ERR_NETWORK_CHANGED"], "owned_location": True,
                        "callback_response": False, "authentication_error": False}
         self.assertTrue(DRIVER.retryable_browser_transport(observation))
-        for changed in ({"callback_response": True}, {"authentication_error": True},
+        for changed in ({"callback_requested": True}, {"callback_response": True}, {"authentication_error": True},
                         {"owned_location": False}, {"network_failures": []},
                         {"network_failures": ["other"]},
                         {"network_failures": ["net::ERR_NETWORK_CHANGED", "other"]}):
