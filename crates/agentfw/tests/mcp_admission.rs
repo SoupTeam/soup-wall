@@ -535,6 +535,25 @@ fn spawn_gateway_named(
                     .join("rule_baseline/rule_baseline.py"),
             );
         }
+        Some("rule-package") => {
+            // Install the pinned frozen package into this fixture's private profile.
+            let profile = directory.join(".agentfw");
+            if !profile.exists() {
+                std::fs::create_dir_all(&profile).unwrap();
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&profile, std::fs::Permissions::from_mode(0o700)).unwrap();
+            }
+            let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+            let archive = agentfw::classifier_runtime::package::build(
+                agentfw::classifier_runtime::package::Which::Frozen,
+                &root,
+            )
+            .unwrap();
+            agentfw::classifier_runtime::package::Store::new(&profile)
+                .install(&archive, Path::new("/usr/bin/python3"))
+                .unwrap();
+            command.env("AGENTFW_CLASSIFIER", "rule-package");
+        }
         Some(value) if value.starts_with("script:") => {
             command
                 .env("AGENTFW_CLASSIFIER", "rule-baseline")
@@ -5305,4 +5324,132 @@ async fn sou67_read_policy_server_id_mismatch_refused() {
         .to_string()
         .contains("resource_server_identity_mismatch"));
     assert_eq!(executed(&fixture.ledger).len(), 0);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn sou64_installed_package_classifies_in_the_real_collector_like_the_script() {
+    let calls = [
+        r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_document","arguments":{}}}"#,
+        r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"read_document","arguments":{}}}"#,
+    ];
+    let mut package_rows = Vec::new();
+    let mut script_rows = Vec::new();
+    for selection in ["rule-package", "rule-baseline"] {
+        let mut fixture = Fixture::with_classifier("normal", true, Some(selection)).await;
+        fixture.ready().await;
+        for call in calls {
+            fixture.exchange(call).await.unwrap();
+        }
+        let rows: Vec<Value> = std::fs::read_to_string(&fixture.stderr)
+            .unwrap()
+            .lines()
+            .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+            .filter(|row| row["event"] == "mcp_classification")
+            .collect();
+        assert_eq!(rows.len(), 2);
+        if selection == "rule-package" {
+            package_rows = rows;
+        } else {
+            script_rows = rows;
+        }
+    }
+    for (package, script) in package_rows.iter().zip(&script_rows) {
+        assert_eq!(package["source"], "rule-baseline/packaged-worker");
+        assert_eq!(script["source"], "rule-baseline/python");
+        assert_eq!(package["classification"], script["classification"]);
+        // The semantic revision is the classifier source digest, identical for both
+        // adapters; package identity is a separate property.
+        assert_eq!(package["classifier_sha256"], script["classifier_sha256"]);
+        // The prediction identity also binds the adapter source name, so it differs.
+        assert_ne!(package["input_sha256"], script["input_sha256"]);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn sou64_missing_package_is_a_selection_error_with_no_fallback() {
+    let directory = tempfile::tempdir().unwrap();
+    assert!(
+        agentfw::classifier_runtime::worker::PackagedClassifier::from_home(directory.path())
+            .is_err()
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn sou64_installed_package_satisfies_constrained_create_profile_and_wrong_revision_is_refused(
+) {
+    use agentfw::native::resource::{
+        create_file_executor_sha256, CREATE_FILE_EXECUTOR_PROFILE, CREATE_FILE_MAX_CONTENT,
+    };
+    let rule_baseline_path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../rule_baseline/rule_baseline.py");
+    let real_digest = sha(&std::fs::read(&rule_baseline_path).unwrap());
+    const CREATE_POLICY: &str = "agent_policies:
+  - name: fixture-destructive-confirmation
+    when: { action_class: destructive }
+    action: ask
+default: allow
+";
+    for (pinned, expect_success) in [(real_digest.clone(), true), ("c".repeat(64), false)] {
+        let mut fixture = Fixture::with_resource_policy_custom(
+            "operator-create-binding",
+            true,
+            Some("rule-package"),
+            Some(CREATE_POLICY),
+            |dir, registry| {
+                let canonical_dir = dir.canonicalize().unwrap();
+                let canonical_file = canonical_dir
+                    .join("created-by-package.txt")
+                    .to_str()
+                    .unwrap()
+                    .to_string();
+                let schema = json!({"type":"object","properties":{"spec":{"type":"object",
+                    "properties":{"destination":{"type":"string"},"payload":{"type":"string"}},
+                    "required":["destination","payload"],"additionalProperties":false}},
+                    "required":["spec"],"additionalProperties":false});
+                let profile = json!({"server_id":"fixture","tool_name":"save_artifact",
+                    "schema_sha256":sha(schema.to_string().as_bytes()),
+                    "selectors":[{"pointer":"/spec/destination","kind":"path","allow_missing_leaf":true}]});
+                registry["tools"][0] = json!({"name":"save_artifact",
+                    "schema_sha256":sha(schema.to_string().as_bytes()),
+                    "action_class":"side_effecting","result_provenance":"untrusted","egress":[],
+                    "resource_policy":{"profile":profile,"workspace":canonical_dir,"cwd":canonical_dir,
+                        "executor_sha256":create_file_executor_sha256(),
+                        "classifier_sha256":pinned,
+                        "binding":{"contract_version":"sw-native/binding/1","operation":"create_file",
+                            "action":"write","path_selector":"/spec/destination",
+                            "content_selector":"/spec/payload",
+                            "response_contract":"sw-native/response/text/1",
+                            "executor_profile":CREATE_FILE_EXECUTOR_PROFILE,
+                            "max_content_bytes":CREATE_FILE_MAX_CONTENT},
+                        "allowed_resources":[{"kind":"path","canonical":canonical_file}]}});
+            },
+        )
+        .await;
+        fixture.ready().await;
+        let call = json!({"jsonrpc":"2.0","id":"sou64-create","method":"tools/call",
+            "params":{"name":"save_artifact","arguments":{"spec":{
+                "destination":"created-by-package.txt","payload":"package create\n"}}}});
+        let reply = fixture.exchange(&call.to_string()).await.unwrap();
+        let created = fixture._dir.path().join("created-by-package.txt");
+        if expect_success {
+            assert!(
+                created.exists(),
+                "installed package must satisfy the pinned profile: {reply}"
+            );
+            assert_eq!(
+                std::fs::read_to_string(&created).unwrap(),
+                "package create\n"
+            );
+        } else {
+            assert!(
+                reply.contains("resource_classifier_revision_mismatch"),
+                "wrong pin must be refused: {reply}"
+            );
+            assert!(!created.exists());
+        }
+        assert_eq!(executed(&fixture.ledger).len(), 0);
+    }
 }

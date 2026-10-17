@@ -179,18 +179,25 @@ impl InvocationClassifier for RuleBaseline {
                 }
             }
         })?;
-        let reply: BaselineReply =
-            serde_json::from_slice(&output).context("invalid classifier output")?;
-        ensure!(
-            matches!(reply.status.as_str(), "ok" | "unknown"),
-            "classifier returned technical error"
-        );
-        ensure!(
-            reply.status != "unknown" || reply.classification.unknown,
-            "inconsistent unknown status"
-        );
-        Ok(reply.classification)
+        parse_classifier_reply(&output)
     }
+}
+
+/// Shared by the single-shot adapter and the packaged worker so both accept exactly
+/// the same classifier output.
+pub(crate) fn parse_classifier_reply(bytes: &[u8]) -> anyhow::Result<Classification> {
+    ensure!(bytes.len() <= 16 * 1024, "classifier output exceeds limit");
+    let reply: BaselineReply =
+        serde_json::from_slice(bytes).context("invalid classifier output")?;
+    ensure!(
+        matches!(reply.status.as_str(), "ok" | "unknown"),
+        "classifier returned technical error"
+    );
+    ensure!(
+        reply.status != "unknown" || reply.classification.unknown,
+        "inconsistent unknown status"
+    );
+    Ok(reply.classification)
 }
 
 /// Select a real classifier explicitly; test doubles remain debug-only.
@@ -229,6 +236,19 @@ pub fn classifier_from_env() -> anyhow::Result<Option<Arc<dyn InvocationClassifi
                 python,
                 digest,
             })))
+        }
+        Ok(value) if value == "rule-package" => {
+            ensure!(
+                std::env::var_os("AGENTFW_TEST_CLASSIFIER").is_none()
+                    && std::env::var_os("AGENTFW_TEST_CLASSIFIER_READ").is_none()
+                    && std::env::var_os("AGENTFW_RULE_BASELINE").is_none(),
+                "conflicting classifiers"
+            );
+            // Only the verified installed package; no path, no PATH lookup, no fallback.
+            let home = crate::config::Config::home()?;
+            Ok(Some(Arc::new(
+                crate::classifier_runtime::worker::PackagedClassifier::from_home(&home)?,
+            )))
         }
         _ => bail!("unsupported classifier setting"),
     }
