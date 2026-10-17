@@ -2,7 +2,7 @@
 //! SOU-65: operator-owned, fail-closed MCP discovery/profile authoring.
 //! This tool never starts servers, grants permissions, or installs a profile.
 
-use anyhow::{ensure, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -106,6 +106,60 @@ fn discovery_hash(discovery: &Discovery) -> String {
     digest(&canonical(&serde_json::to_value(discovery).expect("discovery serializes")))
 }
 
+/// Resolve a reviewed RFC6901 selector against original schema structure,
+/// never against a guessed description, synthetic default or rewritten input.
+fn selector_shape<'a>(schema: &'a Value, pointer: &str) -> Result<&'a Value> {
+    ensure!(super::resources::valid_pointer(pointer), "invalid resource selector pointer");
+    let mut node = schema;
+    for raw in pointer[1..].split('/') {
+        let key = raw.replace("~1", "/").replace("~0", "~");
+        node = if node["type"] == "object" {
+            node.get("properties").and_then(|x| x.get(&key))
+                .context("resource selector references an undeclared object property")?
+        } else if node["type"] == "array" {
+            let index: usize = key.parse().context("nonconstant array selector unsupported")?;
+            ensure!(index.to_string() == key, "ambiguous array index");
+            node.get("items").context("array schema items unsupported")?
+        } else {
+            bail!("resource selector descends through a scalar or unsupported schema");
+        };
+    }
+    let item = if node["type"] == "array" {
+        node.get("items").context("unbounded or unsupported array selector")?
+    } else { node };
+    ensure!(item["type"] == "string", "resource selector must resolve to strings");
+    Ok(node)
+}
+
+fn validate_semantic_mapping(tool: &DeclaredTool, original: &Value) -> Result<()> {
+    // The real native policy validator checks executor semantics and allowed
+    // resources; the authoring boundary additionally verifies their selectors
+    // refer to declared original input arguments and cannot invent defaults.
+    let schema = &original["inputSchema"];
+    if let Some(policy) = &tool.resource_policy {
+        ensure!(policy.profile.tool_name == tool.name
+            && policy.profile.schema_sha256 == tool.schema_sha256,
+            "resource policy bound to another tool or schema");
+        let mut claimed = BTreeSet::new();
+        for selector in &policy.profile.selectors {
+            ensure!(selector.default.is_none(), "implicit selector defaults unsupported");
+            for pointer in std::iter::once(&selector.pointer).chain(selector.aliases.iter()) {
+                selector_shape(schema, pointer)?;
+                ensure!(claimed.insert(pointer.clone()), "overlapping semantic resource selector");
+            }
+        }
+        for raw in &tool.egress {
+            let desc: crate::native::Egress = serde_json::from_value(raw.clone())
+                .context("unsupported egress declaration")?;
+            ensure!(claimed.contains(&desc.pointer),
+                "egress destination has no reviewed resource selector");
+        }
+    } else {
+        ensure!(tool.egress.is_empty(), "egress needs an enforceable resource policy");
+    }
+    Ok(())
+}
+
 fn verify_declaration(d: &Declaration, snapshot: &Discovery) -> Result<Value> {
     let map = verify_discovery(snapshot)?;
     ensure!(d.format == FORMAT && d.server_id == snapshot.server_id
@@ -119,6 +173,10 @@ fn verify_declaration(d: &Declaration, snapshot: &Discovery) -> Result<Value> {
     for tool in &d.tools {
         ensure!(names.insert(&tool.name), "duplicate operator tool declaration");
         ensure!(map.get(&tool.name) == Some(&tool.schema_sha256), "unreviewed schema drift");
+        let definition = snapshot.tools.iter()
+            .find(|value| value["name"] == tool.name)
+            .context("original tool definition missing")?;
+        validate_semantic_mapping(tool, definition)?;
         ensure!(tool.implementation_reviewed, "operator implementation review missing");
         ensure!(tool.egress.len() <= 32, "excessive egress declarations");
         // Only support exact currently enforcing registry actions. No semantic
