@@ -5,8 +5,8 @@ stdio package with MCP Python SDK 1.29.0. It extends the existing selected-serve
 relay and bubblewrap boundary. It does not replace the transport, classifier,
 policy engine, original discovery, schemas, tool names or result/error frames.
 
-**Acceptance status:** implementation in progress; full Linux acceptance must
-pass before review readiness. Baubek agreed to the narrow Git rule on October 17.
+**Acceptance gate:** full Linux acceptance and independent review are required.
+Baubek agreed to the narrow Git rule on October 17.
 The opt-in [Git classifier snapshot](../../rule_baseline/git_readonly_v1/rule_baseline.py)
 adds only six exact original schemas and bounded argument forms below. It fixes
 unknown status/log/diff and the generic rule's false write for `context_lines`.
@@ -47,6 +47,15 @@ classification, policy and invocation authorization must all succeed. Unknown
 tools, clean, remote and credential operations have no admitted execution path.
 Native text-only Git results are inspected as untrusted content before release;
 unexpected structured output, metadata, binary blocks or envelopes are rejected.
+The private Git policy refuses Medium/High injection findings. A bare 40-digit
+Git object ID triggers the detector's Low long-token heuristic and is not alone
+an instruction. No result bytes are stripped or trusted to avoid inspection.
+Instruction override and prompt-exfiltration controls remain refused, followed
+by a useful hash-bearing read. This is an explicitly read-only scenario policy,
+not a replacement for a user's general Agent policy: the 40-session general
+corpus retains all 19 attack interruptions but intentionally interrupts six
+benign write/network sessions outside this profile. Its general-purpose policy
+gate therefore fails; the unchanged shipped policy passes all 40 sessions.
 The existing filesystem profile continues to require its original structured
 result contract. Cancellation never claims to roll back dispatched work.
 
@@ -66,6 +75,10 @@ library files, installed package tree and bubblewrap executable are recorded.
 The repository and runtime mounts are read-only. The child has no ambient home,
 credentials, Git global/system config, inherited descriptors or network access.
 The existing seccomp filter denies socket creation and unsafe device ioctls.
+The Git branch permits generic nonblocking FIONBIO and destination-free sends
+on anonymous socketpairs for Python's worker-thread wakeups. Addressed sends,
+socket creation/connect, inherited sockets and device-specific ioctls remain
+denied; kernel-backed positive and negative probes cover this distinction.
 Git unconditionally opens `/dev/null` read/write at startup. Its separately
 pinned `agentfw-git-sandbox` launcher therefore installs mandatory Landlock ABI
 3 mutation restrictions inside the namespace before executing original Python:

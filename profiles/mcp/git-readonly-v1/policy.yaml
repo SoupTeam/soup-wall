@@ -14,7 +14,21 @@ agent_policies:
     when: { action_class: privilege_changing }
     action: deny
   - name: git-profile-refuse-result-injection
-    when: { detector: injection, facet: tool_result }
+    # A Git object ID alone produces a Low long-token heuristic. Keep scanning
+    # native bytes, but do not equate that weak signal with an instruction.
+    when: { detector: injection, facet: tool_result, min_severity: medium }
     action: deny
+  - name: git-profile-ask-description-injection
+    when: { detector: injection, facet: tool_description, min_severity: medium }
+    action: ask
+  - name: git-profile-ask-manifest-drift
+    when: { mcp_manifest_changed: true }
+    action: ask
+  - name: git-profile-ask-tool-shadow
+    when: { mcp_tool_shadow: true }
+    action: ask
+  - name: git-profile-ask-unknown-host
+    when: { egress_not_allowlisted: true }
+    action: ask
 egress_allowlist: []
 default: allow
