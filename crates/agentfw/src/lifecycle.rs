@@ -284,16 +284,15 @@ impl Manager {
         // Doctor must never use self.load(), self.verify() or config_digest().
         // Those normal lifecycle APIs can open unbounded files or follow links.
         let manifest = crate::doctor::read_private(&self.root.join(MANIFEST), 1024 * 1024)?;
-        let state: State = serde_json::from_slice(&manifest)
-            .context("invalid bounded lifecycle manifest")?;
+        let state: State =
+            serde_json::from_slice(&manifest).context("invalid bounded lifecycle manifest")?;
         self.validate_state(&state)?;
         let binary_changed = state.active.as_ref().is_some_and(|record| {
             self.path_for(record)
                 .ok()
-                .and_then(|path| {
-                    crate::doctor::hash_selected_file(&path, MAX_CANDIDATE_BYTES).ok()
-                })
-                .as_deref() != Some(record.digest.as_str())
+                .and_then(|path| crate::doctor::hash_selected_file(&path, MAX_CANDIDATE_BYTES).ok())
+                .as_deref()
+                != Some(record.digest.as_str())
         });
         // Compare the one independently bounded, no-follow config snapshot.
         // None means the original file was absent/unsafe, NOT an invitation
