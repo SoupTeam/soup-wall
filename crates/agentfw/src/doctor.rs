@@ -91,6 +91,13 @@ fn check(
     }
 }
 
+fn safe_selected_path(path: &Path) -> bool {
+    path.is_absolute()
+        && path.components().all(|part| matches!(
+            part, std::path::Component::RootDir | std::path::Component::Normal(_)
+        ))
+}
+
 fn is_digest(s: &str) -> bool {
     s.len() == 64
         && s.bytes()
@@ -271,7 +278,7 @@ async fn diagnose(args: &DoctorArgs) -> Report {
     }
 
     let home = match args.home.clone().map(Ok).unwrap_or_else(Config::home_path) {
-        Ok(p) if p.is_absolute() => p,
+        Ok(p) if safe_selected_path(&p) => p,
         _ => {
             checks.push(check(
                 "profile",
@@ -567,6 +574,10 @@ async fn diagnose(args: &DoctorArgs) -> Report {
         };
         checks.push(check("host_connection", "read_only_connection_inspect", outcome, reason, explain,
             "Run agentfw mcp-connection inspect with the same explicit --path, --server, --home and --agent; this does not test active calls."));
+    } else if args.host_config.is_some() {
+        checks.push(check("host_connection", "explicit_host_selection", Outcome::Failed,
+            "host_agent_not_selected", "Selected host settings require an explicit installed Agent binary.",
+            "Add --agent /absolute/path/to/installed/agentfw; never infer an executable from PATH."));
     } else {
         checks.push(check("host_connection", "explicit_host_selection", Outcome::Unknown,
             "host_connection_not_selected", "No host configuration and server were selected.",
