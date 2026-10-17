@@ -53,12 +53,11 @@ fn shadow_and_invalid_classifier_have_actionable_sanitized_report() {
     assert_eq!(result.status.code(), Some(3));
     let exported = std::fs::read(bundle.join("report.json")).unwrap();
     let manifest = std::fs::read(bundle.join("manifest.json")).unwrap();
-    assert_eq!(exported, {
-        let report: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
-        assert!(report["checks"].as_array().unwrap().iter().any(|c| c["reason_code"] == "shadow_mode"));
-        assert!(report["checks"].as_array().unwrap().iter().any(|c| c["reason_code"] == "classifier_pin_mismatch"));
-        serde_json::to_vec_pretty(&report).unwrap()
-    });
+    let report: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert!(report["checks"].as_array().unwrap().iter().any(|c| c["reason_code"] == "shadow_mode"));
+    assert!(report["checks"].as_array().unwrap().iter().any(|c| c["reason_code"] == "classifier_pin_mismatch"));
+    let bundle_report: serde_json::Value = serde_json::from_slice(&exported).unwrap();
+    assert_eq!(bundle_report, report);
     for data in [&result.stdout[..], &exported[..], &manifest[..]] {
         let text = String::from_utf8_lossy(data);
         assert!(!text.contains("supersecret-AUTH-SENTINEL"));
