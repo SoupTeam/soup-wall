@@ -14,6 +14,7 @@ pub mod jsonrpc;
 pub mod manifest;
 mod native_child;
 pub mod profile_author;
+pub mod profile_lifecycle;
 pub mod proxy;
 pub mod resources;
 pub mod server_profile;
