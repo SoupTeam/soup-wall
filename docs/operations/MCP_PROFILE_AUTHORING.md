@@ -43,6 +43,13 @@ The first Linux version deliberately admits only the current native:
 - `https_get`: name **https_get**, the exact current native HTTPS GET schema,
   operator-chosen workspace, canonical exact URL, single verified approved
   address and classifier digest; generates the current typed network authority.
+  The supported, operator-explicit `private_endpoint` and
+  `root_certificate_pem` fields are passed to the existing native
+  `HttpsGetAuthority::validate` checks. They are not inferred from a tool
+  description or a URL: a private address requires the exact reviewed
+  exception; the TLS client still verifies hostname, CA and expiry.
+  These fields are intended for deliberately owned endpoints or an
+  independently approved deployment, **not a global private-network grant**.
 
 Other operations, including arbitrary send-to-recipient, mixed actions,
 unsupported schema keywords, aliases, unconstrained paths and destinations,
@@ -91,14 +98,15 @@ agentfw mcp-profile diff \
 The operator must create a *separate* `compiled-v2` for updates.
 The CLI does **not** overwrite existing directories or publish into the active
 Agent home. Output is privately staged, fsynced, and published without
-replacing an existing directory. It contains:
-`registry.json` (the actual native registry consumed by
-`NativeState::from_bytes`), `resource-profiles.json`, `profile.json`,
-`source-snapshot.json`, and `operator-declarations.json`.
-The operator must explicitly configure the *actual* Agent's native registry
-path and SHA-256 after reviewing the output; the profile generator cannot
-prove that the selected external server's implementation honors any
-description or that the collector is sandboxed.
+replacing an existing directory. It contains **six files**: `registry.json` (the actual native registry
+consumed by `NativeState::from_bytes`), `native-config.json` (typed,
+inert `NativeCfg` fragment with final path and SHA-256),
+`resource-profiles.json`, `profile.json`, `source-snapshot.json`,
+and `operator-declarations.json`.
+The operator must separately review and explicitly select the generated
+`native-config.json` fragment when configuring the actual Agent.
+Compilation itself never changes the active config and cannot prove the
+selected external server honors a description or runs sandboxed.
 
 For an individual invocation, pass
 `--example /private/path/to/arguments.json` to `validate` with
@@ -106,19 +114,49 @@ For an individual invocation, pass
 This reuses the production bounded schema and typed resource extraction;
 it **does not execute the tool** or authorize arbitrary future arguments.
 
-## Demonstration and limits
+## Real production-collector acceptance and limits
+
+Run on an owned Linux host with Rust, Python and OpenSSL installed:
 
 ```sh
 python3 scripts/mcp-profile-authoring-demo.py
+# For an already built exact Agent:
+python3 scripts/mcp-profile-authoring-demo.py --no-build
 ```
 
-The controlled smoke proof checks import denial-by-default, reviewed read
-input, native registry hashing, source preservation, private files,
-schema drift, forbidden arguments, no clobber and deterministic self-diff.
-It does not claim a real remote server is safe or that arbitrary mixed
-actions or egress destinations can be enforced.
+The one-command acceptance creates fresh private temporary directories and
+operates only on controlled local fixtures. The **real** Agent daemon and
+production stdio MCP collector consume the compiled native registry and
+the generated `native-config.json` fragment, not a hand-built replacement.
+The demonstration checks:
 
-A full independent SOU-65 acceptance still requires the production collector
-under an owned test server, real read/write/network side effect and refusal
-witnesses, and a reviewed stable ABI; this initial checkpoint is not a
-completed SOU-65 delivery.
+- Import starts with every tool unreviewed and refuses partial reviews;
+  original name/schema and declaration digests survive compilation.
+- Reviewed `read_document` is useful, unreviewed send and unknown arguments
+  do not reach the child, and a malicious description grants no authority.
+- Native `create_file` creates one approved workspace child while rejecting
+  an out-of-scope path with zero child writes.
+- Native `https_get` uses an explicitly reviewed HTTPS URL, loopback
+  fixture exception and disposable CA with normal TLS validation. A separate
+  receiver process records the **one actual GET** and its exact Host/target;
+  a second independently owned TLS receiver sees **zero connections** for
+  the changed destination. A malformed scheme is rejected, and a useful
+  original `read_document` invocation succeeds *after* the refusal.
+  No HTTPS call is passed through to the child executor.
+- The schema/description drift, changed certificate or private-endpoint
+  mapping, duplicate JSON members, symlinks, unsafe authority diff, no-clobber
+  publication and 0700/0600 private output behavior are checked.
+
+A sanitized exact-source proof is written to
+`target/sou65-profile-author-evidence.json`. It contains the source commit,
+Agent binary digest, compiled registry digest and named check outcomes, not
+operator tokens or private keys. The focused
+`.github/workflows/mcp-profile-author.yml` job runs the same demonstration
+on the PR head.
+
+**Scope:** The TLS endpoint, CA and discovery are disposable owned fixtures.
+The demonstration proves the compiled authority works with the selected
+*current production collector* for these supported operations; it is not an
+attestation of an unrelated MCP server, arbitrary behavior, all network
+environments, generalized send-to-recipient semantics, or host sandboxing.
+Operator implementation review is a separate manual prerequisite.
