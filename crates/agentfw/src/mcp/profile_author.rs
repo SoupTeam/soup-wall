@@ -406,6 +406,7 @@ fn policy_for(
                     executor_profile: resource::CREATE_FILE_EXECUTOR_PROFILE.into(),
                 }),
                 network: None,
+                post: None,
                 windows_read: None,
             };
             Ok(("side_effecting".into(), Some(pol), vec![]))
@@ -480,6 +481,7 @@ fn policy_for(
                 }],
                 execution: None,
                 network: Some(net),
+                post: None,
                 windows_read: None,
             };
             Ok((
