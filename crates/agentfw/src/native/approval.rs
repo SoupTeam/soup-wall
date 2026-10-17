@@ -24,7 +24,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use soup_wall_agent::{EventKind, Verdict};
 
-use super::{binding, declared_hosts, event, identifier, is_digest, resolved, verdict_label};
+use super::{binding, declared_hosts, identifier, is_digest, resolved, verdict_label};
 use super::{CONTRACT, MAX_CONTENT};
 use crate::grant::{self, ActionRef, GrantLedger, GrantStore};
 use crate::handlers::Shared;
@@ -153,6 +153,21 @@ impl ApprovalState {
         }
     }
 
+    /// Operator rejection is terminal even before a collector next polls it.
+    /// Reconcile only the bounded in-memory pending set; never reopen a record.
+    fn reconcile_rejections(&self, records: &mut BTreeMap<String, Record>) {
+        for (id, record) in records.iter_mut() {
+            if record.state == State::Pending
+                && pending_dir(&self.home)
+                    .join(format!("{id}.rejected"))
+                    .exists()
+            {
+                record.state = State::Closed("rejected");
+                self.remove_files(id);
+            }
+        }
+    }
+
     /// Close every outstanding record of a session (end, expiry, cancel).
     pub fn close_session(&self, session_id: &str, reason: &'static str) {
         let mut ids = Vec::new();
@@ -192,6 +207,7 @@ impl ApprovalState {
         match &record.state {
             State::Pending => {}
             State::Redeemed => return Err("native_approval_spent"),
+            State::Closed("rejected") => return Err("native_approval_rejected"),
             State::Closed(_) => return Err("native_approval_closed"),
         }
         // From here any refusal terminally closes the record: it cannot be retried
@@ -268,6 +284,7 @@ impl ApprovalState {
             .lock()
             .map_err(|_| "native_approval_unavailable")?;
         let now = Instant::now();
+        self.reconcile_rejections(&mut records);
         Self::prune(&mut records, now);
         let record = records.get(id).ok_or("native_approval_unknown")?;
         if record.session_id != session_id {
@@ -278,6 +295,7 @@ impl ApprovalState {
             State::Redeemed => "redeemed",
             State::Closed("expired") => "expired",
             State::Closed("cancelled") => "cancelled",
+            State::Closed("rejected") => "rejected",
             State::Closed(_) => "closed",
             State::Pending => {
                 if pending_dir(&self.home)
@@ -445,6 +463,13 @@ fn open(
         .entries
         .get_mut(&request.session_id)
         .ok_or("native_session_unknown")?;
+    if args.to_string().len() > firewall.provenance_limits().max_input_bytes {
+        firewall.mark_provenance_incomplete(&session.epoch);
+        if let Some(host) = &session.host_session {
+            firewall.mark_provenance_incomplete(host);
+        }
+        return Err("native_provenance_input");
+    }
     let tool = native
         .registry
         .tools
@@ -461,15 +486,23 @@ fn open(
     }
     let hosts = declared_hosts(tool, args)?;
     session.seq += 1;
-    let ev = event(
-        &session.epoch,
-        session.seq,
-        EventKind::ToolCall {
-            tool: name.into(),
-            args: args.clone(),
-        },
-    );
-    let outcome = firewall.inspect_native_call(&ev, tool.action_class, &hosts);
+    let ev = session.event(EventKind::ToolCall {
+        tool: name.into(),
+        args: args.clone(),
+    });
+    let mut outcome = firewall.inspect_native_call(&ev, tool.action_class, &hosts);
+    if let Some(host) = &session.host_session {
+        let ev_host = session.host_event(
+            host,
+            session.seq,
+            EventKind::ToolCall {
+                tool: name.into(),
+                args: args.clone(),
+            },
+        );
+        let host_outcome = firewall.inspect_native_call(&ev_host, tool.action_class, &hosts);
+        outcome = super::merge_provenance_outcomes(outcome, host_outcome);
+    }
     let verdict = resolved(&outcome);
     match (source, verdict) {
         (_, Verdict::Deny) => return Err("native_approval_hard_deny"),
@@ -494,6 +527,7 @@ fn open(
         .records
         .lock()
         .map_err(|_| "native_approval_unavailable")?;
+    approval.reconcile_rejections(&mut records);
     ApprovalState::prune(&mut records, Instant::now());
     if records
         .values()

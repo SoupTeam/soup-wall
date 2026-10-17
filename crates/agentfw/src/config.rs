@@ -6,6 +6,7 @@
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
+use soup_wall_agent::TaintLimits;
 
 fn default_bind() -> String {
     "127.0.0.1".into()
@@ -137,6 +138,9 @@ pub struct Config {
     /// work instead of scaling with an arbitrary tool-result size.
     #[serde(default = "default_max_record_bytes")]
     pub max_record_bytes: usize,
+    /// Retained provenance accounting; defaults preserve existing configuration files.
+    #[serde(default)]
+    pub provenance: TaintLimits,
     #[serde(default = "default_timeout_ms")]
     pub deterministic_timeout_ms: u64,
     #[serde(default = "default_max_body_bytes")]
@@ -182,6 +186,7 @@ impl Default for Config {
             audit: None,
             capture_unknown_raw: false,
             max_record_bytes: default_max_record_bytes(),
+            provenance: TaintLimits::default(),
             deterministic_timeout_ms: default_timeout_ms(),
             max_body_bytes: default_max_body_bytes(),
             judge: JudgeCfg::default(),
@@ -214,6 +219,7 @@ impl Config {
 
     /// Reject anything that would expose the daemon beyond this machine.
     pub(crate) fn validate(&self) -> anyhow::Result<()> {
+        self.provenance.validate()?;
         if let Some(native) = &self.native {
             anyhow::ensure!(
                 self.enforce && !self.judge.enabled,
@@ -476,5 +482,40 @@ mod tests {
             err.contains("bogus") || err.contains("unknown field"),
             "got: {err}"
         );
+    }
+    #[test]
+    fn provenance_limits_are_additive_and_partial_configuration_keeps_defaults() {
+        let defaults = Config::from_yaml("enforce: true\n").unwrap();
+        assert_eq!(defaults.provenance, TaintLimits::default());
+        let custom =
+            Config::from_yaml("provenance:\n  per_session_bytes: 65536\n  max_sessions: 8\n")
+                .unwrap();
+        assert_eq!(custom.provenance.per_session_bytes, 65536);
+        assert_eq!(custom.provenance.max_sessions, 8);
+        assert_eq!(custom.provenance.total_bytes, 64 * 1024 * 1024);
+        assert_eq!(custom.provenance.max_literal_bytes, 4096);
+    }
+
+    #[test]
+    fn provenance_limits_reject_unknown_and_unreviewed_values() {
+        for yaml in [
+            "provenance:\n  unknown_budget: 1\n",
+            "provenance:\n  max_sessions: 65537\n",
+            "provenance:\n  max_input_bytes: 1048577\n",
+            "provenance:\n  max_literal_bytes: -1\n",
+        ] {
+            assert!(Config::from_yaml(yaml).is_err(), "accepted {yaml}");
+        }
+    }
+
+    #[test]
+    fn zero_provenance_budgets_are_explicit_valid_configuration() {
+        let config = Config::from_yaml(
+            "provenance:\n  per_session_bytes: 0\n  total_bytes: 0\n  max_sessions: 0\n",
+        )
+        .unwrap();
+        assert_eq!(config.provenance.per_session_bytes, 0);
+        assert_eq!(config.provenance.total_bytes, 0);
+        assert_eq!(config.provenance.max_sessions, 0);
     }
 }
