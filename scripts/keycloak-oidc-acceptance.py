@@ -471,6 +471,7 @@ def run(args):
             leaf = x509.load_pem_x509_certificate(cert.read_bytes())
             spki = base64.b64encode(hashlib.sha256(leaf.public_key().public_bytes(
                 serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)).digest()).decode()
+            evidence.phase("browser-startup")
             pw = resources.enter_context(sync_playwright())
             if args.docker:
                 nss = Path(environment["HOME"]) / ".pki/nssdb"
@@ -544,14 +545,18 @@ def run(args):
                     evidence.phase("callback-" + user["username"])
                     page.locator("#kc-login").click(no_wait_after=True)
                     diagnostics.wait_for_browser(page, lambda: observation["callback_response"] and (
-                        page.url == gateway_base + "/customer" if success else diagnostics.same_endpoint(page.url, callback)),
+                        page.url == gateway_base + "/customer" if success else page.url.startswith(callback + "?")),
                                                  observation, 90000)
                     if success:
                         evidence.phase("server-session-" + user["username"])
                         page.locator("#identity").wait_for(state="visible")
                         page.wait_for_load_state("networkidle")
+                    else:
+                        # Preserve the original refusal URL/query and load-state assertion.
+                        page.wait_for_url(callback + "?**")
                     observation["outcome"] = "completed"
                 except Exception as error:
+                    observation.update(phase=report["phase"], error_type=type(error).__name__)
                     parsed = urllib.parse.urlsplit(page.url)
                     origin = parsed.scheme + "://" + parsed.netloc
                     observation["owned_location"] = origin in origins or parsed.scheme in ("about", "chrome-error")
@@ -591,7 +596,6 @@ def run(args):
                     return {status:response.status, data};
                 }""", {"path": path, "method": method, "headers": headers or {}, "body": body})
 
-            evidence.phase("browser-startup")
             owner = context()
             callbacks = []
             callback_cookies = {}

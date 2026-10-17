@@ -428,6 +428,7 @@ def run(args):
                         page.get_by_text("SAML login could not be completed", exact=False).wait_for()
                     observation["outcome"] = "completed"
                 except Exception as error:
+                    observation.update(phase=report["phase"], error_type=type(error).__name__)
                     # Keep bounded diagnostics, never cookies, assertions,
                     # raw error text or private runtime logs in evidence.
                     observation["final_location"] = navigation_location(page.url, gateway_base, vendor_base)
