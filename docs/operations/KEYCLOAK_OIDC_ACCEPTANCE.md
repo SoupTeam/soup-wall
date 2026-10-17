@@ -46,6 +46,9 @@ vendor side. This change does not add RP-initiated or back-channel IdP logout.
 
 ## Reproduce the disposable Linux/Docker drill
 
+For phase diagnostics, owned cleanup, bounded batches and rerunning only the
+failed backend, see [SSO acceptance diagnostics](SSO_ACCEPTANCE_DIAGNOSTICS.md).
+
 Use Linux x86_64, Docker, the native Rust build prerequisites, Python 3.10+ and
 NSS `certutil` (`libnss3-tools` on Ubuntu). The Keycloak 26.8.0 Linux/amd64 image
 is fixed to `quay.io/keycloak/keycloak@sha256:ad1b0f0fa4bb5eff10f7a78eaafbb6d65b25431c1f824b0710836d74373a7dfb`.

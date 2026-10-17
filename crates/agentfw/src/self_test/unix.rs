@@ -386,10 +386,13 @@ impl LoopbackReceiver {
         let thread = std::thread::spawn(move || {
             while !s.load(Ordering::SeqCst) {
                 match listener.accept() {
-                    Ok((stream, _)) => {
+                    Ok((mut stream, _)) => {
                         if c.fetch_add(1, Ordering::SeqCst) < MAX_RECEIVER_CONNECTIONS {
-                            if let Some(body) = receive(stream) {
+                            if let Some(body) = receive(&mut stream) {
                                 b.lock().expect("receiver lock").push(body);
+                                // A successful acknowledgement must imply the delivery
+                                // witness is already visible to the client-side check.
+                                let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\naccepted");
                             }
                         }
                     }
@@ -427,7 +430,7 @@ impl LoopbackReceiver {
     }
 }
 
-fn receive(mut stream: TcpStream) -> Option<Vec<u8>> {
+fn receive(stream: &mut TcpStream) -> Option<Vec<u8>> {
     stream.set_nonblocking(false).ok()?;
     stream.set_read_timeout(Some(Duration::from_secs(2))).ok()?;
     stream
@@ -461,8 +464,6 @@ fn receive(mut stream: TcpStream) -> Option<Vec<u8>> {
     }
     let mut body = vec![0u8; length];
     reader.read_exact(&mut body).ok()?;
-    let _ = stream
-        .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\naccepted");
     Some(body)
 }
 
@@ -1819,6 +1820,47 @@ mod tests {
         assert_eq!(receiver.counts(), (1, 1));
         assert!(receiver.received(fixture::RECEIVER_CONTROL_BODY.as_bytes()));
         assert!(receiver.close());
+    }
+
+    #[test]
+    fn receiver_ack_waits_for_the_delivery_witness() {
+        let mut receiver = LoopbackReceiver::start().unwrap();
+        let address = receiver
+            .url
+            .strip_prefix("http://")
+            .unwrap()
+            .split('/')
+            .next()
+            .unwrap();
+        let mut stream = TcpStream::connect(address).unwrap();
+        let guard = receiver.bodies.lock().unwrap();
+        let body = fixture::RECEIVER_CONTROL_BODY;
+        write!(stream, "POST /capture HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_millis(200)))
+            .unwrap();
+        let mut byte = [0u8; 1];
+        let early = stream.read(&mut byte);
+        drop(guard);
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let mut response = Vec::new();
+        if let Ok(n) = &early {
+            response.extend_from_slice(&byte[..*n]);
+        }
+        stream.take(4096).read_to_end(&mut response).unwrap();
+        let observed = receiver.counts();
+        let recorded = receiver.received(body.as_bytes());
+        assert!(receiver.close());
+        assert!(
+            matches!(early, Err(ref error) if matches!(error.kind(),
+            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut)),
+            "receiver acknowledged delivery before recording its witness"
+        );
+        assert!(response.starts_with(b"HTTP/1.1 200 OK\r\n"));
+        assert_eq!(observed, (1, 1));
+        assert!(recorded);
     }
 
     #[test]

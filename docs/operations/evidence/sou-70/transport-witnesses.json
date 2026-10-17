@@ -1,0 +1,2747 @@
+{
+  "scope": "SOU-70 predeclared eight-run repair batch; three failed attempts retained",
+  "runs": [
+    {
+      "artifact": "oidc-postgres.zip",
+      "artifact_zip_sha256": "c5c0985d89a2915e1502c3c0d5d50e92015451227a267f94a052923a5096572a",
+      "report_entry": "batch-postgres-20261017T163311Z-8279/run-1.json",
+      "source_commit": "955e851818bddcbebbc3df4349c08d5a5ace576c",
+      "tracked_source_dirty": false,
+      "driver_runtime": {
+        "python": "3.12.3",
+        "os": "Linux",
+        "architecture": "x86_64",
+        "kernel": "6.17.0-1022-azure",
+        "playwright": "1.63.0",
+        "requests": "2.34.2",
+        "cryptography": "50.0.2",
+        "psutil": "7.2.2",
+        "docker_client": "28.0.4",
+        "docker_server": "28.0.4"
+      },
+      "browser_version": "153.0.8010.12",
+      "source_sha256": {
+        "scripts/keycloak-oidc-acceptance.py": "b99b741a809b4bb6214a4888d68baddbbb0243bf29a3c951d5c8e08414059c08",
+        "scripts/keycloak-saml-acceptance.py": "9e68691adcf58bdbbc1a0b8cbdbc3742dfbfa28a0eea8c0588d78c9c60ac3008",
+        "scripts/sso_diagnostics.py": "d7b7d7d0c71f05eb6f5350663c431ba8a9783ee0277ab04986e88b70b98e90b1",
+        "Cargo.lock": "4e3b8e368669b2a597aa8427332c3b11921f712e6702e713fa6540f8369b48b5",
+        "crates/proxy/examples/keycloak-oidc-bootstrap.rs": "fd1493f14d5ee283c57cc6902e7f4852f2ea92b4364f105dbca69e07c9d3b171",
+        "crates/proxy/src/oidc.rs": "e0cb21fa426fdb8bc13cbb01795adce5ac06cf5f61e7389f9dc37d63f4e1a53e",
+        "crates/proxy/src/oidc_auth.rs": "1c62a1d826d5718077349b4dda703678e443c49c94873c9350c09e76530e6b61",
+        "crates/proxy/src/customer_dashboard.html": "3463b890da9a08598c84260586a9463c99a6448e4a1e7f0e42f9c744a1ac1ef5",
+        "crates/proxy/src/tenant_store.rs": "7349a3b8c88366eff8420c7e42022fa0dbb4dd0d420c14f5bae1a863683fa0db",
+        "crates/proxy/src/tenant_store/postgres.rs": "2d87861a6b1eb25110c6c672c834dd0ad6a683c8f929a972746c429d4be5b434",
+        "scripts/keycloak-oidc-acceptance.sh": "382e8ea3a412b5b4b1f107fad262e3635f973825e11eed4f1e58da9484020e1f",
+        ".github/workflows/keycloak-oidc.yml": "0330cf199e610a3fa688a084bffa12e06c1269d2699bffa3274e5c524dadbe62"
+      },
+      "gateway_sha256": "d72bf75f7ddc3bdbd284e684e40b07cdfa88ec5b47b21a87ddd16da2750c621a",
+      "bootstrap_helper_sha256": "6905f905045d0cbf200a2e5499f01b6288455e35cc3551b3c0ca7f3eaa085dce",
+      "backend": "postgres",
+      "passed": true,
+      "cleanup_passed": true,
+      "check_count": 50,
+      "elapsed_ms": 59839,
+      "timeline": [
+        {
+          "phase": "prerequisites",
+          "elapsed_ms": 97,
+          "duration_ms": 539
+        },
+        {
+          "phase": "fixture-startup",
+          "elapsed_ms": 636,
+          "duration_ms": 7573
+        },
+        {
+          "phase": "vendor-discovery",
+          "elapsed_ms": 8209,
+          "duration_ms": 27310
+        },
+        {
+          "phase": "database-startup",
+          "elapsed_ms": 35520,
+          "duration_ms": 7656
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 43175,
+          "duration_ms": 349
+        },
+        {
+          "phase": "real-provider-negative-flow",
+          "elapsed_ms": 43525,
+          "duration_ms": 2031
+        },
+        {
+          "phase": "browser-startup",
+          "elapsed_ms": 45555,
+          "duration_ms": 52
+        },
+        {
+          "phase": "console-entry-owner",
+          "elapsed_ms": 45607,
+          "duration_ms": 148
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 45756,
+          "duration_ms": 467
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 46223,
+          "duration_ms": 71
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 46294,
+          "duration_ms": 348
+        },
+        {
+          "phase": "server-session-owner",
+          "elapsed_ms": 46642,
+          "duration_ms": 3656
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 50297,
+          "duration_ms": 286
+        },
+        {
+          "phase": "console-logout",
+          "elapsed_ms": 50583,
+          "duration_ms": 108
+        },
+        {
+          "phase": "console-entry-analyst",
+          "elapsed_ms": 50691,
+          "duration_ms": 97
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 50787,
+          "duration_ms": 290
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 51077,
+          "duration_ms": 57
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 51134,
+          "duration_ms": 544
+        },
+        {
+          "phase": "server-session-analyst",
+          "elapsed_ms": 51678,
+          "duration_ms": 801
+        },
+        {
+          "phase": "console-entry-owner",
+          "elapsed_ms": 52480,
+          "duration_ms": 95
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 52575,
+          "duration_ms": 274
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 52849,
+          "duration_ms": 56
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 52905,
+          "duration_ms": 249
+        },
+        {
+          "phase": "server-session-owner",
+          "elapsed_ms": 53154,
+          "duration_ms": 705
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 53858,
+          "duration_ms": 359
+        },
+        {
+          "phase": "console-entry-analyst",
+          "elapsed_ms": 54218,
+          "duration_ms": 99
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 54317,
+          "duration_ms": 256
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 54572,
+          "duration_ms": 75
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 54647,
+          "duration_ms": 501
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 55148,
+          "duration_ms": 382
+        },
+        {
+          "phase": "console-entry-analyst",
+          "elapsed_ms": 55530,
+          "duration_ms": 98
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 55628,
+          "duration_ms": 241
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 55869,
+          "duration_ms": 45
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 55914,
+          "duration_ms": 239
+        },
+        {
+          "phase": "server-session-analyst",
+          "elapsed_ms": 56153,
+          "duration_ms": 802
+        },
+        {
+          "phase": "console-entry-unprovisioned",
+          "elapsed_ms": 56955,
+          "duration_ms": 97
+        },
+        {
+          "phase": "idp-redirect-unprovisioned",
+          "elapsed_ms": 57052,
+          "duration_ms": 250
+        },
+        {
+          "phase": "credentials-unprovisioned",
+          "elapsed_ms": 57302,
+          "duration_ms": 22
+        },
+        {
+          "phase": "callback-unprovisioned",
+          "elapsed_ms": 57324,
+          "duration_ms": 512
+        },
+        {
+          "phase": "console-entry-owner",
+          "elapsed_ms": 57836,
+          "duration_ms": 97
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 57933,
+          "duration_ms": 333
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 58266,
+          "duration_ms": 67
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 58334,
+          "duration_ms": 1505
+        },
+        {
+          "phase": "complete",
+          "elapsed_ms": 59839,
+          "duration_ms": 0
+        }
+      ],
+      "retained_failed_attempts": []
+    },
+    {
+      "artifact": "oidc-postgres.zip",
+      "artifact_zip_sha256": "c5c0985d89a2915e1502c3c0d5d50e92015451227a267f94a052923a5096572a",
+      "report_entry": "batch-postgres-20261017T163311Z-8279/run-2.json",
+      "source_commit": "955e851818bddcbebbc3df4349c08d5a5ace576c",
+      "tracked_source_dirty": false,
+      "driver_runtime": {
+        "python": "3.12.3",
+        "os": "Linux",
+        "architecture": "x86_64",
+        "kernel": "6.17.0-1022-azure",
+        "playwright": "1.63.0",
+        "requests": "2.34.2",
+        "cryptography": "50.0.2",
+        "psutil": "7.2.2",
+        "docker_client": "28.0.4",
+        "docker_server": "28.0.4"
+      },
+      "browser_version": "153.0.8010.12",
+      "source_sha256": {
+        "scripts/keycloak-oidc-acceptance.py": "b99b741a809b4bb6214a4888d68baddbbb0243bf29a3c951d5c8e08414059c08",
+        "scripts/keycloak-saml-acceptance.py": "9e68691adcf58bdbbc1a0b8cbdbc3742dfbfa28a0eea8c0588d78c9c60ac3008",
+        "scripts/sso_diagnostics.py": "d7b7d7d0c71f05eb6f5350663c431ba8a9783ee0277ab04986e88b70b98e90b1",
+        "Cargo.lock": "4e3b8e368669b2a597aa8427332c3b11921f712e6702e713fa6540f8369b48b5",
+        "crates/proxy/examples/keycloak-oidc-bootstrap.rs": "fd1493f14d5ee283c57cc6902e7f4852f2ea92b4364f105dbca69e07c9d3b171",
+        "crates/proxy/src/oidc.rs": "e0cb21fa426fdb8bc13cbb01795adce5ac06cf5f61e7389f9dc37d63f4e1a53e",
+        "crates/proxy/src/oidc_auth.rs": "1c62a1d826d5718077349b4dda703678e443c49c94873c9350c09e76530e6b61",
+        "crates/proxy/src/customer_dashboard.html": "3463b890da9a08598c84260586a9463c99a6448e4a1e7f0e42f9c744a1ac1ef5",
+        "crates/proxy/src/tenant_store.rs": "7349a3b8c88366eff8420c7e42022fa0dbb4dd0d420c14f5bae1a863683fa0db",
+        "crates/proxy/src/tenant_store/postgres.rs": "2d87861a6b1eb25110c6c672c834dd0ad6a683c8f929a972746c429d4be5b434",
+        "scripts/keycloak-oidc-acceptance.sh": "382e8ea3a412b5b4b1f107fad262e3635f973825e11eed4f1e58da9484020e1f",
+        ".github/workflows/keycloak-oidc.yml": "0330cf199e610a3fa688a084bffa12e06c1269d2699bffa3274e5c524dadbe62"
+      },
+      "gateway_sha256": "d72bf75f7ddc3bdbd284e684e40b07cdfa88ec5b47b21a87ddd16da2750c621a",
+      "bootstrap_helper_sha256": "6905f905045d0cbf200a2e5499f01b6288455e35cc3551b3c0ca7f3eaa085dce",
+      "backend": "postgres",
+      "passed": true,
+      "cleanup_passed": true,
+      "check_count": 50,
+      "elapsed_ms": 47018,
+      "timeline": [
+        {
+          "phase": "prerequisites",
+          "elapsed_ms": 98,
+          "duration_ms": 482
+        },
+        {
+          "phase": "fixture-startup",
+          "elapsed_ms": 580,
+          "duration_ms": 812
+        },
+        {
+          "phase": "vendor-discovery",
+          "elapsed_ms": 1392,
+          "duration_ms": 26775
+        },
+        {
+          "phase": "database-startup",
+          "elapsed_ms": 28167,
+          "duration_ms": 1997
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 30164,
+          "duration_ms": 347
+        },
+        {
+          "phase": "real-provider-negative-flow",
+          "elapsed_ms": 30510,
+          "duration_ms": 1817
+        },
+        {
+          "phase": "browser-startup",
+          "elapsed_ms": 32328,
+          "duration_ms": 64
+        },
+        {
+          "phase": "console-entry-owner",
+          "elapsed_ms": 32392,
+          "duration_ms": 138
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 32529,
+          "duration_ms": 443
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 32972,
+          "duration_ms": 55
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 33027,
+          "duration_ms": 342
+        },
+        {
+          "phase": "server-session-owner",
+          "elapsed_ms": 33369,
+          "duration_ms": 3544
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 36912,
+          "duration_ms": 281
+        },
+        {
+          "phase": "console-logout",
+          "elapsed_ms": 37194,
+          "duration_ms": 106
+        },
+        {
+          "phase": "console-entry-analyst",
+          "elapsed_ms": 37300,
+          "duration_ms": 97
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 37397,
+          "duration_ms": 364
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 37760,
+          "duration_ms": 17
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 37778,
+          "duration_ms": 413
+        },
+        {
+          "phase": "console-entry-analyst",
+          "elapsed_ms": 38191,
+          "duration_ms": 96
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 38286,
+          "duration_ms": 289
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 38575,
+          "duration_ms": 58
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 38633,
+          "duration_ms": 247
+        },
+        {
+          "phase": "server-session-analyst",
+          "elapsed_ms": 38880,
+          "duration_ms": 844
+        },
+        {
+          "phase": "console-entry-owner",
+          "elapsed_ms": 39724,
+          "duration_ms": 99
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 39823,
+          "duration_ms": 366
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 40189,
+          "duration_ms": 20
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 40209,
+          "duration_ms": 241
+        },
+        {
+          "phase": "server-session-owner",
+          "elapsed_ms": 40450,
+          "duration_ms": 657
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 41107,
+          "duration_ms": 360
+        },
+        {
+          "phase": "console-entry-analyst",
+          "elapsed_ms": 41467,
+          "duration_ms": 92
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 41559,
+          "duration_ms": 273
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 41832,
+          "duration_ms": 27
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 41859,
+          "duration_ms": 485
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 42344,
+          "duration_ms": 381
+        },
+        {
+          "phase": "console-entry-analyst",
+          "elapsed_ms": 42725,
+          "duration_ms": 99
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 42824,
+          "duration_ms": 286
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 43111,
+          "duration_ms": 34
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 43145,
+          "duration_ms": 265
+        },
+        {
+          "phase": "server-session-analyst",
+          "elapsed_ms": 43410,
+          "duration_ms": 839
+        },
+        {
+          "phase": "console-entry-unprovisioned",
+          "elapsed_ms": 44249,
+          "duration_ms": 100
+        },
+        {
+          "phase": "idp-redirect-unprovisioned",
+          "elapsed_ms": 44350,
+          "duration_ms": 265
+        },
+        {
+          "phase": "credentials-unprovisioned",
+          "elapsed_ms": 44615,
+          "duration_ms": 26
+        },
+        {
+          "phase": "callback-unprovisioned",
+          "elapsed_ms": 44640,
+          "duration_ms": 500
+        },
+        {
+          "phase": "console-entry-owner",
+          "elapsed_ms": 45140,
+          "duration_ms": 97
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 45237,
+          "duration_ms": 250
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 45488,
+          "duration_ms": 43
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 45530,
+          "duration_ms": 1487
+        },
+        {
+          "phase": "complete",
+          "elapsed_ms": 47018,
+          "duration_ms": 0
+        }
+      ],
+      "retained_failed_attempts": [
+        {
+          "subject": "analyst",
+          "attempt": 1,
+          "network_failures": [
+            "net::ERR_NETWORK_CHANGED"
+          ],
+          "navigation_statuses": [
+            {
+              "location": "gateway_console",
+              "status": 200
+            },
+            {
+              "location": "gateway_start",
+              "status": 303
+            },
+            {
+              "location": "vendor",
+              "status": 200
+            }
+          ],
+          "callback_requested": false,
+          "callback_response": false,
+          "owned_location": true,
+          "authentication_error": false,
+          "server_error_categories": [],
+          "outcome": "failed",
+          "duration_ms": 849,
+          "final_location": "browser_error"
+        }
+      ]
+    },
+    {
+      "artifact": "oidc-sqlite.zip",
+      "artifact_zip_sha256": "7f0443dbd7eec92c68a5d6dc9c797a26fc08193859eab02f95909b2c6f325799",
+      "report_entry": "batch-sqlite-20261017T163309Z-8277/run-1.json",
+      "source_commit": "955e851818bddcbebbc3df4349c08d5a5ace576c",
+      "tracked_source_dirty": false,
+      "driver_runtime": {
+        "python": "3.12.3",
+        "os": "Linux",
+        "architecture": "x86_64",
+        "kernel": "6.17.0-1022-azure",
+        "playwright": "1.63.0",
+        "requests": "2.34.2",
+        "cryptography": "50.0.2",
+        "psutil": "7.2.2",
+        "docker_client": "28.0.4",
+        "docker_server": "28.0.4"
+      },
+      "browser_version": "153.0.8010.12",
+      "source_sha256": {
+        "scripts/keycloak-oidc-acceptance.py": "b99b741a809b4bb6214a4888d68baddbbb0243bf29a3c951d5c8e08414059c08",
+        "scripts/keycloak-saml-acceptance.py": "9e68691adcf58bdbbc1a0b8cbdbc3742dfbfa28a0eea8c0588d78c9c60ac3008",
+        "scripts/sso_diagnostics.py": "d7b7d7d0c71f05eb6f5350663c431ba8a9783ee0277ab04986e88b70b98e90b1",
+        "Cargo.lock": "4e3b8e368669b2a597aa8427332c3b11921f712e6702e713fa6540f8369b48b5",
+        "crates/proxy/examples/keycloak-oidc-bootstrap.rs": "fd1493f14d5ee283c57cc6902e7f4852f2ea92b4364f105dbca69e07c9d3b171",
+        "crates/proxy/src/oidc.rs": "e0cb21fa426fdb8bc13cbb01795adce5ac06cf5f61e7389f9dc37d63f4e1a53e",
+        "crates/proxy/src/oidc_auth.rs": "1c62a1d826d5718077349b4dda703678e443c49c94873c9350c09e76530e6b61",
+        "crates/proxy/src/customer_dashboard.html": "3463b890da9a08598c84260586a9463c99a6448e4a1e7f0e42f9c744a1ac1ef5",
+        "crates/proxy/src/tenant_store.rs": "7349a3b8c88366eff8420c7e42022fa0dbb4dd0d420c14f5bae1a863683fa0db",
+        "crates/proxy/src/tenant_store/postgres.rs": "2d87861a6b1eb25110c6c672c834dd0ad6a683c8f929a972746c429d4be5b434",
+        "scripts/keycloak-oidc-acceptance.sh": "382e8ea3a412b5b4b1f107fad262e3635f973825e11eed4f1e58da9484020e1f",
+        ".github/workflows/keycloak-oidc.yml": "0330cf199e610a3fa688a084bffa12e06c1269d2699bffa3274e5c524dadbe62"
+      },
+      "gateway_sha256": "d72bf75f7ddc3bdbd284e684e40b07cdfa88ec5b47b21a87ddd16da2750c621a",
+      "bootstrap_helper_sha256": "6905f905045d0cbf200a2e5499f01b6288455e35cc3551b3c0ca7f3eaa085dce",
+      "backend": "sqlite",
+      "passed": true,
+      "cleanup_passed": true,
+      "check_count": 43,
+      "elapsed_ms": 46380,
+      "timeline": [
+        {
+          "phase": "prerequisites",
+          "elapsed_ms": 97,
+          "duration_ms": 532
+        },
+        {
+          "phase": "fixture-startup",
+          "elapsed_ms": 629,
+          "duration_ms": 7777
+        },
+        {
+          "phase": "vendor-discovery",
+          "elapsed_ms": 8406,
+          "duration_ms": 26281
+        },
+        {
+          "phase": "database-startup",
+          "elapsed_ms": 34688,
+          "duration_ms": 62
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 34750,
+          "duration_ms": 266
+        },
+        {
+          "phase": "real-provider-negative-flow",
+          "elapsed_ms": 35016,
+          "duration_ms": 1848
+        },
+        {
+          "phase": "browser-startup",
+          "elapsed_ms": 36863,
+          "duration_ms": 55
+        },
+        {
+          "phase": "console-entry-owner",
+          "elapsed_ms": 36918,
+          "duration_ms": 143
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 37061,
+          "duration_ms": 444
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 37505,
+          "duration_ms": 65
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 37571,
+          "duration_ms": 345
+        },
+        {
+          "phase": "server-session-owner",
+          "elapsed_ms": 37916,
+          "duration_ms": 681
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 38596,
+          "duration_ms": 278
+        },
+        {
+          "phase": "console-logout",
+          "elapsed_ms": 38874,
+          "duration_ms": 105
+        },
+        {
+          "phase": "console-entry-analyst",
+          "elapsed_ms": 38979,
+          "duration_ms": 95
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 39075,
+          "duration_ms": 362
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 39437,
+          "duration_ms": 22
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 39459,
+          "duration_ms": 440
+        },
+        {
+          "phase": "server-session-analyst",
+          "elapsed_ms": 39899,
+          "duration_ms": 718
+        },
+        {
+          "phase": "console-entry-owner",
+          "elapsed_ms": 40616,
+          "duration_ms": 94
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 40710,
+          "duration_ms": 266
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 40976,
+          "duration_ms": 47
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 41022,
+          "duration_ms": 239
+        },
+        {
+          "phase": "server-session-owner",
+          "elapsed_ms": 41261,
+          "duration_ms": 557
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 41818,
+          "duration_ms": 345
+        },
+        {
+          "phase": "console-entry-analyst",
+          "elapsed_ms": 42163,
+          "duration_ms": 92
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 42254,
+          "duration_ms": 252
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 42506,
+          "duration_ms": 57
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 42563,
+          "duration_ms": 324
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 42887,
+          "duration_ms": 64
+        },
+        {
+          "phase": "console-entry-analyst",
+          "elapsed_ms": 42952,
+          "duration_ms": 92
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 43044,
+          "duration_ms": 221
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 43266,
+          "duration_ms": 51
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 43316,
+          "duration_ms": 246
+        },
+        {
+          "phase": "server-session-analyst",
+          "elapsed_ms": 43562,
+          "duration_ms": 581
+        },
+        {
+          "phase": "console-entry-unprovisioned",
+          "elapsed_ms": 44144,
+          "duration_ms": 98
+        },
+        {
+          "phase": "idp-redirect-unprovisioned",
+          "elapsed_ms": 44242,
+          "duration_ms": 300
+        },
+        {
+          "phase": "credentials-unprovisioned",
+          "elapsed_ms": 44542,
+          "duration_ms": 39
+        },
+        {
+          "phase": "callback-unprovisioned",
+          "elapsed_ms": 44581,
+          "duration_ms": 509
+        },
+        {
+          "phase": "console-entry-owner",
+          "elapsed_ms": 45090,
+          "duration_ms": 93
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 45183,
+          "duration_ms": 272
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 45455,
+          "duration_ms": 114
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 45569,
+          "duration_ms": 810
+        },
+        {
+          "phase": "complete",
+          "elapsed_ms": 46380,
+          "duration_ms": 0
+        }
+      ],
+      "retained_failed_attempts": []
+    },
+    {
+      "artifact": "oidc-sqlite.zip",
+      "artifact_zip_sha256": "7f0443dbd7eec92c68a5d6dc9c797a26fc08193859eab02f95909b2c6f325799",
+      "report_entry": "batch-sqlite-20261017T163309Z-8277/run-2.json",
+      "source_commit": "955e851818bddcbebbc3df4349c08d5a5ace576c",
+      "tracked_source_dirty": false,
+      "driver_runtime": {
+        "python": "3.12.3",
+        "os": "Linux",
+        "architecture": "x86_64",
+        "kernel": "6.17.0-1022-azure",
+        "playwright": "1.63.0",
+        "requests": "2.34.2",
+        "cryptography": "50.0.2",
+        "psutil": "7.2.2",
+        "docker_client": "28.0.4",
+        "docker_server": "28.0.4"
+      },
+      "browser_version": "153.0.8010.12",
+      "source_sha256": {
+        "scripts/keycloak-oidc-acceptance.py": "b99b741a809b4bb6214a4888d68baddbbb0243bf29a3c951d5c8e08414059c08",
+        "scripts/keycloak-saml-acceptance.py": "9e68691adcf58bdbbc1a0b8cbdbc3742dfbfa28a0eea8c0588d78c9c60ac3008",
+        "scripts/sso_diagnostics.py": "d7b7d7d0c71f05eb6f5350663c431ba8a9783ee0277ab04986e88b70b98e90b1",
+        "Cargo.lock": "4e3b8e368669b2a597aa8427332c3b11921f712e6702e713fa6540f8369b48b5",
+        "crates/proxy/examples/keycloak-oidc-bootstrap.rs": "fd1493f14d5ee283c57cc6902e7f4852f2ea92b4364f105dbca69e07c9d3b171",
+        "crates/proxy/src/oidc.rs": "e0cb21fa426fdb8bc13cbb01795adce5ac06cf5f61e7389f9dc37d63f4e1a53e",
+        "crates/proxy/src/oidc_auth.rs": "1c62a1d826d5718077349b4dda703678e443c49c94873c9350c09e76530e6b61",
+        "crates/proxy/src/customer_dashboard.html": "3463b890da9a08598c84260586a9463c99a6448e4a1e7f0e42f9c744a1ac1ef5",
+        "crates/proxy/src/tenant_store.rs": "7349a3b8c88366eff8420c7e42022fa0dbb4dd0d420c14f5bae1a863683fa0db",
+        "crates/proxy/src/tenant_store/postgres.rs": "2d87861a6b1eb25110c6c672c834dd0ad6a683c8f929a972746c429d4be5b434",
+        "scripts/keycloak-oidc-acceptance.sh": "382e8ea3a412b5b4b1f107fad262e3635f973825e11eed4f1e58da9484020e1f",
+        ".github/workflows/keycloak-oidc.yml": "0330cf199e610a3fa688a084bffa12e06c1269d2699bffa3274e5c524dadbe62"
+      },
+      "gateway_sha256": "d72bf75f7ddc3bdbd284e684e40b07cdfa88ec5b47b21a87ddd16da2750c621a",
+      "bootstrap_helper_sha256": "6905f905045d0cbf200a2e5499f01b6288455e35cc3551b3c0ca7f3eaa085dce",
+      "backend": "sqlite",
+      "passed": true,
+      "cleanup_passed": true,
+      "check_count": 43,
+      "elapsed_ms": 39765,
+      "timeline": [
+        {
+          "phase": "prerequisites",
+          "elapsed_ms": 98,
+          "duration_ms": 473
+        },
+        {
+          "phase": "fixture-startup",
+          "elapsed_ms": 571,
+          "duration_ms": 692
+        },
+        {
+          "phase": "vendor-discovery",
+          "elapsed_ms": 1263,
+          "duration_ms": 26532
+        },
+        {
+          "phase": "database-startup",
+          "elapsed_ms": 27795,
+          "duration_ms": 71
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 27866,
+          "duration_ms": 269
+        },
+        {
+          "phase": "real-provider-negative-flow",
+          "elapsed_ms": 28135,
+          "duration_ms": 1730
+        },
+        {
+          "phase": "browser-startup",
+          "elapsed_ms": 29865,
+          "duration_ms": 48
+        },
+        {
+          "phase": "console-entry-owner",
+          "elapsed_ms": 29913,
+          "duration_ms": 138
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 30051,
+          "duration_ms": 444
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 30495,
+          "duration_ms": 69
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 30565,
+          "duration_ms": 348
+        },
+        {
+          "phase": "server-session-owner",
+          "elapsed_ms": 30913,
+          "duration_ms": 691
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 31604,
+          "duration_ms": 275
+        },
+        {
+          "phase": "console-logout",
+          "elapsed_ms": 31879,
+          "duration_ms": 104
+        },
+        {
+          "phase": "console-entry-analyst",
+          "elapsed_ms": 31983,
+          "duration_ms": 96
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 32079,
+          "duration_ms": 309
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 32388,
+          "duration_ms": 58
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 32445,
+          "duration_ms": 449
+        },
+        {
+          "phase": "server-session-analyst",
+          "elapsed_ms": 32894,
+          "duration_ms": 719
+        },
+        {
+          "phase": "console-entry-owner",
+          "elapsed_ms": 33614,
+          "duration_ms": 92
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 33706,
+          "duration_ms": 265
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 33970,
+          "duration_ms": 53
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 34024,
+          "duration_ms": 250
+        },
+        {
+          "phase": "server-session-owner",
+          "elapsed_ms": 34274,
+          "duration_ms": 548
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 34821,
+          "duration_ms": 352
+        },
+        {
+          "phase": "console-entry-analyst",
+          "elapsed_ms": 35173,
+          "duration_ms": 96
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 35270,
+          "duration_ms": 302
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 35572,
+          "duration_ms": 45
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 35617,
+          "duration_ms": 330
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 35947,
+          "duration_ms": 306
+        },
+        {
+          "phase": "console-entry-analyst",
+          "elapsed_ms": 36253,
+          "duration_ms": 97
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 36350,
+          "duration_ms": 263
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 36613,
+          "duration_ms": 24
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 36637,
+          "duration_ms": 236
+        },
+        {
+          "phase": "server-session-analyst",
+          "elapsed_ms": 36873,
+          "duration_ms": 594
+        },
+        {
+          "phase": "console-entry-unprovisioned",
+          "elapsed_ms": 37467,
+          "duration_ms": 92
+        },
+        {
+          "phase": "idp-redirect-unprovisioned",
+          "elapsed_ms": 37559,
+          "duration_ms": 296
+        },
+        {
+          "phase": "credentials-unprovisioned",
+          "elapsed_ms": 37855,
+          "duration_ms": 41
+        },
+        {
+          "phase": "callback-unprovisioned",
+          "elapsed_ms": 37897,
+          "duration_ms": 515
+        },
+        {
+          "phase": "console-entry-owner",
+          "elapsed_ms": 38411,
+          "duration_ms": 116
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 38528,
+          "duration_ms": 259
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 38787,
+          "duration_ms": 39
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 38826,
+          "duration_ms": 940
+        },
+        {
+          "phase": "complete",
+          "elapsed_ms": 39765,
+          "duration_ms": 0
+        }
+      ],
+      "retained_failed_attempts": []
+    },
+    {
+      "artifact": "saml-postgres.zip",
+      "artifact_zip_sha256": "8896abb65c8988664fa71faf8aa1f00cdc73abab22c540bda789a4e189e09d33",
+      "report_entry": "batch-postgres-20261017T163313Z-8295/run-1.json",
+      "source_commit": "955e851818bddcbebbc3df4349c08d5a5ace576c",
+      "tracked_source_dirty": false,
+      "driver_runtime": {
+        "python": "3.12.3",
+        "os": "Linux",
+        "architecture": "x86_64",
+        "kernel": "6.17.0-1022-azure",
+        "playwright": "1.63.0",
+        "requests": "2.34.2",
+        "cryptography": "50.0.2",
+        "psutil": "7.2.2",
+        "docker_client": "28.0.4",
+        "docker_server": "28.0.4"
+      },
+      "browser_version": "153.0.8010.12",
+      "source_sha256": {
+        "scripts/keycloak-saml-linux.py": "89e524f8f4e87a597fc5a9be0190cbd55ba6035ab103aff386c160c7d71de710",
+        "scripts/keycloak-saml-acceptance.py": "9e68691adcf58bdbbc1a0b8cbdbc3742dfbfa28a0eea8c0588d78c9c60ac3008",
+        "scripts/keycloak-oidc-acceptance.py": "b99b741a809b4bb6214a4888d68baddbbb0243bf29a3c951d5c8e08414059c08",
+        "scripts/sso_diagnostics.py": "d7b7d7d0c71f05eb6f5350663c431ba8a9783ee0277ab04986e88b70b98e90b1",
+        "Cargo.lock": "4e3b8e368669b2a597aa8427332c3b11921f712e6702e713fa6540f8369b48b5",
+        "crates/proxy/examples/keycloak-saml-bootstrap.rs": "867c690b598cb99297878b707bf05725e78c698eec4ddbf80c11c1fefe65810f",
+        "crates/proxy/src/saml_auth.rs": "d6a72b876f514345b84849467ca5eebc63f1959d0ff81067130d71624b0117ff",
+        "crates/proxy/src/oidc_auth.rs": "1c62a1d826d5718077349b4dda703678e443c49c94873c9350c09e76530e6b61",
+        "crates/proxy/src/customer_dashboard.html": "3463b890da9a08598c84260586a9463c99a6448e4a1e7f0e42f9c744a1ac1ef5",
+        "crates/proxy/src/tenant_store.rs": "7349a3b8c88366eff8420c7e42022fa0dbb4dd0d420c14f5bae1a863683fa0db",
+        "crates/proxy/src/tenant_store/postgres.rs": "2d87861a6b1eb25110c6c672c834dd0ad6a683c8f929a972746c429d4be5b434",
+        "scripts/keycloak-saml-linux.sh": "af5a3d48ac0f8da7273303c6cfbf46ecb21af4a4087737889d0b3717d54f7d89",
+        ".github/workflows/keycloak-saml.yml": "aa746627223a8fa1ac808adaf6d62d6e6adc02b22ed169325e6323587ed86ef0"
+      },
+      "gateway_sha256": "d72bf75f7ddc3bdbd284e684e40b07cdfa88ec5b47b21a87ddd16da2750c621a",
+      "bootstrap_helper_sha256": "4d6f6eb5adecfe544e2da827c581d50293002a00d2d59a056cd076837e960f34",
+      "backend": "postgres",
+      "passed": true,
+      "cleanup_passed": true,
+      "check_count": 75,
+      "elapsed_ms": 68372,
+      "timeline": [
+        {
+          "phase": "prerequisites",
+          "elapsed_ms": 98,
+          "duration_ms": 531
+        },
+        {
+          "phase": "fixture-startup",
+          "elapsed_ms": 629,
+          "duration_ms": 8582
+        },
+        {
+          "phase": "vendor-discovery",
+          "elapsed_ms": 9210,
+          "duration_ms": 26697
+        },
+        {
+          "phase": "database-startup",
+          "elapsed_ms": 35907,
+          "duration_ms": 8023
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 43930,
+          "duration_ms": 380
+        },
+        {
+          "phase": "browser-startup",
+          "elapsed_ms": 44310,
+          "duration_ms": 586
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 44896,
+          "duration_ms": 1061
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 45957,
+          "duration_ms": 20
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 45978,
+          "duration_ms": 1513
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 47491,
+          "duration_ms": 392
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 47883,
+          "duration_ms": 14
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 47898,
+          "duration_ms": 687
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 48585,
+          "duration_ms": 312
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 48897,
+          "duration_ms": 17
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 48914,
+          "duration_ms": 408
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 49322,
+          "duration_ms": 252
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 49574,
+          "duration_ms": 17
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 49591,
+          "duration_ms": 459
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 50050,
+          "duration_ms": 276
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 50326,
+          "duration_ms": 18
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 50344,
+          "duration_ms": 336
+        },
+        {
+          "phase": "server-session-owner",
+          "elapsed_ms": 50680,
+          "duration_ms": 459
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 51138,
+          "duration_ms": 318
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 51456,
+          "duration_ms": 20
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 51476,
+          "duration_ms": 3023
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 54499,
+          "duration_ms": 324
+        },
+        {
+          "phase": "console-logout",
+          "elapsed_ms": 54824,
+          "duration_ms": 101
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 54924,
+          "duration_ms": 267
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 55191,
+          "duration_ms": 18
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 55209,
+          "duration_ms": 484
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 55693,
+          "duration_ms": 264
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 55957,
+          "duration_ms": 17
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 55974,
+          "duration_ms": 340
+        },
+        {
+          "phase": "server-session-analyst",
+          "elapsed_ms": 56314,
+          "duration_ms": 301
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 56615,
+          "duration_ms": 242
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 56857,
+          "duration_ms": 23
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 56881,
+          "duration_ms": 365
+        },
+        {
+          "phase": "server-session-owner",
+          "elapsed_ms": 57245,
+          "duration_ms": 256
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 57502,
+          "duration_ms": 342
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 57844,
+          "duration_ms": 269
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 58113,
+          "duration_ms": 17
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 58130,
+          "duration_ms": 605
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 58735,
+          "duration_ms": 385
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 59120,
+          "duration_ms": 248
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 59368,
+          "duration_ms": 14
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 59382,
+          "duration_ms": 344
+        },
+        {
+          "phase": "server-session-analyst",
+          "elapsed_ms": 59727,
+          "duration_ms": 268
+        },
+        {
+          "phase": "idp-redirect-unprovisioned",
+          "elapsed_ms": 59994,
+          "duration_ms": 216
+        },
+        {
+          "phase": "credentials-unprovisioned",
+          "elapsed_ms": 60211,
+          "duration_ms": 15
+        },
+        {
+          "phase": "callback-unprovisioned",
+          "elapsed_ms": 60225,
+          "duration_ms": 607
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 60832,
+          "duration_ms": 244
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 61076,
+          "duration_ms": 17
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 61093,
+          "duration_ms": 932
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 62025,
+          "duration_ms": 253
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 62278,
+          "duration_ms": 16
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 62294,
+          "duration_ms": 579
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 62873,
+          "duration_ms": 238
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 63111,
+          "duration_ms": 18
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 63129,
+          "duration_ms": 613
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 63742,
+          "duration_ms": 219
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 63961,
+          "duration_ms": 17
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 63978,
+          "duration_ms": 369
+        },
+        {
+          "phase": "server-session-owner",
+          "elapsed_ms": 64347,
+          "duration_ms": 323
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 64670,
+          "duration_ms": 218
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 64888,
+          "duration_ms": 15
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 64904,
+          "duration_ms": 1507
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 66410,
+          "duration_ms": 248
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 66659,
+          "duration_ms": 17
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 66676,
+          "duration_ms": 336
+        },
+        {
+          "phase": "server-session-owner",
+          "elapsed_ms": 67012,
+          "duration_ms": 1360
+        },
+        {
+          "phase": "complete",
+          "elapsed_ms": 68372,
+          "duration_ms": 0
+        }
+      ],
+      "retained_failed_attempts": [
+        {
+          "subject": "analyst",
+          "transport_attempt": 1,
+          "navigation_statuses": [
+            {
+              "location": "gateway_start",
+              "status": 303
+            },
+            {
+              "location": "vendor",
+              "status": 200
+            }
+          ],
+          "network_failures": [
+            {
+              "location": "vendor",
+              "category": "net::ERR_NETWORK_CHANGED"
+            }
+          ],
+          "callback_requested": false,
+          "vendor_status": 200,
+          "final_location": "vendor",
+          "at_acs": false,
+          "at_console": false,
+          "at_vendor": true,
+          "vendor_error_categories": [],
+          "validation_error_categories": [],
+          "server_error_categories": [],
+          "local_authorization_error": false,
+          "outcome": "failed",
+          "duration_ms": 725
+        }
+      ]
+    },
+    {
+      "artifact": "saml-postgres.zip",
+      "artifact_zip_sha256": "8896abb65c8988664fa71faf8aa1f00cdc73abab22c540bda789a4e189e09d33",
+      "report_entry": "batch-postgres-20261017T163313Z-8295/run-2.json",
+      "source_commit": "955e851818bddcbebbc3df4349c08d5a5ace576c",
+      "tracked_source_dirty": false,
+      "driver_runtime": {
+        "python": "3.12.3",
+        "os": "Linux",
+        "architecture": "x86_64",
+        "kernel": "6.17.0-1022-azure",
+        "playwright": "1.63.0",
+        "requests": "2.34.2",
+        "cryptography": "50.0.2",
+        "psutil": "7.2.2",
+        "docker_client": "28.0.4",
+        "docker_server": "28.0.4"
+      },
+      "browser_version": "153.0.8010.12",
+      "source_sha256": {
+        "scripts/keycloak-saml-linux.py": "89e524f8f4e87a597fc5a9be0190cbd55ba6035ab103aff386c160c7d71de710",
+        "scripts/keycloak-saml-acceptance.py": "9e68691adcf58bdbbc1a0b8cbdbc3742dfbfa28a0eea8c0588d78c9c60ac3008",
+        "scripts/keycloak-oidc-acceptance.py": "b99b741a809b4bb6214a4888d68baddbbb0243bf29a3c951d5c8e08414059c08",
+        "scripts/sso_diagnostics.py": "d7b7d7d0c71f05eb6f5350663c431ba8a9783ee0277ab04986e88b70b98e90b1",
+        "Cargo.lock": "4e3b8e368669b2a597aa8427332c3b11921f712e6702e713fa6540f8369b48b5",
+        "crates/proxy/examples/keycloak-saml-bootstrap.rs": "867c690b598cb99297878b707bf05725e78c698eec4ddbf80c11c1fefe65810f",
+        "crates/proxy/src/saml_auth.rs": "d6a72b876f514345b84849467ca5eebc63f1959d0ff81067130d71624b0117ff",
+        "crates/proxy/src/oidc_auth.rs": "1c62a1d826d5718077349b4dda703678e443c49c94873c9350c09e76530e6b61",
+        "crates/proxy/src/customer_dashboard.html": "3463b890da9a08598c84260586a9463c99a6448e4a1e7f0e42f9c744a1ac1ef5",
+        "crates/proxy/src/tenant_store.rs": "7349a3b8c88366eff8420c7e42022fa0dbb4dd0d420c14f5bae1a863683fa0db",
+        "crates/proxy/src/tenant_store/postgres.rs": "2d87861a6b1eb25110c6c672c834dd0ad6a683c8f929a972746c429d4be5b434",
+        "scripts/keycloak-saml-linux.sh": "af5a3d48ac0f8da7273303c6cfbf46ecb21af4a4087737889d0b3717d54f7d89",
+        ".github/workflows/keycloak-saml.yml": "aa746627223a8fa1ac808adaf6d62d6e6adc02b22ed169325e6323587ed86ef0"
+      },
+      "gateway_sha256": "d72bf75f7ddc3bdbd284e684e40b07cdfa88ec5b47b21a87ddd16da2750c621a",
+      "bootstrap_helper_sha256": "4d6f6eb5adecfe544e2da827c581d50293002a00d2d59a056cd076837e960f34",
+      "backend": "postgres",
+      "passed": true,
+      "cleanup_passed": true,
+      "check_count": 75,
+      "elapsed_ms": 54092,
+      "timeline": [
+        {
+          "phase": "prerequisites",
+          "elapsed_ms": 97,
+          "duration_ms": 453
+        },
+        {
+          "phase": "fixture-startup",
+          "elapsed_ms": 550,
+          "duration_ms": 1013
+        },
+        {
+          "phase": "vendor-discovery",
+          "elapsed_ms": 1563,
+          "duration_ms": 25925
+        },
+        {
+          "phase": "database-startup",
+          "elapsed_ms": 27488,
+          "duration_ms": 2115
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 29603,
+          "duration_ms": 380
+        },
+        {
+          "phase": "browser-startup",
+          "elapsed_ms": 29983,
+          "duration_ms": 563
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 30547,
+          "duration_ms": 1080
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 31626,
+          "duration_ms": 18
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 31644,
+          "duration_ms": 1429
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 33073,
+          "duration_ms": 406
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 33479,
+          "duration_ms": 16
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 33495,
+          "duration_ms": 697
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 34191,
+          "duration_ms": 295
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 34486,
+          "duration_ms": 28
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 34514,
+          "duration_ms": 399
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 34913,
+          "duration_ms": 284
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 35197,
+          "duration_ms": 21
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 35218,
+          "duration_ms": 442
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 35660,
+          "duration_ms": 238
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 35898,
+          "duration_ms": 18
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 35916,
+          "duration_ms": 454
+        },
+        {
+          "phase": "server-session-owner",
+          "elapsed_ms": 36369,
+          "duration_ms": 404
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 36773,
+          "duration_ms": 270
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 37043,
+          "duration_ms": 15
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 37059,
+          "duration_ms": 3024
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 40083,
+          "duration_ms": 324
+        },
+        {
+          "phase": "console-logout",
+          "elapsed_ms": 40407,
+          "duration_ms": 113
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 40520,
+          "duration_ms": 270
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 40790,
+          "duration_ms": 14
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 40804,
+          "duration_ms": 221
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 41026,
+          "duration_ms": 315
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 41341,
+          "duration_ms": 25
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 41366,
+          "duration_ms": 445
+        },
+        {
+          "phase": "server-session-analyst",
+          "elapsed_ms": 41811,
+          "duration_ms": 340
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 42151,
+          "duration_ms": 243
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 42394,
+          "duration_ms": 17
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 42412,
+          "duration_ms": 346
+        },
+        {
+          "phase": "server-session-owner",
+          "elapsed_ms": 42758,
+          "duration_ms": 173
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 42931,
+          "duration_ms": 346
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 43277,
+          "duration_ms": 319
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 43596,
+          "duration_ms": 22
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 43618,
+          "duration_ms": 598
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 44216,
+          "duration_ms": 387
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 44603,
+          "duration_ms": 259
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 44862,
+          "duration_ms": 15
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 44878,
+          "duration_ms": 343
+        },
+        {
+          "phase": "server-session-analyst",
+          "elapsed_ms": 45220,
+          "duration_ms": 258
+        },
+        {
+          "phase": "idp-redirect-unprovisioned",
+          "elapsed_ms": 45479,
+          "duration_ms": 253
+        },
+        {
+          "phase": "credentials-unprovisioned",
+          "elapsed_ms": 45731,
+          "duration_ms": 18
+        },
+        {
+          "phase": "callback-unprovisioned",
+          "elapsed_ms": 45749,
+          "duration_ms": 611
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 46360,
+          "duration_ms": 214
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 46574,
+          "duration_ms": 18
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 46592,
+          "duration_ms": 925
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 47517,
+          "duration_ms": 230
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 47747,
+          "duration_ms": 15
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 47762,
+          "duration_ms": 623
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 48385,
+          "duration_ms": 291
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 48676,
+          "duration_ms": 21
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 48697,
+          "duration_ms": 603
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 49300,
+          "duration_ms": 222
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 49522,
+          "duration_ms": 15
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 49537,
+          "duration_ms": 355
+        },
+        {
+          "phase": "server-session-owner",
+          "elapsed_ms": 49892,
+          "duration_ms": 364
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 50256,
+          "duration_ms": 241
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 50498,
+          "duration_ms": 26
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 50524,
+          "duration_ms": 1612
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 52136,
+          "duration_ms": 233
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 52369,
+          "duration_ms": 17
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 52386,
+          "duration_ms": 349
+        },
+        {
+          "phase": "server-session-owner",
+          "elapsed_ms": 52735,
+          "duration_ms": 1357
+        },
+        {
+          "phase": "complete",
+          "elapsed_ms": 54092,
+          "duration_ms": 0
+        }
+      ],
+      "retained_failed_attempts": [
+        {
+          "subject": "analyst",
+          "transport_attempt": 1,
+          "navigation_statuses": [
+            {
+              "location": "gateway_start",
+              "status": 303
+            },
+            {
+              "location": "vendor",
+              "status": 200
+            }
+          ],
+          "network_failures": [
+            {
+              "location": "vendor",
+              "category": "net::ERR_NETWORK_CHANGED"
+            }
+          ],
+          "callback_requested": false,
+          "vendor_status": 200,
+          "final_location": "browser_error",
+          "at_acs": false,
+          "at_console": false,
+          "at_vendor": false,
+          "vendor_error_categories": [],
+          "validation_error_categories": [],
+          "server_error_categories": [],
+          "local_authorization_error": false,
+          "outcome": "failed",
+          "duration_ms": 462
+        }
+      ]
+    },
+    {
+      "artifact": "saml-sqlite.zip",
+      "artifact_zip_sha256": "edf4c9e84bc67cc5c5453688e04bea8dceaef568affe47dfc7aee1210f6e1fa4",
+      "report_entry": "batch-sqlite-20261017T163311Z-8259/run-1.json",
+      "source_commit": "955e851818bddcbebbc3df4349c08d5a5ace576c",
+      "tracked_source_dirty": false,
+      "driver_runtime": {
+        "python": "3.12.3",
+        "os": "Linux",
+        "architecture": "x86_64",
+        "kernel": "6.17.0-1022-azure",
+        "playwright": "1.63.0",
+        "requests": "2.34.2",
+        "cryptography": "50.0.2",
+        "psutil": "7.2.2",
+        "docker_client": "28.0.4",
+        "docker_server": "28.0.4"
+      },
+      "browser_version": "153.0.8010.12",
+      "source_sha256": {
+        "scripts/keycloak-saml-linux.py": "89e524f8f4e87a597fc5a9be0190cbd55ba6035ab103aff386c160c7d71de710",
+        "scripts/keycloak-saml-acceptance.py": "9e68691adcf58bdbbc1a0b8cbdbc3742dfbfa28a0eea8c0588d78c9c60ac3008",
+        "scripts/keycloak-oidc-acceptance.py": "b99b741a809b4bb6214a4888d68baddbbb0243bf29a3c951d5c8e08414059c08",
+        "scripts/sso_diagnostics.py": "d7b7d7d0c71f05eb6f5350663c431ba8a9783ee0277ab04986e88b70b98e90b1",
+        "Cargo.lock": "4e3b8e368669b2a597aa8427332c3b11921f712e6702e713fa6540f8369b48b5",
+        "crates/proxy/examples/keycloak-saml-bootstrap.rs": "867c690b598cb99297878b707bf05725e78c698eec4ddbf80c11c1fefe65810f",
+        "crates/proxy/src/saml_auth.rs": "d6a72b876f514345b84849467ca5eebc63f1959d0ff81067130d71624b0117ff",
+        "crates/proxy/src/oidc_auth.rs": "1c62a1d826d5718077349b4dda703678e443c49c94873c9350c09e76530e6b61",
+        "crates/proxy/src/customer_dashboard.html": "3463b890da9a08598c84260586a9463c99a6448e4a1e7f0e42f9c744a1ac1ef5",
+        "crates/proxy/src/tenant_store.rs": "7349a3b8c88366eff8420c7e42022fa0dbb4dd0d420c14f5bae1a863683fa0db",
+        "crates/proxy/src/tenant_store/postgres.rs": "2d87861a6b1eb25110c6c672c834dd0ad6a683c8f929a972746c429d4be5b434",
+        "scripts/keycloak-saml-linux.sh": "af5a3d48ac0f8da7273303c6cfbf46ecb21af4a4087737889d0b3717d54f7d89",
+        ".github/workflows/keycloak-saml.yml": "aa746627223a8fa1ac808adaf6d62d6e6adc02b22ed169325e6323587ed86ef0"
+      },
+      "gateway_sha256": "d72bf75f7ddc3bdbd284e684e40b07cdfa88ec5b47b21a87ddd16da2750c621a",
+      "bootstrap_helper_sha256": "4d6f6eb5adecfe544e2da827c581d50293002a00d2d59a056cd076837e960f34",
+      "backend": "sqlite",
+      "passed": true,
+      "cleanup_passed": true,
+      "check_count": 68,
+      "elapsed_ms": 55617,
+      "timeline": [
+        {
+          "phase": "prerequisites",
+          "elapsed_ms": 97,
+          "duration_ms": 506
+        },
+        {
+          "phase": "fixture-startup",
+          "elapsed_ms": 603,
+          "duration_ms": 9836
+        },
+        {
+          "phase": "vendor-discovery",
+          "elapsed_ms": 10439,
+          "duration_ms": 26619
+        },
+        {
+          "phase": "database-startup",
+          "elapsed_ms": 37058,
+          "duration_ms": 76
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 37133,
+          "duration_ms": 296
+        },
+        {
+          "phase": "browser-startup",
+          "elapsed_ms": 37430,
+          "duration_ms": 576
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 38006,
+          "duration_ms": 992
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 38998,
+          "duration_ms": 17
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 39015,
+          "duration_ms": 1173
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 40188,
+          "duration_ms": 368
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 40556,
+          "duration_ms": 15
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 40572,
+          "duration_ms": 526
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 41098,
+          "duration_ms": 289
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 41387,
+          "duration_ms": 24
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 41411,
+          "duration_ms": 404
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 41815,
+          "duration_ms": 258
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 42073,
+          "duration_ms": 15
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 42087,
+          "duration_ms": 443
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 42530,
+          "duration_ms": 230
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 42760,
+          "duration_ms": 16
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 42776,
+          "duration_ms": 356
+        },
+        {
+          "phase": "server-session-owner",
+          "elapsed_ms": 43132,
+          "duration_ms": 187
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 43318,
+          "duration_ms": 338
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 43657,
+          "duration_ms": 23
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 43680,
+          "duration_ms": 370
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 44050,
+          "duration_ms": 307
+        },
+        {
+          "phase": "console-logout",
+          "elapsed_ms": 44357,
+          "duration_ms": 100
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 44457,
+          "duration_ms": 275
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 44733,
+          "duration_ms": 13
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 44746,
+          "duration_ms": 638
+        },
+        {
+          "phase": "server-session-analyst",
+          "elapsed_ms": 45385,
+          "duration_ms": 101
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 45485,
+          "duration_ms": 261
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 45747,
+          "duration_ms": 16
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 45763,
+          "duration_ms": 358
+        },
+        {
+          "phase": "server-session-owner",
+          "elapsed_ms": 46121,
+          "duration_ms": 130
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 46251,
+          "duration_ms": 322
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 46573,
+          "duration_ms": 281
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 46854,
+          "duration_ms": 17
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 46871,
+          "duration_ms": 439
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 47310,
+          "duration_ms": 303
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 47613,
+          "duration_ms": 257
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 47870,
+          "duration_ms": 14
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 47884,
+          "duration_ms": 334
+        },
+        {
+          "phase": "server-session-analyst",
+          "elapsed_ms": 48218,
+          "duration_ms": 98
+        },
+        {
+          "phase": "idp-redirect-unprovisioned",
+          "elapsed_ms": 48316,
+          "duration_ms": 183
+        },
+        {
+          "phase": "credentials-unprovisioned",
+          "elapsed_ms": 48499,
+          "duration_ms": 14
+        },
+        {
+          "phase": "callback-unprovisioned",
+          "elapsed_ms": 48513,
+          "duration_ms": 606
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 49119,
+          "duration_ms": 189
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 49309,
+          "duration_ms": 19
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 49328,
+          "duration_ms": 892
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 50220,
+          "duration_ms": 224
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 50444,
+          "duration_ms": 16
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 50460,
+          "duration_ms": 663
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 51123,
+          "duration_ms": 265
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 51387,
+          "duration_ms": 14
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 51401,
+          "duration_ms": 451
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 51852,
+          "duration_ms": 214
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 52066,
+          "duration_ms": 14
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 52080,
+          "duration_ms": 335
+        },
+        {
+          "phase": "server-session-owner",
+          "elapsed_ms": 52415,
+          "duration_ms": 275
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 52691,
+          "duration_ms": 243
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 52934,
+          "duration_ms": 14
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 52948,
+          "duration_ms": 1344
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 54292,
+          "duration_ms": 197
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 54490,
+          "duration_ms": 15
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 54505,
+          "duration_ms": 354
+        },
+        {
+          "phase": "server-session-owner",
+          "elapsed_ms": 54859,
+          "duration_ms": 757
+        },
+        {
+          "phase": "complete",
+          "elapsed_ms": 55617,
+          "duration_ms": 0
+        }
+      ],
+      "retained_failed_attempts": []
+    },
+    {
+      "artifact": "saml-sqlite.zip",
+      "artifact_zip_sha256": "edf4c9e84bc67cc5c5453688e04bea8dceaef568affe47dfc7aee1210f6e1fa4",
+      "report_entry": "batch-sqlite-20261017T163311Z-8259/run-2.json",
+      "source_commit": "955e851818bddcbebbc3df4349c08d5a5ace576c",
+      "tracked_source_dirty": false,
+      "driver_runtime": {
+        "python": "3.12.3",
+        "os": "Linux",
+        "architecture": "x86_64",
+        "kernel": "6.17.0-1022-azure",
+        "playwright": "1.63.0",
+        "requests": "2.34.2",
+        "cryptography": "50.0.2",
+        "psutil": "7.2.2",
+        "docker_client": "28.0.4",
+        "docker_server": "28.0.4"
+      },
+      "browser_version": "153.0.8010.12",
+      "source_sha256": {
+        "scripts/keycloak-saml-linux.py": "89e524f8f4e87a597fc5a9be0190cbd55ba6035ab103aff386c160c7d71de710",
+        "scripts/keycloak-saml-acceptance.py": "9e68691adcf58bdbbc1a0b8cbdbc3742dfbfa28a0eea8c0588d78c9c60ac3008",
+        "scripts/keycloak-oidc-acceptance.py": "b99b741a809b4bb6214a4888d68baddbbb0243bf29a3c951d5c8e08414059c08",
+        "scripts/sso_diagnostics.py": "d7b7d7d0c71f05eb6f5350663c431ba8a9783ee0277ab04986e88b70b98e90b1",
+        "Cargo.lock": "4e3b8e368669b2a597aa8427332c3b11921f712e6702e713fa6540f8369b48b5",
+        "crates/proxy/examples/keycloak-saml-bootstrap.rs": "867c690b598cb99297878b707bf05725e78c698eec4ddbf80c11c1fefe65810f",
+        "crates/proxy/src/saml_auth.rs": "d6a72b876f514345b84849467ca5eebc63f1959d0ff81067130d71624b0117ff",
+        "crates/proxy/src/oidc_auth.rs": "1c62a1d826d5718077349b4dda703678e443c49c94873c9350c09e76530e6b61",
+        "crates/proxy/src/customer_dashboard.html": "3463b890da9a08598c84260586a9463c99a6448e4a1e7f0e42f9c744a1ac1ef5",
+        "crates/proxy/src/tenant_store.rs": "7349a3b8c88366eff8420c7e42022fa0dbb4dd0d420c14f5bae1a863683fa0db",
+        "crates/proxy/src/tenant_store/postgres.rs": "2d87861a6b1eb25110c6c672c834dd0ad6a683c8f929a972746c429d4be5b434",
+        "scripts/keycloak-saml-linux.sh": "af5a3d48ac0f8da7273303c6cfbf46ecb21af4a4087737889d0b3717d54f7d89",
+        ".github/workflows/keycloak-saml.yml": "aa746627223a8fa1ac808adaf6d62d6e6adc02b22ed169325e6323587ed86ef0"
+      },
+      "gateway_sha256": "d72bf75f7ddc3bdbd284e684e40b07cdfa88ec5b47b21a87ddd16da2750c621a",
+      "bootstrap_helper_sha256": "4d6f6eb5adecfe544e2da827c581d50293002a00d2d59a056cd076837e960f34",
+      "backend": "sqlite",
+      "passed": true,
+      "cleanup_passed": true,
+      "check_count": 68,
+      "elapsed_ms": 45680,
+      "timeline": [
+        {
+          "phase": "prerequisites",
+          "elapsed_ms": 97,
+          "duration_ms": 449
+        },
+        {
+          "phase": "fixture-startup",
+          "elapsed_ms": 546,
+          "duration_ms": 1072
+        },
+        {
+          "phase": "vendor-discovery",
+          "elapsed_ms": 1618,
+          "duration_ms": 25111
+        },
+        {
+          "phase": "database-startup",
+          "elapsed_ms": 26728,
+          "duration_ms": 59
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 26788,
+          "duration_ms": 296
+        },
+        {
+          "phase": "browser-startup",
+          "elapsed_ms": 27084,
+          "duration_ms": 547
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 27631,
+          "duration_ms": 1058
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 28689,
+          "duration_ms": 18
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 28707,
+          "duration_ms": 1280
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 29987,
+          "duration_ms": 358
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 30345,
+          "duration_ms": 15
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 30359,
+          "duration_ms": 517
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 30876,
+          "duration_ms": 292
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 31169,
+          "duration_ms": 13
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 31182,
+          "duration_ms": 394
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 31576,
+          "duration_ms": 235
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 31811,
+          "duration_ms": 14
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 31825,
+          "duration_ms": 449
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 32274,
+          "duration_ms": 283
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 32557,
+          "duration_ms": 21
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 32578,
+          "duration_ms": 337
+        },
+        {
+          "phase": "server-session-owner",
+          "elapsed_ms": 32915,
+          "duration_ms": 228
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 33143,
+          "duration_ms": 411
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 33554,
+          "duration_ms": 14
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 33568,
+          "duration_ms": 388
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 33956,
+          "duration_ms": 313
+        },
+        {
+          "phase": "console-logout",
+          "elapsed_ms": 34269,
+          "duration_ms": 106
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 34375,
+          "duration_ms": 269
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 34644,
+          "duration_ms": 14
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 34658,
+          "duration_ms": 539
+        },
+        {
+          "phase": "server-session-analyst",
+          "elapsed_ms": 35198,
+          "duration_ms": 152
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 35350,
+          "duration_ms": 238
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 35588,
+          "duration_ms": 15
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 35603,
+          "duration_ms": 356
+        },
+        {
+          "phase": "server-session-owner",
+          "elapsed_ms": 35959,
+          "duration_ms": 132
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 36091,
+          "duration_ms": 322
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 36413,
+          "duration_ms": 291
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 36705,
+          "duration_ms": 29
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 36733,
+          "duration_ms": 436
+        },
+        {
+          "phase": "gateway-startup",
+          "elapsed_ms": 37169,
+          "duration_ms": 303
+        },
+        {
+          "phase": "idp-redirect-analyst",
+          "elapsed_ms": 37473,
+          "duration_ms": 258
+        },
+        {
+          "phase": "credentials-analyst",
+          "elapsed_ms": 37731,
+          "duration_ms": 16
+        },
+        {
+          "phase": "callback-analyst",
+          "elapsed_ms": 37747,
+          "duration_ms": 364
+        },
+        {
+          "phase": "server-session-analyst",
+          "elapsed_ms": 38111,
+          "duration_ms": 130
+        },
+        {
+          "phase": "idp-redirect-unprovisioned",
+          "elapsed_ms": 38241,
+          "duration_ms": 208
+        },
+        {
+          "phase": "credentials-unprovisioned",
+          "elapsed_ms": 38450,
+          "duration_ms": 14
+        },
+        {
+          "phase": "callback-unprovisioned",
+          "elapsed_ms": 38464,
+          "duration_ms": 603
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 39067,
+          "duration_ms": 248
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 39315,
+          "duration_ms": 21
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 39336,
+          "duration_ms": 902
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 40238,
+          "duration_ms": 232
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 40469,
+          "duration_ms": 16
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 40486,
+          "duration_ms": 588
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 41074,
+          "duration_ms": 218
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 41292,
+          "duration_ms": 15
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 41307,
+          "duration_ms": 335
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 41642,
+          "duration_ms": 389
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 42031,
+          "duration_ms": 14
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 42044,
+          "duration_ms": 342
+        },
+        {
+          "phase": "server-session-owner",
+          "elapsed_ms": 42387,
+          "duration_ms": 318
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 42705,
+          "duration_ms": 256
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 42961,
+          "duration_ms": 19
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 42980,
+          "duration_ms": 1438
+        },
+        {
+          "phase": "idp-redirect-owner",
+          "elapsed_ms": 44418,
+          "duration_ms": 180
+        },
+        {
+          "phase": "credentials-owner",
+          "elapsed_ms": 44598,
+          "duration_ms": 18
+        },
+        {
+          "phase": "callback-owner",
+          "elapsed_ms": 44616,
+          "duration_ms": 345
+        },
+        {
+          "phase": "server-session-owner",
+          "elapsed_ms": 44961,
+          "duration_ms": 719
+        },
+        {
+          "phase": "complete",
+          "elapsed_ms": 45680,
+          "duration_ms": 0
+        }
+      ],
+      "retained_failed_attempts": []
+    }
+  ]
+}
