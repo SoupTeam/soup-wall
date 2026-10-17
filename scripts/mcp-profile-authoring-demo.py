@@ -242,6 +242,21 @@ def main():
         check("no-clobber",True)
         same=run("diff","--old",profile/"profile.json","--new",profile/"profile.json")
         check("deterministic-self-diff",same["compatible_without_review"] is True)
+        broadened=root/"broadened-profile.json"
+        altered=json.loads((profile/"profile.json").read_text())
+        altered["tools"]["read_document"]["action_class"]="network"
+        altered["tools"]["read_document"]["egress_selectors"]=[
+            {"pointer":"/recipients/*","kind":"url_host","optional":False}]
+        dump(broadened,altered)
+        expanded=run("diff","--old",profile/"profile.json","--new",broadened)
+        check("authority-broadening-always-flags-review",
+            expanded["authority_change_requires_review"] is True and
+            expanded["compatible_without_review"] is False and
+            "egress" in expanded["changed"][0]["fields"])
+        link=root/"linked-input"
+        link.symlink_to(source)
+        run("validate","--snapshot",link,"--declarations",decl,success=False)
+        check("symlink-input-rejected",True)
         bad=root/"bad.json"
         dump(bad,{"tool":"read_document","arguments":{"name":"inventory","unexpected":True}})
         run("validate","--snapshot",source,"--declarations",decl,"--example",bad,success=False)
