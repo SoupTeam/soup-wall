@@ -267,7 +267,7 @@ impl Manager {
     /// Read-only snapshot for doctor. Unlike `status`, this does not create an
     /// operation lock, change permissions, query a daemon or adopt a process.
     /// Any recorded process still needs separate authenticated verification.
-    pub fn inspect_read_only(&self) -> Result<Status> {
+    pub fn inspect_read_only(&self, observed_config_sha256: Option<&str>) -> Result<Status> {
         if !self.home.exists() || !self.root.exists() {
             return Ok(Status {
                 active: None,
@@ -280,18 +280,33 @@ impl Manager {
         }
         ensure_dir(&self.home)?;
         ensure_dir(&self.root)?;
-        let state = self.load()?;
-        let binary_changed = state
-            .active
-            .as_ref()
-            .is_some_and(|r| self.verify(r).is_err());
+
+        // Doctor must never use self.load(), self.verify() or config_digest().
+        // Those normal lifecycle APIs can open unbounded files or follow links.
+        let manifest = crate::doctor::read_private(&self.root.join(MANIFEST), 1024 * 1024)?;
+        let state: State = serde_json::from_slice(&manifest)
+            .context("invalid bounded lifecycle manifest")?;
+        self.validate_state(&state)?;
+        let binary_changed = state.active.as_ref().is_some_and(|record| {
+            self.path_for(record)
+                .ok()
+                .and_then(|path| {
+                    crate::doctor::hash_selected_file(&path, MAX_CANDIDATE_BYTES).ok()
+                })
+                .as_deref() != Some(record.digest.as_str())
+        });
+        // Compare the one independently bounded, no-follow config snapshot.
+        // None means the original file was absent/unsafe, NOT an invitation
+        // to read it again (especially not through legacy fs::read).
         let config_changed = state.process.as_ref().is_some_and(|process| {
-            self.config_digest().ok().as_deref() != Some(process.config_digest.as_str())
+            observed_config_sha256.is_some_and(|hash| hash != process.config_digest)
         });
         let detail = if state.operation.is_some() || state.pending_stage.is_some() {
             "interrupted operation; run recover"
         } else if binary_changed {
             "installed binary has changed"
+        } else if state.process.is_some() && observed_config_sha256.is_none() {
+            "config snapshot unavailable"
         } else if config_changed {
             "running with changed config; restart to apply it"
         } else if state.process.is_some() {
@@ -1059,6 +1074,13 @@ impl Manager {
         ensure_regular(&path)?;
         let state: State = serde_json::from_slice(&fs::read(&path)?)
             .with_context(|| format!("invalid {}", path.display()))?;
+        self.validate_state(&state)?;
+        Ok(state)
+    }
+
+    /// Shared structural validation only. No I/O: the read-only doctor
+    /// provides a bounded manifest and the normal lifecycle keeps its API.
+    fn validate_state(&self, state: &State) -> Result<()> {
         for record in [state.active.as_ref(), state.previous.as_ref()]
             .into_iter()
             .flatten()
@@ -1089,7 +1111,7 @@ impl Manager {
             validate_stage_name(&pending.stage)?;
             validate_target_name(&pending.target)?;
         }
-        Ok(state)
+        Ok(())
     }
 
     fn save(&self, state: &State) -> Result<()> {
