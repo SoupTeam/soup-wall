@@ -1406,11 +1406,14 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                         return Err("native_invalid_identity");
                     }
                 }
-                if (grant.agent_id.is_some()
-                    || grant.parent_id.is_some()
-                    || grant.granted_resources.is_some())
-                    && grant.nonce.split_once('.').map(|(instance, _)| instance)
-                        != Some(native.instance_id())
+                // Every host-bound collector shares authoritative provenance.
+                // A legacy grant lacks authenticated agent/lifecycle authority
+                // and must never be used as an alternate shared-host bootstrap.
+                if grant.agent_id.is_none() {
+                    return Err("native_child_authority_identity_required");
+                }
+                if grant.nonce.split_once('.').map(|(instance, _)| instance)
+                    != Some(native.instance_id())
                 {
                     return Err("native_child_authority_instance_mismatch");
                 }

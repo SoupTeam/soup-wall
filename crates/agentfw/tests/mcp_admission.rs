@@ -4233,17 +4233,26 @@ async fn sou63_collector_binds_host_taint_and_provenance_via_cli_and_environment
     for via_env in [false, true] {
         let mut fixture = Fixture::new("provenance", true).await;
         fixture.ready().await;
-        let token = mint_child_token(fixture._dir.path(), "fixture");
+        let token = mint_scoped_token(
+            fixture._dir.path(),
+            "fixture",
+            "host",
+            "read_document,delete_note",
+            fixture.port,
+            None,
+        )
+        .await;
         bind_gateway(&mut fixture, &token, via_env, "provenance").await;
         fixture.ready().await;
         let reply = fixture.exchange(r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_document","arguments":{}}}"#).await.unwrap();
         assert_eq!(serde_json::from_str::<Value>(&reply).unwrap()["id"], 3);
         assert_eq!(executed(&fixture.ledger).len(), 1);
         let hook = json!({"session_id":"host","hook_event_name":"PreToolUse",
-            "tool_name":"Bash","tool_input":{"command":format!("rm -rf /tmp/fixture # {PROVENANCE_TEXT}")}});
+            "tool_name":"mcp__fixture__delete_note","tool_input":{"name":PROVENANCE_TEXT}});
         let response = reqwest::Client::new()
             .post(format!("http://127.0.0.1:{}/hook", fixture.port))
             .bearer_auth("fixture-hook-token")
+            .header("X-Agentfw-Child-Authority", &token)
             .json(&hook)
             .send()
             .await
@@ -4296,6 +4305,25 @@ async fn sou63_invalid_child_authority_and_server_mismatch_never_spawn_server() 
         bind_gateway(&mut fixture, &token, false, "read").await;
         fixture.assert_gateway_failed().await;
         assert!(!marker.exists());
+        assert!(executed(&fixture.ledger).is_empty());
+    }
+}
+
+#[tokio::test]
+async fn reviewc757_legacy_host_tokens_never_spawn_a_server_even_after_restart() {
+    for restart in [false, true] {
+        let mut fixture = Fixture::new("read", true).await;
+        fixture.ready().await;
+        // The public CLI still produces/verifies the old wire contract. It
+        // cannot be used to opt into shared provenance without scoped identity.
+        let token = mint_child_token(fixture._dir.path(), "fixture");
+        if restart {
+            fixture.restart_daemon().await;
+        }
+        let marker = fixture.ledger.with_extension("jsonl.started");
+        bind_gateway(&mut fixture, &token, false, "read").await;
+        fixture.assert_gateway_failed().await;
+        assert!(!marker.exists(), "legacy host authority started a server");
         assert!(executed(&fixture.ledger).is_empty());
     }
 }
@@ -4380,7 +4408,15 @@ async fn sou63_bound_cancellation_and_concurrent_call_withhold_host_provenance()
     ] {
         let mut fixture = Fixture::new("read", true).await;
         fixture.ready().await;
-        let token = mint_child_token(fixture._dir.path(), "fixture");
+        let token = mint_scoped_token(
+            fixture._dir.path(),
+            "fixture",
+            "host",
+            "read_document",
+            fixture.port,
+            None,
+        )
+        .await;
         bind_gateway(&mut fixture, &token, false, "gated-result").await;
         fixture.ready().await;
         let call = r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_document","arguments":{}}}"#;

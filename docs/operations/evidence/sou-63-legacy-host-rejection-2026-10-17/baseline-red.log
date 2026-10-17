@@ -1,0 +1,35 @@
+   Compiling agentfw v0.3.0 (/private/tmp/sou63-review/fix/crates/agentfw)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.74s
+     Running tests/native_endpoint.rs (/private/tmp/sou63-review/target/debug/deps/native_endpoint-903a446a8c0e6b81)
+
+running 3 tests
+
+thread 'reviewc757_legacy_host_grant_cannot_replay_after_daemon_restart' (17966223) panicked at crates/agentfw/tests/native_endpoint.rs:228:5:
+assertion `left == right` failed: {"binding_sha256":null,"call_id":null,"content_sha256":null,"contract_version":"sw-native/1","enforced":true,"event":"session_start","reason_codes":[],"registry_sha256":"418a4571ca079f6426534b1a6405c3973c1235ce6a0aa3f2f4bc721603ce4d2e","release":true,"session_id":"replacement","verdict":"allow"}
+  left: 200
+ right: 409
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test reviewc757_legacy_host_grant_cannot_replay_after_daemon_restart ... FAILED
+
+thread 'reviewc757_current_instance_prefix_cannot_upgrade_legacy_host_authority' (17966222) panicked at crates/agentfw/tests/native_endpoint.rs:228:5:
+assertion `left == right` failed: {"binding_sha256":null,"call_id":null,"content_sha256":null,"contract_version":"sw-native/1","enforced":true,"event":"session_start","reason_codes":[],"registry_sha256":"418a4571ca079f6426534b1a6405c3973c1235ce6a0aa3f2f4bc721603ce4d2e","release":true,"session_id":"downgrade","verdict":"allow"}
+  left: 200
+ right: 409
+test reviewc757_current_instance_prefix_cannot_upgrade_legacy_host_authority ... FAILED
+
+thread 'reviewc757_legacy_host_grant_cannot_reset_history_after_session_end' (17966224) panicked at crates/agentfw/tests/native_endpoint.rs:3139:5:
+assertion `left != right` failed: legacy token resurrected an ended host: {"binding_sha256":null,"call_id":null,"content_sha256":null,"contract_version":"sw-native/1","enforced":true,"event":"session_start","reason_codes":[],"registry_sha256":"418a4571ca079f6426534b1a6405c3973c1235ce6a0aa3f2f4bc721603ce4d2e","release":true,"session_id":"replacement","verdict":"allow"}
+  left: Bool(true)
+ right: true
+test reviewc757_legacy_host_grant_cannot_reset_history_after_session_end ... FAILED
+
+failures:
+
+failures:
+    reviewc757_current_instance_prefix_cannot_upgrade_legacy_host_authority
+    reviewc757_legacy_host_grant_cannot_replay_after_daemon_restart
+    reviewc757_legacy_host_grant_cannot_reset_history_after_session_end
+
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 109 filtered out; finished in 0.10s
+
+error: test failed, to rerun pass `-p agentfw --test native_endpoint`

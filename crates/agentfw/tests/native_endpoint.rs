@@ -3066,20 +3066,173 @@ async fn https_get_v3_native_rechecks_registry_schema_revisions_and_resource_evi
     }
 }
 
+fn legacy_host_start(fixture: &Fixture, collector: &str) -> Value {
+    use agentfw::native::child_authority as ca;
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+    let key = ca::derive_key(NATIVE_TOKEN);
+    let grant = ca::mint(
+        &key,
+        "host",
+        "documents",
+        &["read_document".into(), "delete_document".into()],
+        now,
+        60_000,
+        agentfw::token::generate(),
+    );
+    let proof = ca::encode_token(&grant);
+    assert!(ca::verify_token(&key, &proof, "host", "documents", now).is_ok(),
+        "legacy wire signatures remain compatible; shared-host admission must reject the weaker authority");
+    let mut start = fixture.event(collector, "session_start");
+    start["host_session"] = json!("host");
+    start["server_id"] = json!("documents");
+    start["child_authority"] = json!(proof);
+    start
+}
+
+#[tokio::test]
+async fn reviewc757_legacy_host_grant_cannot_reset_history_after_session_end() {
+    let f = Fixture::new("agent_policies:\n  - name: shared-mcp-deny\n    when: { taint: [mcp], action_class: destructive }\n    action: deny\ndefault: allow\n");
+    let mut start = legacy_host_start(&f, "original");
+    let (s, r) = f.post(&start).await;
+    if r["release"] != true {
+        assert_failure(s, &r, StatusCode::CONFLICT);
+        assert_eq!(r["error_code"], "native_child_authority_identity_required");
+        assert!(
+            f.audit().is_empty(),
+            "refusal must precede session allocation/audit admission"
+        );
+        // Genuinely isolated operation without a host binding remains supported.
+        f.start("independent").await;
+        f.allowed_call("independent", "delete_document", &json!({}))
+            .await;
+        return;
+    }
+    // Original reviewer witness: if legacy bootstrap is ever restored, it must
+    // not permit an ended host's taint to be discarded and the token replayed.
+    assert_allow(s, &r);
+    let (s, r) = f
+        .post(&child_result(&f, "original", UNTRUSTED_TEXT).await)
+        .await;
+    assert_allow(s, &r);
+    let (_, denied) = f
+        .post(&f.call(
+            "original",
+            "delete_document",
+            &json!({"path":UNTRUSTED_TEXT}),
+        ))
+        .await;
+    assert_eq!(denied["verdict"], "deny");
+    let (s, r) = f.post(&f.event("original", "session_end")).await;
+    assert_allow(s, &r);
+    post(
+        f.state.clone(),
+        "/hook",
+        &json!({"session_id":"host","hook_event_name":"SessionEnd"}),
+        Some(HOOK_TOKEN),
+    )
+    .await;
+    start["session_id"] = json!("replacement");
+    let (_, replay) = f.post(&start).await;
+    assert_ne!(
+        replay["release"], true,
+        "legacy token resurrected an ended host: {replay}"
+    );
+}
+
+#[tokio::test]
+async fn reviewc757_legacy_host_grant_cannot_replay_after_daemon_restart() {
+    let mut f = Fixture::new(ALLOW);
+    let mut start = legacy_host_start(&f, "original");
+    let bytes = serde_json::to_vec(&registry()).unwrap();
+    let old_instance = f.state.native.as_ref().unwrap().instance_id().to_string();
+    f.state = make_state(
+        f.dir.path(),
+        Config {
+            enforce: true,
+            ..Config::default()
+        },
+        ALLOW,
+        &bytes,
+        &f.registry_sha256,
+    );
+    assert_ne!(old_instance, f.state.native.as_ref().unwrap().instance_id());
+    start["session_id"] = json!("replacement");
+    let (s, r) = f.post(&start).await;
+    assert_failure(s, &r, StatusCode::CONFLICT);
+    assert_eq!(r["error_code"], "native_child_authority_identity_required");
+    assert!(f.audit().is_empty());
+    // Both truly isolated requests and freshly authenticated host bindings work.
+    f.start("independent").await;
+    f.allowed_call("independent", "read_document", &json!({}))
+        .await;
+    let (s, r) = f
+        .post(&child_start(&f, "fresh", "host", Some("documents")))
+        .await;
+    assert_allow(s, &r);
+}
+
+#[tokio::test]
+async fn reviewc757_current_instance_prefix_cannot_upgrade_legacy_host_authority() {
+    use agentfw::native::child_authority as ca;
+    let f = Fixture::new(ALLOW);
+    // Establish and complete a real scoped host before trying the weaker format.
+    let (s, r) = f
+        .post(&child_start(&f, "scoped", "host", Some("documents")))
+        .await;
+    assert_allow(s, &r);
+    let (s, r) = f.post(&f.event("scoped", "session_end")).await;
+    assert_allow(s, &r);
+    for resources in [None, Some(vec![])] {
+        let mut start = legacy_host_start(&f, "downgrade");
+        let original = ca::decode_token(start["child_authority"].as_str().unwrap()).unwrap();
+        let grant = ca::mint_scoped(
+            &ca::derive_key(NATIVE_TOKEN),
+            "host",
+            "documents",
+            &original.granted_tools,
+            original.issued_at_ms,
+            60_000,
+            scoped_fixture_nonce(&f, "host", None),
+            None,
+            None,
+            resources,
+        );
+        start["child_authority"] = json!(ca::encode_token(&grant));
+        let (s, r) = f.post(&start).await;
+        assert_failure(s, &r, StatusCode::CONFLICT);
+        assert_eq!(r["error_code"], "native_child_authority_identity_required");
+    }
+    let (_, r) = post(
+        f.state.clone(),
+        "/hook",
+        &json!({"session_id":"host",
+        "hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo safe"}}),
+        Some(HOOK_TOKEN),
+    )
+    .await;
+    assert_eq!(r["hookSpecificOutput"]["permissionDecision"], "deny");
+}
+
 fn child_start(fixture: &Fixture, session: &str, host: &str, server: Option<&str>) -> Value {
     use agentfw::native::child_authority;
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_millis() as u64;
-    let grant = child_authority::mint(
+    let grant = child_authority::mint_scoped(
         &child_authority::derive_key(NATIVE_TOKEN),
         host,
         server.unwrap_or(""),
         &["read_document".into()],
         now,
         60_000,
-        agentfw::token::generate(),
+        scoped_fixture_nonce(fixture, host, None),
+        Some(session.into()),
+        None,
+        None,
     );
     let mut request = fixture.event(session, "session_start");
     request["host_session"] = json!(host);
@@ -3191,14 +3344,17 @@ async fn child_authority_refuses_missing_expired_forged_and_mismatched_grants() 
                     } else {
                         grant.issued_at_ms + 120_000
                     };
-                    grant = child_authority::mint(
+                    grant = child_authority::mint_scoped(
                         &child_authority::derive_key(NATIVE_TOKEN),
                         "host",
                         "documents",
                         &grant.granted_tools,
                         issued,
                         60_000,
-                        agentfw::token::generate(),
+                        grant.nonce.clone(),
+                        grant.agent_id.clone(),
+                        None,
+                        None,
                     );
                 }
                 request["child_authority"] = json!(child_authority::encode_token(&grant));
@@ -3299,16 +3455,20 @@ async fn bound_mcp_provenance_reaches_hook_policy_and_audit() {
     let fixture = Fixture::new(
         "agent_policies:\n  - name: fixture-mcp-reuse\n    when: { taint: [mcp], action_class: destructive }\n    action: deny\ndefault: allow\n",
     );
-    let start = child_start(&fixture, "collector", "host", Some("documents"));
+    let start = reviewer_start(
+        &fixture,
+        "documents",
+        &["read_document", "delete_document"],
+        60_000,
+    );
     let (status, reply) = fixture.post(&start).await;
     assert_allow(status, &reply);
-    let result = child_result(&fixture, "collector", UNTRUSTED_TEXT).await;
+    let result = child_result(&fixture, "documents", UNTRUSTED_TEXT).await;
     let (status, reply) = fixture.post(&result).await;
     assert_allow(status, &reply);
     let hook = json!({"session_id":"host","hook_event_name":"PreToolUse",
-        "tool_name":"Bash","tool_input":{"command":format!("rm -rf /tmp/fixture # {UNTRUSTED_TEXT}")}});
-    let (status, reply) = post(fixture.state.clone(), "/hook", &hook, Some(HOOK_TOKEN)).await;
-    assert_eq!(status, StatusCode::OK);
+        "tool_name":"mcp__documents__delete_document","tool_input":{"path":UNTRUSTED_TEXT}});
+    let reply = post_with_proof(&fixture, &hook, start["child_authority"].as_str().unwrap()).await;
     assert_eq!(
         reply["hookSpecificOutput"]["permissionDecision"], "deny",
         "{reply}"
@@ -3380,14 +3540,17 @@ async fn bound_trusted_result_keeps_registry_provenance() {
     let mut start = child_start(&fixture, "collector", "host", Some("documents"));
     let original =
         child_authority::decode_token(start["child_authority"].as_str().unwrap()).unwrap();
-    let grant = child_authority::mint(
+    let grant = child_authority::mint_scoped(
         &child_authority::derive_key(NATIVE_TOKEN),
         "host",
         "documents",
         &["delete_document".into()],
         original.issued_at_ms,
         60_000,
-        agentfw::token::generate(),
+        original.nonce.clone(),
+        original.agent_id.clone(),
+        None,
+        None,
     );
     start["child_authority"] = json!(child_authority::encode_token(&grant));
     let (status, reply) = fixture.post(&start).await;
@@ -3423,14 +3586,19 @@ fn reviewer_start(f: &Fixture, collector: &str, tools: &[&str], ttl: u64) -> Val
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_millis() as u64;
-    let grant = ca::mint(
+    let grant = ca::mint_scoped(
         &ca::derive_key(NATIVE_TOKEN),
         "host",
         collector,
         &tools.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
         now,
         ttl,
-        agentfw::token::generate(),
+        scoped_fixture_nonce(f, "host", None),
+        Some(collector.into()),
+        None,
+        tools
+            .contains(&"send_email")
+            .then(|| vec!["allowed.test".into()]),
     );
     let mut v = child_start(f, collector, "host", Some(collector));
     v["child_authority"] = json!(ca::encode_token(&grant));
@@ -3680,14 +3848,12 @@ async fn rereview_truncated_posttooluse_must_mark_incomplete_history() {
             ..Config::default()
         },
     );
-    let (s, r) = f
-        .post(&reviewer_start(&f, "a", &["read_document"], 60_000))
-        .await;
+    let start = reviewer_start(&f, "documents", &["read_document"], 60_000);
+    let (s, r) = f.post(&start).await;
     assert_allow(s, &r);
     let hook = json!({"session_id":"host","hook_event_name":"PostToolUse",
         "tool_name":"mcp__documents__read_document","tool_response":"x".repeat(2048)});
-    let (s, _) = post(f.state.clone(), "/hook", &hook, Some(HOOK_TOKEN)).await;
-    assert_eq!(s, StatusCode::OK);
+    post_with_proof(&f, &hook, start["child_authority"].as_str().unwrap()).await;
     assert_eq!(f.audit().last().unwrap()["truncated"], true);
     assert!(
         f.state
