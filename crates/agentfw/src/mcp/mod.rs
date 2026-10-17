@@ -12,6 +12,7 @@ pub mod https_get;
 pub mod input;
 pub mod jsonrpc;
 pub mod manifest;
+mod native_child;
 pub mod profile_author;
 pub mod proxy;
 pub mod resources;

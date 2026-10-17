@@ -251,7 +251,7 @@ The separate [authenticated runtime diagnostics](operations/AGENT_LIFECYCLE.md#a
 report loaded identity, transport observations and explicit unknown coverage.
 Their component checks do not replace the independent active-protection witnesses above.
 
-The Linux [`agentfw self-test`](operations/SELF_TEST.md) command (SOU-61) runs the safe
+The Linux and macOS [`agentfw self-test`](operations/SELF_TEST.md) command (SOU-61, SOU-77) runs the safe
 receiver exercise against an installed Agent: witnessed useful reads, a refused synthetic
 send that never reaches the MCP child or receiver, and fail-closed daemon loss, with a
 versioned report. It uses scripted client frames, so host and model coverage and the
