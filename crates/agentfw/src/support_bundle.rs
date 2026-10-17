@@ -43,7 +43,7 @@ pub fn export(report: &Report, destination: &Path) -> anyhow::Result<()> {
         Ok(dir)
     }
 
-    fn create_file(dir: &File, name: &CString, bytes: &[u8]) -> anyhow::Result<()> {
+    fn create_file(dir: &File, name: &std::ffi::CStr, bytes: &[u8]) -> anyhow::Result<()> {
         let fd = unsafe {
             libc::openat(dir.as_raw_fd(), name.as_ptr(),
                          libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC,
@@ -122,9 +122,9 @@ pub fn export(report: &Report, destination: &Path) -> anyhow::Result<()> {
     }
     let output = unsafe { File::from_raw_fd(fd) };
     let mut staging = Staging { parent, stage, output, published: false };
-    create_file(&staging.output, cstr(b"report.json\0").to_owned().as_ref(), &bytes)
+    create_file(&staging.output, cstr(b"report.json\0"), &bytes)
         .context("report write failed")?;
-    create_file(&staging.output, cstr(b"manifest.json\0").to_owned().as_ref(), &manifest_bytes)
+    create_file(&staging.output, cstr(b"manifest.json\0"), &manifest_bytes)
         .context("manifest write failed")?;
     staging.output.sync_all()?;
     // Rename without clobbering an existing file, link or directory, even in a
@@ -148,6 +148,7 @@ pub fn export(_report: &Report, _destination: &Path) -> anyhow::Result<()> {
 mod tests {
     use super::*;
     use crate::doctor::{Outcome, Report};
+    use sha2::Digest;
 
     fn sample() -> Report {
         Report {
