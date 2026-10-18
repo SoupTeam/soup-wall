@@ -396,6 +396,11 @@ def scenario_foreign_files(root: Root):
     code, report = root.onboard("apply", root.inputs() + ["--plan-sha256", digest], "apply")
     check(out, "apply_verified", code == 0 and report["result"] == "verified")
     files, created = add_foreign_files(root)
+    # A retry re-runs the verification steps; it must not adopt the operator's files.
+    code, report = root.onboard("apply", root.inputs() + ["--plan-sha256", digest], "apply-retry")
+    check(out, "retry_does_not_adopt_foreign_files", code == 0 and report["result"] == "verified"
+          and not any(rel in (root.journal() or {}).get("inventory", {})
+                      for rel in ("grants/operator-notes.txt", "onboarding/operator.txt")))
     code, report = root.undo("undo-foreign")
     check(out, "undo_preserves_foreign_bytes", code == 4 and report["result"] == "incomplete" and home_conflict(report)
           and foreign_preserved(files) and (root.journal() or {}).get("phase") == "rollback_conflict",

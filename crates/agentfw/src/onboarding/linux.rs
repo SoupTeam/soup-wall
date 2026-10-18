@@ -847,6 +847,28 @@ fn entry_of(path: &Path) -> Option<InventoryEntry> {
     })
 }
 
+/// Record what one step created or changed, even when it stopped. An entry is adopted
+/// only when the step changed it and, before the step, it was absent or still had the
+/// recorded bytes. Being recorded is not enough: an unchanged entry keeps its prior
+/// digest, and an entry changed outside onboarding (or never ours) is never adopted,
+/// so cleanup preserves it as a conflict.
+pub(crate) fn adopt_step_changes(
+    recorded: &mut BTreeMap<String, InventoryEntry>,
+    before: &BTreeMap<String, InventoryEntry>,
+    after: &BTreeMap<String, InventoryEntry>,
+) {
+    for (rel, entry) in after {
+        let changed_by_step = before.get(rel) != Some(entry);
+        let ours_before = match before.get(rel) {
+            None => true,
+            Some(prior) => recorded.get(rel) == Some(prior),
+        };
+        if changed_by_step && ours_before {
+            recorded.insert(rel.clone(), entry.clone());
+        }
+    }
+}
+
 /// Bounded, non-following inventory of a directory tree, keyed by relative path.
 pub(crate) fn inventory(root: &Path) -> BTreeMap<String, InventoryEntry> {
     fn walk(dir: &Path, prefix: &str, depth: usize, out: &mut BTreeMap<String, InventoryEntry>) {
@@ -1267,14 +1289,9 @@ impl Session<'_> {
         let elapsed = started.elapsed().as_millis() as u64;
         let entry = self.evidence.entry("steps").or_insert_with(|| json!({}));
         entry[name] = json!({"outcome": if result.is_ok() { "done" } else { "stopped" }, "elapsed_ms": elapsed});
-        // Attribute to this operation only what the step itself created or changed, even
-        // when it stopped; entries that existed before the step and were not ours stay foreign.
         if self.journal.created_home && self.home().is_dir() {
-            for (rel, entry) in inventory(self.home()) {
-                if before.get(&rel) != Some(&entry) || self.journal.inventory.contains_key(&rel) {
-                    self.journal.inventory.insert(rel, entry);
-                }
-            }
+            let after = inventory(self.home());
+            adopt_step_changes(&mut self.journal.inventory, &before, &after);
         }
         if result.is_ok() {
             self.mark(name, "done")?;
@@ -2189,6 +2206,102 @@ mod tests {
         let (outcome, _) = home_outcome(&run_rollback(&mut journal, &paths, true));
         assert_eq!(outcome, "reversed");
         assert!(!home.exists());
+    }
+
+    #[test]
+    fn retried_read_only_step_does_not_adopt_operator_changes() {
+        // End to end through Session::step and the production rollback: a recorded
+        // runtime file is replaced by the operator, then a verification step is retried
+        // with a helper that fails without touching the home.
+        let (_dir, paths, journal) = recorded_home();
+        let home = PathBuf::from(&journal.agent_home);
+        let recorded_before = journal.inventory["grants/g1.json"].clone();
+        std::fs::write(home.join("grants/g1.json"), b"operator replacement").unwrap();
+        std::fs::write(home.join("grants/new.txt"), b"operator new").unwrap();
+        std::fs::create_dir(&paths.state).unwrap();
+        let inputs = Inputs {
+            agent: PathBuf::from("/bin/false"),
+            agent_sha256: String::new(),
+            classifier: "rule-baseline".into(),
+            classifier_script: PathBuf::new(),
+            classifier_sha256: String::new(),
+            classifier_python: PathBuf::new(),
+            registry: PathBuf::new(),
+            registry_sha256: String::new(),
+            policy: None,
+            policy_sha256: None,
+            workspace: PathBuf::new(),
+            agent_home: home.clone(),
+            host_config: PathBuf::new(),
+            server: "notes".into(),
+            port: 9,
+            probe_tool: None,
+            probe_args: None,
+            report: PathBuf::new(),
+            timeout_seconds: 60,
+        };
+        let facts = Facts::default();
+        let mut session = Session {
+            inputs: &inputs,
+            facts: &facts,
+            state: paths.state.clone(),
+            profile: paths.profile.clone(),
+            journal,
+            deadline: Instant::now() + Duration::from_secs(60),
+            evidence: serde_json::Map::new(),
+        };
+        session
+            .journal
+            .steps
+            .insert("verify_identity".into(), "done".into());
+        assert!(session.step("verify_identity").is_err());
+        assert_eq!(session.journal.inventory["grants/g1.json"], recorded_before);
+        assert!(!session.journal.inventory.contains_key("grants/new.txt"));
+        let mut journal = session.journal;
+        let (outcome, detail) = home_outcome(&run_rollback(&mut journal, &paths, false));
+        assert_eq!(outcome, "conflict");
+        assert!(detail.starts_with("2 untracked or changed"), "{detail}");
+        assert_eq!(
+            std::fs::read(home.join("grants/g1.json")).unwrap(),
+            b"operator replacement"
+        );
+        assert_eq!(
+            std::fs::read(home.join("grants/new.txt")).unwrap(),
+            b"operator new"
+        );
+    }
+
+    #[test]
+    fn step_adoption_keeps_prior_digest_and_refuses_foreign_entries() {
+        let entry = |d: &str| InventoryEntry {
+            kind: "file".into(),
+            sha256: Some(d.into()),
+        };
+        let mut recorded = BTreeMap::from([
+            ("ours".to_string(), entry("a")),
+            ("edited".to_string(), entry("a")),
+        ]);
+        let before = BTreeMap::from([
+            ("ours".to_string(), entry("a")),
+            ("edited".to_string(), entry("operator")),
+            ("foreign".to_string(), entry("f")),
+        ]);
+        let after = BTreeMap::from([
+            ("ours".to_string(), entry("b")),
+            ("edited".to_string(), entry("agent")),
+            ("foreign".to_string(), entry("g")),
+            ("created".to_string(), entry("c")),
+        ]);
+        adopt_step_changes(&mut recorded, &before, &after);
+        assert_eq!(recorded["ours"], entry("b"));
+        assert_eq!(recorded["edited"], entry("a"));
+        assert!(!recorded.contains_key("foreign"));
+        assert_eq!(recorded["created"], entry("c"));
+        // An unchanged entry keeps its recorded digest even when the file differs from it.
+        let mut recorded = BTreeMap::from([("x".to_string(), entry("a"))]);
+        let same = BTreeMap::from([("x".to_string(), entry("operator"))]);
+        adopt_step_changes(&mut recorded, &same, &same);
+        assert_eq!(recorded["x"], entry("a"));
     }
 
     #[test]

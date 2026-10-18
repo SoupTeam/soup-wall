@@ -57,7 +57,7 @@
     },
     {
       "action": null,
-      "detail": "127.0.0.1:48859 is available for the new Agent",
+      "detail": "127.0.0.1:41663 is available for the new Agent",
       "id": "port",
       "status": "ok"
     },
@@ -79,11 +79,11 @@
   "explanation": "The recorded onboarding for this Agent home is `rollback_conflict`; it is not resumed and nothing was changed.",
   "inputs": {
     "agent": {
-      "path_digest": "2290b4c30513e7d9",
-      "sha256": "a3c036f7f5bb828b63d24b490372fad803656f1a6e451f6127792a8acd4588c7"
+      "path_digest": "6c45afbf4a9e23c5",
+      "sha256": "e65f0abb981da984bb0c3edfa78501858eca22026c10ddc190599e6a4290feb0"
     },
     "agent_home": {
-      "path_digest": "bb0774500fd0587a"
+      "path_digest": "f6e85d07e3be2e60"
     },
     "classifier": {
       "kind": "rule-baseline",
@@ -93,9 +93,9 @@
     "host_config": {
       "other_server_entries": 1,
       "other_settings": 2,
-      "path_digest": "e6be0d2fffeea98b",
-      "selected_entry_sha256": "1c1cef7771092669d6ba3bb289cb7b38db673d9bf9423f6765b18e2243118837",
-      "sha256_at_preview": "f1f026be91f4d782b7720071f2e6cfc11083a94d022ff2897fa4f84c5ac74f8e"
+      "path_digest": "3592d41a9f5833fe",
+      "selected_entry_sha256": "0e2de7c7c917371cdbf4166fe9a655d1300b44eceaa092fe937b275ac868e3af",
+      "sha256_at_preview": "91cb5425f2c64a0bc7fb838e3a034db31f12d7c5094ab7108738a4eb4e49ff6c"
     },
     "policy": {
       "expected_daemon_digest": "239f0d0dd71853fd710f3037b5adfc035cdd3ead53e49b652468e74473c066ee",
@@ -103,14 +103,14 @@
       "rule_count": 12,
       "source": "shipped_default"
     },
-    "port": 48859,
+    "port": 41663,
     "probe": true,
     "registry": {
       "registry_id": "notes-fixture-v1",
       "sha256": "84ca20089de9b412d9b60d1213c78a7fddedeede6fa50cac5313228d2c7e44be"
     },
     "workspace": {
-      "path_digest": "93eef1befa07389d"
+      "path_digest": "9f903f3da1b9b4ee"
     }
   },
   "next_steps": [
@@ -125,5 +125,5 @@
   },
   "result": "refused",
   "schema_version": "sw-onboarding/1",
-  "started_at_unix_ms": 1792343522427
+  "started_at_unix_ms": 1792346290751
 }

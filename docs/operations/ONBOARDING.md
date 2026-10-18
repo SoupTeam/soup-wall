@@ -86,8 +86,10 @@ runs:
 
 After every step the journal also records an **inventory** of the Agent home it
 created: each entry the step created or changed (kind and SHA-256), never
-following links. Entries that existed before a step and were not recorded stay
-foreign. Cleanup uses only this record (see [Undo](#3-undo)).
+following links. An entry is recorded only if the step changed it and, before the
+step, it was absent or still had its recorded bytes. A step that leaves an entry
+unchanged keeps its earlier digest, so a retry never adopts a file the operator
+added or edited; such files stay foreign. Cleanup uses only this record (see [Undo](#3-undo)).
 
 A lock prevents two operations on one Agent home. Each command runs in its own
 process group with a cleared environment and a bounded time.
@@ -197,7 +199,7 @@ python3 scripts/onboarding-acceptance.py --agentfw target/release/agentfw --out 
 | `interrupted_and_killed_apply` | SIGINT stops at a step boundary; rerun resumes to `verified`; SIGKILL during verification recovers |
 | `external_edit_conflicts` | a host edit after preview invalidates the plan; an edited wrapped entry or owned file blocks undo without overwrite |
 | `rollback_after_listener_race` | a listener that appears during apply is not adopted; only proven changes are rolled back |
-| `foreign_files_in_agent_home` | operator files inside `grants/` and `onboarding/` survive undo, purge and an automatic rollback with a `conflict`; the journal stays; undo finishes cleanly once they are removed |
+| `foreign_files_in_agent_home` | operator files inside `grants/` and `onboarding/` are not adopted by a retry and survive undo, purge and an automatic rollback with a `conflict`; the journal stays; undo finishes cleanly once they are removed |
 | `unsafe_host_config` | a non-private host config is refused and its permissions are not changed |
 
 ```sh
@@ -209,7 +211,8 @@ The Rust checks cover read-only preview and digest binding, refusals with
 actions, conflicts for an existing home and a foreign listener, digest
 enforcement, unsafe host files, undo without a record, report non-overwrite,
 undo and rollback that preserve untracked or changed files inside runtime
-directories, audit retention without purge, and an inventory that does not follow links.
+directories, a retried verification step followed by rollback that keeps an
+operator-replaced file, audit retention without purge, and an inventory that does not follow links.
 
 See the [SOU-69 evidence](evidence/SOU69_ONBOARDING_2026-10-18.md).
 
