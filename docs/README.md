@@ -11,6 +11,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Development](DEVELOPMENT.md) | Prerequisites, platform differences, first build, local baseline and focused checks |
 | [Clean setup and status preparation](operations/CLEAN_SETUP_ACCEPTANCE.md) | Disposable Agent installation, truthful daemon-status evidence and read-only scanning audit |
 | [Change-aware CI admission](operations/CI_CHANGE_AWARE.md) | Trusted source-bound plan, aggregate status, full qualification and maintainer activation |
+| [Shared VPS CI](operations/VPS_CI.md) | Main/manual Windows smoke, default-feature checks and owned WSL driver tests on the shared team worker |
 | [Contributing](../CONTRIBUTING.md) | Pull request expectations, regression cases and compatibility rules |
 | [Architecture](ARCHITECTURE.md) | Workspace source map and decision boundaries |
 | [Source provenance](PROVENANCE.md) | License intake, attribution and the current dependency/advisory boundary |

@@ -84,7 +84,7 @@ class ImpactTests(unittest.TestCase):
 
     def test_registered_workflows_have_explicit_plan_dependencies(self):
         actual = {path.name for path in (ROOT / ".github/workflows").glob("*.yml")}
-        self.assertEqual(actual - {"release.yml", "ci-impact-plan.yml", "ci-admission.yml"},
+        self.assertEqual(actual - {"release.yml", "ci-impact-plan.yml", "ci-admission.yml", "vps-ci.yml"},
                          set(WORKFLOW_JOBS))
         for filename, jobs in WORKFLOW_JOBS.items():
             text = (ROOT / ".github/workflows" / filename).read_text(encoding="utf-8")
@@ -97,6 +97,14 @@ class ImpactTests(unittest.TestCase):
                                 text.split(f"  {job}:\n", 1)[1], maxsplit=1)[0]
                 self.assertIn("needs: impact", body, (filename, job))
                 self.assertIn("needs.impact.outputs.jobs", body, (filename, job))
+
+    def test_supplemental_vps_is_outside_pr_admission_only_while_main_only(self):
+        text = (ROOT / '.github/workflows/vps-ci.yml').read_text(encoding='utf-8')
+        self.assertNotRegex(text, r'(?m)^  pull_request(?:_target)?:')
+        self.assertIn("github.ref == 'refs/heads/main'", text)
+        self.assertIn("github.repository == 'SoupTeam/soup-wall'", text)
+        self.assertIn("vars.SOUP_VPS_CI_ENABLED == 'true'", text)
+        self.assertIn("github.event_name == 'workflow_dispatch'", text)
 
 
 class AdmissionTests(unittest.TestCase):
