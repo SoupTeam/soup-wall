@@ -2,6 +2,7 @@ name: Encrypted Console recovery
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:
@@ -18,7 +19,7 @@ jobs:
       workflow: console-recovery.yml
   owned-recovery:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'owned-recovery')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'owned-recovery')
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:

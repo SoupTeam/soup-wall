@@ -2,6 +2,7 @@ name: SOU-30 managed Agent rollout demonstration
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:
@@ -19,7 +20,7 @@ jobs:
       workflow: managed-policy-demo.yml
   managed-rollout-e2e:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'managed-rollout-e2e')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'managed-rollout-e2e')
     name: Signed activation and rollback on real Agent
     runs-on: ubuntu-24.04
     timeout-minutes: 25

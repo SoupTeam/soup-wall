@@ -1,6 +1,7 @@
 ﻿name: scim-directory
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 permissions:
   contents: read
@@ -14,7 +15,7 @@ jobs:
       workflow: scim-directory.yml
   interoperability:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'interoperability')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'interoperability')
     strategy:
       fail-fast: false
       matrix:

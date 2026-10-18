@@ -90,7 +90,8 @@ class ImpactTests(unittest.TestCase):
             text = (ROOT / ".github/workflows" / filename).read_text(encoding="utf-8")
             registered = set(re.findall(r"(?m)^  ([a-z][a-z0-9-]*):\s*$",
                                         text.split("jobs:\n", 1)[1]))
-            self.assertEqual(registered, set(jobs) | {"impact"}, filename)
+            auxiliary = {"draft-checks", "main-smoke"} if filename == "ci.yml" else set()
+            self.assertEqual(registered, set(jobs) | {"impact"} | auxiliary, filename)
             for job in jobs:
                 body = re.split(r"\n  [a-z][a-z0-9-]*:\s*\n",
                                 text.split(f"  {job}:\n", 1)[1], maxsplit=1)[0]
