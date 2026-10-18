@@ -71,6 +71,13 @@ pub enum Command {
         #[arg(long)]
         out: PathBuf,
     },
+    /// Preview an upgrade or rollback and obtain exact-input approval.
+    Preview {
+        #[arg(long, conflicts_with = "revision")]
+        profile: Option<PathBuf>,
+        #[arg(long)]
+        revision: Option<String>,
+    },
     /// Transactionally install a compiled MCP profile into active configuration.
     Install {
         #[arg(long)]
@@ -161,31 +168,41 @@ enum Authority {
     },
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Profile {
-    format: String,
-    server_id: String,
-    server_version: String,
-    snapshot_sha256: String,
-    declaration_sha256: String,
-    registry_sha256: String,
-    tools: BTreeMap<String, ProfileTool>,
-    limits: Vec<String>,
+pub(crate) struct Profile {
+    pub(crate) format: String,
+    pub(crate) server_id: String,
+    pub(crate) server_version: String,
+    pub(crate) snapshot_sha256: String,
+    pub(crate) declaration_sha256: String,
+    pub(crate) registry_sha256: String,
+    pub(crate) tools: BTreeMap<String, ProfileTool>,
+    pub(crate) limits: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct ProfileTool {
-    schema_sha256: String,
-    definition_sha256: String,
-    action_class: String,
-    result_provenance: String,
-    authority_sha256: String,
-    review_sha256: String,
-    workspace: Option<PathBuf>,
-    scoped_resources: Vec<Resource>,
-    egress_selectors: Vec<Value>,
+pub(crate) struct ProfileTool {
+    pub(crate) schema_sha256: String,
+    pub(crate) definition_sha256: String,
+    pub(crate) action_class: String,
+    pub(crate) result_provenance: String,
+    pub(crate) authority_sha256: String,
+    pub(crate) review_sha256: String,
+    pub(crate) workspace: Option<PathBuf>,
+    pub(crate) scoped_resources: Vec<Resource>,
+    pub(crate) egress_selectors: Vec<Value>,
+}
+
+pub(crate) fn parse_profile_bytes(raw: &[u8]) -> Result<Profile> {
+    let v = strict(raw)?;
+    let profile: Profile = serde_json::from_value(v)?;
+    ensure!(
+        profile.format == OUTPUT_FORMAT,
+        "unsupported profile format: expected {OUTPUT_FORMAT}"
+    );
+    Ok(profile)
 }
 
 struct Prepared {
@@ -652,6 +669,43 @@ fn prepare(snapshot_path: &Path, declaration_path: &Path) -> Result<Prepared> {
         declaration_document,
     })
 }
+/// Rebuild authority from the reviewed source documents, never from manifest claims.
+pub(crate) fn verify_compiled_bundle(dir: &Path) -> Result<()> {
+    let prepared = prepare(
+        &dir.join("source-snapshot.json"),
+        &dir.join("operator-declarations.json"),
+    )?;
+    ensure!(
+        prepared.profile.tools.len()
+            == prepared.source_snapshot["tools"]
+                .as_array()
+                .context("source tool inventory missing")?
+                .len(),
+        "partial reviewed inventory is unsupported"
+    );
+    let actual = strict(&read_file(&dir.join("profile.json"))?)?;
+    ensure!(
+        actual == serde_json::to_value(&prepared.profile)?,
+        "compiled profile differs from reviewed source authority"
+    );
+    ensure!(
+        strict(&read_file(&dir.join("registry.json"))?)? == strict(&prepared.registry)?,
+        "compiled registry differs from reviewed source authority"
+    );
+    let profiles = serde_json::to_value(
+        prepared
+            .policies
+            .iter()
+            .map(|p| &p.profile)
+            .collect::<Vec<_>>(),
+    )?;
+    ensure!(
+        strict(&read_file(&dir.join("resource-profiles.json"))?)? == profiles,
+        "resource profiles differ from reviewed source authority"
+    );
+    Ok(())
+}
+
 fn validate_example(prepared: &Prepared, raw: &[u8]) -> Result<Value> {
     let example = strict(raw)?;
     ensure!(
@@ -778,7 +832,46 @@ fn publish_dir(out: &Path, files: &[(&str, Vec<u8>)]) -> Result<()> {
         anyhow::bail!("private atomic profile publication currently requires Linux")
     }
 }
+/// Compile reviewed inert bundle bytes without publishing or modifying host state.
+pub fn compiled_bundle_files(
+    snapshot: &Path,
+    declarations: &Path,
+    out: &Path,
+) -> Result<Vec<(&'static str, Vec<u8>)>> {
+    let p = prepare(snapshot, declarations)?;
+    // Current native collector pins the *complete* tools/list. A partial
+    // registry would fail the manifest coverage handshake and cannot be
+    // described as an installed, enforcing profile.
+    ensure!(p.profile.tools.len() == p.source_snapshot["tools"].as_array()
+                .context("source tool inventory missing")?.len(),
+                "the production collector requires a reviewed declaration for every original tool; partial registry is unsupported");
+    let profile = json_bytes(&serde_json::to_value(&p.profile)?)?;
+    // Complete typed, inert Agent config fragment. Registry path names the
+    // FINAL no-clobber directory, not temporary publication staging.
+    let native = crate::config::NativeCfg {
+        registry_path: out.join("registry.json"),
+        registry_sha256: p.profile.registry_sha256.clone(),
+        approval: None,
+    };
+    let native_config = json_bytes(&json!({"native":native}))?;
+    let policies = json_bytes(&serde_json::to_value(
+        p.policies.iter().map(|p| &p.profile).collect::<Vec<_>>(),
+    )?)?;
+    let source_snapshot = json_bytes(&p.source_snapshot)?;
+    let declaration_document = json_bytes(&p.declaration_document)?;
+    Ok(vec![
+        ("registry.json", p.registry),
+        ("native-config.json", native_config),
+        ("resource-profiles.json", policies),
+        ("source-snapshot.json", source_snapshot),
+        ("operator-declarations.json", declaration_document),
+        ("profile.json", profile),
+    ])
+}
+
 pub fn run(cmd: Command, home: &Path) -> Result<()> {
+    ensure!(cfg!(target_os = "linux") || !matches!(&cmd, Command::Upgrade { .. } | Command::Rollback { .. }),
+        "MCP profile upgrade and rollback require Linux; macOS and Windows transitions are unsupported");
     match cmd {
         Command::Import {
             snapshot,
@@ -831,43 +924,28 @@ pub fn run(cmd: Command, home: &Path) -> Result<()> {
             declarations,
             out,
         } => {
-            let p = prepare(&snapshot, &declarations)?;
-            // Current native collector pins the *complete* tools/list. A partial
-            // registry would fail the manifest coverage handshake and cannot be
-            // described as an installed, enforcing profile.
-            ensure!(p.profile.tools.len() == p.source_snapshot["tools"].as_array()
-                .context("source tool inventory missing")?.len(),
-                "the production collector requires a reviewed declaration for every original tool; partial registry is unsupported");
-            let profile = json_bytes(&serde_json::to_value(&p.profile)?)?;
-            // Complete typed, inert Agent config fragment. Registry path names the
-            // FINAL no-clobber directory, not temporary publication staging.
-            let native = crate::config::NativeCfg {
-                registry_path: out.join("registry.json"),
-                registry_sha256: p.profile.registry_sha256.clone(),
-                approval: None,
-            };
-            let native_config = json_bytes(&json!({"native":native}))?;
-            let policies = json_bytes(&serde_json::to_value(
-                p.policies.iter().map(|p| &p.profile).collect::<Vec<_>>(),
-            )?)?;
-            let source_snapshot = json_bytes(&p.source_snapshot)?;
-            let declaration_document = json_bytes(&p.declaration_document)?;
-            publish_dir(
-                &out,
-                &[
-                    ("registry.json", p.registry),
-                    ("native-config.json", native_config),
-                    ("resource-profiles.json", policies),
-                    ("source-snapshot.json", source_snapshot),
-                    ("operator-declarations.json", declaration_document),
-                    ("profile.json", profile),
-                ],
+            let files = compiled_bundle_files(&snapshot, &declarations, &out)?;
+            let profile: Value = serde_json::from_slice(
+                &files
+                    .iter()
+                    .find(|(name, _)| *name == "profile.json")
+                    .context("profile output missing")?
+                    .1,
             )?;
+            publish_dir(&out, &files)?;
             println!(
                 "{}",
                 json!({"status":"compiled-not-installed","path":out,
-                "registry_sha256":p.profile.registry_sha256,"admitted_tools":p.profile.tools.len()})
+                "registry_sha256":profile["registry_sha256"],"admitted_tools":profile["tools"].as_object().map_or(0, |tools| tools.len())})
             );
+        }
+        Command::Preview { profile, revision } => {
+            let manager = crate::mcp::profile_lifecycle::ProfileManager::new(home);
+            let preview = match profile {
+                Some(path) => manager.preview_upgrade(&path)?,
+                None => manager.preview_rollback(revision.as_deref())?,
+            };
+            println!("{}", serde_json::to_string_pretty(&preview)?);
         }
         Command::Install {
             profile,
@@ -941,13 +1019,7 @@ pub fn compute_profile_diff(old_path: &Path, new_path: &Path) -> Result<ProfileD
     };
     let read = |p: &Path| -> Result<Profile> {
         let actual = resolve(p);
-        let v = strict(&read_file(&actual)?)?;
-        let profile: Profile = serde_json::from_value(v)?;
-        ensure!(
-            profile.format == OUTPUT_FORMAT,
-            "unsupported profile format"
-        );
-        Ok(profile)
+        parse_profile_bytes(&read_file(&actual)?)
     };
     let a = read(old_path)?;
     let b = read(new_path)?;

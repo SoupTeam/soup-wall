@@ -607,7 +607,15 @@ fn main() -> anyhow::Result<()> {
         Cmd::McpProfile { home, command } => {
             let home = match home {
                 Some(h) => h,
-                None => Config::home()?,
+                None => match &command {
+                    agentfw::mcp::profile_author::Command::Preview { .. }
+                    | agentfw::mcp::profile_author::Command::Import { .. }
+                    | agentfw::mcp::profile_author::Command::Validate { .. }
+                    | agentfw::mcp::profile_author::Command::Explain { .. }
+                    | agentfw::mcp::profile_author::Command::Diff { .. }
+                    | agentfw::mcp::profile_author::Command::Compile { .. } => Config::home_path()?,
+                    _ => Config::home()?,
+                },
             };
             agentfw::mcp::profile_author::run(command, &home)
         }

@@ -1,5 +1,58 @@
 # SOU-78: Transactional Installed MCP Profile Upgrades and Rollback Without Stale Authority
 
+## Handoff and current acceptance status (2026-10-18)
+
+**INCOMPLETE — not ready for acceptance.** Antigravity session
+`d78c8d26-227d-4173-9898-649c2b3ba413` stopped after step 9046 because its
+provider quota was exhausted. Base commit: `2b8185a`; seven pre-existing dirty
+files were preserved. The latest added absent-config witness initially failed:
+its recorded process had no responding health endpoint. It now checks the
+ownership validator directly with mismatched and matching baseline controls.
+
+Continuation adds exact-preview approval (generic `yes` rejected), same-server
+binding, reconstruction of compiled authority from reviewed source/declarations,
+resource-manifest verification, bounded state reads and recovery-path validation.
+Test bundles now use the production inert compiler rather than fabricated review
+metadata. Unknown Agent YAML fields already fail closed under the strict config
+schema; supported unrelated settings have a regression control.
+
+Remaining Linear acceptance gaps:
+
+- Transactional integration with an existing owned Linux Claude Code connection,
+  including publication/ownership journal and preserving unrelated host entries.
+- Runtime profile-generation binding and independent stale grant/receipt/Ask
+  witnesses. A monotonic number in profile-state.json alone is insufficient.
+- Preserving authenticated host taint/incomplete-history floors across transitions;
+  restarting the daemon currently loses in-memory history.
+- Real Linux daemon/collector upgrade, rollback and injected-crash exercise with
+  useful reads, removed-authority refusal and independent zero-execution ledgers.
+- Pending-host-restart reporting and Linux service-specific witnesses. Upgrade and
+  rollback CLI dispatch now explicitly refuses macOS/Windows before mutation.
+
+Final continuation checks on macOS:
+
+- `cargo test --offline --locked --workspace --all-features`: **1417 passed,
+  0 failed, 11 ignored** across 61 completed test suites.
+- `cargo clippy --offline --locked --all-targets --all-features --workspace -- -D warnings`:
+  **PASS, zero warnings**.
+- `cargo fmt --check`: **PASS**.
+- Test export byte-compared against all 843 tracked non-documentation source
+  inputs. Exact snapshot and changed-Rust hashes are retained in
+  `sou-78-continuation-2026-10-18.json`.
+- The first full run hit three self-test environment failures because the
+  sandbox refused `/bin/ps`. A narrow exception for that trusted read-only
+  executable restored the process cleanup witness; the final full run passed.
+  Target code remained unable to write to the repository or use external network.
+- These are local source checks, not Linux runtime acceptance or CI evidence.
+
+Status output now separates configured state, managed daemon configuration
+verification, stopped/unavailable runtime, conflict and incomplete recovery.
+Host reload remains explicitly `unverified`.
+
+No PR exists for this branch at this checkpoint. No release or completion claim.
+
+## Historical Antigravity evidence (before continuation; not current-head proof)
+
 ## Overview
 
 Issue **SOU-78** delivers transactional installation, upgrade, rollback, status inspection, and crash recovery for operator-authored MCP profiles (`agentfw mcp-profile`). It builds on the inert authoring primitives from SOU-65 and provides end-to-end transactional lifecycle guarantees, zero stale authority across upgrades and rollbacks, atomic `config.yaml` updates, and automatic baseline restoration upon daemon failure.
@@ -106,4 +159,3 @@ test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; finished in 1.33s
    - `upgrade` and `rollback` check that `config.yaml`'s `native.registry_path` and `registry_sha256` still match the active bundle on disk; foreign configuration modifications fail closed with conflict.
 5. **Lifecycle Ownership Coordination:**
    - Coordinates `lifecycle.lock()` during journal creation and `config.yaml` write; checks post-write status to detect any concurrent start.
-
