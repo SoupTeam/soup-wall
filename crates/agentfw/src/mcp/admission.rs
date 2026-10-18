@@ -903,6 +903,13 @@ struct Collector<'a> {
 }
 
 impl<'a> Collector<'a> {
+    async fn policy_boundary(&self) -> anyhow::Result<Option<crate::policy_transition::Boundary>> {
+        match &self.config.native.policy_barrier {
+            Some(barrier) => barrier.release_boundary().await.map(Some),
+            None => Ok(None),
+        }
+    }
+
     fn new(config: &'a AdmissionCfg) -> anyhow::Result<Self> {
         if config.host_session.is_some() != config.child_authority.is_some() {
             anyhow::bail!(
@@ -1318,6 +1325,9 @@ impl<'a> Collector<'a> {
             "unsupported native receipt contract"
         );
         let mut body = json!({"contract_version":expected_contract,"registry_sha256":self.config.native.registry_sha256,"session_id":self.session,"event":event});
+        if event == "session_start" && self.config.native.policy_barrier.is_some() {
+            body["policy_transition"] = json!(crate::policy_transition::CONTRACT);
+        }
         body.as_object_mut().expect("object").extend(
             fields
                 .as_object()
@@ -1347,6 +1357,7 @@ impl<'a> Collector<'a> {
             "content_sha256",
             "reason_codes",
             "resources_sha256",
+            "managed_policy",
         ];
         keys(&reply, &allowed)?;
         let required = [
@@ -1365,9 +1376,10 @@ impl<'a> Collector<'a> {
         ensure!(
             reply.as_object().is_some_and(|map| {
                 required.iter().all(|k| map.contains_key(*k))
-                    && (map.len() == required.len()
-                        || (map.len() == required.len() + 1
-                            && map.contains_key("resources_sha256")))
+                    && map.len()
+                        == required.len()
+                            + usize::from(map.contains_key("resources_sha256"))
+                            + usize::from(map.contains_key("managed_policy"))
             }) && reply["contract_version"] == expected_contract
                 && reply["registry_sha256"] == self.config.native.registry_sha256
                 && reply["session_id"] == self.session
@@ -1375,6 +1387,21 @@ impl<'a> Collector<'a> {
                 && reply["enforced"] == true,
             "MCP admission receipt identity mismatch"
         );
+        if let Some(policy) = reply.get("managed_policy") {
+            ensure!(
+                self.config.native.policy_barrier.is_some(),
+                "managed native boundary unavailable"
+            );
+            let policy: soup_wall_agent::engine::ManagedActivePolicy =
+                serde_json::from_value(policy.clone())?;
+            ensure!(
+                policy.deployment_sequence > 0
+                    && !policy.revision.is_empty()
+                    && policy.revision.len() <= 128
+                    && crate::native::is_digest(&policy.policy_sha256),
+                "invalid managed policy receipt"
+            );
+        }
         let verdict = reply["verdict"]
             .as_str()
             .context("MCP admission verdict absent")?;
@@ -1748,6 +1775,7 @@ where
                 ensure!(used.len() < MAX_REQUESTS && used.insert(id(request_id)?), "replayed MCP request or session request limit");
                 let params = value.get("params").cloned().unwrap_or_else(|| json!({}));
                 ensure!(params.is_object(), "unsupported MCP parameters");
+                let mut policy_boundary = None;
                 let next = match method {
                     "initialize" => { ensure!(!initialized, "MCP session already initialized"); Pending::Handshake(request_id.clone()) }
                     "tools/list" => {
@@ -2340,6 +2368,7 @@ where
                         if let Some(id) = &approval_id {
                             call_fields["approval_id"] = json!(id);
                         }
+                        policy_boundary = collector.policy_boundary().await?;
                         let mut receipt = without_resource_overlap(
                             client,
                             resource_admission.is_some(),
@@ -2356,6 +2385,7 @@ where
                                 || (!prod_assessment.as_ref().is_some_and(|a| a.ambiguous_or_unknown)
                                     && crate::native::resource_approval::is_supported_linux_resource_tool(installed)));
                         if can_approve_daemon {
+                            drop(policy_boundary.take());
                             let adm_val = resource_admission
                                 .as_ref()
                                 .and_then(|(adm, _)| serde_json::to_value(adm).ok());
@@ -2398,6 +2428,7 @@ where
                                     }
                                     if ok_to_proceed {
                                         call_fields["approval_id"] = json!(id);
+                                        policy_boundary = collector.policy_boundary().await?;
                                         receipt = collector.event("call", call_fields.clone()).await?;
                                     } else {
                                         let mut reasons = receipt["reason_codes"].as_array().cloned().unwrap_or_default();
@@ -2771,6 +2802,7 @@ where
                 pending = Some(next);
                 deadline = tokio::time::Instant::now() + IO_TIMEOUT;
                 write(child, &raw).await?;
+                drop(policy_boundary);
             }
             raw = line(server, &mut server_partial) => {
                 let raw = raw?.context("MCP server closed before client completion")?;
@@ -2788,6 +2820,7 @@ where
                 keys(&value, &["jsonrpc","id","result","error"])?;
                 let request = pending.take().context("unbound or replayed MCP server response")?;
                 ensure!(value.get("id") == Some(request.id()), "MCP response id mismatch");
+                let mut policy_boundary = None;
                 match request {
                     Pending::Handshake(_) => {
                         ensure!(value.get("error").is_none() && value["result"].is_object(), "MCP initialization failed");
@@ -2806,6 +2839,7 @@ where
                     }
                     Pending::Ping(_) => { ensure!(value.get("error").is_none(), "MCP ping failed"); keys(&value["result"], &[])?; }
                     Pending::Call { id, tool, args, call_id, binding, contract_version } => {
+                        policy_boundary = collector.policy_boundary().await?;
                         let kind = result_kind(&value)?;
                         let content = std::str::from_utf8(&raw).context("MCP result is not UTF-8")?;
                         let receipt = collector.event("result", json!({"expected_contract_version":contract_version,"tool":tool,"args":args,"call_id":call_id,"result_kind":kind,"delivery":"mcp_host","content":content,"expected_binding_sha256":binding})).await?;
@@ -2816,6 +2850,7 @@ where
                     }
                 }
                 write(host, &raw).await?;
+                drop(policy_boundary);
             }
             _ = tokio::time::sleep_until(deadline), if pending.is_some() => bail!("MCP server response timed out"),
         }

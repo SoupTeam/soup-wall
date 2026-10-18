@@ -33,6 +33,8 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Check standalone demonstration syntax
         run: python3 -m py_compile scripts/managed-policy-demo.py
+      - name: Verify native policy transition boundaries and managed activation
+        run: cargo test --locked -p agentfw --lib
       - name: Build the real Console and Agent
         run: cargo build --locked -p llm-firewall -p agentfw
       - name: Verify signed delivery and runtime rollback
