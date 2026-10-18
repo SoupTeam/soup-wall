@@ -10,6 +10,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | --- | --- |
 | [Development](DEVELOPMENT.md) | Prerequisites, platform differences, first build, local baseline and focused checks |
 | [Clean setup and status preparation](operations/CLEAN_SETUP_ACCEPTANCE.md) | Disposable Agent installation, truthful daemon-status evidence and read-only scanning audit |
+| [Change-aware CI admission](operations/CI_CHANGE_AWARE.md) | Trusted source-bound plan, aggregate status, full qualification and maintainer activation |
 | [Contributing](../CONTRIBUTING.md) | Pull request expectations, regression cases and compatibility rules |
 | [Architecture](ARCHITECTURE.md) | Workspace source map and decision boundaries |
 | [Source provenance](PROVENANCE.md) | License intake, attribution and the current dependency/advisory boundary |
@@ -44,6 +45,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Provenance memory budgets](operations/PROVENANCE_MEMORY.md) | Retained-byte/context limits, saturation refusal, safe retirement and required owned Linux evidence |
 | [Constrained MCP file creation](operations/MCP_CREATE_FILE.md) | Linux create-only workspace files, bound authority, effect accounting and actual stdio verification |
 | [Constrained MCP HTTPS GET](operations/MCP_HTTPS_GET.md) | Exact URL/address authority, verified TLS, bounded responses and independent receiver witnesses |
+| [Constrained MCP HTTPS POST](operations/MCP_HTTPS_POST.md) | Exact recipient and UTF-8 payload authority, single-use dispatch and conservative effect accounting |
 | [Constrained Windows MCP reads](operations/MCP_WINDOWS_READ.md) | Handle-bound local document reads, explicit v4 authority and native standard-user verification |
 | [Constrained Windows MCP file creation](operations/MCP_WINDOWS_CREATE.md) | Exact v5 create authority, retained parent handles, atomic no-overwrite publication and native verification |
 | [Identity interoperability](operations/IDENTITY_INTEROPERABILITY.md) | Local identity fixtures, external metadata probes and pilot gates |

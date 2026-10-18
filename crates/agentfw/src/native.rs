@@ -869,6 +869,7 @@ fn parse(body: &str) -> Result<Request, &'static str> {
                 request.contract_version.as_str(),
                 resource::CONTRACT
                     | resource::CREATE_CONTRACT
+                    | resource::POST_CONTRACT
                     | resource::NETWORK_CONTRACT
                     | resource::WINDOWS_READ_CONTRACT
                     | resource::WINDOWS_CREATE_CONTRACT
@@ -911,6 +912,7 @@ fn parse(body: &str) -> Result<Request, &'static str> {
             CONTRACT
                 | resource::CONTRACT
                 | resource::CREATE_CONTRACT
+                | resource::POST_CONTRACT
                 | resource::NETWORK_CONTRACT
                 | resource::WINDOWS_READ_CONTRACT
                 | resource::WINDOWS_CREATE_CONTRACT
@@ -931,6 +933,7 @@ fn parse(body: &str) -> Result<Request, &'static str> {
             request.contract_version.as_str(),
             resource::CONTRACT
                 | resource::CREATE_CONTRACT
+                | resource::POST_CONTRACT
                 | resource::NETWORK_CONTRACT
                 | resource::WINDOWS_READ_CONTRACT
                 | resource::WINDOWS_CREATE_CONTRACT
@@ -1484,6 +1487,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         contract_version: match request.contract_version.as_str() {
             resource::CONTRACT => resource::CONTRACT,
             resource::CREATE_CONTRACT => resource::CREATE_CONTRACT,
+            resource::POST_CONTRACT => resource::POST_CONTRACT,
             resource::NETWORK_CONTRACT => resource::NETWORK_CONTRACT,
             resource::WINDOWS_READ_CONTRACT => resource::WINDOWS_READ_CONTRACT,
             resource::WINDOWS_CREATE_CONTRACT => resource::WINDOWS_CREATE_CONTRACT,
@@ -1946,7 +1950,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         if tool
             .resource_policy
             .as_ref()
-            .is_some_and(|policy| policy.is_https_get())
+            .is_some_and(|policy| policy.is_https_get() || policy.is_https_post())
             && !firewall.egress_hosts_allowlisted(&hosts)
         {
             response.verdict = "deny";
