@@ -4,6 +4,14 @@ Changes to the public Soup Wall source distribution are recorded here. Release a
 
 ## Unreleased
 
+- Added `agentfw onboard` (Linux, SOU-69): a read-only `preview` with the exact
+  plan, conflicts, prerequisites and a plan digest; an explicit `apply` of that
+  digest that journals each step through the accepted install, lifecycle,
+  mcp-connection, protection-status and self-test commands and rolls back only
+  its proven changes; and `undo`. Reports keep configured identity separate from
+  witnessed behavior, mark unobserved host coverage unknown and contain no
+  tokens, payloads or raw paths. Phase 4 stays open.
+
 - Added explicit Linux owned MCP connection profile preview/apply/status/recover/rollback
   (SOU-78), using reviewed immutable bundles and retained atomic host publication.
   Generation-checked launchers, current-daemon child authority and approval epoch
