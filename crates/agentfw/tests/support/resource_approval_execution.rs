@@ -53,25 +53,94 @@ struct Receiver {
 impl Receiver {
     async fn start() -> Self {
         let dir = tempfile::tempdir_in(std::env::temp_dir().canonicalize().unwrap()).unwrap();
-        let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
+        let certs = dir.path().join("certs");
+        std::fs::create_dir(&certs).unwrap();
+        std::fs::write(certs.join("extensions.cnf"), "basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=serverAuth\nsubjectAltName=IP:127.0.0.1\n").unwrap();
+        for args in [
+            vec![
+                "req",
+                "-x509",
+                "-newkey",
+                "ec",
+                "-pkeyopt",
+                "ec_paramgen_curve:P-256",
+                "-nodes",
+                "-subj",
+                "/CN=SOU88-Owned-CA",
+                "-days",
+                "2",
+                "-keyout",
+                "ca.key",
+                "-out",
+                "ca.pem",
+                "-addext",
+                "basicConstraints=critical,CA:TRUE",
+                "-addext",
+                "keyUsage=critical,keyCertSign,cRLSign",
+            ],
+            vec![
+                "req",
+                "-new",
+                "-newkey",
+                "ec",
+                "-pkeyopt",
+                "ec_paramgen_curve:P-256",
+                "-nodes",
+                "-subj",
+                "/CN=SOU88-Receiver",
+                "-keyout",
+                "server.key",
+                "-out",
+                "server.csr",
+            ],
+            vec![
+                "x509",
+                "-req",
+                "-in",
+                "server.csr",
+                "-CA",
+                "ca.pem",
+                "-CAkey",
+                "ca.key",
+                "-CAcreateserial",
+                "-days",
+                "2",
+                "-sha256",
+                "-extfile",
+                "extensions.cnf",
+                "-out",
+                "valid.pem",
+            ],
+        ] {
+            let output = tokio::time::timeout(
+                Duration::from_secs(15),
+                Command::new("openssl")
+                    .args(args)
+                    .current_dir(&certs)
+                    .output(),
+            )
+            .await
             .unwrap()
-            .parent()
             .unwrap();
-        let output = Command::new("python3").args(["-B", "-c",
-            "import importlib.util,sys; from pathlib import Path; s=importlib.util.spec_from_file_location('tls',sys.argv[1]); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); m.certificates(Path(sys.argv[2]))"])
-            .arg(repo.join("scripts/verify-sou56-https-get.py"))
-            .arg(dir.path().join("certs")).output().await.unwrap();
-        assert!(
-            output.status.success(),
-            "TLS fixture: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
+            assert!(
+                output.status.success(),
+                "TLS fixture: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        // Embed the accepted fixture so exported test binaries do not require
+        // the original compile-time checkout to exist on the runner.
+        let script = dir.path().join("receiver.py");
+        std::fs::write(
+            &script,
+            include_str!("../../../../scripts/fixtures/mcp_https_get_probe_server.py"),
+        )
+        .unwrap();
         let ledger = dir.path().join("receiver.jsonl");
         let ready = dir.path().join("ready.json");
         let child = Command::new("python3")
             .arg("-B")
-            .arg(repo.join("scripts/fixtures/mcp_https_get_probe_server.py"))
+            .arg(&script)
             .arg("--https")
             .arg("--ledger")
             .arg(&ledger)
@@ -235,6 +304,24 @@ async fn acceptance(network: bool) {
                 .await
                 .expect("approved redemption reached transport hold");
                 tokio::time::sleep(Duration::from_millis(1100)).await;
+                let request = f
+                    .daemon_faults
+                    .captured_calls
+                    .lock()
+                    .unwrap()
+                    .last()
+                    .unwrap()
+                    .clone();
+                let status: Value = reqwest::Client::new()
+                    .post(format!("http://127.0.0.1:{}/native/approval/v1", f.port))
+                    .bearer_auth(TOKEN).json(&json!({"contract_version":CONTRACT,
+                        "registry_sha256":request["registry_sha256"],"session_id":request["session_id"],
+                        "action":"status","pending_id":row["pending_id"]}))
+                    .send().await.unwrap().json().await.unwrap();
+                assert_eq!(
+                    status["state"], "expired",
+                    "actual approved grant must expire: {status}"
+                );
                 f.daemon_faults
                     .stall_call_admission
                     .store(false, Ordering::SeqCst);
@@ -284,7 +371,7 @@ async fn acceptance(network: bool) {
                 assert!(!reply.to_string().contains(DOCUMENT));
                 let expected = match scenario {
                     "reject" => "native_approval_rejected",
-                    "expired" => "native_approval_expired",
+                    "expired" => "native_approval_closed",
                     _ => "native_",
                 };
                 assert!(reply.to_string().contains(expected), "{scenario}: {reply}");

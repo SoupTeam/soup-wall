@@ -106,3 +106,15 @@ helper outside the child sandbox while retaining source-write and external
 network restrictions. Those earlier failures are not represented as passes.
 
 Linux execution acceptance is pending the hosted run of this follow-up.
+
+## First Linux execution attempt (retained failure)
+
+[Run 39128972509](https://github.com/SoupTeam/soup-wall/actions/runs/39128972509)
+compiled the new witnesses and passed both rejection/real useful-continuation
+controls. It then failed a too-specific test expectation: an expired approved
+record is terminally `closed` when redeemed. The follow-up explicitly queries
+and asserts `state=expired` before releasing the held real redemption, then
+requires the closed refusal and zero effect. It does not weaken production checks.
+The arm64 fixture image additionally lacked the original source-path Python
+script. The receiver is now embedded in the test binary; disposable certificate
+creation is self-contained. These initial CI failures are not passing evidence.
