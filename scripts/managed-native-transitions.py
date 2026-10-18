@@ -274,8 +274,13 @@ def run(args):
             reader, sibling, git_client = collector(fs, "fs-reader"), collector(fs, "fs-sibling"), collector(git, "git-reader")
             original_pids = [c.process.pid for c in clients]
             require(FS.result_text(reader.exchange(call_fs(10))[0]) == FS.TEXT, "initial filesystem read failed")
+            witness = GIT.RepositoryWitness(git.workspace)
+            stack.callback(witness.close)
             require("SOU-68 synthetic initial commit" in GIT.text(git_client.exchange(GIT.call(10))[0]), "initial Git read failed")
-            check(report, "original-filesystem-and-git-positive-controls", {"pids": original_pids, "host_session": host})
+            positive_opens = witness.drain()
+            require(positive_opens > 0, "kernel observer did not detect the allowed Git read")
+            check(report, "original-filesystem-and-git-positive-controls", {"pids": original_pids, "host_session": host,
+                  "git_kernel_open_count": positive_opens})
 
             # Independent process owns the same kernel lock as a trusted collector.
             # Holding it models the admitted-but-not-yet-dispatched boundary.
@@ -291,12 +296,14 @@ def run(args):
                     api("POST", console_url + "/agent/v1/policy/ack", {"deployment_sequence": sequence,
                         "revision": "deny", "policy_sha256": digest, "status": "applied"},
                         {"Authorization": "Bearer " + git.token}, 409)
+                require(all(r["status"] != "applied" for r in deployments(git) if r["deployment_sequence"] == seq),
+                        "invalid ACK changed applied state")
                 check(report, "wrong-digest-and-stale-ack-refused", {"http_status": 409, "sequence": seq})
                 check(report, "shared-release-lock-defers-activation-and-ack", public_deployment(row))
             active(git, seq)
             applied(git, seq)
-            witness = GIT.RepositoryWitness(git.workspace)
             try:
+                require(witness.drain() == 0, "unrelated repository activity invalidated the negative control")
                 result = git_client.exchange(GIT.call(11))[0]
                 require(FS.refused(result) and "sou82-deny-read" in json.dumps(result), "Git call was not policy denied")
                 require(witness.drain() == 0, "denied Git call opened the repository")
@@ -316,11 +323,13 @@ def run(args):
             reader.send(*[call_fs(108 + i, f"queued-{i}.fifo") for i in range(8)])
             FS.wait_event(reader.log_path, lambda rows: any(r.get("host_call_id") == 115 and r.get("state") == "queued" for r in rows),
                           "last stale request did not queue")
+            ordering("reader-observed-before-policy-deny", observed_readers=sum(r["reader_opened"] for r in fifo.records))
             seq = deploy(fs, "deny")
             active(fs, seq)
             applied(fs, seq)
-            ordering("reader-existed-before-policy-deny", observed_readers=sum(r["reader_opened"] for r in fifo.records))
             fifo.finish()
+            require(all(r["reader_opened"] and r["bytes_written"] == len(FS.FIFO_TEXT.encode()) and r["error"] is None
+                        for r in fifo.records), "not every dispatched read completed its independent FIFO witness")
             replies = {}
             for _ in range(16):
                 response, _ = reader.receive()
