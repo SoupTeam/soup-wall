@@ -10,8 +10,16 @@ existing correlated refusal.
 - `agentfw mcp --native-admission --native-approval-wait-seconds N` (N = 1..300) plus
   `native.approval` in the daemon `config.yaml`. Both are required; either one missing
   keeps the refusal.
-- Plain calls only. Tools with a `resource_policy` (create-file, https-get, Windows
-  read) are an unsupported executor and are refused (`native_approval_resource_tool_unsupported`).
+- Plain native MCP calls.
+- Constrained Linux native resource executors (SOU-88):
+  - Linux `read_document` under direct/1 profile (`sw-native/read-document/direct/1`).
+  - Linux `create_file` under linux-root-child/1 profile (`sw-native/create-file/linux-root-child/1`).
+  - Linux `https_get` under constrained network executor profile.
+  - Compatible operator-owned file bindings (SOU-67).
+- Explicitly refused:
+  - Windows and macOS native resource tools (`native_approval_resource_tool_unsupported`).
+  - Confined real-fs create profile (SOU-83).
+  - HTTPS POST or non-GET network mutations (SOU-73).
 - One outstanding approval per collector session, 16 per daemon.
 - Two Ask sources: the daemon policy (`call` receipt `verdict: ask`) and the collector
   classifier (`policy_unconfirmed_ask`).
@@ -30,12 +38,15 @@ When the request is opened the daemon records, in memory and in an owner-only fi
 `<home>/native-pending/<id>.json`: collector session id and daemon session epoch,
 registry sha256 and id, tool name, schema sha256, exact arguments and their sha256,
 the **binding digest** (`sw-native/call/1` over registry, epoch, tool, schema,
-canonical arguments), source of the Ask, durable approval-policy epoch, creation and
-expiry time. The pending id is 256 random bits and carries no meaning.
+canonical arguments, and resource admission if present), source of the Ask, durable
+approval-policy epoch, optional frozen `resource_details` (operation, canonical paths,
+destination, URL, method, payload length), creation and expiry time. The pending id is
+256 random bits and carries no meaning.
 
 The held original frame stays in the collector. It is never rewritten, replaced or
 retried as another call; on approval the **same** tool/arguments are re-presented to
-the daemon with `approval_id`, and the child receives the original request bytes.
+the daemon with `approval_id`, and the child receives the original request bytes (or
+native resource executor handles the call directly without invoking the child).
 
 ## State machine
 
@@ -78,15 +89,20 @@ At the `call` event with `approval_id` the daemon recomputes the verdict with th
 
 1. the id exists and is still `pending` (not redeemed/closed/expired);
 2. same collector session and same daemon session epoch;
-3. same tool, schema sha256 and binding digest (arguments, registry, epoch);
+3. same tool, schema sha256 and binding digest (arguments, registry, epoch, resource admission);
 4. verdict is still Ask (daemon source) — Allow or Deny means the policy changed;
    Deny can never be rescued; classifier source accepts Ask/Allow and the collector
    re-runs the classifier after the wait (Deny/failure refuses);
 5. the durable approval-policy epoch equals the one recorded
    (`invalidate_all_for_policy_switch` advances it);
-6. a native grant for exactly this id exists, is signed with the **native key**, has
+6. for resource policies: revalidate_resource_execution confirms the resource tool is a supported
+   Linux native executor, within workspace bounds and allowed resources, destination is not mutated,
+   and for create_file that target file does not already exist;
+7. a native grant for exactly this id exists, is signed with the **native key**, has
    the versioned scope `native-mcp/approval/v1:<tool>`, is unexpired, and is claimed in
    the persistent ledger `native-grants-spent.json`.
+8. Provenance preservation: single-use approval authorizes only the specific action and
+   does not clear provenance taint or incomplete history flags.
 
 Then the result goes through the existing result-inspection/release boundary: a result
 that is Ask/Deny stays blocked. Release is to the MCP host; it does not attest that the
