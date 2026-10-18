@@ -83,8 +83,8 @@ its effect and refusal assertions pass.
 
 Local macOS checks cover the platform refusal, existing collector compatibility,
 formatting and warnings-denied Clippy. They cannot establish the Linux-only
-positive execution cases. Linux CI results and final source identity are recorded
-below after execution; adding a witness alone is not a passing result.
+positive execution cases. Linux CI results and final source identity are recorded below; adding a witness
+alone is not a passing result.
 
 ## Local verification (macOS, 2026-10-18)
 
@@ -105,7 +105,7 @@ cleanup witnesses. The final passing run allowed only that read-only system
 helper outside the child sandbox while retaining source-write and external
 network restrictions. Those earlier failures are not represented as passes.
 
-Linux execution acceptance is pending the hosted run of this follow-up.
+The final Linux execution results are recorded below, separately from local macOS results.
 
 ## First Linux execution attempt (retained failure)
 
@@ -126,3 +126,38 @@ the log retained the real successful TLS response and original second-block
 document. The follow-up asserts both the production metadata and exact original
 UTF-8 body bytes, including for useful continuations. That failed assertion is
 not relabelled as a complete passing suite.
+
+## Final Linux acceptance
+
+Runtime/test source: `85e3c5d96eb7b87490b5258378f9cd275dfe9720`.
+The [exact-head HTTPS workflow](https://github.com/SoupTeam/soup-wall/actions/runs/39129742339)
+completed successfully; artifact `sou56-https-get-evidence` retains the source and
+binary identity, Clippy output, both SOU-88 logs and full real HTTPS report.
+
+| Check | Observed result |
+| --- | --- |
+| SOU-88 collector integrations | 4 passed, 0 failed |
+| New read/GET execution controls | 12/12 passed |
+| Native authorization witnesses | 9 passed, 0 failed |
+| Agent unit tests on Linux | 499 passed, 0 failed, 2 ignored |
+| Native endpoint tests | 120 passed, 0 failed |
+| Actual owned HTTPS regression scenarios | 48/48 passed, 0 skipped |
+| Warnings-denied all-target agentfw Clippy | passed |
+
+[Linux fixture baselines](https://github.com/SoupTeam/soup-wall/actions/runs/39129742419)
+additionally passed **259/259 cases on each of amd64 and arm64**, including all
+12 new controls per architecture. Those jobs tested PR merge source
+`050658fe50cf456049d398fd64c4754510172c88`; all **649 recorded build input
+hashes** were independently compared with runtime head `85e3c5d` and matched.
+The receiver ledger on each architecture recorded exactly four connections,
+four verified TLS transports and four `GET /document?item=7` requests: the three
+approved useful continuations after refusals plus the separate approved scenario.
+Each scenario asserts zero preapproval/failed-control sockets, zero child tool
+calls, original result bytes, and no replay effect before its passing marker.
+
+[Machine-readable summary](sou-88-execution-2026-10-18.json) binds source hashes,
+image/binary identities, log hashes, per-control outcomes and receiver counts.
+The artifacts retain the original logs; this summary contains no tokens, keys,
+private approval grants or protected production data. Subsequent evidence-only
+commits preserve the tested runtime and test source hashes. Maintainer approval
+and remaining general PR checks are separate from these observed results.
