@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (C) 2026 Arthur Lin (carbon-evolution)
+#![cfg(unix)]
 
 //! Independent witness verification suite for SOU-88 single-use operator
 //! Ask confirmation for constrained Linux native resource executors.

@@ -747,34 +747,40 @@ mod tests {
     fn env(approval: Option<u64>) -> Env {
         let dir = tempfile::tempdir().unwrap();
         let schema = "a".repeat(64);
-        let create_schema =
-            super::super::canonical_digest(&crate::native::resource::create_file_schema());
-        let ws = dir.path().canonicalize().unwrap();
-        let ws_str = ws.to_str().unwrap();
-        let target_file = ws.join("test.txt").to_str().unwrap().to_string();
-        let bytes = json!({"contract_version": CONTRACT, "registry_id": "unit-approval", "tools": [
-            {"name": "delete_note", "schema_sha256": schema, "action_class": "destructive",
-             "result_provenance": "untrusted", "egress": []},
-            {"name": "read_note", "schema_sha256": schema, "action_class": "read_only",
-             "result_provenance": "untrusted", "egress": []},
-            {"name": "grant_admin", "schema_sha256": schema, "action_class": "privilege_changing",
-             "result_provenance": "untrusted", "egress": []},
-            {"name": "create_file", "schema_sha256": create_schema, "action_class": "side_effecting",
-             "result_provenance": "untrusted", "egress": [], "resource_policy": {
-                 "profile": {"server_id": "test-fs", "tool_name": "create_file", "schema_sha256": create_schema, "selectors": [{"pointer": "/path", "kind": "path", "allow_missing_leaf": true}]},
-                 "workspace": ws_str, "cwd": ws_str,
-                 "executor_sha256": crate::native::resource::create_file_executor_sha256(),
-                 "classifier_sha256": "c".repeat(64),
-                 "allowed_resources": [{"kind": "path", "canonical": target_file}],
-                 "execution": {
-                     "operation": "create_file", "action": "write", "max_content_bytes": 4096,
-                     "executor_profile": "sw-native/create-file/linux-root-child/1",
-                     "path_selector": "/path", "content_selector": "/content"
-                 }
-             }}
-        ]})
-        .to_string()
-        .into_bytes();
+        #[allow(unused_mut)]
+        let mut tools = vec![
+            json!({"name": "delete_note", "schema_sha256": schema, "action_class": "destructive",
+             "result_provenance": "untrusted", "egress": []}),
+            json!({"name": "read_note", "schema_sha256": schema, "action_class": "read_only",
+             "result_provenance": "untrusted", "egress": []}),
+            json!({"name": "grant_admin", "schema_sha256": schema, "action_class": "privilege_changing",
+             "result_provenance": "untrusted", "egress": []}),
+        ];
+        #[cfg(unix)]
+        {
+            let create_schema =
+                super::super::canonical_digest(&crate::native::resource::create_file_schema());
+            let ws = dir.path().canonicalize().unwrap();
+            let ws_str = ws.to_str().unwrap();
+            let target_file = ws.join("test.txt").to_str().unwrap().to_string();
+            tools.push(json!({"name": "create_file", "schema_sha256": create_schema, "action_class": "side_effecting",
+                 "result_provenance": "untrusted", "egress": [], "resource_policy": {
+                     "profile": {"server_id": "test-fs", "tool_name": "create_file", "schema_sha256": create_schema, "selectors": [{"pointer": "/path", "kind": "path", "allow_missing_leaf": true}]},
+                     "workspace": ws_str, "cwd": ws_str,
+                     "executor_sha256": crate::native::resource::create_file_executor_sha256(),
+                     "classifier_sha256": "c".repeat(64),
+                     "allowed_resources": [{"kind": "path", "canonical": target_file}],
+                     "execution": {
+                         "operation": "create_file", "action": "write", "max_content_bytes": 4096,
+                         "executor_profile": "sw-native/create-file/linux-root-child/1",
+                         "path_selector": "/path", "content_selector": "/content"
+                     }
+                 }}));
+        }
+        let bytes =
+            json!({"contract_version": CONTRACT, "registry_id": "unit-approval", "tools": tools})
+                .to_string()
+                .into_bytes();
         let digest = super::super::hash(&bytes);
         let mut native =
             NativeState::from_bytes(&bytes, &digest, "native-unit-key".into()).unwrap();
@@ -1219,6 +1225,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn resource_tool_can_be_approved_and_inspected() {
         let env = env(Some(60));
         env.start("s1");
@@ -1240,6 +1247,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn unsupported_resource_tool_with_ask_is_refused() {
         let env = env(Some(60));
         env.start("s1");

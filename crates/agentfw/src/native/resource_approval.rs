@@ -140,13 +140,19 @@ pub fn build_resource_details(
     }
 
     if policy.is_create_bound_or_named(&tool.name) {
-        let path = args
-            .get("path")
-            .and_then(Value::as_str)
+        let path_ptr = policy.path_selector();
+        let content_ptr = policy.content_selector();
+        let path = crate::mcp::resources::selected(args, path_ptr)
+            .ok()
+            .flatten()
+            .and_then(|v| v.as_str())
+            .or_else(|| args.get("path").and_then(Value::as_str))
             .ok_or("native_approval_invalid_path")?;
-        let content = args
-            .get("content")
-            .and_then(Value::as_str)
+        let content = crate::mcp::resources::selected(args, content_ptr)
+            .ok()
+            .flatten()
+            .and_then(|v| v.as_str())
+            .or_else(|| args.get("content").and_then(Value::as_str))
             .ok_or("native_approval_invalid_content")?;
         if path.is_empty() || path.len() > 4096 {
             return Err("native_approval_invalid_path");
@@ -166,9 +172,12 @@ pub fn build_resource_details(
     }
 
     if policy.is_read_bound_or_named(&tool.name) {
-        let path = args
-            .get("path")
-            .and_then(Value::as_str)
+        let path_ptr = policy.path_selector();
+        let path = crate::mcp::resources::selected(args, path_ptr)
+            .ok()
+            .flatten()
+            .and_then(|v| v.as_str())
+            .or_else(|| args.get("path").and_then(Value::as_str))
             .ok_or("native_approval_invalid_path")?;
         if path.is_empty() || path.len() > 4096 {
             return Err("native_approval_invalid_path");
@@ -219,13 +228,19 @@ pub fn revalidate_resource_execution(
     }
 
     if policy.is_create_bound_or_named(&tool.name) {
-        let path = args
-            .get("path")
-            .and_then(Value::as_str)
+        let path_ptr = policy.path_selector();
+        let content_ptr = policy.content_selector();
+        let path = crate::mcp::resources::selected(args, path_ptr)
+            .ok()
+            .flatten()
+            .and_then(|v| v.as_str())
+            .or_else(|| args.get("path").and_then(Value::as_str))
             .ok_or("native_approval_invalid_path")?;
-        let content = args
-            .get("content")
-            .and_then(Value::as_str)
+        let content = crate::mcp::resources::selected(args, content_ptr)
+            .ok()
+            .flatten()
+            .and_then(|v| v.as_str())
+            .or_else(|| args.get("content").and_then(Value::as_str))
             .ok_or("native_approval_invalid_content")?;
         if path.is_empty() || path.len() > 4096 {
             return Err("native_approval_invalid_path");
@@ -237,9 +252,12 @@ pub fn revalidate_resource_execution(
     }
 
     if policy.is_read_bound_or_named(&tool.name) {
-        let path = args
-            .get("path")
-            .and_then(Value::as_str)
+        let path_ptr = policy.path_selector();
+        let path = crate::mcp::resources::selected(args, path_ptr)
+            .ok()
+            .flatten()
+            .and_then(|v| v.as_str())
+            .or_else(|| args.get("path").and_then(Value::as_str))
             .ok_or("native_approval_invalid_path")?;
         if path.is_empty() || path.len() > 4096 {
             return Err("native_approval_invalid_path");
@@ -415,5 +433,43 @@ mod tests {
         let invalid_args = json!({"path": "", "content": "hello"});
         assert!(build_resource_details(&create_tool, &invalid_args, None).is_err());
         assert!(revalidate_resource_execution(&create_tool, &invalid_args, None).is_err());
+    }
+
+    #[test]
+    fn test_custom_selectors_build_and_revalidate() {
+        let mut create_tool =
+            sample_tool("save_artifact", CREATE_FILE_EXECUTOR_PROFILE, "create_file");
+        if let Some(ref mut policy) = create_tool.resource_policy {
+            policy.profile.tool_name = "save_artifact".into();
+            policy.profile.selectors = vec![crate::mcp::resources::Selector {
+                pointer: "/spec/destination".into(),
+                kind: crate::mcp::resources::ResourceKind::Path,
+                aliases: vec![],
+                optional: false,
+                default: None,
+                allow_missing_leaf: true,
+            }];
+            if let Some(ref mut exec) = policy.execution {
+                exec.path_selector = Some("/spec/destination".into());
+                exec.content_selector = Some("/spec/payload".into());
+            }
+        }
+        let args = json!({
+            "spec": {
+                "destination": "/workspace/artifact.txt",
+                "payload": "custom selector content"
+            }
+        });
+        let details =
+            build_resource_details(&create_tool, &args, None).expect("details build custom");
+        assert_eq!(details["operation"], "create_file");
+        assert_eq!(details["path"], "/workspace/artifact.txt");
+        assert_eq!(details["content_length"], 23);
+        assert_eq!(
+            details["content_bytes_sha256"],
+            hash(b"custom selector content")
+        );
+
+        assert!(revalidate_resource_execution(&create_tool, &args, None).is_ok());
     }
 }

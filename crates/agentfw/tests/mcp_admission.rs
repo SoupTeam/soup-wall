@@ -930,7 +930,15 @@ impl Fixture {
             daemon_faults.clone(),
         );
         let path = registry_path.to_string_lossy().replace('\'', "''");
-        std::fs::write(home.join("config.yaml"), format!("port: {port}\nenforce: true\nnative:\n  registry_path: '{path}'\n  registry_sha256: '{digest}'\n")).unwrap();
+        let approval_yaml = match approval {
+            Some((ttl, _)) => format!("\n  approval:\n    ttl_seconds: {ttl}"),
+            None => String::new(),
+        };
+        std::fs::write(
+            home.join("config.yaml"),
+            format!("port: {port}\nenforce: true\nnative:\n  registry_path: '{path}'\n  registry_sha256: '{digest}'{approval_yaml}\n"),
+        )
+        .unwrap();
         let ledger = dir.path().join("executed.jsonl");
 
         #[cfg(windows)]
