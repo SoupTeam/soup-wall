@@ -16,6 +16,20 @@ from pathlib import Path
 from vps_counts import test_counts, validate_target
 
 
+def source_clone_environment(source: Path, config: Path, environment: dict) -> dict:
+    # Older Git transports discard command-line configuration. A disposable
+    # protected-scope file survives that boundary without editing user/global files.
+    if config.exists():
+        raise ValueError('Refusing an existing source trust config')
+    for path in ('', source.as_posix(), (source / '.git').as_posix()):
+        subprocess.run(['git', 'config', '--file', str(config), '--add', 'safe.directory', path],
+                       cwd=config.parent, env=environment, check=True,
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    child_environment = environment.copy()
+    child_environment['GIT_CONFIG_GLOBAL'] = str(config)
+    return child_environment
+
+
 def clone_command(source: Path, checkout: Path) -> list[str]:
     # Local upload-pack validates the exact .git path independently of its worktree.
     # Keep both exceptions scoped to this command, never wildcard/global trust.
@@ -44,14 +58,14 @@ def run(source: Path, output: Path, sha: str) -> None:
     def save():
         (output / 'results.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
 
-    def step(name, argv, cwd, reader=None):
+    def step(name, argv, cwd, reader=None, environment=None):
         result = {'name': name, 'argv': argv, 'status': 'running'}
         report['steps'].append(result)
         save()
         print('Linux step: ' + name, flush=True)
         logfile = output / (name + '.log')
         with logfile.open('w', encoding='utf-8') as log:
-            process = subprocess.Popen(argv, cwd=cwd, env=env, stdout=subprocess.PIPE,
+            process = subprocess.Popen(argv, cwd=cwd, env=env if environment is None else environment, stdout=subprocess.PIPE,
                                        stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace')
             for line in process.stdout:
                 print(line, end='', flush=True)
@@ -72,7 +86,8 @@ def run(source: Path, output: Path, sha: str) -> None:
             checkout = root / 'source'
             # Local clone uses the verified public checkout's object store, but
             # creates LF/executable/POSIX worktree files on the Linux filesystem.
-            step('clone', clone_command(source, checkout), root)
+            clone_environment = source_clone_environment(source, root / 'source-trust.config', env)
+            step('clone', clone_command(source, checkout), root, environment=clone_environment)
             step('checkout', ['git', '-c', 'core.autocrlf=false', 'checkout', '--detach', sha], checkout)
             actual = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=checkout, text=True).strip()
             if actual != sha:

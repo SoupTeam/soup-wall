@@ -60,6 +60,14 @@ missing git/python3-venv/openssl packages inside the owned distro. Python venvs
 and checkout copies are isolated from product environments. No model, dataset,
 provider credential, release secret or signing configuration is required.
 
+
+The Linux clone uses a disposable Git configuration containing only the verified
+source worktree and its `.git` directory. It is selected only in the clone
+subprocess environment so older transports retain protected configuration when
+they discard command-line `-c` settings. No user/system global file is changed;
+the temporary file is removed with the disposable checkout. Other repositories
+remain untrusted, and the exceptions do not persist into later commands.
+
 ## Evidence and compatibility
 
 Artifacts include source/tree/runner identity, scope, native logs and nested
