@@ -510,11 +510,36 @@ impl Write for LimitedWriter {
     }
 }
 
+/// flock belongs to the open file description. Closing our descriptor alone
+/// need not release it while a concurrent fork still holds an inherited copy.
+struct WriterLock {
+    file: File,
+    owner_pid: libc::pid_t,
+}
+
+impl Drop for WriterLock {
+    fn drop(&mut self) {
+        // An inherited copy must never unlock the still-live parent's writer.
+        // SAFETY: getpid has no arguments and file owns a live descriptor.
+        if unsafe { libc::getpid() } != self.owner_pid {
+            return;
+        }
+        loop {
+            // SAFETY: unlock only the owning process's live lock descriptor.
+            if unsafe { libc::flock(self.file.as_raw_fd(), libc::LOCK_UN) } == 0
+                || std::io::Error::last_os_error().raw_os_error() != Some(libc::EINTR)
+            {
+                break;
+            }
+        }
+    }
+}
+
 pub(super) struct RetainedSink {
     dir: OwnedDir,
     config: RetentionConfig,
     manifest: Manifest,
-    lock: File,
+    lock: WriterLock,
     active: File,
     active_bytes: u64,
     manifest_identity: (libc::dev_t, libc::ino_t),
@@ -562,6 +587,11 @@ impl RetainedSink {
             unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0,
             "another audit writer owns this directory"
         );
+        let lock = WriterLock {
+            file: lock,
+            // SAFETY: captures the process that successfully acquired the lock.
+            owner_pid: unsafe { libc::getpid() },
+        };
         dir.check()?;
         let mut manifest = load_or_create(&dir, config)?;
         if let Some(id) = manifest.pending_prune {
@@ -745,7 +775,7 @@ impl RetainedSink {
 
     fn check_active(&self) -> Result<()> {
         self.dir.check()?;
-        check_file(&self.dir.dir, &c_name(LOCK), &self.lock)?;
+        check_file(&self.dir.dir, &c_name(LOCK), &self.lock.file)?;
         let mut manifest_file = self
             .dir
             .open_existing(&c_name(MANIFEST))?
@@ -853,6 +883,39 @@ mod tests {
     fn event(index: usize) -> serde_json::Value {
         json!({"at_ms":index,"session":"synthetic","event":"native_call", "verdict":"allow",
             "shadow":false,"seq":index,"raw":"x".repeat(700)})
+    }
+
+    #[test]
+    fn writer_drop_releases_lock_while_inherited_description_stays_open() {
+        let root = tempfile::tempdir().unwrap();
+        let config = config(&root.path().join("retained"));
+        let sink = RetainedSink::open(&config, false).unwrap();
+        // dup and fork share the same open file description. Keep that copy
+        // alive to deterministically reproduce the fork-to-exec close race.
+        let inherited = sink.lock.file.try_clone().unwrap();
+        assert!(RetainedSink::open(&config, false).is_err());
+        drop(sink);
+        let mut reopened = RetainedSink::open(&config, false).unwrap();
+        reopened.write_serialized(&event(1)).unwrap();
+        // Closing an old copy must not affect the newly acquired description.
+        drop(inherited);
+        assert!(RetainedSink::open(&config, false).is_err());
+    }
+
+    #[test]
+    fn non_owner_drop_cannot_unlock_the_live_writer() {
+        let root = tempfile::tempdir().unwrap();
+        let config = config(&root.path().join("retained"));
+        let sink = RetainedSink::open(&config, false).unwrap();
+        let inherited = WriterLock {
+            file: sink.lock.file.try_clone().unwrap(),
+            // Model the acquiring process's PID as observed from a fork child.
+            owner_pid: sink.lock.owner_pid.checked_add(1).unwrap(),
+        };
+        drop(inherited);
+        assert!(RetainedSink::open(&config, false).is_err());
+        drop(sink);
+        assert!(RetainedSink::open(&config, false).is_ok());
     }
 
     #[test]
