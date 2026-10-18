@@ -2,15 +2,14 @@ name: local-test-environment
 
 on:
   pull_request:
-  push:
-    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: local-test-environment-${{ github.workflow }}-${{ github.ref }}
+  group: local-test-environment-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -20,7 +19,7 @@ jobs:
       workflow: test-environment.yml
   windows-launcher:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'windows-launcher')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'windows-launcher')
     name: Windows launcher guidance and reporting
     runs-on: windows-latest
     timeout-minutes: 10
@@ -33,7 +32,7 @@ jobs:
 
   fixture-baseline:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'fixture-baseline')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'fixture-baseline')
     name: Linux fixture baseline (${{ matrix.platform }})
     strategy:
       fail-fast: false

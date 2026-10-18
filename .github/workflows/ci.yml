@@ -7,7 +7,13 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
+    inputs:
+      smoke_only:
+        description: Run only the merged-source smoke command (not full qualification)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -17,14 +23,69 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  draft-checks:
+    name: Draft fast checks (not merge qualification)
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+      - name: Check admission, scheduling and documentation contracts
+        run: |
+          python3 -m unittest discover -s scripts/tests -p 'test_ci_*.py' -v
+          python3 -m unittest discover -s scripts/tests -p 'test_check_docs.py' -v
+          python3 scripts/check_docs.py
+      - name: Rule classifier unit regressions
+        run: python3 -m unittest discover -s rule_baseline -p 'test_*.py' -v
+
+  main-smoke:
+    name: Main binary smoke (full qualification runs before merge)
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.smoke_only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-${{ runner.os }}-${{ runner.arch }}
+          key: ${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-default
+          cache-bin: false
+      - name: Build the actual merged Agent and Gateway
+        run: cargo build --locked -p agentfw --bin agentfw -p llm-firewall --bin llm-firewall
+      - name: Check Agent CLI and the versioned adapter contract
+        run: |
+          target/debug/agentfw --help
+          cargo test --locked -p soup-wall-adapter --lib
+      - name: Exercise the merged Gateway with an owned local upstream and SQLite
+        run: python3 scripts/self-hosted-local-acceptance.py --gateway target/debug/llm-firewall --artifact-label "$GITHUB_SHA" --out target/main-smoke.json
+      - name: Retain merged-source smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: main-smoke-${{ github.sha }}
+          path: target/main-smoke.json
+          if-no-files-found: error
+          retention-days: 7
+
   impact:
+    if: github.event_name != 'workflow_dispatch' || !inputs.smoke_only
     uses: ./.github/workflows/ci-impact-plan.yml
     with:
       workflow: ci.yml
   documentation:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'documentation')
-    name: Documentation links
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'documentation')
+    # A skipped draft job must not satisfy the required ready-PR context.
+    name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'Deferred - Documentation links' || 'Documentation links' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -35,8 +96,9 @@ jobs:
         run: python3 scripts/check_docs.py
 
   test:
+    name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'Deferred - test' || 'test' }}
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'test')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'test')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -48,7 +110,8 @@ jobs:
         with:
           shared-key: ci-${{ runner.os }}-${{ runner.arch }}
           key: ${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-default
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          # PR caches remain scoped to refs/pull/<n>/merge; privileged admission never restores them.
+          save-if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
           cache-bin: false
       # Refuse formatting errors before compiling or running expensive probes.
       - run: cargo fmt --all -- --check
@@ -165,7 +228,7 @@ jobs:
   python-classifier:
     name: Python classifier and evaluation
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'python-classifier')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'python-classifier')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -204,7 +267,7 @@ jobs:
   # The Linux workspace job covers these targets; this adds the native macOS boundary.
   native-macos-resilience:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'native-macos-resilience')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-macos-resilience')
     name: Native macOS admission resilience
     runs-on: macos-15
     timeout-minutes: 30
@@ -215,7 +278,8 @@ jobs:
         with:
           shared-key: ci-${{ runner.os }}-${{ runner.arch }}
           key: ${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-default
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          # PR caches remain scoped to refs/pull/<n>/merge; privileged admission never restores them.
+          save-if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
           cache-bin: false
       - name: Prepare canonical temporary storage and environment evidence
         shell: bash
@@ -290,7 +354,7 @@ jobs:
 
   agent-lifecycle-macos:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'agent-lifecycle-macos')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'agent-lifecycle-macos')
     name: Agent lifecycle on macOS
     runs-on: macos-15
     timeout-minutes: 45
@@ -301,7 +365,8 @@ jobs:
         with:
           shared-key: ci-${{ runner.os }}-${{ runner.arch }}
           key: ${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-default
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          # PR caches remain scoped to refs/pull/<n>/merge; privileged admission never restores them.
+          save-if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
           cache-bin: false
       - name: Build and test managed Agent lifecycle
         shell: bash
@@ -328,8 +393,9 @@ jobs:
 
   # The optional ML stack is not compiled by the default-feature job.
   all-features:
+    name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'Deferred - all-features' || 'all-features' }}
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'all-features')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'all-features')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -341,7 +407,8 @@ jobs:
         with:
           shared-key: ci-${{ runner.os }}-${{ runner.arch }}
           key: ${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-all-features
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          # PR caches remain scoped to refs/pull/<n>/merge; privileged admission never restores them.
+          save-if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
           cache-bin: false
       - name: Install Linux sandbox runtime
         run: sudo apt-get update && sudo apt-get install --no-install-recommends -y bubblewrap
@@ -349,8 +416,9 @@ jobs:
       - run: cargo test --workspace --all-features --locked
 
   agent-windows-security:
+    name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'Deferred - agent-windows-security' || 'agent-windows-security' }}
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'agent-windows-security')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'agent-windows-security')
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -362,7 +430,8 @@ jobs:
         with:
           shared-key: ci-${{ runner.os }}-${{ runner.arch }}
           key: ${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-default
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          # PR caches remain scoped to refs/pull/<n>/merge; privileged admission never restores them.
+          save-if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
           cache-bin: false
       - run: cargo clippy --locked -p agentfw --all-targets -- -D warnings
       # Each MCP case owns real processes and protected profile files. Avoid a
@@ -420,7 +489,7 @@ jobs:
 
   saml-release-targets:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'saml-release-targets')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'saml-release-targets')
     name: SAML ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
@@ -449,7 +518,8 @@ jobs:
         with:
           shared-key: ci-${{ runner.os }}-${{ runner.arch }}
           key: ${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-saml-${{ matrix.target }}
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          # PR caches remain scoped to refs/pull/<n>/merge; privileged admission never restores them.
+          save-if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
           cache-bin: false
       - name: Verify target's resolved RSA dependency boundary
         shell: bash
@@ -467,7 +537,7 @@ jobs:
 
   redis-integration:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'redis-integration')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'redis-integration')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -487,7 +557,8 @@ jobs:
         with:
           shared-key: ci-${{ runner.os }}-${{ runner.arch }}
           key: ${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-default
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          # PR caches remain scoped to refs/pull/<n>/merge; privileged admission never restores them.
+          save-if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
           cache-bin: false
       - run: cargo test --locked -p llm-firewall redis_limits::tests::redis_shares_rate_and_spend_windows -- --ignored
         env:
@@ -495,7 +566,7 @@ jobs:
 
   postgres-integration:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'postgres-integration')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'postgres-integration')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -519,7 +590,8 @@ jobs:
         with:
           shared-key: ci-${{ runner.os }}-${{ runner.arch }}
           key: ${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-default
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          # PR caches remain scoped to refs/pull/<n>/merge; privileged admission never restores them.
+          save-if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
           cache-bin: false
       # Run on the fresh service database before suites which leave queued events.
       - name: Verify webhook ownership, recovery and populated migrations
@@ -573,7 +645,7 @@ jobs:
 
   docker-build:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'docker-build')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'docker-build')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

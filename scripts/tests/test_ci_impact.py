@@ -31,7 +31,7 @@ class ImpactTests(unittest.TestCase):
     def test_agent_native_selects_all_platform_and_original_server_controls(self):
         jobs = self.selected(["crates/agentfw/src/native.rs"])
         self.assertTrue({"test", "native-macos-resilience", "agent-windows-security"} <= jobs["ci.yml"])
-        for workflow in ("mcp-real-filesystem.yml", "mcp-real-git.yml",
+        for workflow in ("mcp-real-filesystem.yml", "mcp-real-git.yml", "mcp-https-post.yml",
                          "mcp-windows-read.yml", "sou79-resource-budgets.yml",
                          "sou86-crash-supervision.yml", "provenance-memory.yml",
                          "supply-chain.yml", "license-policy.yml"):
@@ -90,7 +90,8 @@ class ImpactTests(unittest.TestCase):
             text = (ROOT / ".github/workflows" / filename).read_text(encoding="utf-8")
             registered = set(re.findall(r"(?m)^  ([a-z][a-z0-9-]*):\s*$",
                                         text.split("jobs:\n", 1)[1]))
-            self.assertEqual(registered, set(jobs) | {"impact"}, filename)
+            auxiliary = {"draft-checks", "main-smoke"} if filename == "ci.yml" else set()
+            self.assertEqual(registered, set(jobs) | {"impact"} | auxiliary, filename)
             for job in jobs:
                 body = re.split(r"\n  [a-z][a-z0-9-]*:\s*\n",
                                 text.split(f"  {job}:\n", 1)[1], maxsplit=1)[0]

@@ -2,6 +2,7 @@ name: Native MCP diagnostic output
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:
@@ -18,7 +19,7 @@ jobs:
       workflow: native-mcp-stderr.yml
   required-linux-native-stderr:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'required-linux-native-stderr')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'required-linux-native-stderr')
     runs-on: ubuntu-22.04
     timeout-minutes: 25
     env:
@@ -86,7 +87,7 @@ jobs:
 
   native-platform-launch:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'native-platform-launch')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-platform-launch')
     strategy:
       fail-fast: false
       matrix:

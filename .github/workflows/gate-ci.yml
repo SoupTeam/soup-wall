@@ -2,9 +2,7 @@ name: Gate Validator CI
 
 on:
   pull_request:
-  push:
-    branches:
-      - main
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:
@@ -22,7 +20,7 @@ jobs:
       workflow: gate-ci.yml
   validate-gate-matrix:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'validate-gate-matrix')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'validate-gate-matrix')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

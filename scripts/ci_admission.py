@@ -215,6 +215,8 @@ def inspect(api: GitHub, number: int, event_base: str, event_head: str) -> tuple
         return head_sha, Verdict("failure", "merge candidate unavailable or conflicted")
     if pr.get("state") != "open" or base_sha != event_base or head_sha != event_head:
         return merge_sha, Verdict("failure", "PR source moved during admission; re-run on current candidate")
+    if pr.get("draft") is True:
+        return merge_sha, Verdict("failure", "draft PR is not a merge-qualified candidate")
     commit = api.get("/git/commits/" + merge_sha)
     parents = [item["sha"] for item in commit.get("parents", [])]
     if parents != [base_sha, head_sha]:
@@ -258,6 +260,8 @@ def inspect(api: GitHub, number: int, event_base: str, event_head: str) -> tuple
             return merge_sha, Verdict(verdict.state, workflow + ": " + verdict.reason)
     verdict = assess_codeql(codeql, get_jobs(api, codeql), selected["codeql"], head_sha)
     after = api.get(f"/pulls/{number}")
+    if after.get("draft") is True:
+        return merge_sha, Verdict("failure", "PR converted to draft while evidence was inspected")
     if (after["base"]["sha"], after["head"]["sha"], after.get("merge_commit_sha")) != (base_sha, head_sha, merge_sha):
         return merge_sha, Verdict("failure", "PR source changed while evidence was inspected")
     return merge_sha, verdict
@@ -270,7 +274,8 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     repo = os.environ["GITHUB_REPOSITORY"]
-    event = json.load(open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8"))
+    with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as event_file:
+        event = json.load(event_file)
     pr_event = event["pull_request"]
     if pr_event["number"] != args.pr or pr_event["base"]["repo"]["full_name"] != repo:
         parser.error("event does not identify the requested base PR")
@@ -280,6 +285,15 @@ def main() -> int:
     status_sha = current.get("merge_commit_sha") or current["head"]["sha"]
     if not SHA.fullmatch(status_sha):
         raise RuntimeError("invalid initial status target SHA")
+    if current.get("draft") is True:
+        # Keep admission pending, never green. GitHub also forbids merging drafts.
+        # A ready_for_review event starts fresh qualification; do not occupy a
+        # hosted runner waiting up to 45 minutes for deliberately skipped jobs.
+        if not args.dry_run:
+            api.post("/statuses/" + status_sha, {"state": "pending", "context": CONTEXT,
+                                               "description": "Draft: full qualification starts when ready for review"})
+        print("pending: draft PR; qualification deferred without runner polling", flush=True)
+        return 0
     if not args.dry_run:
         api.post("/statuses/" + status_sha, {"state": "pending", "context": CONTEXT,
                                                "description": "Checking exact-source CI evidence"})

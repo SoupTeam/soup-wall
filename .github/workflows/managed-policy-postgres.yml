@@ -2,6 +2,7 @@ name: Managed Agent PostgreSQL rollout
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:
@@ -18,7 +19,7 @@ jobs:
       workflow: managed-policy-postgres.yml
   managed-postgres:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'managed-postgres')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'managed-postgres')
     name: PostgreSQL migration and real Agent rollout
     runs-on: ubuntu-24.04
     timeout-minutes: 35
