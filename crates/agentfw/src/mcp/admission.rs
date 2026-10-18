@@ -2828,6 +2828,9 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
                             // useful protocol work or recreate a drain task.
                             diagnostics_eof = true;
                         }
+                        _ = tokio::signal::ctrl_c() => {
+                            break Err(anyhow::anyhow!("native_mcp_interrupted"));
+                        }
                         result = &mut exchange => break result,
                     }
                 }

@@ -5983,3 +5983,267 @@ async fn sou78_pending_connection_refuses_native_calls_before_body_or_state_allo
     assert!(!root.join("risk-inflight.json").exists());
     assert!(!root.join("risk-checkpoint.json").exists());
 }
+
+#[tokio::test]
+async fn sou89_restarted_agent_rebinds_after_authority_expires() {
+    let f = Fixture::new(ALLOW);
+    let (s, r) = review8dd_start(
+        &f,
+        "parent-root",
+        "parent",
+        None,
+        &["read_document"],
+        Some(vec![]),
+    )
+    .await;
+    assert_allow(s, &r);
+
+    // Start worker with short TTL (50ms).
+    let (s, r, _) = scoped_start_with_ttl(
+        &f,
+        "child-first",
+        "worker",
+        Some("parent"),
+        &["read_document"],
+        Some(vec![]),
+        50,
+    )
+    .await;
+    assert_allow(s, &r);
+
+    // Active worker rejects duplicate bootstrap.
+    let (_, r) = review8dd_start(
+        &f,
+        "child-dup",
+        "worker",
+        Some("parent"),
+        &["read_document"],
+        Some(vec![]),
+    )
+    .await;
+    assert_eq!(r["error_code"], "native_agent_already_bound");
+
+    // Wait for the first worker's authority to expire.
+    tokio::time::sleep(std::time::Duration::from_millis(70)).await;
+
+    // Direct call to child-first now fails with native_child_authority_expired (not native_session_unknown).
+    let (_, r) = f
+        .post(&f.call("child-first", "read_document", &json!({})))
+        .await;
+    assert_eq!(r["error_code"], "native_child_authority_expired");
+
+    // Restarted worker with fresh authority rebinds cleanly; old dead session is reaped.
+    let (s, r, _) = scoped_start_with_ttl(
+        &f,
+        "child-second",
+        "worker",
+        Some("parent"),
+        &["read_document"],
+        Some(vec![]),
+        60_000,
+    )
+    .await;
+    assert_allow(s, &r);
+
+    // The restarted worker can execute calls.
+    let (s, r) = f
+        .post(&f.call("child-second", "read_document", &json!({})))
+        .await;
+    assert_allow(s, &r);
+}
+
+#[tokio::test]
+async fn sou89_capacity_reclaimed_when_authority_expired_sessions_are_present() {
+    let f = Fixture::new(ALLOW);
+    let (s, r) = review8dd_start(
+        &f,
+        "parent-root",
+        "parent",
+        None,
+        &["read_document"],
+        Some(vec![]),
+    )
+    .await;
+    assert_allow(s, &r);
+
+    // Fill remaining 63 slots with short-lived child sessions (TTL = 500ms).
+    for i in 1..64 {
+        let (s, r, _) = scoped_start_with_ttl(
+            &f,
+            &format!("child-{i}"),
+            &format!("worker-{i}"),
+            Some("parent"),
+            &["read_document"],
+            Some(vec![]),
+            500,
+        )
+        .await;
+        assert_allow(s, &r);
+    }
+
+    // Total sessions = 64 (MAX_SESSIONS). A 65th session while all are alive is rejected with native_session_cap.
+    let (_, r) = review8dd_start(
+        &f,
+        "child-excess",
+        "worker-excess",
+        Some("parent"),
+        &["read_document"],
+        Some(vec![]),
+    )
+    .await;
+    assert_eq!(r["error_code"], "native_session_cap");
+
+    // Wait for the 63 child sessions to expire.
+    tokio::time::sleep(std::time::Duration::from_millis(550)).await;
+
+    // Starting a new session now triggers reap_lost_sessions and succeeds by reclaiming capacity.
+    let (s, r, _) = scoped_start_with_ttl(
+        &f,
+        "child-recovered",
+        "worker-new",
+        Some("parent"),
+        &["read_document"],
+        Some(vec![]),
+        60_000,
+    )
+    .await;
+    assert_allow(s, &r);
+
+    // Calling tools under child-recovered works.
+    let (s, r) = f
+        .post(&f.call("child-recovered", "read_document", &json!({})))
+        .await;
+    assert_allow(s, &r);
+}
+
+#[tokio::test]
+async fn sou89_instance_endpoint_reclaims_capacity_and_cleans_bindings() {
+    let f = Fixture::new(ALLOW);
+    let (s, r) = review8dd_start(
+        &f,
+        "parent-root",
+        "parent",
+        None,
+        &["read_document"],
+        Some(vec![]),
+    )
+    .await;
+    assert_allow(s, &r);
+
+    let (s, r, _) = scoped_start_with_ttl(
+        &f,
+        "child-short",
+        "worker-short",
+        Some("parent"),
+        &["read_document"],
+        Some(vec![]),
+        50,
+    )
+    .await;
+    assert_allow(s, &r);
+
+    // Verify GET /native/v1/instance lists both bindings initially.
+    let response = app(f.state.clone())
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/native/v1/instance")
+                .header("authorization", format!("Bearer {NATIVE_TOKEN}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = serde_json::from_slice::<Value>(
+        &to_bytes(response.into_body(), 1024 * 1024).await.unwrap(),
+    )
+    .unwrap();
+    let bindings = body["bindings"].as_array().unwrap();
+    assert_eq!(bindings.len(), 2);
+    // Sessions include host_session context + parent epoch + child epoch = 3 contexts.
+    let sessions_before = body["provenance"]["usage"]["sessions"].as_u64().unwrap();
+    assert_eq!(sessions_before, 3);
+
+    // Wait for child-short authority to expire.
+    tokio::time::sleep(std::time::Duration::from_millis(70)).await;
+
+    // GET /native/v1/instance reaps the lost child session and updates usage.
+    let response = app(f.state.clone())
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/native/v1/instance")
+                .header("authorization", format!("Bearer {NATIVE_TOKEN}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = serde_json::from_slice::<Value>(
+        &to_bytes(response.into_body(), 1024 * 1024).await.unwrap(),
+    )
+    .unwrap();
+    let bindings = body["bindings"].as_array().unwrap();
+    assert_eq!(bindings.len(), 1);
+    assert_eq!(bindings[0]["agent_id"], "parent");
+    let sessions_after = body["provenance"]["usage"]["sessions"].as_u64().unwrap();
+    assert_eq!(sessions_after, 2);
+}
+
+#[tokio::test]
+async fn sou89_restarted_session_id_reuses_slot_if_previous_died() {
+    let f = Fixture::new(ALLOW);
+    let (s, r) = review8dd_start(
+        &f,
+        "parent-root",
+        "parent",
+        None,
+        &["read_document"],
+        Some(vec![]),
+    )
+    .await;
+    assert_allow(s, &r);
+
+    let (s, r, _) = scoped_start_with_ttl(
+        &f,
+        "reused-child",
+        "worker-1",
+        Some("parent"),
+        &["read_document"],
+        Some(vec![]),
+        50,
+    )
+    .await;
+    assert_allow(s, &r);
+
+    // While alive, attempting session_start with the same session_id returns native_session_exists.
+    let (_, r, _) = scoped_start_with_ttl(
+        &f,
+        "reused-child",
+        "worker-2",
+        Some("parent"),
+        &["read_document"],
+        Some(vec![]),
+        60_000,
+    )
+    .await;
+    assert_eq!(r["error_code"], "native_session_exists");
+
+    // Wait for the first session's authority to expire.
+    tokio::time::sleep(std::time::Duration::from_millis(70)).await;
+
+    // Starting a new session with the same session_id now cleans up the dead session and succeeds.
+    let (s, r, _) = scoped_start_with_ttl(
+        &f,
+        "reused-child",
+        "worker-2",
+        Some("parent"),
+        &["read_document"],
+        Some(vec![]),
+        60_000,
+    )
+    .await;
+    assert_allow(s, &r);
+}

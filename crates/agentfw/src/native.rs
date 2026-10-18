@@ -1281,21 +1281,30 @@ pub async fn instance(State(st): State<Shared>, headers: HeaderMap) -> (StatusCo
     if !crate::token::verify(&native.token, auth) {
         return failure("native_unauthorized", StatusCode::UNAUTHORIZED);
     }
-    let Ok(sessions) = native.sessions.lock() else {
+    let Ok(mut sessions) = native.sessions.lock() else {
         return failure("native_state_unavailable", StatusCode::SERVICE_UNAVAILABLE);
     };
     let Ok(now_ms) = wall_time_ms() else {
         return failure("native_clock_unavailable", StatusCode::SERVICE_UNAVAILABLE);
     };
-    let bindings: Vec<Value> = sessions.entries.values()
-        .filter(|s| s.host_session.is_some() && s.agent_id.is_some() && validate_lineage(&sessions, s, now_ms, Instant::now()).is_ok())
-        .map(|s| json!({"host_session":s.host_session,"agent_id":s.agent_id,"binding_sha256":hash(s.epoch.as_bytes())})).collect();
-    let Ok(firewall) = st.firewall.lock() else {
+    let Ok(mut firewall) = st.firewall.lock() else {
         return failure(
             "native_inspection_unavailable",
             StatusCode::SERVICE_UNAVAILABLE,
         );
     };
+    let now = Instant::now();
+    reap_lost_sessions(
+        &mut sessions,
+        native.approval.as_ref(),
+        &mut firewall,
+        &st.spans,
+        now,
+        now_ms,
+    );
+    let bindings: Vec<Value> = sessions.entries.values()
+        .filter(|s| s.host_session.is_some() && s.agent_id.is_some() && validate_lineage(&sessions, s, now_ms, now).is_ok())
+        .map(|s| json!({"host_session":s.host_session,"agent_id":s.agent_id,"binding_sha256":hash(s.epoch.as_bytes())})).collect();
     (
         StatusCode::OK,
         Json(
@@ -1387,6 +1396,45 @@ fn rollback_provenance_contexts(firewall: &mut soup_wall_agent::AgentFirewall, c
     }
 }
 
+/// Cleans up dead, expired, and orphaned sessions, reclaiming session capacity,
+/// approvals, spans, and provenance tracking contexts without losing host-level
+/// protection or shared taint history.
+fn reap_lost_sessions(
+    state: &mut Sessions,
+    approval: Option<&approval::ApprovalState>,
+    firewall: &mut soup_wall_agent::AgentFirewall,
+    spans: &crate::spans::SpanCache,
+    now: Instant,
+    now_ms: u64,
+) -> usize {
+    let dead_ids: Vec<String> = state
+        .entries
+        .iter()
+        .filter(|(_, s)| {
+            now.duration_since(s.touched) >= TTL
+                || s.authority_expires_at_ms.is_some_and(|exp| now_ms >= exp)
+                || validate_lineage(state, s, now_ms, now).is_err()
+        })
+        .map(|(id, _)| id.clone())
+        .collect();
+
+    let mut total_reaped = 0;
+    for id in &dead_ids {
+        if let Some(old) = state.entries.remove(id) {
+            if let Some(approval) = approval {
+                approval.close_session(id, "session_expired");
+            }
+            if let (Some(host), Some(agent)) = (&old.host_session, &old.agent_id) {
+                firewall.end_agent(host, agent);
+            }
+            firewall.inspect(&old.event_at(old.seq + 1, EventKind::SessionEnd));
+            spans.end_session(&old.epoch);
+            total_reaped += 1;
+        }
+    }
+    total_reaped
+}
+
 fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Response, &'static str> {
     if request.event == "session_start"
         && request.host_session.is_none()
@@ -1399,13 +1447,14 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
     }
 
     let started = Instant::now();
+    let now = Instant::now();
+    let now_ms = wall_time_ms()?;
     // One lock covers sequencing, inspection, admission and audit. No await,
     // external judge, or network request occurs while this guard is held.
     let mut state = native
         .sessions
         .lock()
         .map_err(|_| "native_state_unavailable")?;
-    let now = Instant::now();
     let mut firewall = st
         .firewall
         .lock()
@@ -1453,11 +1502,39 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         reason_codes: vec![],
     };
     if request.event == "session_start" {
-        if state.entries.contains_key(&request.session_id) {
-            return Err("native_session_exists");
+        if let Some(existing) = state.entries.get(&request.session_id) {
+            if now.duration_since(existing.touched) >= TTL
+                || existing
+                    .authority_expires_at_ms
+                    .is_some_and(|exp| now_ms >= exp)
+                || validate_lineage(&state, existing, now_ms, now).is_err()
+            {
+                if let Some(old) = state.entries.remove(&request.session_id) {
+                    if let Some(approval) = &native.approval {
+                        approval.close_session(&request.session_id, "session_expired");
+                    }
+                    if let (Some(host), Some(agent)) = (&old.host_session, &old.agent_id) {
+                        firewall.end_agent(host, agent);
+                    }
+                    firewall.inspect(&old.event_at(old.seq + 1, EventKind::SessionEnd));
+                    st.spans.end_session(&old.epoch);
+                }
+            } else {
+                return Err("native_session_exists");
+            }
         }
         if state.entries.len() >= MAX_SESSIONS {
-            return Err("native_session_cap");
+            reap_lost_sessions(
+                &mut state,
+                native.approval.as_ref(),
+                &mut firewall,
+                &st.spans,
+                now,
+                now_ms,
+            );
+            if state.entries.len() >= MAX_SESSIONS {
+                return Err("native_session_cap");
+            }
         }
         let (granted_tools, granted_resources, agent_id, parent_id, authority_expires_at_ms) =
             if let Some(host_session) = &request.host_session {
@@ -1466,10 +1543,6 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                     .as_deref()
                     .ok_or("native_child_authority_missing")?;
                 let key = child_authority::derive_key(&native.token);
-                let now_ms = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .map_err(|_| "native_clock_unavailable")?
-                    .as_millis() as u64;
                 let grant = child_authority::verify_token(
                     &key,
                     token,
@@ -1526,6 +1599,28 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                     return Err("native_invalid_identity");
                 }
                 if let Some(agent) = &agent_id {
+                    let dead_sessions: Vec<String> = state
+                        .entries
+                        .iter()
+                        .filter(|(_, s)| {
+                            s.host_session.as_ref() == Some(host_session)
+                                && s.agent_id.as_ref() == Some(agent)
+                                && (now.duration_since(s.touched) >= TTL
+                                    || s.authority_expires_at_ms.is_some_and(|exp| now_ms >= exp)
+                                    || validate_lineage(&state, s, now_ms, now).is_err())
+                        })
+                        .map(|(id, _)| id.clone())
+                        .collect();
+                    for id in dead_sessions {
+                        if let Some(old) = state.entries.remove(&id) {
+                            if let Some(approval) = &native.approval {
+                                approval.close_session(&id, "session_expired");
+                            }
+                            firewall.end_agent(host_session, agent);
+                            firewall.inspect(&old.event_at(old.seq + 1, EventKind::SessionEnd));
+                            st.spans.end_session(&old.epoch);
+                        }
+                    }
                     if state.entries.values().any(|s| {
                         s.host_session.as_ref() == Some(host_session)
                             && s.agent_id.as_ref() == Some(agent)
@@ -1696,7 +1791,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         .entries
         .get(&request.session_id)
         .ok_or("native_session_unknown")?;
-    validate_lineage(&state, session, wall_time_ms()?, now)?;
+    validate_lineage(&state, session, now_ms, now)?;
     let session = state
         .entries
         .get_mut(&request.session_id)

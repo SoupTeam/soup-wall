@@ -1192,6 +1192,7 @@ pub(super) async fn run(
                 Err(error) => Err(error),
                 Ok(()) => Err(anyhow::anyhow!("mcp_budget_monitor_stopped")),
             },
+            _ = tokio::signal::ctrl_c() => Err(anyhow::anyhow!("native_mcp_interrupted")),
             result = &mut transport => result,
         }
     };
