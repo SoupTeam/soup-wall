@@ -457,6 +457,7 @@ fn policy_for(
                     response_contract: None,
                 }),
                 network: None,
+                post: None,
                 windows_read: None,
                 binding: None,
             };
@@ -532,6 +533,7 @@ fn policy_for(
                 }],
                 execution: None,
                 network: Some(net),
+                post: None,
                 windows_read: None,
                 binding: None,
             };
