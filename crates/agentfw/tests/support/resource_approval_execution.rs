@@ -7,6 +7,26 @@ use std::os::unix::ffi::OsStrExt;
 
 const ASK: &str = "egress_allowlist: [127.0.0.1]\nagent_policies:\n  - name: ask-read\n    when: { action_class: read_only }\n    action: ask\n  - name: ask-get\n    when: { action_class: network }\n    action: ask\ndefault: allow\n";
 const DOCUMENT: &str = "SOU-88 protected document: 19 blue widgets.\n";
+const HTTPS_DOCUMENT: &str = "{\"inventory\":\"SOU-56 owned HTTPS receiver\",\"red_widgets\":7,\"message\":\"café, қазақша, 日本語 🥣\"}\n";
+
+fn assert_original_result(reply: &Value, network: bool) {
+    assert_ne!(reply["result"]["isError"], true, "{reply}");
+    let content = reply["result"]["content"].as_array().unwrap();
+    if network {
+        // The production HTTPS response contains metadata first, original body
+        // second. Neither a receipt nor metadata alone proves body delivery.
+        assert_eq!(content.len(), 2);
+        let metadata: Value = serde_json::from_str(content[0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(metadata["success"], true);
+        assert_eq!(metadata["request_issued"], true);
+        assert_eq!(metadata["status"], 200);
+        assert_eq!(metadata["received_bytes"], HTTPS_DOCUMENT.len());
+        assert_eq!(content[1]["text"], HTTPS_DOCUMENT);
+    } else {
+        assert_eq!(content.len(), 1);
+        assert_eq!(content[0]["text"], DOCUMENT);
+    }
+}
 
 /// Observe actual reads without opening the protected file ourselves. Metadata
 /// and O_PATH pinning do not produce IN_ACCESS; production read(2) does.
@@ -359,13 +379,7 @@ async fn acceptance(network: bool) {
             let reply: Value = serde_json::from_str(&f.receive().await.unwrap()).unwrap();
             assert_eq!(reply["id"], "protected-call");
             if scenario == "approved" {
-                assert_ne!(reply["result"]["isError"], true, "{reply}");
-                let text = reply["result"]["content"][0]["text"].as_str().unwrap();
-                if network {
-                    assert!(text.contains("SOU-56 owned HTTPS receiver"), "{reply}");
-                } else {
-                    assert_eq!(text, DOCUMENT);
-                }
+                assert_original_result(&reply, network);
             } else {
                 assert_eq!(reply["result"]["isError"], true, "{scenario}: {reply}");
                 assert!(!reply.to_string().contains(DOCUMENT));
@@ -484,10 +498,8 @@ async fn acceptance(network: bool) {
             assert_ne!(next_row["pending_id"], row["pending_id"]);
             operator_approve(&f, &next_row).unwrap();
             let reply: Value = serde_json::from_str(&f.receive().await.unwrap()).unwrap();
-            assert_ne!(
-                reply["result"]["isError"], true,
-                "continuation after {scenario}: {reply}"
-            );
+            assert_eq!(reply["id"], "useful-continuation");
+            assert_original_result(&reply, network);
             if let Some(w) = &watch {
                 assert!(w.accessed());
             }

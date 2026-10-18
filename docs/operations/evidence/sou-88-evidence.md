@@ -118,3 +118,11 @@ requires the closed refusal and zero effect. It does not weaken production check
 The arm64 fixture image additionally lacked the original source-path Python
 script. The receiver is now embedded in the test binary; disposable certificate
 creation is self-contained. These initial CI failures are not passing evidence.
+
+The second Linux attempt [39129351972](https://github.com/SoupTeam/soup-wall/actions/runs/39129351972)
+passed all six read controls and the five GET refusal controls on Linux. Its GET
+positive assertion incorrectly treated the metadata content block as the body;
+the log retained the real successful TLS response and original second-block
+document. The follow-up asserts both the production metadata and exact original
+UTF-8 body bytes, including for useful continuations. That failed assertion is
+not relabelled as a complete passing suite.
