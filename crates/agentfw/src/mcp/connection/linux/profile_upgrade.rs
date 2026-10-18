@@ -156,6 +156,40 @@ fn validate_installed(state: &Installed, o: &Options) -> Result<()> {
             && state.home == o.home,
         "profile ownership mismatch"
     );
+    ensure!(
+        state.generation > 0
+            && [
+                &state.current,
+                &state.registry,
+                &state.config,
+                &state.policy,
+                &state.agent
+            ]
+            .iter()
+            .all(|s| crate::native::is_digest(s))
+            && state
+                .previous
+                .as_deref()
+                .is_none_or(crate::native::is_digest),
+        "invalid installed profile identity"
+    );
+    ensure!(
+        !state.host_session.is_empty()
+            && state.host_session.len() <= 128
+            && !state.profile_server_id.is_empty()
+            && state.profile_server_id.len() <= 128,
+        "invalid installed session identity"
+    );
+    if let Some(c) = &state.classifier {
+        ensure!(
+            crate::native::is_digest(&c.sha256)
+                && crate::native::is_digest(&c.python_sha256)
+                && c.source.is_absolute()
+                && c.python.is_absolute()
+                && c.workspace.is_absolute(),
+            "invalid classifier identity"
+        );
+    }
     Ok(())
 }
 fn manager(o: &Options, journal: &Journal) -> ProfileManager {
@@ -556,6 +590,9 @@ async fn apply(target: Target, approval: String) -> Result<Value> {
     if let Some(c) = &j.classifier {
         stage_classifier(o, c)?;
     }
+    let mgr = manager(o, &j);
+    let staged_source = mgr.stage_owned_revision(&target.source_profile, &j.source_bundle)?;
+    let staged_target = mgr.stage_owned_revision(&target.profile, &j.target_bundle)?;
     let barrier = native_request(
         o,
         reqwest::Method::POST,
@@ -570,22 +607,28 @@ async fn apply(target: Target, approval: String) -> Result<Value> {
     );
     j.phase = "checkpointed".into();
     save(&config, &journal_name(o), &j)?;
-    let mgr = manager(o, &j);
-    mgr.adopt_owned_source(&target.source_profile, &j.before.native_config_sha256)?;
-    let activated = if j.rollback {
-        let token = mgr
-            .preview_rollback(Some(&j.target_bundle))?
-            .approval_sha256;
-        mgr.rollback(Some(&j.target_bundle), Some(j.generation - 1), Some(&token))?
-    } else {
-        let token = mgr.preview_upgrade(&target.profile)?.approval_sha256;
-        mgr.upgrade(
-            &target.profile,
-            Some(&j.target_bundle),
-            Some(j.generation - 1),
-            Some(&token),
-        )?
-    };
+    mgr.adopt_owned_source(&staged_source, &j.before.native_config_sha256)?;
+    let rollback = j.rollback;
+    let target_bundle = j.target_bundle.clone();
+    let prior_generation = j.generation - 1;
+    // The accepted synchronous lifecycle manager owns its bounded HTTP runtime.
+    // Keep it outside this CLI's async runtime instead of nesting runtimes.
+    let activated = tokio::task::spawn_blocking(move || {
+        if rollback {
+            let token = mgr.preview_rollback(Some(&target_bundle))?.approval_sha256;
+            mgr.rollback(Some(&target_bundle), Some(prior_generation), Some(&token))
+        } else {
+            let token = mgr.preview_upgrade(&staged_target)?.approval_sha256;
+            mgr.upgrade(
+                &staged_target,
+                Some(&target_bundle),
+                Some(prior_generation),
+                Some(&token),
+            )
+        }
+    })
+    .await
+    .context("profile lifecycle worker failed")??;
     ensure!(
         activated.verified && activated.daemon_restarted,
         "candidate daemon activation was not verified"
@@ -626,7 +669,10 @@ async fn recover(o: Options) -> Result<Value> {
             inner.operation_id == j.operation,
             "foreign daemon transition preserved"
         );
-        mgr.recover()?;
+        let recovery = manager(&o, &j);
+        tokio::task::spawn_blocking(move || recovery.recover())
+            .await
+            .context("profile recovery worker failed")??;
     }
     let state = mgr.load_state()?;
     if state.active_bundle_sha256.as_deref() == Some(j.target_bundle.as_str())

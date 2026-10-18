@@ -535,6 +535,18 @@ impl ProfileManager {
         Ok(())
     }
 
+    /// Stage the exact reviewed inputs before the owned continuity barrier.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn stage_owned_revision(&self, source: &Path, expected: &str) -> Result<PathBuf> {
+        let _lock = self.lock()?;
+        let staged = self.stage_revision(source)?;
+        ensure!(
+            staged.bundle_sha256 == expected,
+            "reviewed profile changed before staging"
+        );
+        Ok(self.revisions.join(expected))
+    }
+
     /// Acquires exclusive non-blocking advisory lock on mcp-profile operations.
     pub fn lock(&self) -> Result<OperationLock> {
         ensure_safe_managed_dir(&self.home)?;

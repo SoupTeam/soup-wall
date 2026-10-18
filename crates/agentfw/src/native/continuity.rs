@@ -43,11 +43,32 @@ pub struct Continuity {
     gate: tokio::sync::Mutex<()>,
 }
 
+fn encode_bounded<T: Serialize>(value: &T) -> Result<Vec<u8>> {
+    struct Bounded(Vec<u8>);
+    impl Write for Bounded {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            if self.0.len().saturating_add(bytes.len()) > LIMIT as usize {
+                return Err(std::io::Error::other(
+                    "continuity serialization exceeds bound",
+                ));
+            }
+            self.0.extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut writer = Bounded(Vec::new());
+    serde_json::to_writer(&mut writer, value)?;
+    Ok(writer.0)
+}
+
 fn signature(checkpoint: &Checkpoint, token: &str) -> Result<Vec<u8>> {
     let mut mac = Hmac::<Sha256>::new_from_slice(token.as_bytes())?;
     mac.update(b"agentfw/provenance-checkpoint/v1\0");
     // The stored signature is excluded from authenticated material.
-    mac.update(&serde_json::to_vec(&(
+    mac.update(&encode_bounded(&(
         &checkpoint.format,
         checkpoint.sequence,
         &checkpoint.scoped_hosts,
@@ -242,7 +263,7 @@ impl Continuity {
             signature: String::new(),
         };
         checkpoint.signature = URL_SAFE_NO_PAD.encode(signature(&checkpoint, &native.token)?);
-        self.atomic("risk-checkpoint.json", &serde_json::to_vec(&checkpoint)?)?;
+        self.atomic("risk-checkpoint.json", &encode_bounded(&checkpoint)?)?;
         self.sequence.store(sequence, Ordering::Relaxed);
         fs::remove_file(self.root.join("risk-inflight.json"))?;
         self.sync()
@@ -255,7 +276,14 @@ fn refused(path: &str) -> Response {
     } else {
         json!({"contract_version":super::CONTRACT,"release":false,"verdict":"deny","error_code":"native_continuity_unavailable"})
     };
-    (StatusCode::SERVICE_UNAVAILABLE, Json(value)).into_response()
+    // Hook clients consume permissionDecision only on a successful HTTP reply.
+    // A storage outage must never turn enforcement into no-opinion.
+    let status = if path == "/hook" {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    };
+    (status, Json(value)).into_response()
 }
 
 /// Persist risk before releasing an authenticated decision/result. The durable

@@ -98,6 +98,7 @@ def main():
             policy=root/'policy.yaml';policy.write_text('agent_policies: []\ndefault: allow\n')
             port=helpers.available_port()
             native=json.loads((source/'native-config.json').read_text())['native']
+            native['approval']={'ttl_seconds':300}
             helpers.dump(home/'config.yaml',{'port':port,'bind':'127.0.0.1','enforce':True,'policy':str(policy),'native':native})
             run(['lifecycle','install','sou78-proof',binary,'--sha256',helpers.digest(binary)])
             run(['lifecycle','start'])
@@ -153,8 +154,26 @@ def main():
                 '--agent-id','previous-agent','--tools','read_document','--instance-id',before_instance]).stdout.strip()
             legacy_token=run(['child-authority','mint','--session','sou78-host','--server','sou78-owned',
                 '--tools','read_document']).stdout.strip()
-            hook={'hook_event_name':'PostToolUse','session_id':'sou78-host','tool_name':'Read',
-                  'tool_input':{'file_path':'/untrusted/inventory'},'tool_response':
+            # Supported native session/call/Ask APIs create real outstanding authority.
+            native_session='retained-request'
+            event={'contract_version':'sw-native/1','registry_sha256':old_registry,'session_id':native_session}
+            status,reply=api('/native/v1',dict(event,event='session_start',host_session='sou78-host',
+                server_id='sou78-owned',child_authority=old_token))
+            check('old-authenticated-native-session',status==200 and reply.get('release') is True)
+            status,receipt=api('/native/v1',dict(event,event='call',tool='read_document',
+                args={'name':'inventory'},schema_sha256=digest(read_schema)))
+            check('outstanding-old-receipt-created',status==200 and receipt.get('call_id') is not None)
+            ask={'contract_version':'sw-native/1','registry_sha256':old_registry,'session_id':native_session,
+                 'action':'request','source':'classifier','tool':'read_document',
+                 'args':{'name':'approved-on-old-profile'},'schema_sha256':digest(read_schema)}
+            status,pending=api('/native/approval/v1',ask)
+            check('outstanding-ask-created',status==200 and pending.get('state')=='pending')
+            run(['native-approval','approve',pending['pending_id'],'--binding',pending['binding_sha256']])
+            status,approved=api('/native/approval/v1',dict(ask,action='status',pending_id=pending['pending_id']))
+            check('old-ask-explicitly-approved',status==200 and approved.get('state')=='approved')
+            epoch_before=int((home/'approval-policy-epoch').read_text()) if (home/'approval-policy-epoch').exists() else 0
+            hook={'hook_event_name':'PostToolUse','session_id':'sou78-host','tool_name':'WebFetch',
+                  'tool_input':{'url':'https://untrusted.example.test/inventory'},'tool_response':
                   'Quarterly inventory and pending retention schedule for archived records in the warehouse.'}
             check('hook-history-observed',api('/hook',hook,native=False)[0]==200)
             malformed=root/'malformed';shutil.copytree(target,malformed)
@@ -164,6 +183,10 @@ def main():
             check('malformed-target-no-mutation',(home/'config.yaml').read_bytes()==config_before and host.read_bytes()==host_before)
             useful(baseline,'malformed-target-preserves-live-baseline')
             preview=json.loads(transition('preview',source,target).stdout)
+            report['profiles']={'source_bundle_sha256':preview['identities']['source'],
+                'target_bundle_sha256':preview['identities']['target'],'source_registry_sha256':old_registry,
+                'target_registry_sha256':helpers.digest(target/'registry.json'),
+                'original_server_sha256':digest(original),'policy_sha256':helpers.digest(policy)}
             external=json.loads(host.read_text());external['settings']['theme']='external'
             helpers.dump(host,external)
             transition('apply',source,target,approval=preview['approval'],ok=False)
@@ -177,7 +200,9 @@ def main():
                 extra={'LD_PRELOAD':str(library),'SW_PUBLICATION_MODE':crash} if crash else None
                 result=transition('apply',src,dst,rollback,p['approval'],extra,ok=not crash)
                 if crash:
-                    check('exact-real-process-'+crash,result.returncode==(86 if crash=='crash-before' else 87))
+                    if result.returncode != (86 if crash=='crash-before' else 87):
+                        raise RuntimeError('unexpected crash witness exit '+str(result.returncode)+': '+result.stderr[-2500:])
+                    check('exact-real-process-'+crash,True)
                     status=json.loads(transition('status').stdout)
                     check('crash-honestly-incomplete-'+crash,status['status']=='incomplete')
                     recovered=json.loads(transition('recover').stdout)
@@ -210,6 +235,13 @@ def main():
                     'session_id':'stale-'+name,'event':'session_start','host_session':'sou78-host',
                     'server_id':'sou78-owned','child_authority':token})
                 check('previous-'+name+'-grant-refused',status!=200 and reply.get('release') is False)
+            check('profile-switch-retires-hook-grant-epoch',int((home/'approval-policy-epoch').read_text())>epoch_before)
+            status,reply=api('/native/v1',dict(event,registry_sha256=registry,event='result',tool='read_document',
+                args={'name':'inventory'},call_id=receipt['call_id'],result_kind='value',delivery='model',content='late result'))
+            check('old-result-receipt-refused-before-release',status!=200 and reply.get('release') is False)
+            status,reply=api('/native/approval/v1',dict(ask,registry_sha256=registry,action='status',pending_id=pending['pending_id']))
+            check('old-approved-ask-cannot-revive',status!=200 and reply.get('state')!='approved')
+            check('old-ask-grant-files-retired',not list((home/'native-grants').glob('*.json')))
             source_launcher=activate(target,source,source_tools,rollback=True,crash='crash-after')
             restored=launch();useful(restored,'recovered-rollback-useful-read')
             activate(source,target,target_tools)
@@ -232,6 +264,8 @@ def main():
             subprocess.run([str(binary),'lifecycle','stop'],env=env,capture_output=True,timeout=30)
             log.close()
     finally:
+        report['counts']={'passed':sum(c['passed'] for c in checks),'failed':sum(not c['passed'] for c in checks),
+                          'incomplete':0 if report.get('passed') else 1}
         helpers.dump(args.out,report)
     print(json.dumps({'passed':report.get('passed',False),'checks':len(checks),'evidence':str(args.out)}))
 
