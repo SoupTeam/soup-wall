@@ -32,8 +32,8 @@ use windows_sys::Win32::Storage::FileSystem::{
     CreateDirectoryW, CreateFileW, GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
     CREATE_NEW, FILE_APPEND_DATA, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL,
     FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
-    FILE_READ_ATTRIBUTES, FILE_READ_DATA, FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_WRITE_DATA,
-    OPEN_EXISTING, READ_CONTROL, WRITE_DAC, WRITE_OWNER,
+    FILE_READ_ATTRIBUTES, FILE_READ_DATA, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+    FILE_WRITE_DATA, OPEN_EXISTING, READ_CONTROL, WRITE_DAC, WRITE_OWNER,
 };
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
@@ -443,7 +443,52 @@ pub fn open_audit(path: &Path) -> io::Result<File> {
 }
 
 pub fn restrict_existing(path: &Path) -> io::Result<()> {
-    let _file = open_private(path, READ_CONTROL | WRITE_DAC, false)?;
+    let wide = wide_path(path)?;
+    let flags = FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT;
+    let share = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
+    let access = READ_CONTROL | WRITE_DAC | WRITE_OWNER;
+    let raw = unsafe {
+        CreateFileW(
+            wide.as_ptr(),
+            access,
+            share,
+            null(),
+            OPEN_EXISTING,
+            flags,
+            null_mut(),
+        )
+    };
+    let (raw, has_write_owner) = if raw != INVALID_HANDLE_VALUE {
+        (raw, true)
+    } else {
+        let fallback_access = READ_CONTROL | WRITE_DAC;
+        let fallback_raw = unsafe {
+            CreateFileW(
+                wide.as_ptr(),
+                fallback_access,
+                share,
+                null(),
+                OPEN_EXISTING,
+                flags,
+                null_mut(),
+            )
+        };
+        if fallback_raw == INVALID_HANDLE_VALUE {
+            return Err(io::Error::last_os_error());
+        }
+        (fallback_raw, false)
+    };
+    // SAFETY: CreateFileW returned one owned handle, closed with File on every
+    // return path.
+    let _file = unsafe { File::from_raw_handle(raw) };
+    check_kind(raw, false)?;
+    if has_write_owner && owner_sid(raw).map(|o| o == "S-1-5-32-544").unwrap_or(false) {
+        set_current_owner(raw)?;
+    }
+    check_owner(raw)?;
+    let acl = PrivateAcl::new()?;
+    acl.apply(raw)?;
+    check_owner(raw)?;
     Ok(())
 }
 

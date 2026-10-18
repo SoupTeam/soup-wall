@@ -114,17 +114,15 @@ fn read_private(path: &Path) -> Result<Vec<u8>> {
 
 impl Continuity {
     fn ensure_root(&self) -> Result<()> {
+        #[cfg(windows)]
+        crate::private_file_windows::ensure_private_directory(&self.root)?;
+        #[cfg(unix)]
         if !self.root.exists() {
-            #[cfg(unix)]
-            {
-                let mut builder = fs::DirBuilder::new();
-                use std::os::unix::fs::DirBuilderExt;
-                builder.mode(0o700);
-                builder.create(&self.root)?;
-                File::open(self.root.parent().context("continuity parent absent")?)?.sync_all()?;
-            }
-            #[cfg(windows)]
-            crate::private_file_windows::ensure_private_directory(&self.root)?;
+            let mut builder = fs::DirBuilder::new();
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+            builder.create(&self.root)?;
+            File::open(self.root.parent().context("continuity parent absent")?)?.sync_all()?;
         }
         let meta = fs::symlink_metadata(&self.root)?;
         ensure!(
