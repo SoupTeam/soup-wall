@@ -162,9 +162,10 @@ class Executor:
 
 def consume(api,streaming,case,url,executor):
     import openai,anthropic,httpx2
+    client_timeout=10.0 if case=='response_limit' else 2.5
     client_type=anthropic.Anthropic if api=='anthropic' else openai.OpenAI
     client=client_type(api_key='owned-dummy-not-a-provider-key',base_url=url+('/v1' if api!='anthropic' else ''),
-                       max_retries=0,timeout=2.5,http_client=httpx2.Client(trust_env=False,timeout=2.5))
+                       max_retries=0,timeout=client_timeout,http_client=httpx2.Client(trust_env=False,timeout=client_timeout))
     properties={'path':{'type':'string'},'command':{'type':'string'}}
     names=['read_file','Bash']
     functions=[{'name':n,'description':'Untrusted read-only helper metadata','parameters':{'type':'object','properties':properties}} for n in names]
@@ -255,6 +256,8 @@ def consume(api,streaming,case,url,executor):
     except (openai.APIError,anthropic.APIError) as error:
         return {'outcome':'api_error','error_type':type(error).__name__,'status_code':getattr(error,'status_code',None),'events':seen,'completed':completed,
                 'gateway_error':'Soup Wall' in str(error) or 'llm_firewall' in str(error)}
+    except httpx2.TransportError as error:
+        return {'outcome':'transport_error','error_type':type(error).__name__,'events':seen,'completed':completed}
     except Exception as error:
         # A parser failure is evidence to investigate, never proof of protection.
         return {'outcome':'parser_error','error_type':type(error).__name__,'events':seen,'completed':completed}
@@ -274,7 +277,7 @@ def grade(row):
         if case=='destructive' and row['canary_exists']:errors.append('destructive control not calibrated')
     else:
         if effects or row['receiver'] or row['read_receipts']:errors.append('refused case reached executor')
-        if case in ('deny','ask','destructive','unsupported','unknown') and not row['gateway_refusal']:errors.append('no independent gateway refusal')
+        if case in ('deny','ask','destructive','unsupported','unknown','response_limit','input_limit') and not row['gateway_refusal']:errors.append('no independent gateway refusal')
         if not row['canary_exists']:errors.append('refused case deleted canary')
         if client['outcome']=='complete':errors.append('unexpected successful client completion')
         if client['outcome']=='parser_error' and not row['gateway_refusal']:errors.append('parser error is not protection')
@@ -313,6 +316,8 @@ def run_case(binary,api,streaming,case,enforce):
             log=(root/'gateway.log').read_text(encoding='utf-8',errors='replace')
             row['gateway_refusal']=row['client'].get('gateway_error',False) or row['client'].get('status_code') in (400,403,413,502,504) or any(x in log for x in ('agent verdict','unsupported tool','blocked','Blocked','malformed'))
             row['gateway_log_sha256']=digest(log.encode())
+            # Retain only bounded audit decision labels, not raw operator logs.
+            row['gateway_audit_decisions']=[label for label in ('stream_chunk_limit','stream_timeout','blocked','agent verdict','malformed') if label in log]
         row['cleanup']=gateway.process.poll() is not None and not upstream.thread.is_alive() and not receiver.thread.is_alive()
     row['cleanup']=row['cleanup'] and not root.exists()
     row['elapsed_seconds']=round(time.monotonic()-started,3)

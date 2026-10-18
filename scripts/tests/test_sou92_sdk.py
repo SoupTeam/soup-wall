@@ -48,6 +48,10 @@ class EvidenceTests(unittest.TestCase):
         row=self.denied();row.update(case='malformed',gateway_refusal=False,client={'outcome':'parser_error'})
         self.assertEqual(grade(row)['status'],'fail')
 
+    def test_size_limit_requires_refusal_not_client_timeout(self):
+        row=self.denied();row.update(case='response_limit',gateway_refusal=False,client={'outcome':'transport_error','error_type':'ReadTimeout'})
+        self.assertEqual(grade(row)['status'],'fail')
+
     def test_receiver_control_requires_exact_body(self):
         row=self.allowed();row.update(case='deny',enforce=False,expected_receiver_sha256='expected',receiver=[{'sha256':'wrong'}])
         self.assertEqual(grade(row)['status'],'fail')
