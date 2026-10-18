@@ -41,6 +41,7 @@ function report(events, changes = {}) {
 
 async function main() {
   const ownedPath = process.env.SOU75_REPORT_HTML || process.env.SOU75_OWNED_REPORT;
+  const rotatedPath = process.env.SOU84_REPORT_HTML;
   let chromium;
   try { ({ chromium } = require('playwright')); }
   catch (_) {
@@ -172,11 +173,32 @@ async function main() {
       assert.deepEqual(requests, []);
       assert.deepEqual(errors, []);
     }
+    if (rotatedPath) {
+      const rotated = fs.readFileSync(rotatedPath, 'utf8');
+      const embedded = JSON.parse(rotated.match(/<script type="application\/json" id="audit-data">([^]*?)<\/script>/)[1]);
+      assert.ok(embedded.events.length > 0, 'owned rotated report must contain real events');
+      assert.ok(embedded.meta.gaps.intentional > 0, 'pruning must be visible');
+      assert.equal(rotated.includes('SOU84_PRIVATE_SENTINEL_DO_NOT_PUBLISH'), false);
+      const rotatedFixturePath = path.join(fixtureDir, 'rotated.html');
+      fs.writeFileSync(rotatedFixturePath, rotated, { mode: 0o600 });
+      await page.goto(pathToFileURL(rotatedFixturePath).href);
+      await page.locator('#timeline-panel').waitFor({ state: 'visible', timeout: 5000 });
+      assert.match(await page.locator('#report-notice').innerText(), /intentionally pruned/);
+      assert.equal((await page.locator('#count-events').innerText()).replace(/\D/g, ''), String(embedded.events.length));
+      assert.ok(await page.locator('#event-rows tr').count() <= 50);
+      await page.locator('#event').selectOption('unknown');
+      assert.ok(await page.locator('#event-rows tr').count() > 0);
+      await page.locator('#event-rows button').first().focus();
+      await page.keyboard.press('Enter');
+      assert.equal(await page.locator('#detail-panel').isVisible(), true);
+      assert.deepEqual(requests, []);
+      assert.deepEqual(errors, []);
+    }
     await context.close();
     fs.rmSync(fixtureDir, { recursive: true, force: true });
     console.log(`PASS: CSP, filters, details, pagination, small screen, XSS inertness, offline silence; ` +
       `10k initialization ${initializationMs} ms, filter ${filterMs} ms` +
-      (ownedPath ? ', owned generated report' : ''));
+      (ownedPath || rotatedPath ? ', owned generated report' : ''));
   } finally { await browser.close(); }
 }
 

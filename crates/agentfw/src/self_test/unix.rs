@@ -639,6 +639,7 @@ fn start_daemon(
     assets: &Assets,
     ws: &Workspace,
     preferred: Option<u16>,
+    bounded_audit_retention: bool,
     deadline: Instant,
     configured: &mut serde_json::Map<String, Value>,
 ) -> Result<Daemon, Abort> {
@@ -657,9 +658,17 @@ fn start_daemon(
             attempts.push(json!({"outcome": "no_free_port"}));
             continue;
         };
-        let config = json!({"bind": "127.0.0.1", "port": port, "enforce": true,
-            "policy": ws.policy, "audit": ws.agent_dir.join("audit.jsonl"),
+        let mut config = json!({"bind": "127.0.0.1", "port": port, "enforce": true,
+            "policy": ws.policy,
             "native": {"registry_path": ws.registry, "registry_sha256": registry_sha}});
+        if bounded_audit_retention {
+            config["audit_retention"] = json!({"version":1,
+                "directory": ws.agent_dir.join("audit-retention"),
+                "segment_size_bytes":65536,"segment_count":4,
+                "total_disk_bytes":512000,"max_record_bytes":4096});
+        } else {
+            config["audit"] = json!(ws.agent_dir.join("audit.jsonl"));
+        }
         let config_path = ws.agent_dir.join("config.yaml");
         let _ = std::fs::remove_file(&config_path);
         if write_new(&config_path, config.to_string().as_bytes()).is_err() {
@@ -1019,7 +1028,25 @@ struct Observation {
 }
 
 fn audit_records(path: &Path) -> Vec<Value> {
-    lines(path)
+    let source_lines = if path.is_file() {
+        lines(path)
+    } else {
+        let directory = path.with_file_name("audit-retention");
+        let mut paths = std::fs::read_dir(directory)
+            .ok()
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| entry.ok().map(|e| e.path()))
+            .filter(|path| {
+                path.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.starts_with("segment-") && n.ends_with(".jsonl"))
+            })
+            .collect::<Vec<_>>();
+        paths.sort();
+        paths.into_iter().flat_map(|path| lines(&path)).collect()
+    };
+    source_lines
         .iter()
         .filter_map(|line| serde_json::from_slice::<Value>(line).ok())
         .filter(|record| matches!(record["event"].as_str(), Some("native_call") | Some("native_result")))
@@ -1552,6 +1579,7 @@ fn exercise(
             assets,
             ws,
             args.daemon_port,
+            args.bounded_audit_retention,
             deadline,
             configured,
         )?);

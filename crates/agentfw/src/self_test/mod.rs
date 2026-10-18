@@ -98,6 +98,9 @@ pub struct Args {
     /// Keep the owned workspace (synthetic data only) for inspection.
     #[arg(long)]
     pub keep_workspace: bool,
+    /// Linux acceptance option: exercise the production bounded audit sink.
+    #[arg(long)]
+    pub bounded_audit_retention: bool,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]

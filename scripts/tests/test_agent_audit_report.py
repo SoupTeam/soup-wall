@@ -2,6 +2,7 @@
 """Focused safety and semantics checks for the offline audit projection."""
 
 import importlib.util
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -76,6 +77,111 @@ class AuditReportTest(unittest.TestCase):
         missing = self.read_data()["events"][0]["evidence_missing"]
         self.assertIn("Source event was truncated", missing)
         self.assertIn("No linked result record in this report", missing)
+
+    def retained(self, segments, pruned=0):
+        directory = self.base / "retained"
+        directory.mkdir(mode=0o700)
+        metadata = []
+        for index, body in enumerate(segments, pruned + 1):
+            name = directory / f"segment-{index:020}.jsonl"
+            name.write_bytes(body)
+            name.chmod(0o600)
+            metadata.append(dict(id=index, closed=index != pruned + len(segments),
+                                 bytes=len(body) if index != pruned + len(segments) else 0,
+                                 sha256=hashlib.sha256(body).hexdigest() if index != pruned + len(segments) else None,
+                                 partial_tail=False))
+        manifest = dict(version=1, limits=dict(segment_size_bytes=65536, segment_count=4,
+                                              total_disk_bytes=512000, max_record_bytes=4096),
+                        generation=2, next_id=pruned + len(segments) + 1,
+                        pruned_through=pruned, pending_prune=None, segments=metadata)
+        path = directory / "manifest.json"
+        path.write_text(json.dumps(manifest))
+        path.chmod(0o600)
+        return directory
+
+    def test_retained_export_projects_real_segments_and_explains_pruning(self):
+        first = json.dumps(self.native("native_call", raw="SENTINEL_SECRET")).encode() + b"\n"
+        second = json.dumps(self.native("native_result", released=False)).encode() + b"\n"
+        directory = self.retained([first, second], pruned=3)
+        exported = self.base / "export.jsonl"
+        result = REPORT.export_retained(directory, exported)
+        self.assertEqual(result["records"], 2)
+        self.assertEqual(stat.S_IMODE(exported.stat().st_mode), 0o600)
+        self.input = exported
+        self.generate()
+        report = self.read_data()
+        self.assertEqual(report["meta"]["gaps"]["intentional"], 3)
+        self.assertEqual(report["meta"]["source_status"], "partial")
+        self.assertEqual(report["events"][0]["correlation"], report["events"][1]["correlation"])
+        self.assertNotIn("SENTINEL_SECRET", self.output.read_text())
+        self.assertNotIn("real-session-secret", self.output.read_text())
+
+    def test_retained_export_distinguishes_missing_corrupt_and_partial(self):
+        row = json.dumps(self.hook()).encode() + b"\n"
+        directory = self.retained([row, row, row + b'{"incomplete"'])
+        (directory / "segment-00000000000000000001.jsonl").unlink()
+        (directory / "segment-00000000000000000002.jsonl").write_bytes(b"changed\n")
+        exported = self.base / "export.jsonl"
+        result = REPORT.export_retained(directory, exported)
+        self.assertEqual(result["gaps"], {"intentional": 0, "unexplained": 1, "corrupt": 1})
+        self.assertIn("partial_tail", result["notices"])
+        self.input = exported
+        self.generate()
+        report = self.read_data()
+        self.assertEqual(len(report["events"]), 1)
+        self.assertTrue(any("incomplete final record" in note for note in report["meta"]["notices"]))
+        self.assertTrue(any("unexplained gap" in note for note in report["meta"]["notices"]))
+
+    def test_retained_segment_and_time_selection_keeps_linkage_honest(self):
+        call = json.dumps(self.native("native_call", at_ms=100)).encode() + b"\n"
+        result = json.dumps(self.native("native_result", at_ms=200)).encode() + b"\n"
+        directory = self.retained([call, result])
+        exported = self.base / "selected.jsonl"
+        metadata = REPORT.export_retained(directory, exported, from_segment=2, to_segment=2,
+                                          from_ms=150, to_ms=250)
+        self.assertEqual(metadata["records"], 1)
+        self.assertIn("selected_range", metadata["notices"])
+        self.input = exported
+        self.generate()
+        row = self.read_data()["events"][0]
+        self.assertEqual(row["stage"], "result")
+        self.assertIn("No linked admission record in this report", row["evidence_missing"])
+
+    def test_retained_export_rejects_symlink_and_refuses_overwrite(self):
+        directory = self.retained([json.dumps(self.hook()).encode() + b"\n"])
+        segment = directory / "segment-00000000000000000001.jsonl"
+        moved = self.base / "other.jsonl"
+        segment.rename(moved)
+        segment.symlink_to(moved)
+        with self.assertRaises(REPORT.ReportError):
+            REPORT.export_retained(directory, self.base / "export.jsonl")
+        segment.unlink()
+        segment.write_bytes(moved.read_bytes())
+        segment.chmod(0o600)
+        output = self.base / "export.jsonl"
+        REPORT.export_retained(directory, output)
+        with self.assertRaises(FileExistsError):
+            REPORT.export_retained(directory, output)
+
+    def test_reordered_manifest_is_unknown_schema_and_fifo_is_refused(self):
+        row = json.dumps(self.hook()).encode() + b"\n"
+        directory = self.retained([row, row])
+        manifest_path = directory / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["segments"] = list(reversed(manifest["segments"]))
+        manifest_path.write_text(json.dumps(manifest))
+        export = self.base / "reordered.jsonl"
+        result = REPORT.export_retained(directory, export)
+        self.assertIn("unknown_schema", result["notices"])
+        self.assertEqual(result["gaps"]["corrupt"], 1)
+        self.assertEqual(result["records"], 0)
+        manifest["segments"].reverse()
+        manifest_path.write_text(json.dumps(manifest))
+        fifo = directory / "segment-00000000000000000001.jsonl"
+        fifo.unlink()
+        os.mkfifo(fifo, 0o600)
+        with self.assertRaises(REPORT.ReportError):
+            REPORT.export_retained(directory, self.base / "fifo.jsonl")
 
     def test_omitted_findings_are_disclosed(self):
         self.write(self.hook(findings=[{"detector": "injection", "severity": "high"}] *

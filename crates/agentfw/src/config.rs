@@ -129,6 +129,10 @@ pub struct Config {
     pub policy: Option<PathBuf>,
     #[serde(default)]
     pub audit: Option<PathBuf>,
+    /// Opt-in, owner-only Linux audit segments. Legacy `audit` remains unchanged
+    /// when this is absent.
+    #[serde(default)]
+    pub audit_retention: Option<crate::audit::RetentionConfig>,
     /// Persist the complete body of hook events unknown to this build.
     /// Disabled by default because future event shapes may contain credentials,
     /// prompts, file contents, or other sensitive material.
@@ -184,6 +188,7 @@ impl Default for Config {
             enforce: false,
             policy: None,
             audit: None,
+            audit_retention: None,
             capture_unknown_raw: false,
             max_record_bytes: default_max_record_bytes(),
             provenance: TaintLimits::default(),
@@ -220,6 +225,13 @@ impl Config {
     /// Reject anything that would expose the daemon beyond this machine.
     pub(crate) fn validate(&self) -> anyhow::Result<()> {
         self.provenance.validate()?;
+        if let Some(retention) = &self.audit_retention {
+            retention.validate()?;
+            anyhow::ensure!(
+                self.audit.is_none(),
+                "audit and audit_retention cannot both be set"
+            );
+        }
         if let Some(native) = &self.native {
             anyhow::ensure!(
                 self.enforce && !self.judge.enabled,
