@@ -856,6 +856,25 @@ impl Fixture {
         firewall_policy: Option<&str>,
         policy_builder: impl FnOnce(&Path, &mut Value),
     ) -> Self {
+        Self::with_resource_policy_custom_approval(
+            mode,
+            enforce,
+            classifier,
+            firewall_policy,
+            None,
+            policy_builder,
+        )
+        .await
+    }
+
+    async fn with_resource_policy_custom_approval(
+        mode: &str,
+        enforce: bool,
+        classifier: Option<&str>,
+        firewall_policy: Option<&str>,
+        approval: Option<(u64, u64)>,
+        policy_builder: impl FnOnce(&Path, &mut Value),
+    ) -> Self {
         let classified_read = classifier == Some("read") || mode == "classified-read";
         let root = std::env::temp_dir();
         #[cfg(unix)]
@@ -905,7 +924,7 @@ impl Fixture {
                 &home,
                 port,
                 enforce,
-                None,
+                approval.map(|a| a.0),
                 firewall_policy.unwrap_or(POLICY),
             ),
             daemon_faults.clone(),
@@ -918,8 +937,17 @@ impl Fixture {
         let private_before_launch = [home.clone(), home.join("token"), home.join("native-token")]
             .iter()
             .all(|path| protected_dacl(path));
-        let (child, input, output) =
-            spawn_gateway_with_profiles(dir.path(), &ledger, mode, &stderr, classifier, None, true);
+        let (child, input, output) = spawn_gateway_full(
+            dir.path(),
+            &ledger,
+            mode,
+            &stderr,
+            classifier,
+            None,
+            true,
+            approval.map(|a| a.1),
+            None,
+        );
         Self {
             _dir: dir,
             port,
@@ -927,7 +955,7 @@ impl Fixture {
             daemon,
             daemon_shutdown: Some(daemon_shutdown),
             daemon_faults,
-            approval_ttl: None,
+            approval_ttl: approval.map(|a| a.0),
             child,
             input,
             output,
@@ -5462,4 +5490,216 @@ default: allow
         }
         assert_eq!(executed(&fixture.ledger).len(), 0);
     }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn sou88_resource_create_ask_operator_approval_runs_once_and_reject_zero_execution() {
+    use agentfw::native::resource::{
+        create_file_executor_sha256, CREATE_FILE_EXECUTOR_PROFILE, CREATE_FILE_MAX_CONTENT,
+    };
+
+    let rule_baseline_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("rule_baseline/rule_baseline.py");
+    let classifier_digest = sha(&std::fs::read(&rule_baseline_path).unwrap());
+
+    const ASK_CREATE_POLICY: &str = "agent_policies:
+  - name: ask-side-effecting
+    when: { action_class: side_effecting }
+    action: ask
+default: allow
+";
+
+    let mut fixture = Fixture::with_resource_policy_custom_approval(
+        "operator-create-binding",
+        true,
+        Some("rule-baseline"),
+        Some(ASK_CREATE_POLICY),
+        Some((60, 30)),
+        |dir, registry| {
+            let canonical_dir = dir.canonicalize().unwrap();
+            let file1 = canonical_dir
+                .join("approved-file.txt")
+                .to_str()
+                .unwrap()
+                .to_string();
+            let schema = json!({
+                "type": "object",
+                "properties": {
+                    "spec": {
+                        "type": "object",
+                        "properties": {
+                            "destination": { "type": "string" },
+                            "payload": { "type": "string" }
+                        },
+                        "required": ["destination", "payload"],
+                        "additionalProperties": false
+                    }
+                },
+                "required": ["spec"],
+                "additionalProperties": false
+            });
+            let profile = json!({
+                "server_id": "fixture",
+                "tool_name": "save_artifact",
+                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "selectors": [{ "pointer": "/spec/destination", "kind": "path", "allow_missing_leaf": true }]
+            });
+            registry["tools"][0] = json!({
+                "name": "save_artifact",
+                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "action_class": "side_effecting",
+                "result_provenance": "untrusted",
+                "egress": [],
+                "resource_policy": {
+                    "profile": profile,
+                    "workspace": canonical_dir,
+                    "cwd": canonical_dir,
+                    "executor_sha256": create_file_executor_sha256(),
+                    "classifier_sha256": classifier_digest,
+                    "binding": {
+                        "contract_version": "sw-native/binding/1",
+                        "operation": "create_file",
+                        "action": "write",
+                        "path_selector": "/spec/destination",
+                        "content_selector": "/spec/payload",
+                        "response_contract": "sw-native/response/text/1",
+                        "executor_profile": CREATE_FILE_EXECUTOR_PROFILE,
+                        "max_content_bytes": CREATE_FILE_MAX_CONTENT
+                    },
+                    "allowed_resources": [
+                        { "kind": "path", "canonical": file1 }
+                    ]
+                }
+            });
+        },
+    )
+    .await;
+    fixture.ready().await;
+
+    let target1 = "approved-file.txt";
+    let created_path1 = fixture._dir.path().join(target1);
+    let call_reject = json!({
+        "jsonrpc": "2.0",
+        "id": "sou88-create-first",
+        "method": "tools/call",
+        "params": {
+            "name": "save_artifact",
+            "arguments": {
+                "spec": {
+                    "destination": target1,
+                    "payload": "approved file payload\n"
+                }
+            }
+        }
+    });
+
+    #[cfg(target_os = "linux")]
+    {
+        // 1. Submit call and reject it: zero executions, file never created
+        fixture.send_only(&call_reject.to_string()).await;
+        let row_reject = fixture.wait_pending().await;
+        assert_eq!(row_reject["tool"], "save_artifact");
+        agentfw::native::approval::operator_reject(
+            &fixture.agent_home(),
+            row_reject["pending_id"].as_str().unwrap(),
+        )
+        .unwrap();
+
+        let reply_reject = fixture.receive().await.unwrap();
+        assert!(
+            reply_reject.contains("native_approval_rejected"),
+            "{reply_reject}"
+        );
+        assert!(
+            !created_path1.exists(),
+            "target file must not exist after rejection"
+        );
+        assert_eq!(
+            executed(&fixture.ledger).len(),
+            0,
+            "child process never executed"
+        );
+
+        // 2. Submit call again and approve it: executes exactly once
+        let call_approve = json!({
+            "jsonrpc": "2.0",
+            "id": "sou88-create-second",
+            "method": "tools/call",
+            "params": {
+                "name": "save_artifact",
+                "arguments": {
+                    "spec": {
+                        "destination": target1,
+                        "payload": "approved file payload\n"
+                    }
+                }
+            }
+        });
+
+        fixture.send_only(&call_approve.to_string()).await;
+        let row_approve = fixture.wait_pending().await;
+        assert_eq!(row_approve["tool"], "save_artifact");
+        assert_eq!(
+            executed(&fixture.ledger).len(),
+            0,
+            "zero child executions before approval"
+        );
+        assert!(
+            !created_path1.exists(),
+            "target file must not exist before approval"
+        );
+
+        // Operator inspects resource details
+        let inspected = agentfw::native::approval::operator_inspect(
+            &fixture.agent_home(),
+            row_approve["pending_id"].as_str().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(inspected["tool"], "save_artifact");
+        assert_eq!(inspected["resource_details"]["operation"], "create_file");
+
+        operator_approve(&fixture, &row_approve).unwrap();
+
+        let reply_approve: Value = serde_json::from_str(&fixture.receive().await.unwrap()).unwrap();
+        assert_eq!(reply_approve["id"], "sou88-create-second");
+        assert!(
+            reply_approve["result"]["isError"].is_null()
+                || reply_approve["result"]["isError"] == false
+        );
+        assert!(
+            created_path1.exists(),
+            "target file must exist after approved execution"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&created_path1).unwrap(),
+            "approved file payload\n"
+        );
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let reply_reject: Value =
+            serde_json::from_str(&fixture.exchange(&call_reject.to_string()).await.unwrap())
+                .unwrap();
+        assert_eq!(reply_reject["result"]["isError"], true);
+        assert!(
+            reply_reject
+                .to_string()
+                .contains("resource_create_platform_unsupported"),
+            "{reply_reject}"
+        );
+        assert!(
+            !created_path1.exists(),
+            "target file must not exist on unsupported platform"
+        );
+    }
+    assert_eq!(
+        executed(&fixture.ledger).len(),
+        0,
+        "native resource executor handled call; child MCP server was never contacted"
+    );
 }

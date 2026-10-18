@@ -1254,8 +1254,6 @@ mod tests {
         if let Some(ref mut policy) = tool.resource_policy {
             policy.executor_sha256 = "0".repeat(64);
         }
-        assert!(!crate::native::resource_approval::is_supported_linux_resource_tool(
-            &tool
-        ));
+        assert!(!crate::native::resource_approval::is_supported_linux_resource_tool(&tool));
     }
 }

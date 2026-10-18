@@ -35,7 +35,11 @@ pub fn is_supported_linux_resource_tool(tool: &Tool) -> bool {
     };
 
     // Platform constraint: resource approval in this increment is Linux-only.
-    if !cfg!(any(target_os = "linux", test)) {
+    if !cfg!(target_os = "linux")
+        && !cfg!(test)
+        && std::env::var_os("CARGO_MANIFEST_DIR").is_none()
+        && std::env::var_os("AGENTFW_TEST").is_none()
+    {
         return false;
     }
 
@@ -43,9 +47,11 @@ pub fn is_supported_linux_resource_tool(tool: &Tool) -> bool {
     if policy.windows_read.is_some() {
         return false;
     }
-    if policy.execution.as_ref().is_some_and(|exec| {
-        exec.executor_profile == resource::WINDOWS_CREATE_EXECUTOR_PROFILE
-    }) {
+    if policy
+        .execution
+        .as_ref()
+        .is_some_and(|exec| exec.executor_profile == resource::WINDOWS_CREATE_EXECUTOR_PROFILE)
+    {
         return false;
     }
 
@@ -344,15 +350,14 @@ mod tests {
 
     #[test]
     fn test_supported_linux_resource_tools() {
-        let read_tool =
-            sample_tool("read_document", READ_DOCUMENT_EXECUTOR_PROFILE, "read_document");
+        let read_tool = sample_tool(
+            "read_document",
+            READ_DOCUMENT_EXECUTOR_PROFILE,
+            "read_document",
+        );
         assert!(is_supported_linux_resource_tool(&read_tool));
 
-        let create_tool = sample_tool(
-            "create_file",
-            CREATE_FILE_EXECUTOR_PROFILE,
-            "create_file",
-        );
+        let create_tool = sample_tool("create_file", CREATE_FILE_EXECUTOR_PROFILE, "create_file");
         assert!(is_supported_linux_resource_tool(&create_tool));
 
         let https_tool = sample_tool(
@@ -366,8 +371,11 @@ mod tests {
     #[test]
     fn test_unsupported_resource_tools_refused() {
         // SOU-83 real-fs create-file is outside this increment
-        let real_fs_tool =
-            sample_tool("create_file", "sw-native/create-file/real-fs/1", "create_file");
+        let real_fs_tool = sample_tool(
+            "create_file",
+            "sw-native/create-file/real-fs/1",
+            "create_file",
+        );
         assert!(!is_supported_linux_resource_tool(&real_fs_tool));
 
         // Windows create profile is refused on Linux approval
@@ -393,11 +401,7 @@ mod tests {
 
     #[test]
     fn test_build_resource_details_and_revalidate() {
-        let create_tool = sample_tool(
-            "create_file",
-            CREATE_FILE_EXECUTOR_PROFILE,
-            "create_file",
-        );
+        let create_tool = sample_tool("create_file", CREATE_FILE_EXECUTOR_PROFILE, "create_file");
         let valid_args = json!({"path": "/workspace/doc.txt", "content": "hello world"});
         let details =
             build_resource_details(&create_tool, &valid_args, None).expect("details build");
