@@ -2,18 +2,6 @@ name: Encrypted Console recovery
 
 on:
   pull_request:
-    paths:
-      - 'crates/proxy/**'
-      - 'crates/agent/**'
-      - 'crates/agentfw/**'
-      - 'scripts/console*recovery*'
-      - 'scripts/fixtures/console_recovery_inventory_v1.json'
-      - 'scripts/tests/test_console_recovery*'
-      - 'scripts/alert_receiver.py'
-      - 'scripts/keycloak-oidc-acceptance.py'
-      - 'scripts/keycloak-saml-acceptance.py'
-      - '.github/workflows/console-recovery.yml'
-      - 'Cargo.lock'
   workflow_dispatch:
 
 permissions:
@@ -24,7 +12,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: console-recovery.yml
   owned-recovery:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs), 'owned-recovery')
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
