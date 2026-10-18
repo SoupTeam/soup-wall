@@ -2,17 +2,6 @@ name: Constrained MCP HTTPS POST
 
 on:
   pull_request:
-    paths:
-      - 'crates/agentfw/**'
-      - 'crates/agent/**'
-      - 'crates/adapter/**'
-      - 'rule_baseline/**'
-      - 'scripts/verify-sou73-https-post.py'
-      - 'scripts/verify-sou54-create-file.py'
-      - 'scripts/fixtures/mcp_https_post_probe_server.py'
-      - 'scripts/tests/test_sou73_https_post.py'
-      - '.github/workflows/mcp-https-post.yml'
-      - 'Cargo.lock'
   workflow_dispatch:
 
 permissions:
@@ -23,13 +12,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: mcp-https-post.yml
   linux-https-post:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs), 'linux-https-post')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build and identify the exact candidate

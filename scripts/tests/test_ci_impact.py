@@ -31,7 +31,7 @@ class ImpactTests(unittest.TestCase):
     def test_agent_native_selects_all_platform_and_original_server_controls(self):
         jobs = self.selected(["crates/agentfw/src/native.rs"])
         self.assertTrue({"test", "native-macos-resilience", "agent-windows-security"} <= jobs["ci.yml"])
-        for workflow in ("mcp-real-filesystem.yml", "mcp-real-git.yml",
+        for workflow in ("mcp-real-filesystem.yml", "mcp-real-git.yml", "mcp-https-post.yml",
                          "mcp-windows-read.yml", "sou79-resource-budgets.yml",
                          "sou86-crash-supervision.yml", "provenance-memory.yml",
                          "supply-chain.yml", "license-policy.yml"):
