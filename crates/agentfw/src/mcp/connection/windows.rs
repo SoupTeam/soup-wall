@@ -48,7 +48,7 @@ fn parse(bytes: &[u8]) -> Result<Value> {
     Ok(value)
 }
 
-fn parent(path: &Path) -> Result<CreateParent> {
+pub(crate) fn parent(path: &Path) -> Result<CreateParent> {
     let text = path.to_str().context("path must be Unicode")?;
     ensure!(
         !text.starts_with(r"\\") && !text.contains('/') && !text.contains('\0'),
@@ -172,7 +172,7 @@ fn verify_acl(file: &File) -> Result<()> {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]
-struct Identity {
+pub(crate) struct Identity {
     volume: u32,
     high: u32,
     low: u32,
@@ -252,7 +252,7 @@ fn open(path: &Path, create: bool, exclusive: bool) -> Result<File> {
     Ok(file)
 }
 
-fn read_file(path: &Path, limit: usize) -> Result<(Vec<u8>, Identity)> {
+pub(crate) fn read_file(path: &Path, limit: usize) -> Result<(Vec<u8>, Identity)> {
     let _parent = parent(path)?;
     let mut file = open(path, false, false)?;
     let id = identity(&file, false)?;
@@ -766,7 +766,7 @@ struct Owner {
 }
 
 #[derive(Serialize)]
-pub(super) struct Report {
+pub(crate) struct Report {
     pub status: &'static str,
     operation: String,
     config_sha256: String,
@@ -965,7 +965,7 @@ async fn probe(entry: &Value, tool: &str, args: &str) -> Result<String> {
     outcome.context("probe timed out")?
 }
 
-pub(super) async fn run(operation: &str, o: &Options) -> Result<Report> {
+pub(crate) async fn run(operation: &str, o: &Options) -> Result<Report> {
     let start = Instant::now();
     ensure!(
         o.probe_tool.is_none() || operation == "inspect",

@@ -236,6 +236,12 @@ enum Cmd {
     ///
     /// Writes a versioned JSON report. Exit 0 passed, 3 failed, 4 incomplete, 5 unsupported.
     SelfTest(agentfw::self_test::Args),
+    #[cfg(windows)]
+    /// Preview a native Windows Agent setup against explicitly selected local assets.
+    OnboardWindows {
+        #[command(subcommand)]
+        command: agentfw::windows_onboarding::Command,
+    },
     /// Bundled harmless stdio MCP fixture server used by `self-test`.
     #[command(hide = true)]
     SelfTestFixture(agentfw::self_test::FixtureArgs),
@@ -449,6 +455,8 @@ fn main() -> anyhow::Result<()> {
             std::process::exit(agentfw::protection_status::run_cli(args))
         }
         Cmd::SelfTest(args) => std::process::exit(agentfw::self_test::run(args)),
+        #[cfg(windows)]
+        Cmd::OnboardWindows { command } => agentfw::windows_onboarding::run(command),
         Cmd::SelfTestFixture(args) => agentfw::self_test::fixture::serve(args),
         Cmd::Serve => {
             #[cfg(target_os = "linux")]

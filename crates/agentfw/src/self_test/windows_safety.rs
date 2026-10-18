@@ -45,7 +45,7 @@ pub(super) fn install_control_handler() -> io::Result<()> {
     Ok(())
 }
 
-pub(super) fn standard_user() -> io::Result<()> {
+pub(crate) fn standard_user() -> io::Result<()> {
     let mut raw = null_mut();
     if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut raw) } == 0 {
         return Err(io::Error::last_os_error());
@@ -267,7 +267,7 @@ pub(super) fn check_private(path: &Path, directory: bool) -> io::Result<File> {
     open(path, directory, false)
 }
 
-pub(super) fn new_file(path: &Path) -> io::Result<File> {
+pub(crate) fn new_file(path: &Path) -> io::Result<File> {
     let text = path
         .to_str()
         .ok_or_else(|| invalid("Unicode file path required"))?;
@@ -279,7 +279,7 @@ pub(super) fn new_file(path: &Path) -> io::Result<File> {
     open(path, false, true)
 }
 
-pub(super) fn new_directory(path: &Path) -> io::Result<()> {
+pub(crate) fn new_directory(path: &Path) -> io::Result<()> {
     let sid = current_user_sid()?;
     let sddl: Vec<u16> = format!("O:{sid}D:P(A;OICI;GA;;;{sid})(A;OICI;GA;;;SY)")
         .encode_utf16()

@@ -38,6 +38,8 @@ pub mod token;
 #[cfg(windows)]
 pub(crate) mod windows_create;
 #[cfg(windows)]
+pub mod windows_onboarding;
+#[cfg(windows)]
 pub(crate) mod windows_read;
 
 use axum::routing::{get, post};
