@@ -24,10 +24,15 @@ const MAX_PROGRESS: usize = 128;
 const MAX_JSON_DEPTH: usize = 20;
 const MAX_JSON_NODES: usize = 16_384;
 
-#[derive(Clone)]
 struct Grant {
     call_id: Value,
     binding: Value,
+    boundary: Option<crate::policy_transition::Boundary>,
+}
+
+struct Release {
+    raw: Vec<u8>,
+    _boundary: Option<crate::policy_transition::Boundary>,
 }
 
 enum Phase {
@@ -60,7 +65,7 @@ enum Decision {
 
 enum WorkEvent {
     Admitted(String, anyhow::Result<Decision>),
-    Inspected(String, anyhow::Result<Option<Vec<u8>>>),
+    Inspected(String, anyhow::Result<Option<Release>>),
     Reclaimed(String, anyhow::Result<()>),
 }
 
@@ -205,6 +210,7 @@ async fn admit(
         }
         Ok(ProductionVerdict::Allow) => {}
     }
+    let boundary = collector.policy_boundary().await?;
     let receipt = collector
         .event(
             "call",
@@ -222,6 +228,7 @@ async fn admit(
     Ok(Decision::Allowed(Grant {
         call_id: receipt["call_id"].clone(),
         binding: receipt["binding_sha256"].clone(),
+        boundary,
     }))
 }
 
@@ -231,19 +238,25 @@ async fn inspect(
     grant: Grant,
     raw: Vec<u8>,
     kind: &str,
-) -> anyhow::Result<Option<Vec<u8>>> {
+) -> anyhow::Result<Option<Release>> {
+    let boundary = collector.policy_boundary().await?;
     let content = std::str::from_utf8(&raw).context("selected MCP result is not UTF-8")?;
     let receipt = collector.event("result",json!({"tool":call.tool,"args":call.args,
         "call_id":grant.call_id,"expected_binding_sha256":grant.binding,
         "expected_contract_version":CONTRACT,"result_kind":kind,"delivery":"mcp_host","content":content})).await?;
-    Ok(Some(if receipt["release"] == true {
+    let raw = if receipt["release"] == true {
         raw
     } else {
         withheld(&call.id, "result", &receipt["reason_codes"])
+    };
+    Ok(Some(Release {
+        raw,
+        _boundary: boundary,
     }))
 }
 
-async fn reclaim(collector: &Collector<'_>, call: &Call, grant: Grant) -> anyhow::Result<()> {
+async fn reclaim(collector: &Collector<'_>, call: &Call, mut grant: Grant) -> anyhow::Result<()> {
+    drop(grant.boundary.take());
     // A local transport error spends exactly this grant. It makes no claim that
     // a dispatched server request was rolled back or never executed.
     let raw = error(
@@ -696,7 +709,7 @@ where
                                 }
                                 calls.remove(&key);
                             }
-                            Decision::Allowed(grant) => {
+                            Decision::Allowed(mut grant) => {
                                 ensure!(
                                     grants.insert(id(&grant.call_id)?),
                                     "native receipt call ID was reused"
@@ -722,6 +735,7 @@ where
                                 } else {
                                     write(child, &call.raw).await?;
                                     call.dispatched = true;
+                                    drop(grant.boundary.take());
                                     call.phase = Phase::Running(grant);
                                     wire.insert(key.clone(), (call.deadline, false));
                                     let (active, queued) = counts(&calls);
@@ -736,8 +750,8 @@ where
                             .context("unbound native result completion")?;
                         let result = result?;
                         if !call.cancelled {
-                            if let Some(raw) = result {
-                                write(host, &raw).await?;
+                            if let Some(release) = result {
+                                write(host, &release.raw).await?;
                             }
                         }
                         let (active, queued) = counts(&calls);

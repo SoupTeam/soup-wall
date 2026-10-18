@@ -34,7 +34,18 @@ pub struct ManagedSync {
     agent: String,
     trust_source: TrustSource,
     active_path: PathBuf,
+    native_barrier: crate::policy_transition::Barrier,
 }
+
+#[derive(Debug)]
+struct NativeBoundaryBusy;
+
+impl std::fmt::Display for NativeBoundaryBusy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("managed activation deferred by an active native release boundary")
+    }
+}
+impl std::error::Error for NativeBoundaryBusy {}
 
 fn now() -> i64 {
     SystemTime::now()
@@ -254,6 +265,7 @@ impl ManagedSync {
             agent,
             trust_source,
             active_path: home.join("managed-policy-active.json"),
+            native_barrier: crate::policy_transition::Barrier::new(home)?,
         }))
     }
 
@@ -284,6 +296,17 @@ impl ManagedSync {
     /// The historical expiry may have passed while offline: it remains the
     /// last accepted state, but cannot authorize a NEW deployment.
     pub fn restore(&self, state: &Shared) -> Result<()> {
+        // A surviving collector may still hold a pre-crash write boundary.
+        // Do not start a new evaluator until that boundary has ended.
+        let _boundary = self
+            .native_barrier
+            .try_activation()?
+            .ok_or(NativeBoundaryBusy)?;
+        let _native = state
+            .native
+            .as_ref()
+            .map(|n| n.policy_transition_guard())
+            .transpose()?;
         let data = match fs::read(&self.active_path) {
             Ok(data) => data,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
@@ -361,6 +384,15 @@ impl ManagedSync {
         verified: VerifiedAgentPolicy,
         bundle: &SignedAgentPolicy,
     ) -> Result<()> {
+        let _boundary = self
+            .native_barrier
+            .try_activation()?
+            .ok_or(NativeBoundaryBusy)?;
+        let _native = state
+            .native
+            .as_ref()
+            .map(|n| n.policy_transition_guard())
+            .transpose()?;
         let mut fw = state
             .firewall
             .lock()
@@ -526,6 +558,9 @@ impl ManagedSync {
                 }
             };
         if let Err(error) = self.activate(state, verified, &bundle) {
+            if error.is::<NativeBoundaryBusy>() {
+                return Err(error);
+            }
             self.report_rejection(client, &bundle, &token).await;
             return Err(error);
         }
@@ -564,6 +599,7 @@ impl ManagedSync {
             let result = self.poll_once(&client, &state).await;
             let transport_state = match &result {
                 Ok(()) => "online",
+                Err(e) if e.is::<NativeBoundaryBusy>() => "activation_pending",
                 Err(e)
                     if e.chain()
                         .any(|cause| cause.downcast_ref::<CredentialUnavailable>().is_some()) =>
