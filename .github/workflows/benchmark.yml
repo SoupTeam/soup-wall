@@ -1,10 +1,8 @@
 name: benchmark
 
 on:
-  push:
-    branches: [main]
-    paths-ignore: ["**.md", "docs/**", "research/**"]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:
@@ -21,7 +19,7 @@ jobs:
       workflow: benchmark.yml
   agent-scorecard:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'agent-scorecard')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'agent-scorecard')
     name: Agent security scorecard
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 15

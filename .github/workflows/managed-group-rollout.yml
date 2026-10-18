@@ -2,6 +2,7 @@ name: Managed Agent group rollout
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:
@@ -18,7 +19,7 @@ jobs:
       workflow: managed-group-rollout.yml
   group-rollout:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'group-rollout')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'group-rollout')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:

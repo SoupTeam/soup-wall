@@ -2,6 +2,7 @@ name: Native Windows MCP connection acceptance
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:
@@ -18,7 +19,7 @@ jobs:
       workflow: mcp-windows-connection.yml
   standard-user-acceptance:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'standard-user-acceptance')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'standard-user-acceptance')
     runs-on: windows-2022
     timeout-minutes: 40
     steps:

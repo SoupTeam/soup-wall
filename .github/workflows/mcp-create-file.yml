@@ -2,6 +2,7 @@ name: Constrained MCP file creation
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:
@@ -18,7 +19,7 @@ jobs:
       workflow: mcp-create-file.yml
   linux-create-file:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'linux-create-file')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-create-file')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:

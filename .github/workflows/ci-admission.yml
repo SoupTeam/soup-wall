@@ -2,7 +2,7 @@ name: SOU-91 trusted CI admission
 
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
 
 permissions:
   actions: read
