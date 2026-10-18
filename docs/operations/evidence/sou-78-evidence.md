@@ -51,6 +51,29 @@ Host reload remains explicitly `unverified`.
 
 No PR exists for this branch at this checkpoint. No release or completion claim.
 
+## Linux execution and provenance API follow-up
+
+A dedicated `SOU-78 Linux MCP profile lifecycle` workflow now exports the committed
+source and runs offline in an ordinary-UID Docker container with a read-only root,
+no capabilities, no privilege escalation and no external network. Only disposable
+source/cache/target/evidence directories are writable. Host AppArmor settings are
+preserved. Dependencies and the standard toolchain image are prepared before
+execution; image identity, committed source hashes and individual check exit codes
+are retained as CI artifacts.
+
+The first actual Linux clippy run on `eca10fe` identified a Linux-only
+`field_reassign_with_default` in the journal reservation witness. The initializer
+was corrected without suppressing the warning.
+
+A new `sw-provenance/checkpoint/1` core API preserves fingerprint and URL/path
+provenance, insertion order and per-session/global incomplete-history floors.
+Restore rebuilds tracked storage under the configured budgets, refuses duplicate
+or invalid data atomically and requires a pristine tracker. It does not restore
+agent tool grants or approvals. The complete core Agent suite passed locally:
+**190 passed, zero failures**, including four new checkpoint controls; focused
+Agent/agentfw clippy was clean. This API is not yet wired to an authenticated,
+durable daemon checkpoint or the owned-connection transition; those remain open.
+
 ## Historical Antigravity evidence (before continuation; not current-head proof)
 
 ## Overview

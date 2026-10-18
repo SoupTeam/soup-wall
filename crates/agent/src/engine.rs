@@ -254,6 +254,18 @@ impl AgentFirewall {
         self.taint.mark_incomplete(session);
     }
 
+    /// Private authenticated lifecycle checkpoint, never an approval or grant.
+    pub fn provenance_snapshot(&self) -> crate::taint::ProvenanceSnapshot {
+        self.taint.provenance_snapshot()
+    }
+
+    pub fn restore_provenance_snapshot(
+        &mut self,
+        snapshot: crate::taint::ProvenanceSnapshot,
+    ) -> Result<(), &'static str> {
+        self.taint.restore_provenance_snapshot(snapshot)
+    }
+
     /// Reserve a tracked context before authenticated native admission.
     /// `true` identifies a newly created shell; an existing context is never reset.
     pub fn try_register_provenance_context(
@@ -1389,5 +1401,16 @@ mod provenance_budget_tests {
         assert!(out.provenance_incomplete);
         assert_eq!(out.rule.as_deref(), Some("taint-history-incomplete"));
         assert_eq!(out.verdict, Verdict::Ask);
+    }
+    #[test]
+    fn provenance_checkpoint_never_restores_old_tool_grants() {
+        let mut original = AgentFirewall::with_default_policy();
+        original.set_root("host", "agent", &["Bash".into()]);
+        original.mark_provenance_incomplete("host");
+        let snapshot = original.provenance_snapshot();
+        let mut restored = AgentFirewall::with_default_policy();
+        restored.restore_provenance_snapshot(snapshot).unwrap();
+        assert!(restored.provenance_incomplete("host"));
+        assert!(restored.agent_tools("host", "agent").is_none());
     }
 }

@@ -23,6 +23,7 @@ if [[ ${1:-} == --isolated ]]; then
   }
   run_check fmt cargo fmt --all -- --check
   run_check clippy cargo clippy --offline --locked -p agentfw --all-targets -- -D warnings
+  run_check provenance cargo test --offline --locked -p soup-wall-agent
   run_check library cargo test --offline --locked -p agentfw --lib
   run_check profiles cargo test --offline --locked -p agentfw --test mcp_profile_lifecycle
   run_check daemon cargo test --offline --locked -p agentfw --test lifecycle

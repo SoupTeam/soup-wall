@@ -1724,28 +1724,30 @@ mod tests {
         // 2. Journaled next_instance written by ProfileManager::save_state() is preserved
         // even when PID is dead and lock is not held
         let profile_mgr = crate::mcp::profile_lifecycle::ProfileManager::new(temp.path());
-        let mut profile_state = crate::mcp::profile_lifecycle::ProfileState::default();
-        profile_state.generation = 1;
-        profile_state.in_progress = Some(crate::mcp::profile_lifecycle::OperationJournal {
-            operation_id: "op-crash-window".into(),
-            kind: crate::mcp::profile_lifecycle::OperationKind::Install,
-            phase: crate::mcp::profile_lifecycle::OperationPhase::DaemonRestarting,
-            reserved_generation: 1,
-            source_bundle_sha256: None,
-            target_bundle_sha256: "0".repeat(64),
-            pre_operation_config: None,
-            pre_operation_config_digest: None,
-            target_config_digest: "1".repeat(64),
-            was_daemon_running: true,
-            pre_daemon_instance: Some("inst-pre".into()),
-            pre_daemon_config_digest: None,
-            candidate_daemon_instance: Some(candidate_inst.clone()),
-            compensated_daemon_instance: None,
-            historical_compensated_instances: Vec::new(),
-            started_at_utc: "2026-10-18T00:00:00Z".into(),
-            config_written: true,
-            displaced_config_path: None,
-        });
+        let profile_state = crate::mcp::profile_lifecycle::ProfileState {
+            generation: 1,
+            in_progress: Some(crate::mcp::profile_lifecycle::OperationJournal {
+                operation_id: "op-crash-window".into(),
+                kind: crate::mcp::profile_lifecycle::OperationKind::Install,
+                phase: crate::mcp::profile_lifecycle::OperationPhase::DaemonRestarting,
+                reserved_generation: 1,
+                source_bundle_sha256: None,
+                target_bundle_sha256: "0".repeat(64),
+                pre_operation_config: None,
+                pre_operation_config_digest: None,
+                target_config_digest: "1".repeat(64),
+                was_daemon_running: true,
+                pre_daemon_instance: Some("inst-pre".into()),
+                pre_daemon_config_digest: None,
+                candidate_daemon_instance: Some(candidate_inst.clone()),
+                compensated_daemon_instance: None,
+                historical_compensated_instances: Vec::new(),
+                started_at_utc: "2026-10-18T00:00:00Z".into(),
+                config_written: true,
+                displaced_config_path: None,
+            }),
+            ..Default::default()
+        };
         profile_mgr.save_state(&profile_state).unwrap();
 
         fs::write(&next_inst_path, format!("{candidate_inst}\n99999999\n")).unwrap();
