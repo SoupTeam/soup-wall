@@ -217,3 +217,13 @@ an authorized maintainer can verify that setting. Do not add a duplicate
 advanced-setup workflow, lower thresholds, or treat missing/neutral analyses
 as a pass. The trusted aggregate status stays red or pending until evidence is
 complete.
+
+## Single-planner migration
+
+Trusted admission also accepts registered component checks inside the exact-source
+`ci.yml` run, under `Components / <original-workflow> / <original-job-name>`.
+Every selected matrix member and the merge-SHA planner remain mandatory. A green
+CI run without those exact checks is refused. An existing failed legacy component
+run cannot be hidden by the central run. This permits replacing duplicate planners
+after this verifier compatibility is installed; it does not activate selective CI,
+change required checks, or remove any runtime/security acceptance.

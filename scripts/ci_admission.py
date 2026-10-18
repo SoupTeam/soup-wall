@@ -85,6 +85,12 @@ CHECK_NAMES: dict[str, dict[str, tuple[str, ...]]] = {
 }
 
 
+def component_names(workflow: str, job_ids: list[str]) -> tuple[str, ...]:
+    """Reviewed central job names; the PR cannot supply this mapping."""
+    return tuple("Components / " + workflow.removesuffix(".yml") + " / " + name
+                 for name in required_names(workflow, job_ids))
+
+
 def required_names(workflow: str, job_ids: list[str]) -> tuple[str, ...]:
     result: list[str] = []
     for job in job_ids:
@@ -236,26 +242,43 @@ def inspect(api: GitHub, number: int, event_base: str, event_head: str) -> tuple
     selected = plan(paths, force_full=not active)
     actions = api.pages("/actions/runs?" + urlencode({"head_sha": head_sha,
                                                        "event": "pull_request"}), "workflow_runs")
-    selected_runs: list[tuple[str, list[str], dict[str, Any]]] = []
+    central = latest(actions, ".github/workflows/ci.yml", "pull_request", head_sha)
+    job_cache: dict[tuple[int, int], list[dict[str, Any]]] = {}
+    selected_runs: list[tuple[str, tuple[str, ...], dict[str, Any]]] = []
     for workflow, job_ids in selected["workflows"].items():
         if not job_ids:
             continue
         run = latest(actions, ".github/workflows/" + workflow, "pull_request", head_sha)
+        expected = required_names(workflow, job_ids)
+        if run is None and workflow != "ci.yml":
+            # Migration compatibility: components may share ci.yml's single
+            # planner/run, but must still supply EVERY reviewed matrix member.
+            # A green ci.yml without these exact names cannot qualify them.
+            if central is not None and central.get("status") == "completed":
+                key = (int(central["id"]), int(central["run_attempt"]))
+                if key not in job_cache:
+                    job_cache[key] = get_jobs(api, central)
+                if any(job.get("name", "").startswith("Components / ") for job in job_cache[key]):
+                    run = central
+                    expected = component_names(workflow, job_ids)
         if run is None:
             return merge_sha, Verdict("pending", "selected workflow missing: " + workflow)
         if run.get("status") != "completed":
             return merge_sha, Verdict("pending", "selected workflow unfinished: " + workflow)
         if run.get("conclusion") != "success":
             return merge_sha, Verdict("failure", "selected workflow did not succeed: " + workflow)
-        selected_runs.append((workflow, job_ids, run))
+        selected_runs.append((workflow, expected, run))
     codeql_runs = api.pages("/actions/runs?" + urlencode({"head_sha": head_sha,
                                                            "event": "dynamic"}), "workflow_runs")
     codeql = latest(codeql_runs, "dynamic/github-code-scanning/codeql", "dynamic", head_sha)
     verdict = assess_codeql(codeql, None, selected["codeql"], head_sha)
     if verdict.state == "failure" or (codeql is None or codeql.get("status") != "completed"):
         return merge_sha, verdict
-    for workflow, job_ids, run in selected_runs:
-        verdict = assess_job_names(get_jobs(api, run), required_names(workflow, job_ids), merge_sha)
+    for workflow, expected, run in selected_runs:
+        key = (int(run["id"]), int(run["run_attempt"]))
+        if key not in job_cache:
+            job_cache[key] = get_jobs(api, run)
+        verdict = assess_job_names(job_cache[key], expected, merge_sha)
         if verdict.state != "success":
             return merge_sha, Verdict(verdict.state, workflow + ": " + verdict.reason)
     verdict = assess_codeql(codeql, get_jobs(api, codeql), selected["codeql"], head_sha)
