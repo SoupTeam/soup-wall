@@ -50,6 +50,10 @@ cat > "$proof/Dockerfile" <<'DOCKERFILE'
 FROM rust:1-bookworm
 RUN apt-get update && apt-get install --no-install-recommends -y python3 cmake bubblewrap && rm -rf /var/lib/apt/lists/*
 RUN rustup component add clippy rustfmt
+# The repository asks for stable. Link the image's installed toolchain under a
+# custom name so rustup never tries to refresh it inside the read-only container.
+RUN rustup toolchain link sou78 "$(rustc --print sysroot)"
+ENV RUSTUP_TOOLCHAIN=sou78
 DOCKERFILE
 printf '*\n!Dockerfile\n' > "$proof/.dockerignore"
 image="sou78-linux:$(git rev-parse --short=12 HEAD)"
