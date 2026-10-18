@@ -111,6 +111,56 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore = "subprocess helper, invoked by the process-death test"]
+    async fn boundary_process_child() {
+        let home = PathBuf::from(std::env::var_os("SOU82_BOUNDARY_CHILD_HOME").unwrap());
+        let barrier = Barrier::new(&home).unwrap();
+        let _boundary = barrier.release_boundary().await.unwrap();
+        std::fs::write(home.join("child-ready"), b"locked").unwrap();
+        tokio::time::sleep(Duration::from_secs(30)).await;
+    }
+
+    #[test]
+    fn activation_waits_for_another_process_and_recovers_after_its_death() {
+        struct Child(std::process::Child);
+        impl Drop for Child {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+        let home = tempfile::tempdir().unwrap();
+        let barrier = Barrier::new(home.path()).unwrap();
+        let mut child = Child(
+            std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "policy_transition::tests::boundary_process_child",
+                    "--ignored",
+                ])
+                .env("SOU82_BOUNDARY_CHILD_HOME", home.path())
+                .stdout(std::process::Stdio::null())
+                .spawn()
+                .unwrap(),
+        );
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while !home.path().join("child-ready").exists() {
+            assert!(
+                child.0.try_wait().unwrap().is_none(),
+                "boundary child exited"
+            );
+            assert!(
+                std::time::Instant::now() < deadline,
+                "boundary child timed out"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(barrier.try_activation().unwrap().is_none());
+        drop(child);
+        assert!(barrier.try_activation().unwrap().is_some());
+    }
+
+    #[tokio::test]
     async fn activation_waits_for_every_independent_collector_boundary() {
         let home = tempfile::tempdir().unwrap();
         let first = Barrier::new(home.path()).unwrap();

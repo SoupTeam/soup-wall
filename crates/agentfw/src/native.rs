@@ -2482,7 +2482,7 @@ mod tests {
             managed_transition_start(&st);
             let call = managed_transition_call(&st);
             assert!(call.release);
-            let policy = format!("default: allow\nrules:\n  - name: changed-read\n    when: {{action_class: read_only}}\n    action: {verdict}\n");
+            let policy = format!("default: allow\nagent_policies:\n  - name: changed-read\n    when: {{action_class: read_only}}\n    action: {verdict}\n");
             managed_transition_activate(&st, 2, &policy);
             // The new rule matches only the action; ordinary result text alone
             // would pass. Reusing the old call receipt must still withhold it.
@@ -2540,7 +2540,7 @@ mod tests {
                 2,
                 EventKind::ToolResult {
                     tool: "lookup_note".into(),
-                    content: "https://owned.invalid/retained".into(),
+                    content: "A long neutral note from an untrusted native source retained across managed policy transitions.".into(),
                     source: Provenance::Native {
                         registry: "transition-fixture".into(),
                         tool: "lookup_note".into(),
@@ -2556,7 +2556,29 @@ mod tests {
             assert!(fw.taint_len(&epoch) > 0);
             assert!(fw.provenance_incomplete(&epoch));
         }
-        assert!(!managed_transition_call(&st).release);
+        // Incomplete history constrains sensitive reads, while ordinary
+        // read-only continuation remains useful.
+        assert!(managed_transition_call(&st).release);
+        let native = st.native.as_ref().unwrap();
+        let sensitive = inspect(
+            &st,
+            native,
+            request(
+                native,
+                "transition",
+                "call",
+                json!({
+                    "tool":"lookup_note", "args":{"path":"/workspace/.env"},
+                    "schema_sha256":"a".repeat(64)
+                }),
+            ),
+        )
+        .unwrap();
+        assert!(!sensitive.release);
+        assert!(sensitive
+            .reason_codes
+            .iter()
+            .any(|code| code == "taint-history-incomplete"));
     }
 
     #[test]
