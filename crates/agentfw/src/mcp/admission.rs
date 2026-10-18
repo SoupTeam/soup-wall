@@ -1129,6 +1129,7 @@ impl<'a> Collector<'a> {
         name: &str,
         args: &Value,
         schema_sha256: &str,
+        resource_admission: Option<&Value>,
     ) -> anyhow::Result<Result<String, String>>
     where
         R: AsyncBufRead + Unpin,
@@ -1145,6 +1146,9 @@ impl<'a> Collector<'a> {
             ("args".to_owned(), args.clone()),
             ("schema_sha256".to_owned(), json!(schema_sha256)),
         ]);
+        if let Some(admission) = resource_admission {
+            body["resource_admission"] = admission.clone();
+        }
         let reply = match self.approval_post(&body).await? {
             Ok(reply) => reply,
             Err(code) => return Ok(Err(code)),
@@ -2071,11 +2075,24 @@ where
                                 ProductionVerdict::Allow => {}
                                 ProductionVerdict::Ask => {
                                     let mut reasons = json!(["policy_unconfirmed_ask"]);
-                                    if collector.config.approval.is_some()
-                                        && !resource_reply
-                                        && resource_admission.is_none()
-                                    {
-                                        match collector.obtain_approval(client, "classifier", name, &args, &installed.schema_sha256).await? {
+                                    let can_approve = collector.config.approval.is_some()
+                                        && (!resource_reply
+                                            || crate::native::resource_approval::is_supported_linux_resource_tool(installed));
+                                    if can_approve {
+                                        let adm_val = resource_admission
+                                            .as_ref()
+                                            .and_then(|(adm, _)| serde_json::to_value(adm).ok());
+                                        match collector
+                                            .obtain_approval(
+                                                client,
+                                                "classifier",
+                                                name,
+                                                &args,
+                                                &installed.schema_sha256,
+                                                adm_val.as_ref(),
+                                            )
+                                            .await?
+                                        {
                                             Err(code) => reasons = json!(["policy_unconfirmed_ask", code]),
                                             Ok(id) => {
                                                 // Re-evaluate the classifier now: a changed verdict
@@ -2253,14 +2270,27 @@ where
                             collector.event("call", call_fields.clone()),
                         )
                         .await?;
-                        if receipt["release"] != true
+                        let can_approve_daemon = receipt["release"] != true
                             && receipt["verdict"] == "ask"
                             && approval_id.is_none()
                             && collector.config.approval.is_some()
-                            && !resource_reply
-                            && resource_admission.is_none()
-                        {
-                            match collector.obtain_approval(client, "daemon", name, &args, &installed.schema_sha256).await? {
+                            && (!resource_reply
+                                || crate::native::resource_approval::is_supported_linux_resource_tool(installed));
+                        if can_approve_daemon {
+                            let adm_val = resource_admission
+                                .as_ref()
+                                .and_then(|(adm, _)| serde_json::to_value(adm).ok());
+                            match collector
+                                .obtain_approval(
+                                    client,
+                                    "daemon",
+                                    name,
+                                    &args,
+                                    &installed.schema_sha256,
+                                    adm_val.as_ref(),
+                                )
+                                .await?
+                            {
                                 Err(code) => {
                                     let mut reasons = receipt["reason_codes"].as_array().cloned().unwrap_or_default();
                                     reasons.push(json!(code));
