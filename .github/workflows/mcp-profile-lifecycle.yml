@@ -26,8 +26,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt,clippy
-      - name: Install isolated execution runtime
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y bubblewrap
       - name: Exact-source Linux foundation checks (not whole-issue acceptance)
         run: bash scripts/verify-sou78-linux.sh
       - name: Retain exact-source Linux results

@@ -30,7 +30,7 @@ if [[ ${1:-} == --isolated ]]; then
   exit 0
 fi
 
-command -v bwrap >/dev/null
+command -v docker >/dev/null
 : "${RUNNER_TEMP:?an owned disposable runner directory is required}"
 proof="$RUNNER_TEMP/sou78-linux"
 mkdir "$proof"
@@ -43,14 +43,32 @@ git rev-parse HEAD > "$proof/evidence/source-commit.txt"
   find crates scripts -type f -print0 | sort -z | xargs -0 sha256sum
 ) > "$proof/evidence/source-sha256.txt"
 rustc --version > "$proof/evidence/toolchain.txt"
-# Dependency retrieval does not execute package build scripts. Execution below is
-# offline, with a writable disposable copy and a read-only original checkout.
-CARGO_HOME="$proof/cargo-home" cargo fetch --locked --manifest-path "$proof/source/Cargo.toml"
-bwrap --die-with-parent --unshare-net \
-  --ro-bind / / --bind "$proof" "$proof" --dev /dev --proc /proc \
-  --chdir "$proof/source" \
-  --setenv CARGO_HOME "$proof/cargo-home" \
-  --setenv CARGO_TARGET_DIR "$proof/target" \
-  --setenv TMPDIR "$proof/tmp" \
-  --setenv SOU78_EVIDENCE "$proof/evidence" \
-  /bin/bash scripts/verify-sou78-linux.sh --isolated
+# Build only a standard toolchain image here; no target source is copied into it.
+# No host kernel/AppArmor setting is changed. Compilation/tests run as the runner
+# UID in a read-only container with no external network and no capabilities.
+cat > "$proof/Dockerfile" <<'DOCKERFILE'
+FROM rust:1-bookworm
+RUN apt-get update && apt-get install --no-install-recommends -y python3 cmake bubblewrap && rm -rf /var/lib/apt/lists/*
+RUN rustup component add clippy rustfmt
+DOCKERFILE
+printf '*\n!Dockerfile\n' > "$proof/.dockerignore"
+image="sou78-linux:$(git rev-parse --short=12 HEAD)"
+docker build --tag "$image" "$proof" > "$proof/evidence/image-build.log" 2>&1
+docker image inspect "$image" --format '{{.Id}}' > "$proof/evidence/image-id.txt"
+# Dependency retrieval does not run target package build scripts. The source is
+# read-only during retrieval. Cargo's package cache is the only writable input.
+docker run --rm --read-only --user "$(id -u):$(id -g)" \
+  --cap-drop ALL --security-opt no-new-privileges \
+  --mount "type=bind,src=$proof/source,dst=/source,readonly" \
+  --mount "type=bind,src=$proof/cargo-home,dst=/cargo-home" \
+  --env CARGO_HOME=/cargo-home --workdir /source \
+  "$image" cargo fetch --locked > "$proof/evidence/fetch.log" 2>&1
+docker run --rm --read-only --network none --user "$(id -u):$(id -g)" \
+  --cap-drop ALL --security-opt no-new-privileges \
+  --mount "type=bind,src=$proof,dst=$proof" \
+  --env "CARGO_HOME=$proof/cargo-home" \
+  --env "CARGO_TARGET_DIR=$proof/target" \
+  --env "TMPDIR=$proof/tmp" \
+  --env "SOU78_EVIDENCE=$proof/evidence" \
+  --workdir "$proof/source" \
+  "$image" /bin/bash scripts/verify-sou78-linux.sh --isolated
