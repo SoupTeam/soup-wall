@@ -801,11 +801,13 @@ impl ProfileManager {
         let revision_dir = self.revisions.join(bundle_sha256);
         let registry_path = revision_dir.join("registry.json");
         let approval = cfg.native.as_ref().and_then(|n| n.approval.clone());
+        let liveness = cfg.native.as_ref().and_then(|n| n.liveness.clone());
 
         cfg.native = Some(NativeCfg {
             registry_path,
             registry_sha256: registry_sha256.to_string(),
             approval,
+            liveness,
         });
         cfg.validate()?;
 

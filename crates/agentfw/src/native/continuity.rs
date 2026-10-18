@@ -299,11 +299,26 @@ impl Continuity {
         .unwrap_or(false)
     }
 
-    fn begin(&self) -> Result<()> {
+    pub(crate) fn begin(&self) -> Result<()> {
         self.atomic("risk-inflight.json", b"sw-native/provenance-inflight/1\n")
     }
 
-    fn commit(&self, st: &Shared, native: &NativeState) -> Result<()> {
+    pub(crate) fn is_transition_pending(&self) -> bool {
+        !matches!(
+            fs::symlink_metadata(self.root.join("connection-transition.json")),
+            Err(ref error) if error.kind() == std::io::ErrorKind::NotFound
+        )
+    }
+
+    pub(crate) fn is_enabled(&self) -> bool {
+        self.enabled.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn gate(&self) -> &tokio::sync::Mutex<()> {
+        &self.gate
+    }
+
+    pub(crate) fn commit(&self, st: &Shared, native: &NativeState) -> Result<()> {
         let sessions = native
             .sessions
             .lock()
@@ -330,7 +345,12 @@ impl Continuity {
         checkpoint.signature = URL_SAFE_NO_PAD.encode(signature(&checkpoint, &native.token)?);
         self.atomic("risk-checkpoint.json", &encode_bounded(&checkpoint)?)?;
         self.sequence.store(sequence, Ordering::Relaxed);
-        fs::remove_file(self.root.join("risk-inflight.json"))?;
+        let marker = self.root.join("risk-inflight.json");
+        match fs::remove_file(&marker) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e).context("failed to remove risk-inflight marker"),
+        }
         self.sync()
     }
 }
@@ -373,9 +393,10 @@ pub async fn middleware(State(st): State<Shared>, request: Request, next: Next) 
         return next.run(request).await;
     }
     let _gate = store.gate.lock().await;
-    if matches!(path.as_str(), "/native/v1" | "/native/approval/v1" | "/mcp")
-        && !matches!(fs::symlink_metadata(store.root.join("connection-transition.json")),
-            Err(ref error) if error.kind() == std::io::ErrorKind::NotFound)
+    if matches!(
+        path.as_str(),
+        "/native/v1" | "/native/approval/v1" | "/native/liveness/v1" | "/mcp"
+    ) && store.is_transition_pending()
     {
         return (
             StatusCode::SERVICE_UNAVAILABLE,

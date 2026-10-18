@@ -4815,7 +4815,7 @@ async fn review8dd_start(
     resources: Option<Vec<String>>,
 ) -> (StatusCode, Value) {
     let (status, reply, _) =
-        scoped_start_with_ttl(f, session, agent, parent, tools, resources, 60_000).await;
+        scoped_start_with_ttl(f, session, agent, parent, tools, resources, 300_000).await;
     (status, reply)
 }
 
@@ -4852,10 +4852,17 @@ async fn scoped_start_with_ttl(
     ttl: u64,
 ) -> (StatusCode, Value, String) {
     use agentfw::native::child_authority as ca;
+    let offset = f
+        .state
+        .native
+        .as_ref()
+        .map(|n| n.test_time_offset())
+        .unwrap_or(0);
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
-        .as_millis() as u64;
+        .as_millis() as u64
+        + offset;
     let grant = ca::mint_scoped(
         &ca::derive_key(NATIVE_TOKEN),
         "review-host",
@@ -6289,7 +6296,7 @@ async fn sou89_restarted_agent_rebinds_after_authority_expires() {
     .await;
     assert_allow(s, &r);
 
-    // Start worker with short TTL (50ms).
+    // Start worker with standard TTL (60_000ms).
     let (s, r, _) = scoped_start_with_ttl(
         &f,
         "child-first",
@@ -6297,7 +6304,7 @@ async fn sou89_restarted_agent_rebinds_after_authority_expires() {
         Some("parent"),
         &["read_document"],
         Some(vec![]),
-        50,
+        60_000,
     )
     .await;
     assert_allow(s, &r);
@@ -6314,8 +6321,12 @@ async fn sou89_restarted_agent_rebinds_after_authority_expires() {
     .await;
     assert_eq!(r["error_code"], "native_agent_already_bound");
 
-    // Wait for the first worker's authority to expire.
-    tokio::time::sleep(std::time::Duration::from_millis(70)).await;
+    // Advance deterministic test time past the first worker's authority expiration.
+    f.state
+        .native
+        .as_ref()
+        .unwrap()
+        .advance_test_time_ms(61_000);
 
     // Direct call to child-first now fails with native_child_authority_expired (not native_session_unknown).
     let (_, r) = f
@@ -6357,7 +6368,7 @@ async fn sou89_capacity_reclaimed_when_authority_expired_sessions_are_present() 
     .await;
     assert_allow(s, &r);
 
-    // Fill remaining 63 slots with short-lived child sessions (TTL = 500ms).
+    // Fill remaining 63 slots with child sessions (TTL = 60_000ms).
     for i in 1..64 {
         let (s, r, _) = scoped_start_with_ttl(
             &f,
@@ -6366,7 +6377,7 @@ async fn sou89_capacity_reclaimed_when_authority_expired_sessions_are_present() 
             Some("parent"),
             &["read_document"],
             Some(vec![]),
-            500,
+            60_000,
         )
         .await;
         assert_allow(s, &r);
@@ -6384,8 +6395,12 @@ async fn sou89_capacity_reclaimed_when_authority_expired_sessions_are_present() 
     .await;
     assert_eq!(r["error_code"], "native_session_cap");
 
-    // Wait for the 63 child sessions to expire.
-    tokio::time::sleep(std::time::Duration::from_millis(550)).await;
+    // Advance deterministic test time past the 63 child sessions' expiration.
+    f.state
+        .native
+        .as_ref()
+        .unwrap()
+        .advance_test_time_ms(61_000);
 
     // Starting a new session now triggers reap_lost_sessions and succeeds by reclaiming capacity.
     let (s, r, _) = scoped_start_with_ttl(
@@ -6428,7 +6443,7 @@ async fn sou89_instance_endpoint_reclaims_capacity_and_cleans_bindings() {
         Some("parent"),
         &["read_document"],
         Some(vec![]),
-        50,
+        60_000,
     )
     .await;
     assert_allow(s, &r);
@@ -6456,10 +6471,14 @@ async fn sou89_instance_endpoint_reclaims_capacity_and_cleans_bindings() {
     let sessions_before = body["provenance"]["usage"]["sessions"].as_u64().unwrap();
     assert_eq!(sessions_before, 3);
 
-    // Wait for child-short authority to expire.
-    tokio::time::sleep(std::time::Duration::from_millis(70)).await;
+    // Advance deterministic test time past child-short authority expiration.
+    f.state
+        .native
+        .as_ref()
+        .unwrap()
+        .advance_test_time_ms(61_000);
 
-    // GET /native/v1/instance reaps the lost child session and updates usage.
+    // GET /native/v1/instance filters out the expired child session without ad-hoc mutation.
     let response = app(f.state.clone())
         .oneshot(
             Request::builder()
@@ -6479,6 +6498,26 @@ async fn sou89_instance_endpoint_reclaims_capacity_and_cleans_bindings() {
     let bindings = body["bindings"].as_array().unwrap();
     assert_eq!(bindings.len(), 1);
     assert_eq!(bindings[0]["agent_id"], "parent");
+
+    // Autonomous maintenance sweep performs unified terminal retirement and reclaims provenance capacity.
+    agentfw::native::liveness::perform_maintenance(&f.state).await;
+
+    let response = app(f.state.clone())
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/native/v1/instance")
+                .header("authorization", format!("Bearer {NATIVE_TOKEN}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = serde_json::from_slice::<Value>(
+        &to_bytes(response.into_body(), 1024 * 1024).await.unwrap(),
+    )
+    .unwrap();
     let sessions_after = body["provenance"]["usage"]["sessions"].as_u64().unwrap();
     assert_eq!(sessions_after, 2);
 }
@@ -6504,7 +6543,7 @@ async fn sou89_restarted_session_id_reuses_slot_if_previous_died() {
         Some("parent"),
         &["read_document"],
         Some(vec![]),
-        50,
+        60_000,
     )
     .await;
     assert_allow(s, &r);
@@ -6522,8 +6561,12 @@ async fn sou89_restarted_session_id_reuses_slot_if_previous_died() {
     .await;
     assert_eq!(r["error_code"], "native_session_exists");
 
-    // Wait for the first session's authority to expire.
-    tokio::time::sleep(std::time::Duration::from_millis(70)).await;
+    // Advance deterministic test time past the first session's authority expiration.
+    f.state
+        .native
+        .as_ref()
+        .unwrap()
+        .advance_test_time_ms(61_000);
 
     // Starting a new session with the same session_id now cleans up the dead session and succeeds.
     let (s, r, _) = scoped_start_with_ttl(
@@ -6585,4 +6628,658 @@ async fn sou89_lock_contention_refreshes_time_and_rejects_expired_authority() {
 
     // Because timestamps are refreshed after acquiring locks, contention cannot extend authority.
     assert_eq!(r["error_code"], "native_child_authority_expired");
+}
+
+async fn post_liveness(f: &Fixture, body: &Value) -> (StatusCode, Value) {
+    let response = app(f.state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/native/liveness/v1")
+                .header("authorization", format!("Bearer {NATIVE_TOKEN}"))
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_vec(body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    let body = serde_json::from_slice::<Value>(&bytes).unwrap_or(json!({}));
+    (status, body)
+}
+
+#[tokio::test]
+async fn sou89_liveness_enroll_and_renew_monotonicity() {
+    let f = Fixture::new(ALLOW);
+    let (s, r) = f.post(&f.event("collector-live", "session_start")).await;
+    assert_allow(s, &r);
+    let owner_token = r["owner_token"].as_str().unwrap().to_string();
+
+    let instance_id = f.state.native.as_ref().unwrap().instance_id().to_string();
+    let registry_sha256 = f.state.native.as_ref().unwrap().registry_sha256.clone();
+
+    // 0. Forged enrollment without owner token or with wrong token is rejected
+    let forged_missing = json!({
+        "contract_version": "sw-native-liveness/1",
+        "registry_sha256": registry_sha256,
+        "session_id": "collector-live",
+        "instance_id": instance_id,
+        "action": "enroll",
+        "lease_seconds": 15,
+    });
+    let (s, r) = post_liveness(&f, &forged_missing).await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    assert_eq!(r["error_code"], "native_liveness_owner_token_required");
+
+    let forged_wrong = json!({
+        "contract_version": "sw-native-liveness/1",
+        "registry_sha256": registry_sha256,
+        "session_id": "collector-live",
+        "instance_id": instance_id,
+        "action": "enroll",
+        "lease_seconds": 15,
+        "owner_token": "forged-owner-token",
+    });
+    let (s, r) = post_liveness(&f, &forged_wrong).await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    assert_eq!(r["error_code"], "native_liveness_owner_mismatch");
+
+    // 1. Valid enrollment
+    let enroll_req = json!({
+        "contract_version": "sw-native-liveness/1",
+        "registry_sha256": registry_sha256,
+        "session_id": "collector-live",
+        "instance_id": instance_id,
+        "action": "enroll",
+        "lease_seconds": 15,
+        "owner_token": owner_token,
+    });
+    let (s, r) = post_liveness(&f, &enroll_req).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(r["contract_version"], "sw-native-liveness/1");
+    assert_eq!(r["action"], "enroll");
+    assert_eq!(r["lease_seconds"], 15);
+    assert_eq!(r["lease_seq"], 1);
+    assert_eq!(r["status"], "active");
+    let epoch = r["epoch"].as_str().unwrap().to_string();
+    assert!(!epoch.is_empty());
+
+    // Re-enrollment of active lease is rejected
+    let (s, r) = post_liveness(&f, &enroll_req).await;
+    assert_eq!(s, StatusCode::CONFLICT);
+    assert_eq!(r["error_code"], "native_liveness_already_enrolled");
+
+    // 2. Monotonic renewal with next lease_seq
+    let renew_req = json!({
+        "contract_version": "sw-native-liveness/1",
+        "registry_sha256": registry_sha256,
+        "session_id": "collector-live",
+        "instance_id": instance_id,
+        "action": "renew",
+        "epoch": epoch,
+        "lease_seq": 2,
+    });
+    let (s, r) = post_liveness(&f, &renew_req).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(r["lease_seq"], 2);
+    assert_eq!(r["status"], "active");
+
+    // 3. Stale sequence or replay is rejected
+    let replay_req = json!({
+        "contract_version": "sw-native-liveness/1",
+        "registry_sha256": registry_sha256,
+        "session_id": "collector-live",
+        "instance_id": instance_id,
+        "action": "renew",
+        "epoch": epoch,
+        "lease_seq": 2,
+    });
+    let (s, r) = post_liveness(&f, &replay_req).await;
+    assert_eq!(s, StatusCode::CONFLICT);
+    assert_eq!(r["error_code"], "native_liveness_seq_stale");
+
+    // 4. Epoch mismatch is rejected
+    let bad_epoch_req = json!({
+        "contract_version": "sw-native-liveness/1",
+        "registry_sha256": registry_sha256,
+        "session_id": "collector-live",
+        "instance_id": instance_id,
+        "action": "renew",
+        "epoch": "wrong-secret-epoch",
+        "lease_seq": 3,
+    });
+    let (s, r) = post_liveness(&f, &bad_epoch_req).await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    assert_eq!(r["error_code"], "native_liveness_epoch_mismatch");
+
+    // 5. Instance mismatch is rejected
+    let bad_instance_req = json!({
+        "contract_version": "sw-native-liveness/1",
+        "registry_sha256": registry_sha256,
+        "session_id": "collector-live",
+        "instance_id": "wrong-daemon-instance",
+        "action": "renew",
+        "epoch": epoch,
+        "lease_seq": 3,
+    });
+    let (s, r) = post_liveness(&f, &bad_instance_req).await;
+    assert_eq!(s, StatusCode::CONFLICT);
+    assert_eq!(r["error_code"], "native_instance_mismatch");
+}
+
+#[tokio::test]
+async fn sou89_liveness_renewal_cannot_extend_expired_authority() {
+    let f = Fixture::new(ALLOW);
+    let (s, r) = review8dd_start(
+        &f,
+        "parent-live",
+        "parent",
+        None,
+        &["read_document"],
+        Some(vec![]),
+    )
+    .await;
+    assert_allow(s, &r);
+
+    let (s, r, _) = scoped_start_with_ttl(
+        &f,
+        "child-live",
+        "worker",
+        Some("parent"),
+        &["read_document"],
+        Some(vec![]),
+        10_000,
+    )
+    .await;
+    assert_allow(s, &r);
+    let owner_token = r["owner_token"].as_str().unwrap().to_string();
+
+    let instance_id = f.state.native.as_ref().unwrap().instance_id().to_string();
+    let registry_sha256 = f.state.native.as_ref().unwrap().registry_sha256.clone();
+
+    // Enroll in liveness with 60s lease
+    let enroll_req = json!({
+        "contract_version": "sw-native-liveness/1",
+        "registry_sha256": registry_sha256,
+        "session_id": "child-live",
+        "instance_id": instance_id,
+        "action": "enroll",
+        "lease_seconds": 60,
+        "owner_token": owner_token,
+    });
+    let (s, r) = post_liveness(&f, &enroll_req).await;
+    assert_eq!(s, StatusCode::OK);
+    let epoch = r["epoch"].as_str().unwrap().to_string();
+
+    // Advance deterministic test time past the 10s signed authority expiration (while 60s lease is active)
+    f.state
+        .native
+        .as_ref()
+        .unwrap()
+        .advance_test_time_ms(11_000);
+
+    // Attempting to renew liveness after signed authority expired cannot revive authority
+    let renew_req = json!({
+        "contract_version": "sw-native-liveness/1",
+        "registry_sha256": registry_sha256,
+        "session_id": "child-live",
+        "instance_id": instance_id,
+        "action": "renew",
+        "epoch": epoch,
+        "lease_seq": 2,
+    });
+    let (s, r) = post_liveness(&f, &renew_req).await;
+    assert_eq!(s, StatusCode::CONFLICT);
+    assert_eq!(r["error_code"], "native_liveness_authority_expired");
+
+    // The child session cannot execute calls
+    let call = f.call("child-live", "read_document", &json!({}));
+    let (_, r) = f.post(&call).await;
+    assert_eq!(r["error_code"], "native_child_authority_expired");
+}
+
+#[tokio::test]
+async fn sou89_liveness_autonomous_reclamation_and_sibling_isolation() {
+    let f = Fixture::new(ALLOW);
+    let (s, r) = f.post(&f.event("collector-a", "session_start")).await;
+    assert_allow(s, &r);
+    let owner_token_a = r["owner_token"].as_str().unwrap().to_string();
+
+    let (s, r) = f.post(&f.event("collector-b", "session_start")).await;
+    assert_allow(s, &r);
+
+    let instance_id = f.state.native.as_ref().unwrap().instance_id().to_string();
+    let registry_sha256 = f.state.native.as_ref().unwrap().registry_sha256.clone();
+
+    // Enroll collector-a in liveness (10s lease). collector-b is unleased legacy session.
+    let enroll_a = json!({
+        "contract_version": "sw-native-liveness/1",
+        "registry_sha256": registry_sha256,
+        "session_id": "collector-a",
+        "instance_id": instance_id,
+        "action": "enroll",
+        "lease_seconds": 10,
+        "owner_token": owner_token_a,
+    });
+    let (s, r) = post_liveness(&f, &enroll_a).await;
+    assert_eq!(s, StatusCode::OK);
+    let epoch_a = r["epoch"].as_str().unwrap().to_string();
+
+    // Both collectors execute calls successfully
+    let (s, r) = f
+        .post(&f.call("collector-a", "read_document", &json!({})))
+        .await;
+    assert_allow(s, &r);
+    let (s, r) = f
+        .post(&f.call("collector-b", "read_document", &json!({})))
+        .await;
+    assert_allow(s, &r);
+
+    // collector-a stops renewing; advance deterministic clock by 11 seconds (lease expired)
+    f.state
+        .native
+        .as_ref()
+        .unwrap()
+        .advance_test_time_ms(11_000);
+
+    // Autonomous maintenance sweep runs in background (simulated via perform_maintenance)
+    let reclaimed = agentfw::native::liveness::perform_maintenance(&f.state).await;
+    assert_eq!(
+        reclaimed, 1,
+        "expired leased collector was autonomously reclaimed"
+    );
+
+    // collector-a is dead; tool calls fail
+    let (_, r) = f
+        .post(&f.call("collector-a", "read_document", &json!({})))
+        .await;
+    assert_eq!(r["error_code"], "native_session_unknown");
+
+    // Sibling collector-b was NOT affected and remains fully useful
+    let (s, r) = f
+        .post(&f.call("collector-b", "read_document", &json!({})))
+        .await;
+    assert_allow(s, &r);
+
+    // Late renew on collector-a is rejected as terminal
+    let renew_a = json!({
+        "contract_version": "sw-native-liveness/1",
+        "registry_sha256": registry_sha256,
+        "session_id": "collector-a",
+        "instance_id": instance_id,
+        "action": "renew",
+        "epoch": epoch_a,
+        "lease_seq": 2,
+    });
+    let (s, r) = post_liveness(&f, &renew_a).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    assert_eq!(r["error_code"], "native_session_unknown");
+}
+
+#[tokio::test]
+async fn sou89_liveness_explicit_retire_cascades_children_and_preserves_host_risk() {
+    let f = Fixture::new(ALLOW);
+    let (s, r) = review8dd_start(
+        &f,
+        "parent-retire",
+        "parent",
+        None,
+        &["read_document"],
+        Some(vec![]),
+    )
+    .await;
+    assert_allow(s, &r);
+    let owner_token_p = r["owner_token"].as_str().unwrap().to_string();
+
+    let (s, r, _) = scoped_start_with_ttl(
+        &f,
+        "child-retire",
+        "worker",
+        Some("parent"),
+        &["read_document"],
+        Some(vec![]),
+        60_000,
+    )
+    .await;
+    assert_allow(s, &r);
+
+    // Add untrusted taint to host session
+    let result = child_result(&f, "parent-retire", UNTRUSTED_TEXT).await;
+    let (s, r) = f.post(&result).await;
+    assert_allow(s, &r);
+    assert!(f.state.firewall.lock().unwrap().taint_len("review-host") > 0);
+
+    let instance_id = f.state.native.as_ref().unwrap().instance_id().to_string();
+    let registry_sha256 = f.state.native.as_ref().unwrap().registry_sha256.clone();
+
+    // Enroll parent in liveness
+    let enroll_p = json!({
+        "contract_version": "sw-native-liveness/1",
+        "registry_sha256": registry_sha256,
+        "session_id": "parent-retire",
+        "instance_id": instance_id,
+        "action": "enroll",
+        "lease_seconds": 15,
+        "owner_token": owner_token_p,
+    });
+    let (s, r) = post_liveness(&f, &enroll_p).await;
+    assert_eq!(s, StatusCode::OK);
+    let epoch_p = r["epoch"].as_str().unwrap().to_string();
+
+    // Explicit retire of parent
+    let retire_p = json!({
+        "contract_version": "sw-native-liveness/1",
+        "registry_sha256": registry_sha256,
+        "session_id": "parent-retire",
+        "instance_id": instance_id,
+        "action": "retire",
+        "epoch": epoch_p,
+    });
+    let (s, r) = post_liveness(&f, &retire_p).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(r["status"], "retired");
+
+    // Child session was cascade-retired
+    let (_, r) = f
+        .post(&f.call("child-retire", "read_document", &json!({})))
+        .await;
+    assert_eq!(r["error_code"], "native_session_unknown");
+
+    // Shared host risk/taint was preserved and NOT erased
+    assert!(
+        f.state.firewall.lock().unwrap().taint_len("review-host") > 0,
+        "host taint must not be erased upon collector retirement"
+    );
+}
+
+fn reviewer_sou89_liveness(f: &Fixture, sid: &str, action: &str) -> Value {
+    json!({
+        "contract_version": "sw-native-liveness/1",
+        "registry_sha256": f.registry_sha256,
+        "session_id": sid,
+        "instance_id": f.state.native.as_ref().unwrap().instance_id(),
+        "action": action,
+    })
+}
+
+#[tokio::test]
+async fn reviewer_sou89_spent_signed_grant_must_not_rebootstrap() {
+    let f = Fixture::new(ALLOW);
+    let (s, start, proof) = scoped_start_with_ttl(
+        &f,
+        "lost-owner",
+        "worker",
+        None,
+        &["read_document"],
+        Some(vec![]),
+        300_000,
+    )
+    .await;
+    assert_allow(s, &start);
+    let mut enroll = reviewer_sou89_liveness(&f, "lost-owner", "enroll");
+    enroll["owner_token"] = start["owner_token"].clone();
+    enroll["lease_seconds"] = json!(1);
+    let (s, _) = post_liveness(&f, &enroll).await;
+    assert_eq!(s, StatusCode::OK);
+    f.state.native.as_ref().unwrap().advance_test_time_ms(1100);
+    assert_eq!(
+        agentfw::native::liveness::perform_maintenance(&f.state).await,
+        1
+    );
+    let mut replay = f.event("replayed-owner", "session_start");
+    replay["host_session"] = json!("review-host");
+    replay["server_id"] = json!("resource-fixture");
+    replay["child_authority"] = json!(proof);
+    let (status, reply) = f.post(&replay).await;
+    let (call_status, call_reply) = f
+        .post(&f.call("replayed-owner", "read_document", &json!({})))
+        .await;
+    assert!(
+        status != StatusCode::OK || reply["release"] != true,
+        "spent signed grant bootstrapped after expiry: status={status}, reply={reply}; new call={call_status} {call_reply}"
+    );
+}
+
+#[tokio::test]
+async fn reviewer_sou89_parent_close_must_reclaim_descendant() {
+    let f = Fixture::new(ALLOW);
+    let (s, r) = review8dd_start(
+        &f,
+        "parent-review",
+        "parent",
+        None,
+        &["read_document"],
+        Some(vec![]),
+    )
+    .await;
+    assert_allow(s, &r);
+    let (s, r) = review8dd_start(
+        &f,
+        "child-review",
+        "worker",
+        Some("parent"),
+        &["read_document"],
+        Some(vec![]),
+    )
+    .await;
+    assert_allow(s, &r);
+    let mut enroll = reviewer_sou89_liveness(&f, "child-review", "enroll");
+    enroll["owner_token"] = r["owner_token"].clone();
+    enroll["lease_seconds"] = json!(60);
+    let (s, _) = post_liveness(&f, &enroll).await;
+    assert_eq!(s, StatusCode::OK);
+    let (s, r) = f.post(&f.event("parent-review", "session_end")).await;
+    assert_allow(s, &r);
+    let reclaimed = agentfw::native::liveness::perform_maintenance(&f.state).await;
+    let (s, r) = post_liveness(&f, &reviewer_sou89_liveness(&f, "child-review", "status")).await;
+    assert_eq!(
+        s,
+        StatusCode::NOT_FOUND,
+        "child capacity survives parent closure and sweep: reclaimed={reclaimed}, reply={r}"
+    );
+}
+
+#[tokio::test]
+async fn reviewer_sou89_enrol_must_not_revive_expired_unleased_session() {
+    let f = Fixture::new(ALLOW);
+    let (s, start) = f.post(&f.event("expired-review", "session_start")).await;
+    assert_allow(s, &start);
+    f.state
+        .native
+        .as_ref()
+        .unwrap()
+        .advance_test_time_ms(301_000);
+    let (_, before) = f
+        .post(&f.call("expired-review", "read_document", &json!({})))
+        .await;
+    assert_eq!(before["error_code"], "native_child_authority_expired");
+    let mut enroll = reviewer_sou89_liveness(&f, "expired-review", "enroll");
+    enroll["owner_token"] = start["owner_token"].clone();
+    enroll["lease_seconds"] = json!(60);
+    let (s, r) = post_liveness(&f, &enroll).await;
+    let (call_status, call_reply) = f
+        .post(&f.call("expired-review", "read_document", &json!({})))
+        .await;
+    assert_ne!(
+        s,
+        StatusCode::OK,
+        "expired unleased authority revived: enrol={r}; call={call_status} {call_reply}"
+    );
+}
+
+#[tokio::test]
+async fn reviewer_r3_tombstone_saturation_must_not_restore_spent_authority() {
+    let f = Fixture::new(ALLOW);
+    let mut proofs: Vec<(String, String)> = Vec::new();
+    for i in 0..513 {
+        let sid = format!("cap-owner-{i}");
+        let (status, start, proof) = scoped_start_with_ttl(
+            &f,
+            &sid,
+            "worker",
+            None,
+            &["read_document"],
+            Some(vec![]),
+            300_000,
+        )
+        .await;
+        if status != StatusCode::OK || start["release"] != true {
+            assert!(
+                i >= 512,
+                "unexpected rejection before declared ledger capacity: {i}, {start}"
+            );
+            break;
+        }
+        proofs.push((sha(proof.as_bytes()), proof));
+        let mut enroll = reviewer_sou89_liveness(&f, &sid, "enroll");
+        enroll["owner_token"] = start["owner_token"].clone();
+        enroll["lease_seconds"] = json!(60);
+        let (s, r) = post_liveness(&f, &enroll).await;
+        assert_eq!(s, StatusCode::OK, "{r}");
+        let mut retire = reviewer_sou89_liveness(&f, &sid, "retire");
+        retire["epoch"] = r["epoch"].clone();
+        let (s, r) = post_liveness(&f, &retire).await;
+        assert_eq!(s, StatusCode::OK, "{r}");
+    }
+    assert!(proofs.len() >= 512);
+    proofs.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut replay = f.event("cap-replay", "session_start");
+    replay["host_session"] = json!("review-host");
+    replay["server_id"] = json!("resource-fixture");
+    replay["child_authority"] = json!(proofs[0].1);
+    let (status, reply) = f.post(&replay).await;
+    let (call_status, call_reply) = f
+        .post(&f.call("cap-replay", "read_document", &json!({})))
+        .await;
+    assert!(
+        status != StatusCode::OK || reply["release"] != true,
+        "ledger saturation restored spent signed grant after {} retirements: bootstrap={status} {reply}; call={call_status} {call_reply}",
+        proofs.len()
+    );
+}
+
+#[tokio::test]
+async fn sou89_ledger_saturation_fail_closed_and_expiry_lifecycle() {
+    let f = Fixture::new(ALLOW);
+
+    // 1. Start a sibling that remains active throughout
+    let (s, sib_start, _sib_proof) = scoped_start_with_ttl(
+        &f,
+        "surviving-sibling",
+        "sibling",
+        None,
+        &["read_document"],
+        Some(vec![]),
+        300_000,
+    )
+    .await;
+    assert_allow(s, &sib_start);
+    let mut sib_enroll = reviewer_sou89_liveness(&f, "surviving-sibling", "enroll");
+    sib_enroll["owner_token"] = sib_start["owner_token"].clone();
+    sib_enroll["lease_seconds"] = json!(60);
+    let (s, sib_enrolled) = post_liveness(&f, &sib_enroll).await;
+    assert_eq!(s, StatusCode::OK);
+    let sib_epoch = sib_enrolled["epoch"].as_str().unwrap().to_string();
+
+    // 2. Fill the ledger up to MAX_SPENT_AUTHORITIES (512).
+    // Note that active sibling occupies 1 slot of reserved capacity (511 spent + 1 active = 512).
+    let mut proofs = Vec::new();
+    for i in 0..511 {
+        let sid = format!("fill-session-{i}");
+        let aid = format!("fill-worker-{i}");
+        let (status, start, proof) = scoped_start_with_ttl(
+            &f,
+            &sid,
+            &aid,
+            None,
+            &["read_document"],
+            Some(vec![]),
+            300_000,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "failed to start fill session {i}");
+        assert_eq!(start["release"], true);
+        proofs.push(proof.clone());
+        let mut enroll = reviewer_sou89_liveness(&f, &sid, "enroll");
+        enroll["owner_token"] = start["owner_token"].clone();
+        enroll["lease_seconds"] = json!(60);
+        let (s, r) = post_liveness(&f, &enroll).await;
+        assert_eq!(s, StatusCode::OK, "{r}");
+        let mut retire = reviewer_sou89_liveness(&f, &sid, "retire");
+        retire["epoch"] = r["epoch"].clone();
+        let (s, r) = post_liveness(&f, &retire).await;
+        assert_eq!(s, StatusCode::OK, "{r}");
+    }
+
+    // Capacity is now saturated: 511 spent + 1 active = 512.
+    // 3. Overflow attempt must fail-closed with CONFLICT (native_authority_ledger_saturated)
+    let (status, start, _) = scoped_start_with_ttl(
+        &f,
+        "overflow-session",
+        "overflow-worker",
+        None,
+        &["read_document"],
+        Some(vec![]),
+        300_000,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(start["error_code"], "native_authority_ledger_saturated");
+    assert_ne!(start["release"], true);
+
+    // 4. Surviving sibling still renews and does useful work despite saturated ledger
+    let mut renew = reviewer_sou89_liveness(&f, "surviving-sibling", "renew");
+    renew["epoch"] = json!(sib_epoch);
+    renew["lease_seq"] = json!(sib_enrolled["lease_seq"].as_u64().unwrap_or(1) + 1);
+    let (s, r) = post_liveness(&f, &renew).await;
+    assert_eq!(s, StatusCode::OK, "sibling renewal refused: {r}");
+    let (cs, cr) = f
+        .post(&f.call("surviving-sibling", "read_document", &json!({})))
+        .await;
+    assert_allow(cs, &cr);
+
+    // 5. Replay of old grants must be rejected as already spent
+    for p in [
+        &proofs[0],
+        &proofs[proofs.len() / 2],
+        &proofs[proofs.len() - 1],
+    ] {
+        let mut replay = f.event("replay-attempt", "session_start");
+        replay["host_session"] = json!("review-host");
+        replay["server_id"] = json!("resource-fixture");
+        replay["child_authority"] = json!(p);
+        let (status, reply) = f.post(&replay).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(reply["error_code"], "native_child_authority_already_spent");
+        assert_ne!(reply["release"], true);
+    }
+
+    // 6. Advance test time past the 300s TTL (e.g. 301s)
+    f.state
+        .native
+        .as_ref()
+        .unwrap()
+        .advance_test_time_ms(301_000);
+
+    // Maintenance prunes expired tombstones
+    agentfw::native::liveness::perform_maintenance(&f.state).await;
+
+    // 7. Legitimate capacity returns: a fresh signed grant can now be admitted!
+    let (status, start, _) = scoped_start_with_ttl(
+        &f,
+        "fresh-after-prune",
+        "fresh-worker",
+        None,
+        &["read_document"],
+        Some(vec![]),
+        300_000,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "fresh grant start rejected after pruning: {start}"
+    );
+    assert_eq!(start["release"], true);
 }

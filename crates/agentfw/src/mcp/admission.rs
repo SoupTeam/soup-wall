@@ -596,6 +596,26 @@ pub struct AdmissionCfg {
     /// Opt-in wait for a single-use operator approval of a native Ask call.
     /// `None` keeps the default correlated refusal.
     pub approval: Option<ApprovalWait>,
+    pub liveness_url: Option<String>,
+    pub liveness_lease_seconds: Option<u64>,
+}
+
+impl AdmissionCfg {
+    pub fn liveness_endpoint(&self) -> String {
+        if let Some(url) = &self.liveness_url {
+            return url.clone();
+        }
+        if let Some(base) = self.daemon_url.strip_suffix("/native/v1") {
+            format!("{base}/native/liveness/v1")
+        } else if let Some(base) = self.daemon_url.strip_suffix("/native") {
+            format!("{base}/native/liveness/v1")
+        } else {
+            format!(
+                "{}/native/liveness/v1",
+                self.daemon_url.trim_end_matches('/')
+            )
+        }
+    }
 }
 
 pub struct ApprovalWait {
@@ -879,12 +899,13 @@ struct ClassificationAuthority {
     https_get: bool,
 }
 
-struct Collector<'a> {
+pub struct Collector<'a> {
     config: &'a AdmissionCfg,
     host_session: Option<String>,
     child_authority: Option<String>,
     client: reqwest::Client,
     session: String,
+    pub liveness: Option<Arc<crate::native::liveness::CollectorLivenessClient>>,
 }
 
 impl<'a> Collector<'a> {
@@ -903,8 +924,44 @@ impl<'a> Collector<'a> {
                 .redirect(reqwest::redirect::Policy::none())
                 .timeout(Duration::from_secs(5))
                 .build()?,
-            session: format!("mcp:{}", crate::token::generate()),
+            session: std::env::var("AGENTFW_MCP_SESSION")
+                .ok()
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| format!("mcp:{}", crate::token::generate())),
+            liveness: None,
         })
+    }
+
+    pub fn is_uncertain(&self) -> bool {
+        self.liveness.as_ref().is_some_and(|l| l.is_uncertain())
+    }
+
+    async fn fetch_daemon_instance_id(&self) -> anyhow::Result<String> {
+        let instance_url = format!("{}/instance", self.config.daemon_url.trim_end_matches('/'));
+        let response = self
+            .client
+            .get(&instance_url)
+            .bearer_auth(&self.config.native.token)
+            .send()
+            .await
+            .context("MCP daemon instance unavailable")?;
+        ensure!(
+            response.status().is_success(),
+            "MCP daemon instance query rejected"
+        );
+        let info: serde_json::Value = response
+            .json()
+            .await
+            .context("malformed MCP daemon instance reply")?;
+        let instance_id = info["instance_id"]
+            .as_str()
+            .context("MCP daemon instance ID missing")?
+            .to_string();
+        ensure!(
+            crate::native::identifier(&instance_id),
+            "invalid daemon instance ID"
+        );
+        Ok(instance_id)
     }
 
     /// Classifies one validated call before the daemon sees it. The outer error is
@@ -1257,6 +1314,9 @@ impl<'a> Collector<'a> {
     }
 
     async fn event(&self, event: &str, fields: Value) -> anyhow::Result<Value> {
+        if event != "session_end" && self.is_uncertain() {
+            anyhow::bail!("native_liveness_uncertain");
+        }
         let expected_contract = if let Some(admission) = fields.get("resource_admission") {
             serde_json::from_value::<crate::native::resource::Admission>(admission.clone())?
                 .contract()
@@ -1309,6 +1369,8 @@ impl<'a> Collector<'a> {
             "content_sha256",
             "reason_codes",
             "resources_sha256",
+            "instance_id",
+            "owner_token",
         ];
         keys(&reply, &allowed)?;
         let required = [
@@ -1327,9 +1389,13 @@ impl<'a> Collector<'a> {
         ensure!(
             reply.as_object().is_some_and(|map| {
                 required.iter().all(|k| map.contains_key(*k))
-                    && (map.len() == required.len()
-                        || (map.len() == required.len() + 1
-                            && map.contains_key("resources_sha256")))
+                    && map.keys().all(|k| {
+                        required.contains(&k.as_str())
+                            || matches!(
+                                k.as_str(),
+                                "resources_sha256" | "instance_id" | "owner_token"
+                            )
+                    })
             }) && reply["contract_version"] == expected_contract
                 && reply["registry_sha256"] == self.config.native.registry_sha256
                 && reply["session_id"] == self.session
@@ -2756,8 +2822,8 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for DiagnosticOutput<W> {
 }
 
 pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
-    let collector = Collector::new(&config)?;
-    if let (Some(host_session), Some(child_authority)) =
+    let mut collector = Collector::new(&config)?;
+    let start_reply = if let (Some(host_session), Some(child_authority)) =
         (&collector.host_session, &collector.child_authority)
     {
         collector
@@ -2769,10 +2835,62 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
                     "server_id": collector.config.server_id,
                 }),
             )
-            .await?;
+            .await?
     } else {
-        collector.event("session_start", json!({})).await?;
-    }
+        collector.event("session_start", json!({})).await?
+    };
+
+    let selected_profile = super::server_profile::ProfileConfig::load_from_env()
+        .ok()
+        .flatten();
+    let is_selected_profile = selected_profile
+        .as_ref()
+        .is_some_and(|p| super::server_profile::selected(Some(&p.format)));
+    let env_liveness_flag = std::env::var("AGENTFW_NATIVE_LIVENESS").ok().map(|v| {
+        let v = v.trim().to_ascii_lowercase();
+        v != "0" && v != "false" && v != "no" && v != "off"
+    });
+    let env_lease_seconds = std::env::var("AGENTFW_NATIVE_LIVENESS_LEASE_SECONDS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok());
+    let liveness_opt_in = config.liveness_url.is_some()
+        && (env_liveness_flag.unwrap_or(false)
+            || config.liveness_lease_seconds.is_some()
+            || env_lease_seconds.is_some()
+            || (is_selected_profile && env_liveness_flag != Some(false)));
+
+    let (renewal_stop_tx, liveness_task) = if liveness_opt_in {
+        let daemon_instance_id =
+            if let Some(id) = start_reply.get("instance_id").and_then(|v| v.as_str()) {
+                id.to_string()
+            } else {
+                collector.fetch_daemon_instance_id().await?
+            };
+        let owner_token = start_reply
+            .get("owner_token")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        let client = Arc::new(crate::native::liveness::CollectorLivenessClient::new(
+            collector.client.clone(),
+            config.liveness_endpoint(),
+            collector.config.native.token.clone(),
+            collector.config.native.registry_sha256.clone(),
+            collector.session.clone(),
+            daemon_instance_id,
+            owner_token,
+        ));
+        let requested_lease = config.liveness_lease_seconds.or(env_lease_seconds);
+        if let Err(enroll_err) = client.enroll(requested_lease).await {
+            let _ = collector.event("session_end", json!({})).await;
+            return Err(enroll_err);
+        }
+        let (stop_tx, stop_rx) = tokio::sync::watch::channel(false);
+        let task = client.clone().spawn_renewal_task(stop_rx);
+        collector.liveness = Some(client);
+        (Some(stop_tx), Some(task))
+    } else {
+        (None, None)
+    };
     // Fail closed before spawning the server if the native daemon cannot admit a session.
     let operation = async {
         let cwd = std::env::current_dir()?;
@@ -2913,6 +3031,18 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
                         // Once diagnostic uncertainty is observed, a pending
                         // relay cannot win over that failure on the next poll.
                         biased;
+                        _ = async {
+                            if let Some(liveness) = &collector.liveness {
+                                loop {
+                                    if liveness.is_uncertain() {
+                                        return;
+                                    }
+                                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                                }
+                            } else {
+                                std::future::pending::<()>().await;
+                            }
+                        } => break Err(anyhow::anyhow!("native_liveness_uncertain")),
                         report = stderr_drain.as_mut().expect("owned stderr reader").wait(), if !diagnostics_eof => {
                             if report.is_failure() {
                                 break Err(anyhow::anyhow!(report.code()));
@@ -2991,9 +3121,19 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
         Ok(())
     }
     .await;
-    let ended = collector.event("session_end", json!({})).await;
+    if let Some(stop_tx) = renewal_stop_tx {
+        let _ = stop_tx.send(true);
+        if let Some(liveness) = &collector.liveness {
+            let _ = liveness.retire().await;
+        }
+        if let Some(task) = liveness_task {
+            let _ = task.await;
+        }
+    } else {
+        let ended = collector.event("session_end", json!({})).await;
+        ended?;
+    }
     operation?;
-    ended?;
     Ok(())
 }
 
@@ -3589,6 +3729,8 @@ mod resource_receipt_tests {
                 classifier: None,
                 resource_profiles: BTreeMap::new(),
                 approval: None,
+                liveness_url: None,
+                liveness_lease_seconds: None,
             };
             let collector = Collector::new(&config).unwrap();
             let mut response = json!({"contract_version":contract,"registry_sha256":config.native.registry_sha256,

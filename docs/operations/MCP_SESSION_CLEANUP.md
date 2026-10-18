@@ -1,87 +1,127 @@
-# Cleanup of lost MCP sessions and capacity recovery
+# Cleanup of lost MCP sessions, authenticated liveness, and capacity recovery
 
 The Agent daemon enforces bounded session capacity (`MAX_SESSIONS = 64`) and
 per-agent identity bindings for authenticated MCP collectors. When client,
 collector, or server processes terminate unexpectedly (e.g. abrupt crash,
-`SIGKILL`, network partition, or unhandled exit), sessions could previously
-linger in daemon state until idle TTL (300s) elapsed, consuming session slots,
+`SIGKILL`, network partition, or unhandled exit), unleased sessions previously
+lingered in daemon state until the inactivity TTL (300s) elapsed, consuming session slots,
 blocking restarted agents with `native_agent_already_bound`, and retaining
-provenance tracking context allocations.
+provenance tracking context allocations until unrelated incoming traffic triggered cleanup.
 
-SOU-89 introduces automatic cleanup of lost and orphaned MCP sessions and
-restores capacity without weakening security guarantees.
+SOU-89 introduces authenticated native session liveness (`sw-native-liveness/1`),
+proactive bounded daemon maintenance reclamation, and a unified terminal retirement path
+that restores capacity within a predeclared finite cleanup deadline while strictly preserving
+shared-host risk, taint floors, and audit integrity.
 
-## Lost session detection and reaping
+---
 
-A session is considered lost / dead if any of the following conditions hold:
-1. **Idle timeout**: `now.duration_since(session.touched) >= TTL` (300s).
-2. **Expired child authority**: `authority_expires_at_ms` is set and monotonic
-   wall-clock time has passed the expiration deadline (`now_ms >= exp`).
-3. **Broken lineage**: `validate_lineage` fails because any ancestor in the
-   delegation chain has expired authority or the registered parent session has
-   ended or been replaced.
+## Authenticated native liveness contract (`sw-native-liveness/1`)
 
-When reaped:
-- The session is removed from `state.entries`.
-- Pending approval requests for the session are closed with `session_expired`.
-- Agent tool registrations in `firewall` are retired via `end_agent`.
-- Session provenance contexts (`session.epoch`) are retired in `firewall` via
-  `EventKind::SessionEnd`.
-- Span cache records for the session epoch are dropped.
+The liveness contract is versioned separately from the core admission contract (`sw-agent-native/1`)
+and is exposed at `/native/liveness/v1`. Enrolled collectors actively declare their leases
+and maintain continuous liveness.
 
-## Capacity recovery in `session_start`
+### Protocol parameters and limits
 
-When a new session is requested via `session_start`:
-- If `state.entries.len() >= MAX_SESSIONS`, the daemon automatically sweeps
-  and reaps dead and expired sessions before evaluating the capacity limit.
-- If dead sessions were occupying capacity, their slots are freed immediately,
-  allowing the new session to proceed. If all 64 slots are occupied by active,
-  valid sessions, `native_session_cap` is returned.
-- Reusing an existing `session_id` is permitted if the prior session with that ID
-  has died or expired, avoiding false `native_session_exists` errors while
-  strictly protecting active sessions.
+- **Contract Version**: `sw-native-liveness/1`
+- **Default Lease**: `10` seconds (configurable via `config.native.liveness.default_lease_seconds`)
+- **Minimum Lease**: `1` second (`MIN_LEASE_SECONDS = 1`)
+- **Maximum Lease**: `60` seconds (`MAX_LEASE_SECONDS = 60`)
+- **Renewal Period**: `lease_seconds / 3` (collectors renew well before half-life)
+- **Retry Budget**: `3` attempts with 200ms backoff on network failures
+- **Maintenance Sweep Interval**: `500` ms (clamped between 50ms and 10,000ms; configurable via `config.native.liveness.maintenance_interval_ms`)
+- **Finite Cleanup Deadline**: `lease_duration + (2 * maintenance_interval)` (typically under 12 seconds for default lease; under 2 seconds for 1-second lease)
 
-## Agent re-binding
+### Contract actions
 
-When an agent crashes or its child authority expires, the orchestrator or
-supervisor may restart the agent under the same `(host_session, agent_id)` pair:
-- Before checking `native_agent_already_bound`, the daemon inspects any existing
-  session bound to that `(host_session, agent_id)`.
-- If the existing session is dead (authority expired, lineage broken, or timed out),
-  it is reaped immediately, allowing the restarted agent to bind cleanly with
-  its fresh authority grant.
-- If the existing session is still active and valid, the duplicate bootstrap is
-  rejected with `native_agent_already_bound` (`duplicate_agent_bootstrap_never_overwrites_an_active_grant`).
+1. **`enroll`**:
+   - Request: `{"contract_version": "sw-native-liveness/1", "registry_sha256": "...", "session_id": "...", "instance_id": "...", "action": "enroll", "lease_seconds": 15, "owner_token": "..."}`
+   - **Per-session owner authentication**: `owner_token` returned during `session_start` must be presented and is verified in constant time (`subtle::ConstantTimeEq`). Merely possessing the shared daemon token and knowing or guessing a `session_id` is rejected with `403 Forbidden` (`native_liveness_forbidden`).
+   - **Re-enrollment rejection**: Attempting to re-enroll an already enrolled session (whether active, expired, or terminal) is rejected with `409 Conflict` (`native_liveness_already_enrolled` or `native_liveness_terminal`). Expired or retired authority is terminal and cannot be revived; a fresh session must be created.
+   - Binds liveness to the daemon `instance_id` and mints an unguessable secret session `epoch`.
+   - Response: `{"contract_version": "sw-native-liveness/1", "action": "enroll", "instance_id": "...", "session_id": "...", "epoch": "...", "lease_seconds": 15, "lease_seq": 1, "expires_in_ms": 15000, "status": "active"}`
 
-## Instance endpoint observability
+2. **`renew`**:
+   - Request: `{"contract_version": "sw-native-liveness/1", "registry_sha256": "...", "session_id": "...", "instance_id": "...", "action": "renew", "epoch": "...", "lease_seq": 2}`
+   - Monotonicity: `lease_seq` must be strictly greater than the last accepted `lease_seq`. Stale sequences or replays return `409 Conflict` (`native_liveness_seq_stale`).
+   - Authority Ceiling: A lease renewal cannot extend signed child authority (`authority_expires_at_ms`) or parent validity. If signed authority has expired, renewal returns `409 Conflict` (`native_liveness_authority_expired`).
+   - Terminal Immunity: Once a session is terminal (retired, expired, or ended), renewal returns `404 Not Found` or `409 Conflict` (`native_liveness_terminal`). Authority cannot be revived.
 
-Calls to `GET /native/v1/instance` trigger lost session cleanup:
-- Stale bindings for dead or expired sessions are pruned.
-- Returned `bindings` and `provenance.usage` (`sessions`, `retained_bytes`)
-  accurately reflect live, active sessions.
+3. **`retire`**:
+   - Request: `{"contract_version": "sw-native-liveness/1", "registry_sha256": "...", "session_id": "...", "instance_id": "...", "action": "retire", "epoch": "..."}`
+   - Triggers definitive closure of the session and all its descendants via the unified terminal retirement path.
 
-## Collector signal resilience
+4. **`status`**:
+   - Read-only check returning remaining lease milliseconds and state (`"active"`, `"expired"`, `"retired"`).
 
-In addition to daemon-side cleanup, MCP collectors (`agentfw mcp --native-admission`)
-intercept `SIGINT` (e.g. `Ctrl-C`) in their relay transport loops:
-- Upon receiving `SIGINT`, the relay loop breaks cleanly.
-- Process and diagnostic cleanup runs.
-- The collector attempts to send `session_end` to the daemon before exiting,
-  ensuring prompt resource deallocation.
-- If the collector is killed with `SIGKILL` or crashes before sending `session_end`,
-  the daemon-side lost session cleanup handles reclamation automatically.
+---
+
+## Unified terminal retirement path (`retire_sessions_terminal`)
+
+All paths that lead to definitive session closure—explicit `session_end`, `liveness.retire`,
+autonomous background maintenance reclamation, parent session termination, and agent re-binding—converge
+on a single unified terminal retirement path:
+
+1. **Terminal state latch**: Marks `session.terminal = true` and `lease.state = LeaseState::Terminal(reason)`. No subsequent renew, call, or retry can resurrect this session.
+2. **Cascade child retirement**: Automatically traces the provenance tree (`parent_epoch`) and terminally retires all descendant child sessions.
+3. **Pending approval closure**: Closes all outstanding operator approvals for the session via `approval.close_session(id, reason)`.
+4. **Firewall agent termination**: Unregisters agent tools via `firewall.end_agent(host, agent)` and inspects `EventKind::SessionEnd`.
+5. **Span eviction**: Evicts session spans from `st.spans`.
+6. **Audit-before-release**: Formats and persists an audit record (`native_session_{reason}`) via `st.audit.write_native`. If writing the audit record fails, `firewall.mark_all_provenance_incomplete()` is immediately asserted to ensure safety floors fail closed.
+7. **Continuity checkpointing**: Invokes `continuity.commit(st, native)` to persist profile transition gates and session state. If checkpointing fails, provenance is marked incomplete; authority is never revived.
+
+---
+
+## Autonomous daemon maintenance worker
+
+A dedicated background maintenance task is spawned during `agentfw serve` startup:
+- Periodically executes `agentfw::native::liveness::perform_maintenance`.
+- Inspects session liveness leases using monotonic `Instant::now()`, legacy inactivity TTL (300s), and signed child authority deadlines (`now_ms >= exp`).
+- Sweeps dead and expired sessions without requiring any incoming HTTP traffic.
+- Restores daemon session and call capacity deterministically within the predeclared deadline.
+
+---
+
+## Read-only instance endpoint (`GET /native/v1/instance`)
+
+Calls to `GET /native/v1/instance` are strictly read-only:
+- The response filters out dead, expired, or terminal sessions from the returned `bindings` array.
+- It no longer performs ad-hoc mutations or deletions bypassing continuity middleware or audit logging.
+
+---
 
 ## Security invariants preserved
 
-1. **Host-level taint and incomplete floors**: Shared host provenance history
-   and taint floors are tied to `host_session`, not child session epochs.
-   Reaping an orphaned child session never clears or weakens host taint.
-2. **Scoped host tombstones**: `state.scoped_hosts` remains bounded at 64
-   and is never evicted during session cleanup (`scoped_host_capacity_never_evicts_completed_identity_tombstones`).
-3. **Explicit error codes**: Direct tool calls directed at an authority-expired
-   session return `native_child_authority_expired`, and calls to sessions whose
-   parent has ended return `native_child_parent_unavailable`. They do not mask
-   the failure as `native_session_unknown` until the session is legitimately
-   reclaimed.
-4. **Active grant immutability**: Active unexpired grants cannot be hijacked or
-   overwritten by duplicate agent bootstrap requests.
+1. **Host-level taint and incomplete floors**: Shared host provenance history and taint floors are tied to `host_session`, not collector session epochs. Reclaiming an orphaned collector never clears or weakens host taint.
+2. **Sticky incomplete-history floors**: Any failure during audit emission or continuity commitment marks all provenance contexts incomplete, preserving fail-closed policy enforcement.
+3. **Scoped host tombstones**: `state.scoped_hosts` remains bounded at 64 and is never evicted during session cleanup (`scoped_host_capacity_never_evicts_completed_identity_tombstones`).
+4. **Explicit error codes**: Calls directed at an authority-expired session return `native_child_authority_expired`, and calls to sessions whose parent has ended return `native_child_parent_unavailable`. They do not mask the failure as `native_session_unknown` until the session is legitimately reclaimed.
+5. **Active grant immutability**: Active unexpired grants cannot be hijacked or overwritten by duplicate agent bootstrap requests.
+6. **Replay and forgery protection**: Renewals require knowledge of the exact daemon `instance_id`, secret session `epoch`, and monotonic sequence numbers. Guessed session IDs or child messages cannot renew or retire peer sessions.
+
+---
+
+## English operator recovery guide
+
+### Symptom: `native_session_cap`
+- **Cause**: All 64 session slots are occupied by active, valid sessions.
+- **Diagnostics**:
+  ```bash
+  curl -s -H "Authorization: Bearer $NATIVE_TOKEN" http://127.0.0.1:8080/native/v1/instance | jq .
+  ```
+  Check `bindings` and `provenance.usage.sessions`.
+- **Resolution**:
+  - If collectors are enrolled in liveness, orphaned sessions will be automatically reclaimed within their lease deadline.
+  - If unleased legacy collectors crashed, wait for the 300-second inactivity TTL, or send `session_end` for completed sessions.
+
+### Symptom: `native_agent_already_bound`
+- **Cause**: An orchestrator is attempting to bootstrap an agent under `(host_session, agent_id)` while a previous session for that agent is still live and unexpired.
+- **Resolution**:
+  - If the previous collector process is still running, shut it down gracefully.
+  - If the previous collector terminated abruptly, the daemon will automatically reap the session as soon as its liveness lease or signed authority expires, after which re-binding will succeed automatically.
+
+### Symptom: `native_liveness_uncertain` in collector logs
+- **Cause**: The collector detected that its lease renewal failed (e.g. daemon restarted, lease expired, or network partitioned).
+- **Resolution**:
+  - The collector immediately halts further tool execution and enters accepted owned cleanup.
+  - Restart the collector process with fresh credentials to acquire a new authenticated session.

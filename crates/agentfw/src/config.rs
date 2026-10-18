@@ -165,6 +165,9 @@ pub struct NativeCfg {
     /// Opt-in single-use operator approval for native Ask calls. Absent = refusal.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approval: Option<NativeApprovalCfg>,
+    /// Opt-in authenticated session liveness and bounded maintenance (SOU-89).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub liveness: Option<NativeLivenessCfg>,
 }
 
 /// Bounded pending-approval lifecycle for native MCP Ask calls (SOU-48).
@@ -178,6 +181,33 @@ pub struct NativeApprovalCfg {
 
 fn default_native_approval_ttl() -> u64 {
     120
+}
+
+/// Opt-in session liveness and bounded orphan reclamation (SOU-89).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct NativeLivenessCfg {
+    /// Default lease duration in seconds (clamped to 1..=60).
+    #[serde(default = "default_liveness_lease_seconds")]
+    pub default_lease_seconds: u64,
+    /// Maximum lease duration in seconds (clamped to 1..=60).
+    #[serde(default = "default_liveness_max_lease_seconds")]
+    pub max_lease_seconds: u64,
+    /// Maintenance sweep interval in milliseconds.
+    #[serde(default = "default_liveness_maintenance_interval_ms")]
+    pub maintenance_interval_ms: u64,
+}
+
+fn default_liveness_lease_seconds() -> u64 {
+    10
+}
+
+fn default_liveness_max_lease_seconds() -> u64 {
+    60
+}
+
+fn default_liveness_maintenance_interval_ms() -> u64 {
+    500
 }
 
 impl Default for Config {
@@ -246,6 +276,24 @@ impl Config {
                 anyhow::ensure!(
                     (1..=300).contains(&approval.ttl_seconds),
                     "native approval ttl_seconds must be 1..=300"
+                );
+            }
+            if let Some(liveness) = &native.liveness {
+                anyhow::ensure!(
+                    (1..=60).contains(&liveness.default_lease_seconds),
+                    "native liveness default_lease_seconds must be 1..=60"
+                );
+                anyhow::ensure!(
+                    (1..=60).contains(&liveness.max_lease_seconds),
+                    "native liveness max_lease_seconds must be 1..=60"
+                );
+                anyhow::ensure!(
+                    liveness.default_lease_seconds <= liveness.max_lease_seconds,
+                    "native liveness default_lease_seconds cannot exceed max_lease_seconds"
+                );
+                anyhow::ensure!(
+                    (50..=10_000).contains(&liveness.maintenance_interval_ms),
+                    "native liveness maintenance_interval_ms must be 50..=10000"
                 );
             }
         }

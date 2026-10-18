@@ -94,6 +94,8 @@ impl Harness {
             classifier: Some(Arc::new(ReadTestDouble)),
             resource_profiles: BTreeMap::new(),
             approval: None,
+            liveness_url: None,
+            liveness_lease_seconds: None,
         };
         let (host, relay_host) = tokio::io::duplex(1024 * 1024);
         let (server, relay_server) = tokio::io::duplex(1024 * 1024);
