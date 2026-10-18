@@ -470,7 +470,7 @@ pub fn ensure_private_directory(path: &Path) -> io::Result<()> {
     // return path. Backup semantics permit opening directories as files.
     let _directory = unsafe { File::from_raw_handle(raw) };
     check_kind(raw, true)?;
-    if created {
+    if created || owner_sid(raw).map(|o| o == "S-1-5-32-544").unwrap_or(false) {
         set_current_owner(raw)?;
     }
     check_owner(raw)?;
