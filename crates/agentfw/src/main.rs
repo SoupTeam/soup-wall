@@ -857,7 +857,8 @@ fn main() -> anyhow::Result<()> {
                     "MCP native admission needs the existing daemon native token"
                 );
                 let token = agentfw::token::load_or_create(&token_path)?;
-                let native = agentfw::native::NativeState::load(installed, token)?;
+                let native = agentfw::native::NativeState::load(installed, token)?
+                    .with_policy_barrier(&home)?;
                 let manifest_token_path = home.join("token");
                 anyhow::ensure!(
                     manifest_token_path.is_file(),
@@ -1255,6 +1256,7 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
             .map(|native| {
                 let native_token = agentfw::token::load_or_create(&home.join("native-token"))?;
                 let state = agentfw::native::NativeState::load(native, native_token)?
+                    .with_policy_barrier(&home)?
                     .with_continuity(&home, &mut firewall)?;
                 match &native.approval {
                     Some(approval) => {

@@ -21,6 +21,7 @@ pub mod managed_sync;
 pub mod map;
 pub mod mcp;
 pub mod native;
+pub mod policy_transition;
 pub use native::child_authority;
 pub mod preflight;
 #[cfg(windows)]
