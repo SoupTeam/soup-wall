@@ -22,6 +22,7 @@ pub mod approval;
 pub mod child_authority;
 pub mod continuity;
 pub mod resource;
+pub mod resource_approval;
 
 pub const CONTRACT: &str = "sw-native/1";
 pub const MAX_BODY: usize = 1024 * 1024;
