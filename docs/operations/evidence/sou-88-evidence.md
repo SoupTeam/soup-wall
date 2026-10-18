@@ -203,3 +203,24 @@ workspace/all-target Clippy and formatting passed. The two affected
 classifier-dependent integration tests were additionally run individually and
 passed on macOS. Windows-specific preparation still requires the new hosted
 Windows security run; local macOS execution is not evidence of that result.
+
+### Audit lock handoff regression found by complete CI
+
+The current-main candidate `cad431e` passed Windows security and the real Git
+sandbox workflow, but the Linux all-features job
+[117689701629](https://github.com/SoupTeam/soup-wall/actions/runs/39132266829/job/117689701629)
+failed `rotates_prunes_and_reopens_without_exceeding_declared_bytes`: reopening
+immediately after `drop(sink)` reported another audit writer. `flock` is tied to
+an open file description; a descriptor inherited by a concurrent fork can retain
+that lock beyond the writer's close. A deterministic duplicate-descriptor probe
+reproduced this close-only failure without timing or test retries.
+
+Audit retention now wraps the acquired lock in an owning-process guard. The
+acquiring process explicitly unlocks on Drop (including failed-open paths);
+a forked/inherited copy cannot unlock the live parent's writer. Two Linux unit
+regressions check immediate reopen while the old description remains open and
+that a non-owner copy cannot release the writer. Existing second-writer refusal
+and audit integrity/retention checks remain enforced. A local POSIX probe using
+the actual extracted guard code passed owner handoff, non-owner refusal and new
+owner exclusion. This probe is not presented as a complete Linux audit suite;
+the new exact-head Linux CI must validate the module and all-features suite.
