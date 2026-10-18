@@ -1,0 +1,60 @@
+name: Native Windows installed Agent self-test
+
+on:
+  pull_request:
+    paths:
+      - 'crates/agentfw/src/self_test/**'
+      - 'scripts/test-windows-self-test.py'
+      - 'scripts/ci-windows-self-test.ps1'
+      - 'scripts/tests/test_windows_self_test.py'
+      - '.github/workflows/agent-windows-self-test.yml'
+      - 'rule_baseline/rule_baseline.py'
+      - 'crates/agent/policies/agent-default.yaml'
+      - 'Cargo.lock'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-self-test-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  standard-user-self-test:
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build native Agent and focused tests
+        shell: pwsh
+        run: |
+          cargo build --locked -p agentfw --bin agentfw
+          if ($LASTEXITCODE -ne 0) { throw 'Agent build failed' }
+          cargo test --locked -p agentfw --lib --no-run --message-format=json > "$env:RUNNER_TEMP/self-test-build.jsonl"
+          if ($LASTEXITCODE -ne 0) { throw 'Native test build failed' }
+          $tests = Get-Content "$env:RUNNER_TEMP/self-test-build.jsonl" |
+            ForEach-Object { $_ | ConvertFrom-Json } |
+            Where-Object { $_.reason -eq 'compiler-artifact' -and $_.target.name -eq 'agentfw' -and $_.profile.test -and $_.executable }
+          if (@($tests).Count -ne 1) { throw 'Unique native test binary required' }
+          "SELF_TEST_BINARY=$($tests.executable)" | Add-Content $env:GITHUB_ENV
+      - name: Exercise installed Agent under a disposable standard account
+        shell: pwsh
+        run: |
+          ./scripts/ci-windows-self-test.ps1 -AgentBinary ./target/debug/agentfw.exe `
+            -TestBinary $env:SELF_TEST_BINARY -PythonBinary (Get-Command python).Source `
+            -OutputDirectory "$env:RUNNER_TEMP/self-test-results" -Commit ((git rev-parse HEAD).Trim())
+          if ($LASTEXITCODE -ne 0) { throw 'Native standard-user acceptance failed' }
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: native-windows-self-test
+          path: ${{ runner.temp }}/self-test-results/
+          if-no-files-found: error

@@ -1,0 +1,75 @@
+{
+  "schema_version": "sou71-verification/1",
+  "date": "2026-10-17",
+  "native_windows": {
+    "acceptance": {
+      "passed": 19,
+      "failed": 0,
+      "clean_runs": 2,
+      "control_event": "ctrl_c",
+      "runtime": "Windows build 26200, x86_64, Python 3.11.9",
+      "elevated": false,
+      "administrator_group_present": true
+    },
+    "self_test_unit": {
+      "passed": 10,
+      "failed": 0,
+      "ignored": 0
+    },
+    "existing_boundaries": {
+      "passed": 56,
+      "failed": 0,
+      "ignored": 1,
+      "ignored_reason": "Symlink privilege or Developer Mode required; mandatory junction controls passed."
+    },
+    "python_controls": {
+      "passed": 31,
+      "failed": 0
+    }
+  },
+  "cross_platform": {
+    "rust_workspace": {
+      "command": "cargo test --locked --workspace -j 2 -- --test-threads=1",
+      "passed": 1430,
+      "failed": 0,
+      "ignored": 12
+    },
+    "python_suite": {
+      "runtime": "Linux, Python 3.12, urllib3 2.5.0",
+      "command": "python -B -m unittest discover -s scripts/tests -p 'test_*.py' -v",
+      "passed": 713,
+      "failed": 0,
+      "skipped": 36
+    },
+    "benchmark_suite": {
+      "runtime": "Windows, Python 3.11.9",
+      "command": "python -B -m unittest discover -s scripts/benchmarks -p 'test_*.py' -v",
+      "passed": 43,
+      "failed": 0,
+      "skipped": 19
+    },
+    "linux_self_test": {
+      "unit_passed": 10,
+      "integration_passed": 7,
+      "failed": 0
+    }
+  },
+  "checks": {
+    "workspace_clippy": "passed, warnings denied",
+    "windows_all_target_clippy": "passed, warnings denied",
+    "rustfmt": "passed",
+    "powershell_launcher_and_child_syntax": "passed",
+    "documentation_links": "passed"
+  },
+  "diagnostics": {
+    "initial_parallel_workspace_failure": "Existing mcp_concurrency test had a daemon port collision. Its isolated repeat and full serial workspace run passed.",
+    "unfiltered_windows_python": "744 tests: 629 passed, 2 failed, 4 errored, 109 skipped. Failures were in unchanged POSIX, OpenSSL and locale-dependent tests. The complete suite passed on Linux/Python 3.12.",
+    "linux_benchmark_attempt": "The bind-mounted Windows Git worktree pointer was unavailable to Linux git. The benchmark suite passed in native Windows."
+  },
+  "acceptance": {
+    "clean_standard_account_ci": "not run",
+    "native_account_scope": "non-elevated UAC token",
+    "review": "not requested",
+    "release": "not published"
+  }
+}

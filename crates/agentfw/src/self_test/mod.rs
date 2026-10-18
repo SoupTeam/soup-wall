@@ -11,6 +11,10 @@
 pub mod fixture;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod unix;
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+mod windows_safety;
 
 use std::path::PathBuf;
 
@@ -25,7 +29,9 @@ pub const SCHEMA: &str = "sw-self-test/1";
 pub const PROFILE: &str = "linux-stdio-mcp-admission-v1";
 #[cfg(target_os = "macos")]
 pub const PROFILE: &str = "macos-stdio-mcp-admission-v1";
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+#[cfg(windows)]
+pub const PROFILE: &str = "windows-stdio-mcp-admission-v1";
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
 pub const PROFILE: &str = "unsupported-stdio-mcp-admission-v1";
 
 /// Stable exit codes. Clap reports usage errors with 2.
@@ -44,7 +50,10 @@ const PLATFORM_LIMITATION: &str =
 #[cfg(target_os = "macos")]
 const PLATFORM_LIMITATION: &str =
     "macOS execution profile only; the collector is not an OS sandbox";
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+#[cfg(windows)]
+const PLATFORM_LIMITATION: &str =
+    "Native Windows standard-user execution profile; the collector is not an OS sandbox";
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
 const PLATFORM_LIMITATION: &str =
     "Unsupported execution profile; the collector is not an OS sandbox";
 
@@ -236,13 +245,17 @@ pub fn run(args: Args) -> i32 {
     {
         unix::run(args)
     }
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(windows)]
+    {
+        windows::run(args)
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     {
         unsupported(args)
     }
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
 fn unsupported(args: Args) -> i32 {
     let mut report = base_report(false);
     let scenarios = pending_scenarios(
@@ -255,7 +268,7 @@ fn unsupported(args: Args) -> i32 {
     report.insert(
         "explanation".into(),
         json!(
-            "Linux and macOS are the supported self-test profiles; nothing ran and no protection is claimed."
+            "Linux, macOS and native Windows are the supported self-test profiles; nothing ran and no protection is claimed."
         ),
     );
     report.insert("scenarios".into(), json!(scenarios));

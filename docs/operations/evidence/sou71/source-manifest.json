@@ -1,0 +1,18 @@
+{
+  "schema_version": "sou71-source-manifest/1",
+  "base_commit": "6f45156084722e35408a3c626d519eda163302c1",
+  "source_state": "local candidate",
+  "files": {
+    ".github/workflows/agent-windows-self-test.yml": "7c80814e48231afbbdee30e84612b864d3e7dbcb0c76e0f3e21f162841a1ce10",
+    "crates/agentfw/src/self_test/mod.rs": "d7b403754a83c15eabc2f68853d56c1fe56fad92fb7e618ef5ba08f0159919a0",
+    "crates/agentfw/src/self_test/windows.rs": "0cd510eca7503c2ed1f9424cc33bf03c55c0979c74cdbf31f930632fb1237099",
+    "crates/agentfw/src/self_test/windows_safety.rs": "b4e4e9a079dc16a07a98b82301a8e39e6f5cf0efbed89d9851d47687f902422d",
+    "docs/operations/SELF_TEST.md": "0983e5bb93dc6f540cd4d749f6bde55f5ce8deea2cfad1694e5893b29316db48",
+    "docs/operations/WINDOWS_SELF_TEST.md": "773c3c9db64b82b51351cf0cb4427f5ff2a34ad2af532a9d087d5bdd8ecc43f3",
+    "scripts/ci-windows-self-test.ps1": "f2af02105244d3a690d00c95e18a67a3c9c6f449a498173a2adc348290efaca1",
+    "scripts/test-windows-self-test.py": "567367e036853cf93c26cd5b3495609b61a2d5eba2652a4690886725a16f8176",
+    "scripts/tests/test_windows_self_test.py": "2cc8ead8eb9c9c59d3cfda6065c317744d591c91916cc968f61397cb173c71d8"
+  },
+  "native_binary_sha256": "476226bf3637a4c25e9fb9bea46e57ecd454f135c425f848fb0e39e663e562f2",
+  "native_tests_sha256": "a4d16dcf147fb9090e85c7545d1eafb67c6f8b446d7c95ba0a38bdc7284be5cc"
+}
