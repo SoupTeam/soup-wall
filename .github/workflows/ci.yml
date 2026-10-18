@@ -81,6 +81,14 @@ jobs:
     uses: ./.github/workflows/ci-impact-plan.yml
     with:
       workflow: ci.yml
+  components:
+    name: Components
+    needs: impact
+    if: (github.event_name == 'pull_request' && !github.event.pull_request.draft) || (github.event_name == 'workflow_dispatch' && !inputs.smoke_only)
+    uses: ./.github/workflows/ci-components.yml
+    with:
+      plan: ${{ needs.impact.outputs.plan }}
+
   documentation:
     needs: impact
     if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'documentation')
