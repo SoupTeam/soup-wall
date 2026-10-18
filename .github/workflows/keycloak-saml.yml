@@ -2,17 +2,6 @@ name: keycloak-saml
 
 on:
   pull_request:
-    paths:
-      - 'crates/proxy/**'
-      - 'scripts/keycloak-saml*'
-      - 'scripts/keycloak-oidc-acceptance.py'
-      - 'scripts/keycloak-saml-acceptance.py'
-      - 'scripts/tests/test_console_browser.py'
-      - 'scripts/tests/test_keycloak_oidc_acceptance.py'
-      - 'scripts/sso*'
-      - 'scripts/tests/test_sso*'
-      - '.github/workflows/keycloak-saml.yml'
-      - 'Cargo.lock'
   workflow_dispatch:
     inputs:
       backend:
@@ -34,7 +23,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: keycloak-saml.yml
   linux-vendor:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs), 'linux-vendor')
     name: Genuine Keycloak SAML on Linux (${{ matrix.backend }})
     strategy:
       fail-fast: false

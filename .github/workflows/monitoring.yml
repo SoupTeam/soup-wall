@@ -14,7 +14,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: monitoring.yml
   linux-alert-recovery:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs), 'linux-alert-recovery')
     name: Linux dependency alerts and protected durable recovery
     runs-on: ubuntu-24.04
     timeout-minutes: 45

@@ -1,0 +1,34 @@
+name: SOU-91 trusted CI admission
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  actions: read
+  checks: read
+  contents: read
+  pull-requests: read
+  statuses: write
+
+concurrency:
+  group: sou91-admission-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  admission:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      # This checkout is the trusted base commit. Never checkout PR code or
+      # download PR artifacts in this privileged workflow.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - name: Verify selected exact-source CI and CodeQL evidence
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SOU91_SELECTIVE_CI: ${{ vars.SOU91_SELECTIVE_CI }}
+        run: python3 scripts/ci_admission.py --pr "$PR_NUMBER" --wait-seconds 2700

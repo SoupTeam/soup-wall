@@ -2,13 +2,6 @@ name: SOU-30 managed Agent rollout demonstration
 
 on:
   pull_request:
-    paths:
-      - 'crates/agent/**'
-      - 'crates/agentfw/**'
-      - 'crates/proxy/**'
-      - 'scripts/managed-policy-demo.py'
-      - 'scripts/managed-credential-rotation-demo.py'
-      - '.github/workflows/managed-policy-demo.yml'
   workflow_dispatch:
 
 permissions:
@@ -20,7 +13,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: managed-policy-demo.yml
   managed-rollout-e2e:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs), 'managed-rollout-e2e')
     name: Signed activation and rollback on real Agent
     runs-on: ubuntu-24.04
     timeout-minutes: 25

@@ -5,7 +5,7 @@ on:
   push:
     branches:
       - main
-      - feature/*
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -16,7 +16,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: gate-ci.yml
   validate-gate-matrix:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs), 'validate-gate-matrix')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

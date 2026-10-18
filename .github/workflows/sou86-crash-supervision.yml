@@ -2,21 +2,6 @@ name: Linux MCP collector crash supervision
 
 on:
   pull_request:
-    paths:
-      - 'crates/agentfw/**'
-      - 'crates/agent/**'
-      - 'scripts/verify-sou86-crash-supervision.py'
-      - 'scripts/tests/test_sou86_crash_supervision.py'
-      - 'scripts/verify-sou79-resource-budgets.py'
-      - 'scripts/verify-sou62-real-mcp.py'
-      - 'scripts/install-sou62-filesystem-profile.py'
-      - 'scripts/install-sou68-git-profile.py'
-      - 'scripts/verify-sou68-real-mcp.py'
-      - 'profiles/mcp/filesystem-readonly-v1/**'
-      - 'profiles/mcp/git-readonly-v1/**'
-      - 'docs/operations/MCP_LINUX_CRASH_SUPERVISION.md'
-      - '.github/workflows/sou86-crash-supervision.yml'
-      - 'Cargo.lock'
   workflow_dispatch:
 
 permissions:
@@ -27,7 +12,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: sou86-crash-supervision.yml
   required-disposable-linux-crash-supervision:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs), 'required-disposable-linux-crash-supervision')
     runs-on: ubuntu-22.04
     timeout-minutes: 35
     env:
