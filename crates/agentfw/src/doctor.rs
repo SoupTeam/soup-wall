@@ -717,11 +717,12 @@ mod tests {
     fn private_reader_refuses_link_and_public_file() {
         use std::os::unix::fs::{symlink, PermissionsExt};
         let temp = tempfile::tempdir().unwrap();
-        let path = temp.path().join("secret");
+        let root = temp.path().canonicalize().unwrap();
+        let path = root.join("secret");
         std::fs::write(&path, b"sentinel").unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
         assert_eq!(read_private(&path, 16).unwrap(), b"sentinel");
-        let link = temp.path().join("link");
+        let link = root.join("link");
         symlink(&path, &link).unwrap();
         assert!(read_private(&link, 16).is_err());
         assert!(read_private(&path, 3).is_err());

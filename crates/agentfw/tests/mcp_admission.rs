@@ -155,6 +155,9 @@ schemas = {
  'delete_note': {'type':'object','properties':{'name':{'type':'string'}},'required':['name'],'additionalProperties':False}
 }
 if mode == 'classified-read': schemas['read_document'] = {'type':'object','properties':{'path':{'type':'string'}},'required':['path'],'additionalProperties':False}
+if mode == 'sou88-https':
+ del schemas['read_document']
+ schemas['https_get'] = {'type':'object','properties':{'url':{'type':'string','minLength':1,'maxLength':2048}},'required':['url'],'additionalProperties':False}
 if mode == 'operator-binding':
  del schemas['read_document']
  schemas['fetch_document'] = {'type':'object','properties':{'path':{'type':'string'}},'required':['path'],'additionalProperties':False}
@@ -242,6 +245,8 @@ fn registry_with_read_path(classified_read: bool) -> Value {
 
 #[derive(Default)]
 struct DaemonFaults {
+    captured_calls: Mutex<Vec<Value>>,
+    mutate_approved_args: AtomicBool,
     stall_call_admission: AtomicBool,
     call_requests_started: AtomicUsize,
     release_stalled_calls: Notify,
@@ -268,8 +273,24 @@ async fn delay_call_admission(
     let bytes = axum::body::to_bytes(body, agentfw::native::MAX_BODY)
         .await
         .expect("fixture daemon receives bounded requests");
-    let value: Value = serde_json::from_slice(&bytes).expect("fixture collector sends JSON");
-    let request = Request::from_parts(parts, Body::from(bytes));
+    let mut value: Value = serde_json::from_slice(&bytes).expect("fixture collector sends JSON");
+    if value["event"] == "call" {
+        faults.captured_calls.lock().unwrap().push(value.clone());
+        // Hostile transport control: change only the submitted arguments, never
+        // manufacture a daemon verdict or a valid admission/binding.
+        if value["approval_id"].is_string()
+            && faults.mutate_approved_args.swap(false, Ordering::SeqCst)
+        {
+            let key = if value["args"]["url"].is_string() {
+                "url"
+            } else {
+                "path"
+            };
+            let changed = format!("{}-mutated", value["args"][key].as_str().unwrap());
+            value["args"][key] = json!(changed);
+        }
+    }
+    let request = Request::from_parts(parts, Body::from(value.to_string()));
     if faults.stall_call_admission.load(Ordering::SeqCst) && value["event"] == "call" {
         faults.call_requests_started.fetch_add(1, Ordering::SeqCst);
         faults.release_stalled_calls.notified().await;
@@ -856,6 +877,25 @@ impl Fixture {
         firewall_policy: Option<&str>,
         policy_builder: impl FnOnce(&Path, &mut Value),
     ) -> Self {
+        Self::with_resource_policy_custom_approval(
+            mode,
+            enforce,
+            classifier,
+            firewall_policy,
+            None,
+            policy_builder,
+        )
+        .await
+    }
+
+    async fn with_resource_policy_custom_approval(
+        mode: &str,
+        enforce: bool,
+        classifier: Option<&str>,
+        firewall_policy: Option<&str>,
+        approval: Option<(u64, u64)>,
+        policy_builder: impl FnOnce(&Path, &mut Value),
+    ) -> Self {
         let classified_read = classifier == Some("read") || mode == "classified-read";
         let root = std::env::temp_dir();
         #[cfg(unix)]
@@ -905,21 +945,38 @@ impl Fixture {
                 &home,
                 port,
                 enforce,
-                None,
+                approval.map(|a| a.0),
                 firewall_policy.unwrap_or(POLICY),
             ),
             daemon_faults.clone(),
         );
         let path = registry_path.to_string_lossy().replace('\'', "''");
-        std::fs::write(home.join("config.yaml"), format!("port: {port}\nenforce: true\nnative:\n  registry_path: '{path}'\n  registry_sha256: '{digest}'\n")).unwrap();
+        let approval_yaml = match approval {
+            Some((ttl, _)) => format!("\n  approval:\n    ttl_seconds: {ttl}"),
+            None => String::new(),
+        };
+        std::fs::write(
+            home.join("config.yaml"),
+            format!("port: {port}\nenforce: true\nnative:\n  registry_path: '{path}'\n  registry_sha256: '{digest}'{approval_yaml}\n"),
+        )
+        .unwrap();
         let ledger = dir.path().join("executed.jsonl");
 
         #[cfg(windows)]
         let private_before_launch = [home.clone(), home.join("token"), home.join("native-token")]
             .iter()
             .all(|path| protected_dacl(path));
-        let (child, input, output) =
-            spawn_gateway_with_profiles(dir.path(), &ledger, mode, &stderr, classifier, None, true);
+        let (child, input, output) = spawn_gateway_full(
+            dir.path(),
+            &ledger,
+            mode,
+            &stderr,
+            classifier,
+            None,
+            true,
+            approval.map(|a| a.1),
+            None,
+        );
         Self {
             _dir: dir,
             port,
@@ -927,7 +984,7 @@ impl Fixture {
             daemon,
             daemon_shutdown: Some(daemon_shutdown),
             daemon_faults,
-            approval_ttl: None,
+            approval_ttl: approval.map(|a| a.0),
             child,
             input,
             output,
@@ -2044,6 +2101,16 @@ async fn native_mcp_daemon_call_timeout_never_executes_call() {
 
 #[tokio::test]
 async fn native_mcp_cancellation_while_call_admission_is_stalled_is_fail_closed() {
+    #[cfg(windows)]
+    warm_stateless_windows_classifier(
+        &Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("rule_baseline/rule_baseline.py"),
+    )
+    .await;
     let call = r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_document","arguments":{}}}"#;
     let cancelled = r#"{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":3,"reason":"synthetic native admission cancellation"}}"#;
     for release_admission in [false, true] {
@@ -2660,6 +2727,8 @@ print(json.dumps({{'status':'ok','actions':[('read' if '{refusal}' == 'ask' else
     .unwrap();
         let selection = format!("script:{}", script.display());
         let mut fixture = Fixture::with_classifier("normal", true, Some(&selection)).await;
+        #[cfg(windows)]
+        warm_stateless_windows_classifier(&script).await;
         fixture.ready().await;
         for index in 0..70 {
             let call = json!({"jsonrpc":"2.0","id":format!("uncertain-{index}"),"method":"tools/call",
@@ -4064,6 +4133,54 @@ fn operator_approve(fixture: &Fixture, row: &Value) -> anyhow::Result<()> {
     )
 }
 
+/// These two fixtures test policy composition/cancellation after classification,
+/// not Windows' first Python/stdlib load. Prepare only their known stateless
+/// scripts outside the measured phase. All collector calls still use the real
+/// classifier with unchanged production deadlines and exact verdict assertions.
+#[cfg(windows)]
+async fn warm_stateless_windows_classifier(script: &Path) {
+    let python = std::env::var_os("AGENTFW_CLASSIFIER_PYTHON").unwrap_or_else(|| "python".into());
+    let mut command = Command::new(python);
+    command.args(["-I", "-u"]).arg(script).env_clear();
+    if let Some(root) = std::env::var_os("SystemRoot") {
+        command.env("SystemRoot", root);
+    }
+    let mut child = command
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let mut input = child.stdin.take().unwrap();
+    input
+        .write_all(
+            format!(
+                "{}\n",
+                json!({"tool_name":"read_document",
+        "raw_arguments":{},"tool_description":"Read an inventory document",
+        "tool_schema":{"type":"object","properties":{},"additionalProperties":false},
+        "server_id":"fixture"})
+            )
+            .as_bytes(),
+        )
+        .await
+        .unwrap();
+    input.shutdown().await.unwrap();
+    drop(input);
+    let output = tokio::time::timeout(Duration::from_secs(15), child.wait_with_output())
+        .await
+        .expect("bounded stateless classifier fixture preparation")
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stateless classifier setup must succeed"
+    );
+    let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["status"], "ok", "classifier fixture must be ready");
+    assert_eq!(result["unknown"], false);
+}
+
 #[tokio::test]
 async fn sou48_one_correct_approval_runs_the_original_call_once_then_work_continues() {
     let mut fixture = Fixture::with_approval("normal", None, 60, 30).await;
@@ -5463,3 +5580,435 @@ default: allow
         assert_eq!(executed(&fixture.ledger).len(), 0);
     }
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn sou88_resource_create_ask_operator_approval_runs_once_and_reject_zero_execution() {
+    use agentfw::native::resource::{
+        create_file_executor_sha256, CREATE_FILE_EXECUTOR_PROFILE, CREATE_FILE_MAX_CONTENT,
+    };
+
+    let rule_baseline_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("rule_baseline/rule_baseline.py");
+    let classifier_digest = sha(&std::fs::read(&rule_baseline_path).unwrap());
+
+    const ASK_CREATE_POLICY: &str = "agent_policies:
+  - name: ask-side-effecting
+    when: { action_class: side_effecting }
+    action: ask
+default: allow
+";
+
+    let mut fixture = Fixture::with_resource_policy_custom_approval(
+        "operator-create-binding",
+        true,
+        Some("rule-baseline"),
+        Some(ASK_CREATE_POLICY),
+        Some((60, 30)),
+        |dir, registry| {
+            let canonical_dir = dir.canonicalize().unwrap();
+            let file1 = canonical_dir
+                .join("approved-file.txt")
+                .to_str()
+                .unwrap()
+                .to_string();
+            let schema = json!({
+                "type": "object",
+                "properties": {
+                    "spec": {
+                        "type": "object",
+                        "properties": {
+                            "destination": { "type": "string" },
+                            "payload": { "type": "string" }
+                        },
+                        "required": ["destination", "payload"],
+                        "additionalProperties": false
+                    }
+                },
+                "required": ["spec"],
+                "additionalProperties": false
+            });
+            let profile = json!({
+                "server_id": "fixture",
+                "tool_name": "save_artifact",
+                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "selectors": [{ "pointer": "/spec/destination", "kind": "path", "allow_missing_leaf": true }]
+            });
+            registry["tools"][0] = json!({
+                "name": "save_artifact",
+                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "action_class": "side_effecting",
+                "result_provenance": "untrusted",
+                "egress": [],
+                "resource_policy": {
+                    "profile": profile,
+                    "workspace": canonical_dir,
+                    "cwd": canonical_dir,
+                    "executor_sha256": create_file_executor_sha256(),
+                    "classifier_sha256": classifier_digest,
+                    "binding": {
+                        "contract_version": "sw-native/binding/1",
+                        "operation": "create_file",
+                        "action": "write",
+                        "path_selector": "/spec/destination",
+                        "content_selector": "/spec/payload",
+                        "response_contract": "sw-native/response/text/1",
+                        "executor_profile": CREATE_FILE_EXECUTOR_PROFILE,
+                        "max_content_bytes": CREATE_FILE_MAX_CONTENT
+                    },
+                    "allowed_resources": [
+                        { "kind": "path", "canonical": file1 }
+                    ]
+                }
+            });
+        },
+    )
+    .await;
+    fixture.ready().await;
+
+    let target1 = "approved-file.txt";
+    let created_path1 = fixture._dir.path().join(target1);
+    let call_reject = json!({
+        "jsonrpc": "2.0",
+        "id": "sou88-create-first",
+        "method": "tools/call",
+        "params": {
+            "name": "save_artifact",
+            "arguments": {
+                "spec": {
+                    "destination": target1,
+                    "payload": "approved file payload\n"
+                }
+            }
+        }
+    });
+
+    #[cfg(target_os = "linux")]
+    {
+        // 1. Submit call and reject it: zero executions, file never created
+        fixture.send_only(&call_reject.to_string()).await;
+        let row_reject = fixture.wait_pending().await;
+        assert_eq!(row_reject["tool"], "save_artifact");
+        agentfw::native::approval::operator_reject(
+            &fixture.agent_home(),
+            row_reject["pending_id"].as_str().unwrap(),
+        )
+        .unwrap();
+
+        let reply_reject = fixture.receive().await.unwrap();
+        assert!(
+            reply_reject.contains("native_approval_rejected"),
+            "{reply_reject}"
+        );
+        assert!(
+            !created_path1.exists(),
+            "target file must not exist after rejection"
+        );
+        assert_eq!(
+            executed(&fixture.ledger).len(),
+            0,
+            "child process never executed"
+        );
+
+        // 2. Submit call again and approve it: executes exactly once
+        let call_approve = json!({
+            "jsonrpc": "2.0",
+            "id": "sou88-create-second",
+            "method": "tools/call",
+            "params": {
+                "name": "save_artifact",
+                "arguments": {
+                    "spec": {
+                        "destination": target1,
+                        "payload": "approved file payload\n"
+                    }
+                }
+            }
+        });
+
+        fixture.send_only(&call_approve.to_string()).await;
+        let row_approve = fixture.wait_pending().await;
+        assert_eq!(row_approve["tool"], "save_artifact");
+        assert_eq!(
+            executed(&fixture.ledger).len(),
+            0,
+            "zero child executions before approval"
+        );
+        assert!(
+            !created_path1.exists(),
+            "target file must not exist before approval"
+        );
+
+        // Operator inspects resource details
+        let inspected = agentfw::native::approval::operator_inspect(
+            &fixture.agent_home(),
+            row_approve["pending_id"].as_str().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(inspected["tool"], "save_artifact");
+        assert_eq!(inspected["resource_details"]["operation"], "create_file");
+
+        operator_approve(&fixture, &row_approve).unwrap();
+
+        let reply_approve: Value = serde_json::from_str(&fixture.receive().await.unwrap()).unwrap();
+        assert_eq!(reply_approve["id"], "sou88-create-second");
+        assert!(
+            reply_approve["result"]["isError"].is_null()
+                || reply_approve["result"]["isError"] == false
+        );
+        assert!(
+            created_path1.exists(),
+            "target file must exist after approved execution"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&created_path1).unwrap(),
+            "approved file payload\n"
+        );
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let reply_reject: Value =
+            serde_json::from_str(&fixture.exchange(&call_reject.to_string()).await.unwrap())
+                .unwrap();
+        assert_eq!(reply_reject["result"]["isError"], true);
+        assert!(
+            reply_reject
+                .to_string()
+                .contains("resource_create_platform_unsupported"),
+            "{reply_reject}"
+        );
+        assert!(
+            !created_path1.exists(),
+            "target file must not exist on unsupported platform"
+        );
+    }
+    assert_eq!(
+        executed(&fixture.ledger).len(),
+        0,
+        "native resource executor handled call; child MCP server was never contacted"
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn sou88_resource_classifier_unknown_ambiguous_ineligible() {
+    use agentfw::native::resource::{
+        create_file_executor_sha256, CREATE_FILE_EXECUTOR_PROFILE, CREATE_FILE_MAX_CONTENT,
+    };
+
+    let root = std::env::temp_dir().canonicalize().unwrap();
+    let temp = tempfile::tempdir_in(root).unwrap();
+    let script = temp.path().join("ambiguous_classifier.py");
+    let flag_path = temp.path().join("reclassify_flag");
+
+    // Classifier script distinguishing test cases by payload argument
+    std::fs::write(
+        &script,
+        format!(
+            r#"import json, sys, pathlib
+line = sys.stdin.readline()
+req = json.loads(line) if line else {{}}
+args = req.get('raw_arguments', {{}})
+spec = args.get('spec', {{}})
+payload = spec.get('payload', '')
+flag = pathlib.Path({:?})
+
+if 'test-unknown' in payload:
+    print(json.dumps({{'status':'ok','actions':['write'],'unknown':True,'confidence':0.9,'uncertainty':0.1,'reason':'synthetic unknown'}}))
+elif 'test-boundary' in payload:
+    print(json.dumps({{'status':'ok','actions':['write'],'unknown':False,'confidence':0.95,'uncertainty':0.8,'reason':'synthetic exact boundary'}}))
+elif 'test-reclassify' in payload:
+    if not flag.exists():
+        flag.write_text('called')
+        print(json.dumps({{'status':'ok','actions':['write'],'unknown':False,'confidence':0.95,'uncertainty':0.2,'reason':'synthetic eligible ask'}}))
+    else:
+        print(json.dumps({{'status':'ok','actions':['write'],'unknown':False,'confidence':0.95,'uncertainty':0.9,'reason':'synthetic reclassify ambiguous'}}))
+else:
+    print(json.dumps({{'status':'ok','actions':['write'],'unknown':False,'confidence':0.95,'uncertainty':0.9,'reason':'synthetic ambiguous'}}))
+"#,
+            flag_path.to_str().unwrap()
+        ),
+    )
+    .unwrap();
+    let classifier_digest = sha(&std::fs::read(&script).unwrap());
+    let selection = format!("script:{}", script.display());
+
+    const ASK_CREATE_POLICY: &str = "agent_policies:
+  - name: ask-side-effecting
+    when: { action_class: side_effecting }
+    action: ask
+default: allow
+";
+
+    let mut fixture = Fixture::with_resource_policy_custom_approval(
+        "operator-create-binding",
+        true,
+        Some(&selection),
+        Some(ASK_CREATE_POLICY),
+        Some((60, 30)),
+        |dir, registry| {
+            let canonical_dir = dir.canonicalize().unwrap();
+            let file1 = canonical_dir
+                .join("ambiguous-target.txt")
+                .to_str()
+                .unwrap()
+                .to_string();
+            let schema = json!({
+                "type": "object",
+                "properties": {
+                    "spec": {
+                        "type": "object",
+                        "properties": {
+                            "destination": { "type": "string" },
+                            "payload": { "type": "string" }
+                        },
+                        "required": ["destination", "payload"],
+                        "additionalProperties": false
+                    }
+                },
+                "required": ["spec"],
+                "additionalProperties": false
+            });
+            let profile = json!({
+                "server_id": "fixture",
+                "tool_name": "save_artifact",
+                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "selectors": [{ "pointer": "/spec/destination", "kind": "path", "allow_missing_leaf": true }]
+            });
+            registry["tools"][0] = json!({
+                "name": "save_artifact",
+                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "action_class": "side_effecting",
+                "result_provenance": "untrusted",
+                "egress": [],
+                "resource_policy": {
+                    "profile": profile,
+                    "workspace": canonical_dir,
+                    "cwd": canonical_dir,
+                    "executor_sha256": create_file_executor_sha256(),
+                    "classifier_sha256": classifier_digest,
+                    "binding": {
+                        "contract_version": "sw-native/binding/1",
+                        "operation": "create_file",
+                        "action": "write",
+                        "path_selector": "/spec/destination",
+                        "content_selector": "/spec/payload",
+                        "response_contract": "sw-native/response/text/1",
+                        "executor_profile": CREATE_FILE_EXECUTOR_PROFILE,
+                        "max_content_bytes": CREATE_FILE_MAX_CONTENT
+                    },
+                    "allowed_resources": [
+                        { "kind": "path", "canonical": file1 }
+                    ]
+                }
+            });
+        },
+    )
+    .await;
+    fixture.ready().await;
+
+    let target = "ambiguous-target.txt";
+    let target_path = fixture._dir.path().join(target);
+    let call = json!({
+        "jsonrpc": "2.0",
+        "id": "sou88-ambiguous-test",
+        "method": "tools/call",
+        "params": {
+            "name": "save_artifact",
+            "arguments": {
+                "spec": {
+                    "destination": target,
+                    "payload": "forbidden content (default ambiguous)\n"
+                }
+            }
+        }
+    });
+
+    #[cfg(target_os = "linux")]
+    {
+        // 1. High uncertainty (0.9 >= 0.8) -> withheld immediately
+        let reply: Value =
+            serde_json::from_str(&fixture.exchange(&call.to_string()).await.unwrap()).unwrap();
+        assert_eq!(reply["result"]["isError"], true);
+        let reasons = reply["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(
+            reasons.contains("classifier_unknown_or_ambiguous")
+                || reasons.contains("policy_unconfirmed_ask"),
+            "reply must be withheld for ambiguity: {reasons}"
+        );
+        assert!(
+            agentfw::native::approval::operator_list(&fixture.agent_home()).is_empty(),
+            "ambiguous classifier result must NOT open an approval"
+        );
+        assert!(!target_path.exists());
+
+        // 2. Unknown=true with low uncertainty (0.1) -> withheld immediately, no approval
+        let mut call_unknown = call.clone();
+        call_unknown["id"] = json!("sou88-unknown-call");
+        call_unknown["params"]["arguments"]["spec"]["payload"] = json!("test-unknown\n");
+        let reply_unknown: Value =
+            serde_json::from_str(&fixture.exchange(&call_unknown.to_string()).await.unwrap())
+                .unwrap();
+        assert_eq!(reply_unknown["result"]["isError"], true);
+        let reasons_u = reply_unknown["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap();
+        assert!(
+            reasons_u.contains("classifier_unknown_or_ambiguous")
+                || reasons_u.contains("policy_unconfirmed_ask"),
+            "unknown classification must be withheld: {reasons_u}"
+        );
+        assert!(agentfw::native::approval::operator_list(&fixture.agent_home()).is_empty());
+
+        // 3. Exact 0.8 uncertainty boundary -> withheld immediately, no approval
+        let mut call_boundary = call.clone();
+        call_boundary["id"] = json!("sou88-boundary-call");
+        call_boundary["params"]["arguments"]["spec"]["payload"] = json!("test-boundary\n");
+        let reply_b: Value =
+            serde_json::from_str(&fixture.exchange(&call_boundary.to_string()).await.unwrap())
+                .unwrap();
+        assert_eq!(reply_b["result"]["isError"], true);
+        let reasons_b = reply_b["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(
+            reasons_b.contains("classifier_unknown_or_ambiguous")
+                || reasons_b.contains("policy_unconfirmed_ask"),
+            "exact 0.8 boundary must be withheld: {reasons_b}"
+        );
+        assert!(agentfw::native::approval::operator_list(&fixture.agent_home()).is_empty());
+
+        // 4. Reclassification after operator approval:
+        // Initial call is eligible Ask (uncertainty 0.2) -> approval opened and granted.
+        // Reclassification is ambiguous (uncertainty 0.9) -> approval canceled, call withheld!
+        let mut call_reclassify = call.clone();
+        call_reclassify["id"] = json!("sou88-reclassify-call");
+        call_reclassify["params"]["arguments"]["spec"]["payload"] = json!("test-reclassify\n");
+
+        fixture.send_only(&call_reclassify.to_string()).await;
+        let row_reclassify = fixture.wait_pending().await;
+        assert_eq!(row_reclassify["tool"], "save_artifact");
+        operator_approve(&fixture, &row_reclassify).unwrap();
+
+        let reply_r = fixture.receive().await.unwrap();
+        assert!(
+            reply_r.contains("native_approval_reclassify_refused"),
+            "reclassification failure must cancel approval and withhold: {reply_r}"
+        );
+        assert!(!target_path.exists());
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let reply: Value =
+            serde_json::from_str(&fixture.exchange(&call.to_string()).await.unwrap()).unwrap();
+        assert_eq!(reply["result"]["isError"], true);
+        assert!(!target_path.exists());
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[path = "support/resource_approval_execution.rs"]
+mod resource_approval_execution;
