@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Linux foundation verification. Full SOU-78 production acceptance is separate.
+# Exact-source Linux profile, owned connection, and real-process verification.
 set -euo pipefail
 
 if [[ $(uname -s) != Linux ]]; then
@@ -25,10 +25,13 @@ if [[ ${1:-} == --isolated ]]; then
   run_check clippy cargo clippy --offline --locked -p agentfw --all-targets -- -D warnings
   run_check provenance cargo test --offline --locked -p soup-wall-agent
   run_check library cargo test --offline --locked -p agentfw --lib
+  run_check native cargo test --offline --locked -p agentfw --test native_endpoint
+  run_check hooks cargo test --offline --locked -p agentfw --test hook_endpoint
+  run_check protection cargo test --offline --locked -p agentfw --test protection_status
+  run_check owned python3 -I scripts/verify-sou78-owned.py --agentfw "$CARGO_TARGET_DIR/debug/agentfw" --out "$SOU78_EVIDENCE/owned-process.json"
   run_check profiles cargo test --offline --locked -p agentfw --test mcp_profile_lifecycle
   run_check daemon cargo test --offline --locked -p agentfw --test lifecycle
   run_check admission cargo test --offline --locked -p agentfw --test mcp_admission
-  run_check owned python3 -I scripts/verify-sou78-owned.py --agentfw "$CARGO_TARGET_DIR/debug/agentfw" --out "$SOU78_EVIDENCE/owned-process.json"
   exit 0
 fi
 

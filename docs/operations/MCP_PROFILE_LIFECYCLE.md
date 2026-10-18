@@ -1,142 +1,176 @@
-# Transactional MCP Profile Lifecycle (SOU-78)
+# Owned Linux MCP profile transitions (SOU-78)
 
-> Implementation in progress (2026-10-18). This module is a daemon-profile foundation.
-> It does not yet satisfy SOU-78's owned Linux connection transaction or shared-risk
-> continuity requirements. Do not treat local profile tests as acceptance evidence.
+This workflow changes one existing **owned Claude Code stdio connection** between
+two explicitly reviewed profiles. It reuses the accepted authoring compiler, owned
+connection publication and Agent lifecycle manager. It does not discover or approve
+new authority automatically. Development and acceptance use disposable homes.
 
-## Overview
+The supported path is Linux. macOS and Windows reject the owned profile commands
+before mutation. An enforcing, responding, owned Agent with a pinned native registry
+and a supported lifecycle installation is required. The Agent binary and policy stay
+pinned throughout a profile change. Upgrading binaries/services is a separate lifecycle
+operation, not a profile transaction.
 
-`agentfw mcp-profile` provides transactional installation, upgrade, rollback, status inspection, and crash recovery for operator-authored MCP admission profiles.
+## Preview and apply
 
-While SOU-65 established inert profile authoring (`import`, `validate`, `explain`, `diff`, `compile`), SOU-78 manages the installed lifecycle of these profiles under `<HOME>/.agentfw/mcp-profiles/` and binds them to the active daemon configuration (`config.yaml`).
+First author both inert bundles with `agentfw mcp-profile import`, review every
+schema and authority declaration independently, and `validate`/`compile` them as
+specified in [MCP_PROFILE_AUTHORING.md](MCP_PROFILE_AUTHORING.md). A tool description,
+version number or discovery annotation does not grant authority.
 
-## Principles
-
-1. **Immutable Revision Repository:**
-   Compiled profile bundles (comprising the six required files: `native-config.json`, `operator-declarations.json`, `profile.json`, `registry.json`, `resource-profiles.json`, and `source-snapshot.json`) are staged under `<HOME>/.agentfw/mcp-profiles/revisions/<bundle-sha256>/` with restrictive permissions (`0700` directories, `0600` files). The manager never edits an existing revision; reuse revalidates its content-addressed identity. File permissions are private, not an OS immutability guarantee.
-
-2. **Deterministic Bundle Digest:**
-   The bundle SHA-256 digest is computed deterministically over sorted bundle file entries:
-   ```text
-   SHA-256(
-     "native-config.json:<sha256>\n" +
-     "operator-declarations.json:<sha256>\n" +
-     "profile.json:<sha256>\n" +
-     "registry.json:<sha256>\n" +
-     "resource-profiles.json:<sha256>\n" +
-     "source-snapshot.json:<sha256>\n"
-   )
-   ```
-
-3. **Zero Stale Authority (Strictly Monotonic Generation):**
-   Every profile activation—including initial `install`, `upgrade`, and `rollback`—increments the state `generation: u64` monotonically. Even when rolling back to an identical prior bundle, the new activation receives a strictly greater generation (`N + 1`).
-   Generation currently protects CLI compare-and-swap only. It is not yet bound
-   to collector grants, receipts or Ask approvals. A daemon restart changes process
-   identity but does not by itself prove host-risk continuity or host reload.
-
-4. **Atomic Configuration Updates:**
-   Active profile selection is stored directly in `<HOME>/.agentfw/config.yaml` under `native.registry_path` and `native.registry_sha256`. Updates to `config.yaml` use atomic write-sync-rename patterns with private `0600` permissions.
-
-5. **Crash Resilience and Automatic Rollback:**
-   Operations are tracked in an atomic journal (`profile-state.json`) through distinct phases:
-   - `Staged`: Bundle files copied to revision cache.
-   - `ConfigWritten`: `config.yaml` atomically replaced.
-   - `DaemonRestarting`: Daemon restarting and awaiting managed health verification.
-   - `Verified`: Daemon attested matching new instance and config digest.
-   - `RollingBack`: Reverting configuration due to candidate startup failure.
-   - `Failed`: Operation failed and baseline was restored.
-
-   If the daemon fails to boot or pass health verification after a profile change, the `ProfileManager` automatically rolls back `config.yaml` to the prior healthy baseline and restarts the daemon before returning an error to the operator.
-
-6. **Advisory Locking:**
-   All mutations are protected by an advisory lock (`.lock`) using `try_lock()` to prevent race conditions from concurrent CLI invocations.
-
-## Operator CLI Reference
-
-### 1. Install Initial Profile
+The selected connection must already be owned by `mcp-connection connect` and must
+still match its recorded wrapped entry, Agent binary, native configuration and
+registry identities. Existing `connect`/`disconnect` refusals are preserved.
 
 ```bash
-agentfw mcp-profile install --profile /path/to/compiled-profile [--expected-bundle-sha <sha256>]
+agentfw mcp-connection profile preview \
+  --path /absolute/claude-mcp.json --server selected \
+  --home /absolute/operator/.agentfw --agent /absolute/agentfw \
+  --source-profile /absolute/reviewed-v1 --profile /absolute/reviewed-v2 \
+  --host-session actual-host-session \
+  --classifier-script /absolute/rule_baseline/rule_baseline.py
 ```
-- Validates the bundle files.
-- Stages the bundle in immutable revisions storage.
-- Updates `config.yaml` to enforce native admission.
-- Sets initial `generation: 1`.
-- Fails closed if a profile is already active.
 
-### Preview before upgrade or rollback
+`--host-session` is the actual authenticated host context whose history must survive.
+It is an identity, not a new bearer credential. Keep it identical on subsequent
+transitions. Existing scoped hook authentication still applies: scoped hooks require
+the signed proof of an active collector, as in SOU-63; a shared hook bearer alone
+cannot impersonate an agent or erase its history. The operation does not install or
+invent a replacement hook authentication transport.
+
+`--classifier-script` selects reviewed rule-baseline source for native privileged
+resource executors. It is optional for profiles containing only ordinary read-only
+tools. Resource profiles must agree on workspace and classifier digest. The source
+and `/usr/bin/python3` binary are hashed; source is staged privately by content
+identity, and the launcher revalidates those pins. No new classifier is supplied.
+
+Preview shows schema, action, resource/destination and provenance changes. Its
+`approval` binds the exact source/target bundle, host file bytes, ownership record,
+home/path/server, host session, next generation, classifier/interpreter, binary,
+registry, config, policy and current native daemon instance. It stages nothing.
+
+Pass the returned digest to the identical command with `apply`:
 
 ```bash
-agentfw mcp-profile preview --profile /path/to/new-compiled-profile
-agentfw mcp-profile preview --revision <previous-bundle-sha256>
+agentfw mcp-connection profile apply \
+  --path /absolute/claude-mcp.json --server selected \
+  --home /absolute/operator/.agentfw --agent /absolute/agentfw \
+  --source-profile /absolute/reviewed-v1 --profile /absolute/reviewed-v2 \
+  --host-session actual-host-session \
+  --classifier-script /absolute/rule_baseline/rule_baseline.py \
+  --approval EXACT_PREVIEW_DIGEST
 ```
 
-Without either option, preview selects the recorded previous revision for rollback.
-Review `diff` and pass `approval_sha256` to the corresponding apply command. Preview
-reads and validates source documents without staging or activating a revision.
-The two profiles must refer to the same original server identity.
+Generic `yes` is refused. Changed inputs, a changed daemon instance or unrelated
+host edit require a fresh preview. Another active daemon/profile/connection operation
+is a conflict, not permission to overwrite its state.
 
-### 2. Upgrade Profile
+## Durable transition and authority
 
-Upgrade and rollback CLI commands require Linux; macOS and Windows refuse before
-profile mutation. Low-level library tests on other platforms are not support evidence.
+1. The host publication lock and bounded outer journal reserve the selected connection.
+   A home-wide reservation prevents another profile writer or launcher from proceeding.
+2. Both reviewed bundles and any selected classifier are validated and staged privately
+   before the continuity barrier or daemon switch. Revisions are content-addressed;
+   all six authoring outputs must reconstruct the reviewed authority exactly.
+3. An authenticated native barrier drains earlier authenticated POST handlers, checkpoints
+   retained taint and scoped host identities, and imposes a sticky incomplete-history
+   floor for deliveries that cannot be attested across the restart.
+4. The existing profile/lifecycle manager atomically selects the candidate registry,
+   retires the persistent approval epoch, restarts the owned daemon, and verifies its
+   fresh process/config identity. It compensates startup failure through the same
+   lifecycle APIs; it does not introduce another service manager.
+5. The accepted retained-version publication primitive atomically exchanges only the
+   selected host entry. Unrelated entries/settings are preserved. The selected entry
+   always invokes a native collector wrapper; it never temporarily invokes the original
+   server directly. Ownership and installed-generation metadata are then committed.
+6. A private generation-checked launcher refuses pending or stale transactions, rechecks
+   Agent/config/registry/policy identity, obtains the current authenticated daemon
+   instance and mints narrowed session authority. Tokens stay out of host configuration,
+   argv, audit and the original server's environment.
+
+Already running collectors have the previous daemon's session/call state and cannot
+release results or execute a new call after the restart. New launchers mint current
+instance-bound authority. A byte-identical rollback advances generation again, so an
+old launcher cannot revive. Outstanding result receipts and Ask records are not
+restored; approval issuance/redemption is refused during the transition, and previous
+policy epochs remain invalid after it.
+
+## Risk continuity
+
+Private `mcp-profiles/risk-checkpoint.json` authenticates provenance with HMAC-SHA256
+and domain `agentfw/provenance-checkpoint/v1\0`. It contains taint fingerprints,
+URL/path literals, incomplete-history flags and scoped-host tombstones. It deliberately
+contains no active agent grants, calls, receipts or approvals. Restore requires a
+pristine tracker and enforces current provenance budgets. A malformed, public,
+symlinked, over-budget or invalid-MAC checkpoint refuses startup.
+
+Once enabled, authenticated POST handlers first fsync `risk-inflight.json`, then fsync
+the signed checkpoint before releasing their response. An interrupted handler restores
+a global incomplete-history floor. On storage failure, native calls fail closed and
+hooks return documented HTTP 200 `permissionDecision: deny`. Exact old span-cache
+indices and ephemeral native sessions are not restored; the conservative floor accounts
+for incomplete context. The floor is evidence of uncertainty, not a fabricated taint
+source, and it does not silently expire or disappear on collector restart.
+
+Checkpoint serialization and reads are capped at 16 MiB. Native scoped-host tombstones
+are capped at the existing 64-host bound. Reaching a bound refuses the operation;
+history is not silently evicted to claim a successful transition. Checkpoint contents
+may contain sensitive provenance literals: keep them private and exclude them from
+support bundles. Same-user operators who can read daemon keys remain outside the
+credential boundary, as with the existing native protocol.
+
+## Status, recovery and rollback
 
 ```bash
-agentfw mcp-profile upgrade \
-  --profile /path/to/new-compiled-profile \
-  [--expected-bundle-sha <sha256>] \
-  [--expect-generation <u64>] \
-  --accept-diff <preview.approval_sha256>
+agentfw mcp-connection profile status \
+  --path /absolute/claude-mcp.json --server selected \
+  --home /absolute/operator/.agentfw --agent /absolute/agentfw
+
+agentfw mcp-connection profile recover \
+  --path /absolute/claude-mcp.json --server selected \
+  --home /absolute/operator/.agentfw --agent /absolute/agentfw
 ```
-- Compares new profile with active profile using semantic diff.
-- Every upgrade and rollback requires exact preview approval; `yes` is rejected. The digest binds operation, home, source/target bundles, next generation, source/target config and lifecycle snapshot. Any change requires a fresh preview.
-- Increments generation monotonically.
-- Restarts running daemon and verifies fresh instance attestation.
-- Automatically reverts to previous profile if daemon startup fails.
 
-### 3. Rollback Profile
+Status separates `configured`, `not_configured`, `conflict` and `incomplete` from
+`daemon: configuration_verified`, `identity_mismatch` or `unavailable`.
+`runtime_execution: not_probed` and `host_reload: pending` are intentional. Atomic
+publication and daemon health do not prove that a running Claude host reloaded it.
+Reload/restart that host, then exercise the intended useful call through its actual
+collector; configuration status alone is not execution attestation.
 
-```bash
-agentfw mcp-profile rollback \
-  [--revision <bundle-sha256>] \
-  [--expect-generation <u64>] \
-  --accept-diff <preview.approval_sha256>
-```
-- Defaults to rolling back to `previous_bundle_sha256` if `--revision` is omitted.
-- Advances the CLI generation monotonically (`N + 1`); runtime stale-authority protection remains an acceptance gap.
-- Re-binds daemon `config.yaml` to the target revision.
+Recovery is idempotent. Before candidate activation it retains the verified baseline;
+after activation it completes the retained owned publication. It recognizes crashes
+immediately before and after the host exchange. A foreign daemon, ownership change,
+modified selected entry or external publication edit retains journals and every
+captured version and reports a conflict. Preserve those private files, inspect the
+current and retained versions, and explicitly reconcile the intended configuration
+before retrying recovery. Do not delete a journal or edit ownership metadata to force
+success. Recovery does not guess which external edit to discard.
 
-### 4. Status
+Rollback uses the same preview/apply commands, swaps `--source-profile` and `--profile`
+and adds `--rollback` to **both**. Only the recorded previous reviewed snapshot is
+eligible; it must still pass authoring, resource and runtime validation. Revoked review,
+a changed workspace/classifier or a no-longer-valid create-file destination can make
+an old snapshot ineligible. No arbitrary file is accepted as rollback authority.
 
-```bash
-agentfw mcp-profile status
-```
-Outputs privacy-safe JSON with:
-- Current `generation`.
-- `active_bundle_sha256` and `previous_bundle_sha256`.
-- Number of staged revisions in cache.
-- Daemon running status and instance ID.
-- Any in-progress journal record.
+Outer transaction records are limited to 1 MiB; daemon profile state to 10 MiB, Agent
+config to 1 MiB and recent low-level operation history to 1024 records. Retained host
+publication archives are deliberately preserved as private operator evidence; they
+are not automatically garbage-collected. A home-wide native registry is shared: this
+workflow serializes profile changes and does not promise independent live registries
+for multiple selected connections in one Agent home.
 
-### 5. Recover Interrupted Transaction
+The lower-level `mcp-profile install/preview/upgrade/rollback/status/recover` commands
+remain available for daemon-profile maintenance. They do not publish an owned Claude
+entry and cannot bypass a pending owned-connection transition. Use the owned workflow
+above for an installed connection.
 
-```bash
-agentfw mcp-profile recover
-```
-- Inspects pending `in_progress` journal in `profile-state.json`.
-- Restores prior baseline configuration if transaction crashed after config modification.
-- Restarts healthy baseline daemon if needed.
+## Reproduction
 
-## Status interpretation and bounded evidence
-
-`configuration_status` reports `configured`, `conflict` or `not_configured` after
-revalidating the active bundle and selected native config. `runtime_status`
-distinguishes `daemon_configuration_verified`, `unavailable_daemon_stopped`,
-`unavailable`, `conflict` and an `incomplete` journal. These attest the managed
-daemon configuration only. `host_reload_status` remains `unverified`; publication
-and daemon health do not prove an already running Claude Code host reloaded it.
-
-State reads are limited to 10 MiB, input Agent config to 1 MiB, and the recent
-operation history to 1024 records. Recovery rejects unsafe operation identifiers
-and displaced paths outside the journal's owned operation. The current journal is
-never discarded when retaining the bounded recent history.
+`scripts/verify-sou78-linux.sh` exports the committed tree into a disposable ordinary-UID
+container, disables external networking/capabilities and runs strict lint, affected test
+suites and `scripts/verify-sou78-owned.py`. The latter uses a real managed Agent, real
+stdio collectors and a scripted host; it makes no paid-model or installed-UI claim.
+Its independent original-server execution ledger, profile/binary digests, explicit
+crash-before/crash-after exits and sanitized check counts are retained in CI artifacts.
+See [evidence/sou-78-evidence.md](evidence/sou-78-evidence.md) for exact-source results.

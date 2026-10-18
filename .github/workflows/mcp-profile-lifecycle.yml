@@ -6,6 +6,8 @@ on:
     paths:
       - 'crates/agentfw/**'
       - 'crates/agent/**'
+      - 'scripts/verify-sou78*.py'
+      - 'scripts/fixtures/sou78_profile_server.py'
       - 'scripts/verify-sou78-linux.sh'
       - '.github/workflows/mcp-profile-lifecycle.yml'
   workflow_dispatch:
@@ -26,7 +28,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt,clippy
-      - name: Exact-source Linux foundation checks (not whole-issue acceptance)
+      - name: Exact-source Linux profile and owned-process checks
         run: bash scripts/verify-sou78-linux.sh
       - name: Retain exact-source Linux results
         if: always()
