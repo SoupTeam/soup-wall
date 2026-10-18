@@ -32,6 +32,7 @@ fn allocate_test_port() -> Option<u16> {
 
 fn create_test_profile_bundle(dir: &Path, server_id: &str, tool_name: &str) -> String {
     let inputs = tempfile::tempdir().unwrap();
+    let inputs_path = inputs.path().canonicalize().unwrap();
     let snapshot = json!({
         "format": "sw-mcp/operator-discovery/1", "server_id": server_id,
         "server_version": "1.0", "tools": [{"name": tool_name, "description": "Read fixture state",
@@ -46,8 +47,8 @@ fn create_test_profile_bundle(dir: &Path, server_id: &str, tool_name: &str) -> S
             "operator_review": "Independent read-only fixture implementation review"
         }]
     });
-    let snap = inputs.path().join("snapshot.json");
-    let decl = inputs.path().join("declarations.json");
+    let snap = inputs_path.join("snapshot.json");
+    let decl = inputs_path.join("declarations.json");
     fs::write(&snap, serde_json::to_vec(&snapshot).unwrap()).unwrap();
     fs::write(&decl, serde_json::to_vec(&declarations).unwrap()).unwrap();
     fs::create_dir_all(dir).unwrap();

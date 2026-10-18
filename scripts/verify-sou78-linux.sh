@@ -9,6 +9,8 @@ if [[ $(uname -s) != Linux ]]; then
 fi
 
 if [[ ${1:-} == --isolated ]]; then
+  rustc --version > "$SOU78_EVIDENCE/toolchain.txt"
+  cargo --version > "$SOU78_EVIDENCE/cargo-version.txt"
   run_check() {
     local label=$1
     shift
@@ -45,7 +47,7 @@ git archive HEAD | tar -x -C "$proof/source"
 git rev-parse HEAD > "$proof/evidence/source-commit.txt"
 (
   cd "$proof/source"
-  find crates scripts -type f -print0 | sort -z | xargs -0 sha256sum
+  find . -type f -print0 | sort -z | xargs -0 sha256sum
 ) > "$proof/evidence/source-sha256.txt"
 rustc --version > "$proof/evidence/toolchain.txt"
 # Build only a standard toolchain image here; no target source is copied into it.

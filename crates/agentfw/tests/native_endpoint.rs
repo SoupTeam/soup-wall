@@ -5829,7 +5829,7 @@ async fn sou78_barrier_commits_before_response_and_restart_preserves_hook_risk()
             .taint_len("profile-host"),
         taint
     );
-    assert!(replacement
+    assert!(!replacement
         .firewall
         .lock()
         .unwrap()

@@ -78,7 +78,7 @@ is a conflict, not permission to overwrite its state.
    all six authoring outputs must reconstruct the reviewed authority exactly.
 3. An authenticated native barrier drains earlier authenticated POST handlers, checkpoints
    retained taint and scoped host identities, and imposes a sticky incomplete-history
-   floor for deliveries that cannot be attested across the restart.
+   floor on the selected and active authenticated hosts for deliveries that cannot be attested across the restart.
 4. The existing profile/lifecycle manager atomically selects the candidate registry,
    retires the persistent approval epoch, restarts the owned daemon, and verifies its
    fresh process/config identity. It compensates startup failure through the same
@@ -124,7 +124,9 @@ a global incomplete-history floor. On storage failure, native calls fail closed 
 hooks return documented HTTP 200 `permissionDecision: deny`. Exact old span-cache
 indices and ephemeral native sessions are not restored; the conservative floor accounts
 for incomplete context. The floor is evidence of uncertainty, not a fabricated taint
-source, and it does not silently expire or disappear on collector restart.
+source, and it does not silently expire or disappear on collector restart. A clean
+transition marks affected hosts; it does not contaminate an independent fresh host.
+Only an interrupted handler with unknown scope requires the global floor.
 
 Checkpoint serialization and reads are capped at 16 MiB. Native scoped-host tombstones
 are capped at the existing 64-host bound. Reaching a bound refuses the operation;

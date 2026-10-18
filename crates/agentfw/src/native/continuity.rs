@@ -120,6 +120,8 @@ impl Continuity {
                 builder.mode(0o700);
             }
             builder.create(&self.root)?;
+            #[cfg(unix)]
+            File::open(self.root.parent().context("continuity parent absent")?)?.sync_all()?;
             #[cfg(windows)]
             crate::private_file_windows::ensure_private_directory(&self.root)?;
         }
@@ -391,12 +393,25 @@ pub async fn middleware(State(st): State<Shared>, request: Request, next: Next) 
         return refused(&path);
     }
     if enable {
+        let Some(host) = request
+            .headers()
+            .get("x-agentfw-host-session")
+            .and_then(|v| v.to_str().ok())
+            .filter(|h| super::identifier(h))
+        else {
+            return next.run(request).await;
+        };
+        // Native state always precedes firewall state in the lock order.
+        let mut affected = native.active_host_sessions();
+        affected.push(host.to_owned());
         let Ok(mut firewall) = st.firewall.lock() else {
             return refused(&path);
         };
-        // Late host deliveries cannot be attested across a process transition.
-        // Keep exact evidence and impose the conservative floor as well.
-        firewall.mark_all_provenance_incomplete();
+        // Preserve uncertainty for affected hosts without making an independent,
+        // fresh authenticated context permanently unusable for resource execution.
+        for host in affected {
+            firewall.mark_provenance_incomplete(&host);
+        }
         store.enabled.store(true, Ordering::Release);
     }
     let response = next.run(request).await;
@@ -577,7 +592,9 @@ mod tests {
     fn reviewed_manifest_exception_requires_exact_validated_installed_authority() {
         use crate::mcp::{profile_author, profile_lifecycle};
         let dir = tempfile::tempdir().unwrap();
+        let dir_path = dir.path().canonicalize().unwrap();
         let inputs = tempfile::tempdir().unwrap();
+        let inputs_path = inputs.path().canonicalize().unwrap();
         let schema = json!({"type":"object","properties":{},"additionalProperties":false});
         let snapshot = json!({"format":"sw-mcp/operator-discovery/1","server_id":"reviewed-server",
             "server_version":"1","tools":[{"name":"read_note","description":"Reviewed local read.","inputSchema":schema}]});
@@ -585,24 +602,24 @@ mod tests {
             "snapshot_sha256":profile_author::digest(&snapshot),"registry_id":"reviewed-registry","tools":[{
                 "name":"read_note","schema_sha256":profile_author::digest(&schema),"reviewed":true,
                 "operator_review":"Owned read fixture implementation review","authority":{"kind":"read_only"}}]});
-        let snap = inputs.path().join("snapshot.json");
-        let decl = inputs.path().join("declarations.json");
+        let snap = inputs_path.join("snapshot.json");
+        let decl = inputs_path.join("declarations.json");
         fs::write(&snap, serde_json::to_vec(&snapshot).unwrap()).unwrap();
         fs::write(&decl, serde_json::to_vec(&declarations).unwrap()).unwrap();
-        let bundle = inputs.path().join("bundle");
+        let bundle = inputs_path.join("bundle");
         fs::create_dir(&bundle).unwrap();
         for (name, bytes) in profile_author::compiled_bundle_files(&snap, &decl, &bundle).unwrap() {
             fs::write(bundle.join(name), bytes).unwrap();
         }
-        let manager = profile_lifecycle::ProfileManager::new(dir.path());
+        let manager = profile_lifecycle::ProfileManager::new(&dir_path);
         let installed = manager.install(&bundle, None).unwrap();
         let native_cfg =
-            crate::Config::from_yaml(&fs::read_to_string(dir.path().join("config.yaml")).unwrap())
+            crate::Config::from_yaml(&fs::read_to_string(dir_path.join("config.yaml")).unwrap())
                 .unwrap()
                 .native
                 .unwrap();
         let (mut native, mut fw) = fresh();
-        let store = Continuity::attach(dir.path(), &mut native, &mut fw).unwrap();
+        let store = Continuity::attach(&dir_path, &mut native, &mut fw).unwrap();
         let tools = vec![soup_wall_agent::ToolDecl {
             name: "read_note".into(),
             description: "Reviewed local read.".into(),

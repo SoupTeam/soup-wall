@@ -206,6 +206,13 @@ fn manager(o: &Options, journal: &Journal) -> ProfileManager {
 fn guard_path(o: &Options) -> PathBuf {
     o.home.join("mcp-profiles/connection-transition.json")
 }
+fn has_guard(o: &Options) -> Result<bool> {
+    match std::fs::symlink_metadata(guard_path(o)) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error.into()),
+    }
+}
 fn guard_bytes(o: &Options, j: &Journal) -> Vec<u8> {
     format!("{}\n{}\n{}", j.operation, o.path.display(), o.server).into_bytes()
 }
@@ -214,6 +221,7 @@ fn reserve(o: &Options, j: &Journal) -> Result<()> {
     if !root.exists() {
         use std::os::unix::fs::DirBuilderExt;
         std::fs::DirBuilder::new().mode(0o700).create(&root)?;
+        File::open(&o.home)?.sync_all()?;
     }
     let dir = directory(&root)?;
     let dm = dir.metadata()?;
@@ -226,7 +234,7 @@ fn reserve(o: &Options, j: &Journal) -> Result<()> {
     Ok(())
 }
 fn release(o: &Options, j: &Journal) -> Result<()> {
-    if guard_path(o).try_exists()? {
+    if has_guard(o)? {
         ensure!(
             read_private(&guard_path(o))? == guard_bytes(o, j),
             "profile transaction was superseded"
@@ -325,7 +333,7 @@ async fn preview(target: &Target, config: &ConfigFile) -> Result<(Value, Owner, 
         "profile transition requires recovery"
     );
     ensure!(
-        !guard_path(o).try_exists()?,
+        !has_guard(o)?,
         "another owned profile transaction is pending"
     );
     let owner = config
@@ -406,8 +414,9 @@ async fn preview(target: &Target, config: &ConfigFile) -> Result<(Value, Owner, 
     if let Some(active) = &state.active_bundle_sha256 {
         ensure!(*active == source.bundle_sha256, "active profile changed");
     }
-    if let Some(installed) = read_record::<Installed>(config, &state_name(o))? {
-        validate_installed(&installed, o)?;
+    let installed = read_record::<Installed>(config, &state_name(o))?;
+    if let Some(installed) = &installed {
+        validate_installed(installed, o)?;
         ensure!(
             installed.current == source.bundle_sha256
                 && installed.generation == state.generation
@@ -441,7 +450,9 @@ async fn preview(target: &Target, config: &ConfigFile) -> Result<(Value, Owner, 
     let diff =
         crate::mcp::profile_author::compute_profile_diff(&target.source_profile, &target.profile)?;
     let binding = json!({"domain":"agentfw/owned-profile-preview/v1", "path":o.path,"server":o.server,
-        "home":o.home,"owner":owner,"host_config":sha(&config.bytes),"agent":native.binary,
+        "home":o.home,"owner":owner,"installed":installed,
+        "profile_state_sha256":crate::mcp::profile_author::digest(&serde_json::to_value(&state)?),
+        "host_config":sha(&config.bytes),"agent":native.binary,
         "agent_config":native.config,"registry":native.registry,"policy":native.policy,
         "native_instance":runtime["instance_id"],"original_binary_sha256":executable(Path::new(owner.original["command"].as_str().context("original command absent")?))?,"source":source.bundle_sha256,"target":candidate.bundle_sha256,
         "generation":generation,"rollback":target.rollback,"classifier":classifier,"host_session":target.host_session,"profile_server_id":source_profile.server_id});
@@ -690,7 +701,7 @@ async fn recover(o: Options) -> Result<Value> {
             && j.before.agent == o.agent,
         "profile recovery ownership mismatch"
     );
-    if guard_path(&o).try_exists()? {
+    if has_guard(&o)? {
         ensure!(
             read_private(&guard_path(&o))? == guard_bytes(&o, &j),
             "another transaction owns profile recovery"
@@ -743,8 +754,7 @@ async fn collector(o: Options, generation: u64) -> Result<Value> {
     let config = ConfigFile::read(&o.path)?;
     let _lock = config.lock()?;
     ensure!(
-        !guard_path(&o).try_exists()?
-            && read_record::<Journal>(&config, &journal_name(&o))?.is_none(),
+        !has_guard(&o)? && read_record::<Journal>(&config, &journal_name(&o))?.is_none(),
         "profile transition is incomplete"
     );
     let installed: Installed =
@@ -914,7 +924,7 @@ pub(crate) async fn run(command: Command) -> Result<Value> {
         Command::Status(o) => {
             let config = ConfigFile::read(&o.path)?;
             let pending = read_record::<Journal>(&config, &journal_name(&o))?.is_some()
-                || guard_path(&o).try_exists()?
+                || has_guard(&o)?
                 || config.publication()?.is_some();
             let installed = read_record::<Installed>(&config, &state_name(&o))?;
             if let Some(state) = &installed {

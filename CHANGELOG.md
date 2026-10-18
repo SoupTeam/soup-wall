@@ -4,14 +4,13 @@ Changes to the public Soup Wall source distribution are recorded here. Release a
 
 ## Unreleased
 
-- Added transactional MCP profile upgrades and rollback without stale authority (SOU-78):
-  delivered `agentfw mcp-profile install`, `upgrade`, `rollback`, `status`, and `recover`.
-  Features include immutable content-addressed bundle staging in `~/.agentfw/mcp-profiles/revisions/`,
-  semantic authority diff enforcement requiring explicit operator review (`--accept-diff`),
-  monotonic generation authority (`generation: u64`) that strictly increments across every activation
-  (including rollbacks to prior byte-identical revisions) to guarantee zero stale authority,
-  daemon attestation with fresh instance identities, atomic `config.yaml` updates, and crash-resilient
-  journaling that automatically reverts to the healthy baseline if daemon startup fails.
+- Added explicit Linux owned MCP connection profile preview/apply/status/recover/rollback
+  (SOU-78), using reviewed immutable bundles and retained atomic host publication.
+  Generation-checked launchers, current-daemon child authority and approval epoch
+  retirement reject stale execution; authenticated provenance checkpoints retain host
+  risk across restarts. Host reload remains pending until independently exercised.
+  macOS/Windows profile upgrades remain unsupported. See
+  [MCP_PROFILE_LIFECYCLE.md](docs/operations/MCP_PROFILE_LIFECYCLE.md) for scope and limits.
 
 - Added native macOS `agentfw self-test` profile (SOU-77): delivered the
   `macos-stdio-mcp-admission-v1` profile with independent prevention witnesses,

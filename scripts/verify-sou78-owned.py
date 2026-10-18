@@ -126,9 +126,9 @@ def main():
                 if approval is not None:parts+=['--approval',approval]
                 return run(parts,ok,extra)
             def entry():return json.loads(host.read_text())['mcpServers']['owned']
-            def launch(selected=None):
+            def launch(selected=None,launch_env=None):
                 selected=selected or entry()
-                c=helpers.MCPClient([selected['command'],*selected['args']],env,log,cwd=workspace);clients.append(c)
+                c=helpers.MCPClient([selected['command'],*selected['args']],launch_env or env,log,cwd=workspace);clients.append(c)
                 hello=c.send({'jsonrpc':'2.0','id':1,'method':'initialize','params':{
                     'protocolVersion':'2024-11-05','capabilities':{},'clientInfo':{'name':'claude-code-scripted','version':'sou78'}}})
                 check('real-collector-initialize-'+str(len(checks)),hello is not None and 'result' in json.loads(hello))
@@ -252,7 +252,7 @@ def main():
             checkpoint=json.loads((home/'mcp-profiles/risk-checkpoint.json').read_text())
             check('authenticated-host-taint-survives-real-daemon-restart',any(s['session']=='sou78-host'
                 and (s['fingerprints'] or s['literals']) for s in checkpoint['provenance']['sessions']))
-            check('sticky-incomplete-floor-survives',checkpoint['provenance']['legacy_unknown_history'])
+            check('sticky-incomplete-floor-survives',next(s for s in checkpoint['provenance']['sessions'] if s['session']=='sou78-host')['incomplete'])
             current_host=next(s for s in checkpoint['provenance']['sessions'] if s['session']=='sou78-host')
             check('pre-transition-taint-fingerprints-retained',prior_fingerprints.issubset({f[0] for f in current_host['fingerprints']}))
 
@@ -272,6 +272,35 @@ def main():
             status,reply=api('/native/approval/v1',dict(ask,registry_sha256=registry,action='status',pending_id=pending['pending_id']))
             check('old-approved-ask-cannot-revive',status!=200 and reply.get('state')!='approved')
             check('old-ask-grant-files-retired',not list((home/'native-grants').glob('*.json')))
+            # A retained host floor must not erase authority or taint in a fresh,
+            # independent authenticated context. This is a real native broker write,
+            # never a child implementation or a classifier double.
+            independent='sou78-independent-context'
+            instance=api('/native/v1/instance')[1]['instance_id']
+            proof=run(['child-authority','mint','--session',independent,'--server',profile_server,
+                '--agent-id','independent-root','--tools','read_document,create_file','--resources',new_path,
+                '--instance-id',instance,'--ttl-seconds','3600']).stdout.strip()
+            control_env=dict(env,AGENTFW_HOST_SESSION=independent,AGENTFW_CHILD_AUTHORITY=proof,
+                AGENTFW_CLASSIFIER='rule-baseline',AGENTFW_RULE_BASELINE=str(classifier),
+                AGENTFW_CLASSIFIER_PYTHON=str(Path(sys.executable).resolve()),AGENTFW_WORKSPACE=str(workspace))
+            control=launch({'command':str(binary),'args':['mcp','--id',profile_server,'--native-admission','--',
+                original['command'],*original['args']]},control_env)
+            useful(control,'independent-current-authority-useful-read')
+            before=len(ledger.read_text().splitlines())
+            call(active,'create_file',{'path':'new-output.txt','content':'must remain gated for retained host'})
+            check('retained-host-floor-still-gates-current-resource',not new_path.exists()
+                and len(ledger.read_text().splitlines())==before)
+            content='SOU78 independent bounded positive control'
+            reply=call(control,'create_file',{'path':'new-output.txt','content':content})
+            check('fresh-current-resource-authority-executes-through-native-broker',reply is not None
+                and new_path.is_file() and new_path.read_text()==content
+                and len(ledger.read_text().splitlines())==before)
+            control.close()
+            # Remove only this exact fixture-owned positive-control output so the
+            # reviewed create-once destination remains eligible for later rollback.
+            check('positive-control-output-owned-before-cleanup',new_path.is_file() and not new_path.is_symlink()
+                and new_path.read_text()==content)
+            new_path.unlink()
             source_launcher=activate(target,source,source_tools,rollback=True,crash='crash-after')
             restored=launch();useful(restored,'recovered-rollback-useful-read')
             activate(source,target,target_tools)
@@ -290,7 +319,7 @@ def main():
             final_checkpoint=json.loads((home/'mcp-profiles/risk-checkpoint.json').read_text())
             final_host=next(s for s in final_checkpoint['provenance']['sessions'] if s['session']=='sou78-host')
             check('rollback-retains-original-host-history',prior_fingerprints.issubset({f[0] for f in final_host['fingerprints']})
-                and final_checkpoint['provenance']['legacy_unknown_history'] and final_checkpoint['require_scoped_authority'])
+                and final_host['incomplete'] and final_checkpoint['require_scoped_authority'])
             status,reply=api('/native/v1',dict(event,registry_sha256=old_registry,event='session_start',
                 host_session='sou78-host',server_id=profile_server,child_authority=resource_token,session_id='old-resource-after-rollback'))
             check('identical-rollback-rejects-old-resource-authority',status!=200
@@ -299,9 +328,15 @@ def main():
             report['passed']=True
         finally:
             for c in clients:c.close()
-            subprocess.run([str(binary),'lifecycle','stop'],env=env,capture_output=True,timeout=30)
+            stopped=subprocess.run([str(binary),'lifecycle','stop'],env=env,capture_output=True,timeout=30)
             log.close()
+            check('owned-daemon-stop-succeeded',stopped.returncode==0)
+            status=subprocess.run([str(binary),'lifecycle','status'],env=env,capture_output=True,text=True,timeout=15)
+            state=json.loads(status.stdout) if status.returncode==0 else {}
+            check('owned-daemon-no-live-process',state.get('running') is False and state.get('process') is None)
+
     finally:
+        report['passed']=bool(report.get('passed')) and all(c['passed'] for c in checks)
         report['counts']={'passed':sum(c['passed'] for c in checks),'failed':sum(not c['passed'] for c in checks),
                           'incomplete':0 if report.get('passed') else 1}
         helpers.dump(args.out,report)

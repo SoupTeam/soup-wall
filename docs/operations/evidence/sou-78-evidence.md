@@ -74,6 +74,40 @@ agent tool grants or approvals. The complete core Agent suite passed locally:
 Agent/agentfw clippy was clean. This API is not yet wired to an authenticated,
 durable daemon checkpoint or the owned-connection transition; those remain open.
 
+## Successful Linux foundation run
+
+Commit `4fcd4b0673528748d388a9b909d2e40f591c23ad` passed
+[Linux CI run 39094808107](https://github.com/SoupTeam/soup-wall/actions/runs/39094808107).
+All seven check exit codes are zero: formatting, strict clippy, core provenance,
+Agent library, profile CLI lifecycle, real managed daemon lifecycle and MCP
+admission. Total: **728 passed, 0 failed, 2 ignored** (190 core Agent; 454
+Agentfw library; 4 profile lifecycle; 5 daemon lifecycle; 75 admission).
+
+The exact source manifest digest, container image identity and check counts are
+retained in `sou-78-linux-foundation-2026-10-18.json`; original check logs are in
+the CI artifact. No separate user-provided Linux host is needed. This verifies
+the foundation only. The authenticated durable checkpoint boundary and owned
+connection transaction remain implementation work; no SOU-78 completion claim.
+
+## Successful Linux owned-connection and profile transition run
+
+Commit `2905f9b283e7f8b2fdced291dedf9e5dfc9b37c3` passed
+[Linux CI run 39097620842](https://github.com/SoupTeam/soup-wall/actions/runs/39097620842)
+(Job ID `117587222369`). All 11 checks in `scripts/verify-sou78-linux.sh` exited 0:
+- `fmt`: clean, zero formatting issues.
+- `clippy`: clean, zero compiler or clippy warnings.
+- `provenance`: 190 passed, 0 failed.
+- `library`: 460 passed, 0 failed, 2 ignored.
+- `native`: 120 passed, 0 failed.
+- `hooks`: 13 passed, 0 failed.
+- `protection`: 19 passed, 0 failed.
+- `owned`: 68 real-process checks passed, including live daemon lifecycle, transactional preview/apply, rollbacks, and authenticated risk checkpoints.
+- `profiles`: 4 passed, 0 failed.
+- `daemon`: 5 passed, 0 failed.
+- `admission`: 75 passed, 0 failed.
+
+Total: **886 test cases passed, 0 failed, 2 ignored**, plus **68 real daemon lifecycle and owned-process checks verified clean**.
+
 ## Historical Antigravity evidence (before continuation; not current-head proof)
 
 ## Overview

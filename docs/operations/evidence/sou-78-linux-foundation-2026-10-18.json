@@ -1,0 +1,65 @@
+{
+  "issue": "SOU-78",
+  "date": "2026-10-18",
+  "commit": "4fcd4b0673528748d388a9b909d2e40f591c23ad",
+  "run_url": "https://github.com/SoupTeam/soup-wall/actions/runs/39094808107",
+  "conclusion": "success",
+  "scope": "Linux foundation checks; whole-issue acceptance incomplete",
+  "environment": "Ubuntu 24.04 hosted runner; Debian bookworm Rust container; ordinary UID; read-only root; no capabilities; no privilege escalation; loopback-only networking; disposable writable inputs",
+  "image_id": "sha256:4f6dfdd51cd840d8bcc593cd5baaf708cdd740f21a7eb11477ce845ccb90e183",
+  "source_manifest_sha256": "166c08b4a59204d386d8dd942e9d6cbb00ad7bc6313df20dd37bc6a71b90c71d",
+  "checks": {
+    "admission": {
+      "exit_code": 0,
+      "passed": 75,
+      "failed": 0,
+      "ignored": 0
+    },
+    "clippy": {
+      "exit_code": 0,
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    },
+    "daemon": {
+      "exit_code": 0,
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0
+    },
+    "fmt": {
+      "exit_code": 0,
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    },
+    "library": {
+      "exit_code": 0,
+      "passed": 454,
+      "failed": 0,
+      "ignored": 2
+    },
+    "profiles": {
+      "exit_code": 0,
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    "provenance": {
+      "exit_code": 0,
+      "passed": 190,
+      "failed": 0,
+      "ignored": 0
+    }
+  },
+  "totals": {
+    "passed": 728,
+    "failed": 0,
+    "ignored": 2
+  },
+  "not_yet_implemented": [
+    "authenticated durable daemon checkpoint integration",
+    "owned connection profile transition and recovery publication",
+    "whole production-path upgrade/rollback acceptance with risk continuity"
+  ]
+}

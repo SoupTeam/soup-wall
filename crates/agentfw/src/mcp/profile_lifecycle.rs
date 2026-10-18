@@ -552,7 +552,12 @@ impl ProfileManager {
         ensure_safe_managed_dir(&self.home)?;
         ensure_safe_managed_dir(&self.root)?;
         let guard = self.root.join("connection-transition.json");
-        if guard.try_exists()? {
+        let guarded = match fs::symlink_metadata(&guard) {
+            Ok(_) => true,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+            Err(error) => return Err(error.into()),
+        };
+        if guarded {
             let bytes = read_bundle_file(&guard)?.0;
             let owner = std::str::from_utf8(&bytes)?.lines().next();
             ensure!(
@@ -3434,6 +3439,7 @@ mod tests {
 
     fn create_test_profile(dir: &Path, server_id: &str, tool_name: &str) -> String {
         let inputs = tempfile::tempdir().unwrap();
+        let inputs_path = inputs.path().canonicalize().unwrap();
         let snapshot = json!({
             "format": "sw-mcp/operator-discovery/1", "server_id": server_id,
             "server_version": "1.0", "tools": [{"name": tool_name, "description": "Read fixture state",
@@ -3448,8 +3454,8 @@ mod tests {
                 "operator_review": "Independent read-only fixture implementation review"
             }]
         });
-        let snap = inputs.path().join("snapshot.json");
-        let decl = inputs.path().join("declarations.json");
+        let snap = inputs_path.join("snapshot.json");
+        let decl = inputs_path.join("declarations.json");
         fs::write(&snap, serde_json::to_vec(&snapshot).unwrap()).unwrap();
         fs::write(&decl, serde_json::to_vec(&declarations).unwrap()).unwrap();
         fs::create_dir_all(dir).unwrap();
@@ -4099,11 +4105,12 @@ mod tests {
     #[test]
     fn install_works_with_nonexistent_relative_home() {
         let temp = tempdir().unwrap();
-        let rel_home = temp.path().join("sub/rel-home");
+        let root = temp.path().canonicalize().unwrap();
+        let rel_home = root.join("sub/rel-home");
         let mgr = ProfileManager::new(&rel_home);
         assert!(mgr.home.is_absolute());
 
-        let p1_dir = temp.path().join("bundle1");
+        let p1_dir = root.join("bundle1");
         create_test_profile(&p1_dir, "srv-1", "tool_1");
         let rec = mgr.install(&p1_dir, None);
         assert!(rec.is_ok());
@@ -5283,8 +5290,11 @@ mod tests {
         let temp = tempdir().unwrap();
         let home = temp.path().canonicalize().unwrap();
         let mgr = ProfileManager::new(&home);
-        let port = allocate_test_port().expect("loopback access required");
-        fs::write(&mgr.config_path, format!("port: {port}\ncapture_unknown_raw: true\nmax_body_bytes: 1048576\njudge:\n  enabled: false\n  model: retained-model\n")).unwrap();
+        if let Some(port) = allocate_test_port() {
+            fs::write(&mgr.config_path, format!("port: {port}\ncapture_unknown_raw: true\nmax_body_bytes: 1048576\njudge:\n  enabled: false\n  model: retained-model\n")).unwrap();
+        } else {
+            fs::write(&mgr.config_path, "capture_unknown_raw: true\nmax_body_bytes: 1048576\njudge:\n  enabled: false\n  model: retained-model\n").unwrap();
+        }
         let p1 = home.join("p1");
         create_test_profile(&p1, "srv-1", "tool_a");
         mgr.install(&p1, None).unwrap();
@@ -5390,5 +5400,25 @@ mod tests {
         assert_eq!(loaded.history.len(), 1024);
         assert_eq!(loaded.history[0].generation, 6);
         assert_eq!(loaded.history.last().unwrap().generation, 1029);
+    }
+    #[cfg(unix)]
+    #[test]
+    fn dangling_owned_connection_reservation_is_not_an_absent_reservation() {
+        let dir = tempfile::tempdir().unwrap();
+        let manager = ProfileManager::new(dir.path());
+        fs::create_dir(&manager.root).unwrap();
+        std::os::unix::fs::symlink(
+            manager.root.join("missing"),
+            manager.root.join("connection-transition.json"),
+        )
+        .unwrap();
+        assert!(manager.lock().is_err());
+        assert!(!manager.config_path.exists());
+        assert!(
+            fs::symlink_metadata(manager.root.join("connection-transition.json"))
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
     }
 }
