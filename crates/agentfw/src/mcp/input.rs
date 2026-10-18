@@ -17,7 +17,11 @@ const MAX_STRING_CHARACTERS: usize = 65_536;
 #[derive(Debug)]
 enum Shape {
     Object(BTreeMap<String, InputSchema>, BTreeSet<String>),
-    Array(Box<InputSchema>),
+    Array {
+        items: Box<InputSchema>,
+        min_items: usize,
+        max_items: usize,
+    },
     String {
         min_chars: usize,
         max_chars: Option<usize>,
@@ -32,7 +36,10 @@ enum Shape {
 /// Deliberately smaller than general JSON Schema. Unknown keywords are errors.
 /// The original schema remains in the discovery snapshot, not in this validator.
 #[derive(Debug)]
-pub struct InputSchema(Shape);
+pub struct InputSchema {
+    shape: Shape,
+    choices: Option<Vec<Value>>,
+}
 
 impl InputSchema {
     pub fn read(value: &Value) -> anyhow::Result<Self> {
@@ -40,10 +47,26 @@ impl InputSchema {
             value["type"] == "object",
             "MCP input profile requires an object"
         );
-        Self::node(value, 0, &mut 0)
+        Self::node(value, 0, &mut 0, false)
     }
 
-    fn node(value: &Value, depth: usize, nodes: &mut usize) -> anyhow::Result<Self> {
+    /// The selected real-server profile preserves its original open schemas,
+    /// but deliberately accepts only declared fields. Unknown arguments are
+    /// refused rather than stripped by the upstream SDK.
+    pub fn read_selected(value: &Value) -> anyhow::Result<Self> {
+        ensure!(
+            value["type"] == "object",
+            "MCP input profile requires an object"
+        );
+        Self::node(value, 0, &mut 0, true)
+    }
+
+    fn node(
+        value: &Value,
+        depth: usize,
+        nodes: &mut usize,
+        selected: bool,
+    ) -> anyhow::Result<Self> {
         *nodes += 1;
         ensure!(
             depth <= MAX_DEPTH && *nodes <= MAX_SCHEMA_NODES,
@@ -52,26 +75,43 @@ impl InputSchema {
         let map = value.as_object().context("MCP schema must be an object")?;
         let kind = value["type"].as_str().context("MCP schema type missing")?;
         for key in map.keys() {
-            let supported = matches!(key.as_str(), "type" | "title" | "description" | "default")
-                || (kind == "object"
-                    && matches!(
-                        key.as_str(),
-                        "properties" | "required" | "additionalProperties"
-                    ))
-                || (kind == "array" && key == "items")
+            let supported = matches!(
+                key.as_str(),
+                "type" | "title" | "description" | "default" | "enum" | "const"
+            ) || (kind == "object"
+                && matches!(
+                    key.as_str(),
+                    "properties" | "required" | "additionalProperties"
+                ))
+                || (selected && depth == 0 && key == "$schema")
+                || (kind == "array" && matches!(key.as_str(), "items" | "minItems" | "maxItems"))
                 || (kind == "string" && matches!(key.as_str(), "minLength" | "maxLength"));
             ensure!(supported, "unsupported MCP schema keyword");
         }
         for key in ["title", "description"] {
             ensure!(
-                map.get(key).is_none_or(Value::is_string),
+                map.get(key)
+                    .is_none_or(|v| v.as_str().is_some_and(|s| s.len() <= DEFAULT_STRING_BYTES)),
                 "invalid MCP schema annotation"
+            );
+        }
+        if let Some(dialect) = map.get("$schema") {
+            ensure!(
+                matches!(
+                    dialect.as_str(),
+                    Some(
+                        "http://json-schema.org/draft-07/schema#"
+                            | "https://json-schema.org/draft/2020-12/schema"
+                    )
+                ),
+                "unsupported MCP schema dialect"
             );
         }
         let shape = match kind {
             "object" => {
                 ensure!(
-                    value["additionalProperties"] == false,
+                    value["additionalProperties"] == false
+                        || (selected && !map.contains_key("additionalProperties")),
                     "MCP objects must explicitly be closed"
                 );
                 let properties = value["properties"]
@@ -80,7 +120,10 @@ impl InputSchema {
                 ensure!(properties.len() <= MAX_ITEMS, "too many MCP properties");
                 let mut fields = BTreeMap::new();
                 for (name, schema) in properties {
-                    fields.insert(name.clone(), Self::node(schema, depth + 1, nodes)?);
+                    fields.insert(
+                        name.clone(),
+                        Self::node(schema, depth + 1, nodes, selected)?,
+                    );
                 }
                 let mut required = BTreeSet::new();
                 if let Some(value) = map.get("required") {
@@ -94,11 +137,33 @@ impl InputSchema {
                 }
                 Shape::Object(fields, required)
             }
-            "array" => Shape::Array(Box::new(Self::node(
-                value.get("items").context("MCP array items missing")?,
-                depth + 1,
-                nodes,
-            )?)),
+            "array" => {
+                let bound = |key: &str| -> anyhow::Result<Option<usize>> {
+                    map.get(key)
+                        .map(|v| {
+                            let n = v.as_u64().context("invalid MCP array bound")?;
+                            ensure!(
+                                n <= MAX_ITEMS as u64,
+                                "MCP array bound exceeds profile limits"
+                            );
+                            Ok(n as usize)
+                        })
+                        .transpose()
+                };
+                let min_items = bound("minItems")?.unwrap_or(0);
+                let max_items = bound("maxItems")?.unwrap_or(MAX_ITEMS);
+                ensure!(min_items <= max_items, "inconsistent MCP array bounds");
+                Shape::Array {
+                    items: Box::new(Self::node(
+                        value.get("items").context("MCP array items missing")?,
+                        depth + 1,
+                        nodes,
+                        selected,
+                    )?),
+                    min_items,
+                    max_items,
+                }
+            }
             "string" => {
                 let bound = |key: &str| -> anyhow::Result<Option<usize>> {
                     map.get(key)
@@ -138,7 +203,48 @@ impl InputSchema {
         };
         // `default` is preserved as metadata only. It never fills an absent
         // field; resource defaults require separately reviewed semantics.
-        Ok(Self(shape))
+        ensure!(
+            !(map.contains_key("enum") && map.contains_key("const")),
+            "ambiguous MCP enum and const"
+        );
+        let choices = if let Some(v) = map.get("enum") {
+            let entries = v.as_array().context("MCP enum must be an array")?;
+            ensure!(
+                !entries.is_empty() && entries.len() <= MAX_ITEMS,
+                "MCP enum exceeds profile limits"
+            );
+            let mut unique = BTreeSet::new();
+            for v in entries {
+                ensure!(
+                    v.is_null() || v.is_string() || v.is_boolean() || v.is_number(),
+                    "MCP enum only supports scalar values"
+                );
+                ensure!(
+                    v.to_string().len() <= DEFAULT_STRING_BYTES && unique.insert(v.to_string()),
+                    "invalid MCP enum value"
+                );
+            }
+            Some(entries.clone())
+        } else if let Some(v) = map.get("const") {
+            ensure!(
+                v.is_null() || v.is_string() || v.is_boolean() || v.is_number(),
+                "MCP const only supports scalar values"
+            );
+            ensure!(
+                v.to_string().len() <= DEFAULT_STRING_BYTES,
+                "MCP const exceeds profile limits"
+            );
+            Some(vec![v.clone()])
+        } else {
+            None
+        };
+        let schema = Self { shape, choices };
+        if let Some(choices) = &schema.choices {
+            for choice in choices {
+                schema.check(choice, 0, &mut 0)?;
+            }
+        }
+        Ok(schema)
     }
 
     pub fn validate(&self, value: &Value) -> anyhow::Result<()> {
@@ -151,7 +257,13 @@ impl InputSchema {
             depth <= MAX_DEPTH && *nodes <= 4096,
             "MCP arguments exceed profile limits"
         );
-        let valid = match &self.0 {
+        ensure!(
+            self.choices
+                .as_ref()
+                .is_none_or(|choices| choices.contains(value)),
+            "MCP argument is outside enum or const"
+        );
+        let valid = match &self.shape {
             Shape::Object(fields, required) => {
                 let args = value
                     .as_object()
@@ -170,11 +282,18 @@ impl InputSchema {
                 }
                 true
             }
-            Shape::Array(items) => {
+            Shape::Array {
+                items,
+                min_items,
+                max_items,
+            } => {
                 let args = value
                     .as_array()
                     .context("MCP arguments must match array schema")?;
-                ensure!(args.len() <= MAX_ITEMS, "too many MCP array elements");
+                ensure!(
+                    args.len() >= *min_items && args.len() <= *max_items,
+                    "MCP array length mismatch"
+                );
                 for value in args {
                     items.check(value, depth + 1, nodes)?;
                 }
@@ -342,6 +461,63 @@ mod tests {
         assert!(InputSchema::read(&json!({"type":"object","properties":{
             "number":{"type":"integer","maxLength":10}},"required":[],
             "additionalProperties":false}))
+        .is_err());
+    }
+    #[test]
+    fn selected_schema_enforces_enum_array_bounds_without_defaults_or_coercion() {
+        let schema = InputSchema::read_selected(&json!({"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{
+            "sort":{"type":"string","enum":["name","size"],"default":"name"},
+            "paths":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":2}},"required":["paths"]})).unwrap();
+        assert!(schema
+            .validate(&json!({"paths":["a"],"sort":"size"}))
+            .is_ok());
+        assert!(schema.validate(&json!({"paths":["a"]})).is_ok());
+        assert!(schema
+            .validate(&json!({"paths":["a"],"sort":"unknown"}))
+            .is_err());
+        assert!(schema.validate(&json!({"paths":["a"],"sort":1})).is_err());
+        assert!(schema.validate(&json!({"paths":[]})).is_err());
+        assert!(schema.validate(&json!({"paths":["a","b","c"]})).is_err());
+        assert!(schema
+            .validate(&json!({"paths":["a"],"unlisted":true}))
+            .is_err());
+        assert!(schema.validate(&json!({})).is_err());
+    }
+
+    #[test]
+    fn selected_schema_refuses_unimplemented_constraints_and_malformed_enum() {
+        for constraint in [
+            json!({"pattern":".*"}),
+            json!({"format":"uri"}),
+            json!({"enum":[]}),
+            json!({"enum":["a","a"]}),
+            json!({"enum":[{}]}),
+            json!({"enum":[1]}),
+            json!({"enum":["a"],"const":"a"}),
+        ] {
+            let mut field = json!({"type":"string"});
+            field
+                .as_object_mut()
+                .unwrap()
+                .extend(constraint.as_object().unwrap().clone());
+            assert!(
+                InputSchema::read_selected(&json!({"type":"object","properties":{"s":field}}))
+                    .is_err()
+            );
+        }
+        let open = json!({"type":"object","properties":{}});
+        assert!(
+            InputSchema::read(&open).is_err(),
+            "legacy still requires explicit closed objects"
+        );
+        assert!(InputSchema::read_selected(&open).is_ok());
+        assert!(InputSchema::read_selected(
+            &json!({"type":"object","properties":{},"additionalProperties":true})
+        )
+        .is_err());
+        assert!(InputSchema::read_selected(
+            &json!({"$schema":"https://unreviewed.invalid/schema","type":"object","properties":{}})
+        )
         .is_err());
     }
 }

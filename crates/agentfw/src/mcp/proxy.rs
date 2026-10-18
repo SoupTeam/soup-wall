@@ -77,6 +77,10 @@ async fn ask_daemon(
 /// line; when a child line is a `tools/list` result, asks the daemon and (if enforcing
 /// and rejected) replaces it with a JSON-RPC error carrying the same id.
 pub async fn run(cfg: ProxyCfg) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        std::env::var_os(super::linux_budget::ENVIRONMENT).is_none(),
+        "Linux MCP resource budgets require native admission and a selected filesystem or Git server profile"
+    );
     // The daemon is loopback-only. In particular, ::1 must not be routed to an
     // inherited HTTP proxy together with the local authentication token.
     let client = reqwest::Client::builder().no_proxy().build()?;

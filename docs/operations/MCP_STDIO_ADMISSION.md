@@ -5,6 +5,11 @@ execution boundary for a deliberately small stdio MCP contract. The legacy
 `agentfw mcp -- ...` command remains the manifest collector described in the
 existing architecture; its manifest decision does not gate individual calls.
 
+The separately installed [real filesystem server profile](MCP_REAL_FILESYSTEM.md)
+adds a Linux sandbox and a bounded concurrent transport for one pinned original
+server. Select it explicitly with `AGENTFW_MCP_SERVER_PROFILE`; it does not widen
+the legacy contract described below or the built-in resource executors.
+
 ## Operator configuration
 
 Start the Agent with enforcement enabled, the optional judge disabled, and an
@@ -29,11 +34,13 @@ the tool into a fabricated Bash command.
 The guarded collector uses `/native/v1` and the separate private `native-token`.
 It requires the same registry digest as the running daemon. Missing native
 configuration, unavailable inspection, malformed replies and shadow posture
-never authorize a guarded action. The collector is trusted and the server
-executable still runs as the operator; this command is not an OS sandbox.
-Admission covers the JSON-RPC stdin/stdout transport. Server stderr remains
-the runtime's diagnostic stream; arbitrary server logging and other process
-I/O are outside that admission guarantee.
+never authorize a guarded action. The collector is trusted. Without the explicitly selected
+[Linux filesystem server profile](MCP_REAL_FILESYSTEM.md), the child retains the
+operator's host permissions and server stderr remains its diagnostic stream.
+Admission alone covers the JSON-RPC stdin/stdout transport. The selected Linux
+profile additionally enforces a read-only process sandbox, suppresses stderr
+and withholds server logging/progress content; it is not a generic arbitrary
+MCP command sandbox.
 
 ## Boundaries
 
@@ -57,8 +64,11 @@ tool's result cannot undo its effects; preventing a send requires call admission
 
 ## Supported initial contract
 
-The initial contract is synchronous stdio with one outstanding request and
-text-only tool results. The SOU-11 input profile accepts closed top-level objects,
+The legacy guarded contract is synchronous stdio with one outstanding request
+and text-only tool results. The separate explicit
+[Linux filesystem server profile](MCP_REAL_FILESYSTEM.md) supports the pinned
+original server's nine read-only tools, eight active/eight queued calls,
+per-call cancellation and inspected original structured output. The SOU-11 input profile accepts closed top-level objects,
 bounded nested objects/arrays and explicitly typed scalar fields. The collector
 checks actual arguments before admission; the supported keywords and limits are
 listed below. Defaults are inert metadata, never inserted into arguments;
@@ -85,14 +95,14 @@ manifest is admitted, the collector answers these probes locally with JSON-RPC
 bounded discovery parameters, forwards no resource request or content, and
 keeps the tool connection available. Resource reads remain unsupported.
 
-Batched calls, tool-call notifications, duplicate/replayed identifiers,
+For the legacy guarded contract, batched calls, tool-call notifications, duplicate/replayed identifiers,
 unrecognized content paths, server-initiated requests, multimedia, embedded
 resources, structured content and result/server metadata are unsupported. This is a bounded
 integration, not a general MCP transport, concurrent executor, child-authority
 system or human approval channel. Ask and Deny must prevent the affected call
 or result; a correlated refusal lets a supported client continue ordinary work.
 Transport uncertainty ends the collector rather than silently switching to
-the legacy relay. Explicitly inspect the retained evidence and refusal behavior
+the legacy relay. The selected filesystem profile has its own bounded support matrix. Explicitly inspect the retained evidence and refusal behavior
 before attaching another server or runtime.
 
 For tools carrying an installed `resource_policy` (SOU-15), operation-level
@@ -546,6 +556,73 @@ Resource-aware stdio execution requires a reviewed executor that enforces grants
 Environment: Linux in an isolated Docker container, Rust 1.98.0, Python 3.11. Regressions cover repeated Ask/Deny followed by useful execution, missing/tampered/unexpected receipt hashes, URL port/path and mailbox permissions, canonical paths, forged evidence, contract downgrade, original host ID and metadata limits. Independent server ledgers verify zero tool effects on refusals; useful legacy controls execute once.
 
 The scripted baseline demonstration passes all 16 checks using actual loopback sender/receiver witnesses. Actual Claude Code is unavailable in the container, so that host check is **skipped**. This is source preparation evidence, not full SOU-15 acceptance or arbitrary-server sandboxing. Use the current discovered counts from `scripts/verify-sou17.py` rather than the earlier 91-case candidate total.
+
+## Authenticated child authority and host session binding (SOU-63)
+
+The trusted operator issues authority; neither model text nor the shared hook bearer establishes an agent/parent relationship. Keep the native issuer token out of models, MCP servers and hooks. A collector is a trusted execution broker, not a sandbox attestation.
+
+### Identity & Transport Support Matrix
+
+| Mode | Verified identity | Delegation and enforcement | Boundaries |
+| --- | --- | --- | --- |
+| Scoped MCP stdio collector (`--native-admission`, `--host-session`, `--child-authority`) | Signed host, server, agent and optional parent; current daemon instance | Child tools and typed resources/destinations must narrow a live parent's scope; host and collector share taint/incomplete floors | One active scoped collector per `(host, agent)`; separate agents for separate collectors |
+| Native collector without `host_session` / `child_authority` | Native transport bearer and registry; independent collector epoch | Existing isolated/per-collector contracts remain compatible | No shared host binding or delegated agent identity |
+| Legacy grant without signed `agent_id` | Legacy HMAC encoding remains verifiable | **Refused for every shared-host bootstrap** with `native_child_authority_identity_required`, including after host end/restart | A current instance prefix, raw payload agent name or optional resources cannot upgrade this format |
+| Scoped `/native/v1` session | Same grant as the collector; per-invocation schema, registry, call/result receipts remain separate | Every call/result/context validates the complete parent epoch chain and expiry | Partial binding tuples, unknown parents and duplicate agents are refused |
+| Scoped `/hook` with `X-Agentfw-Child-Authority` | Exact signed grant of an active scoped collector; optional payload IDs must agree | Shared host provenance; supported PreToolUse requires a granted registry tool or its exact `mcp__SERVER__TOOL` spelling, with verifiable destination scope | Hooks do not carry native resource/executor receipts. Resource-policy tools and unmatched builtin aliases such as `Bash`/`Read` are explicitly refused in delegated mode; use native admission for these operations |
+| Legacy `/hook` with hook bearer only | Transport bearer plus unverified session correlation | Existing nondelegated hook inspection remains available on never-scoped hosts | No authenticated child identity or consumption attestation; explicit agent/parent claims require signed proof. Hook outage or ignored HTTP decisions remain host-dependent fail-open limitations |
+
+### Signed grant and issuer bootstrap
+
+The compatible `sw-child-authority/1` HMAC-SHA256 encoding retains the domain `agentfw/child-authority-key/v1\0`, length-prefixed fields and constant-time signature verification. Optional `agent_id`, `parent_id` and `granted_resources` are signed along with host/server/tools/time/nonce. Absence of all optional fields preserves the legacy encoding for cryptographic verification only. Every request with `host_session` must provide a grant with a signed nonempty `agent_id` and the current daemon instance binding. A legacy grant is rejected before allocating a session or mutating host authority, even when its HMAC and TTL are valid. Isolated native requests omit both `host_session` and `child_authority`; they do not use legacy host grants.
+
+Scoped grants now bind their signed nonce to the current daemon instance (root: `<instance_id>.<random nonce>`; child: `<instance_id>.<parent binding SHA-256>.<random nonce>`). An authenticated issuer reads `GET /native/v1/instance` with the **native bearer**, verifies the returned registry digest against the installed registry, then passes `instance_id` to mint. Its `bindings` array provides the live parent binding for the matching host/agent; pass this as `--parent-binding` alongside `--parent-id`. The instance identifier conveys no authority without a valid signature. Previously issued scoped grants need reissuing for the current instance; legacy host grants must be replaced by grants containing a signed agent identity and current instance. Isolated requests without a host binding retain their prior contract.
+
+```sh
+agentfw child-authority mint --session HOST --server SERVER \
+  --instance-id INSTANCE --agent-id PARENT --tools read_document,send_http \
+  --resources /canonical/workspace,internal.example --ttl-seconds 300
+
+agentfw child-authority mint --session HOST --server CHILD_SERVER \
+  --instance-id INSTANCE --agent-id CHILD --parent-id PARENT --parent-binding BINDING \
+  --tools send_http --resources https://internal.example/exact-path --ttl-seconds 60
+
+agentfw child-authority verify --session HOST --server CHILD_SERVER --token TOKEN
+```
+
+Mint uses the existing private native token in the selected Agent home. Register the parent collector first, then its children. Merely writing a parent name into a signed grant is insufficient: the daemon must resolve a live scoped parent. `verify` checks cryptographic claims and time, including legacy encoding; it does not certify admission eligibility. Shared-host admission additionally requires signed agent identity and checks the current daemon instance, active session and lineage. Mint without `--agent-id` remains a legacy-format compatibility operation and does not yield a usable host-bound credential; use `--agent-id` and `--instance-id` for collector binding.
+
+Collectors pass `--host-session` and `--child-authority` together (or `AGENTFW_HOST_SESSION` and `AGENTFW_CHILD_AUTHORITY`); both require `--native-admission`. Explicit flags override environment values. The child MCP server does not inherit either authority/session environment variable or the native/hook bearer variables.
+
+### Hook setup and authority limits
+
+After the scoped collector registers, a **trusted host launcher** may add this header to the selected HTTP hook entries:
+
+```json
+{
+  "headers": {
+    "Authorization": "Bearer $AGENTFW_TOKEN",
+    "X-Agentfw-Child-Authority": "$AGENTFW_CHILD_AUTHORITY"
+  },
+  "allowedEnvVars": ["AGENTFW_TOKEN", "AGENTFW_CHILD_AUTHORITY"]
+}
+```
+
+Use the exact collector grant; payload `session_id` must equal its host session. Missing agent/parent fields resolve from that proof, never from an arbitrary active collector. Explicit mismatches, forged/expired/replaced grants and unknown agents are refused. The default installer stays in unbound mode; it does not overwrite active host settings or invent a Claude Code parent relationship. If a launcher cannot establish identity and provision proof, delegated hook authority is unsupported.
+
+For supported PreToolUse, tools must match immutable registry names, directly or as `mcp__SERVER__TOOL` with the exact signed server identity. Wrong-server aliases are refused. Policy uses the registry action/egress semantics; hook approvals keep their original wire tool name and argument binding. Network destinations narrow the signed scope; there is no builtin-to-MCP alias mapping. A hook cannot prove native filesystem/executor receipt binding, so scoped filesystem operations and builtin shell commands must use native admission instead. Signed hook results remain untrusted `Provenance::McpServer` from the verified server, even if their payload claims a local tool name. This establishes origin, not exact native invocation or observable model-context disposal.
+
+Authentication/conflict refusals are audited without tokens. Protected PreToolUse receives HTTP 200 with `permissionDecision: deny` in enforce mode; shadow mode stays nonblocking. Retrospective PostToolUse/lifecycle errors return `{}` and mark shared history incomplete before returning. A malformed or truncated proof/body cannot erase the incomplete-history floor. Native authority and firewall locks are acquired in that order; final hook approval redemption rechecks live authority after any judge await.
+
+### Scope and lifecycle
+
+- Filesystem grants use absolute canonical path components; `..` and suffix collisions do not establish containment. Native resource admission and executor confinement remain mandatory.
+- A destination host/domain may narrow to an exact canonical URL or mailbox. Exact URL scopes preserve scheme, port and path; mailboxes cannot widen back to domains. Unknown parent resource scope cannot confer a proven destination on a child.
+- Parent identity is pinned to its registered session epoch. Expiry, session end or idle eviction invalidates descendants; re-registering the same name does not resurrect them. New descendants require a live parent with the complete scope and the exact parent binding signed into the grant nonce; old grants cannot bootstrap under a replacement parent epoch; stale firewall tool records are never a delegation source.
+- A grant may bootstrap a collector again within the same daemon lifetime and expiry after its previous session ends, but creates a new epoch; host history is retained, and completed per-agent authority records are removed without clearing other agents or shared taint. Concurrent reuse of the same scoped agent is refused.
+- Scoped host tombstones are bounded at 64 per daemon lifetime. A completed host cannot revert to unsigned hook identity. New scoped host IDs beyond the cap are refused with `native_host_binding_cap`, rather than silently evicting security state.
+- Daemon restart changes `instance_id` and refuses old agent-bound grants with `native_child_authority_instance_mismatch`. In-memory history is not durable: the operator must start fresh host conversations and issue fresh grants after restart; do not resume old model context under a fresh grant. Legacy grants lacking a signed agent identity are refused on every shared-host admission, both before and after restart; selecting the older wire format cannot bypass the generation or completed-host protections. Rotating the native issuer token also invalidates existing grant signatures. There is no claim of durable model-context revocation or host enforcement during daemon outage.
+- The real-process tests exercise independent Server A/B collectors with distinct signed server/agent identities and a real parent → narrowed child tool grant, zero execution in the denied Server B ledger, a separate-session success control, and a signed hook-result → MCP-call refusal.
 
 ## Local demonstration
 

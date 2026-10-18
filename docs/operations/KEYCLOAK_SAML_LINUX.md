@@ -11,6 +11,9 @@ SQLite/PostgreSQL results, exact source/binary hashes and earlier failed attempt
 
 ## Reproduce
 
+For phase diagnostics, owned cleanup, bounded batches and rerunning only the
+failed backend, see [SSO acceptance diagnostics](SSO_ACCEPTANCE_DIAGNOSTICS.md).
+
 Use an isolated Linux x86_64 host with Docker, Rust, Python 3, `libnss3-tools`
 and Playwright's Chromium system dependencies. From the repository root:
 

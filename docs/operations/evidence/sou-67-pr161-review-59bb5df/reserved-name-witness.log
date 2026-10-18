@@ -1,0 +1,47 @@
+Review witness: copy the existing integration fixture and replace fetch_document with create_file throughout. Keep the success assertion to test the claim that any operator-owned name can perform a constrained read. A failure at the success assertion demonstrates the reserved-name exception.
+    Blocking waiting for file lock on build directory
+   Compiling agentfw v0.3.0 (/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/crates/agentfw)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 11.92s
+     Running tests/sou67_review_reserved_name.rs (target/debug/deps/sou67_review_reserved_name-b03bff23df18d853)
+
+running 1 test
+
+thread 'sou67_operator_owned_tool_bindings_allow_arbitrary_tool_name_under_constrained_file_execution' (18441246) panicked at crates/agentfw/tests/sou67_review_reserved_name.rs:4980:9:
+assertion failed: reply["result"]["isError"].is_null() || reply["result"]["isError"] == false
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test sou67_operator_owned_tool_bindings_allow_arbitrary_tool_name_under_constrained_file_execution ... FAILED
+
+failures:
+
+failures:
+    sou67_operator_owned_tool_bindings_allow_arbitrary_tool_name_under_constrained_file_execution
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 72 filtered out; finished in 1.03s
+
+error: test failed, to rerun pass `-p agentfw --test sou67_review_reserved_name`
+
+Witness cargo exit code: 101
+
+Repeat with the correlated response printed to identify the exact refusal reason.
+   Compiling agentfw v0.3.0 (/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/crates/agentfw)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.35s
+     Running tests/sou67_review_reserved_name.rs (target/debug/deps/sou67_review_reserved_name-b03bff23df18d853)
+
+running 1 test
+reserved-name response: {"id":"sou67-auth","jsonrpc":"2.0","result":{"content":[{"text":"Soup Wall withheld MCP invocation (resource_create_profile_required)","type":"text"}],"isError":true}}
+
+thread 'sou67_operator_owned_tool_bindings_allow_arbitrary_tool_name_under_constrained_file_execution' (18443805) panicked at crates/agentfw/tests/sou67_review_reserved_name.rs:4981:9:
+assertion failed: reply["result"]["isError"].is_null() || reply["result"]["isError"] == false
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test sou67_operator_owned_tool_bindings_allow_arbitrary_tool_name_under_constrained_file_execution ... FAILED
+
+failures:
+
+failures:
+    sou67_operator_owned_tool_bindings_allow_arbitrary_tool_name_under_constrained_file_execution
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 72 filtered out; finished in 1.00s
+
+error: test failed, to rerun pass `-p agentfw --test sou67_review_reserved_name`
+
+Witness cargo exit code: 101

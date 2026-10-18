@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-6CoC82q/B/3lLvD/pGY1FVz4c6K4Z6Kon2PD0ZhEzbA='; style-src 'unsafe-inline'; img-src 'none'; connect-src 'none'; font-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'">
+  <title>Agent audit explorer</title>
+  <style>
+    :root { color-scheme: light; --ink:#192534; --muted:#526174; --line:#d8e0e8; --paper:#fff; --ground:#f4f6f9; --blue:#174f93; --focus:#005fcc; --warn:#7d4300; --warn-bg:#fff3d7; --danger:#9b2626; --danger-bg:#fff0ed; --good:#18603a; --good-bg:#e9f7ee; }
+    * { box-sizing:border-box; }
+    html { font-family:system-ui,-apple-system,"Segoe UI",sans-serif; line-height:1.45; background:var(--ground); color:var(--ink); }
+    body { margin:0; }
+    button,input,select { font:inherit; }
+    button,select { cursor:pointer; }
+    :focus-visible { outline:3px solid var(--focus); outline-offset:2px; }
+    .shell { max-width:1440px; margin:auto; padding:24px clamp(16px,3vw,40px) 64px; }
+    .eyebrow { margin:0 0 6px; color:var(--blue); font-size:.76rem; font-weight:750; letter-spacing:.1em; text-transform:uppercase; }
+    h1 { margin:0; font-size:clamp(1.65rem,3vw,2.5rem); letter-spacing:-.025em; }
+    h2 { margin:0 0 14px; font-size:1.22rem; }
+    h3 { margin:0 0 10px; font-size:1rem; }
+    p { margin:0 0 12px; }
+    .intro { margin-top:10px; max-width:80ch; color:var(--muted); }
+    .stamp { margin:18px 0 0; font-size:.86rem; color:var(--muted); }
+    .panel { background:var(--paper); border:1px solid var(--line); border-radius:12px; box-shadow:0 1px 4px #1925340b; padding:20px; margin-top:20px; }
+    .notice { border-left:4px solid var(--warn); background:var(--warn-bg); padding:12px 16px; margin:16px 0 0; border-radius:5px; }
+    .notice p:last-child { margin-bottom:0; }
+    .notice.error { border-left-color:var(--danger); background:var(--danger-bg); }
+    .notice-list { margin:8px 0 0; padding-left:22px; }
+    .summary { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:10px; margin:20px 0; }
+    .metric { min-width:0; background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+    .metric strong { display:block; font-size:1.55rem; font-variant-numeric:tabular-nums; }
+    .metric span { display:block; color:var(--muted); font-size:.83rem; }
+    .filters { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+    .field { min-width:0; }
+    .field label { display:block; font-size:.82rem; color:var(--muted); font-weight:650; margin-bottom:4px; }
+    .field input,.field select { width:100%; min-height:40px; background:#fff; color:var(--ink); border:1px solid #aebdca; border-radius:7px; padding:7px 10px; }
+    .field.search { grid-column:span 2; }
+    .filter-actions { display:flex; align-items:end; gap:12px; }
+    .secondary { border:1px solid #9eb0c4; background:#fff; color:var(--blue); border-radius:7px; padding:8px 13px; min-height:40px; font-weight:650; }
+    .secondary:hover { background:#eef4fb; }
+    .table-heading { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:6px 16px; }
+    .small { color:var(--muted); font-size:.88rem; }
+    .table-wrap { width:100%; overflow:auto; border:1px solid var(--line); border-radius:8px; }
+    table { width:100%; border-collapse:collapse; min-width:780px; }
+    th,td { text-align:left; vertical-align:top; border-bottom:1px solid var(--line); padding:11px 12px; }
+    th { background:#edf2f7; font-size:.78rem; color:#31465e; position:sticky; top:0; z-index:1; }
+    tbody tr:last-child td { border-bottom:0; }
+    tbody tr:hover { background:#f7faff; }
+    .mono { font-variant-numeric:tabular-nums; font-feature-settings:"tnum"; }
+    .cell-muted { color:var(--muted); }
+    .badge { display:inline-block; border-radius:4px; border:1px solid currentColor; font-size:.75rem; font-weight:750; padding:1px 6px; white-space:nowrap; text-transform:capitalize; }
+    .badge.allow { color:var(--good); background:var(--good-bg); }
+    .badge.ask { color:var(--warn); background:var(--warn-bg); }
+    .badge.deny { color:var(--danger); background:var(--danger-bg); }
+    .badge.other { color:#45576b; background:#f0f2f5; }
+    .mode { display:block; font-size:.78rem; color:var(--muted); margin-top:4px; }
+    .detail-button { background:transparent; border:0; color:var(--blue); font-weight:700; padding:2px 0; text-decoration:underline; text-underline-offset:3px; }
+    .pager { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-top:14px; }
+    .pager-actions { display:flex; gap:8px; align-items:center; }
+    .pager button { border:1px solid #9eb0c4; background:#fff; border-radius:6px; padding:6px 11px; color:var(--blue); }
+    .pager button:disabled { opacity:.45; cursor:default; }
+    .pager select { min-height:35px; border:1px solid #9eb0c4; border-radius:6px; background:#fff; padding:4px 7px; }
+    .empty { text-align:center; padding:30px 12px; color:var(--muted); }
+    .detail-top { display:flex; justify-content:space-between; align-items:start; gap:12px; }
+    .detail-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px 24px; margin:18px 0; }
+    .detail-item dt { font-size:.78rem; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+    .detail-item dd { margin:3px 0 0; overflow-wrap:anywhere; }
+    .detail-item.wide { grid-column:span 2; }
+    .evidence { margin:10px 0 0; padding-left:22px; }
+    .unavailable { color:var(--muted); font-style:italic; }
+    .fine-print { margin-top:20px; color:var(--muted); font-size:.84rem; }
+    [hidden] { display:none !important; }
+    @media(max-width:1000px) { .summary { grid-template-columns:repeat(3,minmax(0,1fr)); } .filters { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+    @media(max-width:600px) { .shell { padding-top:16px; } .panel { padding:15px; } .summary { grid-template-columns:repeat(2,minmax(0,1fr)); } .filters { grid-template-columns:1fr; } .field.search { grid-column:auto; } .detail-grid { grid-template-columns:1fr; } .detail-item.wide { grid-column:auto; } .table-wrap { margin-left:-15px; width:calc(100% + 30px); border-left:0; border-right:0; border-radius:0; } }
+  </style>
+</head>
+<body>
+<main class="shell">
+  <p class="eyebrow">Private local report</p>
+  <h1>Agent audit explorer</h1>
+  <p class="intro">A view of recorded Agent decisions and available evidence. An allowed decision alone does not prove a tool executed. This report contains a limited projection of the selected local audit log.</p>
+  <p class="stamp" id="report-stamp">Loading report…</p>
+  <div class="notice error" id="load-error" role="alert" hidden></div>
+  <div class="notice" id="report-notice" role="status" hidden></div>
+
+  <section class="summary" aria-label="Summary counts" id="summary" hidden>
+    <div class="metric"><strong id="count-events">0</strong><span>Accepted events</span></div>
+    <div class="metric"><strong id="count-allow">0</strong><span>Allow verdicts</span></div>
+    <div class="metric"><strong id="count-ask">0</strong><span>Ask verdicts</span></div>
+    <div class="metric"><strong id="count-deny">0</strong><span>Deny verdicts</span></div>
+    <div class="metric"><strong id="count-shadow">0</strong><span>Shadow decisions</span></div>
+    <div class="metric"><strong id="count-withheld">0</strong><span>Withheld results</span></div>
+  </section>
+
+  <section class="panel" id="filters-panel" aria-labelledby="filter-title" hidden>
+    <h2 id="filter-title">Find events</h2>
+    <div class="filters">
+      <div class="field search"><label for="search">Search projected event, tool, rule, alias or reason</label><input id="search" type="search" autocomplete="off" placeholder="Search recorded details"></div>
+      <div class="field"><label for="verdict">Verdict</label><select id="verdict"><option value="">All verdicts</option></select></div>
+      <div class="field"><label for="event">Event</label><select id="event"><option value="">All events</option></select></div>
+      <div class="field"><label for="tool">Tool contains</label><input id="tool" type="search" autocomplete="off" placeholder="Tool name or alias"></div>
+      <div class="field"><label for="session">Session alias contains</label><input id="session" type="search" autocomplete="off" placeholder="Session alias"></div>
+      <div class="field"><label for="from-date">From date (UTC)</label><input id="from-date" type="date"></div>
+      <div class="field"><label for="to-date">Through date (UTC)</label><input id="to-date" type="date"></div>
+      <div class="filter-actions"><button class="secondary" id="clear" type="button">Clear filters</button></div>
+    </div>
+  </section>
+
+  <section class="panel" id="timeline-panel" aria-labelledby="timeline-title" hidden>
+    <div class="table-heading"><h2 id="timeline-title" tabindex="-1">Decision timeline</h2><p class="small" id="filter-count" aria-live="polite"></p></div>
+    <div class="table-wrap" role="region" aria-label="Scrollable decision timeline" tabindex="0">
+      <table><thead><tr><th scope="col">Time (UTC)</th><th scope="col">Event</th><th scope="col">Verdict</th><th scope="col">Tool</th><th scope="col">Session</th><th scope="col">Evidence</th><th scope="col">Details</th></tr></thead><tbody id="event-rows"></tbody></table>
+    </div>
+    <p class="empty" id="empty" hidden>No events match these filters.</p>
+    <div class="pager" id="pager"><label class="small" for="page-size">Rows per page <select id="page-size"><option>25</option><option selected>50</option><option>100</option></select></label><div class="pager-actions"><button id="previous" type="button">Previous</button><span id="page-label" class="small" aria-live="polite"></span><button id="next" type="button">Next</button></div></div>
+  </section>
+
+  <section class="panel" id="detail-panel" aria-labelledby="detail-title" tabindex="-1" hidden>
+    <div class="detail-top"><h2 id="detail-title">Event details</h2><button class="secondary" id="close-detail" type="button">Close details</button></div>
+    <p class="small" id="detail-summary"></p>
+    <dl class="detail-grid" id="detail-grid"></dl>
+    <h3>Evidence still missing</h3>
+    <ul class="evidence" id="missing-list"></ul>
+  </section>
+
+  <p class="fine-print">Generated for offline review. The source log may contain further sensitive material and must be handled separately. Times and date filters use UTC.</p>
+</main>
+<script type="application/json" id="audit-data">__AUDIT_DATA__</script>
+<script>
+(() => {
+  'use strict';
+  const byId = (id) => document.getElementById(id);
+  const safeString = (value) => typeof value === 'string' ? value : '';
+  const printable = (value) => value === null || value === undefined || value === '' ? 'Not available in this report' : String(value);
+  const setText = (id, value) => { byId(id).textContent = String(value); };
+  const cell = (row, value, className = '') => {
+    const td = document.createElement('td');
+    td.textContent = printable(value);
+    if (className) td.className = className;
+    row.appendChild(td);
+    return td;
+  };
+  const addDetail = (label, value, wide = false) => {
+    const box = document.createElement('div');
+    box.className = 'detail-item' + (wide ? ' wide' : '');
+    const term = document.createElement('dt');
+    term.textContent = label;
+    const description = document.createElement('dd');
+    description.textContent = printable(value);
+    if (value === null || value === undefined || value === '') description.className = 'unavailable';
+    box.append(term, description);
+    byId('detail-grid').appendChild(box);
+  };
+  const evidenceLabel = (event) => {
+    const stage = safeString(event.stage);
+    if (stage === 'observation') return event.mode === 'shadow' ? 'Post-tool callback observed; verdict shadow' : 'Post-tool callback observed';
+    if (event.mode === 'shadow') return 'Shadow decision only';
+    if (stage === 'admission') return event.released === true ? 'Call admitted; execution unobserved' : event.released === false ? 'Call not admitted' : 'Call admission; release unknown';
+    if (stage === 'result') return event.released === true ? 'Result released' : event.released === false ? 'Result withheld' : 'Result release unknown';
+    if (stage === 'context') return 'Context decision';
+    if (stage === 'decision') return 'Decision only';
+    return 'Evidence limited';
+  };
+  const showDetail = (event, trigger) => {
+    byId('detail-panel').hidden = false;
+    byId('detail-grid').replaceChildren();
+    byId('missing-list').replaceChildren();
+    setText('detail-title', 'Event ' + printable(event.id) + ' details');
+    setText('detail-summary', evidenceLabel(event));
+    addDetail('Time (UTC)', event.timestamp);
+    addDetail('Event', event.event);
+    addDetail('Verdict', event.verdict);
+    addDetail('Policy mode', event.mode);
+    addDetail('Evidence stage', evidenceLabel(event), true);
+    addDetail('Tool', event.tool);
+    addDetail('Session alias', event.session_alias);
+    addDetail('Rule', event.rule);
+    addDetail('Reason', event.reason, true);
+    addDetail('Detector categories', Array.isArray(event.detectors) && event.detectors.length ? event.detectors.join(', ') : null);
+    addDetail('Detector severity', Array.isArray(event.severity) && event.severity.length ? event.severity.join(', ') : null);
+    addDetail('Taint origin', event.taint_origin);
+    addDetail('Latency', Number.isFinite(event.latency_ms) ? event.latency_ms + ' ms' : null);
+    addDetail('Call correlation', event.correlation);
+    if (Array.isArray(event.details)) {
+      for (const item of event.details.slice(0, 20)) {
+        if (item && typeof item.label === 'string') addDetail(item.label, item.value, true);
+      }
+    }
+    const missing = Array.isArray(event.evidence_missing) ? event.evidence_missing : [];
+    for (const message of missing.length ? missing : ['No additional missing evidence recorded for this event.']) {
+      const li = document.createElement('li');
+      li.textContent = safeString(message);
+      byId('missing-list').appendChild(li);
+    }
+    byId('detail-panel').focus();
+    byId('close-detail').onclick = () => { byId('detail-panel').hidden = true; trigger.focus(); };
+  };
+  const showError = (message) => {
+    const error = byId('load-error');
+    error.textContent = message;
+    error.hidden = false;
+    setText('report-stamp', 'Report unavailable');
+  };
+
+  let report;
+  try {
+    report = JSON.parse(byId('audit-data').textContent);
+    if (!report || !Array.isArray(report.events) || !report.meta || typeof report.meta !== 'object') throw new Error('Invalid report shape');
+  } catch (_) {
+    showError('This report cannot be read. Generate it again from the selected audit log.');
+    return;
+  }
+  const events = report.events;
+  const meta = report.meta;
+  const totals = meta.totals || {};
+  const fmtCount = (number) => Number.isFinite(number) ? number.toLocaleString() : '0';
+  const count = (predicate) => events.reduce((total, event) => total + (predicate(event) ? 1 : 0), 0);
+  setText('report-stamp', 'Generated ' + printable(meta.generated_at) + ' · ' + fmtCount(events.length) + ' accepted events');
+  setText('count-events', fmtCount(events.length));
+  setText('count-allow', fmtCount(count((e) => e.verdict === 'allow')));
+  setText('count-ask', fmtCount(count((e) => e.verdict === 'ask')));
+  setText('count-deny', fmtCount(count((e) => e.verdict === 'deny')));
+  setText('count-shadow', fmtCount(count((e) => e.mode === 'shadow')));
+  setText('count-withheld', fmtCount(count((e) => e.stage === 'result' && e.released === false)));
+  byId('summary').hidden = false;
+
+  const notices = Array.isArray(meta.notices) ? meta.notices.filter((item) => typeof item === 'string') : [];
+  const hasGaps = meta.source_status === 'partial' || ['malformed', 'unsupported', 'skipped'].some((key) => Number(totals[key]) > 0);
+  if (hasGaps || notices.length) {
+    const box = byId('report-notice');
+    const heading = document.createElement('strong');
+    heading.textContent = hasGaps ? 'Source evidence is partial.' : 'Report notice';
+    box.appendChild(heading);
+    const counts = document.createElement('p');
+    counts.textContent = 'Lines read: ' + fmtCount(Number(totals.lines)) + '; malformed: ' + fmtCount(Number(totals.malformed)) + '; unsupported: ' + fmtCount(Number(totals.unsupported)) + '; skipped: ' + fmtCount(Number(totals.skipped)) + '.';
+    box.appendChild(counts);
+    if (notices.length) {
+      const list = document.createElement('ul');
+      list.className = 'notice-list';
+      for (const message of notices) {
+        const li = document.createElement('li');
+        li.textContent = message;
+        list.appendChild(li);
+      }
+      box.appendChild(list);
+    }
+    box.hidden = false;
+  }
+
+  const controls = ['search', 'verdict', 'event', 'tool', 'session', 'from-date', 'to-date'];
+  const choices = [ ['verdict', 'verdict'], ['event', 'event'] ];
+  for (const [selectId, key] of choices) {
+    const values = [...new Set(events.map((e) => safeString(e[key])).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    for (const value of values) {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = value;
+      byId(selectId).appendChild(option);
+    }
+  }
+  const indexed = events.map((event) => ({
+    event,
+    day: safeString(event.timestamp).slice(0, 10),
+    haystack: [event.event, event.verdict, event.tool, event.session_alias, event.rule, event.reason, event.correlation,
+      ...(Array.isArray(event.detectors) ? event.detectors : []), ...(Array.isArray(event.severity) ? event.severity : [])].map(safeString).join(' ').toLocaleLowerCase()
+  }));
+  let filtered = indexed;
+  let page = 0;
+  const render = () => {
+    const size = Number(byId('page-size').value);
+    const pages = Math.max(1, Math.ceil(filtered.length / size));
+    page = Math.min(page, pages - 1);
+    const start = page * size;
+    const slice = filtered.slice(start, start + size);
+    const body = byId('event-rows');
+    body.replaceChildren();
+    for (const item of slice) {
+      const event = item.event;
+      const row = document.createElement('tr');
+      cell(row, event.timestamp, 'mono');
+      cell(row, event.event);
+      const verdictCell = cell(row, '');
+      verdictCell.textContent = '';
+      const badge = document.createElement('span');
+      badge.className = 'badge ' + (['allow', 'ask', 'deny'].includes(event.verdict) ? event.verdict : 'other');
+      badge.textContent = event.verdict == null ? 'No policy verdict' : printable(event.verdict);
+      verdictCell.appendChild(badge);
+      const mode = document.createElement('span');
+      mode.className = 'mode';
+      mode.textContent = ['shadow', 'enforced'].includes(event.mode) ? event.mode : 'mode unknown';
+      verdictCell.appendChild(mode);
+      cell(row, event.tool);
+      cell(row, event.session_alias);
+      cell(row, evidenceLabel(event));
+      const action = cell(row, '');
+      action.textContent = '';
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'detail-button';
+      button.textContent = 'View event ' + printable(event.id);
+      button.setAttribute('aria-label', 'View details for event ' + printable(event.id));
+      button.addEventListener('click', () => showDetail(event, button));
+      action.appendChild(button);
+      body.appendChild(row);
+    }
+    byId('empty').hidden = filtered.length !== 0;
+    byId('pager').hidden = filtered.length === 0;
+    setText('filter-count', fmtCount(filtered.length) + ' of ' + fmtCount(events.length) + ' events');
+    setText('page-label', 'Page ' + (page + 1) + ' of ' + pages);
+    byId('previous').disabled = page === 0;
+    byId('next').disabled = page >= pages - 1;
+  };
+  const applyFilters = () => {
+    const search = byId('search').value.trim().toLocaleLowerCase();
+    const verdict = byId('verdict').value;
+    const eventName = byId('event').value;
+    const tool = byId('tool').value.trim().toLocaleLowerCase();
+    const session = byId('session').value.trim().toLocaleLowerCase();
+    const from = byId('from-date').value;
+    const to = byId('to-date').value;
+    filtered = indexed.filter((item) => {
+      const e = item.event;
+      return (!search || item.haystack.includes(search)) &&
+        (!verdict || e.verdict === verdict) &&
+        (!eventName || e.event === eventName) &&
+        (!tool || safeString(e.tool).toLocaleLowerCase().includes(tool)) &&
+        (!session || safeString(e.session_alias).toLocaleLowerCase().includes(session)) &&
+        (!from || (item.day && item.day >= from)) &&
+        (!to || (item.day && item.day <= to));
+    });
+    page = 0;
+    byId('detail-panel').hidden = true;
+    render();
+  };
+  let searchTimer;
+  for (const id of controls) {
+    const isSearch = ['search', 'tool', 'session'].includes(id);
+    byId(id).addEventListener(isSearch ? 'input' : 'change', () => {
+      if (isSearch) {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(applyFilters, 140);
+      } else applyFilters();
+    });
+  }
+  byId('clear').addEventListener('click', () => {
+    for (const id of controls) byId(id).value = '';
+    clearTimeout(searchTimer);
+    applyFilters();
+    byId('search').focus();
+  });
+  byId('page-size').addEventListener('change', () => { page = 0; render(); });
+  byId('previous').addEventListener('click', () => { if (page > 0) { page--; render(); byId('timeline-title').focus(); } });
+  byId('next').addEventListener('click', () => { if ((page + 1) * Number(byId('page-size').value) < filtered.length) { page++; render(); byId('timeline-title').focus(); } });
+  byId('filters-panel').hidden = false;
+  byId('timeline-panel').hidden = false;
+  render();
+})();
+</script>
+</body>
+</html>

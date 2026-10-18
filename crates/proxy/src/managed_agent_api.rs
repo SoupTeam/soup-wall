@@ -12,7 +12,9 @@ use axum::Json;
 use serde::Deserialize;
 
 use crate::handlers::Shared;
-use crate::tenant_store::{AppliedReport, EnrolledAgent, ManagedIssuer, TenantStore};
+use crate::tenant_store::{
+    AppliedReport, EnrolledAgent, ManagedIssuer, RotationRequest, TenantStore,
+};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -114,6 +116,34 @@ pub async fn revoke(
         Err(_) => failure(
             StatusCode::SERVICE_UNAVAILABLE,
             "Agent revocation unavailable",
+        ),
+    }
+}
+
+/// Admin-only credential rotation. Never authenticates using the Agent bearer.
+pub async fn rotate_credential(
+    State(state): State<Shared>,
+    Path((tenant_id, agent_id)): Path<(String, String)>,
+    Json(input): Json<RotationRequest>,
+) -> Response {
+    let Some(store) = store(&state) else {
+        return failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Console storage unavailable",
+        );
+    };
+    match tokio::task::spawn(async move {
+        store
+            .rotate_managed_agent_async(&tenant_id, &agent_id, &input)
+            .await
+    })
+    .await
+    {
+        Ok(Ok(receipt)) => Json(receipt).into_response(),
+        Ok(Err(_)) => failure(StatusCode::CONFLICT, "credential rotation refused"),
+        Err(_) => failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "credential rotation unavailable",
         ),
     }
 }
@@ -311,30 +341,35 @@ pub async fn deployments(
     }
 }
 
-async fn principal(state: &Shared, headers: &HeaderMap) -> Option<(TenantStore, EnrolledAgent)> {
+async fn principal(
+    state: &Shared,
+    headers: &HeaderMap,
+) -> Option<(TenantStore, EnrolledAgent, String)> {
     let db = store(state)?;
     let bearer = headers
         .get(axum::http::header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())?
         .to_owned();
     let lookup = db.clone();
-    let identity =
-        tokio::task::spawn(
-            async move { lookup.authenticate_managed_agent_async(Some(&bearer)).await },
-        )
-        .await
-        .ok()?
-        .ok()??;
-    Some((db, identity))
+    let lookup_bearer = bearer.clone();
+    let identity = tokio::task::spawn(async move {
+        lookup
+            .authenticate_managed_agent_async(Some(&lookup_bearer))
+            .await
+    })
+    .await
+    .ok()?
+    .ok()??;
+    Some((db, identity, bearer))
 }
 
 /// Only an enrolled Agent may fetch its own latest pending deployment.
 pub async fn fetch_policy(State(state): State<Shared>, headers: HeaderMap) -> Response {
-    let Some((db, who)) = principal(&state, &headers).await else {
+    let Some((db, who, bearer)) = principal(&state, &headers).await else {
         return failure(StatusCode::UNAUTHORIZED, "Agent authentication required");
     };
     match tokio::task::spawn(async move {
-        db.deliver_managed_bundle_async(&who.tenant_id, &who.agent_id)
+        db.deliver_authorized_managed_bundle_async(&who.tenant_id, &who.agent_id, &bearer)
             .await
     })
     .await
@@ -363,12 +398,17 @@ pub async fn acknowledge_policy(
     headers: HeaderMap,
     Json(report): Json<AppliedReport>,
 ) -> Response {
-    let Some((db, who)) = principal(&state, &headers).await else {
+    let Some((db, who, bearer)) = principal(&state, &headers).await else {
         return failure(StatusCode::UNAUTHORIZED, "Agent authentication required");
     };
     match tokio::task::spawn(async move {
-        db.acknowledge_managed_bundle_async(&who.tenant_id, &who.agent_id, &report)
-            .await
+        db.acknowledge_authorized_managed_bundle_async(
+            &who.tenant_id,
+            &who.agent_id,
+            &bearer,
+            &report,
+        )
+        .await
     })
     .await
     {

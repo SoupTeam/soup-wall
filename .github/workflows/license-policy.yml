@@ -2,15 +2,25 @@ name: License and provenance policy
 
 on:
   pull_request:
-  push:
-    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# Only the newest validation for a PR/ref is useful.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: license-policy.yml
   rust-license-policy:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'rust-license-policy')
     name: Locked workspace license policy
     runs-on: ubuntu-latest
     timeout-minutes: 20

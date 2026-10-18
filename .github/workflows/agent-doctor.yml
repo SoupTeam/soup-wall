@@ -1,0 +1,45 @@
+name: SOU-74 installed Agent doctor
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: agent-doctor.yml
+  agent-doctor-linux:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'agent-doctor-linux')
+    name: doctor-linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Record exact source
+        run: |
+          git rev-parse HEAD
+          rustc --version
+          cargo --version
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Focused doctor and privacy unit tests
+        run: |
+          cargo test --locked -p agentfw --lib doctor
+          cargo test --locked -p agentfw --lib support_bundle
+      - name: Installed command outside checkout
+        run: cargo test --locked -p agentfw --test doctor -- --nocapture
+      - name: Warnings denied
+        run: cargo clippy --locked -p agentfw --all-targets -- -D warnings

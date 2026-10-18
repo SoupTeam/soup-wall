@@ -1,0 +1,756 @@
+{
+  "schema_version": "sou66-windows-connection/1",
+  "status": "incomplete",
+  "acceptance_passed": false,
+  "observed_at": "2026-10-16T12:53:32.632517+00:00",
+  "os": "Windows-10-10.0.26200-SP0",
+  "diagnostic": true,
+  "process_job": true,
+  "standard_user": {
+    "administrator_group_present": true,
+    "is_administrator": false,
+    "sid_sha256": "da4367dd8abcc0af6a5d4b2fe4f7861d00346a9e8d51fc1744ef44dd90481b2d"
+  },
+  "source_hashes": {
+    "crates/adapter/src/lib.rs": "f43c41ff4c85c5ae77cb544c1e3c26fb5265f3fb68d8e470c4b9a2322c9d7afe",
+    "crates/adapter/src/runner.rs": "99ef70172faa380c5e9b0fa466c25a777edd80a54624a4e8541cd6df2f92cc5a",
+    "crates/adapter/src/tool_call.rs": "ffd672326b7ae4eaed94bfbe178c014eb188af9fedd95932927f2fe81b95db6d",
+    "crates/adapter/tests/attack_scenarios.rs": "ddab6227f7e29b43f05ec46245b566b4bdc96f6c0915640867b11e71a5dfc720",
+    "crates/adapter/tests/enforcement_pipeline.rs": "0eaac691c58a3c0ce209bdca6583303527909eb1bb2560b6075231afe73b81bf",
+    "crates/adapter/tests/latency_bench.rs": "266569020d176f32cbf4ab5a67bc44cb30ebf612e57e321f00e30ce0ef4df057",
+    "crates/adapter/tests/resilience_tests.rs": "9664ea07735d4b1e2d3dafa436cb80c9fa8f9306e688a33078bdfaaf34bcf278",
+    "crates/adapter/tests/schema_validation.rs": "82a2ad1b8e81e282adb205671ac47320945b7ec6fc14613a3e0134d96c46234e",
+    "crates/agent/src/action.rs": "7069161402b26daf8d9b345aca453ccea473ee0fad5e72da381aba4c184163b2",
+    "crates/agent/src/authority.rs": "20a5724530f0b7834aec1e37884e24d9087e43bb4974f967331de32fb978ca1a",
+    "crates/agent/src/egress.rs": "9dc5091592cd8fac69296f9317e200a1c5e368e681671d9027ab40b7a0334d05",
+    "crates/agent/src/engine.rs": "275031542a0af2b6c3b95d44b7ab3632be92a06d2bcc7bc76daf3fde27842b8f",
+    "crates/agent/src/event.rs": "904081b15eec9a3401e6f609c1b0e392291c639339706e9511914d45883612a9",
+    "crates/agent/src/facet.rs": "2225d0e1aeb4ae78b64712e089fc696fcda4e75a4cc177b2bd18301ac8e28e78",
+    "crates/agent/src/fingerprint.rs": "b1d2c6452fa9d5b27196b98f0b99c8b300e292c55263e85da2ca593af71c983c",
+    "crates/agent/src/lib.rs": "9abb757d1a3fb741e11f23fdf936768adb23fd85aea409bd47e729d1457d6784",
+    "crates/agent/src/policy.rs": "68e66ea9703af85b41abf46ae3eb2f29b5056ea1f554f718e8e160d9b91c4b03",
+    "crates/agent/src/resolution.rs": "3e58e96e3e45dac6e37b41ac76d5a789711bcef041da5c299eff041cc04e0a0a",
+    "crates/agent/src/taint.rs": "ad3d6a52d20bc4d72aff9725046d3c211b1fd7c776aad961ecd1b64f95d063af",
+    "crates/agent/tests/provenance_overflow.rs": "f69fcc301c3a3436615363b2bb14aae57c0a8ca51c48303b7a750c04a697acb7",
+    "crates/agent/tests/scenarios.rs": "41a57badc326a2ea55cf44bd50f9f0ebdcf52a9b67236374bf7da1392dab400f",
+    "crates/agent/tests/spawn_resolution.rs": "6b79808ee3e12dad2e5aeef7646dfced0ce363986de29b5fa6ac6cb5eb55d017",
+    "crates/agentfw/examples/policy_matrix.rs": "6a5c62003dff259f9973e469db218ef1fd2f1b8a1ce3250e73b7150bbbf37f27",
+    "crates/agentfw/src/audit.rs": "0f348a0e9ec9412d0898f1372b0b84a2c922832ceb4a63a258b2b03e3628a23b",
+    "crates/agentfw/src/config.rs": "3a49d4fc2fd17027096219e752a3b66909add947e9bca4b5d971e579603e8686",
+    "crates/agentfw/src/decision.rs": "741b9a03d5fc09f0bdf522b6391c45f946722a77280a17b97e71ebed31f595db",
+    "crates/agentfw/src/grant.rs": "8da8477a08cba7b18ff6b2ee3db391ed967eb587b9c16155b03d0e4d41db22e8",
+    "crates/agentfw/src/handlers.rs": "11aa76b82af67f1a42a882a15e02477841757c88a5719cfa64c3b01a8339b6e2",
+    "crates/agentfw/src/hook.rs": "ac67cd17a338cffffee347abe04a5c3203f5bf742f3a6bcbf534923b2e2ea402",
+    "crates/agentfw/src/install.rs": "c026246f4098b9fef9a46a60a6870b775bfcce1ce7b88e126e0e5bafa46eb7f6",
+    "crates/agentfw/src/judge.rs": "cd19617313163aafe3a9f37d3e81de2f339438813e162aefad1536fb8c59c449",
+    "crates/agentfw/src/lib.rs": "2e64f93964b1d67bc88e54053e302ee545cefcd4f361d64264e61179ccaed4cb",
+    "crates/agentfw/src/lifecycle.rs": "7355d468e303b6d1ac9dfd7a270d31beda046624ee5c071d1681085e64c2857c",
+    "crates/agentfw/src/main.rs": "8d14eb257127f1551eff0261b0a46bb004f8f1b3350c41405850652a3ca380e4",
+    "crates/agentfw/src/managed_credential.rs": "2358486909a9995c37f4f8c67cc42b3a09faed2d284995e8d68b0afaecbd104a",
+    "crates/agentfw/src/managed_policy.rs": "29a4ae6b16e08fb9765f83f9fe3f2999cb8ee252ea12354caf1feec4461f830d",
+    "crates/agentfw/src/managed_sync.rs": "b5c942f1f895b3ba6adcf414f0353cbd2012f4f82131f0cc75a495bf131a100e",
+    "crates/agentfw/src/map.rs": "06765851b9c48eb66720af99459b23c6b19d9d206e4a0d53f3c6652106f85f4d",
+    "crates/agentfw/src/mcp/admission/real_server/fault_tests.rs": "d62260c75b481b45016be0aea22ab39084b4701b9ea9a4a9ea359f6ef110ed81",
+    "crates/agentfw/src/mcp/admission/real_server.rs": "2cce0664398cf580500ae5134b3ed2acb9c78a5b2b8980e75dff53e959b411a0",
+    "crates/agentfw/src/mcp/admission.rs": "5cdb800ac2067a0815d5f2ec913102d7317edd55a4d9be6e203ecab724a48dbb",
+    "crates/agentfw/src/mcp/connection/windows.rs": "424763f8f9af42a8abdd5e8ac2e47adeee907b6768ad92a68020ce6f7e051033",
+    "crates/agentfw/src/mcp/connection.rs": "8116e7444e7f2c332ed837d2d534781bd2fff6ecc811fdc6c65e3a20dd88478b",
+    "crates/agentfw/src/mcp/create_file.rs": "1d2cea3355d0adbba173aa291f932f5b1b4b32d06a05bda63813acf9abcdb976",
+    "crates/agentfw/src/mcp/https_get.rs": "c155459cfe7cb91d1d33a200d59f882dedea44b731c8d4e405e4c689dfde3ad0",
+    "crates/agentfw/src/mcp/input.rs": "b947955e1d3a98fdaa62b142214641ad171583503695332c31364e2a2102116a",
+    "crates/agentfw/src/mcp/jsonrpc.rs": "c77265bf4d7c851e3319c4f39bed8114980bde552b9a0cfc0836dd2c43dd147c",
+    "crates/agentfw/src/mcp/manifest.rs": "39673dd219863047f77dad5e73761ecf3f326dd38df196d886d718a4b9758803",
+    "crates/agentfw/src/mcp/mod.rs": "addc3f46dade4ba2b169f53fa5b51a4d1cc482525e31bf2273cfeae04c271299",
+    "crates/agentfw/src/mcp/proxy.rs": "7b414e7b9b47697195f466daa66addb6ead4b1af76886f41149a9cdbc77a3ad7",
+    "crates/agentfw/src/mcp/resources.rs": "ba23b844c959806b1a0b8388f0818d02cfe03293dc2cc763e465cb0b98576f48",
+    "crates/agentfw/src/mcp/server_profile.rs": "6c49b625b98ee3ee4d09a20e3ac0f6677bf353c127360aa9f0374ab78c94381f",
+    "crates/agentfw/src/mcp/server_sandbox.rs": "084f9cd9da88e267153b0475dd8f773c127501f10051c7759daa6d8eed49d7ae",
+    "crates/agentfw/src/mcp/stdio.rs": "f2976bc80ea39c336b5b885d493b6f5b4524bf1301109f4bc28fb46dd026ae5e",
+    "crates/agentfw/src/mcp/store.rs": "b39b680fb21af64d79f9a82ec12e2b5deda12d276c6371d1c111ea1892ddf25c",
+    "crates/agentfw/src/native/approval.rs": "bd568c370d95a3ef3dc9f1e4d4805210de3ebfec01b77ea8137e35fffef73466",
+    "crates/agentfw/src/native/resource.rs": "2364bc45f07c3d6186f77981410665d7e86fa7b13fbe04b50c337145dd5b0bac",
+    "crates/agentfw/src/native.rs": "3382619a68d52c7057c08cb64a3483df181f6794474369974bf613525e5472b7",
+    "crates/agentfw/src/preflight.rs": "689f7ff7d2c4bd66d0505e2e75e2d9d78a8ed4e978aa3d5418f44747677bb8f6",
+    "crates/agentfw/src/private_file_windows.rs": "5a131ffa5c23572590b9dfb914827090687625fbe4207e0c2ef05e7b92d6fccb",
+    "crates/agentfw/src/protection_status.rs": "470c2bab8dc2f723b1b9cc25593dc28c54a09239ad9a6afca57ae2fe162b1d5f",
+    "crates/agentfw/src/provenance.rs": "4cd61e80219e0bed286cdf11c5f916e51baed204e24484f4a436d4bea62af677",
+    "crates/agentfw/src/replay.rs": "deda854b7ae10bc68eaf4251f44cc9524f0ae1e281e9efab976288906102a5c2",
+    "crates/agentfw/src/sandbox.rs": "af8ab10332e6c569fb05c0ad7cd7809fa3a23331e9319a313e40c0422eb200e0",
+    "crates/agentfw/src/service.rs": "71680d597cecc98f29688a2898f474f390be18879512e89d3ab5ad7cea2ea9d5",
+    "crates/agentfw/src/spans.rs": "2dc37461c4fa689d70595d6c046a72702e47e5b7100271c3d3779b2992105c2f",
+    "crates/agentfw/src/token.rs": "edc3bfa80ace9ba4fc3e50501ed88849ef97fbcb3e334dc1ec406730ecb2e696",
+    "crates/agentfw/src/windows_create.rs": "728d0d5eb0c5b09fd11a461ace675d7518abba3c46f910650f88b6a256341fbd",
+    "crates/agentfw/src/windows_read.rs": "08c1d1bc2cbc922fe8668473eb9a35d6ec1315100a7fb23d2733d13ac042ee28",
+    "crates/agentfw/tests/hook_endpoint.rs": "1a1601a3c7d25ffae7a30427c2ec946e56d09faa7d4fc2d2b5ebbe499ffee462",
+    "crates/agentfw/tests/judge_corpus.rs": "6fc6561f9929e23e2df9f8878991eafab79d9299e4e270088539bb55e1f4aa15",
+    "crates/agentfw/tests/judge_endpoint.rs": "a6bd65aa1da805bf7e3c05eabc1f5daa2e6a651e1c30616f731a72a78abfedbb",
+    "crates/agentfw/tests/lifecycle.rs": "f2d33938d9ee9693cad3aef459c4d07779d4fec26d3c5fbced182392ed4f99c8",
+    "crates/agentfw/tests/mcp_admission.rs": "b0ef706cca830fd20f28d1a3d8129256d69fb57c145302c9d7d1168812f050f5",
+    "crates/agentfw/tests/mcp_concurrency.rs": "329f60e121e13ec9fc73ef30a860a8e2456e0398a26dbeb8e0e2c9d70de69aa5",
+    "crates/agentfw/tests/mcp_endpoint.rs": "4dca71ea54db7f9cb810e249c0cf0b81c9279704e58a10860499ba8c63a96b9c",
+    "crates/agentfw/tests/mcp_inputs.rs": "f42729e70559de906537936ea68f40430e304a8778e96849039ec37559cf5d50",
+    "crates/agentfw/tests/mcp_proxy.rs": "f0a02826debe4bc0598b6b88033abddd6a1c21704413a434252d22a6a09aec37",
+    "crates/agentfw/tests/mcp_resources.rs": "d8a7c3f7552e08b898b82ebeeb9747ae0782f18ae577da11e77a725abec538fb",
+    "crates/agentfw/tests/native_endpoint.rs": "9ea6121731c82b31f2e59affa0537abdd55ae9d668b124c9544c51737c1c3734",
+    "crates/agentfw/tests/protection_status.rs": "118e882604991fcb46422d713bfa90e6454ca70a3b33f4bab547f7af6ce2620a",
+    "crates/agentfw/tests/workspace_root_pinning.rs": "db64a299a2eb7be891131f2100edbcd816b4ffa83913b85179bdd60b47e5b1a3",
+    "crates/bench/src/agent_dataset.rs": "3cebe4adcd42f7f951f4c3bae54ca179db9a127437e0af8a4da09cc164043c96",
+    "crates/bench/src/agent_eval.rs": "c74151bc2234bc24334949fbf40c02f8d8c739578a03cd27f2d052939594fa08",
+    "crates/bench/src/agent_guard.rs": "223872ba654ce82341262c7b244f73bb0599d5767d2da49bf412770d30e1ed83",
+    "crates/bench/src/agent_report.rs": "28ef96796264c1f1ef87837254932329d1e29834b99c3235b25721221e9f590c",
+    "crates/bench/src/dataset.rs": "f4238a5f32028240de7a7cc1564e964ff71119a61c529cc548e0f5d361949c68",
+    "crates/bench/src/evaluate.rs": "a07872323d3dfb4218e4582fe0fce6843c5d985950870240262a847722ae6eb5",
+    "crates/bench/src/main.rs": "6e69b1e41cc0c42ef587d39ab764e93da3dfc4a5ab702c26c0cde17f7c88da4b",
+    "crates/bench/src/metrics.rs": "e6e13d18fcde9824c78df7630f234dd9523ef3d17ff3ca514dbe03b40e4145f9",
+    "crates/bench/src/report.rs": "a76c60e35b86494be9fe2a337412a74dbc01f0bb7e55cbd37e57eb93ecb01aac",
+    "crates/bench/src/rivals.rs": "b888844f84d58b188146c6de29653fb3dbacde2ae0dd9b4eb860eb668a30fc13",
+    "crates/bench/src/scorecard.rs": "46fd564d59a370f5cad066a4be01953438447e2cc75a53d20afaaab67764474c",
+    "crates/core/examples/ml_probe.rs": "1e7a0f46257e60053abc85c32b0ea153b8b60a7628f0335899167a458316c797",
+    "crates/core/examples/moderation_probe.rs": "8b6a61ed938a9f4ca8434110474dcc797d2e56ee48fae4e07af8214554fa5a27",
+    "crates/core/src/context.rs": "686133cd213c5f4a418378d89154ad7b38113557948c7c4b1fb973cf645f4a77",
+    "crates/core/src/detector.rs": "66f4f063d5db534e6e805d8087ea9226e5ff214722775d9cbb11d678a08db4b5",
+    "crates/core/src/detectors/injection/heuristics.rs": "f06880f1886b38c6421d5ea8dcddc2bd10795368954fc47ea68825accf2b0e4c",
+    "crates/core/src/detectors/injection/ml.rs": "ef3db5295639a3b821d842e05d73dd60e26be4b463d32522be026f5f1972fa52",
+    "crates/core/src/detectors/injection/mod.rs": "30f509c20b93f339de83f3ff3f4515f5dabe427424887ac34dfc1074563f4433",
+    "crates/core/src/detectors/injection/signatures.rs": "e4b2a2d3d27e55bbc3336d2e34d427bd607dbc22ee2b6f369a834dfcd0c86397",
+    "crates/core/src/detectors/mod.rs": "e2954531ffd892f8db6f41c93c57aa9717342d0dc69fef35e4d0a47c80340f6e",
+    "crates/core/src/detectors/moderation.rs": "9b1feb4e5edc541fea0cf0f9a53ebef7294f922fa103a5c14a1ecf49e014d5b4",
+    "crates/core/src/detectors/output.rs": "e493ab6ba6f4489e46802ee12e61f5b05f52e687b17d17373b0fcdbfbb2bfea8",
+    "crates/core/src/detectors/pii.rs": "8af448adbeb4c8c4aa7cbe427bb32870d5ae2057f5f4e7006e5786d44d3e5e62",
+    "crates/core/src/detectors/secret.rs": "e26623583c6d936cb6a670c9c475d6c62efdfc355821ed964008da32e30a8892",
+    "crates/core/src/finding.rs": "bd0c5385dcaae9b44f6f78489cd3b04928a55f2443a949a70413ba8e9e9b72f1",
+    "crates/core/src/firewall.rs": "842ed4c1b83789514aca24e92f7c5faee9b9f6f4bcfd1043ea2c7bdbb2df6641",
+    "crates/core/src/lib.rs": "30893b4fbf80bf43175792347842e4fb48922596574bd10ee9a13dfb97d06a33",
+    "crates/core/src/masking.rs": "276e1afa622cac9920ea7c738225f9acd420444a2fa63fc1ed8b50b319daca5b",
+    "crates/core/src/normalize.rs": "ae28636882ba7360da2068f0ed866960f1115674fc23a5cbd72128c1ab1b337e",
+    "crates/core/src/policy.rs": "d05d4db813e1295d705f52b0740e739d04ef79675f2a3c9bcede324c0e54e496",
+    "crates/core/src/scoring.rs": "16db47c30b6b588af522e37e654457600111617c236c38be289c6c2eb218c968",
+    "crates/core/src/severity.rs": "1e6b0b2c58a95ead6f1b567c69ff2016e648bfa0f99dcb17f89f77d04b142179",
+    "crates/core/src/taxonomy.rs": "d6c944cae1160068dac3f3d3abbc163dbb5307cd54b63844a96aab474eef0d29",
+    "crates/core/src/util.rs": "ea8728493ac0c0a043fcec401533027432c92fd4cf00e2976d430754c54e8d8c",
+    "crates/core/tests/detect_and_score.rs": "39b6cd43ba5cba0b6e4eebf78d6d869c4b65384373647e13cdce70a1a41b014b",
+    "crates/core/tests/shipped_policy.rs": "20ce16fd81a4f515361f2bcef8ec7ef9335bcc02d7d23c041ca4b6bdf549e021",
+    "crates/proxy/examples/console-recovery-fixture.rs": "e72542f134425e5b541c04ed085e8261a75d7720330657ab3d8a492138176470",
+    "crates/proxy/examples/keycloak-oidc-bootstrap.rs": "fd1493f14d5ee283c57cc6902e7f4852f2ea92b4364f105dbca69e07c9d3b171",
+    "crates/proxy/examples/keycloak-saml-bootstrap.rs": "867c690b598cb99297878b707bf05725e78c698eec4ddbf80c11c1fefe65810f",
+    "crates/proxy/examples/postgres-restore-fixture.rs": "8c220e1f7b894abf6c8ab49105aeb265d17d74c9c7bc0ff06994b2b4e553d9ce",
+    "crates/proxy/src/admin.rs": "febec23e3ded57916ee977434f91f0097a5aaee13f2fdf5b64e11f5779c983d7",
+    "crates/proxy/src/admin_ui.rs": "a320672edab0b0fe1ab93a790584848b038ebd46e72d172cc40c75c7cc0a10f6",
+    "crates/proxy/src/agent_scan.rs": "a788938a13fc381c33b2b2988ccd73f0e8e5cc8bec2ea84c56fe9ff6383e22dd",
+    "crates/proxy/src/anthropic.rs": "8cb3afb35b98a9fc60ba25e5b5d287f64f783d2c6022de8396e7a250ab262b5c",
+    "crates/proxy/src/audit.rs": "34f32c966218e965b8903bcef6ec614f7d5a95ceb94bb9983f89d209305da464",
+    "crates/proxy/src/auth.rs": "b1a54020595737c1238cc3df20dec95a5dadc7908f0b028de83cda2926f53c7e",
+    "crates/proxy/src/capability.rs": "e24388052d1bf78e18abf88a24fb860a1729835da8f023ec435a04cd8dcc1b1d",
+    "crates/proxy/src/config.rs": "cc39d924c437602d509b7de07fecf2037729909337505a8a746e617b23d3cabc",
+    "crates/proxy/src/control_plane.rs": "3cd02a69266303c16a05875e6cfef9937aac0755f0a8ce628a62ab82c6a69c4a",
+    "crates/proxy/src/customer_ui.rs": "356f06c0dba7bf965d6d6bd9ddd9570a6c43f856a14c0415ad845318886b0bac",
+    "crates/proxy/src/events.rs": "327dbd980704aa2a9a35d28056f3595bbd955c8aab9cbca724b3a3a5f0656fb7",
+    "crates/proxy/src/handlers.rs": "52e36e3eb45c311bd4777ffc48ba46767650e76a62a88cb79cded9a41e71f09b",
+    "crates/proxy/src/invitation_ui.rs": "845193abd430dbb89058dee6ada6e1fc87ecfba6f224a702457b6c8566b004bb",
+    "crates/proxy/src/lib.rs": "ac0ed043943e2a9d2d6aedab4c9f6ce3001a7bd3d1a7ca613c61a9899e8e8c16",
+    "crates/proxy/src/main.rs": "36f9986f5b31d18e6291e4cbccfedddab2e3e0247ba232758548c83c68421370",
+    "crates/proxy/src/managed_agent_api.rs": "6de6cdc286f6b035c5c8140d30a1dabefbd2bd02f0f6b459ba1c62968dbce57b",
+    "crates/proxy/src/moderation.rs": "317fcbb279ee6f7d21ae997d9294775d218b76d601601ef6ed3f56ff9dda36e3",
+    "crates/proxy/src/oidc.rs": "e0cb21fa426fdb8bc13cbb01795adce5ac06cf5f61e7389f9dc37d63f4e1a53e",
+    "crates/proxy/src/oidc_auth.rs": "1c62a1d826d5718077349b4dda703678e443c49c94873c9350c09e76530e6b61",
+    "crates/proxy/src/oidc_token.rs": "03faf92d77325568625f32461e169f26e86c65ebcb4d310ce1da8c7d258f7ec1",
+    "crates/proxy/src/openai.rs": "51eda1b8dcf267547d3c156f4980a3d81e516069abd8c98b4af321a0492812a1",
+    "crates/proxy/src/pipeline.rs": "fdeff5bfe16cbe6dced7cd32473ad7f6dd27e5a3558d5611d7da5f6b75361ec2",
+    "crates/proxy/src/rate_limit.rs": "f28dba75525add54302b532c99a990c1bb4d5e8e1367f7685103ab18b5c1d638",
+    "crates/proxy/src/redis_limits.rs": "8e40a2073d11da28fe08b7ca94a4371da501c2618c4f70be101c26ff8a492740",
+    "crates/proxy/src/responses.rs": "2ebe73ec671ead6977500336c750684d270fcd22b664eab85d6502145ba30133",
+    "crates/proxy/src/saml_auth.rs": "d6a72b876f514345b84849467ca5eebc63f1959d0ff81067130d71624b0117ff",
+    "crates/proxy/src/scim.rs": "f6fcfd85084326df11235bc5f75b660d99a94b06185ed2042a4b48fcb87c3809",
+    "crates/proxy/src/spend_limit.rs": "b567a43e574697c7833e8a6242ee238094d6672b7b35cf113729017b9b25cea0",
+    "crates/proxy/src/tenant_store/agent_enrollment.rs": "1237e116950497c89b8f1ef6b15332ddff13a9d5a23268c5e0cb38e1e05d6c95",
+    "crates/proxy/src/tenant_store/managed_async.rs": "831e4b207e03769c5a16ede127863eba6bb6f4d30575207b41007a90c17c2a9c",
+    "crates/proxy/src/tenant_store/managed_policy.rs": "21421348d1b318f440a9c2d8e89c7fdc6d9dc8a170423b4d021ec4b0c83fda05",
+    "crates/proxy/src/tenant_store/managed_postgres.rs": "933e3d3a647177cf7cd2fa47f672012a03413d34ba470a728cdff8c23f0c6b38",
+    "crates/proxy/src/tenant_store/postgres.rs": "edf6d29f555531aba07903fb6b6fd6e488d9f5e1661ccd8f5d1661e9712c858d",
+    "crates/proxy/src/tenant_store/recovery_outbox_fixture.rs": "4c6c656c98dc80c34716607de047ca7a1cfbf0bcbffb5c9708fcd8b9ae62cb2e",
+    "crates/proxy/src/tenant_store/webhook_delivery_tests.rs": "343d68ed41462df8ead56632307e677bbe20a9a32a6c1efaf14e614a42f1bdc7",
+    "crates/proxy/src/tenant_store/webhook_recovery_tests.rs": "df4f43c6441b9693cf11b85a7ce65d770e768d5408ee024067f32bb9a182c3f2",
+    "crates/proxy/src/tenant_store/webhook_transport_tests.rs": "7bc6809aacb1bf11f3820797a2b24ef28068d33ad3c6f1031ab387b05c316e2d",
+    "crates/proxy/src/tenant_store.rs": "6662fbdc5044776b8fcfc9f330d94f666d422e7025d98997f06e91781040af58",
+    "crates/proxy/src/usage.rs": "5d663ab2df48fd3b3c68d16563b458b8acec723480bf4be03dd9144ff1d0d7e8",
+    "crates/proxy/tests/agent_inspection.rs": "2d5b0dcb0d1744dc16d536a161f0a7640404493454b0e2c4d1b5ca18b0646ded",
+    "crates/proxy/tests/agent_streaming.rs": "a7673a5f54bc14fc9d64f0ab44618d21ff6fe0d915262a1cfa9e27ffc4584fbd",
+    "crates/proxy/tests/agent_streaming_shadow.rs": "2218dabf12904078e791ec225ac1adcab72b4869badd2596064af765a32cc3a5",
+    "crates/proxy/tests/deployment_assets.rs": "edb481ad2f90ceb4f85627e915d0c2fef8beffe639ca868e19d21a606f33b5b8",
+    "crates/proxy/tests/external_identity.rs": "dd837eec34b3322112f3304f5fced893dcc064ff0f4c715bf5ae3f7d979db47a",
+    "crates/proxy/tests/managed_group_atomic.rs": "1b74157b4da2dd1e791d40ff1cb9f7023c7e72a2ba8ab0f813e94bc999408b36",
+    "crates/proxy/tests/managed_group_rollout.rs": "58b4ea481acbd8e04203c176dd7e3c640c16d32c8639c3e332ddab63c56ba975",
+    "crates/proxy/tests/output_moderation.rs": "5a36980a388ff5da88dcd1e707c38233208b5fab1a4ee7433f8c2be21789ba3b",
+    "crates/proxy/tests/proxy_anthropic.rs": "949583de9df2a4699494365836e8a0d2b5ed45dde99b2ebfe431e35eb0990c8b",
+    "crates/proxy/tests/proxy_capabilities.rs": "602e7589704be0002955c6d8f4ce0cd3688de14a13c8833941bfd62250795d17",
+    "crates/proxy/tests/proxy_forwarding.rs": "603cf3f93121860e28306f0daacaf3326d56fcf6065ffe4db082141bc3b14802",
+    "crates/proxy/tests/proxy_limits.rs": "b7986b3c5e371df42c87438b8981526a190359d066e636604386643a542cb4f4",
+    "crates/proxy/tests/proxy_responses.rs": "09e142f06c4584e97f1cdc3ad4e0ad2118a472b0e1728bfaf78a474782723da8",
+    "crates/proxy/tests/proxy_streaming.rs": "272034c824b602519e8037f8478b4fde32ff5463c334bc5ce0c2040327bd0f3b",
+    "crates/proxy/tests/proxy_tenants.rs": "af5bc326fb60ea317d67d2801108d4020dc824c7793edc4a10028e2898e9657a",
+    "crates/proxy/tests/scim_network.rs": "c9aba24831a316553f61774c5b9144087647198ce87257f6d44bcee042f3475c",
+    "scripts/agentdojo-live.py": "a346c3aec948bb8653876c09c3204ab30e7a88d37c950a57b5c9f0b84939d525",
+    "scripts/alert-receiver.py": "3e255e3d71e31c5c8daf35becc8d80e2a52d7a0a867274b34a8e26087ff3f3ce",
+    "scripts/alert_receiver.py": "40f158804dff1b8a66f24d4ece6af7805dbc63f077a9f0295039fa37063f05c9",
+    "scripts/benchmarks/agentdojo_live.py": "2113ce9c2c26cf46c2a67c47572d097b9c288311a90d665f98c8fb0876f2867b",
+    "scripts/benchmarks/agentdojo_native.py": "ad930d5d29268ee711a6472240cbdc3df8185e8dc49f6e99f2134a09ed77976f",
+    "scripts/benchmarks/agentdojo_protocol.py": "616b02850b348c919df5f88200a9c80f12ba61aaa1fb593412a2acf8b1695959",
+    "scripts/benchmarks/test_agentdojo_history.py": "2561e1a2c6a36c12c961e7ebd76593c91346be6e690905e72904774cc11c6c13",
+    "scripts/benchmarks/test_agentdojo_live.py": "797fc7540529228900a7fa4a45e6caf0fb3115d20ffd53749dfe6ce88bfa1dfb",
+    "scripts/benchmarks/test_agentdojo_native.py": "a2ec2b7a562f50332d5dfe42578a007932f8e5279784e7073270d508d07a3606",
+    "scripts/benchmarks/test_agentdojo_protocol.py": "cc7d0c4a1e22e28c6d10c906610e648e229c0e74fa447a8a2a74fa3fb1dbf3b9",
+    "scripts/check_docs.py": "d0115d30b8aab415bb84b36bdf9659e46e83a92d3af6dc2bab49a5fc1cdc757e",
+    "scripts/ci-local.ps1": "d48a01af8144c6652b3be6bc9b64c692cfeb44fd14f7c349d404ffb8e3c60fc5",
+    "scripts/ci-windows-connection.ps1": "401e2e8c0655133f3976fb023a36dd5e185cb977a0cea61be166f20adb3d79c1",
+    "scripts/ci-windows-create.ps1": "8b87542035564414983122a541b76a137d4fb61c63d169207729b7ae1d98efd9",
+    "scripts/ci-windows-lifecycle.ps1": "3529cbcee2264a496d19f9db56d9c04733099afcc946207a481acd3e7e334943",
+    "scripts/ci-windows-read.ps1": "7481862c2851df3c55ce5823e109736704d91b68c44d5b3617ea01ec5d1744f8",
+    "scripts/clean-setup-acceptance.py": "4d8a93428d6262c8d08d13452631cdf4c3c919a0e52d0c52c933a5705d99affc",
+    "scripts/console-recovery-acceptance.py": "84d9c8330ccea6df988e497ea1530163f528dbe7fe048599c28b4580403cacf0",
+    "scripts/console-recovery-webhook-fixture.py": "79bff20114394f18aae72fa1f1c8a0874b9dfd4fafb604a30a7f64ecd64e8ca7",
+    "scripts/console-recovery.py": "e82c50d557a97870e16d85b85fb96c9fc81d595052758ed59abc9d21a26c016d",
+    "scripts/console_recovery.py": "fc586859ab9a3f5ac7ec01c73fafcddf78b4d95d5d103ee0cf8bd89a94fcaec9",
+    "scripts/container-sandbox-smoke.ps1": "ca601e9e53ae4c8ed68a258b7d012b63add6dd765600ecad4bfc024766499f0e",
+    "scripts/dependency-failure-drill.ps1": "ea6ae7c16ae5dbbfb1be64319691585ee2968060034b9b879365c8ff82d77aaa",
+    "scripts/fetch-monitoring-tools.py": "32cb5d56d2f98e9e10c4081d8b085955d1a1258872d063f6359d3beec6899e82",
+    "scripts/fixtures/claude_mcp_server.py": "4b13e2496900f75ee6a7a7666c67c44b5950b12c4a7f3550661e1448e4a71b8b",
+    "scripts/fixtures/connection_server.py": "e070c1f6f58227146f1492b6b35dfe757a4fc2975eb7aba0ab1c09011d147ddd",
+    "scripts/fixtures/connection_windows_server.py": "6280f06edc979278829bf0c93be8b2d8be129e360188a097ee61c7a3346f08e8",
+    "scripts/fixtures/limited_create_file_agent.py": "dea20f9c97ccdcdaa3c8a46dd561c2dad921854aa8a3b553bc46ed6e58619aa3",
+    "scripts/fixtures/managed_policy_tls_edge.py": "eead99737b67dce2fa74393526c96c1f6785ba63108a89bd0084ecc46ca79a63",
+    "scripts/fixtures/mcp_admission_demo_server.py": "81fc37feaf8109832106246e317801c7e9c49154286fd6133549751a0b328206",
+    "scripts/fixtures/mcp_create_file_probe_server.py": "21892a85c04285328bc1cf25ec74d93f7a52b26710b20210c370bba69b7d4ace",
+    "scripts/fixtures/mcp_https_get_probe_server.py": "02f04795516e0267b4a0ae90c0d34c46596f17211f734714ac105c0f8f37612b",
+    "scripts/fixtures/mcp_resource_backpressure.py": "585beba6711a734dde9c6852c189ce7bb97ea64db0093444f35ee9707becc0bf",
+    "scripts/fixtures/mcp_resource_probe_server.py": "fe79d9eb96dc784f8c3d9b9492ad8d9c14bc03ade8776dbf521bd30a48278d7e",
+    "scripts/fixtures/mcp_windows_create_probe_server.py": "a26e027a05a218d66b8efb8adb8dd9e7c1a7e31295655a7182c73334f57c5a6b",
+    "scripts/fixtures/mcp_windows_read_probe_server.py": "810df78b5ddec2d34dc2153df3594c666a6b56b19e3d19b71a7099eebfc643d0",
+    "scripts/fixtures/tls_client.py": "b534fccc1ae5d2a28a1d052fc94b3a59dac51244dbe9707350f3379958e256c2",
+    "scripts/fixtures/tls_edge.py": "3661f22fc67f5b7aafcffafab11ae81addcc861f943d11070d8301fda47ab20c",
+    "scripts/fixtures/windows_private_storage.py": "f86f713953f92e56e720551c79e0ab208cb62df9e739fe96a1a8da4bc3593ff2",
+    "scripts/github-code-scanning-audit.py": "bec20643ef40217e2f24c8fd0c2af9646b8609f57fa15464e94d1cc73160be96",
+    "scripts/github-code-scanning-report.py": "2a7e9c2192fa7b3c0fb92cde44aeb1182c2c2580ed8d934efdfc18626e204513",
+    "scripts/hosted-onboarding-smoke.ps1": "18330fa93192664b83238e7c90fb6c849f395c7b8e6358e2ff1974aa6c63d8bb",
+    "scripts/identity-sandbox-smoke.ps1": "a05331e6050fa6aea93a81c470ec5da910e75adf4e17e5b5d4641035c4c00fa7",
+    "scripts/import-agentdojo-history.py": "8e4cf7cc8bedc42dc1e2c5e2bff9f73ac0da7eb2c056a7a8dc6c93fabb576a58",
+    "scripts/install-sou62-filesystem-profile.py": "949d3919024845a038c1ae99cda69ac7cc5eabeb4264fcdd4b02077960db12d4",
+    "scripts/keycloak-oidc-acceptance.py": "d811ca649b0d3c7403c3cc820f8ee1f52eb3cd0160d1e7606c53d8e90dee8af7",
+    "scripts/keycloak-saml-acceptance.py": "9e68691adcf58bdbbc1a0b8cbdbc3742dfbfa28a0eea8c0588d78c9c60ac3008",
+    "scripts/keycloak-saml-linux.py": "5dee39b49dec3ee7a4a5b59045fdf0450ff8142dffe923034476875c7f504495",
+    "scripts/license_policy.py": "f9b2455533399d8b327fd644c854d9e6cd5d366976f7f44d648e561c50f977fe",
+    "scripts/linux-alert-acceptance.py": "9b76b1aff1f0098439fcc9d391261648066f539fc61f194f981bfe212058b14f",
+    "scripts/local-compose-drill.ps1": "b8637c5325e498ae42783598ee2bd04576cccf6a443fbd2cfffa2e795b14a494",
+    "scripts/local-monitoring-acceptance.py": "b460b92d068a9f76f3f1039b806177b754b2580b1e5fba5662e9a7c329f7045d",
+    "scripts/managed-credential-rotation-demo.py": "cb3a1e4d06d1c523bfc0a76faeb98a9dd441853926abafce426477f1da8e6fb5",
+    "scripts/managed-group-rollout-demo.py": "6d07742e775c16fb3f445e20392d57dc5983abef1638545b303fd572be91a3d9",
+    "scripts/managed-key-rotation-demo.py": "0dd1fc961cad06e95ab92436bd3f64c4eb7ba86d69d9f7a050f877b480010151",
+    "scripts/managed-policy-demo.py": "28b8395262bf9ba6ce54e32cfe763c01d1368a033634f23b829ae638fda0bebd",
+    "scripts/managed-policy-postgres-demo.py": "4c8c9dc8f684ae1e64347dc332b6ad90d3049080d5c475d20d0b87ddca143a79",
+    "scripts/managed-policy-tls-demo.py": "4aea546b3522ba2a3fb2cb07d53768ccc8caceae85743172c5644406bfacc513",
+    "scripts/mcp-admission-demo.py": "2891a2d412f444265655ec501bba46dab0218d04d6d76a8f2541a460573c9f69",
+    "scripts/mcp-bench.py": "e905dbcdef3a6c69c284ede0ee042fcc8f8189584a667bc88c1d143aa653fe6c",
+    "scripts/measure-sou17-latency.py": "826e4224cea8d2947f85a499062ff9d4130967e28e6a96c9bd6948c89d9925f3",
+    "scripts/monitoring_fixture.py": "062dc969e7acf680f69d006ef0cb0fec3ff9ce6c3edbfc2f1c33c952546a30dd",
+    "scripts/native-approval-acceptance.py": "87948f6d425c5b1e943897d87e89881ede08e761e2c8a6f03e57c3d1eea0273e",
+    "scripts/obfuscate-dataset.py": "9cff3d4c992f20ba35e3da1f0b6abdb7ed1df327ab200eb8b8f03290031e30e4",
+    "scripts/postgres-populated-restore-acceptance.py": "ba0316d424b0c47d916e4c042714231b157c7458c95390d66951ce246da30b54",
+    "scripts/postgres-restore-drill.ps1": "684ed63742345a12ea5ced0b244cf902628325fd2b96fe134ddc7616ae44cefa",
+    "scripts/print-sou58-ci-diagnostics.py": "cfc822861ec3cf61ebcd3be74ae2831c28192251a8cd6b4068fa274858fedb2e",
+    "scripts/print-sou60-ci-diagnostics.py": "745f244af350387a7efba48a1fdd2aa5809e28c2ba564b50f1c32822e48caa4b",
+    "scripts/run-sou18-acceptance.py": "2a2a514b38d05441cd168c4e50c40d4bab65f1cfd524cf1246b7ae437e4d34e2",
+    "scripts/run-windows-lifecycle-tests.ps1": "e12b93cf599a58a23ef35389f4874367d26c2963b1439e8869749674dc32f746",
+    "scripts/self-hosted-local-acceptance.py": "65fcafb1931c4e71e8a1f1bca9f93c113d9db264004b52be0f057cb34e699817",
+    "scripts/staging-acceptance.ps1": "65a71aff9932ea9c2e6433323862d5f73d8f2c47f7e4c026e3a88da492a250b6",
+    "scripts/test-agent-lifecycle-windows.ps1": "7a5a77306ea688a22d26d32d66918bdd885ff510d2cd1dd505782654d5e4e947",
+    "scripts/test-agent-service.py": "8b4766b153ba5c5c7b1edcb4ff9d2c51ac06f50865dd21c924f7132e8c89a156",
+    "scripts/test-environment.py": "4b69029f165a9d8d5a494ff2b1bb569656600311adf78d4b4db1dbf9a5dbb582",
+    "scripts/test-mcp-connection.py": "c390fb1659a0716fd267e46815ba600dc93700e96a39fa931b73a7f40bdcf29f",
+    "scripts/test-windows-connection.py": "14aca2e415681b6c69119d12ae61741f4a406e6f8cf83d6102a2c815b71832d2",
+    "scripts/tests/test_agent_service.py": "c787fac4bf0c44ac2181491a3579adb46514013c081bdcfd5275f95c4bbb8349",
+    "scripts/tests/test_alert_receiver.py": "e7ea799a51c617709ad2e986c6299cdfeee374e1f25156a4bf25190ccebc2db9",
+    "scripts/tests/test_check_docs.py": "d4e029a8cdbc0efb1850866dfbb40f47fa63cf7c864adb19489cf4ee8ed13eb0",
+    "scripts/tests/test_console_browser.py": "fdce363ff8f4d1c6d052369fe60f45c372a653dab8f055dbe73f0fd739fced55",
+    "scripts/tests/test_console_recovery.py": "e63aef56ac94b4d14c2c771aa7df0e82422e0b653a0a900af47ba6a84d4b2b18",
+    "scripts/tests/test_console_recovery_acceptance.py": "0302392754ea0056f35da2c5a93b32d7e221e1fdb901877ed17036723ce6cd89",
+    "scripts/tests/test_github_code_scanning_report.py": "c49726541bb0af945eb24a7212fd73580d51557e931092471392b32e170ab7c2",
+    "scripts/tests/test_keycloak_oidc_acceptance.py": "a00ca5d87cd08068af88239539fac78ca93bd68a2a62bcb3ad8889b203592835",
+    "scripts/tests/test_keycloak_saml_acceptance.py": "33d116e29ba97e1dff71282ec33007aa730404d8fba728141b0a9f5e790eab8c",
+    "scripts/tests/test_license_policy.py": "3b9a355aae83780148a269a75339fd630c1115b36f4f39cd45623b00c00eff66",
+    "scripts/tests/test_linux_alert_acceptance.py": "7ce03b616146a4181708cf6fb3b89bc44df5aefd6672274927fe6ff4549c3704",
+    "scripts/tests/test_local_monitoring_acceptance.py": "66c5c83d74be335c7194643daf6d0569f009a30fa79bdbc736d55a8552762404",
+    "scripts/tests/test_mcp_bench.py": "7f11b9203f685b6badd465a71531bf2193f6d34a3738c7e41acfba8c14473130",
+    "scripts/tests/test_mcp_demo_verdicts.py": "5d22f87fdf7ab27db18c72755e07d55c588ce6ba6a387c63ced4a9f3ff28ed32",
+    "scripts/tests/test_postgres_populated_restore_acceptance.py": "c810943d7a1754155d3adaf6f60ab75b9eccb9bbae8eaee4bf255b7eb0c980df",
+    "scripts/tests/test_self_hosted_local_acceptance.py": "979a1f5306e5e0e2661da8cdda3dd4ccbc456ff98ffe2460719e3750d3b10bf7",
+    "scripts/tests/test_setup_preparation.py": "36924488231ca8b51a538ce57e2c84afd115e5453977ad7ac82daf88692f6b4b",
+    "scripts/tests/test_sou17_classifier_boundary.py": "80666e02fbda1b148e5e95508e4b7d52cedb1028befef7feb32cc16a69b05d21",
+    "scripts/tests/test_sou17_generic_boundary.py": "13301cb584473a901c21a083e612828fbccb3f9df2caf5323c6d247e1df8f3a3",
+    "scripts/tests/test_sou17_latency.py": "990873800fce4678b25605d8d236322a28a5b439406819c4d8845526bbc28b26",
+    "scripts/tests/test_sou17_pending_admission.py": "47207b651bf0921d42fd1e4f9c03ae36a36504d6823def7f8144b6a0e6443c80",
+    "scripts/tests/test_sou17_refusal_capacity.py": "7d8e15ab38d8c901c7ef8ad26a694a6bf1d204009d4504305c3cf5fa2e20e699",
+    "scripts/tests/test_sou18_acceptance.py": "d055d927a68c05ed37e3ea5a65f1bb85e417c363a584768f73415d3d056fa2dd",
+    "scripts/tests/test_sou18_claude_outage.py": "b911bb745d516d783f7d16f752ae102eb7fbf38e8a7b652ff57db3d4e809973c",
+    "scripts/tests/test_sou18_resources.py": "caf381b8696cdb4ded5769d4a79244d02a7cfa6907666a26a12012f2b8287789",
+    "scripts/tests/test_sou18_status.py": "ab91e888b5a00359d7262a2cc572e3e4c9be50242bb58655704e5b629cd606f5",
+    "scripts/tests/test_sou54_create_file.py": "af9f1a50d4e9bcf66355969659f0d160c7efdc97c1cf33ff26fd86688eefbb5d",
+    "scripts/tests/test_sou54_create_races.py": "be85d7d58581039ab3ed95404ef0447ddbbbbad1af6c5bbfa6071de74c56e8df",
+    "scripts/tests/test_sou56_https_get.py": "327f082825895d7591d937d804ddc6a8677bea40eda88499091018dfc2106eca",
+    "scripts/tests/test_sou58_windows_read.py": "a26f4481045a149bb88dd2098130bfd144e5d9dbb35508fcb6f723520e0dfab1",
+    "scripts/tests/test_sou60_windows_create.py": "87b61db3960698e5e1bf5b25f61b7b5e480740214a2d0834c9fb05b3a899a8f3",
+    "scripts/tests/test_sou62_real_mcp.py": "06ca5dca5938b02e7a803e9781085e53623cee26dff2be251ff925be0fc66861",
+    "scripts/tests/test_test_environment.py": "7b755dd7d1e2086afcc93f7680b18f71bb1822574b0ad78e1f01987997284444",
+    "scripts/tests/test_tls_lifecycle.py": "32c3503f641e834950c17b758271a34f1ccb0aeea1be1a822b6b9e5254b305e1",
+    "scripts/tests/test_verify_sou17.py": "ada02e07e754009b9f542c0b2294de3a565b98bbe6154c5418a02b7161418da2",
+    "scripts/tests/test_windows_claude_mcp_acceptance.py": "975ab757499f4bce7ae395801a213b1cf8dc0126312668103e4f8d5b0a1d38af",
+    "scripts/tests/test_windows_connection.py": "01b620c59263377b0df6934f406940236f29f59d0750e1d6b76ee99e90650358",
+    "scripts/tests/test_windows_private_storage.py": "1c7f64642842420a5ee4a2aec07b23f12427bfcecacfd17ff9356d5398e07dd4",
+    "scripts/tls-lifecycle.py": "c5edc9b6d48e4feb428aee9a3253c15b9811e55fdb4033c262843d4de234e8ee",
+    "scripts/verify-sou17-classifier-boundary.py": "0376f6ae07e94d1c5185b32a44df7d8bc856bc2a5a93508ea3a5d1d85b4926ae",
+    "scripts/verify-sou17-generic-boundary.py": "af31cad1c2d9f6b49fee6aed3827350319cd9531e912f5ba0b22139d33eea7d9",
+    "scripts/verify-sou17-pending-admission.py": "07d151b4e391fffa663b30e88777b3092bdab375dc4993310b30abed7cc1fb3f",
+    "scripts/verify-sou17-refusal-capacity.py": "1f8231e69adfd15d395570af1c5c47b5883b270ffef81e8649fb178b5704682c",
+    "scripts/verify-sou17.py": "6bc1f3e8c51ae4bc013278de25045881c3125675060cdd575bfc3b5d7388c978",
+    "scripts/verify-sou18-claude-outage.py": "b0e52607c1a686378a902e62ed30ad06fad9940bf90d3b65f8d8c79bad15510b",
+    "scripts/verify-sou18-resources.py": "11b78abdb41d46ae56ee447c35d6f4fa95d4561d4eba0bbe2279573894d85532",
+    "scripts/verify-sou18-status.py": "80c699e43f7f4438dd573d32b04649ea8e4fa68c022a3a2cfe8df124904968e8",
+    "scripts/verify-sou54-create-file.py": "d76a6cda0066ed70db53f7ba56fb0f9cb42b1d18ea194bf8b40b5e09237dc2ad",
+    "scripts/verify-sou54-create-races.py": "6f12b89e2c56123d35c395f19119e5b7ac4aa1a8204976457721774543546724",
+    "scripts/verify-sou56-https-get.py": "fa25eba6a14f3446950694cfeb47a97fea78c955749c9f8f69c73d4768be47aa",
+    "scripts/verify-sou58-windows-read.py": "ff6b6d9952e784eb45a9e923155494c67327dd7e1e609da76cccadda1fa98e52",
+    "scripts/verify-sou60-windows-create.py": "64122bf0527d0cbe3e3567db822938698e9c84916bf0981a382e130781295b9f",
+    "scripts/verify-sou62-real-mcp.py": "8c16f63e7994b077a674e17bf347a51667968e686596e9b2a17e1498161d028d",
+    "scripts/verify_policy_composition.py": "73bba1336d429c00485213a4a47a4b968f64135d7ca3289548a3bd0bd8c88104",
+    "scripts/windows-agent-acceptance.ps1": "c6a80262246758a0906affd414f4946c0f7df8c2b63e4da53757d84879da21e0",
+    "scripts/windows-claude-host-acceptance.py": "d1770dc2ffc1f0be4e680d069df61e9bb2cbd6abeb50115c0c627dd95151a3a1",
+    "scripts/windows-claude-mcp-acceptance.py": "62eefb1a650a75b0338db478a47f8f749642e9975eae092b358ddbddd51f043e",
+    "Cargo.lock": "7fb7958103f09dac26ad68a4e8a5360931d4e9cc9c3e747baa070aaa88c0173b"
+  },
+  "source_before": {
+    "commit": "fb70696b87e6c35b0a5cedde0c6fba51c432419e",
+    "tracked_dirty": true,
+    "untracked_present": false
+  },
+  "binary_sha256": "a6fe11842f532f492efaec31d52c4b054d33a90f896df0455f54a39e9c562d51",
+  "native_test_binary_sha256": "225f22c281c3b00b35c773a5aff467662e7f854778ce8a272da1c07078b58947",
+  "native_tests": {
+    "sha256": "225f22c281c3b00b35c773a5aff467662e7f854778ce8a272da1c07078b58947",
+    "passed": 14
+  },
+  "checks": [
+    {
+      "name": "preview output redacted",
+      "passed": true
+    },
+    {
+      "name": "preview has no effect",
+      "passed": true
+    },
+    {
+      "name": "actual host control reads useful bytes",
+      "passed": true
+    },
+    {
+      "name": "connect output redacted",
+      "passed": true
+    },
+    {
+      "name": "connect configures exact wrapper",
+      "passed": true
+    },
+    {
+      "name": "connect output redacted",
+      "passed": true
+    },
+    {
+      "name": "repeat connect does not wrap again",
+      "passed": true
+    },
+    {
+      "name": "other entry is preserved",
+      "passed": true
+    },
+    {
+      "name": "opaque JSON-RPC identity and useful arguments survive",
+      "passed": true
+    },
+    {
+      "name": "protocol processes close cleanly",
+      "passed": true
+    },
+    {
+      "name": "inspect output redacted",
+      "passed": true
+    },
+    {
+      "name": "controlled read is verified",
+      "passed": true
+    },
+    {
+      "name": "protected read is not forwarded",
+      "passed": true
+    },
+    {
+      "name": "inspect output redacted",
+      "passed": true
+    },
+    {
+      "name": "outside bytes are unchanged",
+      "passed": true
+    },
+    {
+      "name": "inspect output redacted",
+      "passed": true
+    },
+    {
+      "name": "admitted native create writes exact bytes",
+      "passed": true
+    },
+    {
+      "name": "actual protected host reads useful bytes",
+      "passed": true
+    },
+    {
+      "name": "actual host sees outside refusal",
+      "passed": true
+    },
+    {
+      "name": "actual host creates exact admitted bytes",
+      "passed": true
+    },
+    {
+      "name": "actual host keeps outside unchanged",
+      "passed": true
+    },
+    {
+      "name": "all protected calls remain outside server child",
+      "passed": true
+    },
+    {
+      "name": "collector child receives no application secrets",
+      "passed": true
+    },
+    {
+      "name": "disconnect output redacted",
+      "passed": true
+    },
+    {
+      "name": "disconnect output redacted",
+      "passed": true
+    },
+    {
+      "name": "disconnect restores exact entry and later settings",
+      "passed": true
+    },
+    {
+      "name": "connect output redacted",
+      "passed": true
+    },
+    {
+      "name": "disconnect output redacted",
+      "passed": true
+    },
+    {
+      "name": "selected edit survives conflict",
+      "passed": true
+    },
+    {
+      "name": "inspect output redacted",
+      "passed": true
+    },
+    {
+      "name": "daemon loss has no new file effects",
+      "passed": true
+    },
+    {
+      "name": "disconnect output redacted",
+      "passed": true
+    },
+    {
+      "name": "source unchanged",
+      "passed": true
+    },
+    {
+      "name": "selected binary unchanged",
+      "passed": true
+    },
+    {
+      "name": "selected host binary unchanged",
+      "passed": true
+    }
+  ],
+  "operations": [
+    {
+      "operation": "preview",
+      "exit_code": 0,
+      "elapsed_ms": 2391.0,
+      "report": {
+        "status": "preview",
+        "operation": "preview",
+        "config_sha256": "310ca6c71ccd64b9048814445545e04597f3d4b28160c46e4eb9955e8a920fef",
+        "selected_sha256": "db689486bcac58a2081d9248fc8903058602e510e04eeea41091c1a88c817ad2",
+        "server_id": "claude-dd00c6c35d05ab0bc614204d",
+        "agent_sha256": null,
+        "registry_sha256": null,
+        "probe_result_sha256": null,
+        "elapsed_ms": 34,
+        "detail": "selected stdio command will use the native collector; original arguments retained; child environment cleared"
+      }
+    },
+    {
+      "operation": "connect",
+      "exit_code": 0,
+      "elapsed_ms": 1750.0,
+      "report": {
+        "status": "configured",
+        "operation": "connect",
+        "config_sha256": "5935b52a28e7d7cdea27380d6c76b9828424294691685189c0e3f7f564315461",
+        "selected_sha256": "7be243590c9fb5d4d0c8dc2fa6504c7cb1ee753f028a40070ec6ed69e9895126",
+        "server_id": "claude-dd00c6c35d05ab0bc614204d",
+        "agent_sha256": "a6fe11842f532f492efaec31d52c4b054d33a90f896df0455f54a39e9c562d51",
+        "registry_sha256": "906db81c8927965dffd823ac32fdacbe136e6e7cce03a20f04c3808c614d81e1",
+        "probe_result_sha256": null,
+        "elapsed_ms": 1746,
+        "detail": "native wrapper configured; execution is not inferred"
+      }
+    },
+    {
+      "operation": "connect",
+      "exit_code": 0,
+      "elapsed_ms": 1703.0,
+      "report": {
+        "status": "configured",
+        "operation": "connect",
+        "config_sha256": "5935b52a28e7d7cdea27380d6c76b9828424294691685189c0e3f7f564315461",
+        "selected_sha256": "7be243590c9fb5d4d0c8dc2fa6504c7cb1ee753f028a40070ec6ed69e9895126",
+        "server_id": "claude-dd00c6c35d05ab0bc614204d",
+        "agent_sha256": "a6fe11842f532f492efaec31d52c4b054d33a90f896df0455f54a39e9c562d51",
+        "registry_sha256": "906db81c8927965dffd823ac32fdacbe136e6e7cce03a20f04c3808c614d81e1",
+        "probe_result_sha256": null,
+        "elapsed_ms": 1690,
+        "detail": "native wrapper configured; execution is not inferred"
+      }
+    },
+    {
+      "operation": "inspect",
+      "exit_code": 0,
+      "elapsed_ms": 4219.0,
+      "report": {
+        "status": "verified_for_this_probe",
+        "operation": "inspect",
+        "config_sha256": "5935b52a28e7d7cdea27380d6c76b9828424294691685189c0e3f7f564315461",
+        "selected_sha256": "7be243590c9fb5d4d0c8dc2fa6504c7cb1ee753f028a40070ec6ed69e9895126",
+        "server_id": "claude-dd00c6c35d05ab0bc614204d",
+        "agent_sha256": "a6fe11842f532f492efaec31d52c4b054d33a90f896df0455f54a39e9c562d51",
+        "registry_sha256": "906db81c8927965dffd823ac32fdacbe136e6e7cce03a20f04c3808c614d81e1",
+        "probe_result_sha256": "32772aca3bb818c8a388cd50acf37891fccb7f8ebe6fc837400a0ef71a7b4432",
+        "elapsed_ms": 4194,
+        "detail": "controlled request returned a permitted result"
+      }
+    },
+    {
+      "operation": "inspect",
+      "exit_code": 1,
+      "elapsed_ms": 4063.0,
+      "report": {
+        "status": "unavailable",
+        "operation": "inspect",
+        "config_sha256": "5935b52a28e7d7cdea27380d6c76b9828424294691685189c0e3f7f564315461",
+        "selected_sha256": "7be243590c9fb5d4d0c8dc2fa6504c7cb1ee753f028a40070ec6ed69e9895126",
+        "server_id": "claude-dd00c6c35d05ab0bc614204d",
+        "agent_sha256": "a6fe11842f532f492efaec31d52c4b054d33a90f896df0455f54a39e9c562d51",
+        "registry_sha256": "906db81c8927965dffd823ac32fdacbe136e6e7cce03a20f04c3808c614d81e1",
+        "probe_result_sha256": null,
+        "elapsed_ms": 4047,
+        "detail": "controlled request failed or was refused"
+      }
+    },
+    {
+      "operation": "inspect",
+      "exit_code": 0,
+      "elapsed_ms": 4218.0,
+      "report": {
+        "status": "verified_for_this_probe",
+        "operation": "inspect",
+        "config_sha256": "5935b52a28e7d7cdea27380d6c76b9828424294691685189c0e3f7f564315461",
+        "selected_sha256": "7be243590c9fb5d4d0c8dc2fa6504c7cb1ee753f028a40070ec6ed69e9895126",
+        "server_id": "claude-dd00c6c35d05ab0bc614204d",
+        "agent_sha256": "a6fe11842f532f492efaec31d52c4b054d33a90f896df0455f54a39e9c562d51",
+        "registry_sha256": "906db81c8927965dffd823ac32fdacbe136e6e7cce03a20f04c3808c614d81e1",
+        "probe_result_sha256": "1d3a5abde668c2a6747d58e40daf7ddf3d480bffc1ecb1e2fa54bea13875194e",
+        "elapsed_ms": 4203,
+        "detail": "controlled request returned a permitted result"
+      }
+    },
+    {
+      "operation": "disconnect",
+      "exit_code": 0,
+      "elapsed_ms": 188.0,
+      "report": {
+        "status": "disconnected",
+        "operation": "disconnect",
+        "config_sha256": "ac3758bccdecf38c75f26977f6209b990c1f64e605e484ce8869bb98c76e842a",
+        "selected_sha256": "db689486bcac58a2081d9248fc8903058602e510e04eeea41091c1a88c817ad2",
+        "server_id": "claude-dd00c6c35d05ab0bc614204d",
+        "agent_sha256": null,
+        "registry_sha256": null,
+        "probe_result_sha256": null,
+        "elapsed_ms": 178,
+        "detail": "original entry restored; unrelated settings preserved"
+      }
+    },
+    {
+      "operation": "disconnect",
+      "exit_code": 0,
+      "elapsed_ms": 62.0,
+      "report": {
+        "status": "disconnected",
+        "operation": "disconnect",
+        "config_sha256": "ac3758bccdecf38c75f26977f6209b990c1f64e605e484ce8869bb98c76e842a",
+        "selected_sha256": "db689486bcac58a2081d9248fc8903058602e510e04eeea41091c1a88c817ad2",
+        "server_id": "claude-dd00c6c35d05ab0bc614204d",
+        "agent_sha256": null,
+        "registry_sha256": null,
+        "probe_result_sha256": null,
+        "elapsed_ms": 55,
+        "detail": "original entry restored; unrelated settings preserved"
+      }
+    },
+    {
+      "operation": "connect",
+      "exit_code": 0,
+      "elapsed_ms": 1781.0,
+      "report": {
+        "status": "configured",
+        "operation": "connect",
+        "config_sha256": "43ac2bab9a2438964e8f148b224bb2b720ed0fddc346c69e4cc4c459474dbb14",
+        "selected_sha256": "7be243590c9fb5d4d0c8dc2fa6504c7cb1ee753f028a40070ec6ed69e9895126",
+        "server_id": "claude-dd00c6c35d05ab0bc614204d",
+        "agent_sha256": "a6fe11842f532f492efaec31d52c4b054d33a90f896df0455f54a39e9c562d51",
+        "registry_sha256": "906db81c8927965dffd823ac32fdacbe136e6e7cce03a20f04c3808c614d81e1",
+        "probe_result_sha256": null,
+        "elapsed_ms": 1761,
+        "detail": "native wrapper configured; execution is not inferred"
+      }
+    },
+    {
+      "operation": "disconnect",
+      "exit_code": 1,
+      "elapsed_ms": 31.0,
+      "report": {}
+    },
+    {
+      "operation": "inspect",
+      "exit_code": 1,
+      "elapsed_ms": 2844.0,
+      "report": {
+        "status": "unavailable",
+        "operation": "inspect",
+        "config_sha256": "b90443ed4af462c48f42cff95704c85611262cb79bfb6d526a642e2a12be0dd0",
+        "selected_sha256": "7be243590c9fb5d4d0c8dc2fa6504c7cb1ee753f028a40070ec6ed69e9895126",
+        "server_id": "claude-dd00c6c35d05ab0bc614204d",
+        "agent_sha256": null,
+        "registry_sha256": null,
+        "probe_result_sha256": null,
+        "elapsed_ms": 2832,
+        "detail": "Agent preflight unavailable or identity mismatch"
+      }
+    },
+    {
+      "operation": "disconnect",
+      "exit_code": 0,
+      "elapsed_ms": 141.0,
+      "report": {
+        "status": "disconnected",
+        "operation": "disconnect",
+        "config_sha256": "ac3758bccdecf38c75f26977f6209b990c1f64e605e484ce8869bb98c76e842a",
+        "selected_sha256": "db689486bcac58a2081d9248fc8903058602e510e04eeea41091c1a88c817ad2",
+        "server_id": "claude-dd00c6c35d05ab0bc614204d",
+        "agent_sha256": null,
+        "registry_sha256": null,
+        "probe_result_sha256": null,
+        "elapsed_ms": 113,
+        "detail": "original entry restored; unrelated settings preserved"
+      }
+    }
+  ],
+  "fixture_removed": true,
+  "host": {
+    "sha256": "8d1229a281281b98fd2dee72b3253a704be4fce4d45207200cd32a9bb5a6c909",
+    "version": "2.1.251 (Claude Code)",
+    "control": {
+      "exit_code": 0,
+      "results": {
+        "toolu_demo_0": {
+          "is_error": false,
+          "text": "Owned useful document: seven red widgets.\n"
+        }
+      },
+      "stdout_sha256": "4c4d4c099c276d2b9a123bca895c5ae152833d84c1203873e1abf9fee916c517",
+      "stderr_sha256": "a13b1135a964bf051ec5b3b43f59eddfecee4fa9c2301093da9ae0cb278f4ab1"
+    },
+    "protected": {
+      "exit_code": 0,
+      "results": {
+        "toolu_demo_0": {
+          "is_error": false,
+          "text": "Owned useful document: seven red widgets.\r\n"
+        },
+        "toolu_demo_1": {
+          "is_error": true,
+          "text": "Soup Wall withheld MCP invocation (windows_create_path_or_parent_refused)\n\n<system-reminder>\n<total_tokens>14999890 tokens left</total_tokens>\n</system-reminder>"
+        },
+        "toolu_demo_2": {
+          "is_error": false,
+          "text": "{\"bytes_written\":21,\"committed\":true,\"content_sha256\":\"a397bad08bb3ddcf52b694b1142199425be748fa1c92ddbe79be503478826ebc\",\"created\":true,\"directory_synced\":false,\"file_synced\":true,\"path\":\"created.txt\",\"success\":true}"
+        }
+      },
+      "stdout_sha256": "e736b23eec239d862ed99fc126983a7679dc91a0a3c02ea3941195f74c5ef66a",
+      "stderr_sha256": "567b7e53167a69122fd3d8bb4d66100ef2e21177575b3afa1b66cac198ace60b"
+    }
+  },
+  "protocol_witness": {
+    "request": {
+      "jsonrpc": "2.0",
+      "id": "opaque 日 007",
+      "method": "tools/call",
+      "params": {
+        "name": "read_document",
+        "arguments": {
+          "path": "inventory.txt"
+        },
+        "_meta": {
+          "claudecode/toolUseId": "toolu_connection_read",
+          "progressToken": 0
+        }
+      }
+    },
+    "response": {
+      "id": "opaque 日 007",
+      "jsonrpc": "2.0",
+      "result": {
+        "content": [
+          {
+            "text": "Owned useful document: seven red widgets.\r\n",
+            "type": "text"
+          }
+        ]
+      }
+    }
+  },
+  "protocol_closure": {
+    "exit_code": 0,
+    "stdout_eof": true,
+    "reader_joined": true,
+    "forced_cleanup": false
+  },
+  "protocol_log_sha256": "9ff917bf31ac6d6537ca1276bed934a7d46f50d790438e8df3bf10257928d940",
+  "source_binary_stable": true,
+  "summary": {
+    "expected": 35,
+    "observed": 35,
+    "failed": 0,
+    "skips": 0
+  },
+  "transactions_passed": false,
+  "sanitization": "The current account SID is replaced with its SHA-256; runtime observations are unchanged."
+}

@@ -87,7 +87,7 @@ pub struct HttpsGetError {
 }
 
 impl HttpsGetError {
-    fn new(code: &'static str) -> Self {
+    pub(super) fn new(code: &'static str) -> Self {
         Self {
             code,
             request_issued: false,
@@ -95,7 +95,7 @@ impl HttpsGetError {
     }
 
     #[cfg(any(target_os = "linux", test))]
-    fn issued(code: &'static str) -> Self {
+    pub(super) fn issued(code: &'static str) -> Self {
         Self {
             code,
             request_issued: true,
@@ -380,7 +380,7 @@ fn supported_content_type(headers: &reqwest::header::HeaderMap) -> Result<String
 }
 
 #[cfg(target_os = "linux")]
-fn tls_configuration(pem: Option<&str>) -> Result<rustls::ClientConfig, HttpsGetError> {
+pub(super) fn tls_configuration(pem: Option<&str>) -> Result<rustls::ClientConfig, HttpsGetError> {
     use rustls_pki_types::pem::PemObject;
     let mut roots = rustls::RootCertStore::empty();
     roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
@@ -415,9 +415,9 @@ fn tls_configuration(pem: Option<&str>) -> Result<rustls::ClientConfig, HttpsGet
 /// The caller provides one exact socket; there is no hostname connect API,
 /// proxy layer, redirect path, connection pool, or retry mechanism.
 #[cfg(target_os = "linux")]
-struct CountedSocket {
-    socket: tokio::net::TcpStream,
-    received: Arc<AtomicUsize>,
+pub(super) struct CountedSocket {
+    pub(super) socket: tokio::net::TcpStream,
+    pub(super) received: Arc<AtomicUsize>,
 }
 
 #[cfg(target_os = "linux")]
@@ -470,7 +470,7 @@ impl AsyncWrite for CountedSocket {
 }
 
 #[cfg(target_os = "linux")]
-async fn read_response<R: AsyncRead + Unpin>(
+pub(super) async fn read_response<R: AsyncRead + Unpin>(
     stream: &mut R,
 ) -> Result<(String, Vec<u8>, usize), HttpsGetError> {
     let mut received = Vec::with_capacity(MAX_HTTPS_HTTP_BYTES);
@@ -576,7 +576,7 @@ fn parse_response_head(bytes: &[u8]) -> Result<(String, usize), HttpsGetError> {
 }
 
 #[cfg(target_os = "linux")]
-async fn verify_current_addresses(
+pub(super) async fn verify_current_addresses(
     host: &str,
     port: u16,
     approved: &[IpAddr],

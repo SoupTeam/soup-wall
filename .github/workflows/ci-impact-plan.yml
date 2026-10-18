@@ -1,0 +1,48 @@
+name: CI impact plan
+
+on:
+  workflow_call:
+    inputs:
+      workflow:
+        required: true
+        type: string
+    outputs:
+      jobs:
+        description: Exact job IDs selected for the caller
+        value: ${{ jobs.compute.outputs.jobs }}
+
+permissions:
+  contents: read
+
+jobs:
+  compute:
+    # Drafts allocate no planner/runtime runners. Ready-for-review replays all workflows.
+    # Main pushes use ci.yml's separate smoke job; manual qualification stays full.
+    if: github.event_name != 'push' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
+    name: Candidate ${{ github.sha }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      jobs: ${{ steps.plan.outputs.jobs }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Select candidate jobs
+        id: plan
+        env:
+          WORKFLOW: ${{ inputs.workflow }}
+          GITHUB_TOKEN: ${{ github.token }}
+          SOU91_SELECTIVE_CI: ${{ vars.SOU91_SELECTIVE_CI }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/ci_impact.py --workflow "$WORKFLOW" > "$RUNNER_TEMP/ci-impact.json"
+          python3 - "$RUNNER_TEMP/ci-impact.json" "$GITHUB_OUTPUT" <<'PY'
+          import json,sys
+          result=json.load(open(sys.argv[1],encoding='utf-8'))
+          with open(sys.argv[2],'a',encoding='utf-8') as output:
+              output.write('jobs='+json.dumps(result['jobs'],separators=(',',':'))+'\n')
+          print('CI impact mode:',result['mode'],'selected jobs:',len(result['jobs']))
+          PY

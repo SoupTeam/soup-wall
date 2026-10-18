@@ -1,0 +1,160 @@
+name: Linux MCP collector crash supervision
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sou86-crash-supervision-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: sou86-crash-supervision.yml
+  required-disposable-linux-crash-supervision:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'required-disposable-linux-crash-supervision')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    env:
+      RUSTUP_TOOLCHAIN: '1.94.1'
+      SOU86_ACCEPTED: '2af2f35b326e0f70660b5c4cbde8134fe4ab9751'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@1.94.1
+      - uses: Swatinem/rust-cache@v2
+      - name: Build pinned Node and unprivileged bubblewrap prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends meson ninja-build libcap-dev pkg-config
+          mkdir "$RUNNER_TEMP/sou86-node" "$RUNNER_TEMP/sou86-bwrap-source"
+          curl --fail --location --retry 3 https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz --output "$RUNNER_TEMP/sou86-node.tar.xz"
+          printf '%s  %s\n' 9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37 "$RUNNER_TEMP/sou86-node.tar.xz" | sha256sum --check
+          tar --extract --xz --file "$RUNNER_TEMP/sou86-node.tar.xz" --directory "$RUNNER_TEMP/sou86-node" --strip-components=1 --no-same-owner --no-same-permissions
+          curl --fail --location --retry 3 https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz --output "$RUNNER_TEMP/sou86-bwrap.tar.xz"
+          printf '%s  %s\n' 0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d "$RUNNER_TEMP/sou86-bwrap.tar.xz" | sha256sum --check
+          tar --extract --xz --file "$RUNNER_TEMP/sou86-bwrap.tar.xz" --directory "$RUNNER_TEMP/sou86-bwrap-source" --strip-components=1 --no-same-owner --no-same-permissions
+          meson setup "$RUNNER_TEMP/sou86-bwrap-build" "$RUNNER_TEMP/sou86-bwrap-source" -Dtests=false -Dman=disabled -Dselinux=disabled -Dbash_completion=disabled -Dzsh_completion=disabled
+          meson compile -C "$RUNNER_TEMP/sou86-bwrap-build"
+          sha256sum "$RUNNER_TEMP/sou86-node.tar.xz" "$RUNNER_TEMP/sou86-node/bin/node" "$RUNNER_TEMP/sou86-bwrap.tar.xz" "$RUNNER_TEMP/sou86-bwrap-build/bwrap" > "$RUNNER_TEMP/sou86-runtime-hashes.txt"
+      - name: Build accepted runtime separately before implementing the new boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD > "$RUNNER_TEMP/sou86-driver-source.txt"
+          git rev-parse "$SOU86_ACCEPTED" "$SOU86_ACCEPTED^{tree}" > "$RUNNER_TEMP/sou86-accepted-source.txt"
+          rustc --version > "$RUNNER_TEMP/sou86-rust.txt"
+          python3 --version > "$RUNNER_TEMP/sou86-python.txt"
+          systemd --version > "$RUNNER_TEMP/sou86-systemd.txt"
+          mkdir "$RUNNER_TEMP/sou86-accepted"
+          git archive "$SOU86_ACCEPTED" | tar --extract --directory "$RUNNER_TEMP/sou86-accepted"
+          cargo build --manifest-path "$RUNNER_TEMP/sou86-accepted/Cargo.toml" --target-dir "$RUNNER_TEMP/sou86-accepted-target" --locked -p agentfw --bin agentfw --message-format=json > "$RUNNER_TEMP/sou86-accepted-build.jsonl"
+          sha256sum "$RUNNER_TEMP/sou86-accepted-target/debug/agentfw" > "$RUNNER_TEMP/sou86-accepted-binary.txt"
+      - name: Require nonempty observer controls
+        run: |
+          python3 -B - <<'PY'
+          import unittest
+          suite=unittest.defaultTestLoader.discover('scripts/tests',pattern='test_sou86_crash_supervision.py')
+          if not suite.countTestCases(): raise SystemExit('required crash observer controls missing')
+          result=unittest.TextTestRunner(verbosity=2).run(suite)
+          raise SystemExit(0 if result.wasSuccessful() else 1)
+          PY
+      - name: Inventory actual accepted crash behavior before any harness recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          unit="sou86-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          # Explicit authorization is limited to this one disposable service.
+          # Its outer teardown is emergency safety, never successful evidence.
+          sudo systemd-run --quiet --wait --pipe --collect --unit="$unit" \
+            --property="User=$(id -un)" --property="Group=$(id -gn)" \
+            --property='Delegate=cpu memory pids' \
+            --property=MemoryMax=2G --property=MemorySwapMax=0 \
+            --property=TasksMax=256 --property=CPUQuota=200% \
+            --property=RuntimeMaxSec=15min --property=KillMode=control-group \
+            --working-directory="$GITHUB_WORKSPACE" \
+            /usr/bin/env "PATH=$PATH" "TMPDIR=$RUNNER_TEMP" \
+            python3 -B scripts/verify-sou86-crash-supervision.py --run --mode baseline-inventory \
+            --agentfw "$RUNNER_TEMP/sou86-accepted-target/debug/agentfw" \
+            --node "$RUNNER_TEMP/sou86-node/bin/node" --npm "$RUNNER_TEMP/sou86-node/bin/npm" \
+            --bwrap "$RUNNER_TEMP/sou86-bwrap-build/bwrap" \
+            --expected-commit "$(git rev-parse HEAD)" --runtime-source-commit "$SOU86_ACCEPTED" \
+            --disposable-systemd-unit="$unit.service" --output "$RUNNER_TEMP/sou86-baseline-inventory"
+      - name: Build explicitly pinned Git and the exact candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y --no-install-recommends zlib1g-dev
+          mkdir "$RUNNER_TEMP/sou86-git-source"
+          curl --fail --location --retry 3 https://www.kernel.org/pub/software/scm/git/git-2.51.2.tar.xz --output "$RUNNER_TEMP/sou86-git.tar.xz"
+          printf '%s  %s\n' 233d7143a2d58e60755eee9b76f559ec73ea2b3c297f5b503162ace95966b4e3 "$RUNNER_TEMP/sou86-git.tar.xz" | sha256sum --check
+          tar --extract --xz --file "$RUNNER_TEMP/sou86-git.tar.xz" --directory "$RUNNER_TEMP/sou86-git-source" --strip-components=1 --no-same-owner --no-same-permissions
+          make -C "$RUNNER_TEMP/sou86-git-source" -j2 NO_CURL=YesPlease NO_EXPAT=YesPlease NO_TCLTK=YesPlease NO_GETTEXT=YesPlease NO_OPENSSL=YesPlease git
+          cargo build --locked -p agentfw --bins --message-format=json > "$RUNNER_TEMP/sou86-candidate-build.jsonl"
+          sha256sum target/debug/agentfw target/debug/agentfw-git-sandbox "$RUNNER_TEMP/sou86-git-source/git" > "$RUNNER_TEMP/sou86-candidate-binaries.txt"
+      - name: Require original filesystem Git and independently observed crash recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          unit="sou86-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          # The first service has exited and been collected. This is a fresh
+          # explicitly owned service, with no shared-root recovery scan.
+          sudo systemd-run --quiet --wait --pipe --collect --unit="$unit" \
+            --property="User=$(id -un)" --property="Group=$(id -gn)" \
+            --property='Delegate=cpu memory pids' \
+            --property=MemoryMax=2G --property=MemorySwapMax=0 \
+            --property=TasksMax=256 --property=CPUQuota=200% \
+            --property=RuntimeMaxSec=15min --property=KillMode=control-group \
+            --working-directory="$GITHUB_WORKSPACE" \
+            /usr/bin/env "PATH=$PATH" "TMPDIR=$RUNNER_TEMP" \
+            python3 -B scripts/verify-sou86-crash-supervision.py --run --mode acceptance \
+            --agentfw "$GITHUB_WORKSPACE/target/debug/agentfw" \
+            --node "$RUNNER_TEMP/sou86-node/bin/node" --npm "$RUNNER_TEMP/sou86-node/bin/npm" \
+            --bwrap "$RUNNER_TEMP/sou86-bwrap-build/bwrap" \
+            --git "$RUNNER_TEMP/sou86-git-source/git" \
+            --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou86-git-source/git" | cut -d' ' -f1)" \
+            --git-launcher "$GITHUB_WORKSPACE/target/debug/agentfw-git-sandbox" \
+            --expected-commit "$(git rev-parse HEAD)" --runtime-source-commit "$(git rev-parse HEAD)" \
+            --disposable-systemd-unit="$unit.service" --output "$RUNNER_TEMP/sou86-acceptance"
+      - name: Publish separate bounded sanitized inventory and protection evidence
+        if: always()
+        run: |
+          python3 -B - <<'PY'
+          import importlib.util,json,os
+          from pathlib import Path
+          spec=importlib.util.spec_from_file_location('sou86','scripts/verify-sou86-crash-supervision.py')
+          driver=importlib.util.module_from_spec(spec);spec.loader.exec_module(driver)
+          for directory,protected in (('sou86-baseline-inventory',False),('sou86-acceptance',True)):
+              path=Path(os.environ['RUNNER_TEMP'])/directory/'report.json'
+              report=json.loads(path.read_text()) if path.exists() else {'status':'incomplete','error':'required_report_missing','protection_acceptance':protected,'passed':0,'failed':1,'skipped':0}
+              rendered=json.dumps(driver.summary(report),indent=2)
+              print(rendered)
+              with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as stream: stream.write('```json\n'+rendered+'\n```\n')
+          PY
+      - name: Retain exact identities and sanitized owned observations
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou86-linux-crash-supervision-evidence
+          path: |
+            ${{ runner.temp }}/sou86-*.txt
+            ${{ runner.temp }}/sou86-accepted-build.jsonl
+            ${{ runner.temp }}/sou86-candidate-build.jsonl
+            ${{ runner.temp }}/sou86-baseline-inventory/report.json
+            ${{ runner.temp }}/sou86-acceptance/report.json
+          if-no-files-found: warn
+          retention-days: 30

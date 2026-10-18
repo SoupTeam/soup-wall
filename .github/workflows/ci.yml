@@ -7,7 +7,13 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
+    inputs:
+      smoke_only:
+        description: Run only the merged-source smoke command (not full qualification)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -17,8 +23,74 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  draft-checks:
+    name: Draft fast checks (not merge qualification)
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+      - name: Check admission, scheduling and documentation contracts
+        run: |
+          python3 -m unittest discover -s scripts/tests -p 'test_ci_*.py' -v
+          python3 -m unittest discover -s scripts/tests -p 'test_check_docs.py' -v
+          python3 scripts/check_docs.py
+      - name: Rule classifier unit regressions
+        run: python3 -m unittest discover -s rule_baseline -p 'test_*.py' -v
+      - name: SOU-35 public grouped-review and custody regressions
+        run: |
+          python3 -m venv target/sou35-venv
+          target/sou35-venv/bin/python -m pip install --disable-pip-version-check -r eval/sou13/requirements-cp2.txt
+          target/sou35-venv/bin/python eval/sou35/run_tests.py
+
+  main-smoke:
+    name: Main binary smoke (full qualification runs before merge)
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.smoke_only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-${{ runner.os }}-${{ runner.arch }}
+          key: ${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-default
+          cache-bin: false
+      - name: Build the actual merged Agent and Gateway
+        run: cargo build --locked -p agentfw --bin agentfw -p llm-firewall --bin llm-firewall
+      - name: Check Agent CLI and the versioned adapter contract
+        run: |
+          target/debug/agentfw --help
+          cargo test --locked -p soup-wall-adapter --lib
+      - name: Exercise the merged Gateway with an owned local upstream and SQLite
+        run: python3 scripts/self-hosted-local-acceptance.py --gateway target/debug/llm-firewall --artifact-label "$GITHUB_SHA" --out target/main-smoke.json
+      - name: Retain merged-source smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: main-smoke-${{ github.sha }}
+          path: target/main-smoke.json
+          if-no-files-found: error
+          retention-days: 7
+
+  impact:
+    if: github.event_name != 'workflow_dispatch' || !inputs.smoke_only
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: ci.yml
   documentation:
-    name: Documentation links
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'documentation')
+    # A skipped draft job must not satisfy the required ready-PR context.
+    name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'Deferred - Documentation links' || 'Documentation links' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -29,6 +101,9 @@ jobs:
         run: python3 scripts/check_docs.py
 
   test:
+    name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'Deferred - test' || 'test' }}
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'test')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -37,6 +112,14 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-${{ runner.os }}-${{ runner.arch }}
+          key: ${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-default
+          # PR caches remain scoped to refs/pull/<n>/merge; privileged admission never restores them.
+          save-if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+          cache-bin: false
+      # Refuse formatting errors before compiling or running expensive probes.
+      - run: cargo fmt --all -- --check
       - name: Install Linux sandbox runtime
         run: sudo apt-get update && sudo apt-get install --no-install-recommends -y bubblewrap
       - name: Retain focused provenance-overflow regressions
@@ -82,7 +165,6 @@ jobs:
           name: runtime-protection-status
           path: target/runtime-protection-status/
           if-no-files-found: warn
-      - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
       - name: Retain Task 3 attack scenario results
@@ -98,54 +180,24 @@ jobs:
         run: cargo build --locked -p llm-firewall
       - name: Isolated Gateway and SQLite Console acceptance
         run: python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
-      - name: Optional classifier adapter regressions (offline)
-        run: python3 -m unittest experiments.classification.test_jev experiments.classification.test_shadow -v
-      - name: Task 1 classification evaluation runner units
-        run: python3 -m unittest discover -s eval -p 'test_*.py' -v
-      - name: Task 1 rule baseline unit regressions
-        run: python3 -m unittest discover -s rule_baseline -p 'test_*.py' -v
-      - name: SOU-13 public data-free suite and source privacy gate
-        # Private-artifact skips are pinned by count; the private full validation is owner-only.
-        run: |
-          python3 -m venv target/sou13-venv
-          target/sou13-venv/bin/python -m pip install --disable-pip-version-check -r eval/sou13/requirements-cp2.txt
-          target/sou13-venv/bin/python eval/sou13/run_tests.py --expect-skipped 150
-          target/sou13-venv/bin/python eval/sou13/scripts_cp2/check_release_privacy.py --root eval/sou13
-      - name: Optional learned classifier preparation regressions (offline)
-        run: python3 -m unittest experiments.local_classifier.test_model experiments.local_classifier.test_ledger experiments.local_classifier.test_custodian experiments.local_classifier.test_gold_import -v
-      - name: Task 1 frozen core regression evaluation
-        run: python3 eval/eval_runner.py eval/fixtures/soup_task1_evaluation_cases_v0.4.json --classifier-path rule_baseline --out-dir target/task1-core-evaluation
-      - name: Task 1 mixed-action and benign regression evaluation
-        run: python3 eval/eval_runner.py eval/fixtures/soup_task1_mixed_actions_urtisto_v0.1.json eval/fixtures/soup_task1_benign_comparison_urtisto_v0.1.json --classifier-path rule_baseline --out-dir target/task1-mixed-evaluation
-      - name: Retain Task 1 classifier regression evidence
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: task1-classifier-regression-evidence
-          path: |
-            target/task1-core-evaluation/
-            target/task1-mixed-evaluation/
-          if-no-files-found: warn
-      - name: Disposable Agent setup and daemon status
-        run: python3 scripts/clean-setup-acceptance.py --run --agentfw target/debug/agentfw --output target/clean-setup-linux.json
+      - name: Run combined SOU-18 local probes
+        run: python3 scripts/run-sou18-acceptance.py --run --include-generic --repo . --agentfw target/debug/agentfw --expected-commit "${{ github.sha }}" --output "${{ runner.temp }}/sou18-suite-${{ github.run_id }}-${{ github.run_attempt }}"
+      # The suite runs setup and status exactly once in isolated profiles,
+      # verifies their source/binary hashes, and fails on missing stages.
       - name: Retain setup and status evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: clean-setup-linux
-          path: target/clean-setup-linux.json
+          path: ${{ runner.temp }}/sou18-suite-${{ github.run_id }}-${{ github.run_attempt }}/setup.json
           if-no-files-found: warn
-      - name: Compare Agent status with independent MCP witnesses
-        run: python3 scripts/verify-sou18-status.py --run --repo . --agentfw target/debug/agentfw --expected-commit "${{ github.sha }}" --output "${{ runner.temp }}/sou18-status"
       - name: Retain initial status and MCP evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: sou18-status-linux
-          path: ${{ runner.temp }}/sou18-status/results.json
+          path: ${{ runner.temp }}/sou18-suite-${{ github.run_id }}-${{ github.run_attempt }}/status/results.json
           if-no-files-found: warn
-      - name: Run combined SOU-18 local probes
-        run: python3 scripts/run-sou18-acceptance.py --run --include-generic --repo . --agentfw target/debug/agentfw --expected-commit "${{ github.sha }}" --output "${{ runner.temp }}/sou18-suite-${{ github.run_id }}-${{ github.run_attempt }}"
       - name: Retain combined SOU-18 probe evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -178,8 +230,51 @@ jobs:
             target/sou-22-real-baseline.json
           if-no-files-found: ignore
 
+  python-classifier:
+    name: Python classifier and evaluation
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'python-classifier')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Optional classifier adapter regressions (offline)
+        run: python3 -m unittest experiments.classification.test_jev experiments.classification.test_shadow -v
+      - name: Task 1 classification evaluation runner units
+        run: python3 -m unittest discover -s eval -p 'test_*.py' -v
+      - name: Task 1 rule baseline unit regressions
+        run: python3 -m unittest discover -s rule_baseline -p 'test_*.py' -v
+      - name: SOU-13 public data-free suite and source privacy gate
+        # Private-artifact skips are pinned by count; the private full validation is owner-only.
+        run: |
+          python3 -m venv target/sou13-venv
+          target/sou13-venv/bin/python -m pip install --disable-pip-version-check -r eval/sou13/requirements-cp2.txt
+          target/sou13-venv/bin/python eval/sou13/run_tests.py --expect-skipped 150
+          target/sou13-venv/bin/python eval/sou13/scripts_cp2/check_release_privacy.py --root eval/sou13
+      - name: SOU-35 public grouped-review and custody regressions
+        run: target/sou13-venv/bin/python eval/sou35/run_tests.py
+      - name: Optional learned classifier preparation regressions (offline)
+        run: python3 -m unittest experiments.local_classifier.test_model experiments.local_classifier.test_ledger experiments.local_classifier.test_custodian experiments.local_classifier.test_gold_import -v
+      - name: Task 1 frozen core regression evaluation
+        run: python3 eval/eval_runner.py eval/fixtures/soup_task1_evaluation_cases_v0.4.json --classifier-path rule_baseline --out-dir target/task1-core-evaluation
+      - name: Task 1 mixed-action and benign regression evaluation
+        run: python3 eval/eval_runner.py eval/fixtures/soup_task1_mixed_actions_urtisto_v0.1.json eval/fixtures/soup_task1_benign_comparison_urtisto_v0.1.json --classifier-path rule_baseline --out-dir target/task1-mixed-evaluation
+      - name: Retain Task 1 classifier regression evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: task1-classifier-regression-evidence
+          path: |
+            target/task1-core-evaluation/
+            target/task1-mixed-evaluation/
+          if-no-files-found: warn
+
   # The Linux workspace job covers these targets; this adds the native macOS boundary.
   native-macos-resilience:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-macos-resilience')
     name: Native macOS admission resilience
     runs-on: macos-15
     timeout-minutes: 30
@@ -187,6 +282,12 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-${{ runner.os }}-${{ runner.arch }}
+          key: ${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-default
+          # PR caches remain scoped to refs/pull/<n>/merge; privileged admission never restores them.
+          save-if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+          cache-bin: false
       - name: Prepare canonical temporary storage and environment evidence
         shell: bash
         run: |
@@ -232,26 +333,24 @@ jobs:
           path: ${{ env.SOU17_GENERIC_OUTPUT }}/
           if-no-files-found: warn
           retention-days: 14
-      - name: Disposable Agent setup and daemon status
-        run: python3 scripts/clean-setup-acceptance.py --run --agentfw target/debug/agentfw --output target/clean-setup-macos.json
+      - name: Run combined SOU-18 local probes
+        run: python3 scripts/run-sou18-acceptance.py --run --include-generic --repo . --agentfw target/debug/agentfw --expected-commit "${{ github.sha }}" --output "${{ runner.temp }}/sou18-suite-${{ github.run_id }}-${{ github.run_attempt }}"
+      # The suite runs setup and status exactly once in isolated profiles,
+      # verifies their source/binary hashes, and fails on missing stages.
       - name: Retain setup and status evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: clean-setup-macos
-          path: target/clean-setup-macos.json
+          path: ${{ runner.temp }}/sou18-suite-${{ github.run_id }}-${{ github.run_attempt }}/setup.json
           if-no-files-found: warn
-      - name: Compare Agent status with independent MCP witnesses
-        run: python3 scripts/verify-sou18-status.py --run --repo . --agentfw target/debug/agentfw --expected-commit "${{ github.sha }}" --output "${{ runner.temp }}/sou18-status"
       - name: Retain initial status and MCP evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: sou18-status-macos
-          path: ${{ runner.temp }}/sou18-status/results.json
+          path: ${{ runner.temp }}/sou18-suite-${{ github.run_id }}-${{ github.run_attempt }}/status/results.json
           if-no-files-found: warn
-      - name: Run combined SOU-18 local probes
-        run: python3 scripts/run-sou18-acceptance.py --run --include-generic --repo . --agentfw target/debug/agentfw --expected-commit "${{ github.sha }}" --output "${{ runner.temp }}/sou18-suite-${{ github.run_id }}-${{ github.run_attempt }}"
       - name: Retain combined SOU-18 probe evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -261,6 +360,8 @@ jobs:
           if-no-files-found: warn
 
   agent-lifecycle-macos:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'agent-lifecycle-macos')
     name: Agent lifecycle on macOS
     runs-on: macos-15
     timeout-minutes: 45
@@ -268,6 +369,12 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-${{ runner.os }}-${{ runner.arch }}
+          key: ${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-default
+          # PR caches remain scoped to refs/pull/<n>/merge; privileged admission never restores them.
+          save-if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+          cache-bin: false
       - name: Build and test managed Agent lifecycle
         shell: bash
         run: |
@@ -282,6 +389,7 @@ jobs:
           cargo build --locked -p agentfw --bin agentfw
           shasum -a 256 target/debug/agentfw | tee target/sou29-macos/agentfw.sha256
           cargo test --locked -p agentfw --test lifecycle -- --test-threads=1 2>&1 | tee target/sou29-macos/lifecycle.log
+          cargo test --locked -p agentfw --test self_test -- --test-threads=1 2>&1 | tee target/sou29-macos/self_test.log
       - name: Retain macOS lifecycle evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -292,6 +400,9 @@ jobs:
 
   # The optional ML stack is not compiled by the default-feature job.
   all-features:
+    name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'Deferred - all-features' || 'all-features' }}
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'all-features')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -300,12 +411,21 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-${{ runner.os }}-${{ runner.arch }}
+          key: ${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-all-features
+          # PR caches remain scoped to refs/pull/<n>/merge; privileged admission never restores them.
+          save-if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+          cache-bin: false
       - name: Install Linux sandbox runtime
         run: sudo apt-get update && sudo apt-get install --no-install-recommends -y bubblewrap
       - run: cargo clippy --workspace --all-features --all-targets --locked -- -D warnings
       - run: cargo test --workspace --all-features --locked
 
   agent-windows-security:
+    name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'Deferred - agent-windows-security' || 'agent-windows-security' }}
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'agent-windows-security')
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -314,6 +434,12 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-${{ runner.os }}-${{ runner.arch }}
+          key: ${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-default
+          # PR caches remain scoped to refs/pull/<n>/merge; privileged admission never restores them.
+          save-if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+          cache-bin: false
       - run: cargo clippy --locked -p agentfw --all-targets -- -D warnings
       # Each MCP case owns real processes and protected profile files. Avoid a
       # startup burst on Windows; explicit within-case concurrency remains tested.
@@ -369,6 +495,8 @@ jobs:
           if-no-files-found: error
 
   saml-release-targets:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'saml-release-targets')
     name: SAML ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
@@ -394,6 +522,12 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-${{ runner.os }}-${{ runner.arch }}
+          key: ${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-saml-${{ matrix.target }}
+          # PR caches remain scoped to refs/pull/<n>/merge; privileged admission never restores them.
+          save-if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+          cache-bin: false
       - name: Verify target's resolved RSA dependency boundary
         shell: bash
         env:
@@ -409,6 +543,8 @@ jobs:
         run: cargo test --locked -p llm-firewall --lib --target ${{ matrix.target }} saml_auth::tests
 
   redis-integration:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'redis-integration')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -425,11 +561,19 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-${{ runner.os }}-${{ runner.arch }}
+          key: ${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-default
+          # PR caches remain scoped to refs/pull/<n>/merge; privileged admission never restores them.
+          save-if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+          cache-bin: false
       - run: cargo test --locked -p llm-firewall redis_limits::tests::redis_shares_rate_and_spend_windows -- --ignored
         env:
           LLM_FW_TEST_REDIS_URL: redis://127.0.0.1:6379/15
 
   postgres-integration:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'postgres-integration')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -450,6 +594,12 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-${{ runner.os }}-${{ runner.arch }}
+          key: ${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-default
+          # PR caches remain scoped to refs/pull/<n>/merge; privileged admission never restores them.
+          save-if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+          cache-bin: false
       # Run on the fresh service database before suites which leave queued events.
       - name: Verify webhook ownership, recovery and populated migrations
         run: cargo test --locked -p llm-firewall --lib tenant_store::webhook_recovery_tests::postgres_webhook_recovery_and_fenced_completion -- --ignored --exact --nocapture
@@ -501,6 +651,8 @@ jobs:
           if-no-files-found: ignore
 
   docker-build:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'docker-build')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

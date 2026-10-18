@@ -27,21 +27,118 @@ enum NativeApprovalCmd {
     /// List outstanding requests (digests only, no raw arguments).
     List,
     /// Show one request in full, including the exact arguments.
-    Inspect { id: String },
+    Inspect {
+        #[arg(allow_hyphen_values = true)]
+        id: String,
+    },
     /// Approve exactly this call; --binding must be the digest shown by inspect.
     Approve {
+        #[arg(allow_hyphen_values = true)]
         id: String,
         #[arg(long)]
         binding: String,
     },
     /// Reject this call.
-    Reject { id: String },
+    Reject {
+        #[arg(allow_hyphen_values = true)]
+        id: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum ChildAuthorityCmd {
+    /// Mint a signed grant for one host session and MCP server.
+    Mint {
+        #[arg(long)]
+        session: String,
+        #[arg(long)]
+        server: String,
+        #[arg(long, default_value_t = 300)]
+        ttl_seconds: u64,
+        #[arg(long, value_delimiter = ',')]
+        tools: Vec<String>,
+        #[arg(long)]
+        agent_id: Option<String>,
+        #[arg(long)]
+        parent_id: Option<String>,
+        #[arg(long, value_delimiter = ',')]
+        resources: Option<Vec<String>>,
+        /// Current /native/v1/instance identifier; required for scoped grants.
+        #[arg(long, allow_hyphen_values = true)]
+        instance_id: Option<String>,
+        /// Exact live parent binding from /native/v1/instance.
+        #[arg(long)]
+        parent_binding: Option<String>,
+    },
+    /// Authenticate a grant and print its verified claims.
+    Verify {
+        #[arg(long)]
+        session: String,
+        #[arg(long)]
+        server: String,
+        #[arg(long)]
+        token: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum ClassifierPackageCmd {
+    /// Build the deterministic package archive from a source checkout (writes one file).
+    Build {
+        /// `frozen` (SOU-14) or `rev2` (SOU-34).
+        #[arg(long)]
+        classifier: String,
+        #[arg(long, default_value = ".")]
+        source: std::path::PathBuf,
+        #[arg(long)]
+        out: std::path::PathBuf,
+    },
+    /// Validate an archive and show what install would do; writes nothing.
+    Preview {
+        archive: std::path::PathBuf,
+        #[arg(long)]
+        python: std::path::PathBuf,
+    },
+    /// Install and select a package under ~/.agentfw/classifier (private, atomic).
+    Install {
+        archive: std::path::PathBuf,
+        #[arg(long)]
+        python: std::path::PathBuf,
+    },
+    /// Re-verify the selected package, its files, permissions and interpreter.
+    Verify,
+    /// Show selected, previous and installed packages.
+    Inspect,
+    /// Select the previous package (verified first).
+    Rollback,
+    /// Clear leftovers of an interrupted install.
+    Recover,
+    /// Remove one non-selected package, or everything with --all.
+    Remove {
+        #[arg(long)]
+        package: Option<String>,
+        #[arg(long)]
+        all: bool,
+    },
 }
 
 #[derive(Subcommand)]
 enum Cmd {
+    /// Verify and resume an opt-in Linux audit segment store after a stopped writer.
+    AuditRetentionRecover {
+        /// Agent profile containing config.yaml.
+        #[arg(long)]
+        home: Option<PathBuf>,
+    },
+    /// Install and manage the verified rule-classifier package (SOU-64).
+    ClassifierPackage {
+        #[command(subcommand)]
+        action: ClassifierPackageCmd,
+    },
     /// Run the daemon.
     Serve,
+    /// Diagnose an installed Agent without modifying host settings or starting tools.
+    Doctor(agentfw::doctor::DoctorArgs),
     /// Query authenticated runtime diagnostics; unknown protection exits 2.
     ProtectionStatus(agentfw::protection_status::QueryArgs),
     /// Summarize an audit log: what would this policy have done?
@@ -109,6 +206,12 @@ enum Cmd {
         /// This opt-in path fails closed; result release is to the MCP host, not model context.
         #[arg(long)]
         native_admission: bool,
+        /// Parent host session to bind this collector and its provenance to.
+        #[arg(long)]
+        host_session: Option<String>,
+        /// Authenticated child authority grant token minted for this session and server.
+        #[arg(long)]
+        child_authority: Option<String>,
         /// With --native-admission: hold one Ask call up to N seconds for a
         /// single-use operator approval (needs `native.approval` in the daemon
         /// config). 0 or absent keeps the default correlated refusal.
@@ -118,17 +221,37 @@ enum Cmd {
         #[arg(last = true, required = true)]
         command: Vec<String>,
     },
+    /// Manage authenticated child authority grants.
+    ChildAuthority {
+        #[command(subcommand)]
+        action: ChildAuthorityCmd,
+    },
     /// Operator commands for pending native MCP Ask approvals (SOU-48).
     /// Approval is explicit single-use authorization, not proof of human presence.
     NativeApproval {
         #[command(subcommand)]
         action: NativeApprovalCmd,
     },
+    /// Exercise an installed Agent end to end in an owned temporary workspace (Linux).
+    ///
+    /// Writes a versioned JSON report. Exit 0 passed, 3 failed, 4 incomplete, 5 unsupported.
+    SelfTest(agentfw::self_test::Args),
+    /// Bundled harmless stdio MCP fixture server used by `self-test`.
+    #[command(hide = true)]
+    SelfTestFixture(agentfw::self_test::FixtureArgs),
     /// Inspect a selected Claude-style MCP JSON config without starting servers.
     /// Only server names and supported transport flags are printed.
     McpInspectConfig {
         #[arg(long)]
         path: PathBuf,
+    },
+    /// Review, compile, and manage transactional MCP admission profiles.
+    McpProfile {
+        /// Optional custom agentfw home directory (default: ~/.agentfw).
+        #[arg(long)]
+        home: Option<PathBuf>,
+        #[command(subcommand)]
+        command: agentfw::mcp::profile_author::Command,
     },
     /// Manage one explicitly selected Claude Code stdio MCP entry.
     McpConnection {
@@ -295,11 +418,38 @@ enum ServiceCommand {
 }
 
 fn main() -> anyhow::Result<()> {
+    // Internal owners must stay synchronous: parent-death ownership belongs to
+    // their stable main thread, before any Tokio worker can be created.
+    if let Some(status) = agentfw::mcp::linux_owner::early_dispatch() {
+        std::process::exit(status);
+    }
     let cli = Cli::parse();
     match cli.cmd {
+        Cmd::AuditRetentionRecover { home } => {
+            let home = home.unwrap_or(Config::home_path()?);
+            let cfg = Config::from_yaml(&std::fs::read_to_string(home.join("config.yaml"))?)?;
+            let retention = cfg
+                .audit_retention
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("audit_retention is not configured"))?;
+            #[cfg(target_os = "linux")]
+            {
+                agentfw::audit::recover_retention(retention)?;
+                println!("Audit retention verified and ready");
+                Ok(())
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                let _ = retention;
+                anyhow::bail!("bounded audit retention is supported on Linux only")
+            }
+        }
+        Cmd::Doctor(args) => std::process::exit(agentfw::doctor::run(args)),
         Cmd::ProtectionStatus(args) => {
             std::process::exit(agentfw::protection_status::run_cli(args))
         }
+        Cmd::SelfTest(args) => std::process::exit(agentfw::self_test::run(args)),
+        Cmd::SelfTestFixture(args) => agentfw::self_test::fixture::serve(args),
         Cmd::Serve => {
             #[cfg(target_os = "linux")]
             let _direct_guard =
@@ -498,6 +648,38 @@ fn main() -> anyhow::Result<()> {
             );
             Ok(())
         }
+        Cmd::ClassifierPackage { action } => {
+            use agentfw::classifier_runtime::package as pkg;
+            let value = match action {
+                ClassifierPackageCmd::Build {
+                    classifier,
+                    source,
+                    out,
+                } => {
+                    let bytes = pkg::build(pkg::Which::parse(&classifier)?, &source)?;
+                    std::fs::write(&out, &bytes)?;
+                    serde_json::json!({"action":"build","archive_sha256":pkg::sha(&bytes),
+                        "package":pkg::parse(&bytes)?.id(),"out":out})
+                }
+                ClassifierPackageCmd::Preview { archive, python } => {
+                    let store = pkg::Store::new(&Config::home()?);
+                    store.preview(&pkg::read_archive_file(&archive)?, &python)?
+                }
+                ClassifierPackageCmd::Install { archive, python } => {
+                    let store = pkg::Store::new(&Config::home()?);
+                    store.install(&pkg::read_archive_file(&archive)?, &python)?
+                }
+                ClassifierPackageCmd::Verify => pkg::Store::new(&Config::home()?).verify()?,
+                ClassifierPackageCmd::Inspect => pkg::Store::new(&Config::home()?).inspect()?,
+                ClassifierPackageCmd::Rollback => pkg::Store::new(&Config::home()?).rollback()?,
+                ClassifierPackageCmd::Recover => pkg::Store::new(&Config::home()?).recover()?,
+                ClassifierPackageCmd::Remove { package, all } => {
+                    pkg::Store::new(&Config::home()?).remove(package.as_deref(), all)?
+                }
+            };
+            println!("{}", serde_json::to_string_pretty(&value)?);
+            Ok(())
+        }
         Cmd::NativeApproval { action } => {
             let home = Config::home()?;
             match action {
@@ -540,12 +722,117 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Cmd::McpConnection { command } => agentfw::mcp::connection::run(command),
+        Cmd::McpProfile { home, command } => {
+            let home = match home {
+                Some(h) => h,
+                None => match &command {
+                    agentfw::mcp::profile_author::Command::Preview { .. }
+                    | agentfw::mcp::profile_author::Command::Import { .. }
+                    | agentfw::mcp::profile_author::Command::Validate { .. }
+                    | agentfw::mcp::profile_author::Command::Explain { .. }
+                    | agentfw::mcp::profile_author::Command::Diff { .. }
+                    | agentfw::mcp::profile_author::Command::Compile { .. } => Config::home_path()?,
+                    _ => Config::home()?,
+                },
+            };
+            agentfw::mcp::profile_author::run(command, &home)
+        }
+        Cmd::ChildAuthority { action } => {
+            use agentfw::native::child_authority;
+            let home = Config::home()?;
+            let path = home.join("native-token");
+            let token = std::fs::read_to_string(&path).map_err(|_| {
+                anyhow::anyhow!("child authority needs the existing daemon native token")
+            })?;
+            let token = token.trim();
+            anyhow::ensure!(!token.is_empty(), "daemon native token is empty");
+            let key = child_authority::derive_key(token);
+            match action {
+                ChildAuthorityCmd::Mint {
+                    session,
+                    server,
+                    ttl_seconds,
+                    tools,
+                    agent_id,
+                    parent_id,
+                    resources,
+                    instance_id,
+                    parent_binding,
+                } => {
+                    let scoped = agent_id.is_some() || parent_id.is_some() || resources.is_some();
+                    anyhow::ensure!(!scoped || instance_id.as_ref().is_some_and(|id| !id.is_empty() && id.len() <= 128 && id.bytes().all(|b| b.is_ascii_alphanumeric() || b"_-".contains(&b))),
+                        "scoped child authority requires --instance-id from the running daemon's authenticated /native/v1/instance endpoint");
+                    anyhow::ensure!(
+                        agent_id.is_some() || (parent_id.is_none() && resources.is_none()),
+                        "scoped parent/resource authority requires --agent-id"
+                    );
+                    anyhow::ensure!(
+                        parent_id.is_some() == parent_binding.is_some(),
+                        "--parent-id and --parent-binding are required together"
+                    );
+                    anyhow::ensure!(
+                        parent_binding
+                            .as_deref()
+                            .is_none_or(agentfw::native::is_digest),
+                        "invalid parent binding digest"
+                    );
+                    let nonce = if scoped {
+                        let instance = instance_id.unwrap();
+                        match parent_binding {
+                            Some(binding) => {
+                                format!("{instance}.{binding}.{}", agentfw::token::generate())
+                            }
+                            None => format!("{instance}.{}", agentfw::token::generate()),
+                        }
+                    } else {
+                        agentfw::token::generate()
+                    };
+                    let grant = child_authority::mint_scoped(
+                        &key,
+                        &session,
+                        &server,
+                        &tools,
+                        now_ms(),
+                        ttl_seconds.saturating_mul(1000),
+                        nonce,
+                        agent_id,
+                        parent_id,
+                        resources,
+                    );
+                    println!("{}", child_authority::encode_token(&grant));
+                }
+                ChildAuthorityCmd::Verify {
+                    session,
+                    server,
+                    token,
+                } => {
+                    let grant =
+                        child_authority::verify_token(&key, &token, &session, &server, now_ms())
+                            .map_err(|error| anyhow::anyhow!(error.reason()))?;
+                    println!("{}", serde_json::to_string(&grant)?);
+                }
+            }
+            Ok(())
+        }
         Cmd::Mcp {
             id,
+            host_session,
+            child_authority,
             native_admission,
             native_approval_wait_seconds,
             command,
         } => {
+            let host_session = host_session.or_else(|| std::env::var("AGENTFW_HOST_SESSION").ok());
+            let child_authority =
+                child_authority.or_else(|| std::env::var("AGENTFW_CHILD_AUTHORITY").ok());
+            if !native_admission && (host_session.is_some() || child_authority.is_some()) {
+                anyhow::bail!("--host-session and --child-authority require --native-admission");
+            }
+            if host_session.is_some() != child_authority.is_some() {
+                anyhow::bail!(
+                    "both --host-session and --child-authority must be provided together for authenticated binding"
+                );
+            }
             let (cmd, args) = command
                 .split_first()
                 .ok_or_else(|| anyhow::anyhow!("no server command given after --"))?;
@@ -578,6 +865,8 @@ fn main() -> anyhow::Result<()> {
                 );
                 let manifest_token = agentfw::token::load_or_create(&manifest_token_path)?;
                 let admission = agentfw::mcp::admission::AdmissionCfg {
+                    host_session,
+                    child_authority,
                     daemon_url: cfg.endpoint_url("/native/v1"),
                     manifest_url: cfg.endpoint_url("/mcp"),
                     manifest_token,
@@ -945,12 +1234,13 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
         Err(_) => Config::default(),
     };
 
-    let firewall = match &cfg.policy {
-        Some(p) => AgentFirewall::new(
+    let mut firewall = match &cfg.policy {
+        Some(p) => AgentFirewall::with_taint_limits(
             AgentPolicySet::from_yaml(&std::fs::read_to_string(p)?)?,
             DEFAULT_TAINT_CAP,
-        ),
-        None => AgentFirewall::with_default_policy(),
+            cfg.provenance.clone(),
+        )?,
+        None => AgentFirewall::with_default_policy_and_taint_limits(cfg.provenance.clone())?,
     };
 
     let token = agentfw::token::load_or_create(&home.join("token"))?;
@@ -964,7 +1254,8 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
             .as_ref()
             .map(|native| {
                 let native_token = agentfw::token::load_or_create(&home.join("native-token"))?;
-                let state = agentfw::native::NativeState::load(native, native_token)?;
+                let state = agentfw::native::NativeState::load(native, native_token)?
+                    .with_continuity(&home, &mut firewall)?;
                 match &native.approval {
                     Some(approval) => {
                         let hook_token = agentfw::token::load_or_create(&home.join("token"))?;
@@ -980,7 +1271,10 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
             .transpose()?,
         firewall: Mutex::new(firewall),
         sessions: Sessions::default(),
-        audit: AuditSink::open(&audit_path)?,
+        audit: match &cfg.audit_retention {
+            Some(retention) => AuditSink::open_retained(retention)?,
+            None => AuditSink::open(&audit_path)?,
+        },
         spans: agentfw::spans::SpanCache::new(64, cfg.judge.max_span_bytes),
         judge: agentfw::judge::Judge::new(cfg.judge.clone()),
         manifests: agentfw::mcp::store::ManifestStore::new(&home.join("manifests")),

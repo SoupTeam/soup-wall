@@ -202,7 +202,7 @@ def report(records, requirements=None, candidate_patterns=None, allowed=None, ru
     for p in pats:
         c = count_allocations(table, requirements, p, allowed)
         rows.append({'pattern': '/'.join(str(p[s]) for s in SPLITS), 'feasible_allocations': c})
-    policy = {'evidence_policy': RAW_POLICY} if rulings_register is None else         {'evidence_policy': rulings.ELIGIBILITY_POLICY, 'rulings_sha256': rulings_register.digest}
+    policy = {'evidence_policy': RAW_POLICY} if rulings_register is None else         {'evidence_policy': rulings_register.eligibility_policy, 'rulings_sha256': rulings_register.digest}
     return {**policy,
             'families': n, 'leakage_groups': len(table),
             'requirements': {s: sorted(r) for s, r in requirements.items()},

@@ -387,6 +387,38 @@ class EvidenceControls(unittest.TestCase):
 
 
 class OwnedFixtureTests(unittest.TestCase):
+    def test_ready_file_is_absent_until_complete_json_is_published(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            ready = Path(temporary) / "ready.json"
+            original_open = Path.open
+            test = self
+
+            class InterruptedWriter:
+                def __init__(self, handle):
+                    self.handle = handle
+
+                def __enter__(self):
+                    return self
+
+                def write(self, value):
+                    self.handle.write(value[:1])
+                    self.handle.flush()
+                    test.assertFalse(ready.exists(), "polling reader must not see partial JSON")
+                    self.handle.write(value[1:])
+
+                def __exit__(self, *args):
+                    self.handle.close()
+
+            def slow_open(path, mode="r", *args, **kwargs):
+                handle = original_open(path, mode, *args, **kwargs)
+                return InterruptedWriter(handle) if mode == "xb" else handle
+
+            value = {"port": 12345, "pid": 42, "tls": True}
+            with patch.object(Path, "open", slow_open):
+                P.F.publish_ready(ready, value)
+            self.assertEqual(json.loads(ready.read_bytes()), value)
+            self.assertEqual(list(Path(temporary).iterdir()), [ready])
+
     def test_discovery_records_but_never_performs_requested_network_call(self):
         with tempfile.TemporaryDirectory() as temporary:
             ledger = Path(temporary) / "child.jsonl"

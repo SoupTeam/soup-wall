@@ -59,6 +59,8 @@ pub struct HookPayload {
     #[serde(default)]
     pub agent_type: Option<String>,
     #[serde(default)]
+    pub parent_id: Option<String>,
+    #[serde(default)]
     pub last_assistant_message: Option<String>,
 }
 

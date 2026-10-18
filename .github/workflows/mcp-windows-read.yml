@@ -2,19 +2,7 @@ name: Native Windows MCP document read
 
 on:
   pull_request:
-    paths:
-      - 'crates/agentfw/**'
-      - 'crates/agent/**'
-      - 'crates/adapter/**'
-      - 'rule_baseline/**'
-      - 'scripts/verify-sou58-windows-read.py'
-      - 'scripts/ci-windows-read.ps1'
-      - 'scripts/print-sou58-ci-diagnostics.py'
-      - 'scripts/verify-sou54-create-file.py'
-      - 'scripts/fixtures/mcp_windows_read_probe_server.py'
-      - 'scripts/tests/test_sou58_windows_read.py'
-      - '.github/workflows/mcp-windows-read.yml'
-      - 'Cargo.lock'
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:
@@ -25,14 +13,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: mcp-windows-read.yml
   native-windows-standard-user:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-windows-standard-user')
     runs-on: windows-2022
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@stable

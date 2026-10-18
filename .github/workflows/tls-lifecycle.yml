@@ -2,23 +2,25 @@ name: TLS lifecycle
 
 on:
   pull_request:
-    paths:
-      - "deploy/Caddyfile*"
-      - "deploy/Dockerfile.tls"
-      - "scripts/tls-lifecycle.py"
-      - "scripts/fixtures/tls_*.py"
-      - "scripts/tests/test_tls_lifecycle.py"
-      - ".github/workflows/tls-lifecycle.yml"
-      - "crates/**"
-      - "Cargo.lock"
-      - "Cargo.toml"
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# Only the newest validation for a PR/ref is useful.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: tls-lifecycle.yml
   linux:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux')
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:

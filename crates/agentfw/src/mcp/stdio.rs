@@ -65,6 +65,7 @@ impl Pipe {
             return Err(io::Error::last_os_error());
         }
         Ok(Self {
+            #[allow(deprecated)]
             inner: AsyncFd::with_interest(descriptor, interest)?,
         })
     }

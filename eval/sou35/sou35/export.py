@@ -125,7 +125,8 @@ def scored(r, ledger):
 def _case_review_ref(r, ledger):
     entry = ledger.entry(r['id'])
     return {k: entry.get(k) for k in ('row_sha256', 'status', 'evidence_basis', 'reviewed_by', 'reviewer_kind',
-                                      'reviewed_at', 'decision_ref')}
+                                      'reviewed_at', 'decision_ref', 'review_method', 'group_decision_id',
+                                      'group_review_plan_sha256', 'independent_of_generation')}
 
 
 def _ai_reviews(r, ledger):
@@ -173,7 +174,7 @@ def plan_export(records, decls, m, custody_state, authorization, *, test_familie
         'export_kind': EXPORT_SCOPE, 'status': 'INTERNAL_DEVELOPMENT_EXPORT',
         'labels': 'mechanical synthetic labels in the primary evidence stratum (external human case review, '
                   'interface-supported synthetic basis); not real-tool evidence and not a Gold addendum',
-        'eligibility_policy': rulings.ELIGIBILITY_POLICY,
+        'eligibility_policy': ledger.eligibility_policy,
         'manifest_sha256': m['manifest_sha256'],
         'rulings_sha256': m['rulings_sha256'],
         'record_inventory_sha256': m['record_inventory_sha256'],

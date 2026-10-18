@@ -1,0 +1,34 @@
+{
+  "head": "13743ced75486a6805d9a79d25dcc0e0fab12e8a",
+  "verdict": "REQUEST_CHANGES",
+  "shipped_native_endpoint": {
+    "passed": 70,
+    "failed": 0
+  },
+  "previous_integrated_witnesses": {
+    "passed": 11,
+    "failed": 0
+  },
+  "additional_controls": {
+    "passed": 0,
+    "failed": 4
+  },
+  "observations": {
+    "late_fields": "valid oversized JSON with padding before event/tool gets HTTP 200 {} instead of enforce refusal",
+    "transport_error": "valid PostToolUse JSON prefix followed by UnexpectedEof body error is accepted; host history remains complete",
+    "empty_session": "protected PreToolUse with session_id empty gets HTTP 200 {} and allow audit",
+    "invalid_utf8": "invalid byte inside protected PreToolUse command is replaced; request gets HTTP 200 {} instead of malformed-input refusal"
+  },
+  "isolation": "Exact HEAD archive in /private/tmp/sou63-review/13743ce. No network, no writes outside scratch, separate Cargo target. No destructive tool executed.",
+  "patch_sha256": "1edf6f1093eb562ba6c383dab0b0bff48138bcdabd98904bf9b36147a94aa33b",
+  "source_sha256": {
+    "crates/agentfw/src/native.rs": "b52c82588816bd2b282059e64b02b6bcd4d2b57c408fd6e61a2abeac4f8eb60e",
+    "crates/agentfw/src/handlers.rs": "172d3e9dc6c066722dbf7f62fa849542e16e13f1acf1ca14e6759542fc6d7a65",
+    "crates/agentfw/src/lib.rs": "d85027e78d6c65f74c1c3ba74ac966a9bf30d9fdeacf78ed5535f1de9d7b3fa2",
+    "crates/agentfw/src/native/child_authority.rs": "4f576c8fe428533c313bd5d5bb9ffede157c1ce61f622dbd49e610659a01dc8d"
+  },
+  "limitations": [
+    "Focused router review, not full workspace or fresh Clippy run",
+    "Original broader actual-agent/parent identity, delegation/revocation and support-matrix requirements are not established by these test results"
+  ]
+}

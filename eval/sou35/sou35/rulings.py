@@ -27,6 +27,11 @@ VERSION = VERSION_V1  # historical name; new registers use VERSION_V2
 SCOPE = 'sou35_synthetic_candidate_pool'
 STATUSES = frozenset({'accepted', 'pending', 'rejected'})
 ELIGIBILITY_POLICY = 'sou35-strata-v1'
+# An explicitly named evaluation view, never an amendment to SOU-10 D04.
+# It requires a profile-bound grouped-review import receipt. All mechanical
+# ceilings, question gates, diagnostic exclusions and coverage rules still apply.
+SCHEMA_SEMANTICS_POLICY = 'sou35-synthetic-schema-semantics-v1'
+ELIGIBILITY_POLICIES = frozenset({ELIGIBILITY_POLICY, SCHEMA_SEMANTICS_POLICY})
 
 # Case-level evidence basis (v2), strongest first. All are synthetic-program evidence.
 #   interface_supported  the label follows from what the classifier input exposes (identity, schema, argument
@@ -158,7 +163,7 @@ def _v2_errors(register, decls, records):
         e.append('semantic rulings register version/scope mismatch')
     if register.get('pool_digest') != custody.pool_digest(decls):
         e.append('semantic rulings register is not bound to the current pool')
-    if register.get('eligibility_policy') != ELIGIBILITY_POLICY:
+    if not isinstance(register.get('eligibility_policy'), str) or register['eligibility_policy'] not in ELIGIBILITY_POLICIES:
         e.append('semantic rulings register names an unknown eligibility policy')
     if records is None:
         return e + ['a v2 register can only be validated against the record inventory']
@@ -224,6 +229,9 @@ def _v2_errors(register, decls, records):
                 e.append('technical-error case review must not carry a semantic evidence basis')
         elif basis is None:
             e.append('accepted classification case review requires an evidence basis')
+    from . import group_review
+    if not e:
+        e += group_review.import_errors(register)
     return e
 
 
@@ -252,6 +260,10 @@ class Ledger:
     @property
     def digest(self):
         return self._digest
+
+    @property
+    def eligibility_policy(self):
+        return self._register.get('eligibility_policy', ELIGIBILITY_POLICY)
 
     def decision(self, question_id):
         return copy.deepcopy(self._decisions.get(question_id))

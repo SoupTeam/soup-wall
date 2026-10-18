@@ -1,0 +1,370 @@
+{
+  "agentfw_version": "0.3.0",
+  "cleanup": {
+    "collector": {
+      "process_group_empty": true,
+      "reaped": true
+    },
+    "daemon": {
+      "process_group_empty": true,
+      "reaped": true
+    },
+    "receiver": {
+      "socket_closed": true
+    },
+    "summary": "owned processes stopped and workspace removed",
+    "workspace": "removed"
+  },
+  "configured": {
+    "daemon": {
+      "authenticated_status": {
+        "binary_sha256": "c070a10397203cf03f869f5ba7f89f8d274fa78ce3865dd4f768bcf281780461",
+        "binary_sha256_matches_agent": true,
+        "mode": "enforcing",
+        "pid_matches_owned_daemon": true,
+        "policy": {
+          "digest_format": "agent-policy-json/1",
+          "rule_count": 12,
+          "sha256": "239f0d0dd71853fd710f3037b5adfc035cdd3ead53e49b652468e74473c066ee"
+        },
+        "query": "answered",
+        "registry": {
+          "id": "sw-self-test-fixture-v1",
+          "sha256": "2929e475aa0ebf96291cb29c6e7412240d737d0ecc445a7ad6a4fd120f43f901",
+          "state": "supported",
+          "tool_count": 2
+        }
+      },
+      "health": {
+        "enforce": true,
+        "status": "ok"
+      },
+      "note": "configured and healthy state; not witnessed protection",
+      "port": 65450,
+      "start_attempts": [
+        {
+          "outcome": "started"
+        }
+      ]
+    },
+    "manifest_released": {
+      "matches_bundled_registry": true,
+      "tools": [
+        "read_document",
+        "send_http"
+      ]
+    },
+    "receiver_control": {
+      "direct_post_counted": true,
+      "note": "the orchestrator posted one control body directly; MCP deltas exclude it"
+    }
+  },
+  "controlled_path": "scripted stdio MCP client -> agentfw mcp --native-admission collector -> selected rule-baseline classifier -> owned agentfw serve daemon (/native/v1, shipped default policy, bundled registry) -> bundled fixture MCP server -> owned 127.0.0.1 receiver",
+  "duration_ms": 1310,
+  "exit_code": 0,
+  "explanation": "Every scenario was witnessed: useful reads completed, the protected send was refused before the MCP child and receiver, and daemon loss failed closed.",
+  "identities": {
+    "agent": {
+      "sha256": "c070a10397203cf03f869f5ba7f89f8d274fa78ce3865dd4f768bcf281780461",
+      "size_bytes": 15916288
+    },
+    "classifier": {
+      "expected_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+      "kind": "rule-baseline",
+      "python_version": "3.9.6",
+      "source": "rule-baseline/python",
+      "source_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+    },
+    "fixtures": {
+      "sha256": "a5cd3c32e2fd8393fa810f72ac72042fd9b69704adc785db210d6980fa2b78aa",
+      "version": "sw-self-test-fixture/1"
+    },
+    "policy": {
+      "sha256": "8b2bfb66b14a988a29cf2698c482bc7cd91ba550fea14ccfa63540e815eb3c57",
+      "source": "shipped default agent policy embedded in the self-test runner"
+    },
+    "registry": {
+      "registry_id": "sw-self-test-fixture-v1",
+      "sha256": "2929e475aa0ebf96291cb29c6e7412240d737d0ecc445a7ad6a4fd120f43f901"
+    },
+    "runner": {
+      "role": "self-test orchestrator and bundled fixture MCP server",
+      "same_binary_as_agent": true,
+      "sha256": "c070a10397203cf03f869f5ba7f89f8d274fa78ce3865dd4f768bcf281780461"
+    }
+  },
+  "limitations": [
+    "Scripted MCP client frames: not Claude Code, not model context and not live-model effectiveness",
+    "One bundled fixture server, two fixture tools and synthetic data; other servers need their own review",
+    "Result release is to the MCP client; the client's later use of a released result is outside this test",
+    "Unattended Ask is enforced as a refusal; there is no approval channel",
+    "macOS execution profile only; the collector is not an OS sandbox",
+    "Configured and healthy daemon state is reported separately and is never counted as witnessed protection"
+  ],
+  "profile": {
+    "arch": "aarch64",
+    "id": "macos-stdio-mcp-admission-v1",
+    "os": "macos",
+    "supported": true
+  },
+  "result": "passed",
+  "scenarios": [
+    {
+      "detail": "read returned the exact 54 expected bytes; 1 MCP execution, 0 deliveries",
+      "expected": "read_document executes once and the client receives the exact note bytes",
+      "id": "allowed_read",
+      "observed": {
+        "checks": {
+          "exact_expected_bytes": true,
+          "expected_bytes": 54,
+          "request_bytes_preserved": true,
+          "result_bytes_preserved": true
+        },
+        "latency_ms": 84.43,
+        "mcp_child_executions": 1,
+        "outcome": "released",
+        "reason": null,
+        "receiver_connections": 0,
+        "receiver_deliveries": 0,
+        "transport": "reply"
+      },
+      "receipts": {
+        "classification": {
+          "actions": [
+            "read"
+          ],
+          "authoritative_verdict": "allow",
+          "classifier_sha256_matches": true,
+          "failure": null,
+          "latency_us": 79730,
+          "policy": "reached",
+          "source": "rule-baseline/python",
+          "unknown": false
+        },
+        "native_audit": [
+          {
+            "detectors": [],
+            "egress_hosts": [],
+            "event": "native_call",
+            "latency_us": 3351,
+            "released": true,
+            "rule": null,
+            "tool": "read_document",
+            "verdict": "allow"
+          },
+          {
+            "detectors": [],
+            "egress_hosts": [],
+            "event": "native_result",
+            "latency_us": 103,
+            "released": true,
+            "rule": null,
+            "tool": "read_document",
+            "verdict": "allow"
+          }
+        ]
+      },
+      "status": "passed"
+    },
+    {
+      "detail": "the read executed once and its injected result was withheld (ask-injection-in-result); marker never reached the client",
+      "expected": "read_document executes but its injected result is withheld from the client",
+      "id": "adversarial_result",
+      "observed": {
+        "latency_ms": 86.63,
+        "marker_reached_client": false,
+        "mcp_child_executions": 1,
+        "outcome": "result_withheld",
+        "reason": "ask-injection-in-result",
+        "receiver_connections": 0,
+        "receiver_deliveries": 0,
+        "transport": "reply"
+      },
+      "receipts": {
+        "classification": {
+          "actions": [
+            "read"
+          ],
+          "authoritative_verdict": "allow",
+          "classifier_sha256_matches": true,
+          "failure": null,
+          "latency_us": 85273,
+          "policy": "reached",
+          "source": "rule-baseline/python",
+          "unknown": false
+        },
+        "native_audit": [
+          {
+            "detectors": [],
+            "egress_hosts": [],
+            "event": "native_call",
+            "latency_us": 42,
+            "released": true,
+            "rule": null,
+            "tool": "read_document",
+            "verdict": "allow"
+          },
+          {
+            "detectors": [
+              "injection",
+              "injection"
+            ],
+            "egress_hosts": [],
+            "event": "native_result",
+            "latency_us": 100,
+            "released": false,
+            "rule": "ask-injection-in-result",
+            "tool": "read_document",
+            "verdict": "ask"
+          }
+        ]
+      },
+      "status": "passed"
+    },
+    {
+      "detail": "send refused (deny-secret-egress); 0 MCP executions, 0 receiver connections",
+      "expected": "send_http with the synthetic key is refused; the MCP child and receiver see nothing",
+      "id": "protected_send_refused",
+      "observed": {
+        "latency_ms": 84.34,
+        "mcp_child_executions": 0,
+        "outcome": "invocation_refused",
+        "reason": "deny-secret-egress",
+        "receiver_connections": 0,
+        "receiver_deliveries": 0,
+        "synthetic_key_reached_receiver": false,
+        "transport": "reply"
+      },
+      "receipts": {
+        "classification": {
+          "actions": [
+            "send_data"
+          ],
+          "authoritative_verdict": "allow",
+          "classifier_sha256_matches": true,
+          "failure": null,
+          "latency_us": 83229,
+          "policy": "reached",
+          "source": "rule-baseline/python",
+          "unknown": false
+        },
+        "native_audit": [
+          {
+            "detectors": [
+              "secret.aws_key",
+              "pii.ipv4"
+            ],
+            "egress_hosts": [
+              "127.0.0.1"
+            ],
+            "event": "native_call",
+            "latency_us": 194,
+            "released": false,
+            "rule": "deny-secret-egress",
+            "tool": "send_http",
+            "verdict": "deny"
+          }
+        ]
+      },
+      "status": "passed"
+    },
+    {
+      "detail": "read returned the exact 55 expected bytes; 1 MCP execution, 0 deliveries",
+      "expected": "a later read_document executes and returns the exact note bytes",
+      "id": "useful_read_after_refusal",
+      "observed": {
+        "checks": {
+          "exact_expected_bytes": true,
+          "expected_bytes": 55,
+          "request_bytes_preserved": true,
+          "result_bytes_preserved": true
+        },
+        "latency_ms": 82.24,
+        "mcp_child_executions": 1,
+        "outcome": "released",
+        "reason": null,
+        "receiver_connections": 0,
+        "receiver_deliveries": 0,
+        "transport": "reply"
+      },
+      "receipts": {
+        "classification": {
+          "actions": [
+            "read"
+          ],
+          "authoritative_verdict": "allow",
+          "classifier_sha256_matches": true,
+          "failure": null,
+          "latency_us": 80967,
+          "policy": "reached",
+          "source": "rule-baseline/python",
+          "unknown": false
+        },
+        "native_audit": [
+          {
+            "detectors": [],
+            "egress_hosts": [],
+            "event": "native_call",
+            "latency_us": 31,
+            "released": true,
+            "rule": null,
+            "tool": "read_document",
+            "verdict": "allow"
+          },
+          {
+            "detectors": [],
+            "egress_hosts": [],
+            "event": "native_result",
+            "latency_us": 38,
+            "released": true,
+            "rule": null,
+            "tool": "read_document",
+            "verdict": "allow"
+          }
+        ]
+      },
+      "status": "passed"
+    },
+    {
+      "detail": "daemon killed; collector stopped (collector_closed); 0 MCP executions, 0 receiver connections",
+      "expected": "after the owned daemon is killed, a protected send never reaches the MCP child or receiver",
+      "id": "daemon_loss",
+      "observed": {
+        "collector_exited": true,
+        "daemon_killed": true,
+        "latency_ms": 84.48,
+        "mcp_child_executions": 0,
+        "outcome": "malformed",
+        "reason": null,
+        "receiver_connections": 0,
+        "receiver_deliveries": 0,
+        "transport": "collector_closed"
+      },
+      "receipts": {
+        "classification": {
+          "actions": [
+            "send_data"
+          ],
+          "authoritative_verdict": "allow",
+          "classifier_sha256_matches": true,
+          "failure": null,
+          "latency_us": 82877,
+          "policy": "reached",
+          "source": "rule-baseline/python",
+          "unknown": false
+        },
+        "native_audit": null
+      },
+      "status": "passed"
+    }
+  ],
+  "schema_version": "sw-self-test/1",
+  "started_at_unix_ms": 1792247611507,
+  "summary": {
+    "failed": 0,
+    "incomplete": 0,
+    "passed": 5,
+    "unavailable": 0,
+    "unsupported": 0
+  }
+}

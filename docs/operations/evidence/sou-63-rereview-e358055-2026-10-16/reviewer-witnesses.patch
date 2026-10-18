@@ -1,0 +1,77 @@
+--- a/crates/agentfw/tests/native_endpoint.rs
++++ b/crates/agentfw/tests/native_endpoint.rs
+@@ -3842,3 +3842,31 @@
+     assert!(fw.provenance_incomplete("host"),
+         "actual authenticated host stays complete while nested unrelated session is marked: unrelated={}",fw.provenance_incomplete("unrelated"));
+ }
++
++#[tokio::test]
++async fn reviewe358_duplicate_event_must_not_downgrade_to_no_opinion() {
++    let f = Fixture::new(ALLOW);
++    let body = r#"{"session_id":"host","hook_event_name":"PostToolUse","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/reviewer-no-execution"}}"#;
++    assert!(serde_json::from_str::<agentfw::hook::HookPayload>(body).is_err());
++    let scan=agentfw::handlers::RootJsonScan::scan(body);
++    assert!(scan.duplicate_keys.contains("hook_event_name"));
++    let (s,r) = review137_raw_hook(&f,Body::from(body)).await;
++    assert_eq!(s,StatusCode::OK);
++    assert_eq!(r["hookSpecificOutput"]["permissionDecision"],"deny",
++        "scanner found ambiguity, but protected enforce request got no refusal: {r}");
++}
++
++#[tokio::test]
++async fn reviewe358_unseen_duplicate_must_not_make_partial_root_proven_safe() {
++    let f = Fixture::configured(ALLOW,Config { enforce:true,max_body_bytes:1024,..Config::default() });
++    let body = format!("{{\"session_id\":\"host\",\"hook_event_name\":\"PostToolUse\",\"padding\":\"{}\",\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{{\"command\":\"rm -rf /tmp/reviewer-no-execution\"}}}}", "x".repeat(6000));
++    assert!(serde_json::from_str::<agentfw::hook::HookPayload>(&body).is_err());
++    let prefix=&body[..5120];
++    let scan=agentfw::handlers::RootJsonScan::scan(prefix);
++    assert!(!scan.closed_object);
++    assert!(scan.is_proven_non_pre(),"witness must reach premature proof branch");
++    let (s,r)=review137_raw_hook(&f,Body::from(body)).await;
++    assert_eq!(s,StatusCode::OK);
++    assert_eq!(r["hookSpecificOutput"]["permissionDecision"],"deny",
++        "unclosed root prefix was accepted as proof before duplicate tail: {r}");
++}
+--- a/crates/agentfw/src/native.rs
++++ b/crates/agentfw/src/native.rs
+@@ -1642,4 +1642,39 @@
+         );
+         assert!(parse(&duplicate).is_err());
+     }
+-}
++    #[test]
++    fn reviewe358_lossy_hook_must_not_take_firewall_before_native_mutex() {
++        let dir=tempfile::tempdir().unwrap();
++        let st=fixture(dir.path());
++        // This is the native inspect preemption point: native.sessions has
++        // been acquired, and its next operation needs st.firewall.
++        let native_guard=st.native.as_ref().unwrap().sessions.lock().unwrap();
++        let hook_st=st.clone();
++        let worker=std::thread::spawn(move || {
++            let runtime=tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
++            runtime.block_on(async move {
++                let mut headers=axum::http::HeaderMap::new();
++                headers.insert("authorization", "Bearer hook-unit-key".parse().unwrap());
++                crate::handlers::hook(axum::extract::State(hook_st),headers,axum::body::Body::from("{")).await
++            })
++        });
++        let deadline=std::time::Instant::now()+std::time::Duration::from_millis(250);
++        let mut hook_holds_firewall=false;
++        while std::time::Instant::now()<deadline {
++            if st.firewall.try_lock().is_err() {
++                hook_holds_firewall=true;
++                break;
++            }
++            std::thread::sleep(std::time::Duration::from_millis(1));
++        }
++        // Release the controlled native owner so this witness can terminate.
++        // An actual native inspect would instead wait for the hook's firewall
++        // guard, completing the wait cycle indefinitely.
++        drop(native_guard);
++        let response=worker.join().unwrap();
++        assert_eq!(response.0,axum::http::StatusCode::OK);
++        assert!(!hook_holds_firewall,
++            "lock inversion: lossy hook holds firewall while waiting for native.sessions; native inspect holds native.sessions and next waits for firewall");
++    }
++
++}

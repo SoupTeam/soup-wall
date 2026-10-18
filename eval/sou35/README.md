@@ -16,6 +16,7 @@ artificial toy families (`tests/toy/`, `artificial_toy: true`) that exist only t
 | `sou35/manifest.py` | Versioned family-disjoint manifest: deterministic draft, validation, freeze with an approval record, public view |
 | `sou35/export.py` | Development export: primary evidence stratum only; requires frozen v2 manifest, test proof, explicit authorisation and the owner-recorded original generation provenance |
 | `sou35/rulings.py` | Pool-bound, private semantic and case-evidence review decisions (recorded, not authenticated); `evidence_stratum`, the single source of primary eligibility |
+| `sou35/group_review.py` | Explicit private import of approved family-rule decisions, with exact mapping and human independence attestation; preserves grouped method and all existing gate requirements |
 | `sou35/release.py` | Thin custodian CLI over custody, manifest and export (see `docs/benchmarks/sou35/VALIDATION.md`) |
 
 The custodian CLI requires a private `--test-exclusions` policy cross-checked against its exact-SHA reviewer supplement. It applies the bans before future test commitment and draw; the low-level custody API also requires the ban parameter explicitly. No real v3 draw, freeze, scoring or export is authorised by this documentation.
@@ -36,6 +37,10 @@ only after `git check-ignore` confirms the path is ignored. Pool membership (dev
 `candidate_undetermined` until custody and split decisions are made by the responsible humans.
 
 ## Boundaries
+
+Already approved grouped family-rule review can be imported without claiming
+manual per-record human inspection. See [grouped-review import](../../docs/benchmarks/sou35/GROUP_REVIEW.md).
+Preparation is not approval; application requires an exact-plan human attestation.
 
 - Nothing under `eval/sou13/` is modified; SOU-13 modules are imported read-only.
 - Real family declarations, the candidate pool, id maps, seeds and generated records belong in the gitignored

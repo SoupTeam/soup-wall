@@ -2,19 +2,24 @@ name: protected-alert-recovery
 
 on:
   pull_request:
-  push:
-    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: protected-alert-recovery-${{ github.workflow }}-${{ github.ref }}
+  group: protected-alert-recovery-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: monitoring.yml
   linux-alert-recovery:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-alert-recovery')
     name: Linux dependency alerts and protected durable recovery
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -48,6 +53,9 @@ jobs:
                          "passed_checks": sum(row.get("outcome") == "pass" for row in checks),
                          "failed_checks": sum(row.get("outcome") == "fail" for row in checks),
                          "error_type": evidence.get("error_type"),
+                         "error_reason": evidence.get("error_reason"), "error_phase": evidence.get("error_phase"),
+                         "failed_check_names": [row.get("check") for row in checks if row.get("outcome") == "fail"][:20],
+                         "endpoint_witnesses": evidence.get("endpoint_witnesses", [])[:4],
                          "command_failures": [{key: row.get(key) for key in fields}
                                               for row in evidence.get("command_failures", [])]}
               print(json.dumps(summary, sort_keys=True))

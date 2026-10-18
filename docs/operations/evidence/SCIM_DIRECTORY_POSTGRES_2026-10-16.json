@@ -1,0 +1,205 @@
+{
+  "backend": "postgres",
+  "passed": true,
+  "cleanup_passed": true,
+  "checks": [
+    {
+      "name": "pinned-client",
+      "passed": true
+    },
+    {
+      "name": "fresh-postgres-has-no-tables",
+      "passed": true
+    },
+    {
+      "name": "explicit-migrations-and-verified-postgres-tls",
+      "passed": true
+    },
+    {
+      "name": "owned-loopback-listener",
+      "passed": true
+    },
+    {
+      "name": "client-discovery",
+      "passed": true
+    },
+    {
+      "name": "client-create-users",
+      "passed": true
+    },
+    {
+      "name": "duplicate-create-refused",
+      "passed": true
+    },
+    {
+      "name": "users-filter-id",
+      "passed": true
+    },
+    {
+      "name": "users-filter-userName",
+      "passed": true
+    },
+    {
+      "name": "users-filter-externalId",
+      "passed": true
+    },
+    {
+      "name": "case-sensitive-values",
+      "passed": true
+    },
+    {
+      "name": "count-zero",
+      "passed": true
+    },
+    {
+      "name": "offset-after-match",
+      "passed": true
+    },
+    {
+      "name": "foreign-user-hidden",
+      "passed": true
+    },
+    {
+      "name": "literal-sql-looking-value",
+      "passed": true
+    },
+    {
+      "name": "invalid-filter-0",
+      "passed": true
+    },
+    {
+      "name": "invalid-filter-1",
+      "passed": true
+    },
+    {
+      "name": "invalid-filter-2",
+      "passed": true
+    },
+    {
+      "name": "invalid-filter-3",
+      "passed": true
+    },
+    {
+      "name": "pathless-user-deactivate",
+      "passed": true
+    },
+    {
+      "name": "user-reactivate",
+      "passed": true
+    },
+    {
+      "name": "malformed-user-patch-atomic",
+      "passed": true
+    },
+    {
+      "name": "client-create-group",
+      "passed": true
+    },
+    {
+      "name": "groups-filter-id",
+      "passed": true
+    },
+    {
+      "name": "groups-filter-displayName",
+      "passed": true
+    },
+    {
+      "name": "groups-filter-externalId",
+      "passed": true
+    },
+    {
+      "name": "add-member-retry-0",
+      "passed": true
+    },
+    {
+      "name": "add-member-retry-1",
+      "passed": true
+    },
+    {
+      "name": "replace-retains-existing-member-0",
+      "passed": true
+    },
+    {
+      "name": "replace-retains-existing-member-1",
+      "passed": true
+    },
+    {
+      "name": "filtered-remove-retry-0",
+      "passed": true
+    },
+    {
+      "name": "filtered-remove-retry-1",
+      "passed": true
+    },
+    {
+      "name": "foreign-member-patch-atomic",
+      "passed": true
+    },
+    {
+      "name": "malformed-group-patch-atomic",
+      "passed": true
+    },
+    {
+      "name": "foreign-group-hidden",
+      "passed": true
+    },
+    {
+      "name": "group-delete",
+      "passed": true
+    },
+    {
+      "name": "user-delete-deactivates",
+      "passed": true
+    },
+    {
+      "name": "credential-revoked",
+      "passed": true
+    },
+    {
+      "name": "revoked-client-refused",
+      "passed": true
+    },
+    {
+      "name": "other-organization-unaffected",
+      "passed": true
+    },
+    {
+      "name": "fixture-stopped",
+      "passed": true
+    },
+    {
+      "name": "owned-cleanup",
+      "passed": true
+    }
+  ],
+  "started_at_utc": "2026-10-16T17:10:45.080083+00:00",
+  "source_commit": "086e33adaff3ced7f2e514681970f713d8a3da31",
+  "fixture_binary_sha256": "29745db9552f6c23a6255c5f0c47e8c36366a211b9ad3702afe4cfe139dfb2aa",
+  "packages": {
+    "scim2-client": "0.13.1",
+    "scim2-models": "0.12.2",
+    "httpx2": "2.13.1",
+    "pydantic": "2.14.1"
+  },
+  "source_sha256": {
+    "scripts/scim-directory-acceptance.py": "eba0199e0d5ec1e50943a779b35986cfa48b74f6de096ecaf20e9f9f675d02f1",
+    "crates/proxy/src/scim.rs": "27756e19afbfaa066ef59c108eda07266f8151c151a7a260d1a56b272963cb84",
+    "crates/proxy/src/tenant_store.rs": "7349a3b8c88366eff8420c7e42022fa0dbb4dd0d420c14f5bae1a863683fa0db",
+    "crates/proxy/src/tenant_store/postgres.rs": "2d87861a6b1eb25110c6c672c834dd0ad6a683c8f929a972746c429d4be5b434",
+    "crates/proxy/src/lib.rs": "a9eda5f00ba217049a29ccee0ce04f25fb9b716887a083d9056e69f92dec378d",
+    "crates/proxy/examples/scim-directory-fixture.rs": "a9ff904df68e545f608cf743d8bb5a60c1e2f0676a9e07e9a537119e05ffa27d",
+    "Cargo.lock": "7fb7958103f09dac26ad68a4e8a5360931d4e9cc9c3e747baa070aaa88c0173b",
+    "scripts/scim-directory-requirements.txt": "bd5265cc8d04e90506629a8c620fdcbcb1d169d94c775d64e38a9590219bc4e9",
+    ".github/workflows/scim-directory.yml": "5d0343e9afb41ebbed119bf4b088231af2e290de87eed3d15d1d6710c797f7df",
+    "scripts/keycloak-oidc-acceptance.py": "d811ca649b0d3c7403c3cc820f8ee1f52eb3cd0160d1e7606c53d8e90dee8af7",
+    "scripts/keycloak-saml-acceptance.py": "9e68691adcf58bdbbc1a0b8cbdbc3742dfbfa28a0eea8c0588d78c9c60ac3008"
+  },
+  "limitations": [
+    "Synthetic directory only; no customer IdP certification",
+    "Owned loopback HTTP client/server; PostgreSQL uses verified fixture TLS",
+    "User DELETE retains the existing deactivation/tombstone contract",
+    "Equality values are case-sensitive without normalization on both stores"
+  ],
+  "client_source_sha256": "99d9a64f6088bbfe3349a22328a98baff521df4445f5e4d2141de8ad323c0b7e",
+  "postgres_image": "postgres@sha256:ec9f656f17c8b4dfebf49e58cf5c46d493d4846d4ea6d8b85d0637f68ee33bfc"
+}

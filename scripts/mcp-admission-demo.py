@@ -234,9 +234,12 @@ class Harness:
             return None
 
 
-def wait_healthy(port, daemon):
+def wait_healthy(port, daemon, timeout=60):
+    # Debug/all-features executables are large and the daemon hashes its own
+    # binary before binding. Parallel integration fixtures need a startup-only
+    # budget; this does not change any call/admission/execution deadline.
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    deadline = time.monotonic() + 15
+    deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if daemon.poll() is not None:
             return False
@@ -255,6 +258,25 @@ def stop(process):
             process.wait(timeout=10)
         except subprocess.TimeoutExpired:
             process.kill()
+
+
+def startup_failure(workspace, daemon):
+    """Keep bounded diagnostics before the owned temporary profile is removed."""
+    path = workspace / "daemon.log"
+    with path.open("rb") as source:
+        source.seek(0, os.SEEK_END)
+        source.seek(max(0, source.tell() - 8192))
+        log = source.read(8192).decode("utf-8", "replace")
+    for name in ("token", "native-token"):
+        token_path = workspace / ".agentfw" / name
+        if token_path.is_file():
+            token = token_path.read_text(encoding="utf-8").strip()
+            if token:
+                log = log.replace(token, "[REDACTED]")
+    # JSON escaping prevents child output from injecting CI workflow commands.
+    return "Agent daemon did not become healthy: " + json.dumps({
+        "exit_code": daemon.poll(), "daemon_log_tail": log,
+    })
 
 
 @contextmanager
@@ -285,7 +307,7 @@ def agent_stack(agentfw: Path, workspace: Path):
                                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         try:
             if not wait_healthy(port, daemon):
-                raise RuntimeError("Agent daemon did not become healthy; see daemon.log")
+                raise RuntimeError(startup_failure(workspace, daemon))
             yield SimpleNamespace(
                 workspace=workspace, env=dict(env, **classifier_environment()), tools=fixture.TOOLS,
                 notes=notes, ledger=ledger, responses=ledger.with_suffix(".responses"), receiver=receiver,

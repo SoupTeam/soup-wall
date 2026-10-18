@@ -1,0 +1,188 @@
+{
+  "schema_version": "sou71-windows-self-test-acceptance/1",
+  "status": "passed",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "native_windows": true,
+  "elevated": false,
+  "administrator_group_present": true,
+  "agent_sha256": "476226bf3637a4c25e9fb9bea46e57ecd454f135c425f848fb0e39e663e562f2",
+  "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+  "python_sha256": "5f7b89a612c9b8af1d6456cdfcd1dbe5ca630849e79aebced9bee9a6694952ec",
+  "checks": [
+    {
+      "id": "installed_standard_user_positive",
+      "status": "passed",
+      "duration_ms": 12250,
+      "observed": {
+        "scenarios": 5,
+        "exit_code": 0,
+        "final_effects": {
+          "exact_execution_ledger": true,
+          "includes_direct_receiver_control": true,
+          "mcp_child_executions": 3,
+          "no_unexpected_effects": true,
+          "receiver_connections": 1,
+          "receiver_deliveries": 1
+        }
+      }
+    },
+    {
+      "id": "relative_report_and_default_workspace",
+      "status": "passed",
+      "duration_ms": 9812,
+      "observed": {
+        "relative_report": true,
+        "default_temporary_parent": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "id": "wrong_classifier_revision",
+      "status": "passed",
+      "duration_ms": 2531,
+      "observed": {
+        "exit_code": 4,
+        "no_scenarios_passed": true
+      }
+    },
+    {
+      "id": "missing_classifier",
+      "status": "passed",
+      "duration_ms": 2438,
+      "observed": {
+        "exit_code": 4,
+        "no_scenarios_passed": true
+      }
+    },
+    {
+      "id": "missing_python",
+      "status": "passed",
+      "duration_ms": 2359,
+      "observed": {
+        "exit_code": 4,
+        "no_scenarios_passed": true
+      }
+    },
+    {
+      "id": "missing_agent",
+      "status": "passed",
+      "duration_ms": 1438,
+      "observed": {
+        "exit_code": 4,
+        "no_scenarios_passed": true
+      }
+    },
+    {
+      "id": "existing_report",
+      "status": "passed",
+      "duration_ms": 47,
+      "observed": {
+        "exit_code": 4,
+        "existing_bytes_preserved": true
+      }
+    },
+    {
+      "id": "report_stream_device_and_trailing_aliases",
+      "status": "passed",
+      "duration_ms": 93,
+      "observed": {
+        "exit_code": 4,
+        "ads_device_and_trailing_aliases_refused": true
+      }
+    },
+    {
+      "id": "reparse_work_parent",
+      "status": "passed",
+      "duration_ms": 2828,
+      "observed": {
+        "exit_code": 4,
+        "target_unchanged": true
+      }
+    },
+    {
+      "id": "reparse_report_parent",
+      "status": "passed",
+      "duration_ms": 94,
+      "observed": {
+        "exit_code": 4,
+        "target_unchanged": true
+      }
+    },
+    {
+      "id": "foreign_owned_work_parent",
+      "status": "passed",
+      "duration_ms": 2735,
+      "observed": {
+        "exit_code": 4,
+        "foreign_directory_refused": true
+      }
+    },
+    {
+      "id": "broad_work_parent_acl",
+      "status": "passed",
+      "duration_ms": 2937,
+      "observed": {
+        "exit_code": 4,
+        "untrusted_parent_write_access_refused": true
+      }
+    },
+    {
+      "id": "occupied_foreign_daemon_port",
+      "status": "passed",
+      "duration_ms": 10328,
+      "observed": {
+        "foreign_listener_untouched": true,
+        "owned_daemon_started": true
+      }
+    },
+    {
+      "id": "locked_file_cleanup_failure",
+      "status": "passed",
+      "duration_ms": 9813,
+      "observed": {
+        "exit_code": 4,
+        "cleanup_failure_reported": true
+      }
+    },
+    {
+      "id": "changed_workspace_acl",
+      "status": "passed",
+      "duration_ms": 10281,
+      "observed": {
+        "exit_code": 4,
+        "cleanup_failure_reported": true
+      }
+    },
+    {
+      "id": "interrupt_with_active_descendant",
+      "status": "passed",
+      "duration_ms": 4828,
+      "observed": {
+        "exit_code": 4,
+        "control_event": "ctrl_c",
+        "active_descendant_observed": true,
+        "descendant_stopped": true
+      }
+    },
+    {
+      "id": "unrelated_sentinel_unchanged",
+      "status": "passed",
+      "duration_ms": 0,
+      "observed": null
+    },
+    {
+      "id": "operator_profile_sentinels_unchanged",
+      "status": "passed",
+      "duration_ms": 0,
+      "observed": null
+    },
+    {
+      "id": "unrelated_process_unchanged",
+      "status": "passed",
+      "duration_ms": 0,
+      "observed": null
+    }
+  ],
+  "passed": 19,
+  "failed": 0
+}

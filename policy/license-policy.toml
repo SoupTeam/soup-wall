@@ -258,3 +258,14 @@ cargo_lock_checksum = "08db1edfb05d9b3c1542e521aea074442088292f00b5f28e435c714a9
 reason = "Published crate metadata uses legacy non-SPDX slash wording; exact crate archive contains MIT license text supporting an MIT option. Notices were copied unchanged; not a general slash normalization or approval of new versions."
 notice_path = "policy/third-party-notices/wiremock-0.6.5/LICENSE-MIT"
 notice_sha256 = "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+
+# Exact reviewed source path and immutable manifest/license digests; other path
+# dependencies remain forbidden. See vendor/candle-core/PATCH.md.
+[[reviewed_paths]]
+name = "candle-core"
+version = "0.11.0"
+manifest = "vendor/candle-core/Cargo.toml"
+manifest_sha256 = "a8998aad832836eaef669ae25329fd812319087fc1698d532fd42511ac96b9cb"
+license = "MIT OR Apache-2.0"
+notice = "vendor/candle-core/LICENSE"
+notice_sha256 = "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"

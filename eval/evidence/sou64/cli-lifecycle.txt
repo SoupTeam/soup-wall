@@ -1,0 +1,118 @@
+$ agentfw classifier-package build --classifier frozen --source /tmp/claude-0/s64/repo --out /tmp/tmp.7IchoGCzVV/frozen.tar
+{
+  "action": "build",
+  "archive_sha256": "df923672792fa666bb58005091b2dd860b41192bad65ad99f0270d417690fdbf",
+  "out": "/tmp/tmp.7IchoGCzVV/frozen.tar",
+  "package": "318201921779ff6e0b2c2089fcaa45c0c8d472678e25d0cbe0309e3443f97b7e"
+}
+
+$ agentfw classifier-package build --classifier rev2 --source /tmp/claude-0/s64/repo --out /tmp/tmp.7IchoGCzVV/rev2.tar
+{
+  "action": "build",
+  "archive_sha256": "c973da2261aa7676e458bc403068555896258c846ce4140ea9c54f54c0b9b991",
+  "out": "/tmp/tmp.7IchoGCzVV/rev2.tar",
+  "package": "f1a8e5b0a4a67fbd3db909c923b7aed1615ba46317d5268e6561f99404df6bd6"
+}
+
+$ agentfw classifier-package preview frozen.tar --python /usr/bin/python3
+{
+  "action": "preview",
+  "classifier": "frozen",
+  "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+  "package": "318201921779ff6e0b2c2089fcaa45c0c8d472678e25d0cbe0309e3443f97b7e",
+  "python": {
+    "path": "/usr/bin/python3.13",
+    "sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+    "version": "3.13.16"
+  },
+  "target": "/tmp/tmp.7IchoGCzVV/home/.agentfw/classifier/packages/318201921779ff6e0b2c2089fcaa45c0c8d472678e25d0cbe0309e3443f97b7e",
+  "worker_sha256": "ecd1d972a034f05676d44d4bf9ce7f74f15ced4605a70d18721db63f118ca38c",
+  "writes": false
+}
+
+$ agentfw classifier-package install frozen.tar --python /usr/bin/python3
+{
+  "action": "install",
+  "classifier": "frozen",
+  "package": "318201921779ff6e0b2c2089fcaa45c0c8d472678e25d0cbe0309e3443f97b7e",
+  "previous": null,
+  "python": {
+    "path": "/usr/bin/python3.13",
+    "sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+    "version": "3.13.16"
+  }
+}
+
+$ agentfw classifier-package verify
+{
+  "action": "verify",
+  "classifier": "frozen",
+  "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+  "ok": true,
+  "package": "318201921779ff6e0b2c2089fcaa45c0c8d472678e25d0cbe0309e3443f97b7e",
+  "python": {
+    "path": "/usr/bin/python3.13",
+    "sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+    "version": "3.13.16"
+  },
+  "worker_sha256": "ecd1d972a034f05676d44d4bf9ce7f74f15ced4605a70d18721db63f118ca38c"
+}
+
+$ agentfw classifier-package install rev2.tar --python /usr/bin/python3
+{
+  "action": "install",
+  "classifier": "rev2",
+  "package": "f1a8e5b0a4a67fbd3db909c923b7aed1615ba46317d5268e6561f99404df6bd6",
+  "previous": "318201921779ff6e0b2c2089fcaa45c0c8d472678e25d0cbe0309e3443f97b7e",
+  "python": {
+    "path": "/usr/bin/python3.13",
+    "sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+    "version": "3.13.16"
+  }
+}
+
+$ agentfw classifier-package rollback
+{
+  "action": "rollback",
+  "package": "318201921779ff6e0b2c2089fcaa45c0c8d472678e25d0cbe0309e3443f97b7e",
+  "previous": "f1a8e5b0a4a67fbd3db909c923b7aed1615ba46317d5268e6561f99404df6bd6"
+}
+
+$ agentfw classifier-package inspect
+{
+  "action": "inspect",
+  "current": {
+    "package": "318201921779ff6e0b2c2089fcaa45c0c8d472678e25d0cbe0309e3443f97b7e",
+    "python": {
+      "path": "/usr/bin/python3.13",
+      "sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+      "version": "3.13.16"
+    },
+    "schema": "sw-classifier-current/1"
+  },
+  "installed": [
+    "318201921779ff6e0b2c2089fcaa45c0c8d472678e25d0cbe0309e3443f97b7e",
+    "f1a8e5b0a4a67fbd3db909c923b7aed1615ba46317d5268e6561f99404df6bd6"
+  ],
+  "interrupted_install": false,
+  "previous": {
+    "package": "f1a8e5b0a4a67fbd3db909c923b7aed1615ba46317d5268e6561f99404df6bd6",
+    "python": {
+      "path": "/usr/bin/python3.13",
+      "sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+      "version": "3.13.16"
+    },
+    "schema": "sw-classifier-current/1"
+  },
+  "root": "/tmp/tmp.7IchoGCzVV/home/.agentfw/classifier"
+}
+
+# repository path appears nowhere in the installed profile:
+none
+$ agentfw classifier-package remove --all
+{
+  "action": "remove",
+  "all": true
+}
+
+.agentfw

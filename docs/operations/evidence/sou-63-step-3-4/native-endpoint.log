@@ -1,0 +1,67 @@
+   Compiling agentfw v0.3.0 (/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/crates/agentfw)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.90s
+     Running tests/native_endpoint.rs (target/debug/deps/native_endpoint-e99d93f42342a006)
+
+running 59 tests
+test child_authority_refuses_missing_expired_forged_and_mismatched_grants ... ok
+test child_authority_restricts_tools_and_binding_fields_to_session_start ... ok
+test bound_host_withheld_result_does_not_admit_taint_or_spans ... ok
+test bound_trusted_result_keeps_registry_provenance_and_empty_grant_semantics ... ok
+test a_value_cannot_be_relabelled_as_an_error_in_the_final_context ... ok
+test concurrent_context_completions_release_exactly_once ... ok
+test bound_host_concurrent_completion_admits_once ... ok
+test context_audit_retains_detections_from_later_independent_blocks_without_raw_content ... ok
+test child_authority_binds_host_taint_spans_and_audit ... ok
+test ending_bound_collector_cancels_pending_result_without_host_admission ... ok
+test explicit_result_deny_withholds_content_and_spends_the_completion ... ok
+test final_context_and_original_error_text_are_independently_inspected ... ok
+test hook_post_tool_use_still_returns_the_original_empty_contract ... ok
+test contract_registry_and_per_call_privilege_claims_are_rejected ... ok
+test create_file_v2_native_refuses_downgrade_and_content_substitution ... ok
+test held_model_result_does_not_taint_a_preplanned_batch_call_until_context_admission ... ok
+test declared_read_only_tools_keep_dangerous_argument_upgrades ... ok
+test https_get_v3_native_binds_original_host_session_and_exact_resources ... ok
+test bound_mcp_provenance_reaches_hook_policy_and_audit ... ok
+test completions_bind_arguments_and_session_and_fail_closed_after_mismatch ... ok
+test https_get_v3_native_inspects_the_actual_untrusted_result_before_release ... ok
+test https_get_v3_native_refuses_contract_downgrade_and_unknown_network_semantics ... ok
+test create_file_v2_native_admission_binds_args_operation_host_and_session ... ok
+test https_get_v3_native_requires_explicit_egress_even_with_default_allow ... ok
+test native_and_hook_tokens_are_not_interchangeable ... ok
+test injection_result_is_withheld_without_redeeming_an_action_grant_or_recording_taint ... ok
+test native_escalation_uses_the_declared_fallback_without_a_model ... ok
+test context_requires_bound_request_args_and_an_original_tool_envelope ... ok
+test https_get_v3_native_registry_requires_the_closed_reviewed_profile ... ok
+test parent_completion_cannot_be_replayed_or_promoted_to_model_context ... ok
+test https_get_v3_native_rechecks_registry_schema_revisions_and_resource_evidence ... ok
+test https_get_v3_native_refuses_recomputed_address_and_policy_authority ... ok
+test https_get_v3_native_result_wrong_host_or_contract_spends_the_call ... ok
+test parent_result_commits_taint_and_spans_before_parent_action_without_context ... ok
+test denied_resource_calls_leave_capacity_for_a_useful_authorized_call ... ok
+test resource_policy_checks_canonical_path_and_does_not_allow_legacy_downgrade ... ok
+test https_get_v3_native_refuses_url_host_port_query_and_argument_substitution ... ok
+test resource_metadata_respects_the_configured_record_byte_cap ... ok
+test resource_call_binding_covers_original_identity_and_rejects_result_downgrade ... ok
+test resource_policy_checks_mailbox_not_only_its_domain ... ok
+test resource_policy_checks_full_url_port_and_path_before_reservation ... ok
+test resource_context_cannot_forge_arguments_revisions_or_untyped_metadata ... ok
+test result_and_original_context_preserve_one_opaque_binding ... ok
+test session_end_invalidates_calls_and_restart_changes_binding_epoch ... ok
+test sou12_empty_or_ambiguous_egress_never_receives_an_execution_grant ... ok
+test shadow_or_enabled_judge_cannot_claim_native_enforcement ... ok
+test original_placeholder_arguments_are_preserved_with_their_pinned_shape ... ok
+test stages_cannot_be_replayed_or_completed_out_of_order ... ok
+test result_delivery_is_required_and_cannot_be_claimed_on_a_context_request ... ok
+test typed_url_egress_does_not_accept_credentials_or_non_http_schemes ... ok
+test windows_read_v4_requests_are_unavailable_on_other_platforms ... ok
+test windows_create_v5_requests_are_unavailable_on_other_platforms ... ok
+test resource_result_must_keep_the_bound_original_host_id ... ok
+test unknown_tools_and_changed_schema_are_not_admitted ... ok
+test typed_egress_checks_every_to_cc_and_bcc_recipient ... ok
+test outstanding_calls_are_bounded_and_session_end_frees_capacity ... ok
+test content_caps_cover_full_utf8_bytes_without_truncated_admission ... ok
+test successive_parent_results_free_capacity_without_fabricating_model_context ... ok
+test https_get_v3_native_repeated_refusals_and_errors_preserve_call_capacity ... ok
+
+test result: ok. 59 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+

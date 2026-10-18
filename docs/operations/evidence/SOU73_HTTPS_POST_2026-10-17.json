@@ -1,0 +1,1411 @@
+{
+  "schema": "sou73-candidate-evidence-summary/1",
+  "status": "pass",
+  "release_acceptance": false,
+  "source": {
+    "commit": "78906f3580dedbb070cb0ea5cd5614ec760e5266",
+    "tracked_dirty": false
+  },
+  "binary_sha256": "c937768e3bc537c8f4fad97a1cce047058fe04a23d8be8ce89d6f22062f40aa8",
+  "driver_sha256": "092dbd86d3f47f09ac2c894af788066200ee72497c97b68e626f879aafe06291",
+  "fixture_sha256": "e7a2ac627746e35a77782e654665a1cf76f661e3071f64089ef587348ead0eb2",
+  "observed_at_utc": "2026-10-17T13:31:25.301187+00:00",
+  "environment": {
+    "os": "Linux",
+    "architecture": "x86_64",
+    "python": "3.12.3"
+  },
+  "workflow": "https://github.com/SoupTeam/soup-wall/actions/runs/39036688733",
+  "artifact": "https://github.com/SoupTeam/soup-wall/actions/runs/39036688733/artifacts/12102836394",
+  "artifact_zip_sha256": "52d589292017e96d717a8b3bd2ebf321f0d3975a0d6045e645606116c5acab10",
+  "summary": {
+    "cases_run": 55,
+    "cases_expected": 55,
+    "passed": 55,
+    "failed": 0,
+    "skips": 0
+  },
+  "native_test_counts": {
+    "unit": [
+      [
+        "386",
+        "0",
+        "2"
+      ]
+    ],
+    "router": [
+      [
+        "115",
+        "0",
+        "0"
+      ]
+    ]
+  },
+  "limits": {
+    "requests_per_call": 1,
+    "connect_seconds": 3,
+    "total_seconds": 5,
+    "response_bytes": 4096,
+    "request_body_bytes": 4096,
+    "encrypted_receive_bytes": 65536,
+    "http_plaintext_bytes": 16384,
+    "http_header_bytes": 8192,
+    "repeated_failures": 5,
+    "supported_status": 200,
+    "methods": [
+      "POST"
+    ]
+  },
+  "limitations": [
+    "Owned local endpoints with an exact address/HTTPS identity exception; no external provider traffic.",
+    "Scripted MCP client, not an interactive model-host acceptance claim.",
+    "Socket/request ledgers are produced by receiver processes independent of the broker and MCP child.",
+    "Proxy controls retain authenticated request/reply bodies but never Authorization headers and never fabricate Allow.",
+    "Result withholding cannot undo an already issued POST; the receiver witness is retained.",
+    "Unsupported overlap/cancellation/replay ends the original session; useful recovery then uses a fresh session.",
+    "The cross-session transport control substitutes an ended session ID, retains the real daemon 409, and proves useful recovery in a third session.",
+    "Active cancellation is queued only after the independent receiver records the POST; the already issued request is retained while result release is refused.",
+    "Binary digests identify artifacts; matching build logs establish build provenance."
+  ],
+  "prior_failed_run": {
+    "source": "2018e3d56542a26013ee2bac0d3001c43922e48c",
+    "workflow": "https://github.com/SoupTeam/soup-wall/actions/runs/39036154633",
+    "artifact_id": 12102560719,
+    "passed": 26,
+    "failed": 24,
+    "diagnosis": "The owned receiver contained an overriding POST rejection handler. A new real receiver calibration catches this. The synthetic secret fixture policy also blocked benign follow-up through session history; it now uses the existing tool_args/network secret-egress scope. No production policy floor was relaxed."
+  },
+  "cases": [
+    {
+      "case": "allow-json",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 1,
+      "receiver_payloads": [
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "allow-text",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 1,
+      "receiver_payloads": [
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "request-text",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 1,
+      "receiver_payloads": [
+        {
+          "bytes": 24,
+          "sha256": "2310542b3284ed5eba7c1168d8e8f09f56d45ef1ef8b85c88093b535a69e7a36",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "body-boundary",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 1,
+      "receiver_payloads": [
+        {
+          "bytes": 4096,
+          "sha256": "d3228eb2d0c4ee1fbec46c274d45ae4f5c9d95ab71986d6bbf2a7ec272fd0171",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "body-byte-overflow",
+      "status": "pass",
+      "receiver_connections": 0,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "body-invalid-json",
+      "status": "pass",
+      "receiver_connections": 0,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "cookie-state",
+      "status": "pass",
+      "receiver_connections": 2,
+      "receiver_requests": 2,
+      "receiver_payloads": [
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        },
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        },
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        },
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "native-deny",
+      "status": "pass",
+      "receiver_connections": 0,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "deny",
+          "released": false
+        }
+      ],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "native-ask",
+      "status": "pass",
+      "receiver_connections": 0,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "ask",
+          "released": false
+        }
+      ],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "classifier-deny",
+      "status": "pass",
+      "receiver_connections": 0,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "classifier-ask",
+      "status": "pass",
+      "receiver_connections": 0,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "secret-deny",
+      "status": "pass",
+      "receiver_connections": 0,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "deny",
+          "released": false
+        }
+      ],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "url-substitution",
+      "status": "pass",
+      "receiver_connections": 0,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "query-substitution",
+      "status": "pass",
+      "receiver_connections": 0,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "host-substitution",
+      "status": "pass",
+      "receiver_connections": 0,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "port-substitution",
+      "status": "pass",
+      "receiver_connections": 0,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "http-scheme",
+      "status": "pass",
+      "receiver_connections": 0,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "caller-headers",
+      "status": "pass",
+      "receiver_connections": 0,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "caller-method",
+      "status": "pass",
+      "receiver_connections": 0,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "caller-content-type",
+      "status": "pass",
+      "receiver_connections": 0,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "url-credentials",
+      "status": "pass",
+      "receiver_connections": 0,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "metadata-address",
+      "status": "pass",
+      "receiver_connections": 0,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "private-address",
+      "status": "pass",
+      "receiver_connections": 0,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "loopback-without-exception",
+      "status": "pass",
+      "receiver_connections": 0,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 0,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "dns-address-substitution",
+      "status": "pass",
+      "receiver_connections": 0,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "native-url-substitution",
+      "status": "pass",
+      "receiver_connections": 0,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "deny",
+          "released": false
+        }
+      ],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "native-authority-substitution",
+      "status": "pass",
+      "receiver_connections": 0,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "deny",
+          "released": false
+        }
+      ],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "native-body-substitution",
+      "status": "pass",
+      "receiver_connections": 0,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "deny",
+          "released": false
+        }
+      ],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "redirect",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 1,
+      "receiver_payloads": [
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "proxy-poisoning",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 1,
+      "receiver_payloads": [
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "tls-hostname",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "tls-untrusted",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "tls-expired",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "tls-invalid",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "timeout",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 1,
+      "receiver_payloads": [
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "oversize",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 1,
+      "receiver_payloads": [
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "invalid-utf8",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 1,
+      "receiver_payloads": [
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "invalid-json",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 1,
+      "receiver_payloads": [
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "unsupported-compression",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 1,
+      "receiver_payloads": [
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "unsupported-content",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 1,
+      "receiver_payloads": [
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "unsupported-charset",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 1,
+      "receiver_payloads": [
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "http-error",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 1,
+      "receiver_payloads": [
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "result-withheld",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 1,
+      "receiver_payloads": [
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "deny",
+          "released": false
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "repeated-failures",
+      "status": "pass",
+      "receiver_connections": 5,
+      "receiver_requests": 5,
+      "receiver_payloads": [
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        },
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        },
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        },
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        },
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        },
+        {
+          "verdict": "allow",
+          "released": true
+        },
+        {
+          "verdict": "allow",
+          "released": true
+        },
+        {
+          "verdict": "allow",
+          "released": true
+        },
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        },
+        {
+          "verdict": "allow",
+          "released": true
+        },
+        {
+          "verdict": "allow",
+          "released": true
+        },
+        {
+          "verdict": "allow",
+          "released": true
+        },
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "cross-session",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 1,
+      "receiver_payloads": [
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 2,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "replayed-id",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 1,
+      "receiver_payloads": [
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "queued-cancellation",
+      "status": "pass",
+      "receiver_connections": 0,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "queued-overlap",
+      "status": "pass",
+      "receiver_connections": 0,
+      "receiver_requests": 0,
+      "receiver_payloads": [],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "inflight-cancellation",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 1,
+      "receiver_payloads": [
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "daemon-loss",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 1,
+      "receiver_payloads": [
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "unsupported-chunked",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 1,
+      "receiver_payloads": [
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "massive-header",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 1,
+      "receiver_payloads": [
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "informational-response",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 1,
+      "receiver_payloads": [
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "truncated-body",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 1,
+      "receiver_payloads": [
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    },
+    {
+      "case": "duplicate-content-length",
+      "status": "pass",
+      "receiver_connections": 1,
+      "receiver_requests": 1,
+      "receiver_payloads": [
+        {
+          "bytes": 49,
+          "sha256": "1c6f6555abac54fc1e7ec36b205e826cc018e274c7b1fc27cba668b697ff9c73",
+          "complete": true
+        }
+      ],
+      "secondary_connections": 0,
+      "proxy_connections": 0,
+      "native_post_calls": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "native_post_results": [
+        {
+          "verdict": "allow",
+          "released": true
+        }
+      ],
+      "child_calls": 0,
+      "useful_followups": 1,
+      "owned_fixture_removed": true
+    }
+  ]
+}

@@ -2,15 +2,7 @@ name: Managed Agent group rollout
 
 on:
   pull_request:
-    paths:
-      - 'crates/proxy/**'
-      - 'crates/agent/**'
-      - 'crates/agentfw/**'
-      - 'scripts/managed-group-rollout-demo.py'
-      - 'scripts/console_recovery.py'
-      - 'scripts/fixtures/console_recovery_inventory_v1.json'
-      - '.github/workflows/managed-group-rollout.yml'
-      - 'Cargo.lock'
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:
@@ -21,7 +13,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: managed-group-rollout.yml
   group-rollout:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'group-rollout')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:

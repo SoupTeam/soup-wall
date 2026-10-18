@@ -2,20 +2,25 @@ name: SOU-43 verified remote HTTPS Agent rollout
 
 on:
   pull_request:
-    paths:
-      - 'crates/agentfw/**'
-      - 'crates/proxy/**'
-      - 'Cargo.lock'
-      - 'scripts/managed-policy-tls-demo.py'
-      - 'scripts/fixtures/managed_policy_tls_edge.py'
-      - '.github/workflows/managed-policy-tls.yml'
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# Only the newest validation for a PR/ref is useful.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: managed-policy-tls.yml
   agent-https-rollout:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'agent-https-rollout')
     name: Real Agent verified HTTPS rollout and rollback
     runs-on: ubuntu-24.04
     timeout-minutes: 30

@@ -93,3 +93,36 @@ decision = "unresolved"
 origin = "Python package pinned in tracked SOU-13 requirements file"
 version = "per-package pin, no dependency license attestation here"
 reason = "jsonschema supports dataset validation; Python wheels and transitive dependencies are not bundled or approved by this inventory or the internal dataset-use decision"
+
+[[asset]]
+name = "selected filesystem MCP npm runtime lock"
+kind = "external_optional_runtime_lock"
+path = "profiles/mcp/filesystem-readonly-v1/package-lock.json"
+mandatory = false
+decision = "unresolved"
+origin = "https://registry.npmjs.org/@modelcontextprotocol/server-filesystem"
+version = "server-filesystem 2026.8.31; SDK 1.32.1; exact complete npm lock"
+reason = "Optional runtime packages are installed separately, not bundled with Agent. Exact upstream server licensing-transition, SDK and Node notices are retained beside the lock and copied outside the original package tree; dependency-by-dependency redistribution and release review remains separate. See docs/PROVENANCE.md and upstream-identity.json."
+
+[[asset]]
+name = "actual Claude Code acceptance host npm lock"
+kind = "external_optional_runtime_lock"
+path = "profiles/mcp/filesystem-readonly-v1/claude-host/package-lock.json"
+mandatory = false
+decision = "unresolved"
+origin = "https://registry.npmjs.org/@anthropic-ai/claude-code"
+version = "2.1.251; exact optional native-host dependency lock"
+reason = "Acceptance-only official vendor runtime, installed separately without lifecycle scripts. Proprietary vendor terms remain separate; no host source or executable is copied into Agent or approved for redistribution by the Rust license gate."
+
+[[asset]]
+name = "vendored candle-core license text"
+kind = "bundled_vendor"
+path = "vendor/candle-core/LICENSE"
+mandatory = true
+decision = "reviewed"
+license = "Apache-2.0"
+origin = "https://github.com/huggingface/candle"
+version = "0.11.0 / 31f35b147389700ed2a178ee66a91c3cc25cc80d"
+notice_path = "vendor/candle-core/LICENSE"
+reviewed_git_blob_sha1 = "261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64"
+reason = "Published archive checksum verified, original license retained; source/manifest delta documented in PATCH.md"

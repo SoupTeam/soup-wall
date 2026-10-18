@@ -13,11 +13,71 @@ use std::sync::Mutex;
 
 use serde::Serialize;
 
+#[cfg(target_os = "linux")]
+#[path = "audit_retention.rs"]
+mod retention;
+#[cfg(target_os = "linux")]
+pub use retention::recover_retention;
+#[cfg(target_os = "linux")]
+use retention::RetainedSink;
+
+/// Explicit versioned limits for the Linux segment store. The directory is a
+/// dedicated private directory, never an existing audit JSONL path.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RetentionConfig {
+    pub version: u8,
+    pub directory: std::path::PathBuf,
+    pub segment_size_bytes: u64,
+    pub segment_count: usize,
+    pub total_disk_bytes: u64,
+    pub max_record_bytes: usize,
+}
+
+impl RetentionConfig {
+    pub fn validate(&self) -> anyhow::Result<()> {
+        anyhow::ensure!(self.version == 1, "unsupported audit retention version");
+        anyhow::ensure!(
+            self.directory.is_absolute(),
+            "audit retention directory must be absolute"
+        );
+        anyhow::ensure!(
+            (64 * 1024..=16 * 1024 * 1024).contains(&self.segment_size_bytes),
+            "audit segment size must be 64 KiB..=16 MiB"
+        );
+        anyhow::ensure!(
+            (2..=64).contains(&self.segment_count),
+            "audit segment count must be 2..=64"
+        );
+        anyhow::ensure!(
+            (256..=64 * 1024).contains(&self.max_record_bytes),
+            "audit record limit must be 256 bytes..=64 KiB"
+        );
+        anyhow::ensure!(
+            self.max_record_bytes as u64 <= self.segment_size_bytes,
+            "audit record exceeds segment size"
+        );
+        let required = self.segment_size_bytes * self.segment_count as u64 + 2 * 64 * 1024 + 4096;
+        anyhow::ensure!(
+            required <= self.total_disk_bytes && self.total_disk_bytes <= 1024 * 1024 * 1024,
+            "audit total disk cap must cover all segments and metadata and be <= 1 GiB"
+        );
+        #[cfg(not(target_os = "linux"))]
+        anyhow::bail!("bounded audit retention is supported on Linux only");
+        #[cfg(target_os = "linux")]
+        Ok(())
+    }
+}
+
 /// One audited event.
 #[derive(Debug, Clone, Serialize)]
 pub struct AuditLine {
     pub at_ms: u64,
     pub session: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
     pub seq: u64,
     pub event: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -88,7 +148,13 @@ pub struct AuditTaint {
 /// Append-only sink. Serialized behind a mutex so concurrent hooks cannot
 /// interleave partial lines.
 pub struct AuditSink {
-    file: Mutex<File>,
+    inner: Mutex<AuditStorage>,
+}
+
+enum AuditStorage {
+    Legacy(File),
+    #[cfg(target_os = "linux")]
+    Retained(Box<RetainedSink>),
 }
 
 impl AuditSink {
@@ -109,8 +175,40 @@ impl AuditSink {
         #[cfg(not(windows))]
         crate::token::restrict(path)?;
         Ok(Self {
-            file: Mutex::new(file),
+            inner: Mutex::new(AuditStorage::Legacy(file)),
         })
+    }
+
+    pub fn open_retained(config: &RetentionConfig) -> anyhow::Result<Self> {
+        config.validate()?;
+        #[cfg(target_os = "linux")]
+        {
+            Ok(Self {
+                inner: Mutex::new(AuditStorage::Retained(Box::new(RetainedSink::open(
+                    config, false,
+                )?))),
+            })
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            anyhow::bail!("bounded audit retention is supported on Linux only")
+        }
+    }
+
+    /// Coarse, path-free operational status for the loopback health endpoint.
+    pub fn health(&self) -> serde_json::Value {
+        match self.inner.lock() {
+            Ok(storage) => match &*storage {
+                AuditStorage::Legacy(_) => {
+                    serde_json::json!({"mode":"legacy","state":"unverified"})
+                }
+                #[cfg(target_os = "linux")]
+                AuditStorage::Retained(sink) => sink.health(),
+            },
+            Err(_) => {
+                serde_json::json!({"mode":"unknown","state":"unavailable","reason":"audit_mutex_poisoned"})
+            }
+        }
     }
 
     /// Write one line. Failures are returned, never panicked — a broken audit log
@@ -126,17 +224,32 @@ impl AuditSink {
 
     #[cfg(test)]
     pub(crate) fn fail_writes_for_test(&self, path: &Path) {
-        *self.file.lock().unwrap() = File::open(path).unwrap();
+        *self.inner.lock().unwrap() = AuditStorage::Legacy(File::open(path).unwrap());
+    }
+
+    #[cfg(all(test, target_os = "linux"))]
+    pub(crate) fn fail_retained_write_for_test(&self, errno: i32) {
+        let mut storage = self.inner.lock().unwrap();
+        let AuditStorage::Retained(sink) = &mut *storage else {
+            panic!("expected retained audit sink")
+        };
+        sink.inject_write_error(errno);
     }
 
     fn write_serialized(&self, line: &impl Serialize) -> anyhow::Result<()> {
-        let mut json = serde_json::to_string(line)?;
-        json.push('\n');
-        let mut f = self
-            .file
+        let mut storage = self
+            .inner
             .lock()
             .map_err(|_| anyhow::anyhow!("audit mutex poisoned"))?;
-        f.write_all(json.as_bytes())?;
+        match &mut *storage {
+            AuditStorage::Legacy(f) => {
+                let mut json = serde_json::to_string(line)?;
+                json.push('\n');
+                f.write_all(json.as_bytes())?;
+            }
+            #[cfg(target_os = "linux")]
+            AuditStorage::Retained(f) => f.write_serialized(line)?,
+        }
         Ok(())
     }
 }
@@ -221,6 +334,8 @@ mod tests {
         AuditLine {
             at_ms: 1,
             session: "s1".into(),
+            agent_id: None,
+            parent_id: None,
             seq: 2,
             event: "tool_call".into(),
             tool: Some("Bash".into()),

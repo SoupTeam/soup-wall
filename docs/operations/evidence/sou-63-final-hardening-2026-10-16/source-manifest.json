@@ -1,0 +1,18 @@
+{
+  "base_commit": "36d02ae4eed49ed6fa9aa63524d3d9b4cfa182d4",
+  "source_files_sha256": {
+    "crates/agent/src/authority.rs": "e363ab426500c47f3ae4feea61986c018eafbcf2d36250b2db0a70a8d00844ca",
+    "crates/agent/src/engine.rs": "72de9fe980b4eb811f682c9bb700af37dea7613bf29d78cc308189b89744c438",
+    "crates/agentfw/src/handlers.rs": "e8b27a4d326ddf03c79102e3590ede71f825dd5d09cc5d5e8a1122987bfca1e9",
+    "crates/agentfw/src/lib.rs": "5cc2613ad75aeeb76211c0085eb4cc8e6ba74aca81b55b2ed9ea1e4de0dc599c",
+    "crates/agentfw/src/main.rs": "cb0097c4878ef96dd8c4fe5c0dc4c2d81ae7f42a0e3e1c3ef596ca9f3ad33ef3",
+    "crates/agentfw/src/map.rs": "5495b99940957f1dba00775a70290be6a7d72944a32ea7db9f40fcfe5b5c3c37",
+    "crates/agentfw/src/mcp/admission.rs": "07048477597fc54c5ef0b8f23a59670f01ec7aef4443e2034c568ed9cbfb1c62",
+    "crates/agentfw/src/native.rs": "47e9c95948cca2b46e54f6ed2dc515c6a32be31142e1b06c8e98ec6b02bc4dad",
+    "crates/agentfw/src/native/child_authority.rs": "f12f27d2d17ddd74bcf8858eab18edf20e4764228089b629798e11df41f5d2fa",
+    "crates/agentfw/tests/mcp_admission.rs": "ce4176325055f08b966215cceea067ffffbbba506a979c5d3f24cc6e4f6fb08c",
+    "crates/agentfw/tests/native_endpoint.rs": "0e016b8ebc6dd35c25a58fab3a75a9ad8dc84b87cad5c197719cfbfdbcb64e70",
+    "docs/operations/MCP_STDIO_ADMISSION.md": "61043e86262e40eeeca029845853532c25b2862ea7cdd9716300905d333d90c9"
+  },
+  "source_note": "Files identify the tested implementation before commit; evidence excluded to avoid self-reference."
+}

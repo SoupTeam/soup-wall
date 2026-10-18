@@ -1,0 +1,78 @@
+{
+  "agentfw_version": "0.3.0",
+  "cleanup": null,
+  "configured": {},
+  "controlled_path": "scripted stdio MCP client -> agentfw mcp --native-admission collector -> selected rule-baseline classifier -> owned agentfw serve daemon (/native/v1, shipped default policy, bundled registry) -> bundled fixture MCP server -> owned 127.0.0.1 receiver",
+  "duration_ms": 145,
+  "exit_code": 4,
+  "explanation": "Runtime assets are missing or invalid: the classifier source does not match --classifier-sha256 (wrong revision). Nothing was started.",
+  "input_problems": [
+    "the classifier source does not match --classifier-sha256 (wrong revision)"
+  ],
+  "limitations": [
+    "Scripted MCP client frames: not Claude Code, not model context and not live-model effectiveness",
+    "One bundled fixture server, two fixture tools and synthetic data; other servers need their own review",
+    "Result release is to the MCP client; the client's later use of a released result is outside this test",
+    "Unattended Ask is enforced as a refusal; there is no approval channel",
+    "macOS execution profile only; the collector is not an OS sandbox",
+    "Configured and healthy daemon state is reported separately and is never counted as witnessed protection"
+  ],
+  "profile": {
+    "arch": "aarch64",
+    "id": "macos-stdio-mcp-admission-v1",
+    "os": "macos",
+    "supported": true
+  },
+  "result": "incomplete",
+  "scenarios": [
+    {
+      "detail": "not run: a prerequisite was unavailable",
+      "expected": "read_document executes once and the client receives the exact note bytes",
+      "id": "allowed_read",
+      "observed": null,
+      "receipts": null,
+      "status": "unavailable"
+    },
+    {
+      "detail": "not run: a prerequisite was unavailable",
+      "expected": "read_document executes but its injected result is withheld from the client",
+      "id": "adversarial_result",
+      "observed": null,
+      "receipts": null,
+      "status": "unavailable"
+    },
+    {
+      "detail": "not run: a prerequisite was unavailable",
+      "expected": "send_http with the synthetic key is refused; the MCP child and receiver see nothing",
+      "id": "protected_send_refused",
+      "observed": null,
+      "receipts": null,
+      "status": "unavailable"
+    },
+    {
+      "detail": "not run: a prerequisite was unavailable",
+      "expected": "a later read_document executes and returns the exact note bytes",
+      "id": "useful_read_after_refusal",
+      "observed": null,
+      "receipts": null,
+      "status": "unavailable"
+    },
+    {
+      "detail": "not run: a prerequisite was unavailable",
+      "expected": "after the owned daemon is killed, a protected send never reaches the MCP child or receiver",
+      "id": "daemon_loss",
+      "observed": null,
+      "receipts": null,
+      "status": "unavailable"
+    }
+  ],
+  "schema_version": "sw-self-test/1",
+  "started_at_unix_ms": 1792247612834,
+  "summary": {
+    "failed": 0,
+    "incomplete": 0,
+    "passed": 0,
+    "unavailable": 5,
+    "unsupported": 0
+  }
+}

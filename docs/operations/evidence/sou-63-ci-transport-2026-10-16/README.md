@@ -1,0 +1,7 @@
+# SOU-63 CI transport and migration harness correction
+
+The retained [SAML failure](saml-original-failure.json) shows Chromium `net::ERR_NETWORK_CHANGED` on the vendor navigation before any ACS response. It occurs after restarting the owned PostgreSQL Docker container, which changes runner network interfaces. The driver permits one fresh login only for that specific transport error on a browser error page, before ACS and with no vendor, signature or local authorization error. It records the failed attempt; a second transport failure still fails the run. Authentication, role, restart, replay and revocation checks are unchanged. Offline controls prove that ACS responses and authentication errors cannot enter this retry path.
+
+The group rollout [job](https://github.com/SoupTeam/soup-wall/actions/runs/38934568887/job/117086687558) passed all 21 rollout tests and the PostgreSQL fault witness, then exceeded the production 1-second database command budget during the demo's fresh schema migration. Only the disposable PostgreSQL demo config now explicitly uses a bounded 30-second command budget and 10-second pool wait budget. Production defaults and both store implementations remain unchanged. Native CI must confirm the complete demo.
+
+Local: 7 driver tests ran, 6 passed and 1 explicit Docker opt-in was skipped; changed Python sources parse cleanly. Real SAML and PostgreSQL demo execution are verified by their required Linux CI jobs.

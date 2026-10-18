@@ -23,7 +23,8 @@ use serde_json::{json, Value};
 use crate::{
     handlers::Shared,
     tenant_store::{
-        ScimGroup, ScimGroupMemberChange, ScimGroupUpdate, ScimIdentity, ScimUser, ScimUserUpdate,
+        ScimEqualityFilter, ScimGroup, ScimGroupMemberChange, ScimGroupUpdate, ScimIdentity,
+        ScimUser, ScimUserUpdate,
     },
 };
 
@@ -79,6 +80,7 @@ pub struct ScimPatchRequest {
 pub struct ScimPatchOperation {
     pub op: String,
     pub path: Option<String>,
+    #[serde(default)]
     pub value: Value,
 }
 
@@ -253,8 +255,8 @@ pub async fn service_provider_config() -> Response {
         json!({
             "schemas": [SCIM_SERVICE_PROVIDER_CONFIG_SCHEMA],
             "patch": { "supported": true },
-            "bulk": { "supported": false },
-            "filter": { "supported": false, "maxResults": 0 },
+            "bulk": { "supported": false, "maxOperations": 0, "maxPayloadSize": 0 },
+            "filter": { "supported": true, "maxResults": MAX_PAGE_SIZE },
             "changePassword": { "supported": false },
             "sort": { "supported": false },
             "etag": { "supported": false },
@@ -266,6 +268,78 @@ pub async fn service_provider_config() -> Response {
             }]
         }),
     )
+}
+
+// Discovery describes this deliberately bounded directory profile, not full RFC support.
+fn resource_type(group: bool) -> Value {
+    let (name, endpoint, schema) = if group {
+        ("Group", "/Groups", SCIM_GROUP_SCHEMA)
+    } else {
+        ("User", "/Users", SCIM_USER_SCHEMA)
+    };
+    json!({"schemas": ["urn:ietf:params:scim:schemas:core:2.0:ResourceType"],
+        "id": name, "name": name, "endpoint": endpoint, "schema": schema,
+        "schemaExtensions": []})
+}
+
+fn directory_schema(group: bool) -> Value {
+    let attribute = |name: &str, kind: &str, required: bool, mutability: &str| {
+        json!({
+            "name": name, "type": kind, "multiValued": false, "required": required,
+            "caseExact": true, "mutability": mutability, "returned": "default", "uniqueness": "none"
+        })
+    };
+    let mut attributes = vec![
+        attribute("id", "string", false, "readOnly"),
+        attribute("externalId", "string", true, "immutable"),
+        attribute("displayName", "string", group, "readWrite"),
+    ];
+    if group {
+        attributes.push(
+            json!({"name": "members", "type": "complex", "multiValued": true,
+            "required": false, "mutability": "readWrite", "returned": "default",
+            "subAttributes": [attribute("value", "string", true, "readWrite")]}),
+        );
+    } else {
+        attributes.push(attribute("userName", "string", true, "readWrite"));
+        attributes.push(attribute("active", "boolean", false, "readWrite"));
+    }
+    json!({"schemas": ["urn:ietf:params:scim:schemas:core:2.0:Schema"],
+        "id": if group { SCIM_GROUP_SCHEMA } else { SCIM_USER_SCHEMA },
+        "name": if group { "Group" } else { "User" }, "attributes": attributes})
+}
+
+fn discovery_list(resources: Vec<Value>) -> Response {
+    scim_json(
+        StatusCode::OK,
+        json!({"schemas": [SCIM_LIST_RESPONSE_SCHEMA],
+        "totalResults": resources.len(), "startIndex": 1, "itemsPerPage": resources.len(), "Resources": resources}),
+    )
+}
+
+pub async fn resource_types() -> Response {
+    discovery_list(vec![resource_type(false), resource_type(true)])
+}
+pub async fn schemas() -> Response {
+    discovery_list(vec![directory_schema(false), directory_schema(true)])
+}
+pub async fn get_resource_type(Path(id): Path<String>) -> Response {
+    match id.as_str() {
+        "User" => scim_json(StatusCode::OK, resource_type(false)),
+        "Group" => scim_json(StatusCode::OK, resource_type(true)),
+        _ => scim_error(
+            StatusCode::NOT_FOUND,
+            None,
+            "SCIM resource type was not found",
+        ),
+    }
+}
+pub async fn get_schema(Path(id): Path<String>) -> Response {
+    match id.as_str() {
+        SCIM_USER_SCHEMA => scim_json(StatusCode::OK, directory_schema(false)),
+        SCIM_GROUP_SCHEMA => scim_json(StatusCode::OK, directory_schema(true)),
+        _ => scim_error(StatusCode::NOT_FOUND, None, "SCIM schema was not found"),
+    }
 }
 
 pub async fn create_user(
@@ -328,13 +402,28 @@ pub async fn list_users(
     Extension(identity): Extension<ScimIdentity>,
     Query(query): Query<ScimUserListQuery>,
 ) -> Response {
-    if query.filter.is_some() || query.sort_by.is_some() || query.sort_order.is_some() {
+    if query.sort_by.is_some() || query.sort_order.is_some() {
         return scim_error(
             StatusCode::BAD_REQUEST,
             Some("invalidFilter"),
-            "SCIM filtering and sorting are not supported",
+            "SCIM sorting is not supported",
         );
     }
+    let filter = match query
+        .filter
+        .as_deref()
+        .map(|value| ScimEqualityFilter::parse(value, false))
+        .transpose()
+    {
+        Ok(filter) => filter,
+        Err(_) => {
+            return scim_error(
+                StatusCode::BAD_REQUEST,
+                Some("invalidFilter"),
+                "Only one bounded string equality filter is supported",
+            )
+        }
+    };
     if !valid_page(query.start_index, query.count) {
         return scim_error(
             StatusCode::BAD_REQUEST,
@@ -350,7 +439,7 @@ pub async fn list_users(
         );
     };
     match store
-        .list_scim_users_async(&identity, query.start_index, query.count)
+        .list_scim_users_filtered_async(&identity, query.start_index, query.count, filter.as_ref())
         .await
     {
         Ok(page) => scim_json(
@@ -526,13 +615,28 @@ pub async fn list_groups(
     Extension(identity): Extension<ScimIdentity>,
     Query(query): Query<ScimUserListQuery>,
 ) -> Response {
-    if query.filter.is_some() || query.sort_by.is_some() || query.sort_order.is_some() {
+    if query.sort_by.is_some() || query.sort_order.is_some() {
         return scim_error(
             StatusCode::BAD_REQUEST,
             Some("invalidFilter"),
-            "SCIM filtering and sorting are not supported",
+            "SCIM sorting is not supported",
         );
     }
+    let filter = match query
+        .filter
+        .as_deref()
+        .map(|value| ScimEqualityFilter::parse(value, true))
+        .transpose()
+    {
+        Ok(filter) => filter,
+        Err(_) => {
+            return scim_error(
+                StatusCode::BAD_REQUEST,
+                Some("invalidFilter"),
+                "Only one bounded string equality filter is supported",
+            )
+        }
+    };
     if !valid_page(query.start_index, query.count) {
         return scim_error(
             StatusCode::BAD_REQUEST,
@@ -548,7 +652,7 @@ pub async fn list_groups(
         );
     };
     match store
-        .list_scim_groups_async(&identity, query.start_index, query.count)
+        .list_scim_groups_filtered_async(&identity, query.start_index, query.count, filter.as_ref())
         .await
     {
         Ok(page) => scim_json(
@@ -726,9 +830,58 @@ async fn update_group(
     }
 }
 
+fn expand_pathless(
+    operations: Vec<ScimPatchOperation>,
+    limit: usize,
+) -> Result<Vec<ScimPatchOperation>, (&'static str, &'static str)> {
+    if operations.is_empty() || operations.len() > limit {
+        return Err((
+            "invalidValue",
+            "SCIM operation count exceeds the supported bound",
+        ));
+    }
+    let mut expanded = Vec::new();
+    for operation in operations {
+        if operation.path.is_some() {
+            expanded.push(operation);
+        } else {
+            if !operation.op.eq_ignore_ascii_case("replace") {
+                return Err(("invalidPath", "Only replace supports a pathless object"));
+            }
+            let Value::Object(attributes) = operation.value else {
+                return Err((
+                    "invalidValue",
+                    "Pathless replace requires an attribute object",
+                ));
+            };
+            if attributes.is_empty() || attributes.len() > limit {
+                return Err((
+                    "invalidValue",
+                    "Pathless attribute count exceeds the supported bound",
+                ));
+            }
+            for (path, value) in attributes {
+                expanded.push(ScimPatchOperation {
+                    op: "replace".into(),
+                    path: Some(path),
+                    value,
+                });
+            }
+        }
+        if expanded.len() > limit {
+            return Err((
+                "invalidValue",
+                "SCIM attribute count exceeds the supported bound",
+            ));
+        }
+    }
+    Ok(expanded)
+}
+
 fn parse_patch(
     operations: Vec<ScimPatchOperation>,
 ) -> Result<ScimUserUpdate, (&'static str, &'static str)> {
+    let operations = expand_pathless(operations, 3)?;
     if operations.is_empty() || operations.len() > 3 {
         return Err((
             "invalidValue",
@@ -782,6 +935,7 @@ fn parse_patch(
 fn parse_group_patch(
     operations: Vec<ScimPatchOperation>,
 ) -> Result<ScimGroupUpdate, (&'static str, &'static str)> {
+    let operations = expand_pathless(operations, 2)?;
     if operations.is_empty() || operations.len() > 2 {
         return Err((
             "invalidValue",
@@ -791,8 +945,37 @@ fn parse_group_patch(
     let mut seen = HashSet::new();
     let mut update = ScimGroupUpdate::default();
     for operation in operations {
-        let Some(path) = operation.path else {
+        let Some(path) = operation.path.clone() else {
             return Err(("invalidPath", "Every SCIM operation needs a supported path"));
+        };
+        let mut operation = operation;
+        let path = if path
+            .get(..8)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("members["))
+        {
+            if !operation.op.eq_ignore_ascii_case("remove")
+                || !operation.value.is_null()
+                || !path.ends_with(']')
+            {
+                return Err((
+                    "invalidPath",
+                    "Filtered members path only supports remove without value",
+                ));
+            }
+            let selector = &path[8..path.len() - 1];
+            let split = selector
+                .find(char::is_whitespace)
+                .ok_or(("invalidPath", "Invalid members selector"))?;
+            if !selector[..split].eq_ignore_ascii_case("value") {
+                return Err(("invalidPath", "Only member value equality is supported"));
+            }
+            // Reuse the bounded equality grammar, including JSON escape handling.
+            let filter = ScimEqualityFilter::parse(&format!("id{}", &selector[split..]), false)
+                .map_err(|_| ("invalidPath", "Invalid member equality selector"))?;
+            operation.value = json!([{"value": filter.value()}]);
+            "members".to_owned()
+        } else {
+            path
         };
         let path = path.to_ascii_lowercase();
         if !seen.insert(path.clone()) {
@@ -876,4 +1059,78 @@ fn scim_error(
             status: status.as_u16().to_string(),
         },
     )
+}
+// SPDX-License-Identifier: Apache-2.0
+#[cfg(test)]
+mod interoperability_tests {
+    use super::*;
+
+    #[test]
+    fn scim_filters_are_bounded_typed_and_do_not_accept_expressions() {
+        for value in [
+            r#"userName eq "Alice""#,
+            r#"EXTERNALID EQ "a\"b""#,
+            r#"id eq "' OR 1=1 --""#,
+        ] {
+            assert!(ScimEqualityFilter::parse(value, false).is_ok());
+        }
+        for value in [
+            "",
+            "id pr",
+            r#"id eq 1"#,
+            r#"id eq "x" or id eq "y""#,
+            r#"userName co "x""#,
+            r#"members[value eq "x"]"#,
+            r#"id eq "\u0000""#,
+        ] {
+            assert!(ScimEqualityFilter::parse(value, false).is_err(), "{value}");
+        }
+        assert!(ScimEqualityFilter::parse(&format!("id eq {:?}", "x".repeat(513)), false).is_err());
+        assert!(ScimEqualityFilter::parse(r#"userName eq "x""#, true).is_err());
+        assert!(ScimEqualityFilter::parse(r#"displayName eq "x""#, true).is_ok());
+    }
+
+    fn operations(value: Value) -> Vec<ScimPatchOperation> {
+        serde_json::from_value(value).unwrap()
+    }
+
+    #[test]
+    fn scim_pathless_patch_is_bounded_and_validates_all_attributes() {
+        let update = parse_patch(operations(
+            json!([{"op":"replace","value":{"active":false,"displayName":"New"}}]),
+        ))
+        .unwrap();
+        assert_eq!(update.active, Some(false));
+        assert_eq!(update.display_name.as_deref(), Some("New"));
+        for value in [
+            json!([{"op":"replace","value":{}}]),
+            json!([{"op":"replace","value":{"active":false,"admin":true}}]),
+            json!([{"op":"replace","path":"active","value":false},{"op":"replace","value":{"Active":true}}]),
+            json!([{"op":"replace","value":{"active":"false"}}]),
+        ] {
+            assert!(parse_patch(operations(value)).is_err());
+        }
+    }
+
+    #[test]
+    fn scim_filtered_removal_preserves_identifier_case_and_rejects_extra_syntax() {
+        let update = parse_group_patch(operations(
+            json!([{"op":"remove","path":"members[value eq \"principal_AbC\"]"}]),
+        ))
+        .unwrap();
+        assert!(
+            matches!(update.member_change, Some(ScimGroupMemberChange::Remove(ids)) if ids == vec!["principal_AbC"])
+        );
+        for path in [
+            "members[value co \"x\"]",
+            "members[value eq \"x\" or value eq \"y\"]",
+            "members[display eq \"x\"]",
+        ] {
+            assert!(parse_group_patch(operations(json!([{"op":"remove","path":path}]))).is_err());
+        }
+        assert!(parse_group_patch(operations(
+            json!([{"op":"remove","path":"members[value eq \"x\"]","value":[]}])
+        ))
+        .is_err());
+    }
 }

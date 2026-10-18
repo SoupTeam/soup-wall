@@ -53,6 +53,80 @@ def complete_receipts():
     return {"records": rows, "total_unique_events": 6, "returned_records": 6, "has_more": False}
 
 
+class SourceArchiveExtraction(unittest.TestCase):
+    def archive(self, members):
+        content = io.BytesIO()
+        with tarfile.open(fileobj=content, mode="w") as bundle:
+            for name, kind, data in members:
+                member = tarfile.TarInfo(name)
+                member.type = kind
+                member.size = len(data) if kind == tarfile.REGTYPE else 0
+                member.mode = 0o7777
+                member.linkname = "../outside"
+                bundle.addfile(member, io.BytesIO(data) if member.isfile() else None)
+        content.seek(0)
+        return tarfile.open(fileobj=content)
+
+    def test_regular_git_files_extract_without_filter_api_and_without_privilege_bits(self):
+        with tempfile.TemporaryDirectory() as temporary, self.archive([
+                ("deploy/", tarfile.DIRTYPE, b""),
+                ("deploy/run.sh", tarfile.REGTYPE, b"#!/bin/sh\n"),
+                ("README.md", tarfile.REGTYPE, b"owned snapshot")]) as bundle:
+            with patch.object(bundle, "extractall", side_effect=AssertionError("unsafe API")):
+                DRILL.extract_source_archive(bundle, Path(temporary))
+            self.assertEqual((Path(temporary) / "deploy/run.sh").read_bytes(), b"#!/bin/sh\n")
+            if os.name == "posix":
+                self.assertEqual((Path(temporary) / "deploy/run.sh").stat().st_mode & 0o7777, 0o755)
+
+    @unittest.skipUnless(os.name == "posix", "Docker source permissions require Unix modes")
+    def test_private_umask_preserves_public_source_modes_and_private_parent(self):
+        with tempfile.TemporaryDirectory() as temporary, self.archive([
+                ("policies/", tarfile.DIRTYPE, b""),
+                ("policies/default.yaml", tarfile.REGTYPE, b"owned public policy"),
+                ("scripts/receiver.py", tarfile.REGTYPE, b"owned public helper")]) as bundle:
+            parent = Path(temporary)
+            parent.chmod(0o700)
+            destination = parent / "source"
+            destination.mkdir(mode=0o700)
+            bundle.getmember("policies/default.yaml").mode = 0o644
+            original = os.umask(0o077)
+            try:
+                DRILL.extract_source_archive(bundle, destination)
+                observed = os.umask(0o077)
+            finally:
+                os.umask(original)
+            self.assertEqual(observed, 0o077)
+            self.assertEqual(parent.stat().st_mode & 0o7777, 0o700)
+            for directory in [destination, destination / "policies", destination / "scripts"]:
+                self.assertEqual(directory.stat().st_mode & 0o7777, 0o755)
+            self.assertEqual((destination / "policies/default.yaml").stat().st_mode & 0o7777, 0o644)
+            self.assertEqual((destination / "scripts/receiver.py").stat().st_mode & 0o7777, 0o755)
+
+    def test_rejects_paths_links_devices_duplicates_and_file_parents_before_writing(self):
+        for members in [
+                [(name, tarfile.REGTYPE, b"bad")] for name in
+                ["../escape", "/absolute", "a/../escape", "a//b", "./local", "a\\b"]
+            ] + [
+                [("link", kind, b"")] for kind in
+                [tarfile.SYMTYPE, tarfile.LNKTYPE, tarfile.CHRTYPE, tarfile.FIFOTYPE]
+            ] + [
+                [("same", tarfile.REGTYPE, b"first"), ("same", tarfile.REGTYPE, b"second")],
+                [("file", tarfile.REGTYPE, b"first"), ("file/child", tarfile.REGTYPE, b"second")],
+                [("file/child", tarfile.REGTYPE, b"first"), ("file", tarfile.REGTYPE, b"second")]]:
+            with self.subTest(members=members), tempfile.TemporaryDirectory() as temporary, self.archive(members) as bundle:
+                with self.assertRaises(DRILL.DrillError):
+                    DRILL.extract_source_archive(bundle, Path(temporary))
+                self.assertEqual(list(Path(temporary).iterdir()), [])
+
+    def test_nonempty_destination_is_refused(self):
+        with tempfile.TemporaryDirectory() as temporary, self.archive([]) as bundle:
+            existing = Path(temporary) / "keep"
+            existing.write_bytes(b"unchanged")
+            with self.assertRaises(DRILL.DrillError):
+                DRILL.extract_source_archive(bundle, Path(temporary))
+            self.assertEqual(existing.read_bytes(), b"unchanged")
+
+
 @unittest.skipUnless(os.name == "posix", "protected fixture files require Unix ownership and permissions")
 class ProtectedFixtureFiles(unittest.TestCase):
     def test_first_secret_byte_is_written_only_to_exclusive_0600_owned_file(self):

@@ -1,0 +1,1479 @@
+﻿2026-10-17T09:57:34.6749428Z Current runner version: '2.337.0'
+2026-10-17T09:57:34.6772888Z ##[group]Runner Image Provisioner
+2026-10-17T09:57:34.6773586Z Hosted Compute Agent
+2026-10-17T09:57:34.6774064Z Version: 20261012.601
+2026-10-17T09:57:34.6774539Z Commit: f3dc54e1fb89da6852db922499a0233137369e1d
+2026-10-17T09:57:34.6775072Z Build Date: 2026-10-12T17:48:21Z
+2026-10-17T09:57:34.6775596Z Worker ID: {a75ac736-21a4-4e6c-9127-76bfd133a620}
+2026-10-17T09:57:34.6776140Z Region: centralus
+2026-10-17T09:57:34.6776539Z Cloud: Azure
+2026-10-17T09:57:34.6776935Z ##[endgroup]
+2026-10-17T09:57:34.6778048Z ##[group]Operating System
+2026-10-17T09:57:34.6778534Z Ubuntu
+2026-10-17T09:57:34.6778908Z 24.04.5
+2026-10-17T09:57:34.6779265Z LTS
+2026-10-17T09:57:34.6779657Z ##[endgroup]
+2026-10-17T09:57:34.6780055Z ##[group]Runner Image
+2026-10-17T09:57:34.6780474Z Image: ubuntu-24.04
+2026-10-17T09:57:34.6780941Z Version: 20261012.334.1
+2026-10-17T09:57:34.6781848Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261012.334/images/ubuntu/Ubuntu2404-Readme.md
+2026-10-17T09:57:34.6783253Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261012.334
+2026-10-17T09:57:34.6783972Z ##[endgroup]
+2026-10-17T09:57:34.6784811Z ##[group]GITHUB_TOKEN Permissions
+2026-10-17T09:57:34.6786503Z Contents: read
+2026-10-17T09:57:34.6786920Z Metadata: read
+2026-10-17T09:57:34.6787309Z ##[endgroup]
+2026-10-17T09:57:34.6789296Z Secret source: Actions
+2026-10-17T09:57:34.6789950Z Cache mode: write
+2026-10-17T09:57:34.6790503Z Prepare workflow directory
+2026-10-17T09:57:34.7047616Z Prepare all required actions
+2026-10-17T09:57:34.7086182Z Getting action download info
+2026-10-17T09:57:34.9436623Z Download action repository 'actions/checkout@v7' (SHA:3d3c42e5aac5ba805825da76410c181273ba90b1)
+2026-10-17T09:57:35.0232918Z Download action repository 'dtolnay/rust-toolchain@stable' (SHA:b725eda525362e7cf34af9a7243cac1e3f01a7ec)
+2026-10-17T09:57:35.1751128Z Download action repository 'Swatinem/rust-cache@v2' (SHA:6323deb102c322ba6fcbdcafc7e3dddab59af2b6)
+2026-10-17T09:57:35.6258954Z Download action repository 'actions/upload-artifact@v7' (SHA:cf430e030ddbb5b0abf93d22962f4752f3646cd9)
+2026-10-17T09:57:36.3025966Z Complete job name: test
+2026-10-17T09:57:36.3960247Z ##[group]Run actions/checkout@v7
+2026-10-17T09:57:36.3961379Z with:
+2026-10-17T09:57:36.3962099Z   repository: SoupTeam/soup-wall
+2026-10-17T09:57:36.3967913Z   token: ***
+2026-10-17T09:57:36.3968645Z   ssh-strict: true
+2026-10-17T09:57:36.3969380Z   ssh-user: git
+2026-10-17T09:57:36.3970148Z   persist-credentials: true
+2026-10-17T09:57:36.3970950Z   clean: true
+2026-10-17T09:57:36.3971686Z   sparse-checkout-cone-mode: true
+2026-10-17T09:57:36.3972743Z   fetch-depth: 1
+2026-10-17T09:57:36.3973473Z   fetch-tags: false
+2026-10-17T09:57:36.3974217Z   show-progress: true
+2026-10-17T09:57:36.3974951Z   lfs: false
+2026-10-17T09:57:36.3975645Z   submodules: false
+2026-10-17T09:57:36.3976408Z   set-safe-directory: true
+2026-10-17T09:57:36.3977252Z   allow-unsafe-pr-checkout: false
+2026-10-17T09:57:36.3978284Z ##[endgroup]
+2026-10-17T09:57:36.4838656Z Syncing repository: SoupTeam/soup-wall
+2026-10-17T09:57:36.4841909Z ##[group]Getting Git version info
+2026-10-17T09:57:36.4844039Z Working directory is '/home/runner/work/soup-wall/soup-wall'
+2026-10-17T09:57:36.4846417Z [command]/usr/bin/git version
+2026-10-17T09:57:36.4883908Z git version 2.55.0
+2026-10-17T09:57:36.4899357Z ##[endgroup]
+2026-10-17T09:57:36.4907143Z Temporarily overriding HOME='/home/runner/work/_temp/f17bc7c9-18d7-4f5f-bcef-3c0fac4d77b7' before making global git config changes
+2026-10-17T09:57:36.4909833Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-17T09:57:36.4912735Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/soup-wall/soup-wall
+2026-10-17T09:57:36.4951471Z Deleting the contents of '/home/runner/work/soup-wall/soup-wall'
+2026-10-17T09:57:36.4955042Z ##[group]Determining repository object format
+2026-10-17T09:57:36.4957183Z ##[endgroup]
+2026-10-17T09:57:36.4958833Z ##[group]Initializing the repository
+2026-10-17T09:57:36.4961413Z [command]/usr/bin/git init /home/runner/work/soup-wall/soup-wall
+2026-10-17T09:57:36.5057454Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-10-17T09:57:36.5059553Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-10-17T09:57:36.5061551Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-10-17T09:57:36.5063341Z hint: call:
+2026-10-17T09:57:36.5064200Z hint:
+2026-10-17T09:57:36.5065477Z hint: 	git config --global init.defaultBranch <name>
+2026-10-17T09:57:36.5066803Z hint:
+2026-10-17T09:57:36.5068036Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-10-17T09:57:36.5070139Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-10-17T09:57:36.5071593Z hint:
+2026-10-17T09:57:36.5072732Z hint: 	git branch -m <name>
+2026-10-17T09:57:36.5073514Z hint:
+2026-10-17T09:57:36.5074543Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-10-17T09:57:36.5076050Z Initialized empty Git repository in /home/runner/work/soup-wall/soup-wall/.git/
+2026-10-17T09:57:36.5079357Z [command]/usr/bin/git remote add origin https://github.com/SoupTeam/soup-wall
+2026-10-17T09:57:36.5117494Z ##[endgroup]
+2026-10-17T09:57:36.5119191Z ##[group]Disabling automatic garbage collection
+2026-10-17T09:57:36.5120756Z [command]/usr/bin/git config --local gc.auto 0
+2026-10-17T09:57:36.5153106Z ##[endgroup]
+2026-10-17T09:57:36.5155184Z ##[group]Setting up auth
+2026-10-17T09:57:36.5156555Z Removing SSH command configuration
+2026-10-17T09:57:36.5158457Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-17T09:57:36.5180447Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-17T09:57:36.5450591Z Removing HTTP extra header
+2026-10-17T09:57:36.5453205Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-17T09:57:36.5477688Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-17T09:57:36.5620626Z Removing includeIf entries pointing to credentials config files
+2026-10-17T09:57:36.5623870Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-17T09:57:36.5646089Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-17T09:57:36.5789813Z [command]/usr/bin/git config --file /home/runner/work/_temp/git-credentials-d3a599ec-f51a-4602-b6c1-d7fd472acfd6.config http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-10-17T09:57:36.5815402Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/soup-wall/soup-wall/.git.path /home/runner/work/_temp/git-credentials-d3a599ec-f51a-4602-b6c1-d7fd472acfd6.config
+2026-10-17T09:57:36.5839250Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/soup-wall/soup-wall/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-d3a599ec-f51a-4602-b6c1-d7fd472acfd6.config
+2026-10-17T09:57:36.5868463Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-d3a599ec-f51a-4602-b6c1-d7fd472acfd6.config
+2026-10-17T09:57:36.5897514Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-d3a599ec-f51a-4602-b6c1-d7fd472acfd6.config
+2026-10-17T09:57:36.5920490Z ##[endgroup]
+2026-10-17T09:57:36.5921711Z ##[group]Fetching the repository
+2026-10-17T09:57:36.5925321Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +5c1d4b33b1550679273ac5e34d92484183027710:refs/remotes/pull/161/merge
+2026-10-17T09:57:37.8076647Z From https://github.com/SoupTeam/soup-wall
+2026-10-17T09:57:37.8077484Z  * [new ref]         5c1d4b33b1550679273ac5e34d92484183027710 -> pull/161/merge
+2026-10-17T09:57:37.8087156Z ##[endgroup]
+2026-10-17T09:57:37.8088001Z ##[group]Determining the checkout info
+2026-10-17T09:57:37.8088685Z ##[endgroup]
+2026-10-17T09:57:37.8090734Z [command]/usr/bin/git sparse-checkout disable
+2026-10-17T09:57:37.8143266Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-10-17T09:57:37.8199356Z ##[group]Checking out the ref
+2026-10-17T09:57:37.8204044Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/161/merge
+2026-10-17T09:57:37.9214762Z Note: switching to 'refs/remotes/pull/161/merge'.
+2026-10-17T09:57:37.9215176Z 
+2026-10-17T09:57:37.9215468Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-10-17T09:57:37.9216538Z changes and commit them, and you can discard any commits you make in this
+2026-10-17T09:57:37.9217194Z state without impacting any branches by switching back to a branch.
+2026-10-17T09:57:37.9217488Z 
+2026-10-17T09:57:37.9217793Z If you want to create a new branch to retain commits you create, you may
+2026-10-17T09:57:37.9218271Z do so (now or later) by using -c with the switch command. Example:
+2026-10-17T09:57:37.9218534Z 
+2026-10-17T09:57:37.9218653Z   git switch -c <new-branch-name>
+2026-10-17T09:57:37.9218901Z 
+2026-10-17T09:57:37.9219030Z Or undo this operation with:
+2026-10-17T09:57:37.9219228Z 
+2026-10-17T09:57:37.9219376Z   git switch -
+2026-10-17T09:57:37.9219523Z 
+2026-10-17T09:57:37.9219786Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-10-17T09:57:37.9220046Z 
+2026-10-17T09:57:37.9220394Z HEAD is now at 5c1d4b3 Merge 59bb5dfda3e326d314ac8f1a8a67222d9fa8229d into fff8ba55a22f2d19b3a4554908571adc84a42fce
+2026-10-17T09:57:37.9230245Z ##[endgroup]
+2026-10-17T09:57:37.9266399Z [command]/usr/bin/git log -1 --format=%H
+2026-10-17T09:57:37.9286050Z 5c1d4b33b1550679273ac5e34d92484183027710
+2026-10-17T09:57:37.9589355Z ##[group]Run dtolnay/rust-toolchain@stable
+2026-10-17T09:57:37.9589709Z with:
+2026-10-17T09:57:37.9590043Z   components: rustfmt, clippy
+2026-10-17T09:57:37.9590401Z   toolchain: stable
+2026-10-17T09:57:37.9590683Z ##[endgroup]
+2026-10-17T09:57:37.9654354Z ##[start-action display=Parse toolchain version;id=__dtolnay_rust-toolchain.parse]
+2026-10-17T09:57:37.9715391Z ##[group]Run if [[ -z $toolchain ]]; then
+2026-10-17T09:57:37.9715897Z [36;1mif [[ -z $toolchain ]]; then[0m
+2026-10-17T09:57:37.9716446Z [36;1m  # GitHub does not enforce `required: true` inputs itself. https://github.com/actions/runner/issues/1070[0m
+2026-10-17T09:57:37.9717004Z [36;1m  echo "'toolchain' is a required input" >&2[0m
+2026-10-17T09:57:37.9717358Z [36;1m  exit 1[0m
+2026-10-17T09:57:37.9717726Z [36;1melif [[ $toolchain =~ ^stable' '[0-9]+' '(year|month|week|day)s?' 'ago$ ]]; then[0m
+2026-10-17T09:57:37.9718210Z [36;1m  if [[ Linux == macOS ]]; then[0m
+2026-10-17T09:57:37.9718819Z [36;1m    echo "toolchain=1.$((($(date -v-$(sed 's/stable \([0-9]*\) \(.\).*/\1\2/' <<< $toolchain) +%s)/60/60/24-16569)/7/6))" >> $GITHUB_OUTPUT[0m
+2026-10-17T09:57:37.9719367Z [36;1m  else[0m
+2026-10-17T09:57:37.9719790Z [36;1m    echo "toolchain=1.$((($(date --date "${toolchain#stable }" +%s)/60/60/24-16569)/7/6))" >> $GITHUB_OUTPUT[0m
+2026-10-17T09:57:37.9720253Z [36;1m  fi[0m
+2026-10-17T09:57:37.9720605Z [36;1melif [[ $toolchain =~ ^stable' 'minus' '[0-9]+' 'releases?$ ]]; then[0m
+2026-10-17T09:57:37.9721112Z [36;1m  echo "toolchain=1.$((($(date +%s)/60/60/24-16569)/7/6-${toolchain//[^0-9]/}))" >> $GITHUB_OUTPUT[0m
+2026-10-17T09:57:37.9721599Z [36;1melif [[ $toolchain =~ ^1\.[0-9]+$ ]]; then[0m
+2026-10-17T09:57:37.9722101Z [36;1m  echo "toolchain=1.$((i=${toolchain#1.}, c=($(date +%s)/60/60/24-16569)/7/6, i+9*i*(10*i<=c)+90*i*(100*i<=c)))" >> $GITHUB_OUTPUT[0m
+2026-10-17T09:57:37.9722716Z [36;1melse[0m
+2026-10-17T09:57:37.9723168Z [36;1m  delimiter=EOF[0m
+2026-10-17T09:57:37.9723540Z [36;1m  while [[ $toolchain == *$delimiter* ]]; do delimiter+=_; done[0m
+2026-10-17T09:57:37.9724004Z [36;1m  printf 'toolchain<<%s\n%s\n%s\n' "$delimiter" "$toolchain" "$delimiter" >> $GITHUB_OUTPUT[0m
+2026-10-17T09:57:37.9724446Z [36;1mfi[0m
+2026-10-17T09:57:37.9902918Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-17T09:57:37.9903310Z env:
+2026-10-17T09:57:37.9903639Z   toolchain: stable
+2026-10-17T09:57:37.9903933Z ##[endgroup]
+2026-10-17T09:57:38.0001709Z ##[end-action id=__dtolnay_rust-toolchain.parse;outcome=success;conclusion=success;duration_ms=34]
+2026-10-17T09:57:38.0006006Z ##[start-action display=Set $CARGO_HOME;id=__dtolnay_rust-toolchain.__run]
+2026-10-17T09:57:38.0044064Z ##[group]Run echo CARGO_HOME=${CARGO_HOME:-"$HOME/.cargo"} >> $GITHUB_ENV
+2026-10-17T09:57:38.0044580Z [36;1mecho CARGO_HOME=${CARGO_HOME:-"$HOME/.cargo"} >> $GITHUB_ENV[0m
+2026-10-17T09:57:38.0073853Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-17T09:57:38.0074257Z ##[endgroup]
+2026-10-17T09:57:38.0128359Z ##[end-action id=__dtolnay_rust-toolchain.__run;outcome=success;conclusion=success;duration_ms=12]
+2026-10-17T09:57:38.0130725Z ##[start-action display=Install rustup if needed;id=__dtolnay_rust-toolchain.__run_2]
+2026-10-17T09:57:38.0207077Z ##[group]Run if ! command -v rustup &>/dev/null; then
+2026-10-17T09:57:38.0207473Z [36;1mif ! command -v rustup &>/dev/null; then[0m
+2026-10-17T09:57:38.0208190Z [36;1m  curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused --location --silent --show-error --fail https://sh.rustup.rs | sh -s -- --default-toolchain none -y[0m
+2026-10-17T09:57:38.0208895Z [36;1m  echo "$CARGO_HOME/bin" >> $GITHUB_PATH[0m
+2026-10-17T09:57:38.0209282Z [36;1mfi[0m
+2026-10-17T09:57:38.0236180Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-17T09:57:38.0236575Z env:
+2026-10-17T09:57:38.0236835Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T09:57:38.0237160Z ##[endgroup]
+2026-10-17T09:57:38.0284696Z ##[end-action id=__dtolnay_rust-toolchain.__run_2;outcome=success;conclusion=success;duration_ms=15]
+2026-10-17T09:57:38.0287049Z ##[start-action display=Install rustup if needed on windows;id=__dtolnay_rust-toolchain.__run_3]
+2026-10-17T09:57:38.0293595Z ##[end-action id=__dtolnay_rust-toolchain.__run_3;outcome=skipped;conclusion=skipped;duration_ms=0]
+2026-10-17T09:57:38.0305192Z ##[start-action display=rustup toolchain install stable;id=__dtolnay_rust-toolchain.__run_4]
+2026-10-17T09:57:38.0332552Z ##[group]Run set -f  # split targets and components on commas and whitespace, without glob expansion
+2026-10-17T09:57:38.0333226Z [36;1mset -f  # split targets and components on commas and whitespace, without glob expansion[0m
+2026-10-17T09:57:38.0333705Z [36;1mflags=()[0m
+2026-10-17T09:57:38.0334025Z [36;1mfor t in ${targets//,/ }; do flags+=(--target "$t"); done[0m
+2026-10-17T09:57:38.0334449Z [36;1mfor c in ${components//,/ }; do flags+=(--component "$c"); done[0m
+2026-10-17T09:57:38.0334947Z [36;1mif [[ $toolchain == nightly && -n $components ]]; then flags+=(--allow-downgrade); fi[0m
+2026-10-17T09:57:38.0335359Z [36;1mlog=$(mktemp)[0m
+2026-10-17T09:57:38.0335639Z [36;1mtrap 'rm -f "$log"' EXIT[0m
+2026-10-17T09:57:38.0335947Z [36;1mfor attempt in 1 2 3 4 5; do[0m
+2026-10-17T09:57:38.0336516Z [36;1m  if rustup toolchain install "$toolchain" "${flags[@]}" --profile minimal --no-self-update --force-non-host 2>&1 | tee "$log"; then[0m
+2026-10-17T09:57:38.0337037Z [36;1m    break[0m
+2026-10-17T09:57:38.0337303Z [36;1m  else[0m
+2026-10-17T09:57:38.0337580Z [36;1m    status=$?[0m
+2026-10-17T09:57:38.0337835Z [36;1m  fi[0m
+2026-10-17T09:57:38.0338183Z [36;1m  if [[ $attempt == 5 ]] || ! grep -Fq 'checksum failed for ' "$log" \[0m
+2026-10-17T09:57:38.0338714Z [36;1m      || ! grep -Fq 'this is likely due to an ongoing update of the official release server' "$log"; then[0m
+2026-10-17T09:57:38.0339195Z [36;1m    exit "$status"[0m
+2026-10-17T09:57:38.0339593Z [36;1m  fi[0m
+2026-10-17T09:57:38.0339953Z [36;1m  echo "Retrying rustup toolchain install in 30 seconds (retry $attempt of 4)" >&2[0m
+2026-10-17T09:57:38.0340390Z [36;1m  sleep 30[0m
+2026-10-17T09:57:38.0340651Z [36;1mdone[0m
+2026-10-17T09:57:38.0366345Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-17T09:57:38.0366766Z env:
+2026-10-17T09:57:38.0367056Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T09:57:38.0367354Z   toolchain: stable
+2026-10-17T09:57:38.0367634Z   targets: 
+2026-10-17T09:57:38.0367925Z   components: rustfmt, clippy
+2026-10-17T09:57:38.0368264Z   RUSTUP_PERMIT_COPY_RENAME: 1
+2026-10-17T09:57:38.0368562Z ##[endgroup]
+2026-10-17T09:57:40.3513423Z info: syncing channel updates for stable-x86_64-unknown-linux-gnu
+2026-10-17T09:57:40.8649064Z info: latest update on 2026-10-15 for version 1.99.1 (58cf8f9c3 2026-10-13)
+2026-10-17T09:57:40.8986858Z info: removing previous version of component rustfmt
+2026-10-17T09:57:40.9001003Z info: removing previous version of component clippy
+2026-10-17T09:57:40.9113639Z info: removing previous version of component cargo
+2026-10-17T09:57:40.9142682Z info: removing previous version of component rust-std
+2026-10-17T09:57:40.9189899Z info: removing previous version of component rustc
+2026-10-17T09:57:40.9220779Z info: downloading 5 components
+2026-10-17T09:57:49.0544899Z 
+2026-10-17T09:57:49.0612612Z   stable-x86_64-unknown-linux-gnu updated - rustc 1.99.1 (58cf8f9c3 2026-10-13) (from rustc 1.99.0 (b940084d7 2026-09-28))
+2026-10-17T09:57:49.0613130Z 
+2026-10-17T09:57:49.0667174Z ##[end-action id=__dtolnay_rust-toolchain.__run_4;outcome=success;conclusion=success;duration_ms=11036]
+2026-10-17T09:57:49.0677244Z ##[start-action display=rustup default stable;id=__dtolnay_rust-toolchain.__run_5]
+2026-10-17T09:57:49.0742470Z ##[group]Run rustup default "$toolchain" --force-non-host
+2026-10-17T09:57:49.0742903Z [36;1mrustup default "$toolchain" --force-non-host[0m
+2026-10-17T09:57:49.0777795Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-17T09:57:49.0778154Z env:
+2026-10-17T09:57:49.0778560Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T09:57:49.0778853Z   toolchain: stable
+2026-10-17T09:57:49.0779081Z ##[endgroup]
+2026-10-17T09:57:49.0999137Z info: using existing install for stable-x86_64-unknown-linux-gnu
+2026-10-17T09:57:49.1247610Z info: default toolchain set to stable-x86_64-unknown-linux-gnu
+2026-10-17T09:57:49.1247901Z 
+2026-10-17T09:57:49.1309664Z info: note that the toolchain 'stable-x86_64-unknown-linux-gnu' is currently in use (overridden by '/home/runner/work/soup-wall/soup-wall/rust-toolchain.toml')
+2026-10-17T09:57:49.1310503Z   stable-x86_64-unknown-linux-gnu unchanged - rustc 1.99.1 (58cf8f9c3 2026-10-13)
+2026-10-17T09:57:49.1311187Z 
+2026-10-17T09:57:49.1321580Z ##[end-action id=__dtolnay_rust-toolchain.__run_5;outcome=success;conclusion=success;duration_ms=64]
+2026-10-17T09:57:49.1325200Z ##[start-action display=Create cachekey;id=__dtolnay_rust-toolchain.rustc-version]
+2026-10-17T09:57:49.1446772Z ##[group]Run DATE=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-date: \(20[0-9][0-9]\)-\([01][0-9]\)-\([0-3][0-9]\)$/\1\2\3/p')
+2026-10-17T09:57:49.1447694Z [36;1mDATE=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-date: \(20[0-9][0-9]\)-\([01][0-9]\)-\([0-3][0-9]\)$/\1\2\3/p')[0m
+2026-10-17T09:57:49.1448297Z [36;1mHASH=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-hash: //p')[0m
+2026-10-17T09:57:49.1448890Z [36;1mecho "cachekey=$(echo $DATE$HASH | head -c12)" >> $GITHUB_OUTPUT[0m
+2026-10-17T09:57:49.1480060Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-17T09:57:49.1480445Z env:
+2026-10-17T09:57:49.1480707Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T09:57:49.1480961Z   toolchain: stable
+2026-10-17T09:57:49.1481196Z ##[endgroup]
+2026-10-17T09:57:49.1782571Z ##[end-action id=__dtolnay_rust-toolchain.rustc-version;outcome=success;conclusion=success;duration_ms=45]
+2026-10-17T09:57:49.1785929Z ##[start-action display=Disable incremental compilation;id=__dtolnay_rust-toolchain.__run_6]
+2026-10-17T09:57:49.1845699Z ##[group]Run if [ -z "${CARGO_INCREMENTAL+set}" ]; then
+2026-10-17T09:57:49.1846268Z [36;1mif [ -z "${CARGO_INCREMENTAL+set}" ]; then[0m
+2026-10-17T09:57:49.1846686Z [36;1m  echo CARGO_INCREMENTAL=0 >> $GITHUB_ENV[0m
+2026-10-17T09:57:49.1847081Z [36;1mfi[0m
+2026-10-17T09:57:49.1883103Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-17T09:57:49.1883674Z env:
+2026-10-17T09:57:49.1883964Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T09:57:49.1884310Z ##[endgroup]
+2026-10-17T09:57:49.1962625Z ##[end-action id=__dtolnay_rust-toolchain.__run_6;outcome=success;conclusion=success;duration_ms=17]
+2026-10-17T09:57:49.1965208Z ##[start-action display=Enable colors in Cargo output;id=__dtolnay_rust-toolchain.__run_7]
+2026-10-17T09:57:49.2156350Z ##[group]Run if [ -z "${CARGO_TERM_COLOR+set}" ]; then
+2026-10-17T09:57:49.2156852Z [36;1mif [ -z "${CARGO_TERM_COLOR+set}" ]; then[0m
+2026-10-17T09:57:49.2157299Z [36;1m  echo CARGO_TERM_COLOR=always >> $GITHUB_ENV[0m
+2026-10-17T09:57:49.2157815Z [36;1mfi[0m
+2026-10-17T09:57:49.2186725Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-17T09:57:49.2187033Z env:
+2026-10-17T09:57:49.2187259Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T09:57:49.2187561Z   CARGO_INCREMENTAL: 0
+2026-10-17T09:57:49.2187776Z ##[endgroup]
+2026-10-17T09:57:49.3370776Z ##[end-action id=__dtolnay_rust-toolchain.__run_7;outcome=success;conclusion=success;duration_ms=140]
+2026-10-17T09:57:49.3374720Z ##[start-action display=Enable Cargo sparse registry;id=__dtolnay_rust-toolchain.__run_8]
+2026-10-17T09:57:49.4548187Z ##[group]Run # implemented in 1.66, stabilized in 1.68, made default in 1.70
+2026-10-17T09:57:49.4548800Z [36;1m# implemented in 1.66, stabilized in 1.68, made default in 1.70[0m
+2026-10-17T09:57:49.4549584Z [36;1mif [ -z "${CARGO_REGISTRIES_CRATES_IO_PROTOCOL+set}" -o -f "/home/runner/work/_temp"/.implicit_cargo_registries_crates_io_protocol ]; then[0m
+2026-10-17T09:57:49.4550679Z [36;1m  if rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.6[89]\.'; then[0m
+2026-10-17T09:57:49.4551353Z [36;1m    touch "/home/runner/work/_temp"/.implicit_cargo_registries_crates_io_protocol || true[0m
+2026-10-17T09:57:49.4551992Z [36;1m    echo CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse >> $GITHUB_ENV[0m
+2026-10-17T09:57:49.4552762Z [36;1m  elif rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.6[67]\.'; then[0m
+2026-10-17T09:57:49.4553348Z [36;1m    touch "/home/runner/work/_temp"/.implicit_cargo_registries_crates_io_protocol || true[0m
+2026-10-17T09:57:49.4553885Z [36;1m    echo CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git >> $GITHUB_ENV[0m
+2026-10-17T09:57:49.4554368Z [36;1m  fi[0m
+2026-10-17T09:57:49.4554655Z [36;1mfi[0m
+2026-10-17T09:57:49.4588509Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-17T09:57:49.4588910Z env:
+2026-10-17T09:57:49.4589173Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T09:57:49.4589429Z   CARGO_INCREMENTAL: 0
+2026-10-17T09:57:49.4589694Z   CARGO_TERM_COLOR: always
+2026-10-17T09:57:49.4589939Z   toolchain: stable
+2026-10-17T09:57:49.4590144Z ##[endgroup]
+2026-10-17T09:57:49.5660265Z ##[end-action id=__dtolnay_rust-toolchain.__run_8;outcome=success;conclusion=success;duration_ms=228]
+2026-10-17T09:57:49.5663893Z ##[start-action display=Work around spurious network errors in curl 8.0;id=__dtolnay_rust-toolchain.__run_9]
+2026-10-17T09:57:49.5744998Z ##[group]Run # https://rust-lang.zulipchat.com/#narrow/stream/246057-t-cargo/topic/timeout.20investigation
+2026-10-17T09:57:49.5745835Z [36;1m# https://rust-lang.zulipchat.com/#narrow/stream/246057-t-cargo/topic/timeout.20investigation[0m
+2026-10-17T09:57:49.5746677Z [36;1mif rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.7[01]\.'; then[0m
+2026-10-17T09:57:49.5747099Z [36;1m  echo CARGO_HTTP_MULTIPLEXING=false >> $GITHUB_ENV[0m
+2026-10-17T09:57:49.5747461Z [36;1mfi[0m
+2026-10-17T09:57:49.5777217Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-17T09:57:49.5777742Z env:
+2026-10-17T09:57:49.5777973Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T09:57:49.5778258Z   CARGO_INCREMENTAL: 0
+2026-10-17T09:57:49.5778490Z   CARGO_TERM_COLOR: always
+2026-10-17T09:57:49.5778729Z   toolchain: stable
+2026-10-17T09:57:49.5778973Z ##[endgroup]
+2026-10-17T09:57:49.5945994Z ##[end-action id=__dtolnay_rust-toolchain.__run_9;outcome=success;conclusion=success;duration_ms=28]
+2026-10-17T09:57:49.5951243Z ##[start-action display=rustc +stable --version --verbose;id=__dtolnay_rust-toolchain.__run_10]
+2026-10-17T09:57:49.6143246Z ##[group]Run rustc +"$toolchain" --version --verbose
+2026-10-17T09:57:49.6143604Z [36;1mrustc +"$toolchain" --version --verbose[0m
+2026-10-17T09:57:49.6173051Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-17T09:57:49.6173380Z env:
+2026-10-17T09:57:49.6173686Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T09:57:49.6173963Z   CARGO_INCREMENTAL: 0
+2026-10-17T09:57:49.6174222Z   CARGO_TERM_COLOR: always
+2026-10-17T09:57:49.6174520Z   toolchain: stable
+2026-10-17T09:57:49.6174764Z ##[endgroup]
+2026-10-17T09:57:49.6443065Z rustc 1.99.1 (58cf8f9c3 2026-10-13)
+2026-10-17T09:57:49.6443881Z binary: rustc
+2026-10-17T09:57:49.6444334Z commit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67
+2026-10-17T09:57:49.6444847Z commit-date: 2026-10-13
+2026-10-17T09:57:49.6445341Z host: x86_64-unknown-linux-gnu
+2026-10-17T09:57:49.6445938Z release: 1.99.1
+2026-10-17T09:57:49.6446502Z LLVM version: 23.1.1
+2026-10-17T09:57:49.6461009Z ##[end-action id=__dtolnay_rust-toolchain.__run_10;outcome=success;conclusion=success;duration_ms=50]
+2026-10-17T09:57:49.6565650Z ##[group]Run Swatinem/rust-cache@v2
+2026-10-17T09:57:49.6565929Z with:
+2026-10-17T09:57:49.6566188Z   prefix-key: v0-rust
+2026-10-17T09:57:49.6566441Z   add-job-id-key: true
+2026-10-17T09:57:49.6566707Z   add-rust-environment-hash-key: true
+2026-10-17T09:57:49.6567022Z   cache-targets: true
+2026-10-17T09:57:49.6567269Z   cache-all-crates: false
+2026-10-17T09:57:49.6567580Z   cache-workspace-crates: false
+2026-10-17T09:57:49.6567844Z   save-if: true
+2026-10-17T09:57:49.6568079Z   cache-provider: github
+2026-10-17T09:57:49.6568352Z   cache-bin: true
+2026-10-17T09:57:49.6568604Z   lookup-only: false
+2026-10-17T09:57:49.6568838Z   cmd-format: {0}
+2026-10-17T09:57:49.6569054Z env:
+2026-10-17T09:57:49.6569265Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T09:57:49.6569568Z   CARGO_INCREMENTAL: 0
+2026-10-17T09:57:49.6569822Z   CARGO_TERM_COLOR: always
+2026-10-17T09:57:49.6570067Z ##[endgroup]
+2026-10-17T09:57:49.9882217Z ##[group]Cache Configuration
+2026-10-17T09:57:49.9883203Z Cache Provider:
+2026-10-17T09:57:49.9883549Z     github
+2026-10-17T09:57:49.9883869Z Workspaces:
+2026-10-17T09:57:49.9884243Z     /home/runner/work/soup-wall/soup-wall
+2026-10-17T09:57:49.9884661Z Cache Paths:
+2026-10-17T09:57:49.9885004Z     /home/runner/.cargo/bin
+2026-10-17T09:57:49.9885402Z     /home/runner/.cargo/.crates.toml
+2026-10-17T09:57:49.9885849Z     /home/runner/.cargo/.crates2.json
+2026-10-17T09:57:49.9886281Z     /home/runner/.cargo/registry
+2026-10-17T09:57:49.9886746Z     /home/runner/.cargo/git
+2026-10-17T09:57:49.9887192Z     /home/runner/work/soup-wall/soup-wall/target
+2026-10-17T09:57:49.9887623Z Restore Key:
+2026-10-17T09:57:49.9887976Z     v0-rust-test-Linux-x64-01b81e85
+2026-10-17T09:57:49.9888376Z Cache Key:
+2026-10-17T09:57:49.9888724Z     v0-rust-test-Linux-x64-01b81e85-d1043089
+2026-10-17T09:57:49.9889126Z .. Prefix:
+2026-10-17T09:57:49.9889490Z   - v0-rust-test-Linux-x64
+2026-10-17T09:57:49.9889894Z .. Environment considered:
+2026-10-17T09:57:49.9890294Z   - Rust Versions:
+2026-10-17T09:57:49.9890831Z     - 1.99.1 x86_64-unknown-linux-gnu 58cf8f9c35b355199727627d07ae34a4e2846d67
+2026-10-17T09:57:49.9891352Z   - CARGO_HOME
+2026-10-17T09:57:49.9891714Z   - CARGO_INCREMENTAL
+2026-10-17T09:57:49.9892089Z   - CARGO_TERM_COLOR
+2026-10-17T09:57:49.9892609Z .. Lockfiles considered:
+2026-10-17T09:57:49.9893134Z   - /home/runner/work/soup-wall/soup-wall/Cargo.lock
+2026-10-17T09:57:49.9894009Z   - /home/runner/work/soup-wall/soup-wall/crates/adapter/Cargo.toml
+2026-10-17T09:57:49.9894628Z   - /home/runner/work/soup-wall/soup-wall/crates/agent/Cargo.toml
+2026-10-17T09:57:49.9895254Z   - /home/runner/work/soup-wall/soup-wall/crates/agentfw/Cargo.toml
+2026-10-17T09:57:49.9895888Z   - /home/runner/work/soup-wall/soup-wall/crates/bench/Cargo.toml
+2026-10-17T09:57:49.9896474Z   - /home/runner/work/soup-wall/soup-wall/crates/core/Cargo.toml
+2026-10-17T09:57:49.9897052Z   - /home/runner/work/soup-wall/soup-wall/crates/proxy/Cargo.toml
+2026-10-17T09:57:49.9897648Z   - /home/runner/work/soup-wall/soup-wall/rust-toolchain.toml
+2026-10-17T09:57:49.9898467Z ##[endgroup]
+2026-10-17T09:57:49.9898617Z 
+2026-10-17T09:57:49.9898815Z ... Restoring cache ...
+2026-10-17T09:57:50.1383013Z Cache hit for: v0-rust-test-Linux-x64-01b81e85-d1043089
+2026-10-17T09:57:51.2919208Z Received 96468992 of 558567063 (17.3%), 92.1 MBs/sec
+2026-10-17T09:57:52.2918104Z Received 130023424 of 558567063 (23.3%), 62.0 MBs/sec
+2026-10-17T09:57:53.2974179Z Received 310378496 of 558567063 (55.6%), 98.7 MBs/sec
+2026-10-17T09:57:54.2930296Z Received 536870912 of 558567063 (96.1%), 128.0 MBs/sec
+2026-10-17T09:57:54.4113096Z Received 558567063 of 558567063 (100.0%), 129.4 MBs/sec
+2026-10-17T09:57:54.4162770Z Cache Size: ~533 MB (558567063 B)
+2026-10-17T09:57:54.4225094Z [command]/usr/bin/tar -xf /home/runner/work/_temp/4eeb0ab5-cbf7-4f00-8ba2-251e5a6aa57d/cache.tzst -P -C /home/runner/work/soup-wall/soup-wall --use-compress-program unzstd
+2026-10-17T09:58:00.3058472Z Cache restored successfully
+2026-10-17T09:58:00.3259006Z Restored from cache key "v0-rust-test-Linux-x64-01b81e85-d1043089" full match: true.
+2026-10-17T09:58:00.3344086Z ##[group]Run cargo fmt --all -- --check
+2026-10-17T09:58:00.3344474Z [36;1mcargo fmt --all -- --check[0m
+2026-10-17T09:58:00.3384061Z shell: /usr/bin/bash -e {0}
+2026-10-17T09:58:00.3384434Z env:
+2026-10-17T09:58:00.3384654Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T09:58:00.3384906Z   CARGO_INCREMENTAL: 0
+2026-10-17T09:58:00.3385195Z   CARGO_TERM_COLOR: always
+2026-10-17T09:58:00.3385473Z   CACHE_ON_FAILURE: false
+2026-10-17T09:58:00.3385737Z ##[endgroup]
+2026-10-17T09:58:01.4554458Z ##[group]Run sudo apt-get update && sudo apt-get install --no-install-recommends -y bubblewrap
+2026-10-17T09:58:01.4555212Z [36;1msudo apt-get update && sudo apt-get install --no-install-recommends -y bubblewrap[0m
+2026-10-17T09:58:01.4590246Z shell: /usr/bin/bash -e {0}
+2026-10-17T09:58:01.4590525Z env:
+2026-10-17T09:58:01.4590864Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T09:58:01.4591132Z   CARGO_INCREMENTAL: 0
+2026-10-17T09:58:01.4591381Z   CARGO_TERM_COLOR: always
+2026-10-17T09:58:01.4591636Z   CACHE_ON_FAILURE: false
+2026-10-17T09:58:01.4591891Z ##[endgroup]
+2026-10-17T09:58:01.6197225Z Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [144 B]
+2026-10-17T09:58:01.6727292Z Hit:2 http://azure.archive.ubuntu.com/ubuntu noble InRelease
+2026-10-17T09:58:01.6733274Z Get:6 https://packages.microsoft.com/ubuntu/24.04/prod noble InRelease [3600 B]
+2026-10-17T09:58:01.6735007Z Get:3 http://azure.archive.ubuntu.com/ubuntu noble-updates InRelease [126 kB]
+2026-10-17T09:58:01.6899159Z Get:4 http://azure.archive.ubuntu.com/ubuntu noble-backports InRelease [126 kB]
+2026-10-17T09:58:01.7289619Z Get:5 http://azure.archive.ubuntu.com/ubuntu noble-security InRelease [126 kB]
+2026-10-17T09:58:01.7488209Z Get:7 https://packages.microsoft.com/ubuntu/24.04/prod noble/main arm64 Packages [556 kB]
+2026-10-17T09:58:01.7899110Z Get:8 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 Packages [1397 kB]
+2026-10-17T09:58:01.8450111Z Get:9 http://azure.archive.ubuntu.com/ubuntu noble-updates/main Translation-en [308 kB]
+2026-10-17T09:58:01.8484432Z Get:20 https://packages.microsoft.com/ubuntu/24.04/prod noble/main armhf Packages [12.4 kB]
+2026-10-17T09:58:01.8873324Z Get:10 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Packages [1704 kB]
+2026-10-17T09:58:01.8904674Z Get:21 https://packages.microsoft.com/ubuntu/24.04/prod noble/main amd64 Packages [617 kB]
+2026-10-17T09:58:01.9373160Z Get:11 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe Translation-en [342 kB]
+2026-10-17T09:58:01.9959432Z Get:12 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Packages [1805 kB]
+2026-10-17T09:58:02.1059181Z Get:13 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted Translation-en [411 kB]
+2026-10-17T09:58:02.2155322Z Get:14 http://azure.archive.ubuntu.com/ubuntu noble-security/main amd64 Packages [1144 kB]
+2026-10-17T09:58:02.4163191Z Get:15 http://azure.archive.ubuntu.com/ubuntu noble-security/main Translation-en [231 kB]
+2026-10-17T09:58:02.4748079Z Get:16 http://azure.archive.ubuntu.com/ubuntu noble-security/universe amd64 Packages [1222 kB]
+2026-10-17T09:58:02.5345309Z Get:17 http://azure.archive.ubuntu.com/ubuntu noble-security/universe Translation-en [246 kB]
+2026-10-17T09:58:02.6387664Z Get:18 http://azure.archive.ubuntu.com/ubuntu noble-security/restricted amd64 Packages [1713 kB]
+2026-10-17T09:58:02.6955927Z Get:19 http://azure.archive.ubuntu.com/ubuntu noble-security/restricted Translation-en [392 kB]
+2026-10-17T09:58:08.1446157Z Fetched 12.5 MB in 1s (9932 kB/s)
+2026-10-17T09:58:08.8365669Z Reading package lists...
+2026-10-17T09:58:08.8615353Z Reading package lists...
+2026-10-17T09:58:09.0031541Z Building dependency tree...
+2026-10-17T09:58:09.0038972Z Reading state information...
+2026-10-17T09:58:09.1660542Z The following NEW packages will be installed:
+2026-10-17T09:58:09.1668246Z   bubblewrap
+2026-10-17T09:58:09.1817749Z 0 upgraded, 1 newly installed, 0 to remove and 44 not upgraded.
+2026-10-17T09:58:09.1818185Z Need to get 50.4 kB of archives.
+2026-10-17T09:58:09.1818580Z After this operation, 133 kB of additional disk space will be used.
+2026-10-17T09:58:09.1818991Z Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [144 B]
+2026-10-17T09:58:09.2363568Z Get:2 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 bubblewrap amd64 0.9.0-1ubuntu0.3 [50.4 kB]
+2026-10-17T09:58:09.5126751Z Fetched 50.4 kB in 0s (683 kB/s)
+2026-10-17T09:58:09.7796780Z Selecting previously unselected package bubblewrap.
+2026-10-17T09:58:09.7991974Z (Reading database ... 
+2026-10-17T09:58:09.7992765Z (Reading database ... 5%
+2026-10-17T09:58:09.7993093Z (Reading database ... 10%
+2026-10-17T09:58:09.7993349Z (Reading database ... 15%
+2026-10-17T09:58:09.7993613Z (Reading database ... 20%
+2026-10-17T09:58:09.7993889Z (Reading database ... 25%
+2026-10-17T09:58:09.7994154Z (Reading database ... 30%
+2026-10-17T09:58:09.7994409Z (Reading database ... 35%
+2026-10-17T09:58:09.7994650Z (Reading database ... 40%
+2026-10-17T09:58:09.7994903Z (Reading database ... 45%
+2026-10-17T09:58:09.7995173Z (Reading database ... 50%
+2026-10-17T09:58:09.8046400Z (Reading database ... 55%
+2026-10-17T09:58:09.9299535Z (Reading database ... 60%
+2026-10-17T09:58:10.1197210Z (Reading database ... 65%
+2026-10-17T09:58:10.3259567Z (Reading database ... 70%
+2026-10-17T09:58:10.5292736Z (Reading database ... 75%
+2026-10-17T09:58:10.6732664Z (Reading database ... 80%
+2026-10-17T09:58:10.9193363Z (Reading database ... 85%
+2026-10-17T09:58:11.0869247Z (Reading database ... 90%
+2026-10-17T09:58:11.2776074Z (Reading database ... 95%
+2026-10-17T09:58:11.2776449Z (Reading database ... 100%
+2026-10-17T09:58:11.2776817Z (Reading database ... 203540 files and directories currently installed.)
+2026-10-17T09:58:11.2819817Z Preparing to unpack .../bubblewrap_0.9.0-1ubuntu0.3_amd64.deb ...
+2026-10-17T09:58:11.3893420Z Unpacking bubblewrap (0.9.0-1ubuntu0.3) ...
+2026-10-17T09:58:12.1777797Z Setting up bubblewrap (0.9.0-1ubuntu0.3) ...
+2026-10-17T09:58:12.1822995Z Processing triggers for man-db (2.12.0-4build2) ...
+2026-10-17T09:58:12.1841575Z Not building database; man-db/auto-update is not 'true'.
+2026-10-17T09:58:12.6155087Z 
+2026-10-17T09:58:12.6156360Z Running kernel seems to be up-to-date.
+2026-10-17T09:58:12.6156961Z 
+2026-10-17T09:58:12.6157306Z No services need to be restarted.
+2026-10-17T09:58:12.6157706Z 
+2026-10-17T09:58:12.6158458Z No containers need to be restarted.
+2026-10-17T09:58:12.6159238Z 
+2026-10-17T09:58:12.6159469Z No user sessions are running outdated binaries.
+2026-10-17T09:58:12.6159756Z 
+2026-10-17T09:58:12.6159954Z No VM guests are running outdated hypervisor (qemu) binaries on this host.
+2026-10-17T09:58:13.3258937Z ##[group]Run set -o pipefail
+2026-10-17T09:58:13.3259314Z [36;1mset -o pipefail[0m
+2026-10-17T09:58:13.3259647Z [36;1mmkdir -p target/provenance-overflow[0m
+2026-10-17T09:58:13.3259964Z [36;1m{[0m
+2026-10-17T09:58:13.3260233Z [36;1m  git rev-parse HEAD[0m
+2026-10-17T09:58:13.3260507Z [36;1m  rustc --version[0m
+2026-10-17T09:58:13.3260884Z [36;1m  cargo test --locked -p soup-wall-agent incomplete_marker -- --nocapture[0m
+2026-10-17T09:58:13.3261479Z [36;1m  cargo test --locked -p soup-wall-agent zero_capacity_marks -- --nocapture[0m
+2026-10-17T09:58:13.3261956Z [36;1m  cargo test --locked -p soup-wall-agent --test provenance_overflow -- --nocapture[0m
+2026-10-17T09:58:13.3262679Z [36;1m} 2>&1 | tee target/provenance-overflow/results.log[0m
+2026-10-17T09:58:13.3295705Z shell: /usr/bin/bash -e {0}
+2026-10-17T09:58:13.3296020Z env:
+2026-10-17T09:58:13.3296301Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T09:58:13.3296602Z   CARGO_INCREMENTAL: 0
+2026-10-17T09:58:13.3297000Z   CARGO_TERM_COLOR: always
+2026-10-17T09:58:13.3297269Z   CACHE_ON_FAILURE: false
+2026-10-17T09:58:13.3297529Z ##[endgroup]
+2026-10-17T09:58:13.3368794Z 5c1d4b33b1550679273ac5e34d92484183027710
+2026-10-17T09:58:13.3599468Z rustc 1.99.1 (58cf8f9c3 2026-10-13)
+2026-10-17T09:58:13.4041812Z [1m[92m    Updating[0m crates.io index
+2026-10-17T09:58:13.5670980Z [1m[92m   Compiling[0m soup-wall-adapter v0.1.0 (/home/runner/work/soup-wall/soup-wall/crates/adapter)
+2026-10-17T09:58:13.5672405Z [1m[92m   Compiling[0m soup-wall-core v0.2.0 (/home/runner/work/soup-wall/soup-wall/crates/core)
+2026-10-17T09:58:13.8707698Z [1m[92m   Compiling[0m soup-wall-agent v0.2.0 (/home/runner/work/soup-wall/soup-wall/crates/agent)
+2026-10-17T09:58:15.4534587Z [1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 2.07s
+2026-10-17T09:58:15.4580468Z [1m[92m     Running[0m unittests src/lib.rs (target/debug/deps/soup_wall_agent-a44a717340dcc970)
+2026-10-17T09:58:15.4591784Z 
+2026-10-17T09:58:15.4591971Z running 1 test
+2026-10-17T09:58:15.4682219Z test taint::tests::incomplete_marker_is_sticky_and_bounded_for_both_fifo_indexes ... ok
+2026-10-17T09:58:15.4682713Z 
+2026-10-17T09:58:15.4683016Z test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 151 filtered out; finished in 0.01s
+2026-10-17T09:58:15.4683339Z 
+2026-10-17T09:58:15.4683747Z [1m[92m     Running[0m tests/provenance_overflow.rs (target/debug/deps/provenance_overflow-2e043456e36b6be3)
+2026-10-17T09:58:15.4691441Z 
+2026-10-17T09:58:15.4693880Z running 0 tests
+2026-10-17T09:58:15.4694206Z 
+2026-10-17T09:58:15.4694562Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+2026-10-17T09:58:15.4694957Z 
+2026-10-17T09:58:15.4695486Z [1m[92m     Running[0m tests/scenarios.rs (target/debug/deps/scenarios-bd0eb9d52990a3ae)
+2026-10-17T09:58:15.4704551Z 
+2026-10-17T09:58:15.4704877Z running 0 tests
+2026-10-17T09:58:15.4705152Z 
+2026-10-17T09:58:15.4705500Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+2026-10-17T09:58:15.4705900Z 
+2026-10-17T09:58:15.4707017Z [1m[92m     Running[0m tests/spawn_resolution.rs (target/debug/deps/spawn_resolution-2d03c8f9da5880a9)
+2026-10-17T09:58:15.4715866Z 
+2026-10-17T09:58:15.4716108Z running 0 tests
+2026-10-17T09:58:15.4716310Z 
+2026-10-17T09:58:15.4716634Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+2026-10-17T09:58:15.4716930Z 
+2026-10-17T09:58:15.5531303Z [1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+2026-10-17T09:58:15.5548184Z [1m[92m     Running[0m unittests src/lib.rs (target/debug/deps/soup_wall_agent-a44a717340dcc970)
+2026-10-17T09:58:15.5559756Z 
+2026-10-17T09:58:15.5560320Z running 1 test
+2026-10-17T09:58:15.5563511Z test taint::tests::zero_capacity_marks_even_unfingerprintable_input_without_retaining_it ... ok
+2026-10-17T09:58:15.5563939Z 
+2026-10-17T09:58:15.5564399Z test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 151 filtered out; finished in 0.00s
+2026-10-17T09:58:15.5564816Z 
+2026-10-17T09:58:15.5566611Z [1m[92m     Running[0m tests/provenance_overflow.rs (target/debug/deps/provenance_overflow-2e043456e36b6be3)
+2026-10-17T09:58:15.5575189Z 
+2026-10-17T09:58:15.5575458Z running 0 tests
+2026-10-17T09:58:15.5575618Z 
+2026-10-17T09:58:15.5575903Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+2026-10-17T09:58:15.5576250Z 
+2026-10-17T09:58:15.5577763Z [1m[92m     Running[0m tests/scenarios.rs (target/debug/deps/scenarios-bd0eb9d52990a3ae)
+2026-10-17T09:58:15.5586409Z 
+2026-10-17T09:58:15.5586588Z running 0 tests
+2026-10-17T09:58:15.5586750Z 
+2026-10-17T09:58:15.5587401Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+2026-10-17T09:58:15.5587888Z 
+2026-10-17T09:58:15.5589145Z [1m[92m     Running[0m tests/spawn_resolution.rs (target/debug/deps/spawn_resolution-2d03c8f9da5880a9)
+2026-10-17T09:58:15.5598012Z 
+2026-10-17T09:58:15.5598324Z running 0 tests
+2026-10-17T09:58:15.5598508Z 
+2026-10-17T09:58:15.5598805Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+2026-10-17T09:58:15.5599180Z 
+2026-10-17T09:58:15.6389189Z [1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+2026-10-17T09:58:15.6406466Z [1m[92m     Running[0m tests/provenance_overflow.rs (target/debug/deps/provenance_overflow-2e043456e36b6be3)
+2026-10-17T09:58:15.6416812Z 
+2026-10-17T09:58:15.6417031Z running 7 tests
+2026-10-17T09:58:15.6997708Z test benign_below_capacity_and_unadmitted_preview_remain_unaffected ... ok
+2026-10-17T09:58:15.6998397Z test managed_policy_activation_preserves_incomplete_history_across_rollback ... ok
+2026-10-17T09:58:15.7024094Z test explicit_allow_and_judge_fallback_cannot_bypass_loss_floor ... ok
+2026-10-17T09:58:15.7024880Z test trusted_input_peer_activity_and_duplicate_start_cannot_reset_loss ... ok
+2026-10-17T09:58:15.7025584Z test retained_hard_deny_survives_incomplete_history ... ok
+2026-10-17T09:58:15.7044143Z test zero_capacity_covers_hook_sensitive_reads_and_native_effects ... ok
+2026-10-17T09:58:15.7152826Z test evicted_early_prose_url_and_path_cannot_become_clean_effectful_calls ... ok
+2026-10-17T09:58:15.7153176Z 
+2026-10-17T09:58:15.7153483Z test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+2026-10-17T09:58:15.7153756Z 
+2026-10-17T09:58:15.7246212Z ##[group]Run actions/upload-artifact@v7
+2026-10-17T09:58:15.7246517Z with:
+2026-10-17T09:58:15.7246874Z   name: provenance-overflow
+2026-10-17T09:58:15.7247197Z   path: target/provenance-overflow/results.log
+2026-10-17T09:58:15.7247516Z   if-no-files-found: error
+2026-10-17T09:58:15.7247819Z   compression-level: 6
+2026-10-17T09:58:15.7248069Z   overwrite: false
+2026-10-17T09:58:15.7248339Z   include-hidden-files: false
+2026-10-17T09:58:15.7248619Z   archive: true
+2026-10-17T09:58:15.7248890Z env:
+2026-10-17T09:58:15.7249126Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T09:58:15.7249392Z   CARGO_INCREMENTAL: 0
+2026-10-17T09:58:15.7249667Z   CARGO_TERM_COLOR: always
+2026-10-17T09:58:15.7249977Z   CACHE_ON_FAILURE: false
+2026-10-17T09:58:15.7250237Z ##[endgroup]
+2026-10-17T09:58:15.8328853Z With the provided path, there will be 1 file uploaded
+2026-10-17T09:58:15.8336178Z Artifact name is valid!
+2026-10-17T09:58:15.8345164Z Root directory input is valid!
+2026-10-17T09:58:16.1055343Z Uploading artifact: provenance-overflow.zip
+2026-10-17T09:58:16.1118260Z Beginning upload of artifact content to blob storage
+2026-10-17T09:58:16.2732160Z Uploaded bytes 989
+2026-10-17T09:58:16.3139175Z Finished uploading artifact content to blob storage!
+2026-10-17T09:58:16.3139927Z SHA256 digest of uploaded artifact is 82fef4723063ad5a9825b83a507a23db23e1795b41ef696f9bf5d4ea99fe85ec
+2026-10-17T09:58:16.3140822Z Finalizing artifact upload
+2026-10-17T09:58:16.6225702Z Artifact provenance-overflow successfully finalized. Artifact ID 12097413242
+2026-10-17T09:58:16.6226585Z Artifact provenance-overflow has been successfully uploaded! Final size is 989 bytes. Artifact ID is 12097413242
+2026-10-17T09:58:16.6227419Z Artifact download URL: https://github.com/SoupTeam/soup-wall/actions/runs/39023067335/artifacts/12097413242
+2026-10-17T09:58:16.6316613Z ##[group]Run python3 scripts/verify_policy_composition.py
+2026-10-17T09:58:16.6317008Z [36;1mpython3 scripts/verify_policy_composition.py[0m
+2026-10-17T09:58:16.6352674Z shell: /usr/bin/bash -e {0}
+2026-10-17T09:58:16.6352953Z env:
+2026-10-17T09:58:16.6353304Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T09:58:16.6353614Z   CARGO_INCREMENTAL: 0
+2026-10-17T09:58:16.6353890Z   CARGO_TERM_COLOR: always
+2026-10-17T09:58:16.6354185Z   CACHE_ON_FAILURE: false
+2026-10-17T09:58:16.6354438Z ##[endgroup]
+2026-10-17T09:58:16.7634811Z Running: rustc --version
+2026-10-17T09:58:16.7868717Z Running: cargo run --locked -p agentfw --example policy_matrix -- crates/agentfw/tests/fixtures/policy_matrix_v1.json /home/runner/work/soup-wall/soup-wall/target/policy-composition/matrix.json
+2026-10-17T09:58:26.0459174Z Running: cargo test --locked -p soup-wall-agent
+2026-10-17T09:58:26.5109861Z Running: cargo test --locked -p agentfw --lib
+2026-10-17T09:59:06.3985612Z Running: cargo test --locked -p agentfw --test judge_endpoint
+2026-10-17T09:59:09.0584667Z Running: cargo test --locked -p agentfw --test native_endpoint
+2026-10-17T09:59:12.1884640Z Running: cargo run --locked -p soup-wall-bench -- --agent crates/bench/corpora/agent_sessions.jsonl --policy crates/agent/policies/agent-default.yaml
+2026-10-17T09:59:14.0572116Z Running: cargo run --locked -p soup-wall-bench -- --agent crates/bench/corpora/agent_sessions.jsonl --policy /home/runner/work/soup-wall/soup-wall/target/policy-composition/negative-control.yaml --agent-out /home/runner/work/soup-wall/soup-wall/target/policy-composition/negative-control.json
+2026-10-17T09:59:15.0580470Z Evidence: /home/runner/work/soup-wall/soup-wall/target/policy-composition; passed=True
+2026-10-17T09:59:15.0686360Z ##[group]Run actions/upload-artifact@v7
+2026-10-17T09:59:15.0686716Z with:
+2026-10-17T09:59:15.0686976Z   name: policy-composition
+2026-10-17T09:59:15.0687282Z   path: target/policy-composition/
+2026-10-17T09:59:15.0687587Z   if-no-files-found: warn
+2026-10-17T09:59:15.0687881Z   compression-level: 6
+2026-10-17T09:59:15.0688131Z   overwrite: false
+2026-10-17T09:59:15.0688377Z   include-hidden-files: false
+2026-10-17T09:59:15.0688626Z   archive: true
+2026-10-17T09:59:15.0688900Z env:
+2026-10-17T09:59:15.0689147Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T09:59:15.0689411Z   CARGO_INCREMENTAL: 0
+2026-10-17T09:59:15.0689649Z   CARGO_TERM_COLOR: always
+2026-10-17T09:59:15.0689906Z   CACHE_ON_FAILURE: false
+2026-10-17T09:59:15.0690148Z ##[endgroup]
+2026-10-17T09:59:15.1878515Z With the provided path, there will be 13 files uploaded
+2026-10-17T09:59:15.1884411Z Artifact name is valid!
+2026-10-17T09:59:15.1884682Z Root directory input is valid!
+2026-10-17T09:59:15.4833698Z Uploading artifact: policy-composition.zip
+2026-10-17T09:59:15.4868732Z Beginning upload of artifact content to blob storage
+2026-10-17T09:59:15.6680938Z Uploaded bytes 35377
+2026-10-17T09:59:15.7010822Z Finished uploading artifact content to blob storage!
+2026-10-17T09:59:15.7011418Z SHA256 digest of uploaded artifact is 29ffe3549eed9179374e146e556b7ab4e95b32d3335fcdf8cdf4f72df9b194db
+2026-10-17T09:59:15.7011892Z Finalizing artifact upload
+2026-10-17T09:59:16.0046265Z Artifact policy-composition successfully finalized. Artifact ID 12097910154
+2026-10-17T09:59:16.0047105Z Artifact policy-composition has been successfully uploaded! Final size is 35377 bytes. Artifact ID is 12097910154
+2026-10-17T09:59:16.0050709Z Artifact download URL: https://github.com/SoupTeam/soup-wall/actions/runs/39023067335/artifacts/12097910154
+2026-10-17T09:59:16.0142243Z ##[group]Run set -o pipefail
+2026-10-17T09:59:16.0144407Z [36;1mset -o pipefail[0m
+2026-10-17T09:59:16.0144693Z [36;1mmkdir -p target/runtime-protection-status[0m
+2026-10-17T09:59:16.0145076Z [36;1mgit rev-parse HEAD > target/runtime-protection-status/source.txt[0m
+2026-10-17T09:59:16.0145680Z [36;1mgit ls-files crates/agent crates/agentfw | xargs sha256sum > target/runtime-protection-status/source-sha256.txt[0m
+2026-10-17T09:59:16.0146334Z [36;1mcargo test --locked -p agentfw --test protection_status 2>&1 | tee target/runtime-protection-status/results.log[0m
+2026-10-17T09:59:16.0186007Z shell: /usr/bin/bash -e {0}
+2026-10-17T09:59:16.0186269Z env:
+2026-10-17T09:59:16.0186467Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T09:59:16.0186706Z   CARGO_INCREMENTAL: 0
+2026-10-17T09:59:16.0186906Z   CARGO_TERM_COLOR: always
+2026-10-17T09:59:16.0187118Z   CACHE_ON_FAILURE: false
+2026-10-17T09:59:16.0187553Z   AGENTFW_STATUS_EVIDENCE: /home/runner/work/soup-wall/soup-wall/target/runtime-protection-status/runtime.json
+2026-10-17T09:59:16.0188017Z ##[endgroup]
+2026-10-17T09:59:16.1609827Z [1m[92m   Compiling[0m agentfw v0.3.0 (/home/runner/work/soup-wall/soup-wall/crates/agentfw)
+2026-10-17T09:59:17.6729129Z [1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 1.61s
+2026-10-17T09:59:17.6858254Z [1m[92m     Running[0m tests/protection_status.rs (target/debug/deps/protection_status-9b941943d3bfac73)
+2026-10-17T09:59:17.6876917Z 
+2026-10-17T09:59:17.6877484Z running 19 tests
+2026-10-17T09:59:17.6958218Z test client_rejects_redirect_raw_error_bodies_and_oversized_replies ... ok
+2026-10-17T09:59:17.6983560Z test cli_refuses_fifo_config_and_token_without_waiting_for_a_writer ... ok
+2026-10-17T09:59:17.6988605Z test default_home_query_does_not_create_a_profile ... ok
+2026-10-17T09:59:17.6989550Z test disk_policy_registry_and_config_changes_do_not_replace_runtime_evidence ... ok
+2026-10-17T09:59:17.7013725Z test lifecycle_identity_is_reused_and_health_remains_compatible ... ok
+2026-10-17T09:59:17.7014926Z test legacy_fail_open_contact_and_unauthorized_requests_are_distinguished ... ok
+2026-10-17T09:59:17.7039931Z test managed_metadata_and_live_policy_share_one_snapshot ... ok
+2026-10-17T09:59:17.7069094Z test native_contact_does_not_prove_execution_or_model_consumption ... ok
+2026-10-17T09:59:17.7095331Z test poisoned_engine_reports_unavailable_without_claiming_coverage ... ok
+2026-10-17T09:59:17.7103486Z test missing_token_is_not_created_and_parse_errors_are_sanitized ... ok
+2026-10-17T09:59:17.7105628Z test concurrent_policy_switches_never_mix_digest_and_managed_revision ... ok
+2026-10-17T09:59:17.7129619Z test runtime_instances_are_distinct_and_cannot_be_substituted ... ok
+2026-10-17T09:59:17.7153382Z test request_client_rejects_unavailable_and_wrong_auth ... ok
+2026-10-17T09:59:17.7172961Z test shadow_and_absent_registry_remain_explicit ... ok
+2026-10-17T09:59:17.7177323Z test stale_nonce_digest_instance_and_overclaimed_coverage_are_rejected ... ok
+2026-10-17T09:59:17.7178579Z test cli_is_read_only_and_unknown_is_nonzero_unless_query_only ... ok
+2026-10-17T09:59:17.7179214Z test status_requires_hook_auth_and_fresh_challenge ... ok
+2026-10-17T09:59:17.7191867Z test shadow_cli_cannot_satisfy_require_enforce ... ok
+2026-10-17T09:59:23.9602261Z test real_daemon_reports_loaded_identity_and_survives_disk_drift ... ok
+2026-10-17T09:59:23.9602716Z 
+2026-10-17T09:59:23.9602920Z test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.27s
+2026-10-17T09:59:23.9603187Z 
+2026-10-17T09:59:23.9687323Z ##[group]Run actions/upload-artifact@v7
+2026-10-17T09:59:23.9687577Z with:
+2026-10-17T09:59:23.9687778Z   name: runtime-protection-status
+2026-10-17T09:59:23.9688038Z   path: target/runtime-protection-status/
+2026-10-17T09:59:23.9688275Z   if-no-files-found: warn
+2026-10-17T09:59:23.9688491Z   compression-level: 6
+2026-10-17T09:59:23.9688685Z   overwrite: false
+2026-10-17T09:59:23.9688882Z   include-hidden-files: false
+2026-10-17T09:59:23.9689235Z   archive: true
+2026-10-17T09:59:23.9689417Z env:
+2026-10-17T09:59:23.9689598Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T09:59:23.9689824Z   CARGO_INCREMENTAL: 0
+2026-10-17T09:59:23.9690015Z   CARGO_TERM_COLOR: always
+2026-10-17T09:59:23.9690228Z   CACHE_ON_FAILURE: false
+2026-10-17T09:59:23.9690418Z ##[endgroup]
+2026-10-17T09:59:24.0913380Z With the provided path, there will be 4 files uploaded
+2026-10-17T09:59:24.0933945Z Artifact name is valid!
+2026-10-17T09:59:24.0934465Z Root directory input is valid!
+2026-10-17T09:59:24.3489610Z Uploading artifact: runtime-protection-status.zip
+2026-10-17T09:59:24.3524327Z Beginning upload of artifact content to blob storage
+2026-10-17T09:59:24.5150442Z Uploaded bytes 6210
+2026-10-17T09:59:24.5516977Z Finished uploading artifact content to blob storage!
+2026-10-17T09:59:24.5517652Z SHA256 digest of uploaded artifact is 4ac53f80eadedefd15ab294b6613123db75013b9c21b23a598ea731b9eacb3a8
+2026-10-17T09:59:24.5518088Z Finalizing artifact upload
+2026-10-17T09:59:24.8278036Z Artifact runtime-protection-status successfully finalized. Artifact ID 12096649420
+2026-10-17T09:59:24.8278736Z Artifact runtime-protection-status has been successfully uploaded! Final size is 6210 bytes. Artifact ID is 12096649420
+2026-10-17T09:59:24.8281876Z Artifact download URL: https://github.com/SoupTeam/soup-wall/actions/runs/39023067335/artifacts/12096649420
+2026-10-17T09:59:24.8364403Z ##[group]Run cargo clippy --workspace --all-targets --locked -- -D warnings
+2026-10-17T09:59:24.8364799Z [36;1mcargo clippy --workspace --all-targets --locked -- -D warnings[0m
+2026-10-17T09:59:24.8399320Z shell: /usr/bin/bash -e {0}
+2026-10-17T09:59:24.8399553Z env:
+2026-10-17T09:59:24.8399736Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T09:59:24.8399942Z   CARGO_INCREMENTAL: 0
+2026-10-17T09:59:24.8400129Z   CARGO_TERM_COLOR: always
+2026-10-17T09:59:24.8400327Z   CACHE_ON_FAILURE: false
+2026-10-17T09:59:24.8400503Z ##[endgroup]
+2026-10-17T09:59:25.2025152Z [1m[92m    Checking[0m soup-wall-core v0.2.0 (/home/runner/work/soup-wall/soup-wall/crates/core)
+2026-10-17T09:59:25.2026137Z [1m[92m    Checking[0m soup-wall-adapter v0.1.0 (/home/runner/work/soup-wall/soup-wall/crates/adapter)
+2026-10-17T09:59:25.2091773Z [1m[92m    Checking[0m kryptering v0.6.0 (/home/runner/work/soup-wall/soup-wall/vendor/kryptering)
+2026-10-17T09:59:25.4833934Z [1m[92m    Checking[0m bergshamra-crypto v0.9.2
+2026-10-17T09:59:25.4983427Z [1m[92m    Checking[0m bergshamra-pkcs12 v0.9.2
+2026-10-17T09:59:25.5572630Z [1m[92m    Checking[0m tsp-ltv v0.5.0
+2026-10-17T09:59:25.5704524Z [1m[92m    Checking[0m soup-wall-agent v0.2.0 (/home/runner/work/soup-wall/soup-wall/crates/agent)
+2026-10-17T09:59:25.7630382Z [1m[92m    Checking[0m bergshamra-keys v0.9.2
+2026-10-17T09:59:25.9760320Z [1m[92m    Checking[0m bergshamra-transforms v0.9.2
+2026-10-17T09:59:25.9814130Z [1m[92m    Checking[0m agentfw v0.3.0 (/home/runner/work/soup-wall/soup-wall/crates/agentfw)
+2026-10-17T09:59:26.0283916Z [1m[92m    Checking[0m bergshamra-enc v0.9.2
+2026-10-17T09:59:26.2086519Z [1m[92m    Checking[0m bergshamra-dsig v0.9.2
+2026-10-17T09:59:26.2144009Z [1m[92m    Checking[0m soup-wall-bench v0.2.0 (/home/runner/work/soup-wall/soup-wall/crates/bench)
+2026-10-17T09:59:26.5992261Z [1m[92m    Checking[0m bergshamra v0.9.2
+2026-10-17T09:59:26.6293918Z [1m[92m    Checking[0m saml-rs v0.6.1
+2026-10-17T09:59:27.8114926Z [1m[92m    Checking[0m llm-firewall v0.2.0 (/home/runner/work/soup-wall/soup-wall/crates/proxy)
+2026-10-17T09:59:38.9954125Z [1m[92m    Finished[0m `dev` profile [unoptimized + debuginfo] target(s) in 14.11s
+2026-10-17T09:59:39.0292657Z ##[group]Run cargo test --workspace --locked
+2026-10-17T09:59:39.0293005Z [36;1mcargo test --workspace --locked[0m
+2026-10-17T09:59:39.0328327Z shell: /usr/bin/bash -e {0}
+2026-10-17T09:59:39.0328565Z env:
+2026-10-17T09:59:39.0328765Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T09:59:39.0328990Z   CARGO_INCREMENTAL: 0
+2026-10-17T09:59:39.0329200Z   CARGO_TERM_COLOR: always
+2026-10-17T09:59:39.0329571Z   CACHE_ON_FAILURE: false
+2026-10-17T09:59:39.0329780Z ##[endgroup]
+2026-10-17T09:59:39.2311110Z [1m[92m   Compiling[0m kryptering v0.6.0 (/home/runner/work/soup-wall/soup-wall/vendor/kryptering)
+2026-10-17T09:59:39.2348345Z [1m[92m   Compiling[0m agentfw v0.3.0 (/home/runner/work/soup-wall/soup-wall/crates/agentfw)
+2026-10-17T09:59:39.2349454Z [1m[92m   Compiling[0m soup-wall-bench v0.2.0 (/home/runner/work/soup-wall/soup-wall/crates/bench)
+2026-10-17T09:59:39.9403919Z [1m[92m   Compiling[0m bergshamra-pkcs12 v0.9.2
+2026-10-17T09:59:40.2159869Z [1m[92m   Compiling[0m tsp-ltv v0.5.0
+2026-10-17T09:59:40.9387963Z [1m[92m   Compiling[0m bergshamra-crypto v0.9.2
+2026-10-17T09:59:41.1084300Z [1m[92m   Compiling[0m bergshamra-keys v0.9.2
+2026-10-17T09:59:41.1684474Z [1m[92m   Compiling[0m soup-wall-adapter v0.1.0 (/home/runner/work/soup-wall/soup-wall/crates/adapter)
+2026-10-17T09:59:41.6217080Z [1m[92m   Compiling[0m bergshamra-transforms v0.9.2
+2026-10-17T09:59:41.8404326Z [1m[92m   Compiling[0m bergshamra-enc v0.9.2
+2026-10-17T09:59:41.8538791Z [1m[92m   Compiling[0m bergshamra-dsig v0.9.2
+2026-10-17T09:59:43.3193742Z [1m[92m   Compiling[0m bergshamra v0.9.2
+2026-10-17T09:59:43.3595387Z [1m[92m   Compiling[0m saml-rs v0.6.1
+2026-10-17T09:59:44.5265457Z [1m[92m   Compiling[0m soup-wall-agent v0.2.0 (/home/runner/work/soup-wall/soup-wall/crates/agent)
+2026-10-17T09:59:45.1584916Z [1m[92m   Compiling[0m llm-firewall v0.2.0 (/home/runner/work/soup-wall/soup-wall/crates/proxy)
+2026-10-17T10:00:14.6755073Z [1m[92m   Compiling[0m soup-wall-core v0.2.0 (/home/runner/work/soup-wall/soup-wall/crates/core)
+2026-10-17T10:00:41.5530334Z [1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 1m 02s
+2026-10-17T10:00:41.7726322Z [1m[92m     Running[0m unittests src/lib.rs (target/debug/deps/agentfw-f732f50fabe6af15)
+2026-10-17T10:00:41.7748405Z 
+2026-10-17T10:00:41.7748552Z running 374 tests
+2026-10-17T10:00:41.7753354Z test audit::tests::a_taint_record_carries_structured_origin_and_trust ... ok
+2026-10-17T10:00:41.7754170Z test audit::tests::an_unnamed_origin_omits_the_name_rather_than_emitting_an_empty_one ... ok
+2026-10-17T10:00:41.7755241Z test audit::tests::requesting_0o600_is_not_an_umask_accident ... ok
+2026-10-17T10:00:41.7755903Z test audit::tests::preserves_raw_bytes_when_explicitly_supplied ... ok
+2026-10-17T10:00:41.7759181Z test audit::tests::appends_rather_than_truncating_on_reopen ... ok
+2026-10-17T10:00:41.7762512Z test audit::tests::the_audit_file_is_not_world_readable ... ok
+2026-10-17T10:00:41.7763364Z test audit::tests::writes_one_json_object_per_line ... ok
+2026-10-17T10:00:41.7764518Z test config::tests::a_config_without_a_judge_block_still_parses ... ok
+2026-10-17T10:00:41.7764940Z test config::tests::a_disabled_judge_with_an_oversized_timeout_does_not_block_boot ... ok
+2026-10-17T10:00:41.7765367Z test config::tests::a_judge_timeout_that_would_outlast_the_hook_is_rejected ... ok
+2026-10-17T10:00:41.7765906Z test config::tests::a_lookalike_loopback_hostname_is_not_fooled_by_a_prefix_check ... ok
+2026-10-17T10:00:41.7766380Z test config::tests::a_non_loopback_bind_is_rejected ... ok
+2026-10-17T10:00:41.7766746Z test config::tests::a_judge_url_must_be_loopback_when_enabled ... ok
+2026-10-17T10:00:41.7767068Z test config::tests::an_empty_file_is_all_defaults ... ok
+2026-10-17T10:00:41.7770067Z test config::tests::defaults_are_safe ... ok
+2026-10-17T10:00:41.7779587Z test config::tests::an_unknown_key_inside_the_judge_block_is_rejected ... ok
+2026-10-17T10:00:41.7781842Z test config::tests::an_empty_file_still_equals_default_with_judge_added ... ok
+2026-10-17T10:00:41.7782676Z test config::tests::ipv6_formatting_does_not_expand_the_allowed_bind_list ... ok
+2026-10-17T10:00:41.7783397Z test config::tests::raw_unknown_capture_requires_explicit_opt_in ... ok
+2026-10-17T10:00:41.7784038Z test config::tests::parses_a_partial_file_and_keeps_defaults ... ok
+2026-10-17T10:00:41.7784722Z test config::tests::each_supported_bind_formats_a_valid_socket_and_endpoint_authority ... ok
+2026-10-17T10:00:41.7785535Z test config::tests::loopback_urls_with_ports_and_ipv6_are_accepted ... ok
+2026-10-17T10:00:41.7785990Z test config::tests::the_judge_is_disabled_by_default ... ok
+2026-10-17T10:00:41.7786424Z test decision::tests::a_deferred_decision_omits_the_reason_field ... ok
+2026-10-17T10:00:41.7786923Z test decision::tests::allow_maps_to_defer_never_to_allow ... ok
+2026-10-17T10:00:41.7787404Z test decision::tests::ask_and_deny_map_directly_and_carry_a_reason ... ok
+2026-10-17T10:00:41.7787858Z test decision::tests::enforcing_mode_reports_shadow_false ... ok
+2026-10-17T10:00:41.7788352Z test decision::tests::escalate_must_be_resolved_before_reaching_a_decision ... ok
+2026-10-17T10:00:41.7788920Z test decision::tests::serializes_to_the_documented_hook_output_shape ... ok
+2026-10-17T10:00:41.7789482Z test decision::tests::shadow_mode_never_enforces_anything ... ok
+2026-10-17T10:00:41.7789976Z test grant::tests::a_fresh_grant_verifies_for_the_action_it_was_issued_for ... ok
+2026-10-17T10:00:41.7790432Z test grant::tests::a_forged_and_expired_grant_reports_the_forgery_first ... ok
+2026-10-17T10:00:41.7790812Z test grant::tests::a_future_dated_grant_is_refused_beyond_clock_skew ... ok
+2026-10-17T10:00:41.7791160Z test grant::tests::a_grant_does_not_authorize_different_arguments ... ok
+2026-10-17T10:00:41.7791512Z test grant::tests::a_grant_does_not_cross_sessions_or_tools ... ok
+2026-10-17T10:00:41.7791841Z test grant::tests::a_grant_from_a_different_key_is_refused ... ok
+2026-10-17T10:00:41.7792200Z test grant::tests::a_grant_that_fails_verification_is_not_recorded_as_spent ... ok
+2026-10-17T10:00:41.7792883Z test grant::tests::a_grant_can_only_be_redeemed_once ... ok
+2026-10-17T10:00:41.7793266Z test grant::tests::a_spent_grant_stays_spent_across_a_restart ... ok
+2026-10-17T10:00:41.7793575Z test grant::tests::an_expired_grant_is_refused ... ok
+2026-10-17T10:00:41.7793910Z test grant::tests::argument_key_order_does_not_change_the_fingerprint ... ok
+2026-10-17T10:00:41.7794480Z test grant::tests::corrupt_epoch_fails_closed_for_claims_and_issuance ... ok
+2026-10-17T10:00:41.7795360Z test grant::tests::field_boundaries_cannot_be_shifted_between_session_and_tool ... ok
+2026-10-17T10:00:41.7802739Z test grant::tests::nonces_are_already_in_the_preserved_alphabet ... ok
+2026-10-17T10:00:42.1491571Z test grant::tests::spent_entries_are_pruned_once_they_can_no_longer_matter ... ok
+2026-10-17T10:00:42.1492662Z test grant::tests::tampering_with_any_field_breaks_the_signature ... ok
+2026-10-17T10:00:42.1493358Z test grant::tests::the_tool_is_part_of_the_fingerprint ... ok
+2026-10-17T10:00:42.1493803Z test handlers::tests::a_judgement_of_documentation_takes_the_fallback ... ok
+2026-10-17T10:00:42.1494254Z test handlers::tests::a_judgement_of_injection_becomes_ask ... ok
+2026-10-17T10:00:42.1494674Z test handlers::tests::a_missing_fallback_requires_review ... ok
+2026-10-17T10:00:42.1495105Z test handlers::tests::an_unavailable_judge_takes_the_fallback ... ok
+2026-10-17T10:00:42.1495574Z test handlers::tests::ending_a_session_resets_its_sequence ... ok
+2026-10-17T10:00:42.1496061Z test handlers::tests::root_json_scan_basic_and_proven_non_pre ... ok
+2026-10-17T10:00:42.1496655Z test handlers::tests::root_json_scan_duplicate_keys_are_ambiguous ... ok
+2026-10-17T10:00:42.1497227Z test handlers::tests::root_json_scan_handles_escaped_quotes_in_strings ... ok
+2026-10-17T10:00:42.1497729Z test handlers::tests::root_json_scan_ignores_nested_fields ... ok
+2026-10-17T10:00:42.1498219Z test handlers::tests::root_json_scan_incomplete_keys_and_values ... ok
+2026-10-17T10:00:42.1498936Z test handlers::tests::root_json_scan_skips_arrays_and_objects ... ok
+2026-10-17T10:00:42.1499418Z test handlers::tests::session_sequence_numbers_are_monotonic_and_per_session ... ok
+2026-10-17T10:00:42.1499918Z test handlers::tests::the_judge_can_only_tighten_never_soften ... ok
+2026-10-17T10:00:42.1500363Z test hook::tests::a_missing_session_id_is_an_error ... ok
+2026-10-17T10:00:42.1500768Z test hook::tests::a_plain_string_tool_response_is_read_as_text ... ok
+2026-10-17T10:00:42.1986515Z test hook::tests::an_absent_tool_response_yields_empty_text ... ok
+2026-10-17T10:00:42.1986969Z test hook::tests::an_array_shaped_tool_response_stringifies_to_useful_text ... ok
+2026-10-17T10:00:42.1987489Z test hook::tests::an_empty_session_id_still_parses_but_is_not_a_valid_session ... ok
+2026-10-17T10:00:42.1987985Z test hook::tests::an_unknown_event_name_parses_as_other_rather_than_erroring ... ok
+2026-10-17T10:00:42.1988462Z test hook::tests::as_str_is_pinned_and_snake_case_for_every_variant ... ok
+2026-10-17T10:00:42.1988936Z test hook::tests::parses_post_tool_use_with_a_structured_response ... ok
+2026-10-17T10:00:42.1989319Z test hook::tests::parses_pre_tool_use ... ok
+2026-10-17T10:00:42.1989641Z test hook::tests::parses_subagent_stop ... ok
+2026-10-17T10:00:42.1990157Z test hook::tests::unexpected_extra_fields_are_ignored ... ok
+2026-10-17T10:00:42.1990640Z test install::tests::configured_installation_preserves_each_supported_bind_for_every_event ... ok
+2026-10-17T10:00:42.1991167Z test install::tests::emits_all_five_events_pointing_at_the_daemon ... ok
+2026-10-17T10:00:42.1991556Z test install::tests::honours_a_custom_port ... ok
+2026-10-17T10:00:42.1991993Z test install::tests::instructions_carry_the_promotion_sequence_and_its_evidence_bar ... ok
+2026-10-17T10:00:42.1992672Z test install::tests::instructions_disclaim_the_hook_and_point_at_preflight ... ok
+2026-10-17T10:00:42.1993171Z test install::tests::instructions_mention_shadow_mode_and_the_timeout_cost ... ok
+2026-10-17T10:00:42.1993626Z test install::tests::instructions_never_print_a_literal_token ... ok
+2026-10-17T10:00:42.1993991Z test install::tests::matches_all_tools ... ok
+2026-10-17T10:00:42.1994381Z test install::tests::passes_the_token_by_env_var_never_inline ... ok
+2026-10-17T10:00:42.1994870Z test install::tests::sets_a_short_timeout_so_a_stalled_daemon_cannot_hang_the_loop ... ok
+2026-10-17T10:00:42.1995351Z test install::tests::token_command_quotes_paths_instead_of_evaluating_them ... ok
+2026-10-17T10:00:42.1995818Z test judge::tests::a_huge_span_is_capped ... ok
+2026-10-17T10:00:42.1996168Z test judge::tests::anything_else_is_unavailable_not_a_guess ... ok
+2026-10-17T10:00:42.1996580Z test judge::tests::delimiters_appearing_in_content_are_neutralized ... ok
+2026-10-17T10:00:42.1997033Z test judge::tests::parses_the_two_accepted_answers_case_insensitively ... ok
+2026-10-17T10:00:42.1997394Z test judge::tests::the_prompt_does_not_include_the_tool_call ... ok
+2026-10-17T10:00:42.1997759Z test judge::tests::the_prompt_names_the_source_and_the_answer_contract ... ok
+2026-10-17T10:00:42.1998116Z test judge::tests::the_span_is_truncated_on_a_utf8_boundary ... ok
+2026-10-17T10:00:42.1998447Z test lifecycle::tests::managed_identity_requires_every_field ... ok
+2026-10-17T10:00:42.2391012Z test lifecycle::tests::operation_owner_release_is_not_prolonged_by_an_inherited_descriptor ... ok
+2026-10-17T10:00:42.2391735Z test lifecycle::tests::permission_denial_is_not_evidence_that_a_pid_is_dead ... ok
+2026-10-17T10:00:42.2399274Z test grant::tests::concurrent_issuer_observes_new_generation_after_switch_lock_releases ... ok
+2026-10-17T10:00:42.2400239Z test grant::tests::approvals_issued_under_current_policy_work_and_old_issuance_is_refused ... ok
+2026-10-17T10:00:42.2401083Z test grant::tests::cached_approval_cannot_be_redeemed_after_policy_switch_or_restart ... ok
+2026-10-17T10:00:42.2405975Z test managed_credential::tests::fifo_does_not_block ... ok
+2026-10-17T10:00:42.5984608Z test managed_credential::tests::secure_file_reload_and_failure_no_cache ... ok
+2026-10-17T10:00:42.5985968Z test lifecycle::tests::service_refuses_to_clear_or_stop_a_live_unverified_pid ... ok
+2026-10-17T10:00:42.5986836Z test managed_policy::tests::keyring_parse_and_serialize_round_trip ... ok
+2026-10-17T10:00:42.5987864Z test managed_policy::tests::keyring_rejects_empty_or_invalid_entries ... ok
+2026-10-17T10:00:42.5988605Z test managed_policy::tests::keyring_versioned_format_supports_schema_version_and_denies_unknown_fields ... ok
+2026-10-17T10:00:42.6295739Z test managed_policy::tests::multi_key_verification_supports_rotation_and_revocation ... ok
+2026-10-17T10:00:42.6296367Z test managed_policy::tests::rejects_cross_tenant_or_agent ... ok
+2026-10-17T10:00:42.6296867Z test managed_policy::tests::rejects_expiry_and_excessive_ttl ... ok
+2026-10-17T10:00:42.6297432Z test managed_policy::tests::rejects_invalid_policy_yaml_even_with_valid_signature ... ok
+2026-10-17T10:00:42.6297877Z test managed_policy::tests::rejects_invalid_signature ... ok
+2026-10-17T10:00:42.6298215Z test managed_policy::tests::rejects_policy_tampering ... ok
+2026-10-17T10:00:42.6298550Z test managed_policy::tests::rejects_replay_and_stale_sequence ... ok
+2026-10-17T10:00:42.6298882Z test managed_policy::tests::rejects_signed_metadata_tampering ... ok
+2026-10-17T10:00:42.6299237Z test managed_policy::tests::rejects_unknown_fields_and_oversize_input ... ok
+2026-10-17T10:00:42.6299611Z test managed_policy::tests::rejects_unknown_or_revoked_signing_key ... ok
+2026-10-17T10:00:42.6299981Z test managed_policy::tests::valid_signed_agent_policy_is_verified ... ok
+2026-10-17T10:00:42.6300383Z test managed_sync::https_transport_tests::accepts_https_remote_and_existing_loopback_http ... ok
+2026-10-17T10:00:42.6302147Z test managed_policy::tests::read_keyring_file_enforces_bounds_and_regular_file ... ok
+2026-10-17T10:00:42.6886988Z test managed_sync::https_transport_tests::private_ca_fifo_is_refused_without_waiting_for_a_writer ... ok
+2026-10-17T10:00:42.6887842Z test managed_sync::https_transport_tests::rejects_remote_plaintext_credentials_and_ambiguous_origins ... ok
+2026-10-17T10:00:42.6889235Z test map::tests::an_empty_session_id_maps_to_none_rather_than_a_shared_bucket ... ok
+2026-10-17T10:00:42.6890173Z test map::tests::an_unknown_event_maps_to_none_so_the_daemon_can_skip_it ... ok
+2026-10-17T10:00:42.6890936Z test map::tests::bound_agent_and_parent_identity_are_mapped ... ok
+2026-10-17T10:00:42.6891490Z test map::tests::lifecycle_events_map_across ... ok
+2026-10-17T10:00:42.6892980Z test map::tests::oversized_content_is_truncated_at_the_cap ... ok
+2026-10-17T10:00:42.6894308Z test map::tests::post_tool_use_becomes_a_tool_result_with_provenance ... ok
+2026-10-17T10:00:42.6894810Z test map::tests::pre_tool_use_becomes_a_tool_call ... ok
+2026-10-17T10:00:42.6895517Z test map::tests::small_content_is_not_reported_as_truncated ... ok
+2026-10-17T10:00:42.6896174Z test map::tests::subagent_stop_becomes_a_subagent_report ... ok
+2026-10-17T10:00:42.6896649Z test map::tests::truncation_at_max_zero_one_and_full_length_never_panics ... ok
+2026-10-17T10:00:42.6897222Z test map::tests::truncation_handles_a_four_byte_character_at_the_cut_point ... ok
+2026-10-17T10:00:42.6898064Z test map::tests::truncation_respects_utf8_boundaries ... ok
+2026-10-17T10:00:42.7790712Z test managed_sync::https_transport_tests::private_ca_file_validation_uses_the_real_loader ... ok
+2026-10-17T10:00:42.7798650Z test mcp::admission::input_identity_tests::changed_schema_tool_list_and_unsupported_annotations_require_readmission ... ok
+2026-10-17T10:00:42.7799716Z test mcp::admission::input_identity_tests::compose_production_policy_rules ... ok
+2026-10-17T10:00:42.7809792Z test mcp::admission::input_identity_tests::original_discovery_schema_and_annotations_are_retained ... ok
+2026-10-17T10:00:42.7835987Z test mcp::admission::input_identity_tests::prediction_identity_binds_server_arguments_metadata_and_classifier_revision ... ok
+2026-10-17T10:00:42.7837029Z test mcp::admission::input_identity_tests::sou54_write_authority_preserves_hard_denials_and_unknown_refusal ... ok
+2026-10-17T10:00:42.7843811Z test mcp::admission::input_identity_tests::sou56_https_profile_requires_exact_read_prediction_and_retains_hard_denials ... ok
+2026-10-17T10:00:42.8985912Z test mcp::admission::classifier_revision_tests::classifier_changed_between_parent_check_and_launch_never_executes ... ok
+2026-10-17T10:00:42.9223674Z test mcp::admission::real_server::fault_tests::selected_fault_daemon_loss_never_dispatches_the_call ... ok
+2026-10-17T10:00:42.9585918Z test mcp::admission::real_server::fault_tests::selected_fault_exact_manifest_cannot_release_an_extra_error_channel ... ok
+2026-10-17T10:00:42.9705370Z test mcp::admission::real_server::fault_tests::selected_fault_original_call_and_result_bytes_remain_untouched ... ok
+2026-10-17T10:00:42.9995427Z test mcp::admission::real_server::fault_tests::selected_fault_overload_and_queued_cancellation_are_correlated_without_execution ... ok
+2026-10-17T10:00:43.0229387Z test mcp::admission::real_server::fault_tests::selected_fault_progress_logging_and_reverse_callbacks_have_no_release_channel ... ok
+2026-10-17T10:00:43.0675511Z test mcp::admission::real_server::fault_tests::selected_fault_unknown_and_duplicate_response_ids_never_release_payload ... ok
+2026-10-17T10:00:43.0936496Z test mcp::admission::real_server::fault_tests::selected_fault_unsupported_output_tool_and_native_refusal_preserve_useful_peer ... ok
+2026-10-17T10:00:43.0937599Z test mcp::admission::real_server::tests::ids_keep_json_type_and_refuse_unsafe_numbers ... ok
+2026-10-17T10:00:43.0938633Z test mcp::admission::real_server::tests::json_limits_and_cancellation_errors_are_explicit ... ok
+2026-10-17T10:00:43.0939462Z test mcp::admission::real_server::tests::metadata_does_not_supply_authority_and_accepts_optional_progress ... ok
+2026-10-17T10:00:43.0942921Z test mcp::admission::resource_receipt_tests::canonical_resource_digest_is_independent_of_property_order_and_legacy_stays_closed ... ok
+2026-10-17T10:00:43.0986585Z test mcp::admission::resource_receipt_tests::missing_or_changed_resource_hash_and_old_contract_are_refused_over_http ... ok
+2026-10-17T10:00:44.2097024Z test mcp::connection::linux::tests::a_writer_holding_the_old_inode_keeps_its_version_after_publication ... ok
+2026-10-17T10:00:44.2098889Z test lifecycle::tests::service_switch_is_journaled_and_staging_failure_keeps_active_version ... ok
+2026-10-17T10:00:44.2099663Z test mcp::connection::linux::tests::concurrent_lock_is_refused ... ok
+2026-10-17T10:00:44.2103165Z test mcp::connection::linux::tests::excessive_json_is_rejected ... ok
+2026-10-17T10:00:44.3285327Z test mcp::connection::linux::tests::external_edit_is_preserved ... ok
+2026-10-17T10:00:44.3286852Z test mcp::connection::linux::tests::fifo_does_not_block_reader ... ok
+2026-10-17T10:00:44.3287455Z test mcp::connection::linux::tests::hardlink_file_is_refused ... ok
+2026-10-17T10:00:44.3297580Z test mcp::connection::linux::tests::failed_rename_preserves_destination ... ok
+2026-10-17T10:00:44.3301246Z test mcp::connection::linux::tests::malformed_ownership_is_not_ignored ... ok
+2026-10-17T10:00:44.3302512Z test mcp::connection::linux::tests::invalid_native_config_does_not_print_values ... ok
+2026-10-17T10:00:44.3308125Z test lifecycle::tests::stopped_service_rollback_and_interrupted_stage_keep_running_intent ... ok
+2026-10-17T10:00:44.3310574Z test mcp::connection::linux::tests::public_config_is_refused ... ok
+2026-10-17T10:00:44.3534475Z test mcp::connection::linux::tests::oversized_proposed_config_is_rejected_before_writing ... ok
+2026-10-17T10:00:44.5001205Z test mcp::connection::linux::tests::oversized_transaction_does_not_create_ownership ... ok
+2026-10-17T10:00:44.7302251Z test mcp::connection::linux::tests::read_only_snapshot_detects_config_and_ownership_changes ... ok
+2026-10-17T10:00:45.4995859Z test mcp::connection::linux::tests::selected_change_preserves_unrelated_settings ... ok
+2026-10-17T10:00:45.5000235Z test mcp::connection::linux::tests::selected_transport_and_arguments_are_strict ... ok
+2026-10-17T10:00:45.5001321Z test mcp::connection::linux::tests::strict_json_rejects_duplicates_at_every_depth ... ok
+2026-10-17T10:00:45.5003468Z test mcp::connection::linux::tests::symlink_file_is_refused ... ok
+2026-10-17T10:00:45.5004699Z test mcp::connection::linux::tests::symlink_parent_is_refused ... ok
+2026-10-17T10:00:45.5005410Z test mcp::connection::linux::tests::replacement_refreshes_snapshot_for_following_state_write ... ok
+2026-10-17T10:00:45.5006778Z test mcp::connection::linux::tests::unsupported_paths_and_server_names_are_refused ... ok
+2026-10-17T10:00:45.5028516Z test mcp::connection::linux::tests::wrapped_argument_limit_is_checked_before_writing ... ok
+2026-10-17T10:00:45.6496913Z test mcp::create_file::tests::linux_tests::anonymous_partial_write_and_prepublish_failures_leave_no_named_entry ... ok
+2026-10-17T10:00:45.7285333Z test mcp::create_file::tests::linux_tests::concurrent_same_leaf_publishes_exactly_one_complete_file ... ok
+2026-10-17T10:00:45.9686779Z test mcp::create_file::tests::linux_tests::creates_exact_utf8_private_file_and_accepts_empty_content ... ok
+2026-10-17T10:00:46.0083043Z test mcp::create_file::tests::linux_tests::directory_sync_failure_honestly_reports_already_committed_effect ... ok
+2026-10-17T10:00:46.1387786Z test mcp::create_file::tests::linux_tests::documented_unprivileged_proc_source_preserves_atomic_no_replace ... ok
+2026-10-17T10:00:46.1394361Z test mcp::create_file::tests::linux_tests::moved_nested_parent_is_refused_instead_of_becoming_an_outside_write_handle ... ok
+2026-10-17T10:00:46.1395280Z test mcp::create_file::tests::linux_tests::refuses_every_existing_leaf_type_without_opening_or_changing_it ... ok
+2026-10-17T10:00:46.3101269Z test mcp::create_file::tests::linux_tests::root_replacement_after_staging_refuses_publication_and_cleans_anonymous_file ... ok
+2026-10-17T10:00:46.3104296Z test mcp::create_file::tests::linux_tests::substitution_after_prepare_refuses_both_original_and_replacement_roots ... ok
+2026-10-17T10:00:46.3106168Z test mcp::create_file::tests::linux_tests::target_inserted_after_prepare_is_never_overwritten ... ok
+2026-10-17T10:00:46.3608745Z test mcp::create_file::tests::linux_tests::dropping_a_complete_anonymous_stage_cancels_without_a_named_file ... ok
+2026-10-17T10:00:46.3610472Z test mcp::create_file::tests::linux_tests::target_inserted_after_staging_is_refused_by_atomic_publication ... ok
+2026-10-17T10:00:46.3611376Z test mcp::create_file::tests::validates_content_and_exact_direct_leaf_before_any_effects ... ok
+2026-10-17T10:00:46.3614717Z test mcp::https_get::tests::authority_is_closed_and_identity_binds_all_fields ... ok
+2026-10-17T10:00:46.3616474Z test mcp::https_get::tests::current_dns_must_equal_the_frozen_set ... ok
+2026-10-17T10:00:46.3617423Z test mcp::https_get::tests::default_denies_private_reserved_and_embedded_addresses ... ok
+2026-10-17T10:00:46.3620704Z test mcp::https_get::tests::dns_and_exact_arguments_refuse_before_http_effect ... ok
+2026-10-17T10:00:46.3621366Z test mcp::https_get::tests::complete_body_read_refuses_short_extra_and_oversized_headers ... ok
+2026-10-17T10:00:46.3621923Z test mcp::https_get::tests::errors_do_not_disclose_endpoint_or_response ... ok
+2026-10-17T10:00:46.3624654Z test mcp::https_get::tests::exact_url_scope_rejects_parser_and_authority_aliases ... ok
+2026-10-17T10:00:46.3626255Z test mcp::https_get::tests::encrypted_reads_are_capped_before_polling_the_socket ... ok
+2026-10-17T10:00:46.3627368Z test mcp::https_get::tests::literal_addresses_cannot_override_the_url ... ok
+2026-10-17T10:00:46.3630302Z test mcp::https_get::tests::maximum_complete_body_is_accepted_without_truncation ... ok
+2026-10-17T10:00:46.3631303Z test mcp::https_get::tests::metadata_and_special_ranges_cannot_use_private_fixture_exception ... ok
+2026-10-17T10:00:46.4140159Z test mcp::https_get::tests::invalid_tls_is_refused_after_one_connection_attempt ... ok
+2026-10-17T10:00:46.4141482Z test mcp::https_get::tests::private_exception_is_exact_and_never_a_global_switch ... ok
+2026-10-17T10:00:46.4142691Z test mcp::https_get::tests::response_scope_requires_one_explicit_utf8_text_or_json_type ... ok
+2026-10-17T10:00:46.4143783Z test mcp::https_get::tests::strict_response_framing_refuses_unsupported_or_ambiguous_material ... ok
+2026-10-17T10:00:46.4144998Z test mcp::input::tests::explicit_create_string_bound_accepts_4_kib_and_authority_checks_bytes ... ok
+2026-10-17T10:00:46.4146158Z test mcp::input::tests::malformed_inconsistent_or_unbounded_string_constraints_are_refused ... ok
+2026-10-17T10:00:46.4147371Z test mcp::input::tests::selected_schema_enforces_enum_array_bounds_without_defaults_or_coercion ... ok
+2026-10-17T10:00:46.4148430Z test mcp::input::tests::selected_schema_refuses_unimplemented_constraints_and_malformed_enum ... ok
+2026-10-17T10:00:46.4149607Z test mcp::input::tests::string_lengths_count_unicode_scalars_without_changing_unbounded_profile ... ok
+2026-10-17T10:00:46.4150315Z test mcp::jsonrpc::tests::a_non_tools_list_message_yields_none ... ok
+2026-10-17T10:00:46.4150998Z test mcp::jsonrpc::tests::extracts_the_tool_manifest_from_a_tools_list_response ... ok
+2026-10-17T10:00:46.4151817Z test mcp::manifest::tests::a_changed_description_changes_the_hash ... ok
+2026-10-17T10:00:46.4152737Z test mcp::manifest::tests::a_changed_schema_changes_the_hash ... ok
+2026-10-17T10:00:46.4155564Z test mcp::manifest::tests::a_huge_or_multiline_description_cannot_flood_the_record ... ok
+2026-10-17T10:00:46.4157957Z test mcp::manifest::tests::a_wholesale_rewrite_is_capped_and_says_how_much_is_hidden ... ok
+2026-10-17T10:00:46.4159538Z test mcp::manifest::tests::a_widened_schema_is_reported_as_a_schema_change ... ok
+2026-10-17T10:00:46.4160341Z test mcp::manifest::tests::an_unchanged_manifest_diffs_to_nothing ... ok
+2026-10-17T10:00:46.4161392Z test mcp::manifest::tests::description_poisoning_shows_the_new_text_not_just_the_tool_name ... ok
+2026-10-17T10:00:46.4162149Z test mcp::manifest::tests::reordering_schema_keys_is_not_a_change ... ok
+2026-10-17T10:00:46.4163110Z test mcp::manifest::tests::reordering_tools_does_not_change_the_hash ... ok
+2026-10-17T10:00:46.4164597Z test mcp::manifest::tests::the_diff_names_added_removed_and_changed_tools ... ok
+2026-10-17T10:00:46.4165195Z test mcp::proxy::tests::withholds_only_when_enforcing_and_not_allowed ... ok
+2026-10-17T10:00:46.4168901Z test mcp::server_profile::tests::explicit_profile_is_strict_and_binds_the_actual_command ... ok
+2026-10-17T10:00:46.4186944Z test mcp::server_profile::tests::original_upstream_discovery_preserves_every_tool_and_classifies_support ... ok
+2026-10-17T10:00:46.4204059Z test mcp::server_profile::tests::selected_original_result_requires_inspectable_structured_text ... ok
+2026-10-17T10:00:46.4206264Z test mcp::server_profile::tests::selected_protocol_versions_are_the_frozen_original_sdk_allowlist ... ok
+2026-10-17T10:00:46.4258024Z test mcp::https_get::tests::preparation_and_substitution_do_not_open_a_target_connection ... ok
+2026-10-17T10:00:46.4262167Z test mcp::server_profile::tests::tree_hash_covers_internal_links_and_refuses_escape_links ... ok
+2026-10-17T10:00:46.4299192Z test mcp::server_profile::tests::selected_upstream_pins_cover_metadata_execution_and_output_schema ... ok
+2026-10-17T10:00:46.4303651Z test mcp::server_profile::tests::tree_hash_refuses_escape_hidden_by_a_chained_link_before_parent_traversal ... ok
+2026-10-17T10:00:46.4304500Z test mcp::server_profile::tests::virtual_workspace_paths_have_posix_semantics_on_every_host ... ok
+2026-10-17T10:00:46.4305170Z test mcp::server_sandbox::tests::accepts_only_exact_library_file_destinations ... ok
+2026-10-17T10:00:46.4305957Z test mcp::server_sandbox::tests::selected_server_sandbox_isolates_real_node ... ignored, requires SOU62_SANDBOX_TEST_PROFILE and real Linux namespaces
+2026-10-17T10:00:46.4306894Z test mcp::server_sandbox::tests::syscall_filter_preserves_read_opens_and_only_stdio_fionbio ... ok
+2026-10-17T10:00:46.4371964Z test mcp::stdio::tests::cancelled_read_keeps_immediate_sequential_reply_and_eof_useful ... ok
+2026-10-17T10:00:46.4373977Z test mcp::stdio::tests::no_io_drop_restores_entire_status_and_preserves_original_descriptor_flags ... ok
+2026-10-17T10:00:46.4375824Z test mcp::stdio::tests::non_pollable_stdio_is_explicitly_refused_without_flag_changes ... ok
+2026-10-17T10:00:46.4379326Z test mcp::store::tests::a_legacy_hash_only_pin_still_detects_drift ... ok
+2026-10-17T10:00:46.4379904Z test mcp::store::tests::a_long_id_is_bounded_and_still_unique ... ok
+2026-10-17T10:00:46.4383407Z test mcp::store::tests::a_pin_round_trips_through_disk ... ok
+2026-10-17T10:00:46.4386807Z test mcp::store::tests::a_record_written_before_the_discriminator_is_migrated_not_lost ... ok
+2026-10-17T10:00:46.5990429Z test mcp::server_profile::tests::tree_hash_records_empty_directories_file_bytes_and_every_entry ... ok
+2026-10-17T10:00:46.5995986Z test mcp::store::tests::ids_differing_only_in_replaced_characters_do_not_share_a_record ... ok
+2026-10-17T10:00:46.9641541Z test mcp::store::tests::re_pinning_an_identical_manifest_adds_no_history ... ok
+2026-10-17T10:00:47.0243018Z test mcp::store::tests::the_pinned_manifest_survives_a_restart_so_drift_can_be_diffed ... ok
+2026-10-17T10:00:47.0247202Z test mcp::store::tests::the_registry_flags_a_name_owned_by_another_server_or_a_builtin ... ok
+2026-10-17T10:00:47.1154273Z test native::approval::tests::changed_arguments_and_other_sessions_get_no_release ... ok
+2026-10-17T10:00:47.1191308Z test native::approval::tests::classifier_source_requires_the_same_exact_approval ... ok
+2026-10-17T10:00:47.1281647Z test native::approval::tests::concurrent_redemption_releases_exactly_one ... ok
+2026-10-17T10:00:47.1291727Z test native::approval::tests::default_config_keeps_the_refusal_and_has_no_approval_route ... ok
+2026-10-17T10:00:47.1316309Z test native::approval::tests::exact_approval_releases_the_original_call_exactly_once ... ok
+2026-10-17T10:00:47.1331952Z test native::approval::tests::hook_key_and_hook_grants_cannot_authorize_native_calls ... ok
+2026-10-17T10:00:47.3595775Z test native::approval::tests::policy_switch_hard_deny_and_unsupported_cannot_be_rescued ... ok
+2026-10-17T10:00:47.4198444Z test mcp::store::tests::a_superseded_manifest_moves_into_bounded_history ... ok
+2026-10-17T10:00:47.4219349Z test native::approval::tests::restart_session_end_and_second_pending_close_or_refuse ... ok
+2026-10-17T10:00:47.4228405Z test native::child_authority::tests::concurrent_verification_keeps_session_bindings_isolated ... ok
+2026-10-17T10:00:47.4233733Z test native::child_authority::tests::every_claim_is_authenticated ... ok
+2026-10-17T10:00:47.4237669Z test native::child_authority::tests::expiry_and_future_skew_boundaries ... ok
+2026-10-17T10:00:47.4238546Z test native::child_authority::tests::key_derivation_known_vector_and_separation ... ok
+2026-10-17T10:00:47.4241116Z test native::child_authority::tests::reasons_are_distinct_and_nonempty ... ok
+2026-10-17T10:00:47.4241816Z test native::child_authority::tests::rejects_authenticated_invalid_contract_and_interval ... ok
+2026-10-17T10:00:47.4243128Z test native::child_authority::tests::rejects_malformed_wire_data ... ok
+2026-10-17T10:00:47.4245549Z test native::child_authority::tests::rejects_mismatched_authority_and_wrong_key ... ok
+2026-10-17T10:00:47.4248898Z test native::child_authority::tests::signing_boundaries_cannot_be_shifted ... ok
+2026-10-17T10:00:47.4251171Z test native::child_authority::tests::token_round_trip_and_verification ... ok
+2026-10-17T10:00:47.4270815Z test native::resource::tests::create_authority_refuses_existing_nested_and_linked_destinations ... ok
+2026-10-17T10:00:47.4306480Z test native::resource::tests::create_authority_rejects_args_content_destination_and_workspace_substitution ... ok
+2026-10-17T10:00:47.4322915Z test native::resource::tests::create_authority_rejects_normalized_path_spellings_before_execution ... ok
+2026-10-17T10:00:47.4329203Z test native::resource::tests::create_authority_requires_reviewed_schema_action_profile_and_executor ... ok
+2026-10-17T10:00:47.4340104Z test native::resource::tests::create_binding_detects_replaced_workspace_inode_at_the_same_path ... ok
+2026-10-17T10:00:47.4363343Z test native::resource::tests::create_binding_is_v2_exact_and_uses_utf8_byte_bounds ... ok
+2026-10-17T10:00:47.4367124Z test native::resource::windows_create_contract_tests::windows_create_v5_arguments_enforce_original_fields_and_utf8_byte_cap ... ok
+2026-10-17T10:00:47.4369631Z test native::resource::windows_create_contract_tests::windows_create_v5_binding_refuses_other_platforms_without_filesystem_effects ... ok
+2026-10-17T10:00:47.4374046Z test native::resource::windows_create_contract_tests::windows_create_v5_binding_shape_keeps_linux_contract_distinct ... ok
+2026-10-17T10:00:47.4375200Z test mcp::connection::linux::tests::publication_boundary_conflicts_and_crashes_retain_versions ... ok
+2026-10-17T10:00:47.4378926Z test native::resource::windows_create_contract_tests::windows_create_v5_policy_requires_explicit_closed_write_semantics ... ok
+2026-10-17T10:00:47.4379685Z test native::resource::windows_read_contract_tests::windows_read_authority_requires_explicit_reviewed_semantics ... ok
+2026-10-17T10:00:47.4382920Z test native::resource::windows_read_contract_tests::windows_read_v4_binding_shape_preserves_distinct_contracts ... ok
+2026-10-17T10:00:47.4385356Z test native::tests::delegated_scope_containment_is_typed_and_canonical ... ok
+2026-10-17T10:00:47.4400068Z test native::tests::audit_write_failure_withholds_result_and_does_not_commit_taint_or_spans ... ok
+2026-10-17T10:00:47.4413086Z test native::tests::expired_native_session_clears_taint_and_invalidates_pending_calls ... ok
+2026-10-17T10:00:47.4430483Z test native::tests::legacy_native_parent_and_model_deliveries_remain_supported ... ok
+2026-10-17T10:00:47.4465888Z test native::tests::mcp_host_error_kind_matches_both_rpc_and_tool_errors ... ok
+2026-10-17T10:00:47.4485322Z test native::tests::mcp_host_result_admits_original_decoded_text_and_spends_invocation ... ok
+2026-10-17T10:00:47.4490750Z test native::tests::mcp_host_rejects_uninspected_fields_and_content_without_spending_again ... ok
+2026-10-17T10:00:47.4511941Z test native::tests::mcp_host_unicode_escaped_injection_is_withheld_before_admission ... ok
+2026-10-17T10:00:47.4514195Z test native::tests::registry_rejects_invalid_pointer_escapes_and_semantic_caller_claims ... ok
+2026-10-17T10:00:47.4560634Z test native::tests::pending_call_cap_rejects_new_invocation_without_eviction ... ok
+2026-10-17T10:00:47.4610087Z test native::tests::selected_mcp_injection_only_in_structured_content_is_withheld ... ok
+2026-10-17T10:00:47.4779594Z test native::tests::selected_mcp_parser_refuses_uninspected_meta_duplicates_and_missing_structured_values ... ok
+2026-10-17T10:00:47.4841476Z test native::tests::selected_mcp_registry_rejects_unknown_profile_or_broadened_authority ... ok
+2026-10-17T10:00:47.4878645Z test native::tests::selected_mcp_result_inspects_both_original_text_channels_and_keeps_raw_hash ... ok
+2026-10-17T10:00:47.4915961Z test native::tests::selected_native_grants_bind_numeric_and_string_host_ids_independently ... ok
+2026-10-17T10:00:47.4958610Z test native::tests::selected_native_host_id_is_required_bounded_and_profile_specific ... ok
+2026-10-17T10:00:47.5024188Z test native::tests::selected_native_result_delivery_cannot_downgrade_to_parent_or_model ... ok
+2026-10-17T10:00:47.5025256Z test preflight::tests::a_missing_enforcement_flag_is_unhealthy_rather_than_assumed_enforcing ... ok
+2026-10-17T10:00:47.5025903Z test preflight::tests::a_non_200_answer_is_unhealthy ... ok
+2026-10-17T10:00:47.5026651Z test preflight::tests::an_enforcing_daemon_passes_either_way ... ok
+2026-10-17T10:00:47.5027265Z test preflight::tests::an_unreachable_daemon_fails_and_says_the_hook_fails_open ... ok
+2026-10-17T10:00:47.5028099Z test preflight::tests::shadow_mode_warns_by_default_and_fails_only_when_enforcement_is_required ... ok
+2026-10-17T10:00:47.5028727Z test preflight::tests::something_else_on_the_port_is_unhealthy_not_healthy ... ok
+2026-10-17T10:00:47.5029460Z test provenance::tests::a_path_tool_with_no_cwd_falls_through_to_local_system ... ok
+2026-10-17T10:00:47.5030007Z test provenance::tests::a_read_inside_the_project_is_local_project ... ok
+2026-10-17T10:00:47.5030536Z test provenance::tests::a_read_outside_the_project_is_local_system ... ok
+2026-10-17T10:00:47.5031214Z test provenance::tests::a_relative_path_in_project_is_local_project ... ok
+2026-10-17T10:00:47.5031760Z test provenance::tests::a_relative_traversal_path_is_still_outside_the_project ... ok
+2026-10-17T10:00:47.5032484Z test provenance::tests::a_sibling_directory_sharing_a_prefix_is_outside ... ok
+2026-10-17T10:00:47.5033059Z test provenance::tests::a_traversal_path_is_not_treated_as_inside_the_project ... ok
+2026-10-17T10:00:47.5033741Z test provenance::tests::bash_and_unknown_tools_are_local_system_not_untrusted ... ok
+2026-10-17T10:00:47.5034332Z test provenance::tests::host_of_handles_userinfo_port_case_and_missing_scheme ... ok
+2026-10-17T10:00:47.5034822Z test provenance::tests::mcp_name_parsing_edge_cases ... ok
+2026-10-17T10:00:47.5035251Z test provenance::tests::mcp_tools_carry_their_server_name ... ok
+2026-10-17T10:00:47.5035726Z test provenance::tests::no_tool_result_is_ever_marked_user_prompt ... ok
+2026-10-17T10:00:47.5036246Z test provenance::tests::notebook_read_uses_the_notebook_path_key ... ok
+2026-10-17T10:00:47.5036839Z test provenance::tests::relative_path_against_absolute_root_does_not_match_is_inside_directly ... ok
+2026-10-17T10:00:47.5037376Z test provenance::tests::root_itself_is_inside_root ... ok
+2026-10-17T10:00:47.5037824Z test provenance::tests::trailing_slashes_do_not_change_the_result ... ok
+2026-10-17T10:00:47.5038307Z test provenance::tests::web_fetch_is_network_with_the_host ... ok
+2026-10-17T10:00:47.5038810Z test provenance::tests::web_fetch_without_a_parsable_url_is_still_network ... ok
+2026-10-17T10:00:47.5039730Z test replay::tests::a_thin_log_never_recommends_enforcing_however_clean_it_looks ... ok
+2026-10-17T10:00:47.5040360Z test replay::tests::an_empty_log_has_a_zero_interruption_rate_and_does_not_divide_by_zero ... ok
+2026-10-17T10:00:47.5041059Z test replay::tests::an_unrecognized_verdict_string_counts_toward_total_but_no_bucket ... ok
+2026-10-17T10:00:47.5042166Z test replay::tests::counts_verdicts_and_sessions ... ok
+2026-10-17T10:00:47.5052929Z test replay::tests::denial_rate_is_reported_separately_from_asks ... ok
+2026-10-17T10:00:47.5073752Z test replay::tests::enough_quiet_traffic_supports_enforcing ... ok
+2026-10-17T10:00:47.5102747Z test replay::tests::one_interruption_in_a_large_window_demands_review_not_promotion ... ok
+2026-10-17T10:00:47.5103782Z test replay::tests::ranks_rules_by_how_often_they_fired ... ok
+2026-10-17T10:00:47.5105247Z test replay::tests::reports_latency_percentiles ... ok
+2026-10-17T10:00:47.5106565Z test replay::tests::reports_the_interruption_rate ... ok
+2026-10-17T10:00:47.5108081Z test replay::tests::round_trips_through_the_real_audit_line_serializer ... ok
+2026-10-17T10:00:47.5109341Z test replay::tests::the_observed_window_comes_from_recorded_timestamps ... ok
+2026-10-17T10:00:47.5109947Z test replay::tests::tolerates_blank_and_malformed_lines ... ok
+2026-10-17T10:00:47.5131285Z test sandbox::tests::guarded_file_delete_and_rename_stay_inside_the_workspace ... ok
+2026-10-17T10:00:47.5137535Z test sandbox::tests::guarded_file_mutations_fail_closed_when_policy_denies ... ok
+2026-10-17T10:00:47.5164368Z test sandbox::tests::guarded_file_write_is_confined_to_the_workspace ... ok
+2026-10-17T10:00:47.5178138Z test sandbox::tests::guarded_file_write_rejects_traversal_and_symlink_targets ... ok
+2026-10-17T10:00:47.5193180Z test sandbox::tests::guarded_network_fetch_refuses_unknown_hosts_before_proxy_io ... ok
+2026-10-17T10:00:47.5203522Z test sandbox::tests::guarded_network_fetch_requires_a_policy_egress_allowlist ... ok
+2026-10-17T10:00:47.5232249Z test sandbox::tests::guarded_network_fetch_uses_the_proxy_and_bounds_the_response ... ok
+2026-10-17T10:00:47.5233550Z test sandbox::tests::guarded_network_urls_fail_closed_on_insecure_or_ambiguous_inputs ... ok
+2026-10-17T10:00:47.5257656Z test sandbox::tests::guarded_shell_inspects_the_exact_command_before_running_it ... ok
+2026-10-17T10:00:47.5273308Z test sandbox::tests::guarded_shell_refuses_before_process_creation ... ok
+2026-10-17T10:00:47.5276441Z test sandbox::tests::rejects_a_network_allowlist_instead_of_sharing_the_host_net ... ok
+2026-10-17T10:00:47.5279165Z test sandbox::tests::rejects_the_host_root_as_a_workspace ... ok
+2026-10-17T10:00:47.5300001Z test sandbox::tests::runs_with_bounded_output_and_no_network ... ok
+2026-10-17T10:00:47.5301377Z test sandbox::tests::test_guarded_file_open_refuses_fifo_without_blocking ... ok
+2026-10-17T10:00:47.5302000Z test self_test::fixture::tests::receiver_url_is_exact_numeric_loopback ... ok
+2026-10-17T10:00:47.5311197Z test self_test::fixture::tests::registry_pins_the_bundled_schemas ... ok
+2026-10-17T10:00:47.5311748Z test self_test::fixture::tests::synthetic_data_is_synthetic ... ok
+2026-10-17T10:00:47.5314996Z test self_test::linux::tests::cleanup_refuses_directories_it_does_not_own ... ok
+2026-10-17T10:00:47.5317948Z test self_test::linux::tests::owned_process_group_is_stopped_and_reaped ... ok
+2026-10-17T10:00:47.5364265Z test self_test::linux::tests::owned_workspace_is_created_private_and_removed ... ok
+2026-10-17T10:00:47.5568538Z test self_test::linux::tests::receiver_counts_only_owned_loopback_deliveries ... ok
+2026-10-17T10:00:47.5569556Z test self_test::linux::tests::reply_outcomes_are_read_from_exact_bytes ... ok
+2026-10-17T10:00:47.5571226Z test self_test::tests::human_summary_never_reports_pass_for_incomplete ... ok
+2026-10-17T10:00:47.5571935Z test self_test::tests::overall_keeps_failed_incomplete_and_unsupported_distinct ... ok
+2026-10-17T10:00:47.5580556Z test service::tests::incomplete_copy_cleanup_requires_the_recorded_inode ... ok
+2026-10-17T10:00:47.5585116Z test service::tests::invalid_ownership_still_blocks_legacy_operations ... ok
+2026-10-17T10:00:47.5586956Z test service::tests::preview_is_nonmutating_and_profiles_are_distinct ... ok
+2026-10-17T10:00:47.5587574Z test service::tests::quoting_preserves_literals_and_rejects_controls ... ok
+2026-10-17T10:00:47.5590190Z test service::tests::replaced_or_linked_files_are_never_owned ... ok
+2026-10-17T10:00:47.5590905Z test spans::tests::an_absent_entry_is_none ... ok
+2026-10-17T10:00:47.5592004Z test spans::tests::content_is_truncated_on_a_utf8_boundary ... ok
+2026-10-17T10:00:47.5592651Z test spans::tests::ending_a_session_drops_its_spans ... ok
+2026-10-17T10:00:47.5593799Z test spans::tests::putting_the_same_seq_twice_does_not_grow_the_eviction_queue_unboundedly ... ok
+2026-10-17T10:00:47.5594395Z test spans::tests::sessions_are_isolated ... ok
+2026-10-17T10:00:47.5595059Z test spans::tests::stores_and_retrieves_by_sequence_number ... ok
+2026-10-17T10:00:47.5595709Z test spans::tests::the_oldest_entry_is_evicted_at_capacity ... ok
+2026-10-17T10:00:47.5596492Z test token::tests::a_prefix_of_the_token_does_not_verify ... ok
+2026-10-17T10:00:47.5603611Z test token::tests::a_whitespace_only_existing_file_is_regenerated_not_returned_empty ... ok
+2026-10-17T10:00:47.5605164Z test token::tests::an_existing_nonempty_token_is_restricted_before_reuse ... ok
+2026-10-17T10:00:47.5605947Z test token::tests::generated_tokens_are_long_and_unique ... ok
+2026-10-17T10:00:47.5607918Z test token::tests::load_or_create_round_trips_and_is_stable ... ok
+2026-10-17T10:00:47.5608389Z test token::tests::matching_tokens_verify ... ok
+2026-10-17T10:00:47.5610735Z test token::tests::the_token_file_is_not_world_readable ... ok
+2026-10-17T10:00:47.5611211Z test token::tests::wrong_missing_and_malformed_headers_all_fail ... ok
+2026-10-17T10:00:47.7039251Z test native::tests::reviewe358_lossy_hook_must_not_take_firewall_before_native_mutex ... ok
+2026-10-17T10:00:48.5626390Z test native::approval::tests::reject_and_expiry_cannot_be_rescued ... ok
+2026-10-17T10:01:12.8128001Z test mcp::admission::real_server::fault_tests::selected_fault_actual_call_deadline_reclaims_grant_and_discards_late_reply ... ok
+2026-10-17T10:01:12.8128401Z 
+2026-10-17T10:01:12.8128608Z test result: ok. 373 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 31.04s
+2026-10-17T10:01:12.8128872Z 
+2026-10-17T10:01:12.8143348Z [1m[92m     Running[0m unittests src/main.rs (target/debug/deps/agentfw-c9180cd62e2f730e)
+2026-10-17T10:01:12.8152869Z 
+2026-10-17T10:01:12.8153080Z running 1 test
+2026-10-17T10:01:12.8163741Z test cli_tests::managed_instance_preserves_leading_hyphens ... ok
+2026-10-17T10:01:12.8164005Z 
+2026-10-17T10:01:12.8164207Z test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+2026-10-17T10:01:12.8164455Z 
+2026-10-17T10:01:12.8166994Z [1m[92m     Running[0m tests/hook_endpoint.rs (target/debug/deps/hook_endpoint-a67c6d31b7780b8a)
+2026-10-17T10:01:12.8184522Z 
+2026-10-17T10:01:12.8187546Z running 13 tests
+2026-10-17T10:01:12.8213686Z test a_request_without_a_token_is_rejected ... ok
+2026-10-17T10:01:12.8214074Z test a_request_with_the_wrong_token_is_rejected ... ok
+2026-10-17T10:01:12.8230952Z test health_reports_the_enforcement_mode ... ok
+2026-10-17T10:01:12.8269228Z test malformed_and_unknown_payloads_never_block_the_agent ... ok
+2026-10-17T10:01:12.8943359Z test a_benign_tool_call_yields_no_decision ... ok
+2026-10-17T10:01:12.8953185Z test an_approval_does_not_authorize_a_different_command ... ok
+2026-10-17T10:01:12.8953726Z test post_tool_use_cannot_consume_a_pending_action_approval ... ok
+2026-10-17T10:01:12.8955126Z test a_human_approval_withdraws_the_objection_exactly_once ... ok
+2026-10-17T10:01:12.8955830Z test raw_unknown_capture_is_an_explicit_forensic_opt_in ... ok
+2026-10-17T10:01:12.8956463Z test unknown_events_do_not_persist_raw_bodies_by_default ... ok
+2026-10-17T10:01:12.8964897Z test post_tool_use_never_carries_a_decision_even_when_enforcing ... ok
+2026-10-17T10:01:12.8976205Z test shadow_mode_computes_the_verdict_but_never_enforces_it ... ok
+2026-10-17T10:01:12.8976627Z test the_indirect_injection_kill_chain_is_denied_when_enforcing ... ok
+2026-10-17T10:01:12.8976844Z 
+2026-10-17T10:01:12.8977043Z test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+2026-10-17T10:01:12.8977294Z 
+2026-10-17T10:01:12.8983062Z [1m[92m     Running[0m tests/judge_corpus.rs (target/debug/deps/judge_corpus-cd0378aaeb672184)
+2026-10-17T10:01:12.8995871Z 
+2026-10-17T10:01:12.8995980Z running 1 test
+2026-10-17T10:01:12.8996444Z test judge_corpus_evaluation ... ignored, requires a live local model (LM Studio); run with --ignored
+2026-10-17T10:01:12.8996807Z 
+2026-10-17T10:01:12.8997016Z test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+2026-10-17T10:01:12.8997371Z 
+2026-10-17T10:01:12.8998068Z [1m[92m     Running[0m tests/judge_endpoint.rs (target/debug/deps/judge_endpoint-b69a5bdbdcb75446)
+2026-10-17T10:01:12.9012735Z 
+2026-10-17T10:01:12.9012835Z running 9 tests
+2026-10-17T10:01:12.9784079Z test a_disabled_judge_makes_no_request_and_takes_the_fallback ... ok
+2026-10-17T10:01:12.9784851Z test a_disabled_judge_still_honours_an_ask_fallback ... ok
+2026-10-17T10:01:12.9800249Z test a_verdict_of_documentation_takes_the_allow_fallback ... ok
+2026-10-17T10:01:12.9827074Z test an_http_500_from_the_model_falls_back ... ok
+2026-10-17T10:01:12.9827819Z test an_injection_in_the_models_answer_cannot_steer_the_daemon ... ok
+2026-10-17T10:01:12.9844678Z test known_secret_deny_bypasses_a_weaker_rule_and_the_judge ... ok
+2026-10-17T10:01:12.9848998Z test a_verdict_of_injection_asks ... ok
+2026-10-17T10:01:12.9868628Z test prose_instead_of_a_verdict_is_unavailable_and_falls_back ... ok
+2026-10-17T10:01:13.1801408Z test a_model_slower_than_the_timeout_falls_back_within_budget ... ok
+2026-10-17T10:01:13.1803188Z 
+2026-10-17T10:01:13.1803729Z test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.28s
+2026-10-17T10:01:13.1804154Z 
+2026-10-17T10:01:13.1814082Z [1m[92m     Running[0m tests/lifecycle.rs (target/debug/deps/lifecycle-fcd49f92c4b222fb)
+2026-10-17T10:01:13.1828485Z 
+2026-10-17T10:01:13.1828837Z running 5 tests
+2026-10-17T10:01:13.1880301Z test managed_storage_rejects_unsafe_inputs_and_preserves_foreign_files ... ok
+2026-10-17T10:01:13.1883213Z test an_unowned_listener_is_reported_and_never_stopped ... ok
+2026-10-17T10:01:13.1914361Z test recovery_removes_only_the_recorded_incomplete_stage ... ok
+2026-10-17T10:01:13.2005366Z test recovery_restores_the_version_before_an_interrupted_upgrade ... ok
+2026-10-17T10:02:13.1831299Z test managed_lifecycle_restores_last_working_version has been running for over 60 seconds
+2026-10-17T10:02:59.9644280Z test managed_lifecycle_restores_last_working_version ... ok
+2026-10-17T10:02:59.9644616Z 
+2026-10-17T10:02:59.9645106Z test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 106.78s
+2026-10-17T10:02:59.9645759Z 
+2026-10-17T10:02:59.9647277Z [1m[92m     Running[0m tests/mcp_admission.rs (target/debug/deps/mcp_admission-6f19de6c5fb0e449)
+2026-10-17T10:02:59.9663233Z 
+2026-10-17T10:02:59.9663347Z running 73 tests
+2026-10-17T10:03:00.0584090Z test classified_read_keeps_original_call_and_result_bytes ... ok
+2026-10-17T10:03:00.0656312Z test native_mcp_accepts_codex_discovery_and_calls_without_granting_authority ... ok
+2026-10-17T10:03:00.1064749Z test native_mcp_accepts_observed_claude_correlation_metadata_without_changing_call_bytes ... ok
+2026-10-17T10:03:00.1068745Z test native_mcp_allows_real_read_but_denies_secret_send_before_server_execution ... ok
+2026-10-17T10:03:00.1475327Z test native_mcp_cancellation_after_effect_withholds_result_without_undoing_execution ... ok
+2026-10-17T10:03:00.1937209Z test native_mcp_checks_codex_results_before_releasing_original_content ... ok
+2026-10-17T10:03:00.2333551Z test native_mcp_concurrent_call_after_effect_never_reaches_second_executor ... ok
+2026-10-17T10:03:02.0385187Z test classifier_failures_never_reach_policy_or_the_server ... ok
+2026-10-17T10:03:02.1203789Z test native_mcp_daemon_outage_after_execution_withholds_result ... ok
+2026-10-17T10:03:02.1845905Z test native_mcp_daemon_outage_after_manifest_never_executes_call ... ok
+2026-10-17T10:03:02.2020229Z test native_mcp_daemon_shadow_and_outage_never_spawn_server ... ok
+2026-10-17T10:03:02.3550524Z test native_mcp_denied_session_does_not_block_a_benign_peer_on_the_same_daemon ... ok
+2026-10-17T10:03:02.3839057Z test native_mcp_does_not_give_server_daemon_token_environment ... ok
+2026-10-17T10:03:02.4138324Z test native_mcp_keeps_ask_calls_blocked_before_server_execution ... ok
+2026-10-17T10:03:02.4688130Z test native_mcp_never_releases_unbound_or_nontext_server_results ... ok
+2026-10-17T10:03:02.5369365Z test native_mcp_preserves_the_original_correlated_jsonrpc_error ... ok
+2026-10-17T10:03:02.5664267Z test native_mcp_refuses_codex_resource_probes_without_forwarding_or_closing ... ok
+2026-10-17T10:03:02.7997420Z test composed_refusals_do_not_reserve_native_capacity_or_block_useful_followup ... ok
+2026-10-17T10:03:02.8284499Z test native_mcp_rejects_control_characters_in_ids_before_execution ... ok
+2026-10-17T10:03:02.8363461Z test native_mcp_rejects_ambiguous_and_unsupported_client_messages_before_execution ... ok
+2026-10-17T10:03:02.8789182Z test native_mcp_rejects_prompt_instructions_and_extra_capabilities_in_initialization ... ok
+2026-10-17T10:03:02.8946303Z test native_mcp_rejects_replayed_client_id_and_concurrent_calls ... ok
+2026-10-17T10:03:02.9334443Z test native_mcp_rejects_uninspected_manifest_metadata_and_poisoned_descriptions ... ok
+2026-10-17T10:03:03.2091498Z test native_mcp_rejects_unsupported_discovery_metadata_before_forwarding ... ok
+2026-10-17T10:03:03.2905063Z test native_mcp_rejects_unvalidated_arguments_before_server_defaults_can_apply ... ok
+2026-10-17T10:03:03.4203567Z test native_mcp_replayed_id_with_changed_tool_and_arguments_adds_no_effect ... ok
+2026-10-17T10:03:03.5204504Z test native_mcp_rejects_unknown_partial_and_unbounded_correlation_metadata ... ok
+2026-10-17T10:03:03.5464566Z test native_mcp_schema_drift_does_not_release_tools_or_execute ... ok
+2026-10-17T10:03:03.5613794Z test native_mcp_restarted_daemon_rejects_old_completion_but_new_session_remains_useful ... ok
+2026-10-17T10:03:03.5764392Z test native_mcp_two_call_batch_never_executes_either_tool ... ok
+2026-10-17T10:03:03.5876168Z test native_mcp_unsupported_cancellation_before_call_never_executes ... ok
+2026-10-17T10:03:03.6074689Z test native_mcp_withholds_actual_result_then_allows_benign_followup ... ok
+2026-10-17T10:03:03.6128656Z test path_profiles_also_refuse_missing_execution_time_confinement ... ok
+2026-10-17T10:03:03.7463908Z test real_baseline_preserves_frames_and_policy_enforcement ... ok
+2026-10-17T10:03:03.8661355Z test resource_profiles_cannot_promote_a_generic_executor_to_confined ... ok
+2026-10-17T10:03:03.9369228Z test reviewc757_legacy_host_tokens_never_spawn_a_server_even_after_restart ... ok
+2026-10-17T10:03:03.9421022Z test scoped_mint_accepts_hyphen_prefixed_instance_ids ... ok
+2026-10-17T10:03:03.9980968Z test scoped_server_never_inherits_authority_or_host_session_environment ... ok
+2026-10-17T10:03:04.0268620Z test sou11_annotation_text_is_untrusted_and_inspected ... ok
+2026-10-17T10:03:04.1413758Z test sou11_invalid_nested_input_never_reaches_server ... ok
+2026-10-17T10:03:04.1724857Z test sou11_list_change_invalidates_until_a_new_admitted_manifest ... ok
+2026-10-17T10:03:04.2068743Z test sou11_metadata_refresh_changes_prediction_identity ... ok
+2026-10-17T10:03:04.2330502Z test sou11_read_only_hint_cannot_grant_destructive_execution ... ok
+2026-10-17T10:03:04.2869697Z test sou11_stale_manifest_and_changed_schema_cannot_forward_calls ... ok
+2026-10-17T10:03:04.3170564Z test sou11_unfamiliar_nested_input_preserves_bytes_and_annotations ... ok
+2026-10-17T10:03:04.3430106Z test sou15_generic_resource_executor_refuses_both_destinations ... ok
+2026-10-17T10:03:04.3434897Z test sou15_leaf_symlink_and_oversized_content_bounds ... ok
+2026-10-17T10:03:04.3743466Z test sou15_multi_action_and_unknown_classification_handling ... ok
+2026-10-17T10:03:04.4058072Z test sou15_operation_constrained_resource_executor_enforces_boundaries ... ok
+2026-10-17T10:03:04.4341282Z test sou15_parent_swap_symlink_traversal_refuses_outside_canary ... ok
+2026-10-17T10:03:04.6816198Z test sou15_post_admission_read_failure_capacity_leak_prevented_and_continuation_succeeds ... ok
+2026-10-17T10:03:05.2596990Z test native_mcp_cancellation_while_call_admission_is_stalled_is_fail_closed ... ok
+2026-10-17T10:03:05.2894839Z test sou15_root_directory_swap_refused_and_pinned_continuation ... ok
+2026-10-17T10:03:05.2968991Z test native_mcp_daemon_call_timeout_never_executes_call ... ok
+2026-10-17T10:03:05.3264500Z test sou15_unexpected_resource_receipt_refused_before_server_effect ... ok
+2026-10-17T10:03:05.4103926Z test sou17_resource_overlap_during_classifier_refused_before_native_call ... ok
+2026-10-17T10:03:05.4323314Z test python_classifier_failures_block_before_execution ... ok
+2026-10-17T10:03:05.4343576Z test sou24_readonly_write_with_high_uncertainty_is_hard_denied ... ok
+2026-10-17T10:03:05.4344268Z test sou17_post_admission_fifo_refused_and_same_session_read_recovers ... ok
+2026-10-17T10:03:05.8098496Z test sou48_classifier_ask_waits_for_the_same_exact_approval ... ok
+2026-10-17T10:03:05.9888207Z test sou48_concurrent_input_and_restart_close_the_pending_call ... ok
+2026-10-17T10:03:06.0828360Z test sou17_resource_overlap_during_native_gates_refused_with_useful_peer ... ok
+2026-10-17T10:03:06.1062900Z test sou48_one_correct_approval_runs_the_original_call_once_then_work_continues ... ok
+2026-10-17T10:03:06.1331593Z test sou63_child_authority_cli_round_trip_and_refusals ... ok
+2026-10-17T10:03:06.2397662Z test sou63_bound_cancellation_and_concurrent_call_withhold_host_provenance ... ok
+2026-10-17T10:03:06.2614021Z test sou63_collector_binds_host_taint_and_provenance_via_cli_and_environment ... ok
+2026-10-17T10:03:06.3374269Z test sou63_invalid_child_authority_and_server_mismatch_never_spawn_server ... ok
+2026-10-17T10:03:07.2705362Z test sou15_refusal_capacity_leak_prevented_and_continuation_succeeds ... ok
+2026-10-17T10:03:07.3084905Z test sou67_operator_owned_tool_bindings_allow_arbitrary_tool_name_under_constrained_file_execution ... ok
+2026-10-17T10:03:07.3260859Z test sou48_reject_and_timeout_run_nothing_and_work_continues ... ok
+2026-10-17T10:03:07.3423383Z test understated_classification_keeps_trusted_network_restrictions ... ok
+2026-10-17T10:03:09.4614682Z test sou63_real_process_cross_collector_taint_server_a_to_server_b ... ok
+2026-10-17T10:03:09.5763513Z test sou63_real_process_hook_to_mcp_taint_and_lifecycle ... ok
+2026-10-17T10:03:09.5764035Z 
+2026-10-17T10:03:09.5764452Z test result: ok. 73 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.61s
+2026-10-17T10:03:09.5764987Z 
+2026-10-17T10:03:09.5779648Z [1m[92m     Running[0m tests/mcp_concurrency.rs (target/debug/deps/mcp_concurrency-ab4a622c8f88b0d4)
+2026-10-17T10:03:09.5788913Z 
+2026-10-17T10:03:09.5789078Z running 11 tests
+2026-10-17T10:03:16.2994217Z test large_resource_replies_keep_sequential_calls_useful ... ok
+2026-10-17T10:03:16.8563719Z test immediate_resource_refusals_preserve_same_session_recovery_and_eof ... FAILED
+2026-10-17T10:03:17.1704786Z test immediate_next_resource_frame_after_lf_and_final_eof_remain_useful ... ok
+2026-10-17T10:03:18.4833784Z test immediate_resource_read_errors_recover_and_close_cleanly_after_final_lf ... ok
+2026-10-17T10:03:21.1705944Z test large_resource_reply_finishes_once_after_client_eof ... ok
+2026-10-17T10:03:21.7244467Z test partial_queued_resource_call_is_refused_before_native_execution ... ok
+2026-10-17T10:03:22.0679900Z test queued_resource_calls_are_refused_before_native_execution ... ok
+2026-10-17T10:03:23.3649186Z test resource_reply_backpressure_refuses_cancellation ... ok
+2026-10-17T10:03:26.5558882Z test resource_reply_backpressure_refuses_partial_call ... ok
+2026-10-17T10:03:26.5848568Z test resource_reply_backpressure_refuses_queued_call ... ok
+2026-10-17T10:03:28.4367425Z test sequential_resource_failures_keep_useful_same_session_continuation ... ok
+2026-10-17T10:03:28.4367816Z 
+2026-10-17T10:03:28.4367916Z failures:
+2026-10-17T10:03:28.4369094Z 
+2026-10-17T10:03:28.4369669Z ---- immediate_resource_refusals_preserve_same_session_recovery_and_eof stdout ----
+2026-10-17T10:03:28.4371075Z [1m[91merror[0m: test failed, to rerun pass `-p agentfw --test mcp_concurrency`
+2026-10-17T10:03:28.4424934Z SOU17_EVIDENCE {"actual_broker_reads":33,"boundary":"production_mcp_resource_stdout","child_executor_entries":0,"client_output_sha256":"1846eddbc2bf2f8ce47191e827094d02625252e301984a28d7769f5bccfc7a70","client_tool_result_bytes":4168,"collector_exit":0,"error":null,"file_bytes_unchanged":true,"mode":"immediate-refusals","native_call_ids":["danTcjj5WeeZMHQBc12_ffM2DyAqjSo0H5DuFUsEU_0","BEY1gza1Fr5iE0ZpcZWWukW6NgEQSVfQxDJMaMTrWDM","VZ8xHua4_iY_Qx0UM-KXIcEO-f2-ISmiPJ_7V3q3El4","rsLKRkm0zWL5GBKu5mocX9lSVSiZt4IZUcPOnkB8odE","4NVlJSzpKjbGS7GwUJl6otptXBKYG2yZjyCpQQGYr5U","iCrRtkwLRiq1h1c-qL-Vu6RI7Y0GU3ZuK-QPrjleWww","zmy0nvRrEdCUxCr_W9QnS_T-tntLUBRi6fzYzHfgoEo","pAEaPPMPIJ2vJlKcLbDyT1_C7E_musHvKis08edJHII","f_LtzvGTGOSIyOFtHSX_b2FRoiNd8iz1GrNyNUbgg-c","IWLQFKUe3grwUZp-aw8AMjjdqlJulT_icGt8DtBD4MI","9rFuQyjmVdXYBa6t2mXtX9nP0-s2rr8jGhaDiu7o-pw","OEmRKTgjw-qZxK1eSblnemGpcJasEdJzHAZMG3RNSp4","b1xgvvsEwPpmqhA3UyAi8CvGlO432lGg7607aSQkI-g","NKg2l5x6s2QJWpNk4_c3xPy-XPxPmsrQCLJHawiO1m8","vRemN5n1Jo4EfWro7mzGSBFcU5q1pxjMoUh4YVskI8c","B_CBHkuq7QV8S4cHUtCgIMgfBLF_ZXtZyPRMd9SoLKc","Y1peelb64S7vPE1ykk6BmLx-LTovLK1KsOdHQs3e6tM","9d0jtHELAzvnIdm9HerLTyWThZe9NxFsJNlr1Ntm-kg","jGOhv8WGzQEqxIPVr6Gps_BcYVfajcruX0NNVsr8CEg","ujGkCHb7vC_Ib5YSsE5E5JepB81XP_qXgqrwLZK2Qf8","AWkaBtZCZx7HqVcUUQOupUQGcM5xPDIXD01QPsBDwx4","kh7pgoAOfb2l0p5lNbxoVRo5DTPj2MrADsiBvKYSmHQ","000QUb7vhc1PfWoNWciwvLspce1VROx3DlyvBjkYMsk","3zwox9wXQuYFjuvI7E7rKTmZe7q8xY9MQbEcwfxVKNk","nHCAVt0WFpBmG-sjIQj5qjxjvw1RmuagrJe7ROcHCx8","kITTnRcdmc_FjcEyJncJGa8V_1njWUOPNi5m9VLZRR0","XCBl-dcaJj-4Dd_pLgJPJbc4cU8MJCHWCn-oHyB8nhE","c4jPSjSzB60BRKtvJ7dQ2jkL6P7AOoRvmT2BzYWF_GE","dCtNcv544FHRDc5rpsDzQpIJ4gg_R2yAGi-W2pz1UB8","hBfEcymPUt1bMJb1QVyg_6OHQ2Z1dWNvu-qXFAwhF-0","f7u5rSbkoKN-n5ul0-wdSeVWcq4ZRh0PLwVihQX4fR0","LEqrUl79UkiRKGidb9ompvV1oaxdT7DUnq8v7l6Yyrk","zvGM3WM7GMJLt4T_86KctWTTkRGyBPc3yxyt7DEo6o0"],"native_gates":66,"owned_profile_removed":true,"receiver_deliveries":0,"stdout_eof_observed":true,"witness":{"clean_eof_sent_after_final_lf":true,"correlated_response_count":33,"error_response_count":0,"expected_outcomes":["allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow","resource_executor_unsupported","allow"],"next_frame_written_after_lf_before_json_validation":true,"prepared_frames":["{\"jsonrpc\":\"2.0\",\"id\":\"absolute-read\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou18_absolute-read\",\"progressToken\":1}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-1\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_1\",\"progressToken\":2}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-2\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_2\",\"progressToken\":3}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-3\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_3\",\"progressToken\":4}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-4\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_4\",\"progressToken\":5}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-5\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_5\",\"progressToken\":6}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-6\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_6\",\"progressToken\":7}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-7\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_7\",\"progressToken\":8}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-8\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_8\",\"progressToken\":9}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-9\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_9\",\"progressToken\":10}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-10\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_10\",\"progressToken\":11}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-11\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_11\",\"progressToken\":12}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-12\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_12\",\"progressToken\":13}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-13\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_13\",\"progressToken\":14}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-14\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_14\",\"progressToken\":15}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-15\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_15\",\"progressToken\":16}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-16\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_16\",\"progressToken\":17}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-17\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_17\",\"progressToken\":18}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-18\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_18\",\"progressToken\":19}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-19\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_19\",\"progressToken\":20}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-20\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_20\",\"progressToken\":21}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-21\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_21\",\"progressToken\":22}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-22\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_22\",\"progressToken\":23}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-23\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_23\",\"progressToken\":24}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-24\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_24\",\"progressToken\":25}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-25\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_25\",\"progressToken\":26}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-26\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_26\",\"progressToken\":27}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-27\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_27\",\"progressToken\":28}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-28\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_28\",\"progressToken\":29}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-29\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_29\",\"progressToken\":30}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-30\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_30\",\"progressToken\":31}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-31\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_31\",\"progressToken\":32}}}","{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-32\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_32\",\"progressToken\":33}}}"],"received_outcomes":[{"expected_refusal_present":false,"id":"absolute-read","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-1","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-2","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-3","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-4","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-5","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-6","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-7","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-8","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-9","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-10","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-11","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-12","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-13","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-14","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-15","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-16","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-17","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-18","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-19","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-20","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-21","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-22","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-23","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-24","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-25","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-26","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-27","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-28","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-29","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-30","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-31","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true},{"expected_refusal_present":false,"id":"rapid-immediate-refusals-32","is_error":null,"jsonrpc":"2.0","technical_error_code":null,"useful_contents_match":true}],"released_reply_ids":["absolute-read","rapid-immediate-refusals-1","rapid-immediate-refusals-2","rapid-immediate-refusals-3","rapid-immediate-refusals-4","rapid-immediate-refusals-5","rapid-immediate-refusals-6","rapid-immediate-refusals-7","rapid-immediate-refusals-8","rapid-immediate-refusals-9","rapid-immediate-refusals-10","rapid-immediate-refusals-11","rapid-immediate-refusals-12","rapid-immediate-refusals-13","rapid-immediate-refusals-14","rapid-immediate-refusals-15","rapid-immediate-refusals-16","rapid-immediate-refusals-17","rapid-immediate-refusals-18","rapid-immediate-refusals-19","rapid-immediate-refusals-20","rapid-immediate-refusals-21","rapid-immediate-refusals-22","rapid-immediate-refusals-23","rapid-immediate-refusals-24","rapid-immediate-refusals-25","rapid-immediate-refusals-26","rapid-immediate-refusals-27","rapid-immediate-refusals-28","rapid-immediate-refusals-29","rapid-immediate-refusals-30","rapid-immediate-refusals-31","rapid-immediate-refusals-32"],"released_response_sha256":["7579e5973b676863125e1d26343a76bf27f2480fdd1c112a564adb97767b4812","f4f1bea6dde8a06cebb317f23f7b0fe9ca27fb34b65e9fa81766a06dd5ff13d6","3da7257c88b6c356fd99496ea6c173a9e94d687ede32fd51d7692305be0bb1ef","71d6e5c05ef6d5c3bbeda5cc9c7820465485912b6ff46e65cb79b3707cdfdf8b","1c4607927a738aa0a7c9af304cfdff55b1ed701a31cd387b308fe53291c4ca4b","e2d8f91f8cce08ee5ccfa91da862fc2424dceb5937cf023fead1e9e776df6e90","4bba4b83441b43899f32ae83c7cd6b9757ddfc2edc9190d86d588867788f6705","399e6d244a3f2a770ec40a624ba5dd317ff480494498f78137c669975f65300e","bb3a3ba42adb9c220e4421b5d24a5363f07ba2d21a83c448027b0c0b1eafd0e6","49c0a376529e46a46f6a64811ebecd693a233fb5c20080bf4f2f30c34aa4a2f1","4003ed7929d85ae1eadc8ddbb4b57c5b325f4fc97a8a8eb1384796e32291b3a4","00afb068d7647422b507c9123387c68d4fc8b5222cf06a6d043aa479fcd02d2d","1e4f77236628360704910c1ec5eb411e5898da564556a7ba0a75b8d62fbac4c6","174536079ed91db17ede6e9c20d58dddab0fb314ac1a6cf8436127bd3d2c482f","4ad648a9efc4e07bda7e956fff50a82393dd648c629226d4c4142498fdd6a4c0","ca4d1abd4922b496d0ae3e05ec127690efb1eaa1684ad6a682017148cbf56c57","169af5fd21d6ee65c9a033918b729d9509feb0cb01ca7ac1613b447464adda74","da4388697b7d847d86a2655dab54920e901f66613799c1a28423ae22b538e17c","f7b4a4eabb3c0b533f153a9dbf1a383f3b938e33df0d1dafb8fdf698e46adbd9","5a18fbc152dce107e45eecb4f3a25cad86160c4f156516e9d04eea276b15cda1","1071745d7dab97841aeb5664e4dc5dce22e24bfa65b33bf8d208e032e55e538c","d5f59daadc069d4aea49911c1a7cc372e72487299c2cf1eb94fcfbb6291ed9c0","5e24ea837318b3bc39dbb166177088d6ea690e12719bb23ac3af127b87a74af2","607213b1b23c933acda146a01015b5cb5d2ae7c8d52b21ba07c754a4e1d98562","a2317f2e0fb1214b4bc63eee757d3f4a252992a3206750dc4fcef44d3923153b","dd995ae88aabf0fa16d479cab259be029efcccb585557f6ed8587586241c3222","35d84d462e1c975a1e2e02249e98fe54d4368bc051393cb13172c3d80b81d98f","98b935d8c3caf4c3fde57f01f5774a193d71eb3940d0f88e2578eb1a938c6393","9b1260eda4cfee9561f57eac932c361e771da5e07c82f63f9a64c85ffea94b66","ae7995215d135622727a53fd5c8726404940ecb5f54f57f49b969b95d490325e","ba4ea94bc58c16016429f53e3e1c09ce9a2a5c5bbaafba7633319b23568752cd","67e9c055e5ce3cd259fae55ea45ea94f81a3253b0dfefe6eca5eb9b6dc5e70cd","b40941398bf202d6aac1c9a15778d0c7e30644a2a381b7d1742ce9aa300f32ec"],"released_tool_response_sha256":"ded8ffe5886bbe8e998e491d5231a64f93599a61c7b16826bb91b857200f6429","unsupported_refusal_count":16,"useful_response_count":17}}
+2026-10-17T10:03:28.4473801Z 
+2026-10-17T10:03:28.4474242Z thread 'immediate_resource_refusals_preserve_same_session_recovery_and_eof' (7978) panicked at crates/agentfw/tests/mcp_concurrency.rs:174:5:
+2026-10-17T10:03:28.4524353Z resource reply backpressure (immediate-refusals): stdout={"boundary": "production_mcp_resource_stdout", "mode": "immediate-refusals", "witness": {"prepared_frames": ["{\"jsonrpc\":\"2.0\",\"id\":\"absolute-read\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou18_absolute-read\",\"progressToken\":1}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-1\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_1\",\"progressToken\":2}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-2\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_2\",\"progressToken\":3}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-3\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_3\",\"progressToken\":4}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-4\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_4\",\"progressToken\":5}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-5\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_5\",\"progressToken\":6}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-6\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_6\",\"progressToken\":7}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-7\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_7\",\"progressToken\":8}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-8\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_8\",\"progressToken\":9}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-9\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_9\",\"progressToken\":10}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-10\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_10\",\"progressToken\":11}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-11\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_11\",\"progressToken\":12}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-12\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_12\",\"progressToken\":13}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-13\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_13\",\"progressToken\":14}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-14\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_14\",\"progressToken\":15}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-15\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_15\",\"progressToken\":16}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-16\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_16\",\"progressToken\":17}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-17\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_17\",\"progressToken\":18}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-18\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_18\",\"progressToken\":19}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-19\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_19\",\"progressToken\":20}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-20\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_20\",\"progressToken\":21}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-21\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_21\",\"progressToken\":22}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-22\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_22\",\"progressToken\":23}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-23\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_23\",\"progressToken\":24}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-24\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_24\",\"progressToken\":25}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-25\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_25\",\"progressToken\":26}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-26\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_26\",\"progressToken\":27}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-27\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_27\",\"progressToken\":28}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-28\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_28\",\"progressToken\":29}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-29\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_29\",\"progressToken\":30}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-30\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_30\",\"progressToken\":31}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-31\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_note\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_31\",\"progressToken\":32}}}", "{\"jsonrpc\":\"2.0\",\"id\":\"rapid-immediate-refusals-32\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_document\",\"arguments\":{\"path\":\"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt\"},\"_meta\":{\"claudecode/toolUseId\":\"toolu_sou17_rapid_32\",\"progressToken\":33}}}"], "expected_outcomes": ["allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow", "resource_executor_unsupported", "allow"], "next_frame_written_after_lf_before_json_validation": true, "released_response_sha256": ["7579e5973b676863125e1d26343a76bf27f2480fdd1c112a564adb97767b4812", "f4f1bea6dde8a06cebb317f23f7b0fe9ca27fb34b65e9fa81766a06dd5ff13d6", "3da7257c88b6c356fd99496ea6c173a9e94d687ede32fd51d7692305be0bb1ef", "71d6e5c05ef6d5c3bbeda5cc9c7820465485912b6ff46e65cb79b3707cdfdf8b", "1c4607927a738aa0a7c9af304cfdff55b1ed701a31cd387b308fe53291c4ca4b", "e2d8f91f8cce08ee5ccfa91da862fc2424dceb5937cf023fead1e9e776df6e90", "4bba4b83441b43899f32ae83c7cd6b9757ddfc2edc9190d86d588867788f6705", "399e6d244a3f2a770ec40a624ba5dd317ff480494498f78137c669975f65300e", "bb3a3ba42adb9c220e4421b5d24a5363f07ba2d21a83c448027b0c0b1eafd0e6", "49c0a376529e46a46f6a64811ebecd693a233fb5c20080bf4f2f30c34aa4a2f1", "4003ed7929d85ae1eadc8ddbb4b57c5b325f4fc97a8a8eb1384796e32291b3a4", "00afb068d7647422b507c9123387c68d4fc8b5222cf06a6d043aa479fcd02d2d", "1e4f77236628360704910c1ec5eb411e5898da564556a7ba0a75b8d62fbac4c6", "174536079ed91db17ede6e9c20d58dddab0fb314ac1a6cf8436127bd3d2c482f", "4ad648a9efc4e07bda7e956fff50a82393dd648c629226d4c4142498fdd6a4c0", "ca4d1abd4922b496d0ae3e05ec127690efb1eaa1684ad6a682017148cbf56c57", "169af5fd21d6ee65c9a033918b729d9509feb0cb01ca7ac1613b447464adda74", "da4388697b7d847d86a2655dab54920e901f66613799c1a28423ae22b538e17c", "f7b4a4eabb3c0b533f153a9dbf1a383f3b938e33df0d1dafb8fdf698e46adbd9", "5a18fbc152dce107e45eecb4f3a25cad86160c4f156516e9d04eea276b15cda1", "1071745d7dab97841aeb5664e4dc5dce22e24bfa65b33bf8d208e032e55e538c", "d5f59daadc069d4aea49911c1a7cc372e72487299c2cf1eb94fcfbb6291ed9c0", "5e24ea837318b3bc39dbb166177088d6ea690e12719bb23ac3af127b87a74af2", "607213b1b23c933acda146a01015b5cb5d2ae7c8d52b21ba07c754a4e1d98562", "a2317f2e0fb1214b4bc63eee757d3f4a252992a3206750dc4fcef44d3923153b", "dd995ae88aabf0fa16d479cab259be029efcccb585557f6ed8587586241c3222", "35d84d462e1c975a1e2e02249e98fe54d4368bc051393cb13172c3d80b81d98f", "98b935d8c3caf4c3fde57f01f5774a193d71eb3940d0f88e2578eb1a938c6393", "9b1260eda4cfee9561f57eac932c361e771da5e07c82f63f9a64c85ffea94b66", "ae7995215d135622727a53fd5c8726404940ecb5f54f57f49b969b95d490325e", "ba4ea94bc58c16016429f53e3e1c09ce9a2a5c5bbaafba7633319b23568752cd", "67e9c055e5ce3cd259fae55ea45ea94f81a3253b0dfefe6eca5eb9b6dc5e70cd", "b40941398bf202d6aac1c9a15778d0c7e30644a2a381b7d1742ce9aa300f32ec"], "received_outcomes": [{"id": "absolute-read", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-1", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-2", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-3", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-4", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-5", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-6", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-7", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-8", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-9", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-10", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-11", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-12", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-13", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-14", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-15", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-16", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-17", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-18", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-19", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-20", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-21", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-22", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-23", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-24", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-25", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-26", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-27", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-28", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-29", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-30", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-31", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}, {"id": "rapid-immediate-refusals-32", "jsonrpc": "2.0", "is_error": null, "useful_contents_match": true, "expected_refusal_present": false, "technical_error_code": null}], "clean_eof_sent_after_final_lf": true, "released_reply_ids": ["absolute-read", "rapid-immediate-refusals-1", "rapid-immediate-refusals-2", "rapid-immediate-refusals-3", "rapid-immediate-refusals-4", "rapid-immediate-refusals-5", "rapid-immediate-refusals-6", "rapid-immediate-refusals-7", "rapid-immediate-refusals-8", "rapid-immediate-refusals-9", "rapid-immediate-refusals-10", "rapid-immediate-refusals-11", "rapid-immediate-refusals-12", "rapid-immediate-refusals-13", "rapid-immediate-refusals-14", "rapid-immediate-refusals-15", "rapid-immediate-refusals-16", "rapid-immediate-refusals-17", "rapid-immediate-refusals-18", "rapid-immediate-refusals-19", "rapid-immediate-refusals-20", "rapid-immediate-refusals-21", "rapid-immediate-refusals-22", "rapid-immediate-refusals-23", "rapid-immediate-refusals-24", "rapid-immediate-refusals-25", "rapid-immediate-refusals-26", "rapid-immediate-refusals-27", "rapid-immediate-refusals-28", "rapid-immediate-refusals-29", "rapid-immediate-refusals-30", "rapid-immediate-refusals-31", "rapid-immediate-refusals-32"], "correlated_response_count": 33, "useful_response_count": 17, "error_response_count": 0, "unsupported_refusal_count": 16, "released_tool_response_sha256": "ded8ffe5886bbe8e998e491d5231a64f93599a61c7b16826bb91b857200f6429"}, "native_gates": 66, "actual_broker_reads": 33, "native_call_ids": ["danTcjj5WeeZMHQBc12_ffM2DyAqjSo0H5DuFUsEU_0", "BEY1gza1Fr5iE0ZpcZWWukW6NgEQSVfQxDJMaMTrWDM", "VZ8xHua4_iY_Qx0UM-KXIcEO-f2-ISmiPJ_7V3q3El4", "rsLKRkm0zWL5GBKu5mocX9lSVSiZt4IZUcPOnkB8odE", "4NVlJSzpKjbGS7GwUJl6otptXBKYG2yZjyCpQQGYr5U", "iCrRtkwLRiq1h1c-qL-Vu6RI7Y0GU3ZuK-QPrjleWww", "zmy0nvRrEdCUxCr_W9QnS_T-tntLUBRi6fzYzHfgoEo", "pAEaPPMPIJ2vJlKcLbDyT1_C7E_musHvKis08edJHII", "f_LtzvGTGOSIyOFtHSX_b2FRoiNd8iz1GrNyNUbgg-c", "IWLQFKUe3grwUZp-aw8AMjjdqlJulT_icGt8DtBD4MI", "9rFuQyjmVdXYBa6t2mXtX9nP0-s2rr8jGhaDiu7o-pw", "OEmRKTgjw-qZxK1eSblnemGpcJasEdJzHAZMG3RNSp4", "b1xgvvsEwPpmqhA3UyAi8CvGlO432lGg7607aSQkI-g", "NKg2l5x6s2QJWpNk4_c3xPy-XPxPmsrQCLJHawiO1m8", "vRemN5n1Jo4EfWro7mzGSBFcU5q1pxjMoUh4YVskI8c", "B_CBHkuq7QV8S4cHUtCgIMgfBLF_ZXtZyPRMd9SoLKc", "Y1peelb64S7vPE1ykk6BmLx-LTovLK1KsOdHQs3e6tM", "9d0jtHELAzvnIdm9HerLTyWThZe9NxFsJNlr1Ntm-kg", "jGOhv8WGzQEqxIPVr6Gps_BcYVfajcruX0NNVsr8CEg", "ujGkCHb7vC_Ib5YSsE5E5JepB81XP_qXgqrwLZK2Qf8", "AWkaBtZCZx7HqVcUUQOupUQGcM5xPDIXD01QPsBDwx4", "kh7pgoAOfb2l0p5lNbxoVRo5DTPj2MrADsiBvKYSmHQ", "000QUb7vhc1PfWoNWciwvLspce1VROx3DlyvBjkYMsk", "3zwox9wXQuYFjuvI7E7rKTmZe7q8xY9MQbEcwfxVKNk", "nHCAVt0WFpBmG-sjIQj5qjxjvw1RmuagrJe7ROcHCx8", "kITTnRcdmc_FjcEyJncJGa8V_1njWUOPNi5m9VLZRR0", "XCBl-dcaJj-4Dd_pLgJPJbc4cU8MJCHWCn-oHyB8nhE", "c4jPSjSzB60BRKtvJ7dQ2jkL6P7AOoRvmT2BzYWF_GE", "dCtNcv544FHRDc5rpsDzQpIJ4gg_R2yAGi-W2pz1UB8", "hBfEcymPUt1bMJb1QVyg_6OHQ2Z1dWNvu-qXFAwhF-0", "f7u5rSbkoKN-n5ul0-wdSeVWcq4ZRh0PLwVihQX4fR0", "LEqrUl79UkiRKGidb9ompvV1oaxdT7DUnq8v7l6Yyrk", "zvGM3WM7GMJLt4T_86KctWTTkRGyBPc3yxyt7DEo6o0"], "client_tool_result_bytes": 4168, "client_output_sha256": "1846eddbc2bf2f8ce47191e827094d02625252e301984a28d7769f5bccfc7a70", "child_executor_entries": 0, "receiver_deliveries": 0, "file_bytes_unchanged": true, "stdout_eof_observed": true, "owned_profile_removed": true, "collector_exit": 0, "error": null}
+2026-10-17T10:03:28.4572635Z  stderr=Traceback (most recent call last):
+2026-10-17T10:03:28.4573300Z   File "/home/runner/work/soup-wall/soup-wall/scripts/fixtures/mcp_resource_backpressure.py", line 346, in <module>
+2026-10-17T10:03:28.4573801Z     sys.exit(main())
+2026-10-17T10:03:28.4574025Z              ^^^^^^
+2026-10-17T10:03:28.4574436Z   File "/home/runner/work/soup-wall/soup-wall/scripts/fixtures/mcp_resource_backpressure.py", line 303, in main
+2026-10-17T10:03:28.4575051Z     assert observation["is_error"] is True and observation["expected_refusal_present"] is True, summary
+2026-10-17T10:03:28.4575539Z            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-10-17T10:03:28.4624293Z AssertionError: {'boundary': 'production_mcp_resource_stdout', 'mode': 'immediate-refusals', 'witness': {'prepared_frames': ['{"jsonrpc":"2.0","id":"absolute-read","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou18_absolute-read","progressToken":1}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-1","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_1","progressToken":2}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-2","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_2","progressToken":3}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-3","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_3","progressToken":4}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-4","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_4","progressToken":5}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-5","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_5","progressToken":6}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-6","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_6","progressToken":7}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-7","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_7","progressToken":8}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-8","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_8","progressToken":9}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-9","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_9","progressToken":10}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-10","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_10","progressToken":11}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-11","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_11","progressToken":12}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-12","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_12","progressToken":13}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-13","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_13","progressToken":14}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-14","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_14","progressToken":15}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-15","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_15","progressToken":16}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-16","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_16","progressToken":17}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-17","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_17","progressToken":18}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-18","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_18","progressToken":19}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-19","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_19","progressToken":20}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-20","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_20","progressToken":21}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-21","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_21","progressToken":22}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-22","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_22","progressToken":23}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-23","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_23","progressToken":24}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-24","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_24","progressToken":25}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-25","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_25","progressToken":26}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-26","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_26","progressToken":27}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-27","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_27","progressToken":28}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-28","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_28","progressToken":29}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-29","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_29","progressToken":30}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-30","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_30","progressToken":31}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-31","method":"tools/call","params":{"name":"read_note","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_31","progressToken":32}}}', '{"jsonrpc":"2.0","id":"rapid-immediate-refusals-32","method":"tools/call","params":{"name":"read_document","arguments":{"path":"/tmp/sou18-resource-_s3_m_er/workspace/notes/inventory.txt"},"_meta":{"claudecode/toolUseId":"toolu_sou17_rapid_32","progressToken":33}}}'], 'expected_outcomes': ['allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow', 'resource_executor_unsupported', 'allow'], 'next_frame_written_after_lf_before_json_validation': True, 'released_response_sha256': ['7579e5973b676863125e1d26343a76bf27f2480fdd1c112a564adb97767b4812', 'f4f1bea6dde8a06cebb317f23f7b0fe9ca27fb34b65e9fa81766a06dd5ff13d6', '3da7257c88b6c356fd99496ea6c173a9e94d687ede32fd51d7692305be0bb1ef', '71d6e5c05ef6d5c3bbeda5cc9c7820465485912b6ff46e65cb79b3707cdfdf8b', '1c4607927a738aa0a7c9af304cfdff55b1ed701a31cd387b308fe53291c4ca4b', 'e2d8f91f8cce08ee5ccfa91da862fc2424dceb5937cf023fead1e9e776df6e90', '4bba4b83441b43899f32ae83c7cd6b9757ddfc2edc9190d86d588867788f6705', '399e6d244a3f2a770ec40a624ba5dd317ff480494498f78137c669975f65300e', 'bb3a3ba42adb9c220e4421b5d24a5363f07ba2d21a83c448027b0c0b1eafd0e6', '49c0a376529e46a46f6a64811ebecd693a233fb5c20080bf4f2f30c34aa4a2f1', '4003ed7929d85ae1eadc8ddbb4b57c5b325f4fc97a8a8eb1384796e32291b3a4', '00afb068d7647422b507c9123387c68d4fc8b5222cf06a6d043aa479fcd02d2d', '1e4f77236628360704910c1ec5eb411e5898da564556a7ba0a75b8d62fbac4c6', '174536079ed91db17ede6e9c20d58dddab0fb314ac1a6cf8436127bd3d2c482f', '4ad648a9efc4e07bda7e956fff50a82393dd648c629226d4c4142498fdd6a4c0', 'ca4d1abd4922b496d0ae3e05ec127690efb1eaa1684ad6a682017148cbf56c57', '169af5fd21d6ee65c9a033918b729d9509feb0cb01ca7ac1613b447464adda74', 'da4388697b7d847d86a2655dab54920e901f66613799c1a28423ae22b538e17c', 'f7b4a4eabb3c0b533f153a9dbf1a383f3b938e33df0d1dafb8fdf698e46adbd9', '5a18fbc152dce107e45eecb4f3a25cad86160c4f156516e9d04eea276b15cda1', '1071745d7dab97841aeb5664e4dc5dce22e24bfa65b33bf8d208e032e55e538c', 'd5f59daadc069d4aea49911c1a7cc372e72487299c2cf1eb94fcfbb6291ed9c0', '5e24ea837318b3bc39dbb166177088d6ea690e12719bb23ac3af127b87a74af2', '607213b1b23c933acda146a01015b5cb5d2ae7c8d52b21ba07c754a4e1d98562', 'a2317f2e0fb1214b4bc63eee757d3f4a252992a3206750dc4fcef44d3923153b', 'dd995ae88aabf0fa16d479cab259be029efcccb585557f6ed8587586241c3222', '35d84d462e1c975a1e2e02249e98fe54d4368bc051393cb13172c3d80b81d98f', '98b935d8c3caf4c3fde57f01f5774a193d71eb3940d0f88e2578eb1a938c6393', '9b1260eda4cfee9561f57eac932c361e771da5e07c82f63f9a64c85ffea94b66', 'ae7995215d135622727a53fd5c8726404940ecb5f54f57f49b969b95d490325e', 'ba4ea94bc58c16016429f53e3e1c09ce9a2a5c5bbaafba7633319b23568752cd', '67e9c055e5ce3cd259fae55ea45ea94f81a3253b0dfefe6eca5eb9b6dc5e70cd', 'b40941398bf202d6aac1c9a15778d0c7e30644a2a381b7d1742ce9aa300f32ec'], 'received_outcomes': [{'id': 'absolute-read', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-1', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-2', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-3', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-4', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-5', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-6', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-7', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-8', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-9', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-10', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-11', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-12', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-13', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-14', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-15', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-16', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-17', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-18', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-19', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-20', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-21', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-22', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-23', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-24', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-25', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-26', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-27', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-28', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-29', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-30', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-31', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}, {'id': 'rapid-immediate-refusals-32', 'jsonrpc': '2.0', 'is_error': None, 'useful_contents_match': True, 'expected_refusal_present': False, 'technical_error_code': None}], 'clean_eof_sent_after_final_lf': True, 'released_reply_ids': ['absolute-read', 'rapid-immediate-refusals-1', 'rapid-immediate-refusals-2', 'rapid-immediate-refusals-3', 'rapid-immediate-refusals-4', 'rapid-immediate-refusals-5', 'rapid-immediate-refusals-6', 'rapid-immediate-refusals-7', 'rapid-immediate-refusals-8', 'rapid-immediate-refusals-9', 'rapid-immediate-refusals-10', 'rapid-immediate-refusals-11', 'rapid-immediate-refusals-12', 'rapid-immediate-refusals-13', 'rapid-immediate-refusals-14', 'rapid-immediate-refusals-15', 'rapid-immediate-refusals-16', 'rapid-immediate-refusals-17', 'rapid-immediate-refusals-18', 'rapid-immediate-refusals-19', 'rapid-immediate-refusals-20', 'rapid-immediate-refusals-21', 'rapid-immediate-refusals-22', 'rapid-immediate-refusals-23', 'rapid-immediate-refusals-24', 'rapid-immediate-refusals-25', 'rapid-immediate-refusals-26', 'rapid-immediate-refusals-27', 'rapid-immediate-refusals-28', 'rapid-immediate-refusals-29', 'rapid-immediate-refusals-30', 'rapid-immediate-refusals-31', 'rapid-immediate-refusals-32'], 'correlated_response_count': 33, 'useful_response_count': 17, 'error_response_count': 0, 'unsupported_refusal_count': 16, 'released_tool_response_sha256': 'ded8ffe5886bbe8e998e491d5231a64f93599a61c7b16826bb91b857200f6429'}, 'native_gates': 66, 'actual_broker_reads': 33, 'native_call_ids': ['danTcjj5WeeZMHQBc12_ffM2DyAqjSo0H5DuFUsEU_0', 'BEY1gza1Fr5iE0ZpcZWWukW6NgEQSVfQxDJMaMTrWDM', 'VZ8xHua4_iY_Qx0UM-KXIcEO-f2-ISmiPJ_7V3q3El4', 'rsLKRkm0zWL5GBKu5mocX9lSVSiZt4IZUcPOnkB8odE', '4NVlJSzpKjbGS7GwUJl6otptXBKYG2yZjyCpQQGYr5U', 'iCrRtkwLRiq1h1c-qL-Vu6RI7Y0GU3ZuK-QPrjleWww', 'zmy0nvRrEdCUxCr_W9QnS_T-tntLUBRi6fzYzHfgoEo', 'pAEaPPMPIJ2vJlKcLbDyT1_C7E_musHvKis08edJHII', 'f_LtzvGTGOSIyOFtHSX_b2FRoiNd8iz1GrNyNUbgg-c', 'IWLQFKUe3grwUZp-aw8AMjjdqlJulT_icGt8DtBD4MI', '9rFuQyjmVdXYBa6t2mXtX9nP0-s2rr8jGhaDiu7o-pw', 'OEmRKTgjw-qZxK1eSblnemGpcJasEdJzHAZMG3RNSp4', 'b1xgvvsEwPpmqhA3UyAi8CvGlO432lGg7607aSQkI-g', 'NKg2l5x6s2QJWpNk4_c3xPy-XPxPmsrQCLJHawiO1m8', 'vRemN5n1Jo4EfWro7mzGSBFcU5q1pxjMoUh4YVskI8c', 'B_CBHkuq7QV8S4cHUtCgIMgfBLF_ZXtZyPRMd9SoLKc', 'Y1peelb64S7vPE1ykk6BmLx-LTovLK1KsOdHQs3e6tM', '9d0jtHELAzvnIdm9HerLTyWThZe9NxFsJNlr1Ntm-kg', 'jGOhv8WGzQEqxIPVr6Gps_BcYVfajcruX0NNVsr8CEg', 'ujGkCHb7vC_Ib5YSsE5E5JepB81XP_qXgqrwLZK2Qf8', 'AWkaBtZCZx7HqVcUUQOupUQGcM5xPDIXD01QPsBDwx4', 'kh7pgoAOfb2l0p5lNbxoVRo5DTPj2MrADsiBvKYSmHQ', '000QUb7vhc1PfWoNWciwvLspce1VROx3DlyvBjkYMsk', '3zwox9wXQuYFjuvI7E7rKTmZe7q8xY9MQbEcwfxVKNk', 'nHCAVt0WFpBmG-sjIQj5qjxjvw1RmuagrJe7ROcHCx8', 'kITTnRcdmc_FjcEyJncJGa8V_1njWUOPNi5m9VLZRR0', 'XCBl-dcaJj-4Dd_pLgJPJbc4cU8MJCHWCn-oHyB8nhE', 'c4jPSjSzB60BRKtvJ7dQ2jkL6P7AOoRvmT2BzYWF_GE', 'dCtNcv544FHRDc5rpsDzQpIJ4gg_R2yAGi-W2pz1UB8', 'hBfEcymPUt1bMJb1QVyg_6OHQ2Z1dWNvu-qXFAwhF-0', 'f7u5rSbkoKN-n5ul0-wdSeVWcq4ZRh0PLwVihQX4fR0', 'LEqrUl79UkiRKGidb9ompvV1oaxdT7DUnq8v7l6Yyrk', 'zvGM3WM7GMJLt4T_86KctWTTkRGyBPc3yxyt7DEo6o0'], 'client_tool_result_bytes': 4168, 'client_output_sha256': '1846eddbc2bf2f8ce47191e827094d02625252e301984a28d7769f5bccfc7a70', 'child_executor_entries': 0, 'receiver_deliveries': 0, 'file_bytes_unchanged': True, 'stdout_eof_observed': True, 'owned_profile_removed': True, 'collector_exit': 0, 'error': None}
+2026-10-17T10:03:28.4672988Z 
+2026-10-17T10:03:28.4673242Z note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+2026-10-17T10:03:28.4673541Z 
+2026-10-17T10:03:28.4673545Z 
+2026-10-17T10:03:28.4673654Z failures:
+2026-10-17T10:03:28.4673960Z     immediate_resource_refusals_preserve_same_session_recovery_and_eof
+2026-10-17T10:03:28.4674217Z 
+2026-10-17T10:03:28.4674509Z test result: FAILED. 10 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 18.86s
+2026-10-17T10:03:28.4674840Z 
+2026-10-17T10:03:28.4686560Z ##[error]Process completed with exit code 101.
+2026-10-17T10:03:28.4750170Z ##[group]Run actions/upload-artifact@v7
+2026-10-17T10:03:28.4750432Z with:
+2026-10-17T10:03:28.4750633Z   name: task3-attack-scenarios
+2026-10-17T10:03:28.4750930Z   path: crates/adapter/attack_results.json
+attack_results.json
+
+2026-10-17T10:03:28.4751244Z   if-no-files-found: error
+2026-10-17T10:03:28.4751474Z   compression-level: 6
+2026-10-17T10:03:28.4751666Z   overwrite: false
+2026-10-17T10:03:28.4751870Z   include-hidden-files: false
+2026-10-17T10:03:28.4752105Z   archive: true
+2026-10-17T10:03:28.4752382Z env:
+2026-10-17T10:03:28.4752573Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T10:03:28.4752802Z   CARGO_INCREMENTAL: 0
+2026-10-17T10:03:28.4752995Z   CARGO_TERM_COLOR: always
+2026-10-17T10:03:28.4753216Z   CACHE_ON_FAILURE: false
+2026-10-17T10:03:28.4753415Z ##[endgroup]
+2026-10-17T10:03:28.6060770Z Multiple search paths detected. Calculating the least common ancestor of all paths
+2026-10-17T10:03:28.6062832Z The least common ancestor is /home/runner/work/soup-wall/soup-wall. This will be the root directory of the artifact
+2026-10-17T10:03:28.6079330Z ##[error]No files were found with the provided path: crates/adapter/attack_results.json
+attack_results.json. No artifacts will be uploaded.
+2026-10-17T10:03:28.6215317Z ##[group]Run actions/upload-artifact@v7
+2026-10-17T10:03:28.6215577Z with:
+2026-10-17T10:03:28.6215796Z   name: task1-classifier-regression-evidence
+2026-10-17T10:03:28.6216126Z   path: target/task1-core-evaluation/
+target/task1-mixed-evaluation/
+
+2026-10-17T10:03:28.6216461Z   if-no-files-found: warn
+2026-10-17T10:03:28.6216670Z   compression-level: 6
+2026-10-17T10:03:28.6216857Z   overwrite: false
+2026-10-17T10:03:28.6217057Z   include-hidden-files: false
+2026-10-17T10:03:28.6217269Z   archive: true
+2026-10-17T10:03:28.6217438Z env:
+2026-10-17T10:03:28.6217622Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T10:03:28.6217846Z   CARGO_INCREMENTAL: 0
+2026-10-17T10:03:28.6218033Z   CARGO_TERM_COLOR: always
+2026-10-17T10:03:28.6218242Z   CACHE_ON_FAILURE: false
+2026-10-17T10:03:28.6218442Z ##[endgroup]
+2026-10-17T10:03:28.7317904Z Multiple search paths detected. Calculating the least common ancestor of all paths
+2026-10-17T10:03:28.7319389Z The least common ancestor is /home/runner/work/soup-wall/soup-wall/target. This will be the root directory of the artifact
+2026-10-17T10:03:28.7324807Z ##[warning]No files were found with the provided path: target/task1-core-evaluation/
+target/task1-mixed-evaluation/. No artifacts will be uploaded.
+2026-10-17T10:03:28.7445221Z ##[group]Run actions/upload-artifact@v7
+2026-10-17T10:03:28.7445580Z with:
+2026-10-17T10:03:28.7445834Z   name: clean-setup-linux
+2026-10-17T10:03:28.7446252Z   path: /home/runner/work/_temp/sou18-suite-39023067335-1/setup.json
+2026-10-17T10:03:28.7446694Z   if-no-files-found: warn
+2026-10-17T10:03:28.7446976Z   compression-level: 6
+2026-10-17T10:03:28.7447249Z   overwrite: false
+2026-10-17T10:03:28.7447520Z   include-hidden-files: false
+2026-10-17T10:03:28.7447813Z   archive: true
+2026-10-17T10:03:28.7448055Z env:
+2026-10-17T10:03:28.7448299Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T10:03:28.7448609Z   CARGO_INCREMENTAL: 0
+2026-10-17T10:03:28.7448886Z   CARGO_TERM_COLOR: always
+2026-10-17T10:03:28.7449177Z   CACHE_ON_FAILURE: false
+2026-10-17T10:03:28.7449447Z ##[endgroup]
+2026-10-17T10:03:28.8639344Z ##[warning]No files were found with the provided path: /home/runner/work/_temp/sou18-suite-39023067335-1/setup.json. No artifacts will be uploaded.
+2026-10-17T10:03:28.8808322Z ##[group]Run actions/upload-artifact@v7
+2026-10-17T10:03:28.8809199Z with:
+2026-10-17T10:03:28.8809453Z   name: sou18-status-linux
+2026-10-17T10:03:28.8809898Z   path: /home/runner/work/_temp/sou18-suite-39023067335-1/status/results.json
+2026-10-17T10:03:28.8810377Z   if-no-files-found: warn
+2026-10-17T10:03:28.8810667Z   compression-level: 6
+2026-10-17T10:03:28.8810943Z   overwrite: false
+2026-10-17T10:03:28.8811217Z   include-hidden-files: false
+2026-10-17T10:03:28.8811733Z   archive: true
+2026-10-17T10:03:28.8811994Z env:
+2026-10-17T10:03:28.8812244Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T10:03:28.8812657Z   CARGO_INCREMENTAL: 0
+2026-10-17T10:03:28.8812941Z   CARGO_TERM_COLOR: always
+2026-10-17T10:03:28.8813235Z   CACHE_ON_FAILURE: false
+2026-10-17T10:03:28.8813539Z ##[endgroup]
+2026-10-17T10:03:29.0048286Z ##[warning]No files were found with the provided path: /home/runner/work/_temp/sou18-suite-39023067335-1/status/results.json. No artifacts will be uploaded.
+2026-10-17T10:03:29.0135138Z ##[group]Run actions/upload-artifact@v7
+2026-10-17T10:03:29.0135435Z with:
+2026-10-17T10:03:29.0135627Z   name: sou18-suite-linux
+2026-10-17T10:03:29.0135905Z   path: /home/runner/work/_temp/sou18-suite-39023067335-1/
+2026-10-17T10:03:29.0136197Z   if-no-files-found: warn
+2026-10-17T10:03:29.0136409Z   compression-level: 6
+2026-10-17T10:03:29.0136615Z   overwrite: false
+2026-10-17T10:03:29.0136817Z   include-hidden-files: false
+2026-10-17T10:03:29.0137045Z   archive: true
+2026-10-17T10:03:29.0137236Z env:
+2026-10-17T10:03:29.0137416Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T10:03:29.0137653Z   CARGO_INCREMENTAL: 0
+2026-10-17T10:03:29.0137857Z   CARGO_TERM_COLOR: always
+2026-10-17T10:03:29.0138067Z   CACHE_ON_FAILURE: false
+2026-10-17T10:03:29.0138275Z ##[endgroup]
+2026-10-17T10:03:29.1286997Z ##[warning]No files were found with the provided path: /home/runner/work/_temp/sou18-suite-39023067335-1/. No artifacts will be uploaded.
+2026-10-17T10:03:29.1414329Z ##[group]Run actions/upload-artifact@v7
+2026-10-17T10:03:29.1414759Z with:
+2026-10-17T10:03:29.1415050Z   name: local-gateway-acceptance
+2026-10-17T10:03:29.1415448Z   path: target/local-gateway-evidence.json
+2026-10-17T10:03:29.1415856Z   if-no-files-found: ignore
+2026-10-17T10:03:29.1416192Z   compression-level: 6
+2026-10-17T10:03:29.1416508Z   overwrite: false
+2026-10-17T10:03:29.1416823Z   include-hidden-files: false
+2026-10-17T10:03:29.1417163Z   archive: true
+2026-10-17T10:03:29.1417449Z env:
+2026-10-17T10:03:29.1417734Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T10:03:29.1418084Z   CARGO_INCREMENTAL: 0
+2026-10-17T10:03:29.1418390Z   CARGO_TERM_COLOR: always
+2026-10-17T10:03:29.1418719Z   CACHE_ON_FAILURE: false
+2026-10-17T10:03:29.1419028Z ##[endgroup]
+2026-10-17T10:03:29.2602625Z No files were found with the provided path: target/local-gateway-evidence.json. No artifacts will be uploaded.
+2026-10-17T10:03:29.2783511Z ##[group]Run actions/upload-artifact@v7
+2026-10-17T10:03:29.2783902Z with:
+2026-10-17T10:03:29.2784152Z   name: mcp-admission-demo
+2026-10-17T10:03:29.2784805Z   path: target/mcp-admission-demo.json
+target/sou-22-real-baseline.json
+
+2026-10-17T10:03:29.2785316Z   if-no-files-found: ignore
+2026-10-17T10:03:29.2785641Z   compression-level: 6
+2026-10-17T10:03:29.2785931Z   overwrite: false
+2026-10-17T10:03:29.2786239Z   include-hidden-files: false
+2026-10-17T10:03:29.2786545Z   archive: true
+2026-10-17T10:03:29.2786819Z env:
+2026-10-17T10:03:29.2787086Z   CARGO_HOME: /home/runner/.cargo
+2026-10-17T10:03:29.2787415Z   CARGO_INCREMENTAL: 0
+2026-10-17T10:03:29.2787711Z   CARGO_TERM_COLOR: always
+2026-10-17T10:03:29.2788023Z   CACHE_ON_FAILURE: false
+2026-10-17T10:03:29.2788305Z ##[endgroup]
+2026-10-17T10:03:29.4017221Z Multiple search paths detected. Calculating the least common ancestor of all paths
+2026-10-17T10:03:29.4018770Z The least common ancestor is /home/runner/work/soup-wall/soup-wall/target. This will be the root directory of the artifact
+2026-10-17T10:03:29.4019448Z No files were found with the provided path: target/mcp-admission-demo.json
+2026-10-17T10:03:29.4019995Z target/sou-22-real-baseline.json. No artifacts will be uploaded.
+2026-10-17T10:03:29.4148534Z Post job cleanup.
+2026-10-17T10:03:29.4883103Z [command]/usr/bin/git version
+2026-10-17T10:03:29.4918431Z git version 2.55.0
+2026-10-17T10:03:29.4944937Z Temporarily overriding HOME='/home/runner/work/_temp/3bf153f7-62bb-457c-8872-f033ff21f7a4' before making global git config changes
+2026-10-17T10:03:29.4945829Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-17T10:03:29.4949726Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/soup-wall/soup-wall
+2026-10-17T10:03:29.4977431Z Removing SSH command configuration
+2026-10-17T10:03:29.4982507Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-17T10:03:29.5009828Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-17T10:03:29.5199637Z Removing HTTP extra header
+2026-10-17T10:03:29.5203942Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-17T10:03:29.5228730Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-17T10:03:29.5417976Z Removing includeIf entries pointing to credentials config files
+2026-10-17T10:03:29.5424398Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-17T10:03:29.5454495Z includeif.gitdir:/home/runner/work/soup-wall/soup-wall/.git.path
+2026-10-17T10:03:29.5455061Z includeif.gitdir:/home/runner/work/soup-wall/soup-wall/.git/worktrees/*.path
+2026-10-17T10:03:29.5455531Z includeif.gitdir:/github/workspace/.git.path
+2026-10-17T10:03:29.5455924Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-10-17T10:03:29.5468686Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/soup-wall/soup-wall/.git.path
+2026-10-17T10:03:29.5483359Z /home/runner/work/_temp/git-credentials-d3a599ec-f51a-4602-b6c1-d7fd472acfd6.config
+2026-10-17T10:03:29.5488262Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/soup-wall/soup-wall/.git.path \/home\/runner\/work\/_temp\/git\-credentials\-d3a599ec\-f51a\-4602\-b6c1\-d7fd472acfd6\.config
+2026-10-17T10:03:29.5539130Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/soup-wall/soup-wall/.git/worktrees/*.path
+2026-10-17T10:03:29.5560532Z /home/runner/work/_temp/git-credentials-d3a599ec-f51a-4602-b6c1-d7fd472acfd6.config
+2026-10-17T10:03:29.5574476Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/soup-wall/soup-wall/.git/worktrees/*.path \/home\/runner\/work\/_temp\/git\-credentials\-d3a599ec\-f51a\-4602\-b6c1\-d7fd472acfd6\.config
+2026-10-17T10:03:29.5618329Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+2026-10-17T10:03:29.5632578Z /github/runner_temp/git-credentials-d3a599ec-f51a-4602-b6c1-d7fd472acfd6.config
+2026-10-17T10:03:29.5648411Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path \/github\/runner_temp\/git\-credentials\-d3a599ec\-f51a\-4602\-b6c1\-d7fd472acfd6\.config
+2026-10-17T10:03:29.5683572Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-10-17T10:03:29.5696185Z /github/runner_temp/git-credentials-d3a599ec-f51a-4602-b6c1-d7fd472acfd6.config
+2026-10-17T10:03:29.5702801Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path \/github\/runner_temp\/git\-credentials\-d3a599ec\-f51a\-4602\-b6c1\-d7fd472acfd6\.config
+2026-10-17T10:03:29.5730166Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-17T10:03:29.5885979Z Removing credentials config '/home/runner/work/_temp/git-credentials-d3a599ec-f51a-4602-b6c1-d7fd472acfd6.config'
+2026-10-17T10:03:29.6006939Z Cleaning up orphan processes

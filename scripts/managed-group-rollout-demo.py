@@ -95,7 +95,7 @@ def main():
         'binary_sha256': {'llm-firewall': digest(console_bin), 'agentfw': digest(agent_bin)},
         'checks': {}, 'passed': False, 'cleanup_passed': False,
         'configuration': {'transport': 'literal loopback HTTP', 'agents': 4, 'pilots': 1,
-                          'external_provider_calls': 0, 'recovery_schema': 27},
+                          'external_provider_calls': 0, 'recovery_schema': 28},
         'limitations': ['Disposable local processes; no production multi-host or remote-attestation claim']}
     def check(label, value):
         report['checks'][label] = bool(value)
@@ -122,9 +122,12 @@ def main():
                 'SOUP_AGENT_POLICY_KEY_ID': 'group-demo-key', 'SOUP_AGENT_POLICY_SEED_HEX': secrets.token_hex(32),
                 'SOUP_AGENT_POLICY_SEED_HEX_UNTRUSTED_KEY': secrets.token_hex(32),
                 'OPENAI_API_KEY': '', 'LLM_FW_OPENAI_API_KEY': ''})
+            # Schema creation on shared CI can exceed the production 1s request
+            # budget. Give only this disposable demo an explicit bounded budget.
             def configuration(database):
                 cfg.write_text(f'bind: "127.0.0.1:{cp}"\ntenant_store:\n  enabled: true\n  backend: {args.backend}\n' +
-                    (f'  database_path: "{database}"\n' if args.backend == 'sqlite' else ''))
+                    (f'  database_path: "{database}"\n' if args.backend == 'sqlite' else
+                     '  postgres_command_timeout_ms: 30000\n  postgres_pool_wait_timeout_ms: 10000\n'))
                 if args.backend == 'postgres':
                     env['LLM_FW_POSTGRES_URL'] = database
             configuration(str(source_sqlite) if args.backend == 'sqlite' else source_url)

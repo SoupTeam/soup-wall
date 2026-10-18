@@ -20,6 +20,51 @@ DRIVER = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(DRIVER)
 
 
+class SamlNavigationDiagnosticsTests(unittest.TestCase):
+    def test_navigation_diagnostics_never_retain_untrusted_urls_or_failures(self):
+        spec = importlib.util.spec_from_file_location(
+            "saml_linux_driver", Path(__file__).resolve().parents[1] / "keycloak-saml-linux.py")
+        driver = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(driver)
+        gateway, vendor = "https://127.0.0.1:443", "https://localhost:8443"
+        self.assertEqual(driver.navigation_location(
+            gateway + "/auth/saml/acs?SAMLResponse=synthetic-secret", gateway, vendor), "gateway_acs")
+        self.assertEqual(driver.navigation_location(
+            gateway + "/private-secret?token=synthetic-secret", gateway, vendor), "gateway_other")
+        self.assertEqual(driver.navigation_location(
+            "https://unknown.test/private-secret", gateway, vendor), "other")
+        self.assertEqual(driver.navigation_location("chrome-error://chromewebdata/", gateway, vendor),
+                         "browser_error")
+        self.assertEqual(driver.network_failure_category("net::ERR_CONNECTION_RESET"),
+                         "net::ERR_CONNECTION_RESET")
+        self.assertEqual(driver.network_failure_category("untrusted secret"), "other")
+        transient = {"final_location": "browser_error", "network_failures": [
+            {"category": "net::ERR_NETWORK_CHANGED"}]}
+        self.assertTrue(driver.retryable_login_transport(transient))
+        self.assertTrue(driver.retryable_login_transport(dict(transient, final_location="vendor")))
+        self.assertTrue(driver.retryable_login_transport(dict(transient, final_location="gateway_start")))
+        for extra in ({"callback_requested": True}, {"acs_status": 400}, {"acs_status": 303}, {"local_authorization_error": True},
+                      {"server_error_categories": ["failed to consume saml state"]},
+                      {"validation_error_categories": ["signature"]},
+                      {"vendor_error_categories": ["invalid username or password"]},
+                      {"final_location": "gateway_acs"},
+                      {"network_failures": [{"category": "net::ERR_CONNECTION_REFUSED"}]}):
+            self.assertFalse(driver.retryable_login_transport(dict(transient, **extra)))
+
+
+class OidcTransportRetryTests(unittest.TestCase):
+    def test_only_confirmed_pre_callback_network_change_is_retryable(self):
+        observation = {"network_failures": ["net::ERR_NETWORK_CHANGED"], "owned_location": True,
+                       "callback_response": False, "authentication_error": False}
+        self.assertTrue(DRIVER.retryable_browser_transport(observation))
+        for changed in ({"callback_requested": True}, {"callback_response": True}, {"authentication_error": True},
+                        {"server_error_categories": ["oidc authorization-code exchange failed"]},
+                        {"owned_location": False}, {"network_failures": []},
+                        {"network_failures": ["other"]},
+                        {"network_failures": ["net::ERR_NETWORK_CHANGED", "other"]}):
+            self.assertFalse(DRIVER.retryable_browser_transport(dict(observation, **changed)))
+
+
 class ImportedCredentialTests(unittest.TestCase):
     def test_realm_import_contains_salted_verifier_instead_of_cleartext(self):
         secret = "generated-only-for-this-unit-test"

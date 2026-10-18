@@ -394,6 +394,8 @@ mod tests {
         let a = AuditLine {
             at_ms: 1,
             session: "s1".into(),
+            agent_id: None,
+            parent_id: None,
             seq: 2,
             event: "tool_call".into(),
             tool: Some("Bash".into()),

@@ -9,6 +9,23 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
+/// Releases ownership explicitly before closing the descriptor. A concurrent
+/// fork may inherit the open-file description until exec; close alone would
+/// otherwise let an unrelated child prolong the lifecycle lock.
+pub struct OperationLock(File);
+
+impl OperationLock {
+    pub(crate) fn held(file: File) -> Self {
+        Self(file)
+    }
+}
+
+impl Drop for OperationLock {
+    fn drop(&mut self) {
+        let _ = self.0.unlock();
+    }
+}
+
 const MANIFEST: &str = "lifecycle.json";
 const MAX_CANDIDATE_BYTES: u64 = 512 * 1024 * 1024;
 const START_TIMEOUT: Duration = Duration::from_secs(30);
@@ -54,9 +71,9 @@ impl ProcessRecord {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Operation {
-    from: Record,
-    to: Record,
-    was_running: bool,
+    pub(crate) from: Record,
+    pub(crate) to: Record,
+    pub(crate) was_running: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -136,6 +153,14 @@ impl Manager {
         candidate: &Path,
         expected_sha256: &str,
     ) -> Result<Record> {
+        #[cfg(target_os = "linux")]
+        if crate::service::registered(&self.home) {
+            return crate::service::Service::new(&self.home)?.upgrade(
+                version,
+                candidate,
+                expected_sha256,
+            );
+        }
         let _lock = self.lock()?;
         #[cfg(target_os = "linux")]
         crate::service::require_unregistered(&self.home)?;
@@ -191,6 +216,10 @@ impl Manager {
     }
 
     pub fn rollback(&self) -> Result<Record> {
+        #[cfg(target_os = "linux")]
+        if crate::service::registered(&self.home) {
+            return crate::service::Service::new(&self.home)?.rollback();
+        }
         let _lock = self.lock()?;
         #[cfg(target_os = "linux")]
         crate::service::require_unregistered(&self.home)?;
@@ -235,8 +264,81 @@ impl Manager {
         state.active.context("rollback lost active version")
     }
 
+    /// Read-only snapshot for doctor. Unlike `status`, this does not create an
+    /// operation lock, change permissions, query a daemon or adopt a process.
+    /// Any recorded process still needs separate authenticated verification.
+    pub fn inspect_read_only(&self, observed_config_sha256: Option<&str>) -> Result<Status> {
+        if !self.home.exists() || !self.root.exists() {
+            return Ok(Status {
+                active: None,
+                previous: None,
+                process: None,
+                running: false,
+                interrupted: false,
+                detail: "not installed".into(),
+            });
+        }
+        ensure_dir(&self.home)?;
+        ensure_dir(&self.root)?;
+
+        // Doctor must never use self.load(), self.verify() or config_digest().
+        // Those normal lifecycle APIs can open unbounded files or follow links.
+        let manifest = crate::doctor::read_private(&self.root.join(MANIFEST), 1024 * 1024)?;
+        let state: State =
+            serde_json::from_slice(&manifest).context("invalid bounded lifecycle manifest")?;
+        self.validate_state(&state)?;
+        let binary_changed = state.active.as_ref().is_some_and(|record| {
+            self.path_for(record)
+                .ok()
+                .and_then(|path| crate::doctor::hash_selected_file(&path, MAX_CANDIDATE_BYTES).ok())
+                .as_deref()
+                != Some(record.digest.as_str())
+        });
+        // Compare the one independently bounded, no-follow config snapshot.
+        // None means the original file was absent/unsafe, NOT an invitation
+        // to read it again (especially not through legacy fs::read).
+        let config_changed = state.process.as_ref().is_some_and(|process| {
+            observed_config_sha256.is_some_and(|hash| hash != process.config_digest)
+        });
+        let detail = if state.operation.is_some() || state.pending_stage.is_some() {
+            "interrupted operation; run recover"
+        } else if binary_changed {
+            "installed binary has changed"
+        } else if state.process.is_some() && observed_config_sha256.is_none() {
+            "config snapshot unavailable"
+        } else if config_changed {
+            "running with changed config; restart to apply it"
+        } else if state.process.is_some() {
+            "process recorded; authenticated observation required"
+        } else if state.active.is_some() {
+            "installed and stopped"
+        } else {
+            "not installed"
+        };
+        Ok(Status {
+            active: state.active,
+            previous: state.previous,
+            process: state.process,
+            running: false,
+            interrupted: state.operation.is_some() || state.pending_stage.is_some(),
+            detail: detail.to_owned(),
+        })
+    }
+
     pub fn status(&self) -> Result<Status> {
+        #[cfg(target_os = "linux")]
+        if crate::service::registered(&self.home) {
+            return crate::service::Service::new(&self.home)?.status();
+        }
         let _lock = self.lock()?;
+        self.status_locked()
+    }
+
+    pub(crate) fn status_locked(&self) -> Result<Status> {
+        #[cfg(target_os = "linux")]
+        if crate::service::registered(&self.home) {
+            return crate::service::Service::new(&self.home)?.status();
+        }
         let state = self.load()?;
         let health = self.running(&state)?;
         let config_changed = state.process.as_ref().is_some_and(|process| {
@@ -284,6 +386,10 @@ impl Manager {
     }
 
     pub fn start(&self) -> Result<()> {
+        #[cfg(target_os = "linux")]
+        if crate::service::registered(&self.home) {
+            return crate::service::Service::new(&self.home)?.start();
+        }
         let _lock = self.lock()?;
         #[cfg(target_os = "linux")]
         crate::service::require_unregistered(&self.home)?;
@@ -296,6 +402,10 @@ impl Manager {
     }
 
     pub fn stop(&self) -> Result<()> {
+        #[cfg(target_os = "linux")]
+        if crate::service::registered(&self.home) {
+            return crate::service::Service::new(&self.home)?.stop();
+        }
         let _lock = self.lock()?;
         #[cfg(target_os = "linux")]
         crate::service::require_unregistered(&self.home)?;
@@ -308,6 +418,10 @@ impl Manager {
     }
 
     pub fn restart(&self) -> Result<()> {
+        #[cfg(target_os = "linux")]
+        if crate::service::registered(&self.home) {
+            return crate::service::Service::new(&self.home)?.restart();
+        }
         let _lock = self.lock()?;
         #[cfg(target_os = "linux")]
         crate::service::require_unregistered(&self.home)?;
@@ -320,36 +434,63 @@ impl Manager {
         self.start_locked(&mut state)
     }
 
-    pub fn recover(&self) -> Result<()> {
+    pub(crate) fn restart_with_ownership_check(
+        &self,
+        expected_instance: Option<&str>,
+        was_running: bool,
+        candidate_instance: Option<&str>,
+    ) -> Result<()> {
+        #[cfg(target_os = "linux")]
+        if crate::service::registered(&self.home) {
+            return crate::service::Service::new(&self.home)?.restart_with_ownership_check(
+                expected_instance,
+                was_running,
+                candidate_instance,
+            );
+        }
         let _lock = self.lock()?;
         #[cfg(target_os = "linux")]
         crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
-        if let Some(pending) = state.pending_stage.clone() {
+        ensure!(
+            state.operation.is_none() && state.pending_stage.is_none(),
+            "recover the interrupted operation first"
+        );
+        let health = self.running(&state)?;
+        if was_running {
             ensure!(
-                !state
-                    .owned
-                    .iter()
-                    .any(|record| record.binary == pending.target),
-                "recorded staging target overlaps an installed version"
+                health.is_some(),
+                "conflict: daemon process died or is not responding before restart"
             );
-            for name in [&pending.stage, &pending.target] {
-                let path = self.root.join(name);
-                match fs::symlink_metadata(&path) {
-                    Ok(metadata) => {
-                        ensure!(
-                            metadata.file_type().is_file(),
-                            "recorded stage is not a regular file"
-                        );
-                        fs::remove_file(path)?;
-                    }
-                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(error) => return Err(error.into()),
-                }
+            if let Some(expected) = expected_instance {
+                let current_inst = state.process.as_ref().map(|p| p.instance.as_str());
+                ensure!(
+                    current_inst == Some(expected),
+                    "conflict: daemon was restarted independently before profile restart (expected {expected}, got {current_inst:?})"
+                );
             }
-            state.pending_stage = None;
-            self.save(&state)?;
+            self.stop_locked(&mut state)?;
+            self.start_locked_with_instance(&mut state, candidate_instance)
+        } else {
+            self.clear_dead_record(&mut state)?;
+            ensure!(
+                health.is_none() && state.process.is_none(),
+                "conflict: an independent daemon was started before candidate launch"
+            );
+            self.start_locked_with_instance(&mut state, candidate_instance)
         }
+    }
+
+    pub fn recover(&self) -> Result<()> {
+        #[cfg(target_os = "linux")]
+        if crate::service::registered(&self.home) {
+            return crate::service::Service::new(&self.home)?.recover();
+        }
+        let _lock = self.lock()?;
+        #[cfg(target_os = "linux")]
+        crate::service::require_unregistered(&self.home)?;
+        let mut state = self.load()?;
+        self.cleanup_pending_stage(&mut state)?;
         if let Some(process) = state.process.clone() {
             if self.running(&state)?.is_none() {
                 ensure!(
@@ -442,10 +583,11 @@ impl Manager {
 
     // Shared by detached lifecycle startup and the foreground service launcher.
     // The caller owns the short state lock; waiting for readiness happens separately.
-    fn prepare_launch(
+    fn prepare_launch_with_instance(
         &self,
         state: &mut State,
         pid: u32,
+        candidate_instance: Option<&str>,
     ) -> Result<(PathBuf, ProcessRecord, File)> {
         ensure!(
             state.process.is_none(),
@@ -459,18 +601,31 @@ impl Manager {
             "Agent port is occupied by another process"
         );
         let binary = self.path_for(active)?;
+        let instance = match candidate_instance {
+            Some(inst) => inst.to_string(),
+            None => crate::token::generate(),
+        };
+        ensure!(
+            instance.len() == 43
+                && instance
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_')),
+            "invalid candidate process instance format"
+        );
         let process = ProcessRecord {
             pid,
-            instance: crate::token::generate(),
+            instance: instance.clone(),
             binary_digest: active.digest.clone(),
             config_digest: self.config_digest()?,
             port: cfg.port,
             bind: cfg.bind,
-            launch_log: String::new(),
+            launch_log: format!(".launch-{}.log", instance),
         };
-        let mut process = process;
-        process.launch_log = format!(".launch-{}.log", process.instance);
         let launch_log = self.root.join(&process.launch_log);
+        if launch_log.exists() {
+            ensure_regular(&launch_log)?;
+            fs::remove_file(&launch_log)?;
+        }
         let log = create_private(&launch_log)?;
         state.process = Some(process.clone());
         if let Err(error) = self.save(state) {
@@ -482,7 +637,16 @@ impl Manager {
     }
 
     fn start_locked(&self, state: &mut State) -> Result<()> {
-        let (binary, process, log) = self.prepare_launch(state, 0)?;
+        self.start_locked_with_instance(state, None)
+    }
+
+    fn start_locked_with_instance(
+        &self,
+        state: &mut State,
+        candidate_instance: Option<&str>,
+    ) -> Result<()> {
+        let (binary, process, log) =
+            self.prepare_launch_with_instance(state, 0, candidate_instance)?;
         let launch_log = self.root.join(&process.launch_log);
         let mut child = match Command::new(binary)
             .args([
@@ -731,7 +895,7 @@ impl Manager {
     }
 
     #[cfg(target_os = "linux")]
-    pub fn direct_serve_guard(&self) -> Result<File> {
+    pub fn direct_serve_guard(&self) -> Result<OperationLock> {
         let lock = self.lock()?;
         crate::service::require_unregistered(&self.home)?;
         Ok(lock)
@@ -746,18 +910,282 @@ impl Manager {
     }
 
     #[cfg(target_os = "linux")]
+    pub(crate) fn service_prepare_upgrade(
+        &self,
+        version: &str,
+        candidate: &Path,
+        digest: &str,
+        was_running: bool,
+    ) -> Result<Record> {
+        let _lock = self.lock()?;
+        let mut state = self.load()?;
+        ensure!(
+            state.operation.is_none() && state.pending_stage.is_none(),
+            "recover the interrupted operation first"
+        );
+        let from = state.active.clone().context("Agent is not installed")?;
+        self.verify(&from)?;
+        let to = self.stage(&mut state, version, candidate, digest)?;
+        state.owned.push(to.clone());
+        state.operation = Some(Operation {
+            from,
+            to: to.clone(),
+            was_running,
+        });
+        state.pending_stage = None;
+        self.save(&state)?;
+        Ok(to)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn service_prepare_rollback(&self, was_running: bool) -> Result<Record> {
+        let _lock = self.lock()?;
+        let mut state = self.load()?;
+        ensure!(
+            state.operation.is_none() && state.pending_stage.is_none(),
+            "recover the interrupted operation first"
+        );
+        let from = state.active.clone().context("Agent is not installed")?;
+        let to = state.previous.clone().context("no previous version")?;
+        self.verify(&from)?;
+        self.verify(&to)?;
+        state.operation = Some(Operation {
+            from,
+            to: to.clone(),
+            was_running,
+        });
+        self.save(&state)?;
+        Ok(to)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn service_recover_staging(&self) -> Result<()> {
+        let _lock = self.lock()?;
+        let mut state = self.load()?;
+        self.cleanup_pending_stage(&mut state)
+    }
+
+    fn cleanup_pending_stage(&self, state: &mut State) -> Result<()> {
+        if let Some(pending) = state.pending_stage.clone() {
+            ensure!(
+                !state
+                    .owned
+                    .iter()
+                    .any(|record| record.binary == pending.target),
+                "recorded staging target overlaps an installed version"
+            );
+            for name in [&pending.stage, &pending.target] {
+                let path = self.root.join(name);
+                match fs::symlink_metadata(&path) {
+                    Ok(metadata) => {
+                        ensure!(
+                            metadata.file_type().is_file(),
+                            "recorded stage is not a regular file"
+                        );
+                        fs::remove_file(path)?;
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(error.into()),
+                }
+            }
+            state.pending_stage = None;
+            self.save(state)?;
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn service_select(&self, selected: &Record) -> Result<()> {
+        let _lock = self.lock()?;
+        let mut state = self.load()?;
+        ensure!(
+            state.process.is_none(),
+            "stop the service before switching versions"
+        );
+        let operation = state.operation.as_ref().context("no service transaction")?;
+        ensure!(
+            selected == &operation.from || selected == &operation.to,
+            "selected version is outside the recorded transaction"
+        );
+        self.verify(selected)?;
+        state.previous = Some(if selected == &operation.from {
+            operation.to.clone()
+        } else {
+            operation.from.clone()
+        });
+        state.active = Some(selected.clone());
+        self.save(&state)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn service_finish(&self) -> Result<()> {
+        let _lock = self.lock()?;
+        let mut state = self.load()?;
+        ensure!(
+            state.operation.is_some(),
+            "no service transaction to finish"
+        );
+        state.operation = None;
+        self.save(&state)
+    }
+
+    #[cfg(target_os = "linux")]
     pub(crate) fn service_launch(&self) -> Result<(PathBuf, ProcessRecord)> {
         let _lock = self.lock()?;
         let mut state = self.load()?;
         ensure!(
-            state.pending_stage.is_none() && state.operation.is_none(),
-            "recover lifecycle transaction before service startup"
+            state.operation.as_ref().is_none_or(|operation| {
+                state.active.as_ref() == Some(&operation.from)
+                    || state.active.as_ref() == Some(&operation.to)
+            }),
+            "active service version is outside the recorded transaction"
         );
+        // A staged candidate never changes the running version. During a switch,
+        // only the two journaled versions may boot; recovery restores `from`.
         // systemd has reaped the old main process before invoking a new launcher.
         // A reused/live PID is never cleared solely because the endpoint is down.
         self.clear_dead_record(&mut state)?;
-        let (binary, process, _log) = self.prepare_launch(&mut state, std::process::id())?;
+        let next_inst = self.read_next_instance()?;
+        if let Some(inst) = &next_inst {
+            let orphan_log = self.root.join(format!(".launch-{}.log", inst));
+            if orphan_log.exists() {
+                ensure_regular(&orphan_log)?;
+                let _ = fs::remove_file(&orphan_log);
+            }
+        }
+        let (binary, process, _log) = self.prepare_launch_with_instance(
+            &mut state,
+            std::process::id(),
+            next_inst.as_deref(),
+        )?;
+        self.set_next_instance(None)?;
         Ok((binary, process))
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn set_next_instance(&self, instance: Option<&str>) -> Result<()> {
+        let path = self.root.join(".next_instance");
+        match instance {
+            Some(inst) => {
+                let temp = self.root.join(format!(".{}.tmp", crate::token::generate()));
+                let mut file = create_private(&temp)?;
+                let payload = format!("{inst}\n{}", std::process::id());
+                file.write_all(payload.as_bytes())?;
+                file.sync_all()?;
+                drop(file);
+                fs::rename(&temp, &path)?;
+                #[cfg(unix)]
+                File::open(&self.root)?.sync_all()?;
+            }
+            None => {
+                if path.exists() {
+                    let _ = fs::remove_file(&path);
+                    #[cfg(unix)]
+                    let _ = File::open(&self.root).and_then(|f| f.sync_all());
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    fn instance_in_durable_journal(&self, inst: &str) -> bool {
+        let mcp_state_path = self
+            .home
+            .join("mcp-profiles")
+            .join(crate::mcp::profile_lifecycle::STATE_FILE);
+        if mcp_state_path.exists() {
+            if let Ok(content) = fs::read_to_string(&mcp_state_path) {
+                if let Ok(state) =
+                    serde_json::from_str::<crate::mcp::profile_lifecycle::ProfileState>(&content)
+                {
+                    if let Some(journal) = &state.in_progress {
+                        if journal.candidate_daemon_instance.as_deref() == Some(inst)
+                            || journal.compensated_daemon_instance.as_deref() == Some(inst)
+                            || journal.pre_daemon_instance.as_deref() == Some(inst)
+                            || journal
+                                .historical_compensated_instances
+                                .iter()
+                                .any(|h| h.as_str() == inst)
+                        {
+                            return true;
+                        }
+                    }
+                } else if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(in_progress) = val.get("in_progress").filter(|v| !v.is_null()) {
+                        if in_progress
+                            .get("candidate_daemon_instance")
+                            .and_then(|v| v.as_str())
+                            == Some(inst)
+                            || in_progress
+                                .get("compensated_daemon_instance")
+                                .and_then(|v| v.as_str())
+                                == Some(inst)
+                            || in_progress
+                                .get("pre_daemon_instance")
+                                .and_then(|v| v.as_str())
+                                == Some(inst)
+                            || in_progress
+                                .get("historical_compensated_instances")
+                                .and_then(|v| v.as_array())
+                                .is_some_and(|arr| arr.iter().any(|v| v.as_str() == Some(inst)))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn read_next_instance(&self) -> Result<Option<String>> {
+        let path = self.root.join(".next_instance");
+        if !path.exists() {
+            return Ok(None);
+        }
+        let bytes = fs::read(&path)?;
+        let s = String::from_utf8(bytes).context("invalid utf-8 in .next_instance")?;
+        let mut lines = s.lines();
+        let Some(inst) = lines.next().map(|l| l.trim()).filter(|l| !l.is_empty()) else {
+            let _ = fs::remove_file(&path);
+            return Ok(None);
+        };
+
+        // If the instance reservation is backed by a durable in-progress operation journal,
+        // it belongs to an ongoing or interrupted transaction that must be preserved across
+        // caller crashes per AGENTS.md:17-19.
+        if self.instance_in_durable_journal(inst) {
+            return Ok(Some(inst.to_string()));
+        }
+
+        // Verify owning operation process is alive
+        if let Some(pid_str) = lines.next() {
+            if let Ok(owner_pid) = pid_str.trim().parse::<u32>() {
+                if !crate::lifecycle::pid_alive(owner_pid)? {
+                    let _ = fs::remove_file(&path);
+                    return Ok(None);
+                }
+            }
+        }
+        // Verify owning operation lock is held (if operation.lock exists)
+        let svc_root = self.home.join("service");
+        let op_lock_path = svc_root.join("operation.lock");
+        if op_lock_path.exists() {
+            if let Ok(file) = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&op_lock_path)
+            {
+                if file.try_lock().is_ok() {
+                    // Lock was not held by an active operation! Discard orphaned reservation.
+                    let _ = fs::remove_file(&path);
+                    return Ok(None);
+                }
+            }
+        }
+        Ok(Some(inst.to_string()))
     }
 
     #[cfg(target_os = "linux")]
@@ -767,7 +1195,6 @@ impl Manager {
         self.clear_dead_record(&mut state)
     }
 
-    #[cfg(target_os = "linux")]
     fn clear_dead_record(&self, state: &mut State) -> Result<()> {
         if let Some(process) = &state.process {
             ensure!(
@@ -821,7 +1248,7 @@ impl Manager {
         self.verify(state.active.as_ref().context("Agent is not installed")?)
     }
 
-    pub(crate) fn lock(&self) -> Result<File> {
+    pub(crate) fn lock(&self) -> Result<OperationLock> {
         if self.home.exists() {
             ensure_dir(&self.home)?;
         } else {
@@ -851,7 +1278,7 @@ impl Manager {
             .open(path)?;
         file.try_lock()
             .context("another lifecycle operation is in progress")?;
-        Ok(file)
+        Ok(OperationLock::held(file))
     }
 
     fn load(&self) -> Result<State> {
@@ -862,6 +1289,13 @@ impl Manager {
         ensure_regular(&path)?;
         let state: State = serde_json::from_slice(&fs::read(&path)?)
             .with_context(|| format!("invalid {}", path.display()))?;
+        self.validate_state(&state)?;
+        Ok(state)
+    }
+
+    /// Shared structural validation only. No I/O: the read-only doctor
+    /// provides a bounded manifest and the normal lifecycle keeps its API.
+    fn validate_state(&self, state: &State) -> Result<()> {
         for record in [state.active.as_ref(), state.previous.as_ref()]
             .into_iter()
             .flatten()
@@ -892,7 +1326,7 @@ impl Manager {
             validate_stage_name(&pending.stage)?;
             validate_target_name(&pending.target)?;
         }
-        Ok(state)
+        Ok(())
     }
 
     fn save(&self, state: &State) -> Result<()> {
@@ -906,6 +1340,8 @@ impl Manager {
             ensure_regular(&target)?;
         }
         fs::rename(&temp, target)?;
+        #[cfg(unix)]
+        File::open(&self.root)?.sync_all()?;
         Ok(())
     }
 }
@@ -1010,7 +1446,67 @@ fn create_private(path: &Path) -> Result<File> {
     Ok(file)
 }
 
-fn port_occupied(config: &crate::Config) -> bool {
+#[cfg(unix)]
+fn probe_port_in_use(address: std::net::SocketAddr) -> bool {
+    unsafe {
+        let (domain, sa_len) = match address {
+            std::net::SocketAddr::V4(_) => (
+                libc::AF_INET,
+                std::mem::size_of::<libc::sockaddr_in>() as libc::socklen_t,
+            ),
+            std::net::SocketAddr::V6(_) => (
+                libc::AF_INET6,
+                std::mem::size_of::<libc::sockaddr_in6>() as libc::socklen_t,
+            ),
+        };
+        let fd = libc::socket(domain, libc::SOCK_STREAM, 0);
+        if fd < 0 {
+            return false;
+        }
+        let optval: libc::c_int = 1;
+        libc::setsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            libc::SO_REUSEADDR,
+            &optval as *const _ as *const libc::c_void,
+            std::mem::size_of_val(&optval) as libc::socklen_t,
+        );
+
+        let bind_res = match address {
+            std::net::SocketAddr::V4(v4) => {
+                let mut sin: libc::sockaddr_in = std::mem::zeroed();
+                sin.sin_family = libc::AF_INET as libc::sa_family_t;
+                sin.sin_port = v4.port().to_be();
+                sin.sin_addr.s_addr = u32::from_ne_bytes(v4.ip().octets());
+                libc::bind(fd, &sin as *const _ as *const libc::sockaddr, sa_len)
+            }
+            std::net::SocketAddr::V6(v6) => {
+                let mut sin6: libc::sockaddr_in6 = std::mem::zeroed();
+                sin6.sin6_family = libc::AF_INET6 as libc::sa_family_t;
+                sin6.sin6_port = v6.port().to_be();
+                sin6.sin6_addr.s6_addr = v6.ip().octets();
+                libc::bind(fd, &sin6 as *const _ as *const libc::sockaddr, sa_len)
+            }
+        };
+        let err = if bind_res != 0 {
+            std::io::Error::last_os_error().raw_os_error()
+        } else {
+            None
+        };
+        libc::close(fd);
+        err == Some(libc::EADDRINUSE)
+    }
+}
+
+#[cfg(not(unix))]
+fn probe_port_in_use(address: std::net::SocketAddr) -> bool {
+    matches!(
+        std::net::TcpListener::bind(address),
+        Err(e) if e.kind() == std::io::ErrorKind::AddrInUse
+    )
+}
+
+pub(crate) fn port_occupied(config: &crate::Config) -> bool {
     use std::net::ToSocketAddrs;
     config
         .socket_address()
@@ -1019,6 +1515,7 @@ fn port_occupied(config: &crate::Config) -> bool {
         .is_some_and(|addresses| {
             addresses.into_iter().any(|address| {
                 std::net::TcpStream::connect_timeout(&address, Duration::from_millis(200)).is_ok()
+                    || probe_port_in_use(address)
             })
         })
 }
@@ -1057,6 +1554,106 @@ pub(crate) fn pid_alive(pid: u32) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn service_switch_is_journaled_and_staging_failure_keeps_active_version() {
+        let temp = tempfile::tempdir().unwrap();
+        let manager = Manager::new(temp.path());
+        let binary = temp.path().join("candidate");
+        fs::write(&binary, b"synthetic executable").unwrap();
+        let digest = sha256_file(&binary).unwrap();
+        let original = manager.install("one", &binary, &digest).unwrap();
+        assert!(manager
+            .service_prepare_upgrade("bad", &binary, &"0".repeat(64), true)
+            .is_err());
+        let (state, _) = manager.service_snapshot().unwrap();
+        assert_eq!(state.active, Some(original.clone()));
+        assert!(state.pending_stage.is_none() && state.operation.is_none());
+        let target = manager
+            .service_prepare_upgrade("two", &binary, &digest, true)
+            .unwrap();
+        let (state, _) = manager.service_snapshot().unwrap();
+        assert_eq!(state.active, Some(original.clone()));
+        let operation = state.operation.unwrap();
+        assert_eq!(operation.from, original);
+        assert_eq!(operation.to, target);
+        assert!(operation.was_running);
+        // The coordinator releases the state lock before starting systemd.
+        drop(manager.lock().unwrap());
+        assert!(manager
+            .service_prepare_upgrade("three", &binary, &digest, false)
+            .is_err());
+        let foreign = Record {
+            version: "foreign".into(),
+            binary: "agentfw-foreign".into(),
+            digest,
+        };
+        assert!(manager.service_select(&foreign).is_err());
+        manager.service_select(&target).unwrap();
+        manager.service_select(&original).unwrap();
+        manager.service_finish().unwrap();
+        let (state, _) = manager.service_snapshot().unwrap();
+        assert_eq!(state.active, Some(original));
+        assert_eq!(state.previous, Some(target));
+        assert!(state.operation.is_none());
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn stopped_service_rollback_and_interrupted_stage_keep_running_intent() {
+        let temp = tempfile::tempdir().unwrap();
+        let manager = Manager::new(temp.path());
+        let candidate = temp.path().join("candidate");
+        fs::write(&candidate, b"synthetic executable").unwrap();
+        let digest = sha256_file(&candidate).unwrap();
+        let first = manager.install("one", &candidate, &digest).unwrap();
+        let second = manager
+            .service_prepare_upgrade("two", &candidate, &digest, false)
+            .unwrap();
+        manager.service_select(&second).unwrap();
+        manager.service_finish().unwrap();
+        assert_eq!(manager.service_prepare_rollback(false).unwrap(), first);
+        assert!(!manager.load().unwrap().operation.unwrap().was_running);
+        manager.service_select(&first).unwrap();
+        manager.service_finish().unwrap();
+        let lock = manager.lock().unwrap();
+        let mut state = manager.load().unwrap();
+        let stage = format!(".{}.stage", crate::token::generate());
+        fs::write(manager.root.join(&stage), b"partial").unwrap();
+        state.pending_stage = Some(PendingStage {
+            stage: stage.clone(),
+            target: "agentfw-incomplete".into(),
+        });
+        manager.save(&state).unwrap();
+        drop(lock);
+        manager.service_recover_staging().unwrap();
+        assert!(!manager.root.join(stage).exists());
+        let state = manager.load().unwrap();
+        assert_eq!(state.active, Some(first));
+        assert!(state.process.is_none() && state.pending_stage.is_none());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn operation_owner_release_is_not_prolonged_by_an_inherited_descriptor() {
+        let temp = tempfile::tempdir().unwrap();
+        let manager = Manager::new(temp.path());
+        let owner = manager.lock().unwrap();
+        let inherited = owner.0.try_clone().unwrap();
+        assert!(manager.lock().is_err(), "live owner must remain exclusive");
+        drop(owner);
+        let replacement = manager
+            .lock()
+            .expect("an unrelated inherited descriptor must not retain ownership");
+        assert!(
+            manager.lock().is_err(),
+            "replacement must own the same exclusive lock"
+        );
+        drop(replacement);
+        drop(inherited);
+        manager.lock().unwrap();
+    }
 
     #[test]
     fn managed_identity_requires_every_field() {
@@ -1128,5 +1725,101 @@ mod tests {
         assert!(pid_alive(1).unwrap());
         assert!(pid_alive(u32::MAX).is_err());
         assert!(!pid_alive(0).unwrap());
+    }
+
+    #[test]
+    fn prepare_launch_with_instance_reconciles_orphan_log_on_retry() {
+        let temp = tempfile::tempdir().unwrap();
+        let manager = Manager::new(temp.path());
+        let _lock = manager.lock().unwrap();
+        let instance = crate::token::generate();
+
+        let version = "1.0.0";
+        let expected_bin = format!("agentfw-{version}{}", std::env::consts::EXE_SUFFIX);
+        let binary_path = manager.root.join(&expected_bin);
+        fs::create_dir_all(binary_path.parent().unwrap()).unwrap();
+        fs::write(&binary_path, b"test-binary-content").unwrap();
+        let digest = sha256_file(&binary_path).unwrap();
+
+        let mut state = State::default();
+        let active = Record {
+            version: version.into(),
+            digest,
+            binary: expected_bin,
+        };
+        state.active = Some(active.clone());
+        state.owned.push(active);
+
+        // Write a minimal config.yaml in home
+        fs::write(temp.path().join("config.yaml"), b"port: 9876\n").unwrap();
+
+        // Pre-create an orphan launch log
+        let orphan_log = manager.root.join(format!(".launch-{instance}.log"));
+        fs::write(&orphan_log, b"abandoned log\n").unwrap();
+        assert!(orphan_log.exists());
+
+        // Prepare launch with the same instance should reconcile and succeed
+        let res =
+            manager.prepare_launch_with_instance(&mut state, std::process::id(), Some(&instance));
+        assert!(
+            res.is_ok(),
+            "failed to prepare launch with orphan log: {:?}",
+            res.err()
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn read_next_instance_preserves_journaled_instance_across_caller_death() {
+        let temp = tempfile::tempdir().unwrap();
+        let manager = Manager::new(temp.path());
+        let _ = fs::create_dir_all(&manager.root);
+        let mcp_dir = temp.path().join("mcp-profiles");
+        let _ = fs::create_dir_all(&mcp_dir);
+
+        let candidate_inst = crate::token::generate();
+
+        // 1. Unjournaled next_instance with dead PID is discarded
+        let next_inst_path = manager.root.join(".next_instance");
+        fs::write(&next_inst_path, format!("{candidate_inst}\n99999999\n")).unwrap();
+        let res = manager.read_next_instance().unwrap();
+        assert_eq!(res, None);
+        assert!(
+            !next_inst_path.exists(),
+            "orphaned reservation must be removed"
+        );
+
+        // 2. Journaled next_instance written by ProfileManager::save_state() is preserved
+        // even when PID is dead and lock is not held
+        let profile_mgr = crate::mcp::profile_lifecycle::ProfileManager::new(temp.path());
+        let profile_state = crate::mcp::profile_lifecycle::ProfileState {
+            generation: 1,
+            in_progress: Some(crate::mcp::profile_lifecycle::OperationJournal {
+                operation_id: "op-crash-window".into(),
+                kind: crate::mcp::profile_lifecycle::OperationKind::Install,
+                phase: crate::mcp::profile_lifecycle::OperationPhase::DaemonRestarting,
+                reserved_generation: 1,
+                source_bundle_sha256: None,
+                target_bundle_sha256: "0".repeat(64),
+                pre_operation_config: None,
+                pre_operation_config_digest: None,
+                target_config_digest: "1".repeat(64),
+                was_daemon_running: true,
+                pre_daemon_instance: Some("inst-pre".into()),
+                pre_daemon_config_digest: None,
+                candidate_daemon_instance: Some(candidate_inst.clone()),
+                compensated_daemon_instance: None,
+                historical_compensated_instances: Vec::new(),
+                started_at_utc: "2026-10-18T00:00:00Z".into(),
+                config_written: true,
+                displaced_config_path: None,
+            }),
+            ..Default::default()
+        };
+        profile_mgr.save_state(&profile_state).unwrap();
+
+        fs::write(&next_inst_path, format!("{candidate_inst}\n99999999\n")).unwrap();
+        let res = manager.read_next_instance().unwrap();
+        assert_eq!(res, Some(candidate_inst));
     }
 }

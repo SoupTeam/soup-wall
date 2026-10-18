@@ -2,21 +2,7 @@ name: Native Windows MCP file creation
 
 on:
   pull_request:
-    paths:
-      - 'crates/agentfw/**'
-      - 'crates/agent/**'
-      - 'crates/adapter/**'
-      - 'rule_baseline/**'
-      - 'scripts/verify-sou60-windows-create.py'
-      - 'scripts/ci-windows-create.ps1'
-      - 'scripts/print-sou60-ci-diagnostics.py'
-      - 'scripts/verify-sou54-create-file.py'
-      - 'scripts/verify-sou58-windows-read.py'
-      - 'scripts/fixtures/mcp_windows_read_probe_server.py'
-      - 'scripts/fixtures/mcp_windows_create_probe_server.py'
-      - 'scripts/tests/test_sou60_windows_create.py'
-      - '.github/workflows/mcp-windows-create.yml'
-      - 'Cargo.lock'
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:
@@ -27,14 +13,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: mcp-windows-create.yml
   native-windows-standard-user:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-windows-standard-user')
     runs-on: windows-2022
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@stable
@@ -97,13 +89,15 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
   linux-read-create-https-regressions:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-read-create-https-regressions')
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@stable
