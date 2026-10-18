@@ -5712,6 +5712,7 @@ default: allow
     );
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn sou88_resource_classifier_unknown_ambiguous_ineligible() {
     use agentfw::native::resource::{
@@ -5752,6 +5753,7 @@ else:
         ),
     )
     .unwrap();
+    let classifier_digest = sha(&std::fs::read(&script).unwrap());
     let selection = format!("script:{}", script.display());
 
     const ASK_CREATE_POLICY: &str = "agent_policies:
@@ -5807,7 +5809,7 @@ default: allow
                     "workspace": canonical_dir,
                     "cwd": canonical_dir,
                     "executor_sha256": create_file_executor_sha256(),
-                    "classifier_sha256": "c".repeat(64),
+                    "classifier_sha256": classifier_digest,
                     "binding": {
                         "contract_version": "sw-native/binding/1",
                         "operation": "create_file",
