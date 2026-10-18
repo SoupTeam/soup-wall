@@ -71,6 +71,44 @@ pub enum Command {
         #[arg(long)]
         out: PathBuf,
     },
+    /// Preview an upgrade or rollback and obtain exact-input approval.
+    Preview {
+        #[arg(long, conflicts_with = "revision")]
+        profile: Option<PathBuf>,
+        #[arg(long)]
+        revision: Option<String>,
+    },
+    /// Transactionally install a compiled MCP profile into active configuration.
+    Install {
+        #[arg(long)]
+        profile: PathBuf,
+        #[arg(long)]
+        expected_bundle_sha: Option<String>,
+    },
+    /// Transactionally upgrade the active MCP profile with fresh generation authority.
+    Upgrade {
+        #[arg(long)]
+        profile: PathBuf,
+        #[arg(long)]
+        expected_bundle_sha: Option<String>,
+        #[arg(long)]
+        expect_generation: Option<u64>,
+        #[arg(long)]
+        accept_diff: Option<String>,
+    },
+    /// Transactionally rollback to a previous MCP profile revision.
+    Rollback {
+        #[arg(long)]
+        revision: Option<String>,
+        #[arg(long)]
+        expect_generation: Option<u64>,
+        #[arg(long)]
+        accept_diff: Option<String>,
+    },
+    /// Inspect active and installed MCP profiles and daemon binding.
+    Status,
+    /// Recover from an interrupted or crashed profile lifecycle transaction.
+    Recover,
 }
 
 #[derive(Deserialize)]
@@ -130,31 +168,41 @@ enum Authority {
     },
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Profile {
-    format: String,
-    server_id: String,
-    server_version: String,
-    snapshot_sha256: String,
-    declaration_sha256: String,
-    registry_sha256: String,
-    tools: BTreeMap<String, ProfileTool>,
-    limits: Vec<String>,
+pub(crate) struct Profile {
+    pub(crate) format: String,
+    pub(crate) server_id: String,
+    pub(crate) server_version: String,
+    pub(crate) snapshot_sha256: String,
+    pub(crate) declaration_sha256: String,
+    pub(crate) registry_sha256: String,
+    pub(crate) tools: BTreeMap<String, ProfileTool>,
+    pub(crate) limits: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct ProfileTool {
-    schema_sha256: String,
-    definition_sha256: String,
-    action_class: String,
-    result_provenance: String,
-    authority_sha256: String,
-    review_sha256: String,
-    workspace: Option<PathBuf>,
-    scoped_resources: Vec<Resource>,
-    egress_selectors: Vec<Value>,
+pub(crate) struct ProfileTool {
+    pub(crate) schema_sha256: String,
+    pub(crate) definition_sha256: String,
+    pub(crate) action_class: String,
+    pub(crate) result_provenance: String,
+    pub(crate) authority_sha256: String,
+    pub(crate) review_sha256: String,
+    pub(crate) workspace: Option<PathBuf>,
+    pub(crate) scoped_resources: Vec<Resource>,
+    pub(crate) egress_selectors: Vec<Value>,
+}
+
+pub(crate) fn parse_profile_bytes(raw: &[u8]) -> Result<Profile> {
+    let v = strict(raw)?;
+    let profile: Profile = serde_json::from_value(v)?;
+    ensure!(
+        profile.format == OUTPUT_FORMAT,
+        "unsupported profile format: expected {OUTPUT_FORMAT}"
+    );
+    Ok(profile)
 }
 
 struct Prepared {
@@ -178,7 +226,7 @@ fn canonical(value: &Value) -> Value {
         other => other.clone(),
     }
 }
-fn digest(value: &Value) -> String {
+pub fn digest(value: &Value) -> String {
     sha(canonical(value).to_string().as_bytes())
 }
 
@@ -621,6 +669,43 @@ fn prepare(snapshot_path: &Path, declaration_path: &Path) -> Result<Prepared> {
         declaration_document,
     })
 }
+/// Rebuild authority from the reviewed source documents, never from manifest claims.
+pub(crate) fn verify_compiled_bundle(dir: &Path) -> Result<()> {
+    let prepared = prepare(
+        &dir.join("source-snapshot.json"),
+        &dir.join("operator-declarations.json"),
+    )?;
+    ensure!(
+        prepared.profile.tools.len()
+            == prepared.source_snapshot["tools"]
+                .as_array()
+                .context("source tool inventory missing")?
+                .len(),
+        "partial reviewed inventory is unsupported"
+    );
+    let actual = strict(&read_file(&dir.join("profile.json"))?)?;
+    ensure!(
+        actual == serde_json::to_value(&prepared.profile)?,
+        "compiled profile differs from reviewed source authority"
+    );
+    ensure!(
+        strict(&read_file(&dir.join("registry.json"))?)? == strict(&prepared.registry)?,
+        "compiled registry differs from reviewed source authority"
+    );
+    let profiles = serde_json::to_value(
+        prepared
+            .policies
+            .iter()
+            .map(|p| &p.profile)
+            .collect::<Vec<_>>(),
+    )?;
+    ensure!(
+        strict(&read_file(&dir.join("resource-profiles.json"))?)? == profiles,
+        "resource profiles differ from reviewed source authority"
+    );
+    Ok(())
+}
+
 fn validate_example(prepared: &Prepared, raw: &[u8]) -> Result<Value> {
     let example = strict(raw)?;
     ensure!(
@@ -747,7 +832,46 @@ fn publish_dir(out: &Path, files: &[(&str, Vec<u8>)]) -> Result<()> {
         anyhow::bail!("private atomic profile publication currently requires Linux")
     }
 }
-pub fn run(cmd: Command) -> Result<()> {
+/// Compile reviewed inert bundle bytes without publishing or modifying host state.
+pub fn compiled_bundle_files(
+    snapshot: &Path,
+    declarations: &Path,
+    out: &Path,
+) -> Result<Vec<(&'static str, Vec<u8>)>> {
+    let p = prepare(snapshot, declarations)?;
+    // Current native collector pins the *complete* tools/list. A partial
+    // registry would fail the manifest coverage handshake and cannot be
+    // described as an installed, enforcing profile.
+    ensure!(p.profile.tools.len() == p.source_snapshot["tools"].as_array()
+                .context("source tool inventory missing")?.len(),
+                "the production collector requires a reviewed declaration for every original tool; partial registry is unsupported");
+    let profile = json_bytes(&serde_json::to_value(&p.profile)?)?;
+    // Complete typed, inert Agent config fragment. Registry path names the
+    // FINAL no-clobber directory, not temporary publication staging.
+    let native = crate::config::NativeCfg {
+        registry_path: out.join("registry.json"),
+        registry_sha256: p.profile.registry_sha256.clone(),
+        approval: None,
+    };
+    let native_config = json_bytes(&json!({"native":native}))?;
+    let policies = json_bytes(&serde_json::to_value(
+        p.policies.iter().map(|p| &p.profile).collect::<Vec<_>>(),
+    )?)?;
+    let source_snapshot = json_bytes(&p.source_snapshot)?;
+    let declaration_document = json_bytes(&p.declaration_document)?;
+    Ok(vec![
+        ("registry.json", p.registry),
+        ("native-config.json", native_config),
+        ("resource-profiles.json", policies),
+        ("source-snapshot.json", source_snapshot),
+        ("operator-declarations.json", declaration_document),
+        ("profile.json", profile),
+    ])
+}
+
+pub fn run(cmd: Command, home: &Path) -> Result<()> {
+    ensure!(cfg!(target_os = "linux") || !matches!(&cmd, Command::Upgrade { .. } | Command::Rollback { .. }),
+        "MCP profile upgrade and rollback require Linux; macOS and Windows transitions are unsupported");
     match cmd {
         Command::Import {
             snapshot,
@@ -792,131 +916,181 @@ pub fn run(cmd: Command) -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&p.profile)?);
         }
         Command::Diff { old, new } => {
-            let read = |p: PathBuf| -> Result<Profile> {
-                let v = strict(&read_file(&p)?)?;
-                let profile: Profile = serde_json::from_value(v)?;
-                ensure!(
-                    profile.format == OUTPUT_FORMAT,
-                    "unsupported profile format"
-                );
-                Ok(profile)
-            };
-            let a = read(old)?;
-            let b = read(new)?;
-            let mut additions = Vec::new();
-            let mut removals = Vec::new();
-            let mut changes = Vec::new();
-            for name in b.tools.keys() {
-                if !a.tools.contains_key(name) {
-                    additions.push(name.clone())
-                }
-            }
-            for name in a.tools.keys() {
-                if !b.tools.contains_key(name) {
-                    removals.push(name.clone())
-                }
-            }
-            for (name, new_tool) in &b.tools {
-                if let Some(old_tool) = a.tools.get(name) {
-                    let fields = [
-                        ("schema", old_tool.schema_sha256 != new_tool.schema_sha256),
-                        (
-                            "definition",
-                            old_tool.definition_sha256 != new_tool.definition_sha256,
-                        ),
-                        ("action", old_tool.action_class != new_tool.action_class),
-                        (
-                            "provenance",
-                            old_tool.result_provenance != new_tool.result_provenance,
-                        ),
-                        (
-                            "authority",
-                            old_tool.authority_sha256 != new_tool.authority_sha256,
-                        ),
-                        ("workspace", old_tool.workspace != new_tool.workspace),
-                        (
-                            "resources",
-                            old_tool.scoped_resources != new_tool.scoped_resources,
-                        ),
-                        (
-                            "egress",
-                            old_tool.egress_selectors != new_tool.egress_selectors,
-                        ),
-                        (
-                            "operator_review",
-                            old_tool.review_sha256 != new_tool.review_sha256,
-                        ),
-                    ]
-                    .into_iter()
-                    .filter_map(|(k, c)| c.then_some(k))
-                    .collect::<Vec<_>>();
-                    if !fields.is_empty() {
-                        changes.push(json!({"tool":name,"fields":fields,"requires_review":true,
-                            "prior_workspace":old_tool.workspace,"next_workspace":new_tool.workspace,
-                            "prior_resources":old_tool.scoped_resources,"next_resources":new_tool.scoped_resources,
-                            "prior_egress":old_tool.egress_selectors,"next_egress":new_tool.egress_selectors}))
-                    }
-                }
-            }
-            let drift = a.snapshot_sha256 != b.snapshot_sha256
-                || a.server_id != b.server_id
-                || a.server_version != b.server_version;
-            // Even a description/review change needs explicit operator review.
-            // Never call a changed discovery/authority profile compatible.
-            let broader = !additions.is_empty() || !changes.is_empty();
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json!({"format":"sw-mcp/operator-diff/1",
-                "added":additions,"removed":removals,"changed":changes,
-                "discovery_drift":drift,"authority_change_requires_review":broader,
-                "compatible_without_review":!drift&&!broader&&removals.is_empty()&&changes.is_empty()}))?
-            );
+            let summary = compute_profile_diff(&old, &new)?;
+            println!("{}", serde_json::to_string_pretty(&summary)?);
         }
         Command::Compile {
             snapshot,
             declarations,
             out,
         } => {
-            let p = prepare(&snapshot, &declarations)?;
-            // Current native collector pins the *complete* tools/list. A partial
-            // registry would fail the manifest coverage handshake and cannot be
-            // described as an installed, enforcing profile.
-            ensure!(p.profile.tools.len() == p.source_snapshot["tools"].as_array()
-                .context("source tool inventory missing")?.len(),
-                "the production collector requires a reviewed declaration for every original tool; partial registry is unsupported");
-            let profile = json_bytes(&serde_json::to_value(&p.profile)?)?;
-            // Complete typed, inert Agent config fragment. Registry path names the
-            // FINAL no-clobber directory, not temporary publication staging.
-            let native = crate::config::NativeCfg {
-                registry_path: out.join("registry.json"),
-                registry_sha256: p.profile.registry_sha256.clone(),
-                approval: None,
-            };
-            let native_config = json_bytes(&json!({"native":native}))?;
-            let policies = json_bytes(&serde_json::to_value(
-                p.policies.iter().map(|p| &p.profile).collect::<Vec<_>>(),
-            )?)?;
-            let source_snapshot = json_bytes(&p.source_snapshot)?;
-            let declaration_document = json_bytes(&p.declaration_document)?;
-            publish_dir(
-                &out,
-                &[
-                    ("registry.json", p.registry),
-                    ("native-config.json", native_config),
-                    ("resource-profiles.json", policies),
-                    ("source-snapshot.json", source_snapshot),
-                    ("operator-declarations.json", declaration_document),
-                    ("profile.json", profile),
-                ],
+            let files = compiled_bundle_files(&snapshot, &declarations, &out)?;
+            let profile: Value = serde_json::from_slice(
+                &files
+                    .iter()
+                    .find(|(name, _)| *name == "profile.json")
+                    .context("profile output missing")?
+                    .1,
             )?;
+            publish_dir(&out, &files)?;
             println!(
                 "{}",
                 json!({"status":"compiled-not-installed","path":out,
-                "registry_sha256":p.profile.registry_sha256,"admitted_tools":p.profile.tools.len()})
+                "registry_sha256":profile["registry_sha256"],"admitted_tools":profile["tools"].as_object().map_or(0, |tools| tools.len())})
             );
+        }
+        Command::Preview { profile, revision } => {
+            let manager = crate::mcp::profile_lifecycle::ProfileManager::new(home);
+            let preview = match profile {
+                Some(path) => manager.preview_upgrade(&path)?,
+                None => manager.preview_rollback(revision.as_deref())?,
+            };
+            println!("{}", serde_json::to_string_pretty(&preview)?);
+        }
+        Command::Install {
+            profile,
+            expected_bundle_sha,
+        } => {
+            let manager = crate::mcp::profile_lifecycle::ProfileManager::new(home);
+            let record = manager.install(&profile, expected_bundle_sha.as_deref())?;
+            println!("{}", serde_json::to_string_pretty(&record)?);
+        }
+        Command::Upgrade {
+            profile,
+            expected_bundle_sha,
+            expect_generation,
+            accept_diff,
+        } => {
+            let manager = crate::mcp::profile_lifecycle::ProfileManager::new(home);
+            let record = manager.upgrade(
+                &profile,
+                expected_bundle_sha.as_deref(),
+                expect_generation,
+                accept_diff.as_deref(),
+            )?;
+            println!("{}", serde_json::to_string_pretty(&record)?);
+        }
+        Command::Rollback {
+            revision,
+            expect_generation,
+            accept_diff,
+        } => {
+            let manager = crate::mcp::profile_lifecycle::ProfileManager::new(home);
+            let record = manager.rollback(
+                revision.as_deref(),
+                expect_generation,
+                accept_diff.as_deref(),
+            )?;
+            println!("{}", serde_json::to_string_pretty(&record)?);
+        }
+        Command::Status => {
+            let manager = crate::mcp::profile_lifecycle::ProfileManager::new(home);
+            let status = manager.status()?;
+            println!("{}", serde_json::to_string_pretty(&status)?);
+        }
+        Command::Recover => {
+            let manager = crate::mcp::profile_lifecycle::ProfileManager::new(home);
+            manager.recover()?;
+            println!("{}", json!({"status": "recovered"}));
         }
     }
     Ok(())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProfileDiffSummary {
+    pub format: String,
+    pub added: Vec<String>,
+    pub removed: Vec<String>,
+    pub changed: Vec<Value>,
+    pub discovery_drift: bool,
+    pub authority_change_requires_review: bool,
+    pub compatible_without_review: bool,
+}
+
+pub fn compute_profile_diff(old_path: &Path, new_path: &Path) -> Result<ProfileDiffSummary> {
+    let resolve = |p: &Path| -> PathBuf {
+        if p.is_dir() {
+            p.join("profile.json")
+        } else {
+            p.to_path_buf()
+        }
+    };
+    let read = |p: &Path| -> Result<Profile> {
+        let actual = resolve(p);
+        parse_profile_bytes(&read_file(&actual)?)
+    };
+    let a = read(old_path)?;
+    let b = read(new_path)?;
+    let mut additions = Vec::new();
+    let mut removals = Vec::new();
+    let mut changes = Vec::new();
+    for name in b.tools.keys() {
+        if !a.tools.contains_key(name) {
+            additions.push(name.clone())
+        }
+    }
+    for name in a.tools.keys() {
+        if !b.tools.contains_key(name) {
+            removals.push(name.clone())
+        }
+    }
+    for (name, new_tool) in &b.tools {
+        if let Some(old_tool) = a.tools.get(name) {
+            let fields = [
+                ("schema", old_tool.schema_sha256 != new_tool.schema_sha256),
+                (
+                    "definition",
+                    old_tool.definition_sha256 != new_tool.definition_sha256,
+                ),
+                ("action", old_tool.action_class != new_tool.action_class),
+                (
+                    "provenance",
+                    old_tool.result_provenance != new_tool.result_provenance,
+                ),
+                (
+                    "authority",
+                    old_tool.authority_sha256 != new_tool.authority_sha256,
+                ),
+                ("workspace", old_tool.workspace != new_tool.workspace),
+                (
+                    "resources",
+                    old_tool.scoped_resources != new_tool.scoped_resources,
+                ),
+                (
+                    "egress",
+                    old_tool.egress_selectors != new_tool.egress_selectors,
+                ),
+                (
+                    "operator_review",
+                    old_tool.review_sha256 != new_tool.review_sha256,
+                ),
+            ]
+            .into_iter()
+            .filter_map(|(k, c)| c.then_some(k))
+            .collect::<Vec<_>>();
+            if !fields.is_empty() {
+                changes.push(json!({"tool":name,"fields":fields,"requires_review":true,
+                    "prior_workspace":old_tool.workspace,"next_workspace":new_tool.workspace,
+                    "prior_resources":old_tool.scoped_resources,"next_resources":new_tool.scoped_resources,
+                    "prior_egress":old_tool.egress_selectors,"next_egress":new_tool.egress_selectors}))
+            }
+        }
+    }
+    let drift = a.snapshot_sha256 != b.snapshot_sha256
+        || a.server_id != b.server_id
+        || a.server_version != b.server_version;
+    let broader = !additions.is_empty() || !changes.is_empty();
+    Ok(ProfileDiffSummary {
+        format: "sw-mcp/operator-diff/1".to_string(),
+        added: additions,
+        removed: removals.clone(),
+        changed: changes.clone(),
+        discovery_drift: drift,
+        authority_change_requires_review: broader,
+        compatible_without_review: !drift && !broader && removals.is_empty() && changes.is_empty(),
+    })
 }
 
 #[cfg(test)]
@@ -941,5 +1115,12 @@ mod tests {
         for name in ["create_file", "https_get"] {
             assert!(policy_for("owned", name, &"0".repeat(64), &Authority::ReadOnly).is_err());
         }
+    }
+    #[test]
+    fn run_dispatches_lifecycle_status_and_recover() {
+        let temp = tempfile::tempdir().unwrap();
+        let home = temp.path().canonicalize().unwrap();
+        assert!(run(Command::Status, &home).is_ok());
+        assert!(run(Command::Recover, &home).is_ok());
     }
 }

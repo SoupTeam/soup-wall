@@ -24,7 +24,7 @@ use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use subtle::ConstantTimeEq;
 
@@ -343,6 +343,7 @@ impl GrantLedger {
         // It invalidates an already-deserialized grant after a policy switch.
         let home = self.path.parent().ok_or(GrantError::StalePolicy)?;
         let epoch = PolicyEpochLock::acquire(home).map_err(|_| GrantError::StalePolicy)?;
+        require_stable_profile(home).map_err(|_| GrantError::StalePolicy)?;
         if grant.policy_epoch != epoch.epoch {
             return Err(GrantError::StalePolicy);
         }
@@ -374,6 +375,45 @@ impl GrantLedger {
 /// mechanism that still works when the daemon is not running.
 pub struct GrantStore {
     dir: std::path::PathBuf,
+}
+
+fn require_stable_profile(home: &Path) -> io::Result<()> {
+    match fs::symlink_metadata(home.join("mcp-profiles/connection-transition.json")) {
+        Ok(_) => return Err(io::Error::other("profile transition is pending")),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => (),
+        Err(error) => return Err(error),
+    }
+    let path = home.join("mcp-profiles/profile-state.json");
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    let file = match options.open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error),
+    };
+    if !file.metadata()?.is_file() {
+        return Err(io::Error::other("profile state unavailable"));
+    }
+    let mut bytes = Vec::new();
+    std::io::Read::take(file, 10 * 1024 * 1024 + 1).read_to_end(&mut bytes)?;
+    if bytes.len() > 10 * 1024 * 1024 {
+        return Err(io::Error::other("profile state exceeds bound"));
+    }
+    #[derive(serde::Deserialize)]
+    struct State {
+        in_progress: Option<serde_json::Value>,
+    }
+    let state: State = serde_json::from_slice(&bytes)
+        .map_err(|_| io::Error::other("profile state unavailable"))?;
+    if state.in_progress.is_some() {
+        return Err(io::Error::other("profile transition is pending"));
+    }
+    Ok(())
 }
 
 impl GrantStore {
@@ -420,6 +460,7 @@ impl GrantStore {
         nonce: String,
     ) -> io::Result<(Grant, PathBuf)> {
         let epoch = PolicyEpochLock::acquire(self.home())?;
+        require_stable_profile(self.home())?;
         let grant = mint_with_epoch(key, action, issued_at_ms, ttl_ms, nonce, epoch.epoch);
         let path = self.write_unlocked(&grant)?;
         Ok((grant, path))
@@ -436,6 +477,7 @@ impl GrantStore {
 
     pub fn write(&self, grant: &Grant) -> io::Result<PathBuf> {
         let epoch = PolicyEpochLock::acquire(self.home())?;
+        require_stable_profile(self.home())?;
         if grant.policy_epoch != epoch.epoch {
             return Err(io::Error::other("obsolete approval generation"));
         }
@@ -960,5 +1002,69 @@ mod tests {
             left.signature, right.signature,
             "concatenation without length prefixes would collide here"
         );
+    }
+    #[test]
+    fn pending_profile_blocks_issuance_and_redeem_and_commit_retires_old_grants() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = GrantStore::new(&temp.path().join("grants"));
+        let ledger = GrantLedger::open(&temp.path().join("grants-spent.json"));
+        let (grant, _) = store
+            .issue(
+                KEY,
+                &action(),
+                NOW,
+                DEFAULT_TTL_MS,
+                crate::token::generate(),
+            )
+            .unwrap();
+        let root = temp.path().join("mcp-profiles");
+        fs::create_dir(&root).unwrap();
+        let guard = root.join("connection-transition.json");
+        fs::write(&guard, "operation").unwrap();
+        assert!(store
+            .issue(
+                KEY,
+                &action(),
+                NOW,
+                DEFAULT_TTL_MS,
+                crate::token::generate()
+            )
+            .is_err());
+        assert_eq!(
+            redeem(KEY, &grant, &action(), NOW + 1, &ledger),
+            Err(GrantError::StalePolicy)
+        );
+        // An interrupted transition still permits epoch retirement by recovery.
+        store.invalidate_all_for_policy_switch().unwrap();
+        fs::remove_file(guard).unwrap();
+        assert_eq!(
+            redeem(KEY, &grant, &action(), NOW + 1, &ledger),
+            Err(GrantError::StalePolicy)
+        );
+        fs::write(
+            root.join("profile-state.json"),
+            br#"{"in_progress":{"phase":"prepared"}}"#,
+        )
+        .unwrap();
+        assert!(store
+            .issue(
+                KEY,
+                &action(),
+                NOW,
+                DEFAULT_TTL_MS,
+                crate::token::generate()
+            )
+            .is_err());
+        fs::write(root.join("profile-state.json"), br#"{"in_progress":null}"#).unwrap();
+        let (fresh, _) = store
+            .issue(
+                KEY,
+                &action(),
+                NOW,
+                DEFAULT_TTL_MS,
+                crate::token::generate(),
+            )
+            .unwrap();
+        assert_eq!(redeem(KEY, &fresh, &action(), NOW + 1, &ledger), Ok(()));
     }
 }

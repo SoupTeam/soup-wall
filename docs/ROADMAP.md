@@ -257,6 +257,15 @@ send that never reaches the MCP child or receiver, and fail-closed daemon loss, 
 versioned report. It uses scripted client frames, so host and model coverage and the
 other readiness items above remain open.
 
+The owned Linux MCP profile transition workflow
+([`agentfw mcp-connection profile`](operations/MCP_PROFILE_LIFECYCLE.md), SOU-78)
+combines exact reviewed-profile approval, retained host publication, generation-checked
+launchers and current-instance authority with authenticated risk checkpoints. Its
+production-path exercise uses scripted stdio frames and disposable homes; it does
+not attest a paid/live model, an already running host reload, Windows/macOS upgrades
+or whole-Phase readiness. Exact-source results and remaining verification status are
+recorded in [SOU-78 evidence](operations/evidence/sou-78-evidence.md).
+
 ### Phase 6 — Complete team rollout and operational validation
 
 **Depends on:** Phases 1–5 and selected deployment/identity environments.

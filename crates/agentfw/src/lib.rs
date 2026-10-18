@@ -78,12 +78,20 @@ pub fn app_with_diagnostics(
             post(native::handler).layer(axum::extract::DefaultBodyLimit::max(native::MAX_BODY)),
         )
         .route("/native/v1/instance", get(native::instance))
+        .route(
+            native::continuity::BARRIER,
+            post(native::continuity::barrier),
+        )
         .route("/health", get(handlers::health))
         .route(protection_status::ENDPOINT, get(protection_status::handler))
         .layer(axum::Extension(runtime.clone()))
         .layer(axum::middleware::from_fn_with_state(
             (state.clone(), runtime),
             protection_status::observe,
+        ))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            native::continuity::middleware,
         ))
         .with_state(state)
 }

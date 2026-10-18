@@ -23,6 +23,6 @@ pub use facet::{facets, Facet};
 pub use fingerprint::{fingerprints, overlap};
 pub use policy::{AgentDecision, AgentPolicySet, Signals, TaintSource, Verdict};
 pub use taint::{
-    LimitError, SessionTaintUsage, TaintLimits, TaintMark, TaintTracker, TaintUsage,
-    TrackingFailure,
+    LimitError, ProvenanceSnapshot, SessionProvenanceSnapshot, SessionTaintUsage, TaintLimits,
+    TaintMark, TaintTracker, TaintUsage, TrackingFailure,
 };

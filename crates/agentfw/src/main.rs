@@ -27,15 +27,22 @@ enum NativeApprovalCmd {
     /// List outstanding requests (digests only, no raw arguments).
     List,
     /// Show one request in full, including the exact arguments.
-    Inspect { id: String },
+    Inspect {
+        #[arg(allow_hyphen_values = true)]
+        id: String,
+    },
     /// Approve exactly this call; --binding must be the digest shown by inspect.
     Approve {
+        #[arg(allow_hyphen_values = true)]
         id: String,
         #[arg(long)]
         binding: String,
     },
     /// Reject this call.
-    Reject { id: String },
+    Reject {
+        #[arg(allow_hyphen_values = true)]
+        id: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -238,8 +245,11 @@ enum Cmd {
         #[arg(long)]
         path: PathBuf,
     },
-    /// Review and compile one operator-owned MCP admission profile (no installation).
+    /// Review, compile, and manage transactional MCP admission profiles.
     McpProfile {
+        /// Optional custom agentfw home directory (default: ~/.agentfw).
+        #[arg(long)]
+        home: Option<PathBuf>,
         #[command(subcommand)]
         command: agentfw::mcp::profile_author::Command,
     },
@@ -712,7 +722,21 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Cmd::McpConnection { command } => agentfw::mcp::connection::run(command),
-        Cmd::McpProfile { command } => agentfw::mcp::profile_author::run(command),
+        Cmd::McpProfile { home, command } => {
+            let home = match home {
+                Some(h) => h,
+                None => match &command {
+                    agentfw::mcp::profile_author::Command::Preview { .. }
+                    | agentfw::mcp::profile_author::Command::Import { .. }
+                    | agentfw::mcp::profile_author::Command::Validate { .. }
+                    | agentfw::mcp::profile_author::Command::Explain { .. }
+                    | agentfw::mcp::profile_author::Command::Diff { .. }
+                    | agentfw::mcp::profile_author::Command::Compile { .. } => Config::home_path()?,
+                    _ => Config::home()?,
+                },
+            };
+            agentfw::mcp::profile_author::run(command, &home)
+        }
         Cmd::ChildAuthority { action } => {
             use agentfw::native::child_authority;
             let home = Config::home()?;
@@ -1210,7 +1234,7 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
         Err(_) => Config::default(),
     };
 
-    let firewall = match &cfg.policy {
+    let mut firewall = match &cfg.policy {
         Some(p) => AgentFirewall::with_taint_limits(
             AgentPolicySet::from_yaml(&std::fs::read_to_string(p)?)?,
             DEFAULT_TAINT_CAP,
@@ -1230,7 +1254,8 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
             .as_ref()
             .map(|native| {
                 let native_token = agentfw::token::load_or_create(&home.join("native-token"))?;
-                let state = agentfw::native::NativeState::load(native, native_token)?;
+                let state = agentfw::native::NativeState::load(native, native_token)?
+                    .with_continuity(&home, &mut firewall)?;
                 match &native.approval {
                     Some(approval) => {
                         let hook_token = agentfw::token::load_or_create(&home.join("token"))?;
