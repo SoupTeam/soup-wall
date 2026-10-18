@@ -364,7 +364,7 @@ def admit(api: GitHub, args: argparse.Namespace, pr_event: dict[str, Any]) -> in
             if not args.dry_run:
                 api.post("/statuses/" + sha, {"state": "pending", "context": CONTEXT,
                                             "description": verdict.reason[:140]})
-            return 0
+            return 2 if args.dry_run else 0
         final_state = "failure" if verdict.state == "pending" else verdict.state
         description = ("Selected jobs and all five CodeQL analyses passed" if final_state == "success"
                        else verdict.reason)[:140]

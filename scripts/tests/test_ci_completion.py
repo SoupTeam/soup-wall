@@ -66,3 +66,10 @@ class Completion(unittest.TestCase):
         with patch.object(gate, "inspect", return_value=(MERGE, gate.Verdict("failure", "required job failed"))):
             self.assertEqual(gate.admit(api, args, api.pr), 1)
         self.assertEqual(api.posts[-1][1]["state"], "failure")
+
+    def test_readonly_pending_probe_returns_pending_exit_not_success(self):
+        api = API()
+        args = argparse.Namespace(pr=1, wait_seconds=0, dry_run=True)
+        with patch.object(gate, "inspect", return_value=(MERGE, gate.Verdict("pending", "CI unfinished"))):
+            self.assertEqual(gate.admit(api, args, api.pr), 2)
+        self.assertEqual(api.posts, [])
