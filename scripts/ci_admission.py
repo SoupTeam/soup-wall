@@ -290,19 +290,32 @@ def inspect(api: GitHub, number: int, event_base: str, event_head: str) -> tuple
     return merge_sha, verdict
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--pr", type=int, required=True)
-    parser.add_argument("--wait-seconds", type=int, default=2700)
-    parser.add_argument("--dry-run", action="store_true")
-    args = parser.parse_args()
-    repo = os.environ["GITHUB_REPOSITORY"]
-    with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as event_file:
-        event = json.load(event_file)
-    pr_event = event["pull_request"]
-    if pr_event["number"] != args.pr or pr_event["base"]["repo"]["full_name"] != repo:
-        parser.error("event does not identify the requested base PR")
-    api = GitHub(repo, os.environ["GITHUB_TOKEN"])
+def completion_targets(api: GitHub, event: dict[str, Any]) -> list[dict[str, Any]]:
+    """Use repository API metadata only, never upstream artifacts or PR code."""
+    run = api.get("/actions/runs/" + str(int(event["workflow_run"]["id"])))
+    path = str(run.get("path", "")).split("@", 1)[0]
+    allowed = ((run.get("event") == "pull_request" and path == ".github/workflows/ci.yml")
+               or (run.get("event") == "dynamic" and path.startswith("dynamic/github-code-scanning/codeql")))
+    if not allowed or run.get("status") != "completed" or not SHA.fullmatch(str(run.get("head_sha", ""))):
+        return []
+    candidates = run.get("pull_requests", [])
+    if not candidates:
+        # Default-setup CodeQL can omit PR associations, especially for forks.
+        candidates = api.pages("/pulls?state=open", "")
+    targets = []
+    seen = set()
+    for candidate in candidates:
+        number = int(candidate["number"])
+        if number in seen:
+            continue
+        seen.add(number)
+        pr = api.get(f"/pulls/{number}")
+        if pr.get("state") == "open" and pr["head"]["sha"] == run["head_sha"]:
+            targets.append(pr)
+    return targets
+
+
+def admit(api: GitHub, args: argparse.Namespace, pr_event: dict[str, Any]) -> int:
     deadline = time.monotonic() + max(0, min(args.wait_seconds, 2700))
     current = api.get(f"/pulls/{args.pr}")
     status_sha = current.get("merge_commit_sha") or current["head"]["sha"]
@@ -345,6 +358,13 @@ def main() -> int:
                 return 2
             time.sleep(30)
             continue
+        if verdict.state == "pending" and args.wait_seconds == 0:
+            # Completion events recheck us without billing an idle polling runner.
+            # Missing evidence stays blocking, never a green qualification.
+            if not args.dry_run:
+                api.post("/statuses/" + sha, {"state": "pending", "context": CONTEXT,
+                                            "description": verdict.reason[:140]})
+            return 0
         final_state = "failure" if verdict.state == "pending" else verdict.state
         description = ("Selected jobs and all five CodeQL analyses passed" if final_state == "success"
                        else verdict.reason)[:140]
@@ -352,6 +372,33 @@ def main() -> int:
             api.post("/statuses/" + sha, {"state": final_state, "context": CONTEXT,
                                             "description": description})
         return 0 if final_state == "success" else 1
+
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--pr", type=int)
+    parser.add_argument("--wait-seconds", type=int, default=0)
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args()
+    repo = os.environ["GITHUB_REPOSITORY"]
+    with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as event_file:
+        event = json.load(event_file)
+    api = GitHub(repo, os.environ["GITHUB_TOKEN"])
+    if "workflow_run" in event:
+        if args.pr is not None:
+            parser.error("completion routing determines the current PR from repository metadata")
+        result = 0
+        for pr in completion_targets(api, event):
+            args.pr = pr["number"]
+            result = max(result, admit(api, args, pr))
+        return result
+    pr_event = event["pull_request"]
+    if args.pr is None:
+        args.pr = pr_event["number"]
+    if pr_event["number"] != args.pr or pr_event["base"]["repo"]["full_name"] != repo:
+        parser.error("event does not identify the requested base PR")
+    return admit(api, args, pr_event)
 
 
 if __name__ == "__main__":

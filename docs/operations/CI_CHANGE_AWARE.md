@@ -244,3 +244,17 @@ This removes 34 repeated planner allocations per full Ready run: the expected
 full check count falls from 105 to 71 with the same runtime matrix. This is a job
 count reduction, not a measured percentage of billed cost. Selective scheduling
 still requires its reviewed activation and live required-context readback.
+
+### Completion-driven admission
+
+The privileged admission workflow checks once on PR updates and again when the
+central CI or managed CodeQL run completes. Missing evidence remains a pending
+blocking status; it never becomes green from a timeout or skipped test. This
+avoids allocating an idle runner for up to 45 minutes. Routing reads the run and
+current PR from the repository API, ignores obsolete heads and validates the
+upstream workflow path/event; it never downloads artifacts or executes PR code.
+CodeQL's dynamic `PR #*` workflow names are matched by a workflow-name glob.
+Only trusted base/default-branch scripts are executed. An older PR that still
+uses legacy parallel workflows must refresh from current main before it can
+rely on the new completion orchestration. Full legacy manual qualification is
+still available and the trusted verifier retains its legacy evidence support.

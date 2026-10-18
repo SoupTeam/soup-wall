@@ -81,7 +81,7 @@ class CostPolicyTests(unittest.TestCase):
     def test_admission_also_handles_draft_transitions(self):
         text = (ROOT / ".github/workflows/ci-admission.yml").read_text(encoding="utf-8")
         self.assertIn("ready_for_review, converted_to_draft", text)
-        self.assertIn("ref: ${{ github.event.pull_request.base.sha }}", text)
+        self.assertIn("ref: ${{ github.event.pull_request.base.sha || github.sha }}", text)
         self.assertNotIn("pull_request.head.sha", text)
 
     def test_skipped_drafts_cannot_satisfy_existing_required_contexts(self):
