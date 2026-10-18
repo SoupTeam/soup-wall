@@ -1075,46 +1075,129 @@ pub(super) async fn run(
         prepared.workspace() == workspace,
         "selected sandbox workspace changed"
     );
-    let mut process = prepared.spawn()?;
+    let (mut process, mut budget) = prepared.spawn()?;
+    let attached = if let Some(budget) = budget.as_mut() {
+        process
+            .id()
+            .context("mcp_budget_child_identity_missing")
+            .and_then(|pid| budget.verify_attached(pid))
+    } else {
+        Ok(())
+    };
+    let boundary_failed = budget
+        .as_ref()
+        .map(super::super::linux_budget::OwnedBudget::failed)
+        .unwrap_or_else(|| Arc::new(std::sync::atomic::AtomicBool::new(false)));
+    let budget_requested = budget.is_some();
+    let budget_mode = if budget_requested {
+        "enforced"
+    } else {
+        "unbudgeted"
+    };
     let mut stderr_task = None;
+    eprintln!(
+        "{}",
+        json!({"event":"mcp_real_budget_start","mode":budget_mode,
+        "budget":budget.as_ref().map(super::super::linux_budget::OwnedBudget::metadata)})
+    );
     eprintln!(
         "{}",
         json!({"event":"mcp_real_server_start","profile":profile.format,
         "sandbox":server_sandbox::profile_name(&profile.format),"sandbox_workspace":server_sandbox::SANDBOX_WORKSPACE,
-        "sandbox_pid":process.id(),
+        "sandbox_pid":process.id(),"resource_budget":budget_mode,
         "active_limit":ACTIVE_LIMIT,"queued_limit":QUEUE_LIMIT,"wire_limit":WIRE_LIMIT,
         "forwarded_cancellation_limit":FORWARDED_CANCELLATIONS})
     );
-    let operation = async {
-        let stderr = process.stderr.take().context("selected server stderr missing")?;
-        stderr_task = Some(tokio::spawn(drain_stderr(stderr)));
-        let mut child = process.stdin.take().context("selected server stdin missing")?;
-        let mut server = BufReader::new(process.stdout.take().context("selected server stdout missing")?);
-        #[cfg(unix)]
-        let mut client = BufReader::new(crate::mcp::stdio::Pipe::stdin()?);
-        #[cfg(unix)]
-        let mut host = crate::mcp::stdio::Pipe::stdout()?;
-        #[cfg(not(unix))]
-        let mut client = BufReader::new(tokio::io::stdin());
-        #[cfg(not(unix))]
-        let mut host = tokio::io::stdout();
-        let result = {
-            let exchange = relay(collector, &mut client, &mut host, &mut server, &mut child, &profile.format);
-            tokio::pin!(exchange);
-            tokio::select! {
-                result = &mut exchange => result,
-                drained = stderr_task.as_mut().expect("stderr task") => {
-                    stderr_task = None;
-                    let received = drained.context("selected server stderr worker failed")??;
-                    eprintln!("{}",json!({"event":"mcp_real_stderr","received_bytes":received,"released":false}));
-                    exchange.await
+    let operation = {
+        let transport = async {
+            attached?;
+            let stderr = process
+                .stderr
+                .take()
+                .context("selected server stderr missing")?;
+            stderr_task = Some(tokio::spawn(drain_stderr(stderr)));
+            let mut child = process
+                .stdin
+                .take()
+                .context("selected server stdin missing")?;
+            let mut server = BufReader::new(
+                process
+                    .stdout
+                    .take()
+                    .context("selected server stdout missing")?,
+            );
+            #[cfg(unix)]
+            let mut client = BufReader::new(crate::mcp::stdio::Pipe::stdin()?);
+            #[cfg(unix)]
+            let host = crate::mcp::stdio::Pipe::stdout()?;
+            #[cfg(not(unix))]
+            let mut client = BufReader::new(tokio::io::stdin());
+            #[cfg(not(unix))]
+            let host = tokio::io::stdout();
+            // The monitor publishes failure before waking its select arm. An
+            // already pending host write must observe the same withdrawal;
+            // cancelling the relay alone does not provide that ordering.
+            let mut host = super::DiagnosticOutput {
+                inner: host,
+                failed: Arc::clone(&boundary_failed),
+            };
+            let result = {
+                let exchange = relay(
+                    collector,
+                    &mut client,
+                    &mut host,
+                    &mut server,
+                    &mut child,
+                    &profile.format,
+                );
+                tokio::pin!(exchange);
+                tokio::select! {
+                    result = &mut exchange => result,
+                    drained = stderr_task.as_mut().expect("stderr task") => {
+                        stderr_task = None;
+                        let received = drained.context("selected server stderr worker failed")??;
+                        eprintln!("{}",json!({"event":"mcp_real_stderr","received_bytes":received,"released":false}));
+                        exchange.await
+                    }
                 }
-            }
+            };
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(1), child.shutdown()).await;
+            drop(child);
+            result
         };
-        let _ = tokio::time::timeout(std::time::Duration::from_secs(1), child.shutdown()).await;
-        drop(child);
-        result
-    }.await;
+        tokio::pin!(transport);
+        if let Some(budget) = budget.as_ref() {
+            // This surrounds the entire transport, including its stderr-EOF
+            // continuation and stdin shutdown. A benign stderr EOF must never
+            // disable resource-limit/lifetime monitoring.
+            tokio::select! {
+                biased;
+                failure = budget.wait_failure() => match failure {
+                    Err(error) => Err(error),
+                    Ok(()) => Err(anyhow::anyhow!("mcp_budget_monitor_stopped")),
+                },
+                result = &mut transport => result,
+            }
+        } else {
+            transport.await
+        }
+    };
+    // Check once more when useful transport and a controller event become ready
+    // together. This reports observed uncertainty; it cannot retract a result
+    // or effect committed before that observation.
+    let budget_check = budget
+        .as_ref()
+        .map(super::super::linux_budget::OwnedBudget::check)
+        .unwrap_or(Ok(()));
+    let budget_failed =
+        boundary_failed.load(std::sync::atomic::Ordering::Acquire) || budget_check.is_err();
+    // Always attempt all independent cleanup boundaries. In particular a
+    // cgroup failure cannot skip group termination/reaping or the stderr join.
+    let budget_cleanup = if let Some(budget) = budget.as_mut() {
+        budget.finish().await
+    } else {
+        Ok(())
+    };
     let cleanup = server_sandbox::terminate(&mut process).await;
     let stderr_cleanup = if let Some(mut task) = stderr_task {
         match tokio::time::timeout(std::time::Duration::from_secs(1), &mut task).await {
@@ -1138,12 +1221,26 @@ pub(super) async fn run(
     } else {
         Ok(())
     };
+    let budget_failed = budget_failed || boundary_failed.load(std::sync::atomic::Ordering::Acquire);
+    eprintln!(
+        "{}",
+        json!({"event":"mcp_real_budget_end","mode":budget_mode,
+        "budget":budget.as_ref().map(super::super::linux_budget::OwnedBudget::metadata),
+        "cleanup_verified":budget_cleanup.is_ok(),"observed_failure":budget_failed})
+    );
     eprintln!(
         "{}",
         json!({"event":"mcp_real_server_end","profile":profile.format,
-        "cleanup_verified":cleanup.is_ok()&&stderr_cleanup.is_ok(),"transport_complete":operation.is_ok()})
+        "budget_requested":budget_requested,"budget_cleanup_verified":budget_cleanup.is_ok(),
+        "budget_failure_observed":budget_failed,
+        "cleanup_verified":cleanup.is_ok()&&stderr_cleanup.is_ok()&&budget_cleanup.is_ok(),
+        "transport_complete":operation.is_ok()&&budget_check.is_ok()&&!budget_failed
+            &&cleanup.is_ok()&&stderr_cleanup.is_ok()&&budget_cleanup.is_ok()})
     );
     operation?;
+    budget_check?;
+    ensure!(!budget_failed, "mcp_budget_boundary_failed");
+    budget_cleanup?;
     cleanup?;
     stderr_cleanup?;
     Ok(())

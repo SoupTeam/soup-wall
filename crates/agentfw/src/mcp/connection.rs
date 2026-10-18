@@ -48,6 +48,24 @@ pub enum Command {
     },
 }
 
+/// Reuse the accepted connection inspector without invoking a tool or
+/// writing/printing host configuration. Return only the allowlisted status.
+pub async fn inspect_read_only(options: &Options) -> anyhow::Result<&'static str> {
+    anyhow::ensure!(
+        options.probe_tool.is_none() && options.probe_args.is_none(),
+        "doctor never issues a probe"
+    );
+    #[cfg(target_os = "linux")]
+    {
+        Ok(linux::run("inspect", options).await?.status)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = options;
+        anyhow::bail!("installed doctor connection inspection requires Linux")
+    }
+}
+
 pub fn run(command: Command) -> anyhow::Result<()> {
     let command = match command {
         Command::Profile { command } => return crate::mcp::profile_upgrade::run(command),

@@ -8,9 +8,22 @@ on:
       - 'scripts/keycloak-saml-acceptance.py'
       - 'scripts/tests/test_console_browser.py'
       - 'scripts/tests/test_keycloak_oidc_acceptance.py'
+      - 'scripts/sso*'
+      - 'scripts/tests/test_sso*'
       - '.github/workflows/keycloak-oidc.yml'
       - 'Cargo.lock'
   workflow_dispatch:
+    inputs:
+      backend:
+        description: Focused backend (PRs still test both)
+        type: choice
+        options: [all, sqlite, postgres]
+        default: all
+      runs:
+        description: Predeclared fresh runs per backend
+        type: choice
+        options: ['1', '2']
+        default: '1'
 
 permissions:
   contents: read
@@ -25,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        backend: [sqlite, postgres]
+        backend: ${{ fromJSON(inputs.backend == 'sqlite' && '["sqlite"]' || inputs.backend == 'postgres' && '["postgres"]' || '["sqlite","postgres"]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -42,10 +55,13 @@ jobs:
           target/oidc-driver/bin/python -m pip install requests==2.34.2 cryptography==50.0.2 psutil==7.2.2 playwright==1.63.0
           target/oidc-driver/bin/python -m playwright install --with-deps chromium
       - name: Run browser regressions and real Keycloak lifecycle
+        env:
+          SSO_RUNS: ${{ inputs.runs || '1' }}
         run: |
           export PATH="$PWD/target/oidc-driver/bin:$PATH"
           python3 -m unittest discover -s scripts/tests -p test_console_browser.py -v
           python3 -m unittest discover -s scripts/tests -p test_keycloak_oidc_acceptance.py -v
+          python3 -m unittest discover -s scripts/tests -p 'test_sso*.py' -v
           cargo test --locked -p llm-firewall --example keycloak-oidc-bootstrap
           bash scripts/keycloak-oidc-acceptance.sh "${{ matrix.backend }}"
       - name: Retain only sanitized checks and hashes
@@ -53,6 +69,6 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: keycloak-oidc-linux-${{ matrix.backend }}-evidence
-          path: target/oidc-evidence/*.json
+          path: target/oidc-evidence/**/*.json
           if-no-files-found: warn
           retention-days: 30

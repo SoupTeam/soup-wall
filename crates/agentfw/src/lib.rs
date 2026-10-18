@@ -5,8 +5,10 @@
 //! agent layer; all verdict logic lives in `soup-wall-agent`.
 
 pub mod audit;
+pub mod classifier_runtime;
 pub mod config;
 pub mod decision;
+pub mod doctor;
 pub mod grant;
 pub mod handlers;
 pub mod hook;
@@ -31,6 +33,7 @@ pub mod self_test;
 #[cfg(target_os = "linux")]
 pub mod service;
 pub mod spans;
+pub mod support_bundle;
 pub mod token;
 #[cfg(windows)]
 pub(crate) mod windows_create;

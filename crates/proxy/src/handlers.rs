@@ -799,6 +799,16 @@ pub async fn chat_completions(
         return (StatusCode::BAD_REQUEST, Json(error_body(&reason))).into_response();
     }
 
+    // [P1 FIX]: Strict validation BEFORE sending upstream or reserving spend.
+    let tool_results =
+        match crate::agent_scan::openai_tool_results_strict(&decision.request).into_result() {
+            Ok(res) => res,
+            Err(reason) => {
+                audit_block(&request_id, 0, vec![reason.into()], vec![], vec![], started);
+                return (StatusCode::BAD_REQUEST, Json(error_body(reason))).into_response();
+            }
+        };
+
     let spend_reservation = match reserve_spend(
         &state,
         &headers,
@@ -837,7 +847,7 @@ pub async fn chat_completions(
             },
             Some(StreamToolContext {
                 protocol: crate::agent_scan::StreamProtocol::OpenAiChat,
-                tool_results: crate::agent_scan::openai_tool_results(&decision.request),
+                tool_results, // Use pre-validated results
             }),
         )
         .await;
@@ -881,19 +891,25 @@ pub async fn chat_completions(
     )
     .await;
 
-    let events = crate::events::normalize_chat(&decision.request, &body);
+    let events = match crate::events::normalize_chat(&decision.request, &body) {
+        Ok(events) => events,
+        Err(reason) => {
+            audit_output_block(&request_id, reason, started);
+            return (StatusCode::BAD_GATEWAY, Json(error_body(reason))).into_response();
+        }
+    };
     if let Some(reason) = capability_refuse_events(&state, &request_id, &events) {
         audit_output_block(&request_id, &reason, started);
         return (StatusCode::BAD_GATEWAY, Json(error_body(&reason))).into_response();
     }
     let assistant = crate::events::output_text(&events);
+
+    // Output policy is correctly placed here for non-streaming
     if let Some(reason) = decide_output(&state.firewall, &assistant) {
         audit_output_block(&request_id, &reason, started);
         return (StatusCode::BAD_GATEWAY, Json(error_body(&reason))).into_response();
     }
 
-    // Agent layer: inspect the response's tool calls against the request's tool
-    // results. Non-streaming only (this is past the stream early-return).
     if state.config.agent_inspection.enabled {
         if let Some(reason) = agent_refuse_events(&state, &request_id, &events) {
             audit_output_block(&request_id, &reason, started);
@@ -901,8 +917,6 @@ pub async fn chat_completions(
         }
     }
 
-    // Output content moderation: restrict a harmful reply regardless of backend.
-    // Non-streaming only (v1); `block` refuses, `flag` audits and forwards.
     if !decision.request.stream {
         if let crate::moderation::GateVerdict::Harmful { categories, action } =
             state.moderation.check(&assistant)
@@ -960,6 +974,19 @@ pub async fn responses(
         return (StatusCode::BAD_REQUEST, Json(error_body(&reason))).into_response();
     }
 
+    // [P1 FIX]: Strict validation BEFORE sending upstream or reserving spend.
+    let tool_results = if state.config.agent_inspection.enabled {
+        match crate::agent_scan::responses_tool_results_strict(&decision.request).into_result() {
+            Ok(res) => res,
+            Err(reason) => {
+                audit_block(&request_id, 0, vec![reason.into()], vec![], vec![], started);
+                return (StatusCode::BAD_REQUEST, Json(error_body(reason))).into_response();
+            }
+        }
+    } else {
+        Vec::new()
+    };
+
     let spend_reservation = match reserve_spend(
         &state,
         &headers,
@@ -975,11 +1002,6 @@ pub async fn responses(
 
     let url = format!("{}/v1/responses", state.config.upstream.openai_base);
     if decision.request.stream {
-        let tool_results = if state.config.agent_inspection.enabled {
-            crate::agent_scan::responses_tool_results(&decision.request)
-        } else {
-            Vec::new()
-        };
         let builder = forward_headers(
             state.http.post(&url).json(&decision.request),
             &headers,
@@ -991,7 +1013,7 @@ pub async fn responses(
             builder,
             request_id,
             started,
-            tool_results,
+            tool_results, // Use pre-validated results
             tenant_audit.map(|Extension(context)| context),
             StreamUsageContext {
                 tenant_access: tenant_access.map(|Extension(access)| access),
@@ -1043,12 +1065,20 @@ pub async fn responses(
     )
     .await;
 
-    let events = crate::events::normalize_responses(&decision.request, &body);
+    let events = match crate::events::normalize_responses(&decision.request, &body) {
+        Ok(events) => events,
+        Err(reason) => {
+            audit_output_block(&request_id, reason, started);
+            return (StatusCode::BAD_GATEWAY, Json(error_body(reason))).into_response();
+        }
+    };
     if let Some(reason) = capability_refuse_events(&state, &request_id, &events) {
         audit_output_block(&request_id, &reason, started);
         return (StatusCode::BAD_GATEWAY, Json(error_body(&reason))).into_response();
     }
     let assistant = crate::events::output_text(&events);
+
+    // Output policy is correctly placed here for non-streaming
     if let Some(reason) = decide_output(&state.firewall, &assistant) {
         audit_output_block(&request_id, &reason, started);
         return (StatusCode::BAD_GATEWAY, Json(error_body(&reason))).into_response();
@@ -1116,6 +1146,22 @@ pub async fn messages(
         return (StatusCode::BAD_REQUEST, Json(anthropic_error_body(&reason))).into_response();
     }
 
+    // [P1 FIX]: Validate protected request content BEFORE sending it upstream or reserving spend.
+    // This strictly parses tool results for both streaming and non-streaming paths.
+    let tool_results = match serde_json::to_value(&decision.request) {
+        Ok(req_val) => {
+            match crate::agent_scan::anthropic_tool_results_strict(&req_val).into_result() {
+                Ok(res) => res,
+                Err(reason) => {
+                    audit_block(&request_id, 0, vec![reason.into()], vec![], vec![], started);
+                    return (StatusCode::BAD_REQUEST, Json(anthropic_error_body(reason)))
+                        .into_response();
+                }
+            }
+        }
+        Err(_) => Vec::new(),
+    };
+
     let spend_reservation = match reserve_spend(
         &state,
         &headers,
@@ -1140,7 +1186,7 @@ pub async fn messages(
         return proxy_stream(
             state.clone(),
             builder,
-            request_id,
+            request_id.clone(),
             started,
             ANTHROPIC_BLOCK_FRAME,
             tenant_audit.map(|Extension(context)| context),
@@ -1154,11 +1200,7 @@ pub async fn messages(
             },
             Some(StreamToolContext {
                 protocol: crate::agent_scan::StreamProtocol::AnthropicMessages,
-                // `anthropic_tool_results` reads the untyped wire shape; the typed
-                // request round-trips to it losslessly via `rest`.
-                tool_results: serde_json::to_value(&decision.request)
-                    .map(|request| crate::agent_scan::anthropic_tool_results(&request))
-                    .unwrap_or_default(),
+                tool_results, // Use the pre-validated results
             }),
         )
         .await;
@@ -1202,12 +1244,22 @@ pub async fn messages(
     )
     .await;
 
-    let events = crate::events::normalize_anthropic(&decision.request, &body);
+    let events = match crate::events::normalize_anthropic(&decision.request, &body) {
+        Ok(events) => events,
+        Err(reason) => {
+            audit_output_block(&request_id, reason, started);
+            return (StatusCode::BAD_GATEWAY, Json(anthropic_error_body(reason))).into_response();
+        }
+    };
+
     if let Some(reason) = capability_refuse_events(&state, &request_id, &events) {
         audit_output_block(&request_id, &reason, started);
         return (StatusCode::BAD_GATEWAY, Json(anthropic_error_body(&reason))).into_response();
     }
+
     let assistant = crate::events::output_text(&events);
+
+    // [OUTPUT POLICY FIX]: Restore the firewall check for non-streaming assistant responses.
     if let Some(reason) = decide_output(&state.firewall, &assistant) {
         audit_output_block(&request_id, &reason, started);
         return (StatusCode::BAD_GATEWAY, Json(anthropic_error_body(&reason))).into_response();
@@ -1567,15 +1619,8 @@ async fn proxy_responses_stream(
             let mut block_reason = None;
             let frames = match decoder.push_frames(&bytes) {
                 Ok(frames) => frames,
-                Err(error) if task_state.config.fail_mode == FailMode::FailClosed => {
-                    block_reason = Some(error.reason().to_string());
-                    Vec::new()
-                }
                 Err(error) => {
-                    tracing::warn!(
-                        reason = error.reason(),
-                        "Responses stream inspection failed open"
-                    );
+                    block_reason = Some(error.reason().to_string());
                     Vec::new()
                 }
             };
@@ -1584,12 +1629,23 @@ async fn proxy_responses_stream(
                 if let Some(event) = &frame.event {
                     match event.get("type").and_then(serde_json::Value::as_str) {
                         Some("response.output_item.added") => {
-                            if event
+                            if let Some(item_type) = event
                                 .pointer("/item/type")
                                 .and_then(serde_json::Value::as_str)
-                                == Some("function_call")
                             {
-                                in_flight_function_calls += 1;
+                                if item_type == "function_call" {
+                                    in_flight_function_calls += 1;
+                                } else if matches!(
+                                    item_type,
+                                    "custom_tool_call"
+                                        | "local_shell_call"
+                                        | "computer_call"
+                                        | "mcp_call"
+                                ) || item_type.ends_with("_call")
+                                {
+                                    block_reason = Some(format!("unsupported tool-bearing type '{}' detected before byte release", item_type));
+                                    break;
+                                }
                             }
                         }
                         Some("response.function_call_arguments.delta")
@@ -1613,34 +1669,48 @@ async fn proxy_responses_stream(
                         }
                         Some("response.output_item.done") => {
                             if let Some(item) = event.get("item") {
-                                if item.get("type").and_then(serde_json::Value::as_str)
-                                    == Some("function_call")
-                                {
-                                    in_flight_function_calls =
-                                        in_flight_function_calls.saturating_sub(1);
-                                }
-                                if let Some(call) = crate::agent_scan::responses_tool_call(item) {
-                                    if let Some(reason) = capability_refuse_calls(
-                                        &task_state,
-                                        &request_id,
-                                        std::slice::from_ref(&call),
-                                    ) {
-                                        block_reason = Some(reason);
-                                        break;
-                                    }
-                                    if task_state.config.agent_inspection.enabled
-                                        && inspected_calls
-                                            .insert(responses_call_identity(item, &call))
-                                    {
-                                        if let Some(reason) = agent_refuse_reason(
+                                let item_type = item
+                                    .get("type")
+                                    .and_then(serde_json::Value::as_str)
+                                    .unwrap_or("");
+                                match crate::agent_scan::responses_stream_tool_call_strict(item) {
+                                    Ok(Some(call)) => {
+                                        in_flight_function_calls =
+                                            in_flight_function_calls.saturating_sub(1);
+
+                                        if let Some(reason) = capability_refuse_calls(
                                             &task_state,
                                             &request_id,
-                                            tool_results.clone(),
-                                            vec![call],
+                                            std::slice::from_ref(&call),
                                         ) {
                                             block_reason = Some(reason);
                                             break;
                                         }
+                                        if task_state.config.agent_inspection.enabled
+                                            && inspected_calls
+                                                .insert(responses_call_identity(item, &call))
+                                        {
+                                            if let Some(reason) = agent_refuse_reason(
+                                                &task_state,
+                                                &request_id,
+                                                tool_results.clone(),
+                                                vec![call],
+                                            ) {
+                                                block_reason = Some(reason);
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    Ok(None) => {
+                                        if item_type == "function_call" {
+                                            block_reason =
+                                                Some("malformed function_call item".to_string());
+                                            break;
+                                        }
+                                    }
+                                    Err(reason) => {
+                                        block_reason = Some(reason.to_string());
+                                        break;
                                     }
                                 }
                             }
@@ -1976,14 +2046,7 @@ async fn proxy_stream(
             let frames = match usage_decoder.push_frames(&bytes) {
                 Ok(frames) => frames,
                 Err(error) => {
-                    if task_state.config.fail_mode == FailMode::FailClosed {
-                        tool_block = Some(error.reason().to_string());
-                    } else {
-                        tracing::warn!(
-                            reason = error.reason(),
-                            "stream event could not be decoded"
-                        );
-                    }
+                    tool_block = Some(error.reason().to_string());
                     Vec::new()
                 }
             };
@@ -2006,12 +2069,8 @@ async fn proxy_stream(
                         let completed = match assembler.push(event) {
                             Ok(calls) => calls,
                             Err(reason) => {
-                                if task_state.config.fail_mode == FailMode::FailClosed {
-                                    tool_block = Some(reason.to_string());
-                                    break;
-                                }
-                                tracing::warn!(reason, "streamed tool call not reassembled");
-                                Vec::new()
+                                tool_block = Some(reason.to_string());
+                                break;
                             }
                         };
                         if !completed.is_empty() {

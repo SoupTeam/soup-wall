@@ -301,6 +301,7 @@ impl Gateway {
             "AGENTFW_HOST_SESSION",
             "AGENTFW_CHILD_AUTHORITY",
             "AGENTFW_MCP_SERVER_PROFILE",
+            "AGENTFW_MCP_LINUX_BUDGET",
             "AGENTFW_CLASSIFIER",
             "AGENTFW_RULE_BASELINE",
             "AGENTFW_TEST_CLASSIFIER",
@@ -311,6 +312,9 @@ impl Gateway {
             "AGENTFW_NATIVE_TOKEN",
         ] {
             command.env_remove(name);
+        }
+        if mode == "unselected-budget" {
+            command.env("AGENTFW_MCP_LINUX_BUDGET", root.join("not-opened.json"));
         }
         let mut child = command.spawn().expect("production collector must spawn");
         let input = child.stdin.take();
@@ -847,4 +851,71 @@ async fn native_mcp_stderr_eof_does_not_end_useful_protocol() {
         "stderr EOF prevented useful followup execution"
     );
     fixture.assert_audit_private();
+}
+
+#[tokio::test]
+async fn native_mcp_unselected_resource_budget_refuses_before_server_start() {
+    let mut fixture = Fixture::new("unselected-budget").await;
+    // Keep host input open: refusal cannot depend on host EOF or child output.
+    let status = tokio::time::timeout(DEADLINE, fixture.gateway.child.wait())
+        .await
+        .expect("unsupported budget refusal deadline")
+        .unwrap();
+    assert!(!status.success());
+    assert!(fixture.gateway.receive().await.is_none());
+    let observed = fixture.gateway.stderr.take().unwrap().await.unwrap();
+    assert!(
+        String::from_utf8_lossy(&observed.retained)
+            .contains("resource budgets require a selected filesystem or Git server profile"),
+        "refusal must identify the unsupported budget, after successful native session admission"
+    );
+    assert!(!fixture.gateway.directory.join("server.pid").exists());
+    assert_eq!(fixture.gateway.executions(), 0);
+    fixture.assert_audit_private();
+}
+
+#[tokio::test]
+async fn transparent_mcp_resource_budget_refuses_before_server_start() {
+    let root = tempfile::tempdir().unwrap();
+    let marker = root.path().join("must-not-be-created");
+    let output = tokio::time::timeout(
+        DEADLINE,
+        Command::new(env!("CARGO_BIN_EXE_agentfw"))
+            .args([
+                "mcp",
+                "--id",
+                "unsupported-budget",
+                "--",
+                python(),
+                "-I",
+                "-c",
+            ])
+            .arg("import pathlib,sys; pathlib.Path(sys.argv[1]).write_bytes(b'executed')")
+            .arg(&marker)
+            .env(
+                if cfg!(windows) { "USERPROFILE" } else { "HOME" },
+                root.path(),
+            )
+            .env(
+                "AGENTFW_MCP_LINUX_BUDGET",
+                root.path().join("not-opened.json"),
+            )
+            .env_remove("AGENTFW_HOST_SESSION")
+            .env_remove("AGENTFW_CHILD_AUTHORITY")
+            .stdin(Stdio::null())
+            .kill_on_drop(true)
+            .output(),
+    )
+    .await
+    .expect("unsupported transparent proxy budget refusal deadline")
+    .unwrap();
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr).contains(
+        "resource budgets require native admission and a selected filesystem or Git server profile"
+    ));
+    assert!(
+        !marker.exists(),
+        "an unsupported budget must never be ignored"
+    );
 }
