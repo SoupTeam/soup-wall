@@ -1,0 +1,57 @@
+name: Official SDK Gateway compatibility
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gateway-sdk-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: gateway-sdk.yml
+  official-sdk:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs), 'official-sdk')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install hash-pinned official SDKs
+        run: python -m pip install --require-hashes -r scripts/requirements-sou92.txt
+      - name: Build exact candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD > "$RUNNER_TEMP/sou92-source.txt"
+          rustc --version > "$RUNNER_TEMP/sou92-rust.txt"
+          cargo build --locked -p llm-firewall --bin llm-firewall --message-format=json > "$RUNNER_TEMP/sou92-build.jsonl"
+          sha256sum target/debug/llm-firewall > "$RUNNER_TEMP/sou92-binary.txt"
+      - name: Evidence grading controls
+        run: python -B -m unittest discover -s scripts/tests -p test_sou92_sdk.py -v
+      - name: Actual SDKs through Gateway with independent effects
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -B scripts/verify-sou92-sdk.py --run --gateway "$PWD/target/debug/llm-firewall" \
+            --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou92-results.json" \
+            2>&1 | tee "$RUNNER_TEMP/sou92-driver.log"
+      - name: Retain complete and interrupted evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou92-sdk-evidence
+          path: ${{ runner.temp }}/sou92-*
+          if-no-files-found: error
+          retention-days: 30

@@ -34,6 +34,7 @@ WORKFLOW_JOBS: dict[str, tuple[str, ...]] = {
     "ci.yml": CI_JOBS,
     "console-recovery.yml": ("owned-recovery",),
     "gate-ci.yml": ("validate-gate-matrix",),
+    "gateway-sdk.yml": ("official-sdk",),
     "identity-sandbox.yml": ("vendor-driver-safety", "local-idp-evidence"),
     "keycloak-oidc.yml": ("linux-vendor",),
     "keycloak-saml.yml": ("linux-vendor",),
@@ -75,6 +76,7 @@ AGENT_WORKFLOWS = frozenset({
     "sou86-crash-supervision.yml", "tls-lifecycle.yml",
 })
 GATEWAY_WORKFLOWS = frozenset({
+    "gateway-sdk.yml",
     "agent-fleet.yml", "console-recovery.yml", "identity-sandbox.yml",
     "keycloak-oidc.yml", "keycloak-saml.yml", "managed-credential-rotation.yml",
     "managed-group-rollout.yml", "managed-policy-demo.yml",
