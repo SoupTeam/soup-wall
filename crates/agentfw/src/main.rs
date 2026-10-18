@@ -1116,7 +1116,7 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
         Err(_) => Config::default(),
     };
 
-    let firewall = match &cfg.policy {
+    let mut firewall = match &cfg.policy {
         Some(p) => AgentFirewall::with_taint_limits(
             AgentPolicySet::from_yaml(&std::fs::read_to_string(p)?)?,
             DEFAULT_TAINT_CAP,
@@ -1136,7 +1136,8 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
             .as_ref()
             .map(|native| {
                 let native_token = agentfw::token::load_or_create(&home.join("native-token"))?;
-                let state = agentfw::native::NativeState::load(native, native_token)?;
+                let state = agentfw::native::NativeState::load(native, native_token)?
+                    .with_continuity(&home, &mut firewall)?;
                 match &native.approval {
                     Some(approval) => {
                         let hook_token = agentfw::token::load_or_create(&home.join("token"))?;

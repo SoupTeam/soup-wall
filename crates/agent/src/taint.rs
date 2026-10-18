@@ -689,6 +689,13 @@ impl TaintTracker {
             legacy_unknown_history: AtomicBool::new(false),
         })
     }
+    pub fn mark_all_incomplete(&mut self) {
+        self.legacy_unknown_history.store(true, Ordering::Relaxed);
+        for session in self.sessions.values() {
+            session.lose();
+        }
+    }
+
     /// Export evidence in insertion order so replay preserves eviction behavior.
     /// No grants, active agents, approvals or executable authority are exported.
     pub fn provenance_snapshot(&self) -> ProvenanceSnapshot {

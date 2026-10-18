@@ -254,6 +254,10 @@ impl AgentFirewall {
         self.taint.mark_incomplete(session);
     }
 
+    pub fn mark_all_provenance_incomplete(&mut self) {
+        self.taint.mark_all_incomplete();
+    }
+
     /// Private authenticated lifecycle checkpoint, never an approval or grant.
     pub fn provenance_snapshot(&self) -> crate::taint::ProvenanceSnapshot {
         self.taint.provenance_snapshot()

@@ -435,6 +435,8 @@ pub struct ProfileManager {
     state_path: PathBuf,
     lock_path: PathBuf,
     config_path: PathBuf,
+    source_override: Option<(String, PathBuf)>,
+    operation_override: Option<String>,
 }
 
 fn create_private(path: &Path) -> Result<File> {
@@ -474,13 +476,78 @@ impl ProfileManager {
             state_path,
             lock_path,
             config_path,
+            source_override: None,
+            operation_override: None,
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn with_owned_operation(mut self, operation: String) -> Self {
+        self.operation_override = Some(operation);
+        self
+    }
+
+    fn operation_id(&self) -> String {
+        self.operation_override
+            .clone()
+            .unwrap_or_else(|| format!("op-{}", crate::token::generate()))
+    }
+
+    /// Explicit owned-connection adoption only. The old standalone commands
+    /// retain their strict cached-registry identity checks.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn with_owned_source(mut self, bundle: String, registry: PathBuf) -> Self {
+        self.source_override = Some((bundle, registry));
+        self
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn adopt_owned_source(&self, source: &Path, expected_config: &str) -> Result<()> {
+        let _lock = self.lock()?;
+        let mut state = self.load_state()?;
+        ensure!(
+            state.in_progress.is_none(),
+            "interrupted profile transition requires recovery"
+        );
+        let bundle = self.stage_revision(source)?;
+        ensure!(
+            self.config_digest()?.as_deref() == Some(expected_config),
+            "Agent configuration changed before adoption"
+        );
+        let bytes = read_bundle_file(&self.config_path)?.0;
+        ensure!(
+            sha256_bytes(&bytes) == expected_config,
+            "Agent configuration changed during adoption"
+        );
+        let cfg = Config::from_yaml(std::str::from_utf8(&bytes)?)?;
+        let native = cfg.native.context("native source configuration absent")?;
+        ensure!(
+            native.registry_sha256 == bundle.registry_sha256
+                && read_bundle_file(&native.registry_path)?.1 == bundle.registry_sha256,
+            "reviewed source differs from installed registry"
+        );
+        if let Some(active) = &state.active_bundle_sha256 {
+            ensure!(*active == bundle.bundle_sha256, "another profile is active");
+        } else {
+            state.active_bundle_sha256 = Some(bundle.bundle_sha256);
+            self.save_state(&state)?;
+        }
+        Ok(())
     }
 
     /// Acquires exclusive non-blocking advisory lock on mcp-profile operations.
     pub fn lock(&self) -> Result<OperationLock> {
         ensure_safe_managed_dir(&self.home)?;
         ensure_safe_managed_dir(&self.root)?;
+        let guard = self.root.join("connection-transition.json");
+        if guard.try_exists()? {
+            let bytes = read_bundle_file(&guard)?.0;
+            let owner = std::str::from_utf8(&bytes)?.lines().next();
+            ensure!(
+                owner.is_some() && owner == self.operation_override.as_deref(),
+                "owned connection transition pending; use mcp-connection profile recover"
+            );
+        }
         ensure_safe_managed_dir(&self.revisions)?;
 
         #[cfg(unix)]
@@ -688,6 +755,13 @@ impl ProfileManager {
         };
 
         if let Some((expected_path, expected_sha)) = expected_active_registry {
+            let expected_path = self
+                .source_override
+                .as_ref()
+                .filter(|(bundle, _)| {
+                    expected_path == self.revisions.join(bundle).join("registry.json")
+                })
+                .map_or(expected_path, |(_, path)| path.as_path());
             ensure!(
                 pre_config.is_some(),
                 "conflict: config.yaml is missing while a profile is active; refusing to overwrite foreign configuration deletion"
@@ -1056,6 +1130,9 @@ impl ProfileManager {
         candidate_path: &Path,
         displaced_path: &Path,
     ) -> Result<()> {
+        crate::grant::GrantStore::new(&self.home.join("grants"))
+            .invalidate_all_for_policy_switch()
+            .context("cannot retire previous profile approvals")?;
         if candidate_path.exists() {
             let _ = fs::remove_file(candidate_path);
         }
@@ -1545,7 +1622,7 @@ impl ProfileManager {
             .generation
             .checked_add(1)
             .context("generation overflow")?;
-        let op_id = format!("op-{}", crate::token::generate());
+        let op_id = self.operation_id();
         let lifecycle = crate::lifecycle::Manager::new(&self.home);
 
         let (pre_config, pre_config_digest, target_yaml, target_config_digest) =
@@ -1929,7 +2006,7 @@ impl ProfileManager {
             preview.approval_sha256
         );
 
-        let op_id = format!("op-{}", crate::token::generate());
+        let op_id = self.operation_id();
         let lifecycle = crate::lifecycle::Manager::new(&self.home);
 
         // FAIL CLOSED on daemon status
@@ -2320,7 +2397,7 @@ impl ProfileManager {
             preview.approval_sha256
         );
 
-        let op_id = format!("op-{}", crate::token::generate());
+        let op_id = self.operation_id();
         let lifecycle = crate::lifecycle::Manager::new(&self.home);
 
         // FAIL CLOSED on daemon status

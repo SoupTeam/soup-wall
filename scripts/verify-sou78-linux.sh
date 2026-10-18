@@ -28,6 +28,7 @@ if [[ ${1:-} == --isolated ]]; then
   run_check profiles cargo test --offline --locked -p agentfw --test mcp_profile_lifecycle
   run_check daemon cargo test --offline --locked -p agentfw --test lifecycle
   run_check admission cargo test --offline --locked -p agentfw --test mcp_admission
+  run_check owned python3 -I scripts/verify-sou78-owned.py --agentfw "$CARGO_TARGET_DIR/debug/agentfw" --out "$SOU78_EVIDENCE/owned-process.json"
   exit 0
 fi
 

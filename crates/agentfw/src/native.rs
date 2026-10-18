@@ -20,6 +20,7 @@ use crate::handlers::Shared;
 
 pub mod approval;
 pub mod child_authority;
+pub mod continuity;
 pub mod resource;
 
 pub const CONTRACT: &str = "sw-native/1";
@@ -474,6 +475,7 @@ pub struct NativeState {
     pub registry_sha256: String,
     pub token: String,
     instance_id: String,
+    pub(crate) continuity: Option<continuity::Continuity>,
     sessions: Mutex<Sessions>,
     pub(crate) approval: Option<approval::ApprovalState>,
 }
@@ -613,9 +615,19 @@ impl NativeState {
             registry_sha256: expected.into(),
             token,
             instance_id: crate::token::generate(),
+            continuity: None,
             sessions: Mutex::default(),
             approval: None,
         })
+    }
+
+    pub fn with_continuity(
+        mut self,
+        home: &std::path::Path,
+        firewall: &mut soup_wall_agent::AgentFirewall,
+    ) -> anyhow::Result<Self> {
+        self.continuity = Some(continuity::Continuity::attach(home, &mut self, firewall)?);
+        Ok(self)
     }
 
     /// Public runtime identifier, authenticated by the native transport endpoint.
