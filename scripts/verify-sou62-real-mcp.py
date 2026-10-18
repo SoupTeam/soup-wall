@@ -814,7 +814,8 @@ def run(args):
             config = {"port": port, "enforce": True, "max_record_bytes": 1048576, "policy": str(stack.install / "policy.yaml"),
                       "native": {"registry_path": str(stack.install / "registry.json"), "registry_sha256": sha(stack.install / "registry.json")}}
             write(stack.home / ".agentfw/config.yaml", config)
-            positive_env = dict(stack.env, SOU62_SANDBOX_TEST_PROFILE=str(stack.install / "profile.json"))
+            positive_env = dict(stack.env, SOU62_SANDBOX_TEST_PROFILE=str(stack.install / "profile.json"),
+                                SOU86_TEST_AGENTFW=str(binary))
             try:
                 positive = subprocess.run([str(tests), "selected_server_sandbox_isolates_real_node", "--ignored", "--nocapture"],
                                           env=positive_env, capture_output=True, timeout=90)

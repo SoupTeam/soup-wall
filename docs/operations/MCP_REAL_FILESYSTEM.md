@@ -18,6 +18,10 @@ memory or task limit. Select the separate versioned
 `AGENTFW_MCP_LINUX_BUDGET` to require a prepared cgroup-v2 delegation. Missing
 delegation or unsupported controls refuse startup before the server executes.
 
+The selected Linux runtime also uses [owned crash supervision](MCP_LINUX_CRASH_SUPERVISION.md)
+for collector loss, private PID 1 ownership and bounded recovery. Process cleanup
+and native session retirement are reported separately.
+
 ## Exact upstream and runtime identities
 
 The committed [upstream identity](../../profiles/mcp/filesystem-readonly-v1/upstream-identity.json)

@@ -97,10 +97,12 @@ launches and bounded safe metadata. Fixed terminal reasons include
 native work and verifies cleanup. A dispatched operation may already have run;
 withholding its result does not undo its effects.
 
-Verified cleanup describes the collector's structured exit path. If it is killed
-before that path can run, no successful teardown or immediate native retirement
-is claimed. Keep the existing bubblewrap parent-death boundary and an owned
-service lifecycle; an abandoned empty leaf may require operator removal, and
+The selected Linux runtime also uses [owned crash supervision](MCP_LINUX_CRASH_SUPERVISION.md)
+outside this server budget. Once its private owner is armed, collector loss can
+stop the selected server and remove this launch's leaf without running collector
+destructors. Preparation before owner creation can still leave an empty leaf;
+cleanup is unverified for that window and may require exact owned-leaf operator
+removal. Process cleanup does not acknowledge immediate native retirement:
 unreachable native state retains its existing expiry/refusal behavior. Never
 remove an unrelated cgroup as recovery.
 

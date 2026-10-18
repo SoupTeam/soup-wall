@@ -402,6 +402,11 @@ enum ServiceCommand {
 }
 
 fn main() -> anyhow::Result<()> {
+    // Internal owners must stay synchronous: parent-death ownership belongs to
+    // their stable main thread, before any Tokio worker can be created.
+    if let Some(status) = agentfw::mcp::linux_owner::early_dispatch() {
+        std::process::exit(status);
+    }
     let cli = Cli::parse();
     match cli.cmd {
         Cmd::Doctor(args) => std::process::exit(agentfw::doctor::run(args)),
