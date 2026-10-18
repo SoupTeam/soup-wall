@@ -19,6 +19,8 @@ pub const RESOURCE_APPROVAL_CONTRACT: &str = "sw-native-resource-approval/1";
 
 /// Returns true if the tool's resource policy is a supported Linux native resource executor.
 ///
+/// Returns true if the tool's resource policy is a supported Linux native resource executor.
+///
 /// In scope for SOU-88:
 /// - Linux `read_document` under direct/1 profile (`READ_DOCUMENT_EXECUTOR_PROFILE`)
 /// - Linux `create_file` under linux-root-child/1 profile (`CREATE_FILE_EXECUTOR_PROFILE`)
@@ -26,22 +28,25 @@ pub const RESOURCE_APPROVAL_CONTRACT: &str = "sw-native-resource-approval/1";
 /// - Compatible operator-owned file bindings (SOU-67)
 ///
 /// Explicitly refused:
-/// - Windows and macOS resource tools
+/// - Non-Linux platforms (Windows, macOS)
 /// - Confined real-fs create profile (SOU-83)
 /// - HTTPS POST (SOU-73)
 pub fn is_supported_linux_resource_tool(tool: &Tool) -> bool {
+    // Platform constraint: resource approval in this increment is strictly Linux-only.
+    // Environment variables (CARGO_MANIFEST_DIR, AGENTFW_TEST) or cfg(test) must NEVER
+    // bypass the platform boundary in production or non-Linux test builds.
+    if !cfg!(target_os = "linux") {
+        return false;
+    }
+
+    is_supported_linux_resource_tool_profile(tool)
+}
+
+/// Evaluates whether the tool matches a supported executor profile for Linux native resource approval.
+pub fn is_supported_linux_resource_tool_profile(tool: &Tool) -> bool {
     let Some(policy) = &tool.resource_policy else {
         return false;
     };
-
-    // Platform constraint: resource approval in this increment is Linux-only.
-    if !cfg!(target_os = "linux")
-        && !cfg!(test)
-        && std::env::var_os("CARGO_MANIFEST_DIR").is_none()
-        && std::env::var_os("AGENTFW_TEST").is_none()
-    {
-        return false;
-    }
 
     // Windows policies are explicitly unsupported for Linux resource approval
     if policy.windows_read.is_some() {
@@ -373,17 +378,51 @@ mod tests {
             READ_DOCUMENT_EXECUTOR_PROFILE,
             "read_document",
         );
-        assert!(is_supported_linux_resource_tool(&read_tool));
+        assert!(is_supported_linux_resource_tool_profile(&read_tool));
 
         let create_tool = sample_tool("create_file", CREATE_FILE_EXECUTOR_PROFILE, "create_file");
-        assert!(is_supported_linux_resource_tool(&create_tool));
+        assert!(is_supported_linux_resource_tool_profile(&create_tool));
 
         let https_tool = sample_tool(
             "https_get",
             crate::mcp::https_get::EXECUTOR_PROFILE,
             "https_get",
         );
-        assert!(is_supported_linux_resource_tool(&https_tool));
+        assert!(is_supported_linux_resource_tool_profile(&https_tool));
+
+        #[cfg(target_os = "linux")]
+        {
+            assert!(is_supported_linux_resource_tool(&read_tool));
+            assert!(is_supported_linux_resource_tool(&create_tool));
+            assert!(is_supported_linux_resource_tool(&https_tool));
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            assert!(!is_supported_linux_resource_tool(&read_tool));
+            assert!(!is_supported_linux_resource_tool(&create_tool));
+            assert!(!is_supported_linux_resource_tool(&https_tool));
+        }
+    }
+
+    #[test]
+    fn test_platform_scope_not_bypassable_by_env() {
+        let read_tool = sample_tool(
+            "read_document",
+            READ_DOCUMENT_EXECUTOR_PROFILE,
+            "read_document",
+        );
+        // Setting CARGO_MANIFEST_DIR or AGENTFW_TEST must not enable Linux resource approval
+        // on non-Linux platforms.
+        #[cfg(not(target_os = "linux"))]
+        {
+            std::env::set_var("CARGO_MANIFEST_DIR", "/some/manifest/dir");
+            std::env::set_var("AGENTFW_TEST", "1");
+            assert!(!is_supported_linux_resource_tool(&read_tool));
+        }
+        #[cfg(target_os = "linux")]
+        {
+            assert!(is_supported_linux_resource_tool(&read_tool));
+        }
     }
 
     #[test]
@@ -394,6 +433,7 @@ mod tests {
             "sw-native/create-file/real-fs/1",
             "create_file",
         );
+        assert!(!is_supported_linux_resource_tool_profile(&real_fs_tool));
         assert!(!is_supported_linux_resource_tool(&real_fs_tool));
 
         // Windows create profile is refused on Linux approval
@@ -402,6 +442,7 @@ mod tests {
             resource::WINDOWS_CREATE_EXECUTOR_PROFILE,
             "create_file",
         );
+        assert!(!is_supported_linux_resource_tool_profile(&win_create_tool));
         assert!(!is_supported_linux_resource_tool(&win_create_tool));
 
         // Plain tool without resource policy
@@ -414,6 +455,7 @@ mod tests {
             resource_policy: None,
             mcp_result_profile: None,
         };
+        assert!(!is_supported_linux_resource_tool_profile(&plain_tool));
         assert!(!is_supported_linux_resource_tool(&plain_tool));
     }
 

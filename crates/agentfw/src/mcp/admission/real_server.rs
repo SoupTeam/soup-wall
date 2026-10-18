@@ -189,21 +189,23 @@ async fn admit(
         .await?
     {
         Err(code) => return Ok(Decision::Refused(not_classified(&call.id, code))),
-        Ok(ProductionVerdict::Ask) => {
-            return Ok(Decision::Refused(withheld(
-                &call.id,
-                "invocation",
-                &json!(["classifier_ask"]),
-            )))
-        }
-        Ok(ProductionVerdict::Deny) => {
-            return Ok(Decision::Refused(withheld(
-                &call.id,
-                "invocation",
-                &json!(["classifier_deny"]),
-            )))
-        }
-        Ok(ProductionVerdict::Allow) => {}
+        Ok(assessment) => match assessment.verdict {
+            ProductionVerdict::Ask => {
+                return Ok(Decision::Refused(withheld(
+                    &call.id,
+                    "invocation",
+                    &json!(["classifier_ask"]),
+                )))
+            }
+            ProductionVerdict::Deny => {
+                return Ok(Decision::Refused(withheld(
+                    &call.id,
+                    "invocation",
+                    &json!(["classifier_deny"]),
+                )))
+            }
+            ProductionVerdict::Allow => {}
+        },
     }
     let receipt = collector
         .event(

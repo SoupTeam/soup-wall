@@ -1805,14 +1805,37 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         }
         if let Some(policy) = &tool.resource_policy {
             if request.contract_version != policy.contract() {
+                if let Some(ref approval_id) = request.approval_id {
+                    if let Some(ref approval) = native.approval {
+                        approval.invalidate(
+                            approval_id,
+                            &request.session_id,
+                            "native_resource_contract_required",
+                        );
+                    }
+                }
                 return Err("native_resource_contract_required");
             }
             let Some(admission) = &request.resource_admission else {
+                if let Some(ref approval_id) = request.approval_id {
+                    if let Some(ref approval) = native.approval {
+                        approval.invalidate(
+                            approval_id,
+                            &request.session_id,
+                            "native_resource_contract_required",
+                        );
+                    }
+                }
                 return Err("native_resource_contract_required");
             };
             if let Err(reason) =
                 resource::authorize(policy, tool, &native.registry_sha256, args, admission)
             {
+                if let Some(ref approval_id) = request.approval_id {
+                    if let Some(ref approval) = native.approval {
+                        approval.invalidate(approval_id, &request.session_id, reason);
+                    }
+                }
                 response.verdict = "deny";
                 response.release = false;
                 response.reason_codes.push(reason.into());
@@ -1827,6 +1850,15 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                 return Ok(response);
             }
         } else if request.resource_admission.is_some() {
+            if let Some(ref approval_id) = request.approval_id {
+                if let Some(ref approval) = native.approval {
+                    approval.invalidate(
+                        approval_id,
+                        &request.session_id,
+                        "native_resource_policy_missing",
+                    );
+                }
+            }
             return Err("native_resource_policy_missing");
         }
         if total_calls >= MAX_CALLS || session.calls.len() >= MAX_SESSION_CALLS {
@@ -1850,9 +1882,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             let outcome_host = firewall.inspect_native_call(&ev_host, tool.action_class, &hosts);
             outcome = merge_provenance_outcomes(outcome, outcome_host);
         }
-        let verdict = resolved(&outcome);
-        response.verdict = verdict_label(verdict);
-        response.release = verdict == Verdict::Allow;
+        let mut verdict = resolved(&outcome);
         response.reason_codes = outcome.rule.iter().cloned().collect();
         if tool
             .resource_policy
@@ -1860,12 +1890,13 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             .is_some_and(|policy| policy.is_https_get())
             && !firewall.egress_hosts_allowlisted(&hosts)
         {
-            response.verdict = "deny";
-            response.release = false;
+            verdict = Verdict::Deny;
             response
                 .reason_codes
                 .push("native_https_egress_not_allowlisted".into());
         }
+        response.verdict = verdict_label(verdict);
+        response.release = verdict == Verdict::Allow;
         let legacy_bound = binding(
             &native.registry_sha256,
             &session.epoch,
@@ -1883,39 +1914,67 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             // Exact single-use operator approval, rechecked against the policy
             // verdict computed just now. A hard Deny can never be rescued.
             let approval = native.approval.as_ref().ok_or("native_approval_disabled")?;
-            let revalidate = if tool.resource_policy.is_some() {
-                resource_approval::revalidate_resource_execution(
-                    tool,
-                    args,
-                    request.resource_admission.as_ref(),
-                )
-            } else {
-                Ok(())
-            };
-            match revalidate.and_then(|_| {
-                approval.redeem(
+            if verdict == Verdict::Deny {
+                // An explicit hard Deny (including egress denial or lineage floor failure)
+                // can never be approved or redeemed. Terminally invalidate the presented approval.
+                approval.invalidate(
                     approval_id,
                     &request.session_id,
-                    &session.epoch,
-                    name,
-                    &tool.schema_sha256,
-                    &bound,
-                    verdict,
-                )
-            }) {
-                Ok(()) => {
-                    response.verdict = "allow";
-                    response.release = true;
-                    response
-                        .reason_codes
-                        .push(format!("native_approval_redeemed:{approval_id}"));
-                }
-                Err(code) => {
-                    response.release = false;
-                    if verdict != Verdict::Deny {
-                        response.verdict = "ask";
+                    "native_approval_hard_deny",
+                );
+                response.verdict = "deny";
+                response.release = false;
+                response
+                    .reason_codes
+                    .push("native_approval_hard_deny".into());
+            } else {
+                let revalidate = if tool.resource_policy.is_some() {
+                    resource_approval::revalidate_resource_execution(
+                        tool,
+                        args,
+                        request.resource_admission.as_ref(),
+                    )
+                } else {
+                    Ok(())
+                };
+                match revalidate {
+                    Ok(()) => {
+                        match approval.redeem(
+                            approval_id,
+                            &request.session_id,
+                            &session.epoch,
+                            name,
+                            &tool.schema_sha256,
+                            &bound,
+                            verdict,
+                        ) {
+                            Ok(()) => {
+                                response.verdict = "allow";
+                                response.release = true;
+                                response
+                                    .reason_codes
+                                    .push(format!("native_approval_redeemed:{approval_id}"));
+                            }
+                            Err(code) => {
+                                response.release = false;
+                                if verdict != Verdict::Deny {
+                                    response.verdict = "ask";
+                                }
+                                response.reason_codes.push(code.into());
+                            }
+                        }
                     }
-                    response.reason_codes.push(code.into());
+                    Err(code) => {
+                        // Terminal invalidation on failed presented approval:
+                        // a refused mutation must not leave an approval retryable under
+                        // the documented terminal-refusal contract.
+                        approval.invalidate(approval_id, &request.session_id, code);
+                        response.release = false;
+                        if verdict != Verdict::Deny {
+                            response.verdict = "ask";
+                        }
+                        response.reason_codes.push(code.into());
+                    }
                 }
             }
         }

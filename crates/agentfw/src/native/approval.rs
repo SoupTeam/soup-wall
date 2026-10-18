@@ -278,6 +278,21 @@ impl ApprovalState {
         }
     }
 
+    /// Terminally invalidates a presented approval record upon validation or execution refusal.
+    /// Once closed, an approval cannot be retried or rescued under another identity or argument.
+    pub fn invalidate(&self, id: &str, session_id: &str, reason: &'static str) {
+        if let Ok(mut records) = self.records.lock() {
+            Self::prune(&mut records, Instant::now());
+            if let Some(record) = records.get_mut(id) {
+                if record.session_id == session_id && record.state == State::Pending {
+                    record.state = State::Closed(reason);
+                    drop(records);
+                    self.remove_files(id);
+                }
+            }
+        }
+    }
+
     fn status(&self, id: &str, session_id: &str) -> Result<(&'static str, u64), &'static str> {
         let mut records = self
             .records
@@ -463,6 +478,13 @@ fn open(
         .map_err(|_| "native_inspection_unavailable")?;
     let session = state
         .entries
+        .get(&request.session_id)
+        .ok_or("native_session_unknown")?;
+    if super::validate_lineage(&state, session, now_ms(), Instant::now()).is_err() {
+        return Err("native_approval_hard_deny");
+    }
+    let session = state
+        .entries
         .get_mut(&request.session_id)
         .ok_or("native_session_unknown")?;
     if args.to_string().len() > firewall.provenance_limits().max_input_bytes {
@@ -506,7 +528,14 @@ fn open(
         let host_outcome = firewall.inspect_native_call(&ev_host, tool.action_class, &hosts);
         outcome = super::merge_provenance_outcomes(outcome, host_outcome);
     }
-    let verdict = resolved(&outcome);
+    let mut verdict = resolved(&outcome);
+    let is_https_get = tool
+        .resource_policy
+        .as_ref()
+        .is_some_and(|policy| policy.is_https_get());
+    if is_https_get && !firewall.egress_hosts_allowlisted(&hosts) {
+        verdict = Verdict::Deny;
+    }
     match (source, verdict) {
         (_, Verdict::Deny) => return Err("native_approval_hard_deny"),
         (Source::Daemon, Verdict::Allow) => return Err("native_approval_not_required"),

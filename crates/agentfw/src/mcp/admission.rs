@@ -381,6 +381,21 @@ pub enum ProductionVerdict {
     Deny,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClassifiedAssessment {
+    pub verdict: ProductionVerdict,
+    pub ambiguous_or_unknown: bool,
+}
+
+impl ClassifiedAssessment {
+    pub fn allow() -> Self {
+        Self {
+            verdict: ProductionVerdict::Allow,
+            ambiguous_or_unknown: false,
+        }
+    }
+}
+
 pub fn compose_production_policy(
     classification: &Classification,
     baseline: ActionClass,
@@ -919,9 +934,9 @@ impl<'a> Collector<'a> {
         args: &Value,
         baseline: ActionClass,
         authority: ClassificationAuthority,
-    ) -> anyhow::Result<Result<ProductionVerdict, &'static str>> {
+    ) -> anyhow::Result<Result<ClassifiedAssessment, &'static str>> {
         let Some(classifier) = self.config.classifier.clone() else {
-            return Ok(Ok(ProductionVerdict::Allow));
+            return Ok(Ok(ClassifiedAssessment::allow()));
         };
         let tool = snapshot
             .tools
@@ -977,10 +992,11 @@ impl<'a> Collector<'a> {
         } else {
             None
         };
-        let prod_eval = if let Err(failure) = mapped {
+        let prod_eval: Result<ClassifiedAssessment, &'static str> = if let Err(failure) = mapped {
             Err(failure) // Invalid classifier replies never reach policy.
         } else if let Some(ref res) = result {
-            if authority.https_get {
+            let ambiguous_or_unknown = res.unknown || res.uncertainty >= 0.8;
+            let eval = if authority.https_get {
                 compose_https_get_policy(res, baseline, authority.egress_declared)
             } else {
                 compose_scoped_production_policy(
@@ -989,7 +1005,11 @@ impl<'a> Collector<'a> {
                     authority.egress_declared,
                     authority.create_file_profile.is_some(),
                 )
-            }
+            };
+            eval.map(|verdict| ClassifiedAssessment {
+                verdict,
+                ambiguous_or_unknown,
+            })
         } else {
             Err(mapped.err().unwrap_or("classifier_unavailable"))
         };
@@ -1020,9 +1040,11 @@ impl<'a> Collector<'a> {
                 AdapterVerdict::Deny => "deny",
             }),
             "authoritative_verdict":match &prod_eval {
-                Ok(ProductionVerdict::Allow) => "allow",
-                Ok(ProductionVerdict::Ask) => "ask",
-                Ok(ProductionVerdict::Deny) => "deny",
+                Ok(assessment) => match assessment.verdict {
+                    ProductionVerdict::Allow => "allow",
+                    ProductionVerdict::Ask => "ask",
+                    ProductionVerdict::Deny => "deny",
+                },
                 Err(e) => *e,
             },
             "policy":if policy_reached { "reached" } else { "not_reached" },
@@ -1219,6 +1241,18 @@ impl<'a> Collector<'a> {
                 }
             }
         }
+    }
+
+    async fn cancel_approval(&self, id: &str) -> anyhow::Result<()> {
+        let body = json!({
+            "contract_version": CONTRACT,
+            "registry_sha256": self.config.native.registry_sha256,
+            "session_id": self.session,
+            "action": "cancel",
+            "pending_id": id,
+        });
+        let _ = self.approval_post(&body).await;
+        Ok(())
     }
 
     async fn inspect_manifest(&self, value: &Value) -> anyhow::Result<()> {
@@ -2027,14 +2061,27 @@ where
                         } else {
                             None
                         };
-                        let mut prod_verdict = None;
+                        let mut prod_assessment: Option<ClassifiedAssessment> = None;
                         let mut approval_id: Option<String> = None;
+                        let egress_declared = installed.action_class == ActionClass::Network
+                            || !installed.egress.is_empty();
+                        let authority = ClassificationAuthority {
+                            egress_declared,
+                            create_file_profile: installed.resource_policy.as_ref()
+                                .filter(|policy| policy.is_create_file()
+                                    && resource_admission.as_ref().is_some_and(|(admission, _)| admission.execution.is_some()))
+                                .map(|policy| if policy.is_windows_create() {
+                                    crate::native::resource::WINDOWS_CREATE_EXECUTOR_PROFILE
+                                } else {
+                                    crate::native::resource::CREATE_FILE_EXECUTOR_PROFILE
+                                }),
+                            https_get: installed.resource_policy.as_ref()
+                                .is_some_and(|policy| policy.is_https_get()),
+                        };
                         if collector.config.classifier.is_some() {
                             let snapshot = admitted_snapshot
                                 .as_ref()
                                 .context("classifier discovery state missing")?;
-                            let egress_declared = installed.action_class == ActionClass::Network
-                                || !installed.egress.is_empty();
                             match without_resource_overlap(
                                 client,
                                 resource_admission.is_some(),
@@ -2044,19 +2091,7 @@ where
                                     name,
                                     &args,
                                     installed.action_class,
-                                    ClassificationAuthority {
-                                        egress_declared,
-                                        create_file_profile: installed.resource_policy.as_ref()
-                                            .filter(|policy| policy.is_create_file()
-                                                && resource_admission.as_ref().is_some_and(|(admission, _)| admission.execution.is_some()))
-                                            .map(|policy| if policy.is_windows_create() {
-                                                crate::native::resource::WINDOWS_CREATE_EXECUTOR_PROFILE
-                                            } else {
-                                                crate::native::resource::CREATE_FILE_EXECUTOR_PROFILE
-                                            }),
-                                        https_get: installed.resource_policy.as_ref()
-                                            .is_some_and(|policy| policy.is_https_get()),
-                                    },
+                                    authority,
                                 ),
                             )
                             .await?
@@ -2065,16 +2100,30 @@ where
                                     write_resource_reply(client, host, resource_reply, &not_classified(request_id, failure)).await?;
                                     continue;
                                 }
-                                Ok(verdict) => {
-                                    prod_verdict = Some(verdict);
+                                Ok(assessment) => {
+                                    prod_assessment = Some(assessment);
                                 }
                             }
                         }
-                        if let Some(verdict) = prod_verdict {
-                            match verdict {
+                        if let Some(assessment) = prod_assessment {
+                            match assessment.verdict {
                                 ProductionVerdict::Allow => {}
                                 ProductionVerdict::Ask => {
                                     let mut reasons = json!(["policy_unconfirmed_ask"]);
+                                    let is_resource = resource_reply
+                                        || installed.resource_policy.is_some();
+                                    // SOU-88: Resource classifier-Ask continuation explicitly excludes
+                                    // unknown or ambiguous classification (unknown=true or uncertainty >= 0.8).
+                                    if is_resource && assessment.ambiguous_or_unknown {
+                                        write_resource_reply(
+                                            client,
+                                            host,
+                                            resource_reply,
+                                            &withheld(request_id, "invocation", &json!(["policy_unconfirmed_ask", "classifier_unknown_or_ambiguous"])),
+                                        )
+                                        .await?;
+                                        continue;
+                                    }
                                     let can_approve = collector.config.approval.is_some()
                                         && (!resource_reply
                                             || crate::native::resource_approval::is_supported_linux_resource_tool(installed));
@@ -2095,17 +2144,24 @@ where
                                         {
                                             Err(code) => reasons = json!(["policy_unconfirmed_ask", code]),
                                             Ok(id) => {
-                                                // Re-evaluate the classifier now: a changed verdict
-                                                // (or failure) cannot ride the old approval.
+                                                // Re-evaluate the classifier using the identical authority context.
                                                 let snapshot = admitted_snapshot.as_ref().context("classifier discovery state missing")?;
-                                                let egress_declared = installed.action_class == ActionClass::Network
-                                                    || !installed.egress.is_empty();
-                                                let again = collector.classify(snapshot, request_id, name, &args, installed.action_class,
-                                                    ClassificationAuthority { egress_declared, create_file_profile: None, https_get: false }).await?;
-                                                if matches!(again, Ok(ProductionVerdict::Ask | ProductionVerdict::Allow)) {
-                                                    approval_id = Some(id);
-                                                } else {
-                                                    reasons = json!(["policy_unconfirmed_ask", "native_approval_reclassify_refused"]);
+                                                let again = collector.classify(snapshot, request_id, name, &args, installed.action_class, authority).await?;
+                                                match again {
+                                                    Ok(again_assessment) => {
+                                                        if (is_resource && again_assessment.ambiguous_or_unknown)
+                                                            || again_assessment.verdict == ProductionVerdict::Deny
+                                                        {
+                                                            let _ = collector.cancel_approval(&id).await;
+                                                            reasons = json!(["policy_unconfirmed_ask", "native_approval_reclassify_refused"]);
+                                                        } else {
+                                                            approval_id = Some(id);
+                                                        }
+                                                    }
+                                                    Err(_) => {
+                                                        let _ = collector.cancel_approval(&id).await;
+                                                        reasons = json!(["policy_unconfirmed_ask", "native_approval_reclassify_refused"]);
+                                                    }
                                                 }
                                             }
                                         }
@@ -2270,12 +2326,15 @@ where
                             collector.event("call", call_fields.clone()),
                         )
                         .await?;
+                        let is_resource = resource_reply
+                            || installed.resource_policy.is_some();
                         let can_approve_daemon = receipt["release"] != true
                             && receipt["verdict"] == "ask"
                             && approval_id.is_none()
                             && collector.config.approval.is_some()
-                            && (!resource_reply
-                                || crate::native::resource_approval::is_supported_linux_resource_tool(installed));
+                            && (!is_resource
+                                || (!prod_assessment.as_ref().is_some_and(|a| a.ambiguous_or_unknown)
+                                    && crate::native::resource_approval::is_supported_linux_resource_tool(installed)));
                         if can_approve_daemon {
                             let adm_val = resource_admission
                                 .as_ref()
@@ -2297,9 +2356,34 @@ where
                                     receipt["reason_codes"] = json!(reasons);
                                 }
                                 Ok(id) => {
-                                    // Same original call, now carrying the approval id.
-                                    call_fields["approval_id"] = json!(id);
-                                    receipt = collector.event("call", call_fields.clone()).await?;
+                                    // If a classifier is configured, re-evaluate with the same authority context
+                                    let mut ok_to_proceed = true;
+                                    if collector.config.classifier.is_some() {
+                                        let snapshot = admitted_snapshot.as_ref().context("classifier discovery state missing")?;
+                                        let again = collector.classify(snapshot, request_id, name, &args, installed.action_class, authority).await?;
+                                        match again {
+                                            Ok(again_assessment) => {
+                                                if (is_resource && again_assessment.ambiguous_or_unknown)
+                                                    || again_assessment.verdict == ProductionVerdict::Deny
+                                                {
+                                                    let _ = collector.cancel_approval(&id).await;
+                                                    ok_to_proceed = false;
+                                                }
+                                            }
+                                            Err(_) => {
+                                                let _ = collector.cancel_approval(&id).await;
+                                                ok_to_proceed = false;
+                                            }
+                                        }
+                                    }
+                                    if ok_to_proceed {
+                                        call_fields["approval_id"] = json!(id);
+                                        receipt = collector.event("call", call_fields.clone()).await?;
+                                    } else {
+                                        let mut reasons = receipt["reason_codes"].as_array().cloned().unwrap_or_default();
+                                        reasons.push(json!("native_approval_reclassify_refused"));
+                                        receipt["reason_codes"] = json!(reasons);
+                                    }
                                 }
                             }
                         }

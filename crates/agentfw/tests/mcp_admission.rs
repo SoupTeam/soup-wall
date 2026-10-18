@@ -5711,3 +5711,217 @@ default: allow
         "native resource executor handled call; child MCP server was never contacted"
     );
 }
+
+#[tokio::test]
+async fn sou88_resource_classifier_unknown_ambiguous_ineligible() {
+    use agentfw::native::resource::{
+        create_file_executor_sha256, CREATE_FILE_EXECUTOR_PROFILE, CREATE_FILE_MAX_CONTENT,
+    };
+
+    let root = std::env::temp_dir().canonicalize().unwrap();
+    let temp = tempfile::tempdir_in(root).unwrap();
+    let script = temp.path().join("ambiguous_classifier.py");
+    let flag_path = temp.path().join("reclassify_flag");
+
+    // Classifier script distinguishing test cases by payload argument
+    std::fs::write(
+        &script,
+        format!(
+            r#"import json, sys, pathlib
+line = sys.stdin.readline()
+req = json.loads(line) if line else {{}}
+args = req.get('raw_arguments', {{}})
+spec = args.get('spec', {{}})
+payload = spec.get('payload', '')
+flag = pathlib.Path({:?})
+
+if 'test-unknown' in payload:
+    print(json.dumps({{'status':'ok','actions':['write'],'unknown':True,'confidence':0.9,'uncertainty':0.1,'reason':'synthetic unknown'}}))
+elif 'test-boundary' in payload:
+    print(json.dumps({{'status':'ok','actions':['write'],'unknown':False,'confidence':0.95,'uncertainty':0.8,'reason':'synthetic exact boundary'}}))
+elif 'test-reclassify' in payload:
+    if not flag.exists():
+        flag.write_text('called')
+        print(json.dumps({{'status':'ok','actions':['write'],'unknown':False,'confidence':0.95,'uncertainty':0.2,'reason':'synthetic eligible ask'}}))
+    else:
+        print(json.dumps({{'status':'ok','actions':['write'],'unknown':False,'confidence':0.95,'uncertainty':0.9,'reason':'synthetic reclassify ambiguous'}}))
+else:
+    print(json.dumps({{'status':'ok','actions':['write'],'unknown':False,'confidence':0.95,'uncertainty':0.9,'reason':'synthetic ambiguous'}}))
+"#,
+            flag_path.to_str().unwrap()
+        ),
+    )
+    .unwrap();
+    let selection = format!("script:{}", script.display());
+
+    const ASK_CREATE_POLICY: &str = "agent_policies:
+  - name: ask-side-effecting
+    when: { action_class: side_effecting }
+    action: ask
+default: allow
+";
+
+    let mut fixture = Fixture::with_resource_policy_custom_approval(
+        "operator-create-binding",
+        true,
+        Some(&selection),
+        Some(ASK_CREATE_POLICY),
+        Some((60, 30)),
+        |dir, registry| {
+            let canonical_dir = dir.canonicalize().unwrap();
+            let file1 = canonical_dir
+                .join("ambiguous-target.txt")
+                .to_str()
+                .unwrap()
+                .to_string();
+            let schema = json!({
+                "type": "object",
+                "properties": {
+                    "spec": {
+                        "type": "object",
+                        "properties": {
+                            "destination": { "type": "string" },
+                            "payload": { "type": "string" }
+                        },
+                        "required": ["destination", "payload"],
+                        "additionalProperties": false
+                    }
+                },
+                "required": ["spec"],
+                "additionalProperties": false
+            });
+            let profile = json!({
+                "server_id": "fixture",
+                "tool_name": "save_artifact",
+                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "selectors": [{ "pointer": "/spec/destination", "kind": "path", "allow_missing_leaf": true }]
+            });
+            registry["tools"][0] = json!({
+                "name": "save_artifact",
+                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "action_class": "side_effecting",
+                "result_provenance": "untrusted",
+                "egress": [],
+                "resource_policy": {
+                    "profile": profile,
+                    "workspace": canonical_dir,
+                    "cwd": canonical_dir,
+                    "executor_sha256": create_file_executor_sha256(),
+                    "classifier_sha256": "c".repeat(64),
+                    "binding": {
+                        "contract_version": "sw-native/binding/1",
+                        "operation": "create_file",
+                        "action": "write",
+                        "path_selector": "/spec/destination",
+                        "content_selector": "/spec/payload",
+                        "response_contract": "sw-native/response/text/1",
+                        "executor_profile": CREATE_FILE_EXECUTOR_PROFILE,
+                        "max_content_bytes": CREATE_FILE_MAX_CONTENT
+                    },
+                    "allowed_resources": [
+                        { "kind": "path", "canonical": file1 }
+                    ]
+                }
+            });
+        },
+    )
+    .await;
+    fixture.ready().await;
+
+    let target = "ambiguous-target.txt";
+    let target_path = fixture._dir.path().join(target);
+    let call = json!({
+        "jsonrpc": "2.0",
+        "id": "sou88-ambiguous-test",
+        "method": "tools/call",
+        "params": {
+            "name": "save_artifact",
+            "arguments": {
+                "spec": {
+                    "destination": target,
+                    "payload": "forbidden content (default ambiguous)\n"
+                }
+            }
+        }
+    });
+
+    #[cfg(target_os = "linux")]
+    {
+        // 1. High uncertainty (0.9 >= 0.8) -> withheld immediately
+        let reply: Value =
+            serde_json::from_str(&fixture.exchange(&call.to_string()).await.unwrap()).unwrap();
+        assert_eq!(reply["result"]["isError"], true);
+        let reasons = reply["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(
+            reasons.contains("classifier_unknown_or_ambiguous")
+                || reasons.contains("policy_unconfirmed_ask"),
+            "reply must be withheld for ambiguity: {reasons}"
+        );
+        assert!(
+            agentfw::native::approval::operator_list(&fixture.agent_home()).is_empty(),
+            "ambiguous classifier result must NOT open an approval"
+        );
+        assert!(!target_path.exists());
+
+        // 2. Unknown=true with low uncertainty (0.1) -> withheld immediately, no approval
+        let mut call_unknown = call.clone();
+        call_unknown["id"] = json!("sou88-unknown-call");
+        call_unknown["params"]["arguments"]["spec"]["payload"] = json!("test-unknown\n");
+        let reply_unknown: Value =
+            serde_json::from_str(&fixture.exchange(&call_unknown.to_string()).await.unwrap())
+                .unwrap();
+        assert_eq!(reply_unknown["result"]["isError"], true);
+        let reasons_u = reply_unknown["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap();
+        assert!(
+            reasons_u.contains("classifier_unknown_or_ambiguous")
+                || reasons_u.contains("policy_unconfirmed_ask"),
+            "unknown classification must be withheld: {reasons_u}"
+        );
+        assert!(agentfw::native::approval::operator_list(&fixture.agent_home()).is_empty());
+
+        // 3. Exact 0.8 uncertainty boundary -> withheld immediately, no approval
+        let mut call_boundary = call.clone();
+        call_boundary["id"] = json!("sou88-boundary-call");
+        call_boundary["params"]["arguments"]["spec"]["payload"] = json!("test-boundary\n");
+        let reply_b: Value =
+            serde_json::from_str(&fixture.exchange(&call_boundary.to_string()).await.unwrap())
+                .unwrap();
+        assert_eq!(reply_b["result"]["isError"], true);
+        let reasons_b = reply_b["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(
+            reasons_b.contains("classifier_unknown_or_ambiguous")
+                || reasons_b.contains("policy_unconfirmed_ask"),
+            "exact 0.8 boundary must be withheld: {reasons_b}"
+        );
+        assert!(agentfw::native::approval::operator_list(&fixture.agent_home()).is_empty());
+
+        // 4. Reclassification after operator approval:
+        // Initial call is eligible Ask (uncertainty 0.2) -> approval opened and granted.
+        // Reclassification is ambiguous (uncertainty 0.9) -> approval canceled, call withheld!
+        let mut call_reclassify = call.clone();
+        call_reclassify["id"] = json!("sou88-reclassify-call");
+        call_reclassify["params"]["arguments"]["spec"]["payload"] = json!("test-reclassify\n");
+
+        fixture.send_only(&call_reclassify.to_string()).await;
+        let row_reclassify = fixture.wait_pending().await;
+        assert_eq!(row_reclassify["tool"], "save_artifact");
+        operator_approve(&fixture, &row_reclassify).unwrap();
+
+        let reply_r = fixture.receive().await.unwrap();
+        assert!(
+            reply_r.contains("native_approval_reclassify_refused"),
+            "reclassification failure must cancel approval and withhold: {reply_r}"
+        );
+        assert!(!target_path.exists());
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let reply: Value =
+            serde_json::from_str(&fixture.exchange(&call.to_string()).await.unwrap()).unwrap();
+        assert_eq!(reply["result"]["isError"], true);
+        assert!(!target_path.exists());
+    }
+}

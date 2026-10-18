@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (C) 2026 Arthur Lin (carbon-evolution)
 #![cfg(unix)]
+#![cfg_attr(not(target_os = "linux"), allow(unused))]
 
 //! Independent witness verification suite for SOU-88 single-use operator
 //! Ask confirmation for constrained Linux native resource executors.
@@ -63,6 +64,16 @@ agent_policies:
   - name: hard-deny-all
     when: { action_class: side_effecting }
     action: deny
+default: allow
+"#;
+
+const EGRESS_DENY_POLICY: &str = r#"
+agent_policies:
+  - name: ask-network
+    when: { action_class: network }
+    action: ask
+egress_allowlist:
+  - allowed.invalid
 default: allow
 "#;
 
@@ -482,6 +493,7 @@ async fn post(
 // TEST 1: Filesystem Witness - create_file approved executes once
 // =========================================================================
 #[tokio::test]
+#[cfg(target_os = "linux")]
 async fn witness_create_file_approved_executes_once() {
     let fixture = WitnessFixture::new(SIDE_EFFECTING_ASK_POLICY, 60);
     let session = "create-approved-session";
@@ -646,6 +658,7 @@ async fn witness_create_file_approved_executes_once() {
 // TEST 2: Filesystem Witness - Rejection, Mutation, and Expiration (0 executions)
 // =========================================================================
 #[tokio::test]
+#[cfg(target_os = "linux")]
 async fn witness_create_file_rejected_mutated_expired_zero_execution() {
     let fixture = WitnessFixture::new(SIDE_EFFECTING_ASK_POLICY, 1);
     let session = "create-zero-exec-session";
@@ -782,6 +795,7 @@ async fn witness_create_file_rejected_mutated_expired_zero_execution() {
 // TEST 3: Filesystem Witness - read_document approved executes once
 // =========================================================================
 #[tokio::test]
+#[cfg(target_os = "linux")]
 async fn witness_read_document_approved_executes_once() {
     let fixture = WitnessFixture::new(SIDE_EFFECTING_ASK_POLICY, 60);
     let session = "read-approved-session";
@@ -868,6 +882,7 @@ async fn witness_read_document_approved_executes_once() {
 // TEST 4: Network Witness - https_get approved executes once, mutation/rejection 0
 // =========================================================================
 #[tokio::test]
+#[cfg(target_os = "linux")]
 async fn witness_https_get_approved_executes_once_and_rejection_zero_execution() {
     let fixture = WitnessFixture::new(SIDE_EFFECTING_ASK_POLICY, 60);
     let session = "https-witness-session";
@@ -978,12 +993,34 @@ async fn witness_https_get_approved_executes_once_and_rejection_zero_execution()
         .unwrap()
         .iter()
         .any(|c| c == "native_approval_binding_mismatch" || c == "native_https_url_not_allowed"));
+
+    // State machine invariant (SOU-88 / winux125 probe 5):
+    // Failed presented approval is terminally invalidated. Retrying with original URL
+    // and same approval_id must be refused and closed (never retryable).
+    let original_retry = fixture.make_https_get_call(session_mut, &args, Some(pending_mut));
+    let (_, retry_reply) = post(
+        fixture.state.clone(),
+        "/native/v1",
+        &original_retry,
+        Some(NATIVE_TOKEN),
+    )
+    .await;
+    assert_eq!(retry_reply["release"], false);
+    assert!(
+        retry_reply["reason_codes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c == "native_approval_closed" || c == "native_approval_spent"),
+        "retrying original URL after mutation refusal must fail closed: {retry_reply}"
+    );
 }
 
 // =========================================================================
 // TEST 5: Hard Deny Non-Escalation
 // =========================================================================
 #[tokio::test]
+#[cfg(target_os = "linux")]
 async fn witness_hard_deny_cannot_be_approved() {
     let fixture = WitnessFixture::new(HARD_DENY_POLICY, 60);
     let session = "hard-deny-session";
@@ -1034,6 +1071,7 @@ async fn witness_hard_deny_cannot_be_approved() {
 // TEST 6: Provenance Loss Confinement - Single Call Authorization Only
 // =========================================================================
 #[tokio::test]
+#[cfg(target_os = "linux")]
 async fn witness_ask_after_provenance_loss_confinement() {
     let fixture = WitnessFixture::new(SIDE_EFFECTING_ASK_POLICY, 60);
     let session = "provenance-taint-session";
@@ -1134,4 +1172,270 @@ async fn witness_ask_after_provenance_loss_confinement() {
         pending1,
         "new distinct approval required"
     );
+}
+
+// =========================================================================
+// TEST 7: Hard HTTPS Egress Denial Cannot Open or Redeem Approval
+// =========================================================================
+#[tokio::test]
+#[cfg(target_os = "linux")]
+async fn witness_https_egress_denial_cannot_open_or_redeem_approval() {
+    let fixture = WitnessFixture::new(EGRESS_DENY_POLICY, 60);
+    let session = "egress-deny-session";
+    fixture.start_session(session).await;
+
+    let args = json!({
+        "url": HTTPS_URL
+    });
+
+    // 1. Initial GET call to example.com is hard denied due to egress allowlist mismatch
+    let call = fixture.make_https_get_call(session, &args, None);
+    let (status, reply) = post(
+        fixture.state.clone(),
+        "/native/v1",
+        &call,
+        Some(NATIVE_TOKEN),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert_eq!(reply["release"], false);
+    assert_eq!(reply["verdict"], "deny");
+    assert!(
+        reply["reason_codes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c == "native_https_egress_not_allowlisted"),
+        "must contain native_https_egress_not_allowlisted: {reply}"
+    );
+
+    // 2. Attempting to open approval fails with native_approval_hard_deny
+    let (app_status, app_reply) = fixture
+        .open_approval(
+            session,
+            "https_get",
+            &args,
+            fixture.https_policy.profile.schema_sha256.as_str(),
+            Some(&call["resource_admission"]),
+        )
+        .await;
+    assert_eq!(app_status, StatusCode::CONFLICT, "{app_reply}");
+    assert_eq!(app_reply["error_code"], "native_approval_hard_deny");
+    assert!(
+        operator_list(&fixture.agent_home()).is_empty(),
+        "no pending approvals may be opened for egress denial"
+    );
+
+    // 3. Redemption-time control: open approval while egress is allowed,
+    // then revoke egress permission before redemption. Redemption must refuse and terminally invalidate.
+    let fixture_redemption = WitnessFixture::new(SIDE_EFFECTING_ASK_POLICY, 60);
+    let session_r = "egress-redemption-session";
+    fixture_redemption.start_session(session_r).await;
+
+    let call_r = fixture_redemption.make_https_get_call(session_r, &args, None);
+    let (_, app_reply_r) = fixture_redemption
+        .open_approval(
+            session_r,
+            "https_get",
+            &args,
+            fixture_redemption
+                .https_policy
+                .profile
+                .schema_sha256
+                .as_str(),
+            Some(&call_r["resource_admission"]),
+        )
+        .await;
+    let pending_id_r = app_reply_r["pending_id"].as_str().unwrap();
+    let binding_r = app_reply_r["binding_sha256"].as_str().unwrap();
+
+    // Operator approves while egress was allowed
+    operator_approve(
+        &fixture_redemption.agent_home(),
+        HOOK_TOKEN,
+        pending_id_r,
+        binding_r,
+    )
+    .unwrap();
+
+    // Policy changes: egress allowlist is now restricted (example.com removed)
+    let restricted_policy = AgentPolicySet::from_yaml(EGRESS_DENY_POLICY).unwrap();
+    fixture_redemption
+        .state
+        .firewall
+        .lock()
+        .unwrap()
+        .replace_policy_preserving_provenance(restricted_policy);
+
+    // Present approved call: redemption encounters hard egress denial
+    let presented = fixture_redemption.make_https_get_call(session_r, &args, Some(pending_id_r));
+    let (status_p, reply_p) = post(
+        fixture_redemption.state.clone(),
+        "/native/v1",
+        &presented,
+        Some(NATIVE_TOKEN),
+    )
+    .await;
+    assert_eq!(status_p, StatusCode::OK, "{reply_p}");
+    assert_eq!(reply_p["verdict"], "deny");
+    assert_eq!(reply_p["release"], false);
+    assert!(
+        reply_p["reason_codes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c == "native_https_egress_not_allowlisted"),
+        "must contain native_https_egress_not_allowlisted: {reply_p}"
+    );
+    assert!(
+        reply_p["reason_codes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c == "native_approval_hard_deny"),
+        "must contain native_approval_hard_deny: {reply_p}"
+    );
+
+    // Retrying the presented approval fails closed because it was terminally invalidated
+    let (_, retry_p) = post(
+        fixture_redemption.state.clone(),
+        "/native/v1",
+        &presented,
+        Some(NATIVE_TOKEN),
+    )
+    .await;
+    assert_eq!(retry_p["release"], false);
+    assert!(
+        retry_p["reason_codes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c == "native_approval_closed" || c == "native_approval_hard_deny"),
+        "invalidated approval cannot be reused: {retry_p}"
+    );
+}
+
+// =========================================================================
+// TEST 8: Refused Mutation Terminally Invalidates Approval
+// =========================================================================
+#[tokio::test]
+#[cfg(target_os = "linux")]
+async fn witness_refused_mutation_terminally_invalidates_approval() {
+    let fixture = WitnessFixture::new(SIDE_EFFECTING_ASK_POLICY, 60);
+    let session = "mut-terminal-session";
+    fixture.start_session(session).await;
+
+    let original_args = json!({
+        "url": HTTPS_URL
+    });
+
+    // 1. Ask call opens approval
+    let call = fixture.make_https_get_call(session, &original_args, None);
+    let (_, app_reply) = fixture
+        .open_approval(
+            session,
+            "https_get",
+            &original_args,
+            fixture.https_policy.profile.schema_sha256.as_str(),
+            Some(&call["resource_admission"]),
+        )
+        .await;
+    let pending_id = app_reply["pending_id"].as_str().unwrap();
+    let binding = app_reply["binding_sha256"].as_str().unwrap();
+
+    // 2. Operator approves original URL
+    operator_approve(&fixture.agent_home(), HOOK_TOKEN, pending_id, binding).unwrap();
+
+    // 3. Adversary presents approval with mutated URL
+    let mutated_args = json!({
+        "url": "https://example.com/witness/adversary_mutated"
+    });
+    let mut mutated_call = fixture.make_https_get_call(session, &original_args, Some(pending_id));
+    mutated_call["args"] = mutated_args;
+
+    let (_, mut_reply) = post(
+        fixture.state.clone(),
+        "/native/v1",
+        &mutated_call,
+        Some(NATIVE_TOKEN),
+    )
+    .await;
+    assert_eq!(mut_reply["release"], false);
+    assert!(mut_reply["reason_codes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|c| c == "native_approval_binding_mismatch" || c == "native_https_url_not_allowed"));
+
+    // 4. Retry with original URL and same approval_id MUST BE CLOSED and REFUSED
+    let retry_call = fixture.make_https_get_call(session, &original_args, Some(pending_id));
+    let (_, retry_reply) = post(
+        fixture.state.clone(),
+        "/native/v1",
+        &retry_call,
+        Some(NATIVE_TOKEN),
+    )
+    .await;
+    assert_eq!(retry_reply["release"], false);
+    assert!(
+        retry_reply["reason_codes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c == "native_approval_closed" || c == "native_approval_spent"),
+        "approval must be terminally closed: {retry_reply}"
+    );
+}
+
+// =========================================================================
+// TEST 9: Non-Linux Platform Scope Refusal
+// =========================================================================
+#[tokio::test]
+async fn witness_non_linux_platform_refusal() {
+    let fixture = WitnessFixture::new(SIDE_EFFECTING_ASK_POLICY, 60);
+    let session = "platform-refusal-session";
+    fixture.start_session(session).await;
+
+    let target_path = &fixture.create_file_path;
+    let args = json!({
+        "path": target_path.to_str().unwrap(),
+        "content": "test payload\n"
+    });
+
+    let call = fixture.make_create_file_call(session, &args, None);
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        // On non-Linux platforms (macOS, Windows), opening approval is refused
+        // even if CARGO_MANIFEST_DIR or AGENTFW_TEST is set.
+        let (app_status, app_reply) = fixture
+            .open_approval(
+                session,
+                "create_file",
+                &args,
+                fixture.create_policy.profile.schema_sha256.as_str(),
+                Some(&call["resource_admission"]),
+            )
+            .await;
+        assert_eq!(app_status, StatusCode::CONFLICT, "{app_reply}");
+        assert_eq!(
+            app_reply["error_code"],
+            "native_approval_resource_tool_unsupported"
+        );
+        assert!(operator_list(&fixture.agent_home()).is_empty());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let (app_status, app_reply) = fixture
+            .open_approval(
+                session,
+                "create_file",
+                &args,
+                fixture.create_policy.profile.schema_sha256.as_str(),
+                Some(&call["resource_admission"]),
+            )
+            .await;
+        assert_eq!(app_status, StatusCode::OK, "{app_reply}");
+    }
 }
