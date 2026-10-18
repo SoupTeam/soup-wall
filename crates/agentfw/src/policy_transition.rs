@@ -24,6 +24,16 @@ pub struct Boundary {
     _file: File,
 }
 
+impl Drop for Boundary {
+    fn drop(&mut self) {
+        // A concurrent fork may briefly inherit this open file description
+        // before CLOEXEC closes it. End the boundary explicitly, so that an
+        // unrelated child cannot extend it after the owning guard is dropped.
+        // Closing the descriptor still provides the fail-closed fallback.
+        let _ = self._file.unlock();
+    }
+}
+
 impl Barrier {
     pub fn new(home: &Path) -> anyhow::Result<Self> {
         let barrier = Self {
