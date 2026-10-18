@@ -8,7 +8,9 @@ Changes to the public Soup Wall source distribution are recorded here. Release a
   plan, conflicts, prerequisites and a plan digest; an explicit `apply` of that
   digest that journals each step through the accepted install, lifecycle,
   mcp-connection, protection-status and self-test commands and rolls back only
-  its proven changes; and `undo`. Reports keep configured identity separate from
+  its proven changes; and `undo`. Cleanup removes only Agent-home entries the
+  journal recorded for this operation: untracked or changed files, including files
+  inside runtime directories, are preserved and reported as a conflict. Reports keep configured identity separate from
   witnessed behavior, mark unobserved host coverage unknown and contain no
   tokens, payloads or raw paths. Phase 4 stays open.
 

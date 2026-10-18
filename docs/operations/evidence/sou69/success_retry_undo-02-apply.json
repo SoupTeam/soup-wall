@@ -57,7 +57,7 @@
     },
     {
       "action": null,
-      "detail": "127.0.0.1:47033 is available for the new Agent",
+      "detail": "127.0.0.1:55067 is available for the new Agent",
       "id": "port",
       "status": "ok"
     },
@@ -100,7 +100,7 @@
     "note": "No Claude Code session was observed by onboarding; only the configured entry, the daemon identity, an explicit probe and the isolated self-test are reported.",
     "other_mcp_servers": "unknown"
   },
-  "duration_ms": 3390,
+  "duration_ms": 4724,
   "exit_code": 0,
   "explanation": "Configured and verified: the daemon identity matches the plan, the explicit probe returned an admitted result and the isolated self-test passed. Unobserved host sessions remain unknown.",
   "host_probe": {
@@ -111,11 +111,11 @@
   },
   "inputs": {
     "agent": {
-      "path_digest": "581225268699a54d",
-      "sha256": "31186979e3e9951560f437d103c7a66d4162a3fb12a5fb06bcece10a8aebef27"
+      "path_digest": "bd67b18859e21e18",
+      "sha256": "a3c036f7f5bb828b63d24b490372fad803656f1a6e451f6127792a8acd4588c7"
     },
     "agent_home": {
-      "path_digest": "7ba4994557626a9e"
+      "path_digest": "fb1465ec83880bcf"
     },
     "classifier": {
       "kind": "rule-baseline",
@@ -125,9 +125,9 @@
     "host_config": {
       "other_server_entries": 1,
       "other_settings": 1,
-      "path_digest": "f1629cdfeb422d39",
-      "selected_entry_sha256": "3266971403d4a15fb7178bf9a3742ab8f04254afc57f927c09eeabec19890f70",
-      "sha256_at_preview": "5da77926830a393b02915540581bf3040258dbe79905d360e91b634f74193d26"
+      "path_digest": "f2fffdbe769fda11",
+      "selected_entry_sha256": "9c1c852e60300e14d0aa58ad5ece4cc7abbb448fe35e53a1def7b74981f46445",
+      "sha256_at_preview": "19494a7ff7cf4716707af890c7f4d813ca34d41949c95b3371e411c8100f9c2f"
     },
     "policy": {
       "expected_daemon_digest": "239f0d0dd71853fd710f3037b5adfc035cdd3ead53e49b652468e74473c066ee",
@@ -135,14 +135,14 @@
       "rule_count": 12,
       "source": "shipped_default"
     },
-    "port": 47033,
+    "port": 55067,
     "probe": true,
     "registry": {
       "registry_id": "notes-fixture-v1",
       "sha256": "84ca20089de9b412d9b60d1213c78a7fddedeede6fa50cac5313228d2c7e44be"
     },
     "workspace": {
-      "path_digest": "480dc66355cd826d"
+      "path_digest": "bbe94fed68919fac"
     }
   },
   "journal_steps": {
@@ -161,7 +161,7 @@
     "to reverse: agentfw onboard undo with the same Agent, Agent home, host config and server"
   ],
   "operation": "apply",
-  "plan_sha256": "a6fb771d87e9973a6437cf6b46488e306cc08ec13d3004812c57dce4d3692dd6",
+  "plan_sha256": "b15994b49b028dfc2b8c1d6a8066e9abfb4335f16ecc373d4dbaa2a7c39ae157",
   "profile": {
     "arch": "x86_64",
     "id": "linux-local-user-mcp-v1",
@@ -173,7 +173,7 @@
   "schema_version": "sw-onboarding/1",
   "self_test": {
     "exit_code": 0,
-    "report_sha256": "099583e9902ed4cc55e95cacad245b868577da3a9dc523d699cc3b71635e005e",
+    "report_sha256": "71cee1987e865cfcc2011791ec256d7f592581861d312741e1ccd2a2387913c2",
     "result": "passed",
     "scope": "isolated temporary workspace and daemon; it does not show that the configured host is protected",
     "summary": {
@@ -184,10 +184,10 @@
       "unsupported": 0
     }
   },
-  "started_at_unix_ms": 1792337414945,
+  "started_at_unix_ms": 1792343496889,
   "steps": {
     "connect_server": {
-      "elapsed_ms": 201,
+      "elapsed_ms": 328,
       "outcome": "done"
     },
     "create_agent_home": {
@@ -199,23 +199,23 @@
       "outcome": "done"
     },
     "lifecycle_install": {
-      "elapsed_ms": 301,
+      "elapsed_ms": 252,
       "outcome": "done"
     },
     "lifecycle_start": {
-      "elapsed_ms": 805,
+      "elapsed_ms": 874,
       "outcome": "done"
     },
     "self_test": {
-      "elapsed_ms": 1355,
+      "elapsed_ms": 1480,
       "outcome": "done"
     },
     "verify_identity": {
-      "elapsed_ms": 201,
+      "elapsed_ms": 327,
       "outcome": "done"
     },
     "verify_server": {
-      "elapsed_ms": 251,
+      "elapsed_ms": 371,
       "outcome": "done"
     },
     "write_owned_files": {

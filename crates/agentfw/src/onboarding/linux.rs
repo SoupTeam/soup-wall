@@ -805,6 +805,146 @@ pub(crate) struct Journal {
     pub files: BTreeMap<String, String>,
     pub steps: BTreeMap<String, String>,
     pub phase: String,
+    /// Entries of a home this operation created that its own steps created or changed,
+    /// recorded around each step. Cleanup removes only entries that still match.
+    #[serde(default)]
+    pub inventory: BTreeMap<String, InventoryEntry>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct InventoryEntry {
+    pub kind: String,
+    pub sha256: Option<String>,
+}
+
+const INVENTORY_DEPTH: usize = 8;
+const INVENTORY_ENTRIES: usize = 4096;
+
+fn entry_of(path: &Path) -> Option<InventoryEntry> {
+    let meta = std::fs::symlink_metadata(path).ok()?;
+    let file_type = meta.file_type();
+    Some(if file_type.is_symlink() {
+        let target = std::fs::read_link(path).ok()?;
+        InventoryEntry {
+            kind: "symlink".into(),
+            sha256: Some(sha256(target.as_os_str().as_encoded_bytes())),
+        }
+    } else if file_type.is_dir() {
+        InventoryEntry {
+            kind: "dir".into(),
+            sha256: None,
+        }
+    } else if file_type.is_file() {
+        InventoryEntry {
+            kind: "file".into(),
+            sha256: sha256_file(path).ok(),
+        }
+    } else {
+        InventoryEntry {
+            kind: "other".into(),
+            sha256: None,
+        }
+    })
+}
+
+/// Bounded, non-following inventory of a directory tree, keyed by relative path.
+pub(crate) fn inventory(root: &Path) -> BTreeMap<String, InventoryEntry> {
+    fn walk(dir: &Path, prefix: &str, depth: usize, out: &mut BTreeMap<String, InventoryEntry>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            if out.len() >= INVENTORY_ENTRIES {
+                return;
+            }
+            let rel = format!("{prefix}{}", entry.file_name().to_string_lossy());
+            let Some(record) = entry_of(&entry.path()) else {
+                continue;
+            };
+            let is_dir = record.kind == "dir";
+            out.insert(rel.clone(), record);
+            if is_dir && depth < INVENTORY_DEPTH {
+                walk(&entry.path(), &format!("{rel}/"), depth + 1, out);
+            }
+        }
+    }
+    let mut out = BTreeMap::new();
+    walk(root, "", 1, &mut out);
+    out
+}
+
+/// Remove, bottom-up and without following links, only entries that still match the
+/// recorded inventory. Untracked or changed entries are preserved and returned.
+/// A non-empty audit log is kept unless the operator explicitly purges.
+pub(crate) fn clean_recorded(
+    root: &Path,
+    recorded: &BTreeMap<String, InventoryEntry>,
+    purge_audit: bool,
+) -> (Vec<String>, bool) {
+    fn walk(
+        dir: &Path,
+        prefix: &str,
+        recorded: &BTreeMap<String, InventoryEntry>,
+        purge_audit: bool,
+        preserved: &mut Vec<String>,
+        audit_kept: &mut bool,
+    ) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        let mut entries: Vec<_> = entries.flatten().collect();
+        entries.sort_by_key(|e| e.file_name());
+        for entry in entries {
+            let path = entry.path();
+            let rel = format!("{prefix}{}", entry.file_name().to_string_lossy());
+            let Some(actual) = entry_of(&path) else {
+                continue;
+            };
+            if actual.kind == "dir" {
+                walk(
+                    &path,
+                    &format!("{rel}/"),
+                    recorded,
+                    purge_audit,
+                    preserved,
+                    audit_kept,
+                );
+                let tracked = recorded.get(&rel).is_some_and(|r| r.kind == "dir");
+                if !tracked || std::fs::remove_dir(&path).is_err() {
+                    // An untracked directory, or one still holding preserved entries, stays.
+                    if !tracked {
+                        preserved.push(rel);
+                    }
+                }
+                continue;
+            }
+            if rel == "audit.jsonl" && actual.kind == "file" {
+                let empty = std::fs::metadata(&path).is_ok_and(|m| m.len() == 0);
+                if purge_audit || empty {
+                    let _ = std::fs::remove_file(&path);
+                } else {
+                    *audit_kept = true;
+                }
+                continue;
+            }
+            if recorded.get(&rel) == Some(&actual) {
+                let _ = std::fs::remove_file(&path);
+            } else {
+                preserved.push(rel);
+            }
+        }
+    }
+    let mut preserved = Vec::new();
+    let mut audit_kept = false;
+    walk(
+        root,
+        "",
+        recorded,
+        purge_audit,
+        &mut preserved,
+        &mut audit_kept,
+    );
+    (preserved, audit_kept)
 }
 
 fn load_journal(state: &Path) -> std::io::Result<Option<Journal>> {
@@ -1107,6 +1247,11 @@ impl Session<'_> {
         }
         self.mark(name, "started")?;
         let started = Instant::now();
+        let before = if self.home().is_dir() {
+            inventory(self.home())
+        } else {
+            BTreeMap::new()
+        };
         let result = match name {
             "create_agent_home" => self.create_home(),
             "write_owned_files" => self.write_files(),
@@ -1122,8 +1267,19 @@ impl Session<'_> {
         let elapsed = started.elapsed().as_millis() as u64;
         let entry = self.evidence.entry("steps").or_insert_with(|| json!({}));
         entry[name] = json!({"outcome": if result.is_ok() { "done" } else { "stopped" }, "elapsed_ms": elapsed});
+        // Attribute to this operation only what the step itself created or changed, even
+        // when it stopped; entries that existed before the step and were not ours stay foreign.
+        if self.journal.created_home && self.home().is_dir() {
+            for (rel, entry) in inventory(self.home()) {
+                if before.get(&rel) != Some(&entry) || self.journal.inventory.contains_key(&rel) {
+                    self.journal.inventory.insert(rel, entry);
+                }
+            }
+        }
         if result.is_ok() {
             self.mark(name, "done")?;
+        } else {
+            let _ = save_journal(&self.state, &self.journal);
         }
         result
     }
@@ -1584,16 +1740,22 @@ fn apply(args: ApplyArgs) -> i32 {
                      vec!["review the evidence; run `agentfw onboard undo` to reverse the configuration".into()])
                 } else {
                     println!("Rolling back this operation's proven changes...");
+                    // Automatic rollback is never a purge: an operator decides that explicitly.
                     let rollback = rollback(
                         &mut session.journal,
                         &inputs.agent,
                         &paths,
-                        true,
+                        false,
                         session.deadline,
                     );
                     let clean = rollback.iter().all(|r| r["outcome"] != "conflict");
                     body.insert("rollback".into(), json!(rollback));
-                    if clean {
+                    if clean && rollback.iter().any(|r| r["outcome"] == "retained") {
+                        // A non-empty audit log stays; keep the record so an explicit purge can finish.
+                        session.journal.steps.clear();
+                        session.journal.phase = "undone_audit_retained".into();
+                        let _ = save_journal(&session.state, &session.journal);
+                    } else if clean {
                         let _ = remove_state(&paths.state);
                     } else {
                         session.journal.phase = "rollback_conflict".into();
@@ -1727,49 +1889,42 @@ fn rollback(
             }
         }
     }
-    let _ = std::fs::remove_dir(home.join(OWNED_DIR));
     if journal.created_home {
-        let audit = home.join("audit.jsonl");
-        let keep_audit = !purge && std::fs::metadata(&audit).is_ok_and(|m| m.len() > 0);
-        if only_known_entries(&home) {
-            for name in RUNTIME_ENTRIES
+        // Only entries recorded by this operation are removed; nothing is removed recursively.
+        let (preserved, audit_kept) = clean_recorded(&home, &journal.inventory, purge);
+        if !preserved.is_empty() {
+            let mut areas: Vec<String> = preserved
                 .iter()
-                .filter(|n| !(keep_audit && **n == "audit.jsonl"))
-            {
-                let path = home.join(name);
-                match std::fs::symlink_metadata(&path) {
-                    Ok(meta) if meta.is_dir() => {
-                        let _ = std::fs::remove_dir_all(&path);
-                    }
-                    Ok(_) => {
-                        let _ = std::fs::remove_file(&path);
-                    }
-                    Err(_) => {}
-                }
-            }
-            if let Ok(entries) = std::fs::read_dir(&home) {
-                for entry in entries
-                    .flatten()
-                    .filter(|e| e.file_name().to_string_lossy().starts_with(".launch-"))
-                {
-                    let _ = std::fs::remove_file(entry.path());
-                }
-            }
-            if std::fs::remove_dir(&home).is_ok() {
-                journal.created_home = false;
-                record(
-                    "agent_home",
-                    "reversed",
-                    "the Agent home created by onboarding was removed",
-                );
-            } else {
-                record("agent_home", "retained", "non-empty audit log retained; remove with undo --purge-agent-home after review");
-            }
+                .map(|rel| rel.split('/').next().unwrap_or_default().to_string())
+                .collect();
+            areas.dedup();
+            record(
+                "agent_home",
+                "conflict",
+                &format!(
+                    "{} untracked or changed entries were preserved (under: {}); nothing else was removed",
+                    preserved.len(),
+                    areas.join(", ")
+                ),
+            );
+        } else if std::fs::remove_dir(&home).is_ok() {
+            journal.created_home = false;
+            record(
+                "agent_home",
+                "reversed",
+                "the Agent home created by onboarding was removed",
+            );
+        } else if audit_kept {
+            record(
+                "agent_home",
+                "retained",
+                "non-empty audit log retained; remove with undo --purge-agent-home after review",
+            );
         } else {
             record(
                 "agent_home",
                 "conflict",
-                "the Agent home contains files onboarding did not create; retained",
+                "the Agent home could not be removed; retained",
             );
         }
     }
@@ -1927,6 +2082,128 @@ mod tests {
         assert!(only_known_entries(dir.path()));
         std::fs::write(dir.path().join("notes.txt"), b"operator").unwrap();
         assert!(!only_known_entries(dir.path()));
+    }
+
+    /// A created home with one owned file, Agent runtime entries and an audit log,
+    /// plus the journal that onboarding would have recorded for it.
+    fn recorded_home() -> (tempfile::TempDir, Paths, Journal) {
+        let dir = tempfile::tempdir().unwrap();
+        let profile = dir.path().canonicalize().unwrap();
+        let home = profile.join(".agentfw");
+        std::fs::create_dir_all(home.join("grants")).unwrap();
+        std::fs::create_dir_all(home.join(OWNED_DIR)).unwrap();
+        std::fs::write(home.join("config.yaml"), b"enforce: true\n").unwrap();
+        std::fs::write(home.join("grants/g1.json"), b"{}").unwrap();
+        std::fs::write(home.join("audit.jsonl"), b"{\"event\":1}\n").unwrap();
+        let mut journal = Journal {
+            agent_home: home.to_string_lossy().into_owned(),
+            created_home: true,
+            inventory: inventory(&home),
+            ..Journal::default()
+        };
+        journal.files.insert(
+            "config".into(),
+            sha256_file(&home.join("config.yaml")).unwrap(),
+        );
+        let paths = paths(&home).unwrap();
+        (dir, paths, journal)
+    }
+
+    fn home_outcome(results: &[Value]) -> (String, String) {
+        let line = results.iter().find(|r| r["step"] == "agent_home").unwrap();
+        (
+            line["outcome"].as_str().unwrap().into(),
+            line["detail"].as_str().unwrap().into(),
+        )
+    }
+
+    fn run_rollback(journal: &mut Journal, paths: &Paths, purge: bool) -> Vec<Value> {
+        let deadline = Instant::now() + Duration::from_secs(60);
+        rollback(
+            journal,
+            Path::new("/nonexistent/agentfw"),
+            paths,
+            purge,
+            deadline,
+        )
+    }
+
+    #[test]
+    fn rollback_preserves_foreign_files_inside_recognized_directories() {
+        // The automatic rollback after a failed apply calls this with purge = false.
+        let (_dir, paths, mut journal) = recorded_home();
+        let home = PathBuf::from(&journal.agent_home);
+        std::fs::write(home.join("grants/operator-notes.txt"), b"operator bytes").unwrap();
+        std::fs::write(home.join(OWNED_DIR).join("operator.txt"), b"more").unwrap();
+        let (outcome, detail) = home_outcome(&run_rollback(&mut journal, &paths, false));
+        assert_eq!(outcome, "conflict");
+        assert!(detail.starts_with("2 untracked"), "{detail}");
+        assert!(!detail.contains(&*paths.profile.to_string_lossy()));
+        assert_eq!(
+            std::fs::read(home.join("grants/operator-notes.txt")).unwrap(),
+            b"operator bytes"
+        );
+        assert_eq!(
+            std::fs::read(home.join(OWNED_DIR).join("operator.txt")).unwrap(),
+            b"more"
+        );
+        // Recorded entries were removed; the audit log is never purged implicitly.
+        assert!(!home.join("grants/g1.json").exists());
+        assert!(!home.join("config.yaml").exists());
+        assert!(home.join("audit.jsonl").exists());
+        assert!(journal.created_home);
+
+        // An explicit purge still never deletes untracked bytes.
+        let (outcome, _) = home_outcome(&run_rollback(&mut journal, &paths, true));
+        assert_eq!(outcome, "conflict");
+        assert!(home.join("grants/operator-notes.txt").exists());
+        assert!(!home.join("audit.jsonl").exists());
+
+        // Once the operator removes them, the created home is removed.
+        std::fs::remove_file(home.join("grants/operator-notes.txt")).unwrap();
+        std::fs::remove_file(home.join(OWNED_DIR).join("operator.txt")).unwrap();
+        let (outcome, _) = home_outcome(&run_rollback(&mut journal, &paths, false));
+        assert_eq!(outcome, "reversed");
+        assert!(!home.exists());
+    }
+
+    #[test]
+    fn rollback_preserves_changed_runtime_files_and_keeps_audit_without_purge() {
+        let (_dir, paths, mut journal) = recorded_home();
+        let home = PathBuf::from(&journal.agent_home);
+        std::fs::write(home.join("grants/g1.json"), b"{\"changed\":true}").unwrap();
+        let (outcome, detail) = home_outcome(&run_rollback(&mut journal, &paths, false));
+        assert_eq!(outcome, "conflict");
+        assert!(detail.starts_with("1 untracked or changed"), "{detail}");
+        assert_eq!(
+            std::fs::read(home.join("grants/g1.json")).unwrap(),
+            b"{\"changed\":true}"
+        );
+        std::fs::remove_file(home.join("grants/g1.json")).unwrap();
+        let (outcome, _) = home_outcome(&run_rollback(&mut journal, &paths, false));
+        assert_eq!(outcome, "retained");
+        assert_eq!(
+            std::fs::read(home.join("audit.jsonl")).unwrap(),
+            b"{\"event\":1}\n"
+        );
+        let (outcome, _) = home_outcome(&run_rollback(&mut journal, &paths, true));
+        assert_eq!(outcome, "reversed");
+        assert!(!home.exists());
+    }
+
+    #[test]
+    fn inventory_does_not_follow_links() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        std::fs::write(outside.path().join("keep.txt"), b"x").unwrap();
+        std::os::unix::fs::symlink(outside.path(), root.join("link")).unwrap();
+        let recorded = inventory(&root);
+        assert_eq!(recorded["link"].kind, "symlink");
+        assert!(!recorded.contains_key("link/keep.txt"));
+        let (preserved, _) = clean_recorded(&root, &recorded, true);
+        assert!(preserved.is_empty());
+        assert!(outside.path().join("keep.txt").exists());
     }
 
     #[test]

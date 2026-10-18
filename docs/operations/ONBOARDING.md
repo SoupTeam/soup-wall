@@ -84,6 +84,11 @@ runs:
 8. `agentfw mcp-connection inspect` with the explicit probe, if one was given;
 9. the installed `agentfw self-test` in its own isolated workspace.
 
+After every step the journal also records an **inventory** of the Agent home it
+created: each entry the step created or changed (kind and SHA-256), never
+following links. Entries that existed before a step and were not recorded stay
+foreign. Cleanup uses only this record (see [Undo](#3-undo)).
+
 A lock prevents two operations on one Agent home. Each command runs in its own
 process group with a cleared environment and a bounded time.
 
@@ -111,8 +116,10 @@ onboarding observes no Claude Code session.
 - **Failure before configuration** (for example a listener that appears on the
   port during apply): onboarding rolls back only its proven changes in reverse
   order: lifecycle stop/remove, then the exact files it wrote (by digest), then
-  the Agent home it created. Anything changed outside onboarding is retained
-  and reported as a conflict.
+  the recorded entries of the Agent home it created. Anything untracked or
+  changed is retained and reported as a conflict, and the journal stays
+  (`rollback_conflict`) so `undo` can finish later. Automatic rollback never
+  purges: a non-empty audit log is kept like in an ordinary undo.
 - **Verification failure after configuration**: nothing is silently rolled
   back; the result is `failed` and the next step is `undo`.
 - **Interruption** (SIGINT, SIGTERM, SIGHUP or the time bound): the current step
@@ -136,13 +143,26 @@ Undo reverses the recorded onboarding:
 1. `mcp-connection disconnect` restores only the selected entry and keeps later unrelated edits;
 2. `lifecycle stop` and `lifecycle remove`;
 3. the exact files onboarding wrote are removed, matched by digest;
-4. the Agent home is removed if onboarding created it.
+4. in an Agent home onboarding created, only entries that still match the recorded
+   inventory are removed, bottom-up; directories only when empty, and the home
+   itself only when nothing is left. Nothing is deleted recursively.
 
-A non-empty `audit.jsonl` is kept unless `--purge-agent-home` is given; the
-journal then remains (`undone_audit_retained`) so a later purge can finish. If
-the selected entry or an owned file was edited externally, undo stops with
-`incomplete` and overwrites nothing. Resolve the edit and run undo again.
-`apply` refuses to resume an undone or conflicted onboarding.
+| Found in the Agent home | Undo | Undo `--purge-agent-home` |
+|---|---|---|
+| Recorded entry, unchanged | removed | removed |
+| Non-empty `audit.jsonl` | kept (`retained`) | removed |
+| File or directory not recorded (for example `grants/operator-notes.txt`) | kept, `conflict` | kept, `conflict` |
+| Recorded file changed since its step | kept, `conflict` | kept, `conflict` |
+
+On a conflict undo returns `incomplete` (exit 4), keeps the journal
+(`rollback_conflict`) and reports only a count and the top-level directory names,
+never paths. The earlier steps (connection, lifecycle, owned files) stay
+reversed. Review or move the preserved files, then run undo again.
+`--purge-agent-home` only adds the audit log; it never removes untracked or
+changed files. When only the audit log is left, the journal remains
+(`undone_audit_retained`) so a later purge can finish. If the selected entry or
+an owned file was edited externally, undo stops with `incomplete` and overwrites
+nothing. `apply` refuses to resume an undone or conflicted onboarding.
 
 `mcp-connection` keeps its private `.soup-wall-*` recovery files beside the
 host config by design. They can contain the original entry; remove them only
@@ -177,6 +197,7 @@ python3 scripts/onboarding-acceptance.py --agentfw target/release/agentfw --out 
 | `interrupted_and_killed_apply` | SIGINT stops at a step boundary; rerun resumes to `verified`; SIGKILL during verification recovers |
 | `external_edit_conflicts` | a host edit after preview invalidates the plan; an edited wrapped entry or owned file blocks undo without overwrite |
 | `rollback_after_listener_race` | a listener that appears during apply is not adopted; only proven changes are rolled back |
+| `foreign_files_in_agent_home` | operator files inside `grants/` and `onboarding/` survive undo, purge and an automatic rollback with a `conflict`; the journal stays; undo finishes cleanly once they are removed |
 | `unsafe_host_config` | a non-private host config is refused and its permissions are not changed |
 
 ```sh
@@ -186,7 +207,9 @@ cargo test --locked -p agentfw --test onboarding
 
 The Rust checks cover read-only preview and digest binding, refusals with
 actions, conflicts for an existing home and a foreign listener, digest
-enforcement, unsafe host files, undo without a record and report non-overwrite.
+enforcement, unsafe host files, undo without a record, report non-overwrite,
+undo and rollback that preserve untracked or changed files inside runtime
+directories, audit retention without purge, and an inventory that does not follow links.
 
 See the [SOU-69 evidence](evidence/SOU69_ONBOARDING_2026-10-18.md).
 

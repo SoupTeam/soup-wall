@@ -57,7 +57,7 @@
     },
     {
       "action": null,
-      "detail": "127.0.0.1:60787 is available for the new Agent",
+      "detail": "127.0.0.1:47937 is available for the new Agent",
       "id": "port",
       "status": "ok"
     },
@@ -72,11 +72,11 @@
   "explanation": "The plan cannot be applied; resolve the refused or conflicting checks.",
   "inputs": {
     "agent": {
-      "path_digest": "1b1028c109270f9c",
-      "sha256": "31186979e3e9951560f437d103c7a66d4162a3fb12a5fb06bcece10a8aebef27"
+      "path_digest": "0a0805006993db4b",
+      "sha256": "a3c036f7f5bb828b63d24b490372fad803656f1a6e451f6127792a8acd4588c7"
     },
     "agent_home": {
-      "path_digest": "80d8da49af5f574a"
+      "path_digest": "b51dd8fc1942ce2f"
     },
     "classifier": {
       "kind": "rule-baseline",
@@ -86,7 +86,7 @@
     "host_config": {
       "other_server_entries": 0,
       "other_settings": 0,
-      "path_digest": "7c1d2654a0b86e73",
+      "path_digest": "85e1cffaaa4254f2",
       "selected_entry_sha256": "",
       "sha256_at_preview": ""
     },
@@ -96,14 +96,14 @@
       "rule_count": 12,
       "source": "shipped_default"
     },
-    "port": 60787,
+    "port": 47937,
     "probe": true,
     "registry": {
       "registry_id": "notes-fixture-v1",
       "sha256": "84ca20089de9b412d9b60d1213c78a7fddedeede6fa50cac5313228d2c7e44be"
     },
     "workspace": {
-      "path_digest": "099df389d81fce4c"
+      "path_digest": "010869676c3ccde1"
     }
   },
   "next_steps": [
@@ -118,5 +118,5 @@
   },
   "result": "refused",
   "schema_version": "sw-onboarding/1",
-  "started_at_unix_ms": 1792337436394
+  "started_at_unix_ms": 1792343531375
 }

@@ -8,17 +8,18 @@ download, real credential or private/held-out data was used. Phase 4 stays open.
 
 - Source: `main` `449bb38649b52b38cd1b6406e4f0553434b88f59` (a reviewed successor of
   the task base `fff8ba55a22f2d19b3a4554908571adc84a42fce`) with the SOU-69 changes
-  in the working tree. New source SHA-256:
+  in the working tree, including the review fix for PR #184 (inventory-based
+  Agent-home cleanup). New source SHA-256:
 
   | File | SHA-256 |
   |---|---|
   | `crates/agentfw/src/onboarding/mod.rs` | `a3c0028b755037dccd22e2284afafa85277373e3d3c8463c0322dd19fb0730c4` |
-  | `crates/agentfw/src/onboarding/linux.rs` | `78ffba89642694f1cc6379f668c877904c6685cc0471035784027ab48c1f1830` |
-  | `crates/agentfw/tests/onboarding.rs` | `2348a5fc8112d584853cad87b2a8bc45ecb42a0bac70d1097e95b469dffe1156` |
-  | `scripts/onboarding-acceptance.py` | `b63216a925e8d16dbac02b37ae1fe7f66eefb8c182bfd08e1484dad9f9621498` |
+  | `crates/agentfw/src/onboarding/linux.rs` | `16701f12fd87e7ee9513f696bacac4782aad1c7f18cf8e5de0783cf6c43e18ce` |
+  | `crates/agentfw/tests/onboarding.rs` | `5b0906e1c6585c5f5ce3e4c85b44d0bb85e33e1feb5e8408bdaac85115bf7fa9` |
+  | `scripts/onboarding-acceptance.py` | `66449810b9bcc4593ad269467a0ddf18382eeaaa08d1ed855b6ea9869cf0cd02` |
 
 - Agent: `cargo build --locked --release -p agentfw` (rustc 1.97.0, Linux 6.18),
-  SHA-256 `31186979e3e9951560f437d103c7a66d4162a3fb12a5fb06bcece10a8aebef27`, copied
+  SHA-256 `a3c036f7f5bb828b63d24b490372fad803656f1a6e451f6127792a8acd4588c7`, copied
   into each owned root.
 - Classifier: `rule_baseline.py` `d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd`,
   system Python 3.13.16.
@@ -29,7 +30,7 @@ download, real credential or private/held-out data was used. Phase 4 stays open.
 ## Result
 
 `python3 scripts/onboarding-acceptance.py --agentfw target/release/agentfw --out <evidence>`:
-**8/8 scenarios, 45 checks passed** in 22 s. All owned roots were removed
+**9/9 scenarios, 54 checks passed** in 35 s. All owned roots were removed
 afterwards ([summary](sou69/summary.json)). Every onboarding report in
 [`sou69/`](sou69) was checked to contain no raw path from its root.
 
@@ -42,6 +43,7 @@ afterwards ([summary](sou69/summary.json)). Every onboarding report in
 | `interrupted_and_killed_apply` | 6 | SIGINT after `lifecycle_install`: `incomplete`, journal `interrupted`, no rollback; rerun resumed to `verified`; SIGKILL during server verification, rerun `verified`; clean undo |
 | `external_edit_conflicts` | 7 | Host edit after preview invalidated the plan; operator edit of the wrapped entry blocked undo (`rollback_conflict`, entry kept); apply refused while unresolved; edited `config.yaml` retained as a conflict; clean undo after resolution |
 | `rollback_after_listener_race` | 4 | A listener bound while apply ran was not adopted (`incomplete`); rollback reversed lifecycle, config, registry, policy, token and the home; host config and sentinels unchanged |
+| `foreign_files_in_agent_home` | 9 | Operator files in `grants/` and `onboarding/` after apply: undo `incomplete` with an `agent_home` conflict, bytes preserved, journal `rollback_conflict`, connection and lifecycle still reversed; `--purge-agent-home` also preserved them; after removal undo was clean. Files added while apply was interrupted survived the automatic rollback after a listener race (lifecycle and owned files reversed, conflict reported); undo then finished cleanly |
 | `unsafe_host_config` | 3 | A `0644` host config refused; permissions unchanged |
 
 Every scenario checks that the sentinel file, the unrelated `mcpServers`
@@ -53,8 +55,8 @@ documented `mcp-connection` recovery files beside the host config.
 
 | Command | Result |
 |---|---|
-| `cargo test --locked -p agentfw --lib` | 500 passed (2 ignored, pre-existing), including 4 onboarding unit tests |
-| `cargo test --locked -p agentfw --test onboarding` | 5 passed |
+| `cargo test --locked -p agentfw --lib` | 503 passed (2 ignored, pre-existing), including 7 onboarding unit tests |
+| `cargo test --locked -p agentfw --test onboarding` | 7 passed |
 | `cargo clippy --locked -p agentfw --all-targets -- -D warnings` | clean |
 | `cargo fmt --all -- --check` | clean |
 | `python3 -m unittest discover -s scripts/tests -p 'test_*.py'` | 892 run, OK (23 skipped, pre-existing) |

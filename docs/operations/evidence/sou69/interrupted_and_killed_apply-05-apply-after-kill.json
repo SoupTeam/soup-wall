@@ -57,7 +57,7 @@
     },
     {
       "action": null,
-      "detail": "127.0.0.1:37163 is available for the new Agent",
+      "detail": "127.0.0.1:33007 is available for the new Agent",
       "id": "port",
       "status": "ok"
     },
@@ -97,7 +97,7 @@
     "note": "No Claude Code session was observed by onboarding; only the configured entry, the daemon identity, an explicit probe and the isolated self-test are reported.",
     "other_mcp_servers": "unknown"
   },
-  "duration_ms": 2123,
+  "duration_ms": 2924,
   "exit_code": 0,
   "explanation": "Configured and verified: the daemon identity matches the plan, the explicit probe returned an admitted result and the isolated self-test passed. Unobserved host sessions remain unknown.",
   "host_probe": {
@@ -108,11 +108,11 @@
   },
   "inputs": {
     "agent": {
-      "path_digest": "887a924217113772",
-      "sha256": "31186979e3e9951560f437d103c7a66d4162a3fb12a5fb06bcece10a8aebef27"
+      "path_digest": "5f8dcf8557ce626b",
+      "sha256": "a3c036f7f5bb828b63d24b490372fad803656f1a6e451f6127792a8acd4588c7"
     },
     "agent_home": {
-      "path_digest": "b1804191ea506e23"
+      "path_digest": "49b6d3d06a349143"
     },
     "classifier": {
       "kind": "rule-baseline",
@@ -122,9 +122,9 @@
     "host_config": {
       "other_server_entries": 1,
       "other_settings": 1,
-      "path_digest": "8404d9e8e937d817",
-      "selected_entry_sha256": "0234804cdf6e802b2bfcb3034965523c4d410a2494769bc7c46135014631dd97",
-      "sha256_at_preview": "132257502779dd245e3e4caab3a9580d933230f2fda226e4322fe194f2f885f0"
+      "path_digest": "e1ba766549eda0f8",
+      "selected_entry_sha256": "62ad70119aea027b4399ac2924d59b750c1f360a6d180c85473213231087929e",
+      "sha256_at_preview": "c3b880ef4abbcc34be51cd62c19329c9562800ec4021a54d7d638558d1d5040e"
     },
     "policy": {
       "expected_daemon_digest": "239f0d0dd71853fd710f3037b5adfc035cdd3ead53e49b652468e74473c066ee",
@@ -132,14 +132,14 @@
       "rule_count": 12,
       "source": "shipped_default"
     },
-    "port": 37163,
+    "port": 33007,
     "probe": true,
     "registry": {
       "registry_id": "notes-fixture-v1",
       "sha256": "84ca20089de9b412d9b60d1213c78a7fddedeede6fa50cac5313228d2c7e44be"
     },
     "workspace": {
-      "path_digest": "280fd85f08b1a023"
+      "path_digest": "13a830f1c996532a"
     }
   },
   "journal_steps": {
@@ -158,7 +158,7 @@
     "to reverse: agentfw onboard undo with the same Agent, Agent home, host config and server"
   ],
   "operation": "apply",
-  "plan_sha256": "7a468550eb0da61771f170df07ab42e1bff93b13b124c4502717492fae16d344",
+  "plan_sha256": "b6e1639c8fbea1ce586deaf9314ac6d14e1aa9e11ca2bc2cb3b2171c69708504",
   "profile": {
     "arch": "x86_64",
     "id": "linux-local-user-mcp-v1",
@@ -170,7 +170,7 @@
   "schema_version": "sw-onboarding/1",
   "self_test": {
     "exit_code": 0,
-    "report_sha256": "1d72e0a78b92f8d5ba6269bdc82952b7d3b78d7be89ce6469b6cc8a10757d576",
+    "report_sha256": "4b76c2c4c06cbf1c267a4fdbb3ce79375a8960be0d23506885361bbf004007f2",
     "result": "passed",
     "scope": "isolated temporary workspace and daemon; it does not show that the configured host is protected",
     "summary": {
@@ -181,18 +181,18 @@
       "unsupported": 0
     }
   },
-  "started_at_unix_ms": 1792337427867,
+  "started_at_unix_ms": 1792343513258,
   "steps": {
     "self_test": {
-      "elapsed_ms": 1458,
+      "elapsed_ms": 1625,
       "outcome": "done"
     },
     "verify_identity": {
-      "elapsed_ms": 201,
+      "elapsed_ms": 367,
       "outcome": "done"
     },
     "verify_server": {
-      "elapsed_ms": 251,
+      "elapsed_ms": 324,
       "outcome": "done"
     }
   }

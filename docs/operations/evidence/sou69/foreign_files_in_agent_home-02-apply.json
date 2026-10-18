@@ -1,0 +1,226 @@
+{
+  "agentfw_version": "0.3.0",
+  "checks": [
+    {
+      "action": null,
+      "detail": "Linux local-user profile; service management not requested",
+      "id": "platform",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "executable digest matches; lifecycle, mcp-connection, protection-status and self-test are available",
+      "id": "agent",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "rule_baseline.py digest matches the expected revision",
+      "id": "classifier",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "Python 3 runs in isolated mode",
+      "id": "classifier_python",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "reviewed sw-native/1 registry digest matches",
+      "id": "registry",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "shipped_default policy parses (12 rules)",
+      "id": "policy",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "reviewed workspace is an owned directory",
+      "id": "workspace",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "new Agent home will be created",
+      "id": "agent_home",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "reviewed stdio entry found; 1 other server entries and 1 other settings will be preserved",
+      "id": "server",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "127.0.0.1:48403 is available for the new Agent",
+      "id": "port",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "an explicit harmless probe call will verify the connected server",
+      "id": "probe",
+      "status": "ok"
+    }
+  ],
+  "configured": {
+    "checks": {
+      "binary_matches_agent": true,
+      "mode_enforcing": true,
+      "pid_matches_lifecycle": true,
+      "policy_matches": true,
+      "query_answered": true,
+      "registry_matches": true
+    },
+    "note": "daemon identity and configuration; not witnessed protection",
+    "policy": {
+      "digest_format": "agent-policy-json/1",
+      "rule_count": 12,
+      "sha256": "239f0d0dd71853fd710f3037b5adfc035cdd3ead53e49b652468e74473c066ee"
+    },
+    "registry": {
+      "id": "notes-fixture-v1",
+      "sha256": "84ca20089de9b412d9b60d1213c78a7fddedeede6fa50cac5313228d2c7e44be",
+      "state": "supported",
+      "tool_count": 4
+    }
+  },
+  "connection": {
+    "status": "configured"
+  },
+  "coverage": {
+    "claude_hooks": "unknown",
+    "host_session": "unknown",
+    "model_context": "unknown",
+    "note": "No Claude Code session was observed by onboarding; only the configured entry, the daemon identity, an explicit probe and the isolated self-test are reported.",
+    "other_mcp_servers": "unknown"
+  },
+  "duration_ms": 4667,
+  "exit_code": 0,
+  "explanation": "Configured and verified: the daemon identity matches the plan, the explicit probe returned an admitted result and the isolated self-test passed. Unobserved host sessions remain unknown.",
+  "host_probe": {
+    "probe_requested": true,
+    "probe_result_sha256": "ee119923813b005477313360d3b66a432d3a22916b06c69935012f61c3fe959c",
+    "scope": "one explicit call through the configured entry; future calls still pass native admission",
+    "status": "verified_for_this_probe"
+  },
+  "inputs": {
+    "agent": {
+      "path_digest": "e85efca7b5a240b8",
+      "sha256": "a3c036f7f5bb828b63d24b490372fad803656f1a6e451f6127792a8acd4588c7"
+    },
+    "agent_home": {
+      "path_digest": "30ef3a2abca56559"
+    },
+    "classifier": {
+      "kind": "rule-baseline",
+      "python_version": "3.13.16",
+      "sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+    },
+    "host_config": {
+      "other_server_entries": 1,
+      "other_settings": 1,
+      "path_digest": "554908fb9a6be583",
+      "selected_entry_sha256": "58d06189a4cba234d2c77b1b3a07dfe6379d3f025ea15f94a31479723a997716",
+      "sha256_at_preview": "b13f5dc09c19d94fe0c422794bc6646fa201daa630c240eb84033eadabd6e119"
+    },
+    "policy": {
+      "expected_daemon_digest": "239f0d0dd71853fd710f3037b5adfc035cdd3ead53e49b652468e74473c066ee",
+      "file_sha256": "8b2bfb66b14a988a29cf2698c482bc7cd91ba550fea14ccfa63540e815eb3c57",
+      "rule_count": 12,
+      "source": "shipped_default"
+    },
+    "port": 48403,
+    "probe": true,
+    "registry": {
+      "registry_id": "notes-fixture-v1",
+      "sha256": "84ca20089de9b412d9b60d1213c78a7fddedeede6fa50cac5313228d2c7e44be"
+    },
+    "workspace": {
+      "path_digest": "bc397b31318cb7ab"
+    }
+  },
+  "journal_steps": {
+    "connect_server": "done",
+    "create_agent_home": "done",
+    "create_token": "done",
+    "lifecycle_install": "done",
+    "lifecycle_start": "done",
+    "self_test": "done",
+    "verify_identity": "done",
+    "verify_server": "done",
+    "write_owned_files": "done"
+  },
+  "next_steps": [
+    "start a new Claude Code session so it loads the updated MCP entry",
+    "to reverse: agentfw onboard undo with the same Agent, Agent home, host config and server"
+  ],
+  "operation": "apply",
+  "plan_sha256": "2ecd5d105dc6d80e0ea8bd3d2769bdf4229f80880ee6a66e9087a9c41ae0ee81",
+  "profile": {
+    "arch": "x86_64",
+    "id": "linux-local-user-mcp-v1",
+    "os": "linux",
+    "supported": true
+  },
+  "result": "verified",
+  "resumed": false,
+  "schema_version": "sw-onboarding/1",
+  "self_test": {
+    "exit_code": 0,
+    "report_sha256": "108121c531a952f91f345bfc12fa97ef1c0bf5b40920a1c306703c49a5bda3cc",
+    "result": "passed",
+    "scope": "isolated temporary workspace and daemon; it does not show that the configured host is protected",
+    "summary": {
+      "failed": 0,
+      "incomplete": 0,
+      "passed": 5,
+      "unavailable": 0,
+      "unsupported": 0
+    }
+  },
+  "started_at_unix_ms": 1792343524707,
+  "steps": {
+    "connect_server": {
+      "elapsed_ms": 317,
+      "outcome": "done"
+    },
+    "create_agent_home": {
+      "elapsed_ms": 0,
+      "outcome": "done"
+    },
+    "create_token": {
+      "elapsed_ms": 50,
+      "outcome": "done"
+    },
+    "lifecycle_install": {
+      "elapsed_ms": 251,
+      "outcome": "done"
+    },
+    "lifecycle_start": {
+      "elapsed_ms": 836,
+      "outcome": "done"
+    },
+    "self_test": {
+      "elapsed_ms": 1475,
+      "outcome": "done"
+    },
+    "verify_identity": {
+      "elapsed_ms": 327,
+      "outcome": "done"
+    },
+    "verify_server": {
+      "elapsed_ms": 325,
+      "outcome": "done"
+    },
+    "write_owned_files": {
+      "elapsed_ms": 1,
+      "outcome": "done"
+    }
+  }
+}

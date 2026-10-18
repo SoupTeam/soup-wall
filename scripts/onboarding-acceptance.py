@@ -362,6 +362,79 @@ def scenario_rollback(root: Root):
     return out
 
 
+def add_foreign_files(root: Root):
+    """Operator files inside directories onboarding or the Agent recognize."""
+    created = not (root.home / "grants").exists()
+    (root.home / "grants").mkdir(exist_ok=True)
+    files = {root.home / "grants/operator-notes.txt": b"operator notes\n",
+             root.home / "onboarding/operator.txt": b"operator file\n"}
+    for path, data in files.items():
+        path.write_bytes(data)
+    return files, created
+
+
+def remove_foreign_files(root: Root, files, created):
+    for path in files:
+        path.unlink()
+    if created:  # a directory the operator created is the operator's to remove
+        (root.home / "grants").rmdir()
+
+
+def foreign_preserved(files):
+    return all(path.exists() and path.read_bytes() == data for path, data in files.items())
+
+
+def home_conflict(report):
+    return any(r["step"] == "agent_home" and r["outcome"] == "conflict" for r in (report or {}).get("rollback", []))
+
+
+def scenario_foreign_files(root: Root):
+    out = []
+    before = root.sentinels()
+    original = root.host_value()["mcpServers"]["notes"]
+    _, _, digest = root.preview_digest()
+    code, report = root.onboard("apply", root.inputs() + ["--plan-sha256", digest], "apply")
+    check(out, "apply_verified", code == 0 and report["result"] == "verified")
+    files, created = add_foreign_files(root)
+    code, report = root.undo("undo-foreign")
+    check(out, "undo_preserves_foreign_bytes", code == 4 and report["result"] == "incomplete" and home_conflict(report)
+          and foreign_preserved(files) and (root.journal() or {}).get("phase") == "rollback_conflict",
+          result=report and report["result"])
+    check(out, "undo_reversed_connection_and_lifecycle", root.host_value()["mcpServers"]["notes"] == original
+          and root.owned_processes() == 0)
+    code, report = root.undo("undo-foreign-purge", purge=True)
+    check(out, "purge_never_deletes_foreign_bytes", code == 4 and home_conflict(report) and foreign_preserved(files))
+    remove_foreign_files(root, files, created)
+    code, report = root.undo("undo-purge", purge=True)
+    check(out, "undo_after_removal_clean", code == 0 and not root.home.exists() and not root.state.exists())
+    # Failure rollback: foreign files added while apply was interrupted, then a listener race.
+    _, _, digest = root.preview_digest()
+    process, report_path = root.onboard("apply", root.inputs() + ["--plan-sha256", digest], "apply-interrupted", popen=True)
+    wait_for(lambda: (root.journal() or {}).get("steps", {}).get("create_token") in ("started", "done"))
+    process.send_signal(signal.SIGINT)
+    process.communicate(timeout=600)
+    steps = (root.journal() or {}).get("steps", {})
+    check(out, "interrupted_before_lifecycle", process.returncode == 4 and "lifecycle_install" not in steps)
+    files, created = add_foreign_files(root)
+    process, report_path = root.onboard("apply", root.inputs() + ["--plan-sha256", digest], "apply-race", popen=True)
+    listener = None
+    if wait_for(lambda: (root.journal() or {}).get("steps", {}).get("lifecycle_install") in ("started", "done")):
+        listener = ForeignListener(root.port)
+    process.communicate(timeout=600)
+    if listener:
+        listener.close()
+    report = json.loads(report_path.read_text())
+    reversed_steps = [r["step"] for r in report.get("rollback", []) if r["outcome"] == "reversed"]
+    check(out, "failure_rollback_preserves_foreign_bytes", process.returncode == 4 and home_conflict(report)
+          and "lifecycle" in reversed_steps and "config" in reversed_steps and foreign_preserved(files)
+          and (root.journal() or {}).get("phase") == "rollback_conflict", result=report["result"])
+    remove_foreign_files(root, files, created)
+    code, report = root.undo("undo-after-rollback", purge=True)
+    check(out, "undo_after_rollback_clean", code == 0 and not root.home.exists() and not root.state.exists()
+          and root.sentinels() == before and root.owned_processes() == 0)
+    return out
+
+
 def scenario_unsafe_host(root: Root):
     out = []
     os.chmod(root.host, 0o644)
@@ -375,7 +448,8 @@ def scenario_unsafe_host(root: Root):
 SCENARIOS = [("success_retry_undo", scenario_success), ("missing_or_wrong_classifier", scenario_classifier),
              ("existing_active_config", scenario_existing_config), ("occupied_port_foreign_listener", scenario_port),
              ("interrupted_and_killed_apply", scenario_interrupted), ("external_edit_conflicts", scenario_external_edits),
-             ("rollback_after_listener_race", scenario_rollback), ("unsafe_host_config", scenario_unsafe_host)]
+             ("rollback_after_listener_race", scenario_rollback), ("foreign_files_in_agent_home", scenario_foreign_files),
+             ("unsafe_host_config", scenario_unsafe_host)]
 
 
 def main():

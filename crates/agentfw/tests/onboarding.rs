@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! `agentfw onboard` refusal and read-only checks against the built binary.
+//! `agentfw onboard` refusal, read-only and undo ownership checks against the built binary.
 //! The full apply/retry/interrupt/rollback/undo matrix runs in
 //! `scripts/onboarding-acceptance.py` (see docs/operations/ONBOARDING.md).
 #![cfg(target_os = "linux")]
@@ -362,4 +362,157 @@ fn undo_without_a_recorded_onboarding_changes_nothing_and_reports_are_never_repl
         std::fs::read(home.root.join("taken.json")).unwrap(),
         b"operator"
     );
+}
+
+fn journal(home: &Home) -> Option<Value> {
+    std::fs::read(home.root.join("user/.soup-wall-onboarding/journal.json"))
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+}
+
+/// The journal and home a stopped onboarding leaves behind after its files were
+/// written and the Agent created runtime entries (no connection or lifecycle yet).
+fn recorded_onboarding(home: &Home) -> PathBuf {
+    let user = home.root.join("user");
+    let agent_home = user.join(".agentfw");
+    let state = user.join(".soup-wall-onboarding");
+    for dir in [
+        agent_home.join("grants"),
+        agent_home.join("onboarding"),
+        state.clone(),
+    ] {
+        std::fs::create_dir_all(&dir).unwrap();
+    }
+    let files = [
+        ("config.yaml", b"enforce: true\n".as_slice()),
+        ("onboarding/registry.json", b"{}"),
+        ("grants/g1.json", b"{\"grant\":1}"),
+        ("audit.jsonl", b"{\"event\":1}\n"),
+    ];
+    let mut inventory = serde_json::Map::new();
+    for dir in ["grants", "onboarding"] {
+        inventory.insert(dir.into(), json!({"kind": "dir", "sha256": null}));
+    }
+    for (rel, bytes) in files {
+        std::fs::write(agent_home.join(rel), bytes).unwrap();
+        inventory.insert(rel.into(), json!({"kind": "file", "sha256": sha(bytes)}));
+    }
+    let journal = json!({
+        "schema": "sw-onboarding/1", "plan_sha256": "0".repeat(64), "core_sha256": "0".repeat(64),
+        "agent_home": agent_home, "host_config": user.join(".claude/mcp.json"), "server": "notes",
+        "agent": AGENT, "agent_sha256": agent_sha(), "port": home.port, "created_home": true,
+        "files": {"config": sha(b"enforce: true\n")},
+        "steps": {"create_agent_home": "done", "write_owned_files": "done", "create_token": "done"},
+        "phase": "interrupted", "inventory": inventory,
+    });
+    std::fs::write(
+        state.join("journal.json"),
+        serde_json::to_vec_pretty(&journal).unwrap(),
+    )
+    .unwrap();
+    for dir in [&state, &agent_home] {
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    agent_home
+}
+
+fn undo_args(home: &Home, purge: bool) -> Vec<String> {
+    let user = home.root.join("user");
+    let mut args = vec![
+        "--agent".into(),
+        AGENT.into(),
+        "--agent-home".into(),
+        user.join(".agentfw").display().to_string(),
+        "--host-config".into(),
+        user.join(".claude/mcp.json").display().to_string(),
+        "--server".into(),
+        "notes".into(),
+    ];
+    if purge {
+        args.push("--purge-agent-home".into());
+    }
+    args
+}
+
+#[test]
+fn undo_preserves_foreign_files_inside_recognized_directories() {
+    let Some(home) = Home::new() else { return };
+    let agent_home = recorded_onboarding(&home);
+    std::fs::write(
+        agent_home.join("grants/operator-notes.txt"),
+        b"operator bytes",
+    )
+    .unwrap();
+    std::fs::write(agent_home.join("onboarding/operator.txt"), b"more").unwrap();
+    for (purge, name) in [(false, "u1.json"), (true, "u2.json")] {
+        let (code, report, _) = home.onboard("undo", undo_args(&home, purge), name);
+        let report = report.unwrap();
+        assert_eq!(
+            (code, report["result"].as_str()),
+            (Some(4), Some("incomplete")),
+            "{report}"
+        );
+        let line = report["rollback"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["step"] == "agent_home")
+            .unwrap();
+        assert_eq!(line["outcome"], "conflict");
+        assert!(!report.to_string().contains(&*home.root.to_string_lossy()));
+        assert_eq!(
+            std::fs::read(agent_home.join("grants/operator-notes.txt")).unwrap(),
+            b"operator bytes"
+        );
+        assert_eq!(
+            std::fs::read(agent_home.join("onboarding/operator.txt")).unwrap(),
+            b"more"
+        );
+        assert_eq!(journal(&home).unwrap()["phase"], "rollback_conflict");
+    }
+    // Recorded entries were removed; the audit log only by the explicit purge.
+    assert!(!agent_home.join("grants/g1.json").exists());
+    assert!(!agent_home.join("config.yaml").exists());
+    assert!(!agent_home.join("audit.jsonl").exists());
+    std::fs::remove_file(agent_home.join("grants/operator-notes.txt")).unwrap();
+    std::fs::remove_file(agent_home.join("onboarding/operator.txt")).unwrap();
+    let (code, report, _) = home.onboard("undo", undo_args(&home, false), "u3.json");
+    assert_eq!(
+        (code, report.unwrap()["result"].as_str()),
+        (Some(0), Some("undone"))
+    );
+    assert!(!agent_home.exists());
+    assert!(journal(&home).is_none());
+}
+
+#[test]
+fn ordinary_undo_keeps_the_audit_log_and_a_changed_runtime_file() {
+    let Some(home) = Home::new() else { return };
+    let agent_home = recorded_onboarding(&home);
+    std::fs::write(agent_home.join("grants/g1.json"), b"{\"changed\":true}").unwrap();
+    let (code, report, _) = home.onboard("undo", undo_args(&home, false), "u1.json");
+    assert_eq!(
+        (code, report.unwrap()["result"].as_str()),
+        (Some(4), Some("incomplete"))
+    );
+    assert_eq!(
+        std::fs::read(agent_home.join("grants/g1.json")).unwrap(),
+        b"{\"changed\":true}"
+    );
+    assert!(agent_home.join("audit.jsonl").exists());
+    std::fs::remove_file(agent_home.join("grants/g1.json")).unwrap();
+    let (code, report, _) = home.onboard("undo", undo_args(&home, false), "u2.json");
+    assert_eq!(
+        (code, report.unwrap()["result"].as_str()),
+        (Some(0), Some("undone"))
+    );
+    assert_eq!(
+        std::fs::read(agent_home.join("audit.jsonl")).unwrap(),
+        b"{\"event\":1}\n"
+    );
+    assert_eq!(journal(&home).unwrap()["phase"], "undone_audit_retained");
+    let (code, _, _) = home.onboard("undo", undo_args(&home, true), "u3.json");
+    assert_eq!(code, Some(0));
+    assert!(!agent_home.exists());
+    assert!(journal(&home).is_none());
 }

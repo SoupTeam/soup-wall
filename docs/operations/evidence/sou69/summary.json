@@ -1,6 +1,6 @@
 {
   "schema": "sw-onboarding-acceptance/1",
-  "agentfw_sha256": "31186979e3e9951560f437d103c7a66d4162a3fb12a5fb06bcece10a8aebef27",
+  "agentfw_sha256": "a3c036f7f5bb828b63d24b490372fad803656f1a6e451f6127792a8acd4588c7",
   "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
   "server_sha256": "81fc37feaf8109832106246e317801c7e9c49154286fd6133549751a0b328206",
   "outside_source_checkout": true,
@@ -75,7 +75,7 @@
         "04-undo.json",
         "05-undo-purge.json"
       ],
-      "duration_s": 6.2
+      "duration_s": 8.4
     },
     {
       "scenario": "missing_or_wrong_classifier",
@@ -129,7 +129,7 @@
         "01-preview.json",
         "02-apply.json"
       ],
-      "duration_s": 0.7
+      "duration_s": 0.5
     },
     {
       "scenario": "occupied_port_foreign_listener",
@@ -153,7 +153,7 @@
         "02-preview.json",
         "03-apply-after-listener.json"
       ],
-      "duration_s": 1.1
+      "duration_s": 0.9
     },
     {
       "scenario": "interrupted_and_killed_apply",
@@ -193,7 +193,7 @@
         "05-apply-after-kill.json",
         "06-undo-purge.json"
       ],
-      "duration_s": 7.0
+      "duration_s": 9.6
     },
     {
       "scenario": "external_edit_conflicts",
@@ -238,7 +238,7 @@
         "07-undo-file-conflict.json",
         "08-undo-purge.json"
       ],
-      "duration_s": 4.9
+      "duration_s": 6.4
     },
     {
       "scenario": "rollback_after_listener_race",
@@ -266,7 +266,63 @@
         "01-preview.json",
         "02-apply-race.json"
       ],
-      "duration_s": 1.2
+      "duration_s": 1.5
+    },
+    {
+      "scenario": "foreign_files_in_agent_home",
+      "passed": true,
+      "checks": [
+        {
+          "check": "apply_verified",
+          "passed": true
+        },
+        {
+          "check": "undo_preserves_foreign_bytes",
+          "passed": true,
+          "result": "incomplete"
+        },
+        {
+          "check": "undo_reversed_connection_and_lifecycle",
+          "passed": true
+        },
+        {
+          "check": "purge_never_deletes_foreign_bytes",
+          "passed": true
+        },
+        {
+          "check": "undo_after_removal_clean",
+          "passed": true
+        },
+        {
+          "check": "interrupted_before_lifecycle",
+          "passed": true
+        },
+        {
+          "check": "failure_rollback_preserves_foreign_bytes",
+          "passed": true,
+          "result": "incomplete"
+        },
+        {
+          "check": "undo_after_rollback_clean",
+          "passed": true
+        },
+        {
+          "check": "reports_contain_no_raw_paths",
+          "passed": true
+        }
+      ],
+      "reports": [
+        "01-preview.json",
+        "02-apply.json",
+        "03-undo-foreign.json",
+        "04-undo-foreign-purge.json",
+        "05-undo-purge.json",
+        "06-preview.json",
+        "07-apply-interrupted.json",
+        "08-apply-race.json",
+        "09-undo-after-rollback.json"
+      ],
+      "duration_s": 6.9
     },
     {
       "scenario": "unsafe_host_config",
@@ -295,5 +351,5 @@
     "owned_roots_removed": true
   },
   "passed": true,
-  "duration_s": 22.2
+  "duration_s": 35.2
 }
