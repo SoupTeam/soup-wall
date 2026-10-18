@@ -77,6 +77,7 @@ struct Installed {
     classifier: Option<Classifier>,
     host_session: String,
     profile_server_id: String,
+    original_binary_sha256: String,
     current: String,
     previous: Option<String>,
     generation: u64,
@@ -107,6 +108,7 @@ struct Journal {
     classifier: Option<Classifier>,
     host_session: String,
     profile_server_id: String,
+    original_binary_sha256: String,
     proposed: Option<Owner>,
 }
 
@@ -163,7 +165,8 @@ fn validate_installed(state: &Installed, o: &Options) -> Result<()> {
                 &state.registry,
                 &state.config,
                 &state.policy,
-                &state.agent
+                &state.agent,
+                &state.original_binary_sha256
             ]
             .iter()
             .all(|s| crate::native::is_digest(s))
@@ -244,6 +247,7 @@ async fn native_request(
     method: reqwest::Method,
     route: &str,
     host: Option<&str>,
+    activation: bool,
 ) -> Result<Value> {
     use futures_util::StreamExt;
     let config = crate::Config::from_yaml(std::str::from_utf8(&read_private(
@@ -268,6 +272,9 @@ async fn native_request(
         .bearer_auth(std::str::from_utf8(&token)?.trim());
     if let Some(host) = host {
         request = request.header("x-agentfw-host-session", host);
+    }
+    if activation {
+        request = request.header("x-agentfw-profile-activation", "true");
     }
     let response = request
         .send()
@@ -352,7 +359,8 @@ async fn preview(target: &Target, config: &ConfigFile) -> Result<(Value, Owner, 
         target.profile.join("profile.json"),
     )?)?;
     ensure!(
-        candidate_profile.server_id == source_profile.server_id,
+        candidate_profile.server_id == source_profile.server_id
+            && source_profile.server_id == format!("claude-{}", &id(o)[..24]),
         "profile original server identity mismatch"
     );
     let registry_config: crate::native::Registry =
@@ -404,7 +412,12 @@ async fn preview(target: &Target, config: &ConfigFile) -> Result<(Value, Owner, 
             installed.current == source.bundle_sha256
                 && installed.generation == state.generation
                 && installed.host_session == target.host_session
-                && installed.profile_server_id == source_profile.server_id,
+                && installed.profile_server_id == source_profile.server_id
+                && executable(Path::new(
+                    owner.original["command"]
+                        .as_str()
+                        .context("original command absent")?
+                ))? == installed.original_binary_sha256,
             "profile revision or generation changed"
         );
         if target.rollback {
@@ -423,13 +436,14 @@ async fn preview(target: &Target, config: &ConfigFile) -> Result<(Value, Owner, 
         .generation
         .checked_add(1)
         .context("profile generation exhausted")?;
-    let runtime = native_request(o, reqwest::Method::GET, "/native/v1/instance", None).await?;
+    let runtime =
+        native_request(o, reqwest::Method::GET, "/native/v1/instance", None, false).await?;
     let diff =
         crate::mcp::profile_author::compute_profile_diff(&target.source_profile, &target.profile)?;
     let binding = json!({"domain":"agentfw/owned-profile-preview/v1", "path":o.path,"server":o.server,
         "home":o.home,"owner":owner,"host_config":sha(&config.bytes),"agent":native.binary,
         "agent_config":native.config,"registry":native.registry,"policy":native.policy,
-        "native_instance":runtime["instance_id"],"source":source.bundle_sha256,"target":candidate.bundle_sha256,
+        "native_instance":runtime["instance_id"],"original_binary_sha256":executable(Path::new(owner.original["command"].as_str().context("original command absent")?))?,"source":source.bundle_sha256,"target":candidate.bundle_sha256,
         "generation":generation,"rollback":target.rollback,"classifier":classifier,"host_session":target.host_session,"profile_server_id":source_profile.server_id});
     let approval = crate::mcp::profile_author::digest(&binding);
     config.snapshot_unchanged(&o.server, &Some(owner.clone()))?;
@@ -486,6 +500,14 @@ async fn finish(o: &Options, config: &mut ConfigFile, j: &mut Journal) -> Result
             && native.policy == j.policy,
         "candidate daemon identity or policy changed"
     );
+    ensure!(
+        executable(Path::new(
+            j.before.original["command"]
+                .as_str()
+                .context("original command absent")?
+        ))? == j.original_binary_sha256,
+        "original server binary changed"
+    );
     let mut proposed = j.before.clone();
     proposed.wrapped = launcher(o, &j.before.original, j.generation)?;
     proposed.wrapped_sha256 = hash(&proposed.wrapped);
@@ -526,6 +548,7 @@ async fn finish(o: &Options, config: &mut ConfigFile, j: &mut Journal) -> Result
         classifier: j.classifier.clone(),
         host_session: j.host_session.clone(),
         profile_server_id: j.profile_server_id.clone(),
+        original_binary_sha256: j.original_binary_sha256.clone(),
         current: j.target_bundle.clone(),
         previous: Some(j.source_bundle.clone()),
         generation: j.generation,
@@ -536,6 +559,18 @@ async fn finish(o: &Options, config: &mut ConfigFile, j: &mut Journal) -> Result
         host_reload: "pending".into(),
     };
     save(config, &state_name(o), &installed)?;
+    let activation = native_request(
+        o,
+        reqwest::Method::POST,
+        crate::native::continuity::BARRIER,
+        Some(&j.host_session),
+        true,
+    )
+    .await?;
+    ensure!(
+        activation["registry_sha256"].as_str() == Some(j.target_registry.as_str()),
+        "candidate changed before authority activation"
+    );
     release(o, j)?;
     remove(config, &journal_name(o))?;
     Ok(
@@ -579,6 +614,10 @@ async fn apply(target: Target, approval: String) -> Result<Value> {
         rollback: target.rollback,
         classifier: serde_json::from_value(report["identities"]["classifier"].clone())?,
         host_session: target.host_session.clone(),
+        original_binary_sha256: report["identities"]["original_binary_sha256"]
+            .as_str()
+            .context("missing original binary identity")?
+            .into(),
         profile_server_id: report["identities"]["profile_server_id"]
             .as_str()
             .context("missing server identity")?
@@ -598,6 +637,7 @@ async fn apply(target: Target, approval: String) -> Result<Value> {
         reqwest::Method::POST,
         crate::native::continuity::BARRIER,
         Some(&j.host_session),
+        false,
     )
     .await?;
     ensure!(
@@ -721,6 +761,16 @@ async fn collector(o: Options, generation: u64) -> Result<Value> {
             && active.active_bundle_sha256.as_deref() == Some(installed.current.as_str()),
         "active profile was superseded"
     );
+    let active_bundle = verify_bundle_files(
+        &o.home
+            .join("mcp-profiles/revisions")
+            .join(&installed.current),
+    )?;
+    ensure!(
+        active_bundle.bundle_sha256 == installed.current
+            && active_bundle.registry_sha256 == installed.registry,
+        "installed reviewed bundle changed"
+    );
     let owner = config
         .state(&o.server)?
         .context("owned connection absent")?;
@@ -751,7 +801,8 @@ async fn collector(o: Options, generation: u64) -> Result<Value> {
             .context("native registry absent")?,
         std::str::from_utf8(&token)?.trim().to_string(),
     )?;
-    let snapshot = native_request(&o, reqwest::Method::GET, "/native/v1/instance", None).await?;
+    let snapshot =
+        native_request(&o, reqwest::Method::GET, "/native/v1/instance", None, false).await?;
     let instance = snapshot["instance_id"]
         .as_str()
         .context("native instance unavailable")?;
@@ -796,11 +847,14 @@ async fn collector(o: Options, generation: u64) -> Result<Value> {
         Some(resources),
     );
     let original = &owner.original;
-    executable(Path::new(
-        original["command"]
-            .as_str()
-            .context("original command absent")?,
-    ))?;
+    ensure!(
+        executable(Path::new(
+            original["command"]
+                .as_str()
+                .context("original command absent")?
+        ))? == installed.original_binary_sha256,
+        "original server binary changed"
+    );
     config.snapshot_unchanged(&o.server, &Some(owner.clone()))?;
     // Release the host publication lock before replacing the process image.
     drop(_lock);

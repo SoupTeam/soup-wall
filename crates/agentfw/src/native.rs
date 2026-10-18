@@ -1388,6 +1388,16 @@ fn rollback_provenance_contexts(firewall: &mut soup_wall_agent::AgentFirewall, c
 }
 
 fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Response, &'static str> {
+    if request.event == "session_start"
+        && request.host_session.is_none()
+        && native
+            .continuity
+            .as_ref()
+            .is_some_and(|c| c.requires_scoped_authority())
+    {
+        return Err("native_profile_authority_required");
+    }
+
     let started = Instant::now();
     // One lock covers sequencing, inspection, admission and audit. No await,
     // external judge, or network request occurs while this guard is held.

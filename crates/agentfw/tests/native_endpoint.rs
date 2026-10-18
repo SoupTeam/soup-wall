@@ -5924,3 +5924,62 @@ async fn sou78_persistence_failure_returns_documented_hook_deny_before_execution
         None
     );
 }
+
+#[tokio::test]
+async fn sou78_activation_retires_unversioned_launchers_and_persists_required_authority() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = sou78_durable_state(dir.path());
+    let event = json!({"contract_version":CONTRACT,"registry_sha256":sha(&serde_json::to_vec(&registry()).unwrap()),
+        "session_id":"before-activation","event":"session_start"});
+    let (status, reply) = post(state.clone(), "/native/v1", &event, Some(NATIVE_TOKEN)).await;
+    assert_allow(status, &reply);
+    let response = app(state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(agentfw::native::continuity::BARRIER)
+                .header("authorization", format!("Bearer {NATIVE_TOKEN}"))
+                .header("x-agentfw-host-session", "profile-host")
+                .header("x-agentfw-profile-activation", "true")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    for current in [state, sou78_durable_state(dir.path())] {
+        let (_, reply) = post(current, "/native/v1", &event, Some(NATIVE_TOKEN)).await;
+        assert_eq!(reply["release"], false);
+        assert_eq!(reply["error_code"], "native_profile_authority_required");
+    }
+}
+
+#[tokio::test]
+async fn sou78_pending_connection_refuses_native_calls_before_body_or_state_allocation() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = sou78_durable_state(dir.path());
+    let root = dir.path().join("mcp-profiles");
+    std::fs::create_dir(&root).unwrap();
+    std::fs::write(root.join("connection-transition.json"), b"owned-operation").unwrap();
+    let response = app(state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/native/v1")
+                .header("authorization", format!("Bearer {NATIVE_TOKEN}"))
+                .body(Body::from_stream(futures_util::stream::pending::<
+                    Result<axum::body::Bytes, std::io::Error>,
+                >()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
+    assert_eq!(
+        serde_json::from_slice::<Value>(&bytes).unwrap()["error_code"],
+        "native_profile_transition_pending"
+    );
+    assert!(!root.join("risk-inflight.json").exists());
+    assert!(!root.join("risk-checkpoint.json").exists());
+}

@@ -31,6 +31,7 @@ const FORMAT: &str = "sw-native/provenance-checkpoint/1";
 struct Checkpoint {
     format: String,
     sequence: u64,
+    require_scoped_authority: bool,
     scoped_hosts: Vec<String>,
     provenance: ProvenanceSnapshot,
     signature: String,
@@ -39,6 +40,7 @@ struct Checkpoint {
 pub struct Continuity {
     root: PathBuf,
     enabled: AtomicBool,
+    require_scoped_authority: AtomicBool,
     sequence: AtomicU64,
     gate: tokio::sync::Mutex<()>,
 }
@@ -71,6 +73,7 @@ fn signature(checkpoint: &Checkpoint, token: &str) -> Result<Vec<u8>> {
     mac.update(&encode_bounded(&(
         &checkpoint.format,
         checkpoint.sequence,
+        checkpoint.require_scoped_authority,
         &checkpoint.scoped_hosts,
         &checkpoint.provenance,
     ))?);
@@ -184,6 +187,7 @@ impl Continuity {
         let state = Self {
             root,
             enabled: AtomicBool::new(false),
+            require_scoped_authority: AtomicBool::new(false),
             sequence: AtomicU64::new(0),
             gate: tokio::sync::Mutex::new(()),
         };
@@ -222,6 +226,9 @@ impl Continuity {
                     .restore_provenance_snapshot(checkpoint.provenance)
                     .map_err(anyhow::Error::msg)?;
                 state.sequence.store(checkpoint.sequence, Ordering::Relaxed);
+                state
+                    .require_scoped_authority
+                    .store(checkpoint.require_scoped_authority, Ordering::Release);
             }
             if marker.try_exists()? {
                 ensure!(
@@ -233,6 +240,62 @@ impl Continuity {
             state.enabled.store(true, Ordering::Release);
         }
         Ok(state)
+    }
+
+    pub(crate) fn requires_scoped_authority(&self) -> bool {
+        self.require_scoped_authority.load(Ordering::Acquire)
+    }
+
+    /// An exact reviewed manifest change is explicit operator intent, not discovery
+    /// reapproval. All injection/shadowing policy checks still run on the live data.
+    pub(crate) fn reviewed_manifest(&self, server: &str, hash: &str, registry: &str) -> bool {
+        (|| -> Result<bool> {
+            if !self.requires_scoped_authority() {
+                return Ok(false);
+            }
+            let home = self.root.parent().context("continuity home absent")?;
+            let state = crate::mcp::profile_lifecycle::ProfileManager::new(home).load_state()?;
+            ensure!(state.in_progress.is_none(), "profile transition pending");
+            let active = state
+                .active_bundle_sha256
+                .context("active profile absent")?;
+            ensure!(
+                crate::native::is_digest(&active),
+                "invalid active profile identity"
+            );
+            let dir = self.root.join("revisions").join(&active);
+            let bundle = crate::mcp::profile_lifecycle::verify_bundle_files(&dir)?;
+            ensure!(
+                bundle.bundle_sha256 == active && bundle.registry_sha256 == registry,
+                "active profile changed"
+            );
+            let snapshot: serde_json::Value =
+                serde_json::from_slice(&read_private(&dir.join("source-snapshot.json"))?)?;
+            if snapshot["server_id"].as_str() != Some(server) {
+                return Ok(false);
+            }
+            let mut tools = Vec::new();
+            for tool in snapshot["tools"]
+                .as_array()
+                .context("reviewed tools absent")?
+            {
+                let mut description = tool["description"].as_str().unwrap_or("").to_owned();
+                if let Some(title) = tool["annotations"]["title"].as_str() {
+                    description.push('\n');
+                    description.push_str(title);
+                }
+                tools.push(soup_wall_agent::ToolDecl {
+                    name: tool["name"]
+                        .as_str()
+                        .context("tool identity absent")?
+                        .into(),
+                    description,
+                    schema: tool["inputSchema"].clone(),
+                });
+            }
+            Ok(crate::mcp::manifest::manifest_hash(&tools) == hash)
+        })()
+        .unwrap_or(false)
     }
 
     fn begin(&self) -> Result<()> {
@@ -258,6 +321,7 @@ impl Continuity {
         let mut checkpoint = Checkpoint {
             format: FORMAT.into(),
             sequence,
+            require_scoped_authority: self.requires_scoped_authority(),
             scoped_hosts: hosts,
             provenance: firewall.provenance_snapshot(),
             signature: String::new(),
@@ -308,6 +372,17 @@ pub async fn middleware(State(st): State<Shared>, request: Request, next: Next) 
         return next.run(request).await;
     }
     let _gate = store.gate.lock().await;
+    if matches!(path.as_str(), "/native/v1" | "/native/approval/v1" | "/mcp")
+        && !matches!(fs::symlink_metadata(store.root.join("connection-transition.json")),
+            Err(ref error) if error.kind() == std::io::ErrorKind::NotFound)
+    {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"contract_version":super::CONTRACT,
+            "release":false,"verdict":"deny","error_code":"native_profile_transition_pending"})),
+        )
+            .into_response();
+    }
     let enable = path == BARRIER && crate::token::verify(&native.token, auth);
     if !store.enabled.load(Ordering::Acquire) && !enable {
         return next.run(request).await;
@@ -362,6 +437,17 @@ pub async fn barrier(State(st): State<Shared>, headers: axum::http::HeaderMap) -
     }
     sessions.scoped_hosts.insert(host.to_owned());
     drop(sessions);
+    if headers
+        .get("x-agentfw-profile-activation")
+        .is_some_and(|v| v == "true")
+    {
+        native
+            .continuity
+            .as_ref()
+            .unwrap()
+            .require_scoped_authority
+            .store(true, Ordering::Release);
+    }
     Json(
         json!({"instance_id":native.instance_id(), "registry_sha256":native.registry_sha256,
         "status":"provenance_barrier","authority_restored":false}),
@@ -395,6 +481,7 @@ mod tests {
         let mut checkpoint = Checkpoint {
             format: FORMAT.into(),
             sequence: 7,
+            require_scoped_authority: true,
             scoped_hosts: vec!["host".into()],
             provenance: firewall.provenance_snapshot(),
             signature: String::new(),
@@ -485,5 +572,63 @@ mod tests {
         fs::rename(&path, &moved).unwrap();
         symlink(&moved, &path).unwrap();
         assert!(Continuity::attach(dir.path(), &mut other, &mut fw).is_err());
+    }
+    #[test]
+    fn reviewed_manifest_exception_requires_exact_validated_installed_authority() {
+        use crate::mcp::{profile_author, profile_lifecycle};
+        let dir = tempfile::tempdir().unwrap();
+        let inputs = tempfile::tempdir().unwrap();
+        let schema = json!({"type":"object","properties":{},"additionalProperties":false});
+        let snapshot = json!({"format":"sw-mcp/operator-discovery/1","server_id":"reviewed-server",
+            "server_version":"1","tools":[{"name":"read_note","description":"Reviewed local read.","inputSchema":schema}]});
+        let declarations = json!({"format":"sw-mcp/operator-declaration/1","server_id":"reviewed-server","server_version":"1",
+            "snapshot_sha256":profile_author::digest(&snapshot),"registry_id":"reviewed-registry","tools":[{
+                "name":"read_note","schema_sha256":profile_author::digest(&schema),"reviewed":true,
+                "operator_review":"Owned read fixture implementation review","authority":{"kind":"read_only"}}]});
+        let snap = inputs.path().join("snapshot.json");
+        let decl = inputs.path().join("declarations.json");
+        fs::write(&snap, serde_json::to_vec(&snapshot).unwrap()).unwrap();
+        fs::write(&decl, serde_json::to_vec(&declarations).unwrap()).unwrap();
+        let bundle = inputs.path().join("bundle");
+        fs::create_dir(&bundle).unwrap();
+        for (name, bytes) in profile_author::compiled_bundle_files(&snap, &decl, &bundle).unwrap() {
+            fs::write(bundle.join(name), bytes).unwrap();
+        }
+        let manager = profile_lifecycle::ProfileManager::new(dir.path());
+        let installed = manager.install(&bundle, None).unwrap();
+        let native_cfg =
+            crate::Config::from_yaml(&fs::read_to_string(dir.path().join("config.yaml")).unwrap())
+                .unwrap()
+                .native
+                .unwrap();
+        let (mut native, mut fw) = fresh();
+        let store = Continuity::attach(dir.path(), &mut native, &mut fw).unwrap();
+        let tools = vec![soup_wall_agent::ToolDecl {
+            name: "read_note".into(),
+            description: "Reviewed local read.".into(),
+            schema,
+        }];
+        let hash = crate::mcp::manifest::manifest_hash(&tools);
+        assert!(!store.reviewed_manifest("reviewed-server", &hash, &native_cfg.registry_sha256));
+        store
+            .require_scoped_authority
+            .store(true, Ordering::Release);
+        assert!(store.reviewed_manifest("reviewed-server", &hash, &native_cfg.registry_sha256));
+        assert!(!store.reviewed_manifest("other-server", &hash, &native_cfg.registry_sha256));
+        assert!(!store.reviewed_manifest(
+            "reviewed-server",
+            &"0".repeat(64),
+            &native_cfg.registry_sha256
+        ));
+        assert!(!store.reviewed_manifest("reviewed-server", &hash, &"0".repeat(64)));
+        let cached = dir
+            .path()
+            .join("mcp-profiles/revisions")
+            .join(installed.bundle_sha256)
+            .join("operator-declarations.json");
+        let mut revoked = declarations;
+        revoked["tools"][0]["reviewed"] = json!(false);
+        fs::write(cached, serde_json::to_vec(&revoked).unwrap()).unwrap();
+        assert!(!store.reviewed_manifest("reviewed-server", &hash, &native_cfg.registry_sha256));
     }
 }

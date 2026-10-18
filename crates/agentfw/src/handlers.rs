@@ -1259,13 +1259,24 @@ pub async fn mcp(
     let hash = crate::mcp::manifest::manifest_hash(&req.tools);
     let pinned = st.manifests.get_pinned(&req.server);
     let manifest_changed = matches!(&pinned, Some(previous) if previous.hash != hash);
+    let reviewed_profile_change = manifest_changed
+        && st.native.as_ref().is_some_and(|native| {
+            native.continuity.as_ref().is_some_and(|store| {
+                store.reviewed_manifest(&req.server, &hash, &native.registry_sha256)
+            })
+        });
     let names: Vec<String> = req.tools.iter().map(|t| t.name.clone()).collect();
     let shadowed = st.tools.shadows(&req.server, &names);
     let shadow = shadowed.is_some();
 
     let outcome = {
         let mut fw = st.firewall.lock().expect("firewall mutex");
-        fw.inspect_mcp_handshake(&req.server, &req.tools, manifest_changed, shadow)
+        fw.inspect_mcp_handshake(
+            &req.server,
+            &req.tools,
+            manifest_changed && !reviewed_profile_change,
+            shadow,
+        )
     };
 
     // Compute the diff BEFORE re-pinning: once the new manifest is stored the
@@ -1283,7 +1294,9 @@ pub async fn mcp(
         .put_manifest(&req.server, &hash, &req.tools, now_ms());
     st.tools.record(&req.server, &names);
 
-    let reason = if manifest_changed {
+    let reason = if reviewed_profile_change {
+        Some("exact manifest change approved by the installed reviewed profile".into())
+    } else if manifest_changed {
         // A pin written before manifests were retained has no tools to compare
         // against, so it can only report that something changed. Say which case
         // this is rather than implying the diff was computed and came back empty.

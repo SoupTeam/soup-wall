@@ -60,6 +60,8 @@ def main():
             home=root/'.agentfw'
             home.chmod(0o700)
             workspace=root/'workspace';workspace.mkdir(mode=0o700)
+            host=root/'claude-mcp.json'
+            profile_server='claude-'+hashlib.sha256((str(host)+'\0owned').encode()).hexdigest()[:24]
             old_path=workspace/'old-output.txt';new_path=workspace/'new-output.txt'
             classifier=ROOT/'rule_baseline/rule_baseline.py'
             read_schema={'type':'object','properties':{'name':{'type':'string','minLength':1}},
@@ -70,9 +72,9 @@ def main():
             obsolete={'name':'read_obsolete','description':'Read the retired local inventory.', 'inputSchema':read_schema}
             create={'name':'create_file','description':'Create one bounded local note.', 'inputSchema':create_schema}
             def compile_profile(label,tools,path):
-                snapshot={'format':'sw-mcp/operator-discovery/1','server_id':'sou78-owned',
+                snapshot={'format':'sw-mcp/operator-discovery/1','server_id':profile_server,
                           'server_version':'1','tools':tools}
-                declarations={'format':'sw-mcp/operator-declaration/1','server_id':'sou78-owned',
+                declarations={'format':'sw-mcp/operator-declaration/1','server_id':profile_server,
                     'server_version':'1','snapshot_sha256':digest(snapshot),'registry_id':'sou78-'+label,'tools':[]}
                 for tool in tools:
                     declarations['tools'].append({'name':tool['name'],'schema_sha256':digest(tool['inputSchema']),
@@ -95,7 +97,7 @@ def main():
             initial={'mcpServers':{'owned':original,'unrelated':{'command':'untouched','env':{'KEY':'unrelated-secret'}}},
                      'settings':{'theme':'light'}}
             helpers.dump(host,initial)
-            policy=root/'policy.yaml';policy.write_text('agent_policies: []\ndefault: allow\n')
+            policy=root/'policy.yaml';policy.write_text('agent_policies:\n  - name: reject-unreviewed-drift\n    when: {mcp_manifest_changed: true}\n    action: deny\ndefault: allow\n')
             port=helpers.available_port()
             native=json.loads((source/'native-config.json').read_text())['native']
             native['approval']={'ttl_seconds':300}
@@ -103,11 +105,14 @@ def main():
             run(['lifecycle','install','sou78-proof',binary,'--sha256',helpers.digest(binary)])
             run(['lifecycle','start'])
             opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
-            def api(route,body=None,native=True):
+            def api(route,body=None,native=True,proof=None,host_session=None):
                 token=(home/('native-token' if native else 'token')).read_text().strip()
+                headers={'authorization':'Bearer '+token,'content-type':'application/json'}
+                if proof is not None:headers['x-agentfw-child-authority']=proof
+                if host_session is not None:headers['x-agentfw-host-session']=host_session
                 request=urllib.request.Request(f'http://127.0.0.1:{port}'+route,
                     data=None if body is None else json.dumps(body).encode(),
-                    headers={'authorization':'Bearer '+token,'content-type':'application/json'})
+                    headers=headers)
                 try: response=opener.open(request,timeout=5)
                 except urllib.error.HTTPError as error:response=error
                 with response:return response.status,json.load(response)
@@ -147,18 +152,22 @@ def main():
                 check('unrelated-settings-preserved-'+str(len(checks)),current['settings']==initial['settings']
                     and current['mcpServers']['unrelated']==initial['mcpServers']['unrelated'])
             run(connection('connect'));unchanged_unrelated()
+            legacy_launcher=entry()
             baseline=launch();useful(baseline,'baseline-useful-read')
             old_registry=native['registry_sha256']
             before_instance=api('/native/v1/instance')[1]['instance_id']
-            old_token=run(['child-authority','mint','--session','sou78-host','--server','sou78-owned',
-                '--agent-id','previous-agent','--tools','read_document','--instance-id',before_instance]).stdout.strip()
-            legacy_token=run(['child-authority','mint','--session','sou78-host','--server','sou78-owned',
-                '--tools','read_document']).stdout.strip()
+            old_token=run(['child-authority','mint','--session','sou78-host','--server',profile_server,
+                '--agent-id','previous-agent','--tools','read_document','--instance-id',before_instance,'--ttl-seconds','3600']).stdout.strip()
+            legacy_token=run(['child-authority','mint','--session','sou78-host','--server',profile_server,
+                '--tools','read_document','--ttl-seconds','3600']).stdout.strip()
+            resource_token=run(['child-authority','mint','--session','sou78-host','--server',profile_server,
+                '--agent-id','previous-resource-agent','--tools','read_document,create_file',
+                '--resources',old_path,'--instance-id',before_instance,'--ttl-seconds','3600']).stdout.strip()
             # Supported native session/call/Ask APIs create real outstanding authority.
             native_session='retained-request'
             event={'contract_version':'sw-native/1','registry_sha256':old_registry,'session_id':native_session}
             status,reply=api('/native/v1',dict(event,event='session_start',host_session='sou78-host',
-                server_id='sou78-owned',child_authority=old_token))
+                server_id=profile_server,child_authority=old_token))
             check('old-authenticated-native-session',status==200 and reply.get('release') is True)
             status,receipt=api('/native/v1',dict(event,event='call',tool='read_document',
                 args={'name':'inventory'},schema_sha256=digest(read_schema)))
@@ -175,7 +184,14 @@ def main():
             hook={'hook_event_name':'PostToolUse','session_id':'sou78-host','tool_name':'WebFetch',
                   'tool_input':{'url':'https://untrusted.example.test/inventory'},'tool_response':
                   'Quarterly inventory and pending retention schedule for archived records in the warehouse.'}
-            check('hook-history-observed',api('/hook',hook,native=False)[0]==200)
+            check('hook-history-observed',api('/hook',hook,native=False,proof=old_token)[0]==200)
+            status,_=api('/native/v1/profile-barrier',{},host_session='sou78-host')
+            check('source-risk-checkpoint-before-transition',status==200)
+            prior_checkpoint=json.loads((home/'mcp-profiles/risk-checkpoint.json').read_text())
+            prior_host=next(s for s in prior_checkpoint['provenance']['sessions'] if s['session']=='sou78-host')
+            prior_fingerprints={f[0] for f in prior_host['fingerprints']}
+            check('authenticated-hook-has-real-retained-taint-before-upgrade',bool(prior_fingerprints))
+
             malformed=root/'malformed';shutil.copytree(target,malformed)
             (malformed/'profile.json').write_text('{}')
             config_before=(home/'config.yaml').read_bytes();host_before=host.read_bytes()
@@ -203,6 +219,11 @@ def main():
                     if result.returncode != (86 if crash=='crash-before' else 87):
                         raise RuntimeError('unexpected crash witness exit '+str(result.returncode)+': '+result.stderr[-2500:])
                     check('exact-real-process-'+crash,True)
+                    before_children=len(environment.read_text().splitlines())
+                    blocked=subprocess.run([legacy_launcher['command'],*legacy_launcher['args']],env=env,
+                        input=b'',capture_output=True,timeout=10)
+                    check('pending-transition-refuses-legacy-start-'+crash,blocked.returncode!=0
+                        and len(environment.read_text().splitlines())==before_children)
                     status=json.loads(transition('status').stdout)
                     check('crash-honestly-incomplete-'+crash,status['status']=='incomplete')
                     recovered=json.loads(transition('recover').stdout)
@@ -219,6 +240,10 @@ def main():
             before=len(ledger.read_text().splitlines())
             call(baseline,'read_document',{'name':'inventory'})
             check('old-live-collector-zero-execution',len(ledger.read_text().splitlines())==before)
+            unbound=subprocess.run([legacy_launcher['command'],*legacy_launcher['args']],env=env,
+                input=b'',capture_output=True,timeout=10)
+            check('old-unversioned-launcher-refused-before-child-start',unbound.returncode!=0
+                and len(ledger.read_text().splitlines())==before)
             active=launch();useful(active,'upgraded-useful-read')
             before=len(ledger.read_text().splitlines())
             call(active,'read_obsolete',{'name':'inventory'})
@@ -228,13 +253,18 @@ def main():
             check('authenticated-host-taint-survives-real-daemon-restart',any(s['session']=='sou78-host'
                 and (s['fingerprints'] or s['literals']) for s in checkpoint['provenance']['sessions']))
             check('sticky-incomplete-floor-survives',checkpoint['provenance']['legacy_unknown_history'])
+            current_host=next(s for s in checkpoint['provenance']['sessions'] if s['session']=='sou78-host')
+            check('pre-transition-taint-fingerprints-retained',prior_fingerprints.issubset({f[0] for f in current_host['fingerprints']}))
+
             current_registry=json.loads((home/'mcp-profiles/profile-state.json').read_text())['active_bundle_sha256']
             registry=json.loads((home/'mcp-profiles/revisions'/current_registry/'native-config.json').read_text())['native']['registry_sha256']
-            for name,token in [('scoped',old_token),('legacy',legacy_token)]:
+            for name,token in [('scoped',old_token),('legacy',legacy_token),('resource',resource_token)]:
                 status,reply=api('/native/v1',{'contract_version':'sw-native/1','registry_sha256':registry,
                     'session_id':'stale-'+name,'event':'session_start','host_session':'sou78-host',
-                    'server_id':'sou78-owned','child_authority':token})
+                    'server_id':profile_server,'child_authority':token})
                 check('previous-'+name+'-grant-refused',status!=200 and reply.get('release') is False)
+                check('previous-'+name+'-rejected-for-current-authority',reply.get('error_code')==(
+                    'native_child_authority_identity_required' if name=='legacy' else 'native_child_authority_instance_mismatch'))
             check('profile-switch-retires-hook-grant-epoch',int((home/'approval-policy-epoch').read_text())>epoch_before)
             status,reply=api('/native/v1',dict(event,registry_sha256=registry,event='result',tool='read_document',
                 args={'name':'inventory'},call_id=receipt['call_id'],result_kind='value',delivery='model',content='late result'))
@@ -257,6 +287,14 @@ def main():
             check('host-configuration-contains-no-token',old_token not in host.read_text() and legacy_token not in host.read_text())
             check('all-process-ledger-entries-are-useful-reads',all(json.loads(line)['params']['name']=='read_document'
                 for line in ledger.read_text().splitlines()))
+            final_checkpoint=json.loads((home/'mcp-profiles/risk-checkpoint.json').read_text())
+            final_host=next(s for s in final_checkpoint['provenance']['sessions'] if s['session']=='sou78-host')
+            check('rollback-retains-original-host-history',prior_fingerprints.issubset({f[0] for f in final_host['fingerprints']})
+                and final_checkpoint['provenance']['legacy_unknown_history'] and final_checkpoint['require_scoped_authority'])
+            status,reply=api('/native/v1',dict(event,registry_sha256=old_registry,event='session_start',
+                host_session='sou78-host',server_id=profile_server,child_authority=resource_token,session_id='old-resource-after-rollback'))
+            check('identical-rollback-rejects-old-resource-authority',status!=200
+                and reply.get('error_code')=='native_child_authority_instance_mismatch')
             report['binary_sha256']=helpers.digest(binary)
             report['passed']=True
         finally:

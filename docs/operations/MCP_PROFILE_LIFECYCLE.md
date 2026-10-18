@@ -20,7 +20,9 @@ version number or discovery annotation does not grant authority.
 
 The selected connection must already be owned by `mcp-connection connect` and must
 still match its recorded wrapped entry, Agent binary, native configuration and
-registry identities. Existing `connect`/`disconnect` refusals are preserved.
+registry identities. Both profiles must name the selected connection's existing
+`claude-…` server identity (shown by `mcp-connection preview`/`inspect`); changing
+server identity is unsupported. Existing `connect`/`disconnect` refusals are preserved.
 
 ```bash
 agentfw mcp-connection profile preview \
@@ -69,6 +71,8 @@ is a conflict, not permission to overwrite its state.
 
 1. The host publication lock and bounded outer journal reserve the selected connection.
    A home-wide reservation prevents another profile writer or launcher from proceeding.
+   While reserved, the daemon refuses native admission/approval and MCP handshakes,
+   including a launch through an old unversioned host command.
 2. Both reviewed bundles and any selected classifier are validated and staged privately
    before the continuity barrier or daemon switch. Revisions are content-addressed;
    all six authoring outputs must reconstruct the reviewed authority exactly.
@@ -86,12 +90,21 @@ is a conflict, not permission to overwrite its state.
 6. A private generation-checked launcher refuses pending or stale transactions, rechecks
    Agent/config/registry/policy identity, obtains the current authenticated daemon
    instance and mints narrowed session authority. Tokens stay out of host configuration,
-   argv, audit and the original server's environment.
+   argv, audit and the original server's environment. Final activation durably requires
+   scoped, current-instance authority for this Agent home. Old unversioned commands
+   cannot restart an unbound collector after the reservation is retired. The initial
+   barrier alone does not enable this requirement, so compensation before the first
+   activation retains the working baseline wrapper.
 
 Already running collectors have the previous daemon's session/call state and cannot
 release results or execute a new call after the restart. New launchers mint current
 instance-bound authority. A byte-identical rollback advances generation again, so an
-old launcher cannot revive. Outstanding result receipts and Ask records are not
+old launcher cannot revive. For manifest drift, only the exact tool declarations in the validated installed
+reviewed bundle count as an explicitly approved change. A different server, altered
+schema/description or revoked review does not qualify. Injection and tool-shadowing
+checks still run on the actual handshake; discovery is never reapproval.
+
+Outstanding result receipts and Ask records are not
 restored; approval issuance/redemption is refused during the transition, and previous
 policy epochs remain invalid after it.
 
@@ -99,7 +112,8 @@ policy epochs remain invalid after it.
 
 Private `mcp-profiles/risk-checkpoint.json` authenticates provenance with HMAC-SHA256
 and domain `agentfw/provenance-checkpoint/v1\0`. It contains taint fingerprints,
-URL/path literals, incomplete-history flags and scoped-host tombstones. It deliberately
+URL/path literals, incomplete-history flags, scoped-host tombstones and the durable
+requirement for authenticated scoped authority after activation. It deliberately
 contains no active agent grants, calls, receipts or approvals. Restore requires a
 pristine tracker and enforces current provenance budgets. A malformed, public,
 symlinked, over-budget or invalid-MAC checkpoint refuses startup.
@@ -158,7 +172,10 @@ config to 1 MiB and recent low-level operation history to 1024 records. Retained
 publication archives are deliberately preserved as private operator evidence; they
 are not automatically garbage-collected. A home-wide native registry is shared: this
 workflow serializes profile changes and does not promise independent live registries
-for multiple selected connections in one Agent home.
+for multiple selected connections in one Agent home. After owned activation, unbound
+native collectors in that home are refused; use the published generation-checked
+launcher. Independent connections needing separate lifecycle/authority remain in
+separate Agent homes.
 
 The lower-level `mcp-profile install/preview/upgrade/rollback/status/recover` commands
 remain available for daemon-profile maintenance. They do not publish an owned Claude
