@@ -16,6 +16,14 @@ from pathlib import Path
 from vps_counts import test_counts, validate_target
 
 
+def clone_command(source: Path, checkout: Path) -> list[str]:
+    # Local upload-pack validates the exact .git path independently of its worktree.
+    # Keep both exceptions scoped to this command, never wildcard/global trust.
+    return ['git', '-c', f'safe.directory={source.as_posix()}',
+            '-c', f'safe.directory={(source / ".git").as_posix()}', 'clone', '--no-hardlinks',
+            '--no-checkout', str(source), str(checkout)]
+
+
 def run(source: Path, output: Path, sha: str) -> None:
     validate_target('soup-wall', sha)
     if platform.system() != 'Linux' or os.geteuid() == 0:
@@ -64,8 +72,7 @@ def run(source: Path, output: Path, sha: str) -> None:
             checkout = root / 'source'
             # Local clone uses the verified public checkout's object store, but
             # creates LF/executable/POSIX worktree files on the Linux filesystem.
-            step('clone', ['git', '-c', f'safe.directory={source}', 'clone', '--no-hardlinks',
-                           '--no-checkout', str(source), str(checkout)], root)
+            step('clone', clone_command(source, checkout), root)
             step('checkout', ['git', '-c', 'core.autocrlf=false', 'checkout', '--detach', sha], checkout)
             actual = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=checkout, text=True).strip()
             if actual != sha:
