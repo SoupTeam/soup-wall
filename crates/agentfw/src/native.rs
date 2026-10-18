@@ -1284,14 +1284,14 @@ pub async fn instance(State(st): State<Shared>, headers: HeaderMap) -> (StatusCo
     let Ok(mut sessions) = native.sessions.lock() else {
         return failure("native_state_unavailable", StatusCode::SERVICE_UNAVAILABLE);
     };
-    let Ok(now_ms) = wall_time_ms() else {
-        return failure("native_clock_unavailable", StatusCode::SERVICE_UNAVAILABLE);
-    };
     let Ok(mut firewall) = st.firewall.lock() else {
         return failure(
             "native_inspection_unavailable",
             StatusCode::SERVICE_UNAVAILABLE,
         );
+    };
+    let Ok(now_ms) = wall_time_ms() else {
+        return failure("native_clock_unavailable", StatusCode::SERVICE_UNAVAILABLE);
     };
     let now = Instant::now();
     reap_lost_sessions(
@@ -1447,8 +1447,6 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
     }
 
     let started = Instant::now();
-    let now = Instant::now();
-    let now_ms = wall_time_ms()?;
     // One lock covers sequencing, inspection, admission and audit. No await,
     // external judge, or network request occurs while this guard is held.
     let mut state = native
@@ -1459,6 +1457,8 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         .firewall
         .lock()
         .map_err(|_| "native_inspection_unavailable")?;
+    let now = Instant::now();
+    let now_ms = wall_time_ms()?;
     let expired: Vec<String> = state
         .entries
         .iter()

@@ -6247,3 +6247,51 @@ async fn sou89_restarted_session_id_reuses_slot_if_previous_died() {
     .await;
     assert_allow(s, &r);
 }
+
+#[tokio::test]
+async fn sou89_lock_contention_refreshes_time_and_rejects_expired_authority() {
+    let f = Fixture::new(ALLOW);
+    let (s, r) = review8dd_start(
+        &f,
+        "parent-root",
+        "parent",
+        None,
+        &["read_document"],
+        Some(vec![]),
+    )
+    .await;
+    assert_allow(s, &r);
+
+    // Start child with 100ms TTL.
+    let (s, r, _) = scoped_start_with_ttl(
+        &f,
+        "child-contention",
+        "worker",
+        Some("parent"),
+        &["read_document"],
+        Some(vec![]),
+        100,
+    )
+    .await;
+    assert_allow(s, &r);
+
+    // Hold firewall lock while making a call.
+    // The request waits for the firewall lock until after the grant expires.
+    let state = f.state.clone();
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+    let b = barrier.clone();
+    let blocker = std::thread::spawn(move || {
+        let guard = state.firewall.lock().unwrap();
+        b.wait();
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        drop(guard);
+    });
+    barrier.wait();
+
+    let call = f.call("child-contention", "read_document", &json!({}));
+    let (_, r) = f.post(&call).await;
+    blocker.join().unwrap();
+
+    // Because timestamps are refreshed after acquiring locks, contention cannot extend authority.
+    assert_eq!(r["error_code"], "native_child_authority_expired");
+}
