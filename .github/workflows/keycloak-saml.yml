@@ -2,6 +2,7 @@ name: keycloak-saml
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
     inputs:
       backend:
@@ -29,7 +30,7 @@ jobs:
       workflow: keycloak-saml.yml
   linux-vendor:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'linux-vendor')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-vendor')
     name: Genuine Keycloak SAML on Linux (${{ matrix.backend }})
     strategy:
       fail-fast: false

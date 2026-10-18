@@ -2,6 +2,7 @@ name: Native Windows MCP file creation
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:
@@ -18,7 +19,7 @@ jobs:
       workflow: mcp-windows-create.yml
   native-windows-standard-user:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'native-windows-standard-user')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-windows-standard-user')
     runs-on: windows-2022
     timeout-minutes: 40
     steps:
@@ -89,7 +90,7 @@ jobs:
           retention-days: 30
   linux-read-create-https-regressions:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'linux-read-create-https-regressions')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-read-create-https-regressions')
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:

@@ -2,6 +2,7 @@ name: Linux MCP collector crash supervision
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:
@@ -18,7 +19,7 @@ jobs:
       workflow: sou86-crash-supervision.yml
   required-disposable-linux-crash-supervision:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'required-disposable-linux-crash-supervision')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'required-disposable-linux-crash-supervision')
     runs-on: ubuntu-22.04
     timeout-minutes: 35
     env:

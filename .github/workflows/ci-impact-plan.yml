@@ -16,6 +16,9 @@ permissions:
 
 jobs:
   compute:
+    # Drafts allocate no planner/runtime runners. Ready-for-review replays all workflows.
+    # Main pushes use ci.yml's separate smoke job; manual qualification stays full.
+    if: github.event_name != 'push' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     name: Candidate ${{ github.sha }}
     runs-on: ubuntu-latest
     timeout-minutes: 5

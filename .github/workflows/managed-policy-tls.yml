@@ -2,6 +2,7 @@ name: SOU-43 verified remote HTTPS Agent rollout
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:
@@ -19,7 +20,7 @@ jobs:
       workflow: managed-policy-tls.yml
   agent-https-rollout:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'agent-https-rollout')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'agent-https-rollout')
     name: Real Agent verified HTTPS rollout and rollback
     runs-on: ubuntu-24.04
     timeout-minutes: 30

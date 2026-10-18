@@ -2,6 +2,7 @@ name: Constrained MCP HTTPS POST
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:
@@ -18,7 +19,7 @@ jobs:
       workflow: mcp-https-post.yml
   linux-https-post:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'linux-https-post')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-https-post')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:

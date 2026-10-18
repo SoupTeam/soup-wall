@@ -7,7 +7,7 @@ show the measurement boundary.
 
 ## Source and trust model
 
-Every registered PR workflow starts a small `impact` job. Its reusable workflow
+Every merge-ready registered PR workflow starts a small `impact` job. Its reusable workflow
 checks out the PR test-merge commit with two parents and refuses a checkout whose
 parents differ from the event's base and head. The planner receives the actual
 changed paths from that merge tree. **Until selective scheduling is activated,
@@ -20,8 +20,55 @@ unexpected ruleset forces full qualification. The trusted base admission process
 repeats the ruleset read independently. Once activated, a selected job depends
 on `impact` and runs the existing acceptance body; an unselected job is
 explicitly skipped. A manual
-`workflow_dispatch`, scheduled run or main push selects the complete registered
-job set. No private data, artifacts or release credentials enter the planner.
+`workflow_dispatch` or scheduled run selects the complete registered job set.
+Main pushes use the separate smoke path below. No private data, artifacts or
+release credentials enter the planner.
+
+## Cost policy: draft, ready and merged
+
+- Develop in a **Draft PR**. A single Linux fast job checks Rust formatting,
+  admission/scheduling regressions, documentation and rule-classifier units.
+  The reusable impact job is skipped before allocating a runner, so none of
+  the 35 runtime workflows starts a planner or acceptance runner. Managed
+  CodeQL remains enabled and independent; this is not a promise of zero cost.
+  The four protected runtime/documentation jobs use different `Deferred - ...`
+  names while draft. Their skipped results therefore cannot satisfy existing
+  required contexts, including the transition before ready jobs are queued.
+- **Ready for review** explicitly triggers all runtime workflows and trusted
+  admission. Ready PR updates run qualification again. The existing full-plan
+  bootstrap and protected checks are unchanged. Draft fast checks never
+  substitute for runtime or security qualification.
+- **Convert to draft** cancels outdated runtime workflows. Admission publishes
+  a pending status and exits without a 45-minute polling runner. It never
+  approves a draft. A conversion during evidence inspection also fails
+  admission. Reopening and ready transitions are covered explicitly.
+- **After merge**, one Linux smoke job builds the actual merged Agent/Gateway,
+  checks the adapter contract and Agent CLI, and runs the isolated Gateway
+  acceptance with an owned loopback upstream and SQLite. The duplicate
+  Windows/macOS, all-features, Docker and integration matrix is not repeated
+  on every main push. Managed CodeQL still runs on main. This short smoke is
+  deliberately not a complete product acceptance or release authorization.
+- Every registered workflow retains **Run workflow** for full qualification
+  on a chosen ref. Run all applicable workflows for final release acceptance;
+  neither draft nor post-merge smoke evidence can replace it. The release
+  workflow and scheduled supply-chain scan are unchanged.
+  The `ci` workflow also accepts `smoke_only: true` for testing just the smoke
+  command on a branch before merging. The default is false (full qualification).
+
+Cancellation is scoped by workflow and PR/ref; it does not cancel another PR.
+PR Rust caches can now be saved by ready PR runs, under GitHub's PR merge-ref
+cache scope. Privileged admission still checks out trusted base source only
+and never downloads candidate caches or artifacts. Main smoke warms the base
+Linux build cache. No branch protection or CodeQL threshold is changed here.
+
+Observed baseline on October 18: PR #179 head
+`02464de52f271d9a8ae2976c4d4231a849307c03` consumed 287.8 raw
+runner-minutes across 102 job attempts, including a Git rerun. Main
+`de54c0065d158203c6a840f4a60bc3eed6bddb29` consumed 128.2 raw
+runner-minutes across 38 jobs. The admission job alone waited 18.4 minutes.
+These are sums of job start/completion durations, not organization billing,
+an average, or measured savings. Compare the new draft and main paths against
+these baselines after installation. Ready runtime qualification stays intact.
 
 The privileged `pull_request_target` admission workflow checks out **only the
 trusted base commit**. It parses PR files and GitHub API responses as data. It

@@ -2,6 +2,7 @@ name: Provenance memory budgets
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:
@@ -18,7 +19,7 @@ jobs:
       workflow: provenance-memory.yml
   required-linux-native-mcp-budget:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'required-linux-native-mcp-budget')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'required-linux-native-mcp-budget')
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     env:

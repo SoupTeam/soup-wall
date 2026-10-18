@@ -2,6 +2,7 @@ name: Constrained MCP HTTPS GET
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:
@@ -18,7 +19,7 @@ jobs:
       workflow: mcp-https-get.yml
   linux-https-get:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'linux-https-get')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-https-get')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
