@@ -308,6 +308,7 @@ mod tests {
                 super::super::hash(profile.as_bytes())
             },
             classifier_sha256: "c".repeat(64),
+            post: None,
             allowed_resources: vec![crate::mcp::resources::Resource::Path {
                 canonical: "/workspace".into(),
             }],
@@ -402,6 +403,29 @@ mod tests {
             assert!(!is_supported_linux_resource_tool(&create_tool));
             assert!(!is_supported_linux_resource_tool(&https_tool));
         }
+    }
+
+    #[test]
+    fn https_post_profile_remains_outside_resource_approval_scope() {
+        let mut tool = sample_tool(
+            "https_get",
+            crate::mcp::https_get::EXECUTOR_PROFILE,
+            "https_get",
+        );
+        tool.name = "https_post".into();
+        let policy = tool.resource_policy.as_mut().unwrap();
+        policy.profile.tool_name = tool.name.clone();
+        policy.executor_sha256 = crate::mcp::https_post::executor_profile_sha256();
+        policy.post = Some(crate::mcp::https_post::HttpsPostAuthority {
+            endpoint: policy.network.take().unwrap(),
+            content_type: "text/plain".into(),
+            max_body_bytes: crate::mcp::https_post::MAX_POST_BODY_BYTES,
+        });
+        policy.post.as_ref().unwrap().validate().unwrap();
+        assert!(policy.is_https_post());
+        assert!(!policy.is_https_get());
+        assert!(!is_supported_linux_resource_tool_profile(&tool));
+        assert!(!is_supported_linux_resource_tool(&tool));
     }
 
     #[test]

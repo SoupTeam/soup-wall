@@ -161,3 +161,45 @@ The artifacts retain the original logs; this summary contains no tokens, keys,
 private approval grants or protected production data. Subsequent evidence-only
 commits preserve the tested runtime and test source hashes. Maintainer approval
 and remaining general PR checks are separate from these observed results.
+
+## Current-main integration and general CI follow-up
+
+The lead accepted the read/GET execution evidence and resolved the final inline
+thread in [review 5563163358](https://github.com/SoupTeam/soup-wall/pull/179#pullrequestreview-5563163358).
+That acceptance is not a green status for the entire PR.
+
+On evidence-only head `02464de`, `required-linux-git`
+[attempt 1](https://github.com/SoupTeam/soup-wall/actions/runs/39130548373/attempts/1)
+failed during real overlap/cancellation. The retained collector log reports
+`mcp_owner_sandbox_failed`; the bounded summary reported six completed reads,
+zero completed refusal controls and verified cleanup. This was a fail-closed
+sandbox termination, not a demonstrated authorization bypass. The precise cause
+of the sandbox exit was not established. The unchanged runtime had passed this
+workflow on the three preceding heads. One justified
+[attempt 2](https://github.com/SoupTeam/soup-wall/actions/runs/39130548373/attempts/2)
+on the same head passed; the failed attempt and artifacts remain retained. No
+sandbox controls, lease deadlines or acceptance checks were disabled.
+
+The Windows security job on the same head failed two classifier-dependent
+integration fixtures: a real Python classifier hit its two-second deadline and
+a cancellation fixture consequently did not reach native admission. The
+production fail-closed deadlines remain unchanged. Those two known stateless
+fixtures now explicitly prepare Python/script imports before the measured MCP
+phase; their real collector calls retain the exact original classification,
+policy, zero-effect and timing assertions. Fault/malformed/timeout classifier
+tests are not warmed and still exercise the original failure boundary.
+
+The branch integrates main `de54c0065d158203c6a840f4a60bc3eed6bddb29`
+(accepted POST PR #165). Existing SOU-88 `Policy`/`Admission` test constructors
+explicitly set the new `post` field to `None`; a real POST-profile unit regression
+checks that POST is still outside resource Ask approval scope. Historical
+execution hashes above describe runtime `85e3c5d`, not this later merged
+candidate. Complete merged runtime/security/admission results must be assessed
+on the new head; current results are linked in the PR description.
+
+Local isolated verification of the integrated source completed with **1,487
+passed, 0 failed, 11 ignored** across 65 reported workspace suites. Warnings-denied
+workspace/all-target Clippy and formatting passed. The two affected
+classifier-dependent integration tests were additionally run individually and
+passed on macOS. Windows-specific preparation still requires the new hosted
+Windows security run; local macOS execution is not evidence of that result.

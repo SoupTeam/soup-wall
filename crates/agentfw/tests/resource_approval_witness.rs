@@ -352,6 +352,7 @@ impl WitnessFixture {
             }],
             execution: Some(binding),
             network: None,
+            post: None,
             windows_read: None,
         };
 
@@ -397,6 +398,7 @@ impl WitnessFixture {
             }],
             execution: None,
             network: None,
+            post: None,
             windows_read: None,
         };
 
@@ -438,6 +440,7 @@ impl WitnessFixture {
             }],
             execution: None,
             network: Some(binding),
+            post: None,
             windows_read: None,
         };
 

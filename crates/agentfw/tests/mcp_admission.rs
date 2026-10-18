@@ -2101,6 +2101,16 @@ async fn native_mcp_daemon_call_timeout_never_executes_call() {
 
 #[tokio::test]
 async fn native_mcp_cancellation_while_call_admission_is_stalled_is_fail_closed() {
+    #[cfg(windows)]
+    warm_stateless_windows_classifier(
+        &Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("rule_baseline/rule_baseline.py"),
+    )
+    .await;
     let call = r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_document","arguments":{}}}"#;
     let cancelled = r#"{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":3,"reason":"synthetic native admission cancellation"}}"#;
     for release_admission in [false, true] {
@@ -2717,6 +2727,8 @@ print(json.dumps({{'status':'ok','actions':[('read' if '{refusal}' == 'ask' else
     .unwrap();
         let selection = format!("script:{}", script.display());
         let mut fixture = Fixture::with_classifier("normal", true, Some(&selection)).await;
+        #[cfg(windows)]
+        warm_stateless_windows_classifier(&script).await;
         fixture.ready().await;
         for index in 0..70 {
             let call = json!({"jsonrpc":"2.0","id":format!("uncertain-{index}"),"method":"tools/call",
@@ -4119,6 +4131,54 @@ fn operator_approve(fixture: &Fixture, row: &Value) -> anyhow::Result<()> {
         row["pending_id"].as_str().unwrap(),
         row["binding_sha256"].as_str().unwrap(),
     )
+}
+
+/// These two fixtures test policy composition/cancellation after classification,
+/// not Windows' first Python/stdlib load. Prepare only their known stateless
+/// scripts outside the measured phase. All collector calls still use the real
+/// classifier with unchanged production deadlines and exact verdict assertions.
+#[cfg(windows)]
+async fn warm_stateless_windows_classifier(script: &Path) {
+    let python = std::env::var_os("AGENTFW_CLASSIFIER_PYTHON").unwrap_or_else(|| "python".into());
+    let mut command = Command::new(python);
+    command.args(["-I", "-u"]).arg(script).env_clear();
+    if let Some(root) = std::env::var_os("SystemRoot") {
+        command.env("SystemRoot", root);
+    }
+    let mut child = command
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let mut input = child.stdin.take().unwrap();
+    input
+        .write_all(
+            format!(
+                "{}\n",
+                json!({"tool_name":"read_document",
+        "raw_arguments":{},"tool_description":"Read an inventory document",
+        "tool_schema":{"type":"object","properties":{},"additionalProperties":false},
+        "server_id":"fixture"})
+            )
+            .as_bytes(),
+        )
+        .await
+        .unwrap();
+    input.shutdown().await.unwrap();
+    drop(input);
+    let output = tokio::time::timeout(Duration::from_secs(15), child.wait_with_output())
+        .await
+        .expect("bounded stateless classifier fixture preparation")
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stateless classifier setup must succeed"
+    );
+    let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["status"], "ok", "classifier fixture must be ready");
+    assert_eq!(result["unknown"], false);
 }
 
 #[tokio::test]
