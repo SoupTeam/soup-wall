@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Private authenticated provenance checkpoints. Authority is deliberately absent.
-use std::fs::{self, File, OpenOptions};
+#[cfg(unix)]
+use std::fs::File;
+use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -113,15 +115,14 @@ fn read_private(path: &Path) -> Result<Vec<u8>> {
 impl Continuity {
     fn ensure_root(&self) -> Result<()> {
         if !self.root.exists() {
-            let mut builder = fs::DirBuilder::new();
             #[cfg(unix)]
             {
+                let mut builder = fs::DirBuilder::new();
                 use std::os::unix::fs::DirBuilderExt;
                 builder.mode(0o700);
+                builder.create(&self.root)?;
+                File::open(self.root.parent().context("continuity parent absent")?)?.sync_all()?;
             }
-            builder.create(&self.root)?;
-            #[cfg(unix)]
-            File::open(self.root.parent().context("continuity parent absent")?)?.sync_all()?;
             #[cfg(windows)]
             crate::private_file_windows::ensure_private_directory(&self.root)?;
         }
@@ -160,11 +161,11 @@ impl Continuity {
         }
         let result = (|| -> Result<()> {
             let mut file = options.open(&temporary)?;
-            #[cfg(windows)]
-            crate::token::restrict(&temporary)?;
             file.write_all(bytes)?;
             file.sync_all()?;
             drop(file);
+            #[cfg(windows)]
+            crate::token::restrict(&temporary)?;
             fs::rename(&temporary, self.root.join(name))?;
             self.sync()
         })();
