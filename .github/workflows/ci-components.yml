@@ -1741,7 +1741,7 @@ jobs:
           retention-days: 30
 
   native-mcp-stderr--native-platform-launch:
-    name: "native-mcp-stderr / native-platform-launch"
+    name: "native-mcp-stderr / native-platform-launch (${{ matrix.os }})"
     if: contains(fromJSON(inputs.plan).workflows['native-mcp-stderr.yml'], 'native-platform-launch')
     strategy:
       fail-fast: false
@@ -1861,7 +1861,7 @@ jobs:
           retention-days: 30
 
   scim-directory--interoperability:
-    name: "scim-directory / interoperability"
+    name: "scim-directory / interoperability (${{ matrix.backend }})"
     if: contains(fromJSON(inputs.plan).workflows['scim-directory.yml'], 'interoperability')
     strategy:
       fail-fast: false

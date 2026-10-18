@@ -51,3 +51,8 @@ class SharedComponents(unittest.TestCase):
         planner = (ROOT / ".github/workflows/ci-impact-plan.yml").read_text()
         self.assertIn("plan: ${{ steps.plan.outputs.plan }}", planner)
         self.assertIn("value: ${{ jobs.compute.outputs.plan }}", planner)
+
+    def test_implicit_matrix_names_keep_each_required_platform_and_backend(self):
+        text = TARGET.read_text()
+        self.assertIn('native-mcp-stderr / native-platform-launch (${{ matrix.os }})', text)
+        self.assertIn('scim-directory / interoperability (${{ matrix.backend }})', text)

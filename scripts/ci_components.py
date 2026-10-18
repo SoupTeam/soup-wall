@@ -69,7 +69,16 @@ def generated() -> str:
                     raise ValueError("Quoted job name needs explicit support: " + workflow)
                 body = body[:name.start()] + "    name: " + json.dumps(prefix + " / " + value) + body[name.end():]
             else:
-                body = "    name: " + json.dumps(prefix + " / " + job_id) + "\n" + body
+                value = job_id
+                if "    strategy:" in body:
+                    matrix = re.search(r"^      matrix:\n((?:        [^\n]*\n)+)", body, re.M)
+                    if matrix is None:
+                        raise ValueError("Implicit matrix job name needs explicit support: " + workflow)
+                    axes = re.findall(r"^        ([a-zA-Z_][a-zA-Z0-9_-]*):", matrix[1], re.M)
+                    if not axes or any(axis in {"include", "exclude"} for axis in axes):
+                        raise ValueError("Complex implicit matrix name needs explicit support: " + workflow)
+                    value += " (" + ", ".join("${{ matrix." + axis + " }}" for axis in axes) + ")"
+                body = "    name: " + json.dumps(prefix + " / " + value) + "\n" + body
             output.append("  " + prefix + "--" + job_id + ":\n" + body.rstrip() + "\n\n")
     return "".join(output)
 
