@@ -134,3 +134,11 @@ result writes; a separate subprocess test checks lock release after process deat
 Review the exact run's artifacts and source SHA before accepting its evidence.
 This fixture measures local enforcement under controlled calls, not production
 deployment success, a fleet-wide transaction, or behavior of a live model.
+
+The [retained qualification record](evidence/sou82/qualification.json) identifies
+the passing SQLite/PostgreSQL run of source `3163105` and earlier failed controls.
+Its [unaltered sanitized archive](evidence/sou82/acceptance-3163105.zip) contains
+both full reports and original collector logs. The record pins the archive and
+report SHA-256 digests; evidence-only follow-up commits do not change the measured
+runtime source. Each database passed all 16 controls, including a calibrated
+positive Git-open observation followed by zero opens for the denied call.
