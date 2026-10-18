@@ -326,6 +326,8 @@ struct ApprovalRequest {
     args: Option<Value>,
     schema_sha256: Option<String>,
     pending_id: Option<String>,
+    #[serde(default)]
+    resource_admission: Option<super::resource::Admission>,
 }
 
 fn failure(code: &'static str, status: StatusCode) -> (StatusCode, Json<Value>) {
@@ -481,7 +483,8 @@ fn open(
     {
         return Err("native_schema_mismatch");
     }
-    if tool.resource_policy.is_some() {
+    let is_resource = tool.resource_policy.is_some();
+    if is_resource && !super::resource_approval::is_supported_linux_resource_tool(tool) {
         return Err("native_approval_resource_tool_unsupported");
     }
     let hosts = declared_hosts(tool, args)?;
@@ -509,13 +512,22 @@ fn open(
         (Source::Daemon, Verdict::Allow) => return Err("native_approval_not_required"),
         (Source::Daemon, Verdict::Ask | Verdict::Escalate) | (Source::Classifier, _) => {}
     }
+    let resource_details = if is_resource {
+        Some(super::resource_approval::build_resource_details(
+            tool,
+            args,
+            request.resource_admission.as_ref(),
+        )?)
+    } else {
+        None
+    };
     let bound = binding(
         &native.registry_sha256,
         &session.epoch,
         name,
         &tool.schema_sha256,
         args,
-        None,
+        request.resource_admission.as_ref(),
     );
     let policy_epoch = approval
         .store
@@ -544,7 +556,7 @@ fn open(
         return Err("native_approval_capacity");
     }
     let ttl_ms = approval.ttl.as_millis() as u64;
-    let file = json!({
+    let mut file = json!({
         "pending_id": id, "state": "pending", "scope": "native-mcp/approval/v1",
         "session_id": request.session_id, "session_epoch": session.epoch,
         "registry_sha256": native.registry_sha256, "registry_id": native.registry.registry_id,
@@ -555,6 +567,9 @@ fn open(
         "policy_epoch": policy_epoch, "created_at_ms": created_ms,
         "expires_at_ms": created_ms + ttl_ms,
     });
+    if let Some(details) = resource_details {
+        file["resource_details"] = details;
+    }
     // Audit first and fail closed; the audit line never carries raw arguments.
     audit(
         st,
@@ -722,7 +737,7 @@ mod tests {
     use std::sync::Arc;
 
     const HOOK: &str = "hook-unit-key";
-    const POLICY: &str = "agent_policies:\n  - name: unit-destructive-ask\n    when: { action_class: destructive }\n    action: ask\n  - name: unit-privilege-deny\n    when: { action_class: privilege_changing }\n    action: deny\ndefault: allow\n";
+    const POLICY: &str = "agent_policies:\n  - name: unit-destructive-ask\n    when: { action_class: destructive }\n    action: ask\n  - name: unit-side-effecting-ask\n    when: { action_class: side_effecting }\n    action: ask\n  - name: unit-privilege-deny\n    when: { action_class: privilege_changing }\n    action: deny\ndefault: allow\n";
 
     struct Env {
         dir: tempfile::TempDir,
@@ -732,13 +747,31 @@ mod tests {
     fn env(approval: Option<u64>) -> Env {
         let dir = tempfile::tempdir().unwrap();
         let schema = "a".repeat(64);
+        let create_schema =
+            super::super::canonical_digest(&crate::native::resource::create_file_schema());
+        let ws = dir.path().canonicalize().unwrap();
+        let ws_str = ws.to_str().unwrap();
+        let target_file = ws.join("test.txt").to_str().unwrap().to_string();
         let bytes = json!({"contract_version": CONTRACT, "registry_id": "unit-approval", "tools": [
             {"name": "delete_note", "schema_sha256": schema, "action_class": "destructive",
              "result_provenance": "untrusted", "egress": []},
             {"name": "read_note", "schema_sha256": schema, "action_class": "read_only",
              "result_provenance": "untrusted", "egress": []},
             {"name": "grant_admin", "schema_sha256": schema, "action_class": "privilege_changing",
-             "result_provenance": "untrusted", "egress": []}
+             "result_provenance": "untrusted", "egress": []},
+            {"name": "create_file", "schema_sha256": create_schema, "action_class": "side_effecting",
+             "result_provenance": "untrusted", "egress": [], "resource_policy": {
+                 "profile": {"server_id": "test-fs", "tool_name": "create_file", "schema_sha256": create_schema, "selectors": [{"pointer": "/path", "kind": "path", "allow_missing_leaf": true}]},
+                 "workspace": ws_str, "cwd": ws_str,
+                 "executor_sha256": crate::native::resource::create_file_executor_sha256(),
+                 "classifier_sha256": "c".repeat(64),
+                 "allowed_resources": [{"kind": "path", "canonical": target_file}],
+                 "execution": {
+                     "operation": "create_file", "action": "write", "max_content_bytes": 4096,
+                     "executor_profile": "sw-native/create-file/linux-root-child/1",
+                     "path_selector": "/path", "content_selector": "/content"
+                 }
+             }}
         ]})
         .to_string()
         .into_bytes();
@@ -815,6 +848,14 @@ mod tests {
             args: Value,
             source: &str,
         ) -> Result<Value, &'static str> {
+            let schema = self
+                .native()
+                .registry
+                .tools
+                .iter()
+                .find(|t| t.name == tool)
+                .map(|t| t.schema_sha256.clone())
+                .unwrap_or_else(|| "a".repeat(64));
             let request = ApprovalRequest {
                 contract_version: CONTRACT.into(),
                 registry_sha256: self.native().registry_sha256.clone(),
@@ -823,8 +864,9 @@ mod tests {
                 source: Some(source.into()),
                 tool: Some(tool.into()),
                 args: Some(args),
-                schema_sha256: Some("a".repeat(64)),
+                schema_sha256: Some(schema),
                 pending_id: None,
+                resource_admission: None,
             };
             super::open(
                 &self.st,
@@ -1174,5 +1216,46 @@ mod tests {
         assert!(released.release, "{}", codes(&released));
         let again = env.call("s1", "read_note", args, Some(&pending)).unwrap();
         assert!(!again.release);
+    }
+
+    #[test]
+    fn resource_tool_can_be_approved_and_inspected() {
+        let env = env(Some(60));
+        env.start("s1");
+        let ws_path = env.home().join("test.txt").to_str().unwrap().to_string();
+        let args = json!({"path": ws_path, "content": "approved content bytes"});
+        let reply = env
+            .open("s1", "create_file", args.clone(), "daemon")
+            .unwrap();
+        let pending = id(&reply);
+        let inspected = operator_inspect(env.home(), &pending).unwrap();
+        assert_eq!(inspected["tool"], "create_file");
+        assert_eq!(inspected["resource_details"]["operation"], "create_file");
+        assert_eq!(inspected["resource_details"]["content_length"], 22);
+        assert_eq!(inspected["binding_sha256"], reply["binding_sha256"]);
+
+        assert_eq!(env.state("s1", &pending), "pending");
+        env.approve(&reply);
+        assert_eq!(env.state("s1", &pending), "approved");
+    }
+
+    #[test]
+    fn unsupported_resource_tool_with_ask_is_refused() {
+        let env = env(Some(60));
+        env.start("s1");
+        let mut tool = env
+            .native()
+            .registry
+            .tools
+            .iter()
+            .find(|t| t.name == "create_file")
+            .unwrap()
+            .clone();
+        if let Some(ref mut policy) = tool.resource_policy {
+            policy.executor_sha256 = "0".repeat(64);
+        }
+        assert!(!crate::native::resource_approval::is_supported_linux_resource_tool(
+            &tool
+        ));
     }
 }

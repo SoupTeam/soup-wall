@@ -949,10 +949,15 @@ fn parse(body: &str) -> Result<Request, &'static str> {
         return Err("native_invalid_fields");
     }
     if let Some(id) = &request.approval_id {
-        if !identifier(id)
-            || request.contract_version != CONTRACT
-            || request.resource_admission.is_some()
-        {
+        if !identifier(id) {
+            return Err("native_invalid_fields");
+        }
+        let is_plain = request.contract_version == CONTRACT && request.resource_admission.is_none();
+        let is_supported_resource = matches!(
+            request.contract_version.as_str(),
+            resource::CONTRACT | resource::CREATE_CONTRACT | resource::NETWORK_CONTRACT
+        ) && request.resource_admission.is_some();
+        if !is_plain && !is_supported_resource {
             return Err("native_invalid_fields");
         }
     }
@@ -1878,15 +1883,26 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             // Exact single-use operator approval, rechecked against the policy
             // verdict computed just now. A hard Deny can never be rescued.
             let approval = native.approval.as_ref().ok_or("native_approval_disabled")?;
-            match approval.redeem(
-                approval_id,
-                &request.session_id,
-                &session.epoch,
-                name,
-                &tool.schema_sha256,
-                &bound,
-                verdict,
-            ) {
+            let revalidate = if tool.resource_policy.is_some() {
+                resource_approval::revalidate_resource_execution(
+                    tool,
+                    args,
+                    request.resource_admission.as_ref(),
+                )
+            } else {
+                Ok(())
+            };
+            match revalidate.and_then(|_| {
+                approval.redeem(
+                    approval_id,
+                    &request.session_id,
+                    &session.epoch,
+                    name,
+                    &tool.schema_sha256,
+                    &bound,
+                    verdict,
+                )
+            }) {
                 Ok(()) => {
                     response.verdict = "allow";
                     response.release = true;
