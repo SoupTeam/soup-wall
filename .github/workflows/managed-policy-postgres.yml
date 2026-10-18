@@ -2,16 +2,6 @@ name: Managed Agent PostgreSQL rollout
 
 on:
   pull_request:
-    paths:
-      - 'crates/proxy/**'
-      - 'crates/agent/**'
-      - 'crates/agentfw/**'
-      - 'scripts/managed-policy-postgres-demo.py'
-      - 'scripts/managed-credential-rotation-demo.py'
-      - 'scripts/keycloak-oidc-acceptance.py'
-      - 'scripts/keycloak-saml-acceptance.py'
-      - '.github/workflows/managed-policy-postgres.yml'
-      - 'Cargo.lock'
   workflow_dispatch:
 
 permissions:
@@ -22,7 +12,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: managed-policy-postgres.yml
   managed-postgres:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs), 'managed-postgres')
     name: PostgreSQL migration and real Agent rollout
     runs-on: ubuntu-24.04
     timeout-minutes: 35

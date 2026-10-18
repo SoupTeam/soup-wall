@@ -2,21 +2,6 @@ name: Real filesystem MCP profile
 
 on:
   pull_request:
-    paths:
-      - 'crates/agentfw/**'
-      - 'crates/agent/**'
-      - 'crates/adapter/**'
-      - 'rule_baseline/**'
-      - 'profiles/mcp/filesystem-readonly-v1/**'
-      - 'scripts/install-sou62-filesystem-profile.py'
-      - 'scripts/verify-sou62-real-mcp.py'
-      - 'scripts/tests/test_sou62_real_mcp.py'
-      - 'scripts/verify-sou62-sou63-combined.py'
-      - 'scripts/tests/test_sou62_sou63_combined.py'
-      - 'scripts/linux-alert-acceptance.py'
-      - 'scripts/tests/test_linux_alert_acceptance.py'
-      - '.github/workflows/mcp-real-filesystem.yml'
-      - 'Cargo.lock'
   workflow_dispatch:
 
 permissions:
@@ -27,7 +12,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: mcp-real-filesystem.yml
   required-linux-sandbox-and-real-host:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs), 'required-linux-sandbox-and-real-host')
     # This selected runtime is Linux x86-64. No host sysctl/AppArmor relaxation.
     runs-on: ubuntu-22.04
     timeout-minutes: 40

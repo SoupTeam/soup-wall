@@ -2,16 +2,6 @@ name: Native MCP diagnostic output
 
 on:
   pull_request:
-    paths:
-      - 'crates/agentfw/**'
-      - 'crates/agent/**'
-      - 'scripts/verify-sou76-native-stderr.py'
-      - 'scripts/tests/test_sou76_native_stderr.py'
-      - 'scripts/verify-sou62-real-mcp.py'
-      - 'scripts/mcp-admission-demo.py'
-      - 'docs/operations/NATIVE_MCP_STDERR.md'
-      - '.github/workflows/native-mcp-stderr.yml'
-      - 'Cargo.lock'
   workflow_dispatch:
 
 permissions:
@@ -22,7 +12,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: native-mcp-stderr.yml
   required-linux-native-stderr:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs), 'required-linux-native-stderr')
     runs-on: ubuntu-22.04
     timeout-minutes: 25
     env:
@@ -89,6 +85,8 @@ jobs:
           retention-days: 30
 
   native-platform-launch:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs), 'native-platform-launch')
     strategy:
       fail-fast: false
       matrix:

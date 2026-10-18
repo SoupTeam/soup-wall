@@ -14,7 +14,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: test-environment.yml
   windows-launcher:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs), 'windows-launcher')
     name: Windows launcher guidance and reporting
     runs-on: windows-latest
     timeout-minutes: 10
@@ -26,6 +32,8 @@ jobs:
         run: python -m unittest discover -s scripts/tests -p 'test_test_environment.py' -v
 
   fixture-baseline:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs), 'fixture-baseline')
     name: Linux fixture baseline (${{ matrix.platform }})
     strategy:
       fail-fast: false

@@ -15,7 +15,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: license-policy.yml
   rust-license-policy:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs), 'rust-license-policy')
     name: Locked workspace license policy
     runs-on: ubuntu-latest
     timeout-minutes: 20
