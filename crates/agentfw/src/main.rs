@@ -27,15 +27,22 @@ enum NativeApprovalCmd {
     /// List outstanding requests (digests only, no raw arguments).
     List,
     /// Show one request in full, including the exact arguments.
-    Inspect { id: String },
+    Inspect {
+        #[arg(allow_hyphen_values = true)]
+        id: String,
+    },
     /// Approve exactly this call; --binding must be the digest shown by inspect.
     Approve {
+        #[arg(allow_hyphen_values = true)]
         id: String,
         #[arg(long)]
         binding: String,
     },
     /// Reject this call.
-    Reject { id: String },
+    Reject {
+        #[arg(allow_hyphen_values = true)]
+        id: String,
+    },
 }
 
 #[derive(Subcommand)]
