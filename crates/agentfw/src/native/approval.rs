@@ -1260,6 +1260,14 @@ mod tests {
         env.start("s1");
         let ws_path = env.home().join("test.txt").to_str().unwrap().to_string();
         let args = json!({"path": ws_path, "content": "approved content bytes"});
+        if !cfg!(target_os = "linux") {
+            assert_eq!(
+                env.open("s1", "create_file", args, "daemon").unwrap_err(),
+                "native_approval_resource_tool_unsupported"
+            );
+            assert!(operator_list(env.home()).is_empty());
+            return;
+        }
         let reply = env
             .open("s1", "create_file", args.clone(), "daemon")
             .unwrap();

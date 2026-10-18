@@ -16,11 +16,12 @@ The following operations are strictly refused and cannot be authorized by an ope
 - Windows and macOS resource tools: Windows handles and macOS native execution remain explicitly refused (`native_approval_resource_tool_unsupported`).
 - Confined real-fs create profiles (SOU-83): real-fs create is out of scope.
 - HTTPS POST and non-GET network mutations (SOU-73): network write operations are strictly refused.
+- Unknown/ambiguous resource classification (`unknown=true` or `uncertainty >= 0.8`) cannot open or redeem an approval.
 - Hard Deny policies: if the policy or classifier evaluates to hard Deny, operator approval is rejected (`native_approval_hard_deny`). An approval cannot rescue a hard Deny.
 
 ## 2. Operator Inspection Workflow
 
-When a constrained resource call evaluates to Ask (via daemon policy rule `action: ask` or classifier uncertainty), the MCP gateway stalls the original call frame and creates a pending approval record.
+When a fully classified constrained resource call evaluates to Ask (via daemon policy rule `action: ask` or an eligible classifier policy decision), the MCP gateway stalls the original call frame and creates a pending approval record.
 
 ### Step 1: Listing Outstanding Approvals
 
@@ -50,24 +51,22 @@ For resource tools, the returned JSON record includes the `resource_details` blo
   "resource_details": {
     "operation": "create_file",
     "executor_profile": "sw-native/create-file/linux-root-child/1",
-    "canonical_path": "/workspace/target.txt",
-    "target_destination": "target.txt",
-    "payload_length_bytes": 1024,
-    "max_content_bytes": 4096
+    "path": "/workspace/target.txt",
+    "content_length": 1024,
+    "content_bytes_sha256": "<sha256 of exact UTF-8 content>"
   }
 }
 ```
 
 For `read_document`:
 - `operation`: `"read_document"`
-- `canonical_path`: canonical path of the target document within workspace bounds.
-- `allowed_resources`: canonical paths permitted by policy.
+- `path`: the exact selected path argument (which can be relative). Workspace containment and canonical allowed resources are validated separately against the installed policy.
 
 For `https_get`:
 - `operation`: `"https_get"`
 - `url`: target URL string.
-- `host`: destination hostname.
-- `method`: `"GET"`.
+- `authority_sha256`: digest of the frozen network authority.
+- `executor_profile`: the constrained GET profile; the method is fixed by the profile, not a separate inspection field.
 
 ## 3. Decision & Execution
 
@@ -84,7 +83,7 @@ Requirements for successful approval:
 2. The approval is signed with the native approval key and recorded in `<home>/native-grants/<id>.json`.
 3. The gateway resumes the call and presents `approval_id` to the execution gate.
 4. The execution gate revalidates workspace containment, path boundaries, target existence (for create), and checks that the grant has not been spent.
-5. The grant is recorded in `<home>/native-grants-spent.json`. The action executes exactly once.
+5. The grant is spent in `<home>/native-grants-spent.json` before execution is attempted. It permits at most one execution; approval is not proof that execution or result delivery succeeded. A later executor failure does not make the grant reusable.
 
 ### Rejecting an Operation
 

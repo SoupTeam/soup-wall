@@ -20,6 +20,7 @@ existing correlated refusal.
   - Windows and macOS native resource tools (`native_approval_resource_tool_unsupported`).
   - Confined real-fs create profile (SOU-83).
   - HTTPS POST or non-GET network mutations (SOU-73).
+- Resource calls must be fully classified: `unknown=true` or `uncertainty >= 0.8` is refused before approval and rechecked after confirmation.
 - One outstanding approval per collector session, 16 per daemon.
 - Two Ask sources: the daemon policy (`call` receipt `verdict: ask`) and the collector
   classifier (`policy_unconfirmed_ask`).

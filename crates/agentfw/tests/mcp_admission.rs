@@ -155,6 +155,9 @@ schemas = {
  'delete_note': {'type':'object','properties':{'name':{'type':'string'}},'required':['name'],'additionalProperties':False}
 }
 if mode == 'classified-read': schemas['read_document'] = {'type':'object','properties':{'path':{'type':'string'}},'required':['path'],'additionalProperties':False}
+if mode == 'sou88-https':
+ del schemas['read_document']
+ schemas['https_get'] = {'type':'object','properties':{'url':{'type':'string','minLength':1,'maxLength':2048}},'required':['url'],'additionalProperties':False}
 if mode == 'operator-binding':
  del schemas['read_document']
  schemas['fetch_document'] = {'type':'object','properties':{'path':{'type':'string'}},'required':['path'],'additionalProperties':False}
@@ -242,6 +245,8 @@ fn registry_with_read_path(classified_read: bool) -> Value {
 
 #[derive(Default)]
 struct DaemonFaults {
+    captured_calls: Mutex<Vec<Value>>,
+    mutate_approved_args: AtomicBool,
     stall_call_admission: AtomicBool,
     call_requests_started: AtomicUsize,
     release_stalled_calls: Notify,
@@ -268,8 +273,24 @@ async fn delay_call_admission(
     let bytes = axum::body::to_bytes(body, agentfw::native::MAX_BODY)
         .await
         .expect("fixture daemon receives bounded requests");
-    let value: Value = serde_json::from_slice(&bytes).expect("fixture collector sends JSON");
-    let request = Request::from_parts(parts, Body::from(bytes));
+    let mut value: Value = serde_json::from_slice(&bytes).expect("fixture collector sends JSON");
+    if value["event"] == "call" {
+        faults.captured_calls.lock().unwrap().push(value.clone());
+        // Hostile transport control: change only the submitted arguments, never
+        // manufacture a daemon verdict or a valid admission/binding.
+        if value["approval_id"].is_string()
+            && faults.mutate_approved_args.swap(false, Ordering::SeqCst)
+        {
+            let key = if value["args"]["url"].is_string() {
+                "url"
+            } else {
+                "path"
+            };
+            let changed = format!("{}-mutated", value["args"][key].as_str().unwrap());
+            value["args"][key] = json!(changed);
+        }
+    }
+    let request = Request::from_parts(parts, Body::from(value.to_string()));
     if faults.stall_call_admission.load(Ordering::SeqCst) && value["event"] == "call" {
         faults.call_requests_started.fetch_add(1, Ordering::SeqCst);
         faults.release_stalled_calls.notified().await;
@@ -5927,3 +5948,7 @@ default: allow
         assert!(!target_path.exists());
     }
 }
+
+#[cfg(target_os = "linux")]
+#[path = "support/resource_approval_execution.rs"]
+mod resource_approval_execution;

@@ -6,12 +6,10 @@
 //! Independent witness verification suite for SOU-88 single-use operator
 //! Ask confirmation for constrained Linux native resource executors.
 //!
-//! Verifies:
-//! 1. Filesystem witness: `create_file` approved executes once; rejected/mutated/expired executes 0 times.
-//! 2. Filesystem witness: `read_document` approved executes once; replayed returns spent.
-//! 3. Network witness: `https_get` approved executes once; mutated/rejected returns refusal / 0 execution.
-//! 4. Hard Deny non-escalation: hard Deny cannot open or redeem approvals.
-//! 5. Provenance loss confinement: approving single Ask call preserves taint floor and incomplete history; next call requires Ask.
+//! Authorization-only witnesses: single-use receipts, rejection, mutation,
+//! expiration, hard Deny, and provenance confinement. These tests do not run
+//! resource executors. Actual execution witnesses live in mcp_admission's
+//! support/resource_approval_execution.rs and the collector create test.
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -490,23 +488,23 @@ async fn post(
 }
 
 // =========================================================================
-// TEST 1: Filesystem Witness - create_file approved executes once
+// TEST 1: create_file single-use authorization
 // =========================================================================
 #[tokio::test]
 #[cfg(target_os = "linux")]
-async fn witness_create_file_approved_executes_once() {
+async fn witness_create_file_authorization_is_single_use() {
     let fixture = WitnessFixture::new(SIDE_EFFECTING_ASK_POLICY, 60);
     let session = "create-approved-session";
     fixture.start_session(session).await;
 
     let target_path = &fixture.create_file_path;
-    let content = "approved content written by single-use executor\n";
+    let content = "content bound to single-use authorization\n";
     let args = json!({
         "path": target_path.to_str().unwrap(),
         "content": content
     });
 
-    // 1. Filesystem witness BEFORE call: file does NOT exist
+    // 1. Router test starts with no target file
     assert!(
         !target_path.exists(),
         "target file must not exist before call"
@@ -543,7 +541,7 @@ async fn witness_create_file_approved_executes_once() {
         .as_str()
         .expect("must provide binding_sha256");
 
-    // 4. Filesystem witness AFTER Ask: file STILL does not exist (0 execution)
+    // 4. Ask never creates a target; this test does not run the executor
     assert!(
         !target_path.exists(),
         "target file must not exist during Ask wait"
@@ -592,30 +590,10 @@ async fn witness_create_file_approved_executes_once() {
     );
     assert_eq!(approved_reply["verdict"], "allow");
 
-    // 8. Simulating executor execution following native release (exact single-use write)
-    std::fs::write(target_path, content.as_bytes()).unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(target_path, std::fs::Permissions::from_mode(0o600)).unwrap();
-    }
+    // The router authorizes execution; it does not execute a file write.
+    assert!(!target_path.exists());
 
-    // 9. Filesystem witness: file exists, content matches, permissions 0600
-    assert!(
-        target_path.exists(),
-        "target file must exist after execution"
-    );
-    assert_eq!(std::fs::read_to_string(target_path).unwrap(), content);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        assert_eq!(
-            target_path.metadata().unwrap().permissions().mode() & 0o777,
-            0o600
-        );
-    }
-
-    // 10. Replay prevention: re-submitting same approval_id while file exists fails closed
+    // Replay must be spent even though no executor created a target.
     let (status, replay_reply) = post(
         fixture.state.clone(),
         "/native/v1",
@@ -637,8 +615,7 @@ async fn witness_create_file_approved_executes_once() {
                 || c == "native_approval_spent")
     );
 
-    // Even if the file is removed, re-submitting the same approval_id is spent in the ledger
-    std::fs::remove_file(target_path).unwrap();
+    // Repeated redemption remains spent without any filesystem side effects.
     let (_, replay_spent) = post(
         fixture.state.clone(),
         "/native/v1",
@@ -655,11 +632,11 @@ async fn witness_create_file_approved_executes_once() {
 }
 
 // =========================================================================
-// TEST 2: Filesystem Witness - Rejection, Mutation, and Expiration (0 executions)
+// TEST 2: Rejection, Mutation, and Expiration (no release)
 // =========================================================================
 #[tokio::test]
 #[cfg(target_os = "linux")]
-async fn witness_create_file_rejected_mutated_expired_zero_execution() {
+async fn witness_create_file_rejected_mutated_expired_never_releases() {
     let fixture = WitnessFixture::new(SIDE_EFFECTING_ASK_POLICY, 1);
     let session = "create-zero-exec-session";
     fixture.start_session(session).await;
@@ -702,7 +679,7 @@ async fn witness_create_file_rejected_mutated_expired_zero_execution() {
         .any(|c| c == "native_approval_rejected"));
     assert!(
         !target_path.exists(),
-        "witness: rejected call must execute zero times"
+        "witness: rejected call must leave the target absent"
     );
 
     // --- Subtest B: Content Mutation After Approval ---
@@ -744,7 +721,7 @@ async fn witness_create_file_rejected_mutated_expired_zero_execution() {
         .any(|c| c == "native_approval_binding_mismatch"));
     assert!(
         !target_path.exists(),
-        "witness: mutated content must execute zero times"
+        "witness: mutated content must leave the target absent"
     );
 
     // --- Subtest C: Expiration ---
@@ -787,16 +764,16 @@ async fn witness_create_file_rejected_mutated_expired_zero_execution() {
     }
     assert!(
         !target_path.exists(),
-        "witness: expired approval must execute zero times"
+        "witness: expired approval must leave the target absent"
     );
 }
 
 // =========================================================================
-// TEST 3: Filesystem Witness - read_document approved executes once
+// TEST 3: read_document single-use authorization
 // =========================================================================
 #[tokio::test]
 #[cfg(target_os = "linux")]
-async fn witness_read_document_approved_executes_once() {
+async fn witness_read_document_authorization_is_single_use() {
     let fixture = WitnessFixture::new(SIDE_EFFECTING_ASK_POLICY, 60);
     let session = "read-approved-session";
     fixture.start_session(session).await;
@@ -879,11 +856,11 @@ async fn witness_read_document_approved_executes_once() {
 }
 
 // =========================================================================
-// TEST 4: Network Witness - https_get approved executes once, mutation/rejection 0
+// TEST 4: https_get single-use authorization and mutation refusal
 // =========================================================================
 #[tokio::test]
 #[cfg(target_os = "linux")]
-async fn witness_https_get_approved_executes_once_and_rejection_zero_execution() {
+async fn witness_https_get_authorization_is_single_use_and_mutation_refused() {
     let fixture = WitnessFixture::new(SIDE_EFFECTING_ASK_POLICY, 60);
     let session = "https-witness-session";
     fixture.start_session(session).await;
@@ -1063,7 +1040,7 @@ async fn witness_hard_deny_cannot_be_approved() {
     );
     assert!(
         !target_path.exists(),
-        "witness: hard Deny must execute zero times"
+        "witness: hard Deny must leave the target absent"
     );
 }
 
