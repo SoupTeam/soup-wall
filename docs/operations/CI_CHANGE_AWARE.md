@@ -227,3 +227,20 @@ CI run without those exact checks is refused. An existing failed legacy componen
 run cannot be hidden by the central run. This permits replacing duplicate planners
 after this verifier compatibility is installed; it does not activate selective CI,
 change required checks, or remove any runtime/security acceptance.
+
+### Central component execution
+
+Ready PRs now start `ci.yml` once. Its single source-bound planner supplies the
+complete selection to `ci-components.yml`; the latter runs the original component
+jobs without another planner. The original 34 workflows retain manual dispatch
+(and the supply-chain schedule), but do not independently start on PR updates.
+`python3 scripts/ci_components.py` regenerates the shared workflow from those
+manual sources; `--check` and the CI contract suite reject drift. Edit the original
+job, regenerate, and retain its runtime/artifact/matrix controls. The four existing
+required core check names, separate CodeQL and privileged base-branch admission
+are unchanged. Drafts and main smoke never invoke component qualification.
+
+This removes 34 repeated planner allocations per full Ready run: the expected
+full check count falls from 105 to 71 with the same runtime matrix. This is a job
+count reduction, not a measured percentage of billed cost. Selective scheduling
+still requires its reviewed activation and live required-context readback.

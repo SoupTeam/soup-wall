@@ -84,13 +84,13 @@ class ImpactTests(unittest.TestCase):
 
     def test_registered_workflows_have_explicit_plan_dependencies(self):
         actual = {path.name for path in (ROOT / ".github/workflows").glob("*.yml")}
-        self.assertEqual(actual - {"release.yml", "ci-impact-plan.yml", "ci-admission.yml", "vps-ci.yml"},
+        self.assertEqual(actual - {"release.yml", "ci-impact-plan.yml", "ci-admission.yml", "vps-ci.yml", "ci-components.yml"},
                          set(WORKFLOW_JOBS))
         for filename, jobs in WORKFLOW_JOBS.items():
             text = (ROOT / ".github/workflows" / filename).read_text(encoding="utf-8")
             registered = set(re.findall(r"(?m)^  ([a-z][a-z0-9-]*):\s*$",
                                         text.split("jobs:\n", 1)[1]))
-            auxiliary = {"draft-checks", "main-smoke"} if filename == "ci.yml" else set()
+            auxiliary = {"draft-checks", "main-smoke", "components"} if filename == "ci.yml" else set()
             self.assertEqual(registered, set(jobs) | {"impact"} | auxiliary, filename)
             for job in jobs:
                 body = re.split(r"\n  [a-z][a-z0-9-]*:\s*\n",
