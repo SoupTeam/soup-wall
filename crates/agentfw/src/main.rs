@@ -27,15 +27,22 @@ enum NativeApprovalCmd {
     /// List outstanding requests (digests only, no raw arguments).
     List,
     /// Show one request in full, including the exact arguments.
-    Inspect { id: String },
+    Inspect {
+        #[arg(allow_hyphen_values = true)]
+        id: String,
+    },
     /// Approve exactly this call; --binding must be the digest shown by inspect.
     Approve {
+        #[arg(allow_hyphen_values = true)]
         id: String,
         #[arg(long)]
         binding: String,
     },
     /// Reject this call.
-    Reject { id: String },
+    Reject {
+        #[arg(allow_hyphen_values = true)]
+        id: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -117,6 +124,12 @@ enum ClassifierPackageCmd {
 
 #[derive(Subcommand)]
 enum Cmd {
+    /// Verify and resume an opt-in Linux audit segment store after a stopped writer.
+    AuditRetentionRecover {
+        /// Agent profile containing config.yaml.
+        #[arg(long)]
+        home: Option<PathBuf>,
+    },
     /// Install and manage the verified rule-classifier package (SOU-64).
     ClassifierPackage {
         #[command(subcommand)]
@@ -232,8 +245,11 @@ enum Cmd {
         #[arg(long)]
         path: PathBuf,
     },
-    /// Review and compile one operator-owned MCP admission profile (no installation).
+    /// Review, compile, and manage transactional MCP admission profiles.
     McpProfile {
+        /// Optional custom agentfw home directory (default: ~/.agentfw).
+        #[arg(long)]
+        home: Option<PathBuf>,
         #[command(subcommand)]
         command: agentfw::mcp::profile_author::Command,
     },
@@ -402,8 +418,32 @@ enum ServiceCommand {
 }
 
 fn main() -> anyhow::Result<()> {
+    // Internal owners must stay synchronous: parent-death ownership belongs to
+    // their stable main thread, before any Tokio worker can be created.
+    if let Some(status) = agentfw::mcp::linux_owner::early_dispatch() {
+        std::process::exit(status);
+    }
     let cli = Cli::parse();
     match cli.cmd {
+        Cmd::AuditRetentionRecover { home } => {
+            let home = home.unwrap_or(Config::home_path()?);
+            let cfg = Config::from_yaml(&std::fs::read_to_string(home.join("config.yaml"))?)?;
+            let retention = cfg
+                .audit_retention
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("audit_retention is not configured"))?;
+            #[cfg(target_os = "linux")]
+            {
+                agentfw::audit::recover_retention(retention)?;
+                println!("Audit retention verified and ready");
+                Ok(())
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                let _ = retention;
+                anyhow::bail!("bounded audit retention is supported on Linux only")
+            }
+        }
         Cmd::Doctor(args) => std::process::exit(agentfw::doctor::run(args)),
         Cmd::ProtectionStatus(args) => {
             std::process::exit(agentfw::protection_status::run_cli(args))
@@ -682,7 +722,21 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Cmd::McpConnection { command } => agentfw::mcp::connection::run(command),
-        Cmd::McpProfile { command } => agentfw::mcp::profile_author::run(command),
+        Cmd::McpProfile { home, command } => {
+            let home = match home {
+                Some(h) => h,
+                None => match &command {
+                    agentfw::mcp::profile_author::Command::Preview { .. }
+                    | agentfw::mcp::profile_author::Command::Import { .. }
+                    | agentfw::mcp::profile_author::Command::Validate { .. }
+                    | agentfw::mcp::profile_author::Command::Explain { .. }
+                    | agentfw::mcp::profile_author::Command::Diff { .. }
+                    | agentfw::mcp::profile_author::Command::Compile { .. } => Config::home_path()?,
+                    _ => Config::home()?,
+                },
+            };
+            agentfw::mcp::profile_author::run(command, &home)
+        }
         Cmd::ChildAuthority { action } => {
             use agentfw::native::child_authority;
             let home = Config::home()?;
@@ -1180,7 +1234,7 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
         Err(_) => Config::default(),
     };
 
-    let firewall = match &cfg.policy {
+    let mut firewall = match &cfg.policy {
         Some(p) => AgentFirewall::with_taint_limits(
             AgentPolicySet::from_yaml(&std::fs::read_to_string(p)?)?,
             DEFAULT_TAINT_CAP,
@@ -1200,7 +1254,8 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
             .as_ref()
             .map(|native| {
                 let native_token = agentfw::token::load_or_create(&home.join("native-token"))?;
-                let state = agentfw::native::NativeState::load(native, native_token)?;
+                let state = agentfw::native::NativeState::load(native, native_token)?
+                    .with_continuity(&home, &mut firewall)?;
                 match &native.approval {
                     Some(approval) => {
                         let hook_token = agentfw::token::load_or_create(&home.join("token"))?;
@@ -1216,7 +1271,10 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
             .transpose()?,
         firewall: Mutex::new(firewall),
         sessions: Sessions::default(),
-        audit: AuditSink::open(&audit_path)?,
+        audit: match &cfg.audit_retention {
+            Some(retention) => AuditSink::open_retained(retention)?,
+            None => AuditSink::open(&audit_path)?,
+        },
         spans: agentfw::spans::SpanCache::new(64, cfg.judge.max_span_bytes),
         judge: agentfw::judge::Judge::new(cfg.judge.clone()),
         manifests: agentfw::mcp::store::ManifestStore::new(&home.join("manifests")),

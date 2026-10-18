@@ -23,6 +23,11 @@ pub struct Options {
 
 #[derive(clap::Subcommand)]
 pub enum Command {
+    /// Transactionally change an existing owned Linux connection profile.
+    Profile {
+        #[command(subcommand)]
+        command: crate::mcp::profile_upgrade::Command,
+    },
     Preview(Options),
     Connect(Options),
     Inspect(Options),
@@ -62,6 +67,10 @@ pub async fn inspect_read_only(options: &Options) -> anyhow::Result<&'static str
 }
 
 pub fn run(command: Command) -> anyhow::Result<()> {
+    let command = match command {
+        Command::Profile { command } => return crate::mcp::profile_upgrade::run(command),
+        other => other,
+    };
     #[cfg(windows)]
     let command = match command {
         Command::Collector {
@@ -88,6 +97,7 @@ pub fn run(command: Command) -> anyhow::Result<()> {
             Command::Connect(o) => ("connect", o),
             Command::Inspect(o) => ("inspect", o),
             Command::Disconnect(o) => ("disconnect", o),
+            Command::Profile { .. } => unreachable!(),
         };
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -109,6 +119,7 @@ pub fn run(command: Command) -> anyhow::Result<()> {
                 Command::Connect(o) => ("connect", o),
                 Command::Inspect(o) => ("inspect", o),
                 Command::Disconnect(o) => ("disconnect", o),
+                Command::Profile { .. } => unreachable!(),
                 Command::Collector { .. } => unreachable!(),
             };
             let runtime = tokio::runtime::Builder::new_current_thread()
@@ -136,7 +147,8 @@ pub fn run(command: Command) -> anyhow::Result<()> {
 mod windows;
 
 #[cfg(target_os = "linux")]
-mod linux {
+pub(crate) mod linux {
+    pub(crate) mod profile_upgrade;
     use super::Options;
     use anyhow::{ensure, Context, Result};
     use serde::{Deserialize, Serialize};
@@ -727,6 +739,7 @@ mod linux {
         binary: String,
         registry: String,
         config: String,
+        policy: String,
     }
 
     async fn preflight(o: &Options) -> Result<Native> {
@@ -777,6 +790,7 @@ mod linux {
             binary,
             registry: installed.registry_sha256.clone(),
             config: sha(&bytes),
+            policy: snapshot.policy.sha256,
         })
     }
 

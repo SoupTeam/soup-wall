@@ -2,16 +2,6 @@ name: Real Git MCP profile
 
 on:
   pull_request:
-    paths:
-      - 'crates/agentfw/**'
-      - 'crates/agent/**'
-      - 'crates/adapter/**'
-      - 'rule_baseline/**'
-      - 'profiles/mcp/git-readonly-v1/**'
-      - 'scripts/*sou68*'
-      - 'scripts/tests/test_sou68_real_mcp.py'
-      - '.github/workflows/mcp-real-git.yml'
-      - 'Cargo.lock'
   workflow_dispatch:
 
 permissions:
@@ -22,7 +12,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: mcp-real-git.yml
   required-linux-git:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs), 'required-linux-git')
     runs-on: ubuntu-22.04
     timeout-minutes: 40
     env:

@@ -58,6 +58,7 @@ pub struct Preview {
     pub unit: String,
     pub starts_automatically: bool,
     pub transaction_protocol: u32,
+    pub instance_selection: bool,
 }
 
 pub struct Service {
@@ -118,7 +119,8 @@ impl Service {
             launcher: self.launcher(),
             unit,
             starts_automatically: false,
-            transaction_protocol: 1,
+            transaction_protocol: 2,
+            instance_selection: true,
         })
     }
 
@@ -263,8 +265,28 @@ impl Service {
         let output = command_output(command, false)
             .context("installed launcher predates service transactions; stop, uninstall and reinstall the service with this CLI first")?;
         let preview: serde_json::Value = serde_json::from_str(&output)?;
-        ensure!(preview["transaction_protocol"] == 1,
-            "installed launcher predates service transactions; stop, uninstall and reinstall the service with this CLI first");
+        ensure!(
+            preview["transaction_protocol"].as_u64().unwrap_or(0) >= 1,
+            "installed launcher predates service transactions; stop, uninstall and reinstall the service with this CLI first"
+        );
+        Ok(())
+    }
+
+    pub fn require_instance_launcher(&self) -> Result<()> {
+        self.installed()?;
+        let home = self.home.to_str().context("profile path is not UTF-8")?;
+        let mut command = Command::new(self.launcher());
+        command.args(["service", "--home", home, "preview"]);
+        let output = command_output(command, false).context(
+            "installed service launcher predates instance-bound profile lifecycle; reinstall the service with this CLI (`agentfw service uninstall && agentfw service install`)",
+        )?;
+        let preview: serde_json::Value = serde_json::from_str(&output)?;
+        let protocol = preview["transaction_protocol"].as_u64().unwrap_or(0);
+        let supports_instance = preview["instance_selection"].as_bool().unwrap_or(false);
+        ensure!(
+            protocol >= 2 || supports_instance,
+            "installed service launcher predates instance-bound profile lifecycle; reinstall the service with this CLI (`agentfw service uninstall && agentfw service install`)"
+        );
         Ok(())
     }
 
@@ -380,6 +402,7 @@ impl Service {
     pub fn start(&self) -> Result<()> {
         let _operation = self.operation_lock()?;
         self.idle()?;
+        let _ = self.manager().set_next_instance(None);
         self.start_locked()
     }
 
@@ -468,8 +491,60 @@ impl Service {
     pub fn restart(&self) -> Result<()> {
         let _operation = self.operation_lock()?;
         self.idle()?;
+        let _ = self.manager().set_next_instance(None);
         self.stop_locked()?;
         self.start_locked()
+    }
+
+    pub fn restart_with_ownership_check(
+        &self,
+        expected_instance: Option<&str>,
+        was_running: bool,
+        candidate_instance: Option<&str>,
+    ) -> Result<()> {
+        let _operation = self.operation_lock()?;
+        self.idle()?;
+        if candidate_instance.is_some() {
+            self.require_instance_launcher()?;
+        }
+        let (state, health) = self.manager().service_snapshot()?;
+        if was_running {
+            ensure!(
+                health.is_some(),
+                "conflict: daemon process died or is not responding before restart"
+            );
+            if let Some(expected) = expected_instance {
+                let current_inst = state.process.as_ref().map(|p| p.instance.as_str());
+                ensure!(
+                    current_inst == Some(expected),
+                    "conflict: daemon was restarted independently before profile restart (expected {expected}, got {current_inst:?})"
+                );
+            }
+            self.stop_locked()?;
+            if let Some(cand) = candidate_instance {
+                self.manager().set_next_instance(Some(cand))?;
+            }
+            let res = self.start_locked();
+            if res.is_err() {
+                let _ = self.manager().set_next_instance(None);
+            }
+            res
+        } else {
+            self.manager().service_clear_dead()?;
+            let (state, health) = self.manager().service_snapshot()?;
+            ensure!(
+                health.is_none() && state.process.is_none(),
+                "conflict: an independent daemon was started before candidate launch"
+            );
+            if let Some(cand) = candidate_instance {
+                self.manager().set_next_instance(Some(cand))?;
+            }
+            let res = self.start_locked();
+            if res.is_err() {
+                let _ = self.manager().set_next_instance(None);
+            }
+            res
+        }
     }
 
     fn installed(&self) -> Result<Ownership> {
@@ -636,7 +711,7 @@ impl Service {
         report
     }
 
-    fn operation_lock(&self) -> Result<crate::lifecycle::OperationLock> {
+    pub fn operation_lock(&self) -> Result<crate::lifecycle::OperationLock> {
         make_directory(&self.root)?;
         let path = self.root.join("operation.lock");
         if exists(&path)? {

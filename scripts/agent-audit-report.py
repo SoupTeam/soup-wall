@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -23,6 +24,9 @@ MAX_RECORDS = 10_000
 MAX_DEPTH = 16
 MAX_OUTPUT_BYTES = 8 * 1024 * 1024
 MAX_FINDINGS = 8
+PRIVATE_LINUX_FILESYSTEMS = frozenset({"ext2", "ext3", "ext4", "xfs", "btrfs", "zfs", "f2fs", "tmpfs", "overlay"})
+MAX_MANIFEST_BYTES = 64 * 1024
+MAX_SEGMENT_BYTES = 16 * 1024 * 1024
 VERDICTS = frozenset({"allow", "ask", "deny"})
 SEVERITIES = frozenset({"info", "low", "medium", "high", "critical"})
 ORIGINS = frozenset({"user", "project", "system", "network", "mcp", "subagent", "native"})
@@ -330,7 +334,9 @@ def _read_report(path: Path) -> dict[str, object]:
     counts = {"lines": 0, "accepted": 0, "malformed": 0, "unsupported": 0, "skipped": 0}
     notices: list[str] = []
     partial = False
+    unknown_record_schema = False
     consumed = 0
+    export_meta: dict[str, object] | None = None
     with _open_input(path) as stream:
         while True:
             if counts["lines"] >= MAX_RECORDS:
@@ -369,10 +375,26 @@ def _read_report(path: Path) -> dict[str, object]:
             if type(value) is not dict:
                 counts["malformed"] += 1
                 continue
+            if counts["lines"] == 1 and "audit_export_version" in value:
+                if (value.get("audit_export_version") != 1 or
+                        type(value.get("notices")) is not list or
+                        type(value.get("gaps")) is not dict):
+                    raise ReportError("unsupported audit export schema")
+                allowed_notices = {
+                    "intentional_retention", "missing_segment", "corrupt_segment",
+                    "partial_tail", "unknown_schema", "interrupted_publication",
+                    "export_limit", "selected_range", "malformed_record",
+                }
+                if any(type(item) is not str or item not in allowed_notices
+                       for item in value["notices"]):
+                    raise ReportError("invalid audit export metadata")
+                export_meta = value
+                continue
             # Current Agent audit JSONL has no version field. A future explicit
             # version must be reviewed before it can be interpreted as current.
             if "version" in value or "format_version" in value or "contract_version" in value:
                 counts["unsupported"] += 1
+                unknown_record_schema = True
                 continue
             item = _project(value, counts["lines"], sessions, servers, agents, calls,
                             tools, rules, detectors)
@@ -415,8 +437,28 @@ def _read_report(path: Path) -> dict[str, object]:
         notices.append("Malformed records were omitted")
     if counts["unsupported"]:
         notices.append("Unsupported events or record versions were omitted")
+    if unknown_record_schema:
+        notices.append("Unknown audit record schema was omitted")
     if partial:
         notices.append("Counts of unread records are lower bounds; source evidence is incomplete")
+    if export_meta is not None:
+        labels = {
+            "intentional_retention": "Older segments were intentionally pruned by retention policy",
+            "missing_segment": "A retained segment is missing; evidence has an unexplained gap",
+            "corrupt_segment": "A retained segment failed verification; its records were omitted",
+            "partial_tail": "An incomplete final record was retained but omitted",
+            "unknown_schema": "The segment manifest or export schema is not recognized",
+            "interrupted_publication": "A manifest or pruning operation was interrupted",
+            "export_limit": "Export limit reached; later records were omitted",
+            "selected_range": "The operator selected only part of retained history",
+            "malformed_record": "A malformed source record was omitted",
+        }
+        notices.extend(labels[item] for item in export_meta["notices"])
+        gaps = export_meta["gaps"]
+        if set(gaps) != {"intentional", "unexplained", "corrupt"} or any(type(v) is not int or v < 0 or v > 2**53 - 1 for v in gaps.values()):
+            raise ReportError("invalid audit export gaps")
+        if any(gaps.values()) or export_meta["notices"]:
+            partial = True
     return {
         "meta": {
             "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
@@ -425,6 +467,8 @@ def _read_report(path: Path) -> dict[str, object]:
             "limits": {"input_bytes": MAX_INPUT_BYTES, "line_bytes": MAX_LINE_BYTES,
                        "records": MAX_RECORDS, "depth": MAX_DEPTH, "output_bytes": MAX_OUTPUT_BYTES},
             "notices": notices,
+            "gaps": export_meta["gaps"] if export_meta is not None else
+                    {"intentional": 0, "unexplained": 0, "corrupt": 0},
         }, "events": events,
     }
 
@@ -434,7 +478,7 @@ def _private_output(path: Path, body: bytes) -> None:
     parent = path.parent
     if not parent.exists():
         parent.mkdir(mode=0o700)
-    if _linux_filesystem(parent) not in {"ext2", "ext3", "ext4", "xfs", "btrfs", "zfs", "f2fs", "tmpfs", "overlay"}:
+    if _linux_filesystem(parent) not in PRIVATE_LINUX_FILESYSTEMS:
         raise ReportError("output requires a Linux filesystem with verifiable owner-only permissions")
     parent_fd = _open_dir_nofollow(parent)
     try:
@@ -458,6 +502,191 @@ def _private_output(path: Path, body: bytes) -> None:
             os.close(fd)
     finally:
         os.close(parent_fd)
+
+
+def export_retained(directory: Path, output: Path, from_segment: int | None = None,
+                    to_segment: int | None = None, from_ms: int | None = None,
+                    to_ms: int | None = None) -> dict[str, object]:
+    """Verify and export a bounded selection of real retained JSONL records.
+
+    The export is owner-only raw evidence. The HTML generator still applies its
+    allowlist and report-local aliases; this local digest is not authentication.
+    """
+    if os.name != "posix" or not sys.platform.startswith("linux"):
+        raise ReportError("retained export currently supports Linux only")
+    directory, output = directory.absolute(), output.absolute()
+    if directory == output or directory in output.parents:
+        raise ReportError("export output must be outside the retained directory")
+    if any(v is not None and (v < 0 or v > 2**53 - 1)
+           for v in (from_segment, to_segment, from_ms, to_ms)):
+        raise ReportError("selection must be a nonnegative finite integer")
+    if ((from_segment is not None and to_segment is not None and from_segment > to_segment) or
+            (from_ms is not None and to_ms is not None and from_ms > to_ms)):
+        raise ReportError("selection range is reversed")
+    _check_path_components(directory)
+    if _linux_filesystem(directory) not in PRIVATE_LINUX_FILESYSTEMS:
+        raise ReportError("retained input requires a supported private Linux filesystem")
+    notices: set[str] = set()
+    gaps = {"intentional": 0, "unexplained": 0, "corrupt": 0}
+    records: list[bytes] = []
+    parent_fd = _open_dir_nofollow(directory.parent)
+    dir_fd = os.open(directory.name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                     dir_fd=parent_fd)
+    try:
+        root_stat = os.fstat(dir_fd)
+        if root_stat.st_uid != os.getuid() or root_stat.st_mode & 0o077:
+            raise ReportError("retained directory must be owner-only")
+
+        def read_verified(name: str, limit: int) -> bytes | None:
+            named_dir = os.stat(directory.name, dir_fd=parent_fd, follow_symlinks=False)
+            if (named_dir.st_dev, named_dir.st_ino) != (root_stat.st_dev, root_stat.st_ino):
+                raise ReportError("retained directory was replaced")
+            try:
+                fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dir_fd)
+            except FileNotFoundError:
+                return None
+            except OSError as error:
+                raise ReportError("retained segment cannot be opened safely") from error
+            try:
+                held = os.fstat(fd)
+                named = os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
+                if ((held.st_dev, held.st_ino) != (named.st_dev, named.st_ino) or
+                        not stat.S_ISREG(held.st_mode) or held.st_uid != os.getuid() or
+                        held.st_nlink != 1 or held.st_mode & 0o077 or held.st_size > limit):
+                    raise ReportError("retained segment is unsafe or exceeds limit")
+                with os.fdopen(fd, "rb", closefd=False) as stream:
+                    body = stream.read(limit + 1)
+                if len(body) > limit:
+                    raise ReportError("retained segment exceeds limit")
+                final = os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
+                if (final.st_dev, final.st_ino) != (held.st_dev, held.st_ino):
+                    raise ReportError("retained segment was replaced during export")
+                return body
+            finally:
+                os.close(fd)
+
+        manifest_raw = read_verified("manifest.json", MAX_MANIFEST_BYTES)
+        if manifest_raw is None:
+            raise ReportError("retention manifest missing")
+        if read_verified("manifest.pending", MAX_MANIFEST_BYTES) is not None:
+            notices.add("interrupted_publication")
+        try:
+            manifest = json.loads(manifest_raw, object_pairs_hook=_pair_object)
+            if (type(manifest) is not dict or set(manifest) != {
+                    "version", "limits", "generation", "next_id", "pruned_through", "pending_prune", "segments"} or
+                    manifest.get("version") != 1 or
+                    type(manifest.get("segments")) is not list or
+                    type(manifest.get("pruned_through")) is not int or
+                    type(manifest.get("next_id")) is not int or
+                    type(manifest.get("generation")) is not int or manifest["generation"] < 1 or
+                    manifest["pruned_through"] < 0 or manifest["next_id"] < 2):
+                raise ValueError("unknown manifest schema")
+            limits = manifest.get("limits")
+            if (type(limits) is not dict or set(limits) != {
+                    "segment_size_bytes", "segment_count", "total_disk_bytes", "max_record_bytes"} or
+                    any(type(value) is not int for value in limits.values()) or
+                    not 65536 <= limits["segment_size_bytes"] <= MAX_SEGMENT_BYTES or
+                    not 2 <= limits["segment_count"] <= 64 or
+                    not 256 <= limits["max_record_bytes"] <= MAX_LINE_BYTES or
+                    limits["max_record_bytes"] > limits["segment_size_bytes"] or
+                    not (limits["segment_count"] * limits["segment_size_bytes"] + 2 * MAX_MANIFEST_BYTES + 4096
+                         <= limits["total_disk_bytes"] <= 1024 * 1024 * 1024)):
+                raise ValueError("unknown retention limits")
+            segments = manifest["segments"]
+            if not 1 <= len(segments) <= limits["segment_count"]:
+                raise ValueError("invalid segment count")
+            previous = manifest["pruned_through"]
+            for segment in segments:
+                if (type(segment) is not dict or set(segment) != {
+                        "id", "closed", "bytes", "sha256", "partial_tail"} or
+                        type(segment.get("id")) is not int or
+                        segment["id"] != previous + 1 or segment["id"] >= manifest["next_id"] or
+                        type(segment.get("closed")) is not bool or
+                        type(segment.get("partial_tail")) is not bool or
+                        type(segment.get("bytes")) is not int or
+                        segment["bytes"] < 0 or segment["bytes"] > limits["segment_size_bytes"]):
+                    raise ValueError("manifest order or bound is invalid")
+                digest = segment["sha256"]
+                if segment["closed"] != (type(digest) is str) or (
+                        digest is not None and (len(digest) != 64 or
+                                                any(c not in "0123456789abcdef" for c in digest))) or (
+                        not segment["closed"] and segment["partial_tail"]):
+                    raise ValueError("manifest segment digest is invalid")
+                previous = segment["id"]
+            if previous + 1 != manifest["next_id"]:
+                raise ValueError("manifest order is invalid")
+            pending = manifest["pending_prune"]
+            if pending is not None and (type(pending) is not int or
+                                        len(segments) != limits["segment_count"] or
+                                        pending != segments[0]["id"] or not segments[0]["closed"]):
+                raise ValueError("manifest prune state is invalid")
+        except (ValueError, TypeError, KeyError, UnicodeDecodeError):
+            notices.add("unknown_schema")
+            gaps["corrupt"] += 1
+            segments = []
+            manifest = {}
+        if manifest.get("pruned_through", 0) > 0:
+            gaps["intentional"] = min(manifest["pruned_through"], 2**53 - 1)
+            notices.add("intentional_retention")
+        if manifest.get("pending_prune") is not None:
+            notices.add("interrupted_publication")
+        if any(v is not None for v in (from_segment, to_segment, from_ms, to_ms)):
+            notices.add("selected_range")
+        used = 0
+        for segment in segments:
+            segment_id = segment["id"]
+            if ((from_segment is not None and segment_id < from_segment) or
+                    (to_segment is not None and segment_id > to_segment)):
+                continue
+            name = f"segment-{segment_id:020}.jsonl"
+            body = read_verified(name, limits["segment_size_bytes"])
+            if body is None:
+                gaps["unexplained"] += 1
+                notices.add("missing_segment")
+                continue
+            if segment["closed"] and (len(body) != segment["bytes"] or
+                    hashlib.sha256(body).hexdigest() != segment.get("sha256") or
+                    (bool(body) and not body.endswith(b"\n")) != segment["partial_tail"]):
+                gaps["corrupt"] += 1
+                notices.add("corrupt_segment")
+                continue
+            if not body.endswith(b"\n") and body:
+                notices.add("partial_tail")
+                body = body[:body.rfind(b"\n") + 1]
+            for raw in body.splitlines(keepends=True):
+                if len(raw) > limits["max_record_bytes"]:
+                    notices.add("malformed_record")
+                    continue
+                try:
+                    value = json.loads(raw, object_pairs_hook=_pair_object)
+                except (UnicodeDecodeError, ValueError):
+                    notices.add("malformed_record")
+                    continue
+                if type(value) is not dict:
+                    notices.add("malformed_record")
+                    continue
+                at_ms = value.get("at_ms")
+                if ((from_ms is not None and (type(at_ms) is not int or at_ms < from_ms)) or
+                        (to_ms is not None and (type(at_ms) is not int or at_ms > to_ms))):
+                    continue
+                if used + len(raw) > MAX_INPUT_BYTES - 4096 or len(records) >= MAX_RECORDS - 1:
+                    notices.add("export_limit")
+                    break
+                records.append(raw)
+                used += len(raw)
+            if "export_limit" in notices:
+                break
+        if read_verified("manifest.json", MAX_MANIFEST_BYTES) != manifest_raw:
+            raise ReportError("retention changed during export; retry")
+    finally:
+        os.close(dir_fd)
+        os.close(parent_fd)
+    header = {"audit_export_version": 1, "notices": sorted(notices), "gaps": gaps}
+    payload = json.dumps(header, separators=(",", ":"), ensure_ascii=True).encode() + b"\n" + b"".join(records)
+    if len(payload) > MAX_INPUT_BYTES:
+        raise ReportError("export exceeds input byte limit")
+    _private_output(output, payload)
+    return {"records": len(records), "notices": sorted(notices), "gaps": gaps}
 
 
 def generate(source: Path, output: Path, template: Path | None = None) -> dict[str, object]:
@@ -485,10 +714,23 @@ def generate(source: Path, output: Path, template: Path | None = None) -> dict[s
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input", required=True, type=Path, help="explicit regular Agent audit JSONL path")
-    parser.add_argument("--output", required=True, type=Path, help="new report HTML in a private directory")
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--input", type=Path, help="explicit regular Agent audit JSONL or export path")
+    source.add_argument("--retained-dir", type=Path, help="verified Linux retention directory to export")
+    parser.add_argument("--output", required=True, type=Path, help="new private HTML report or JSONL export")
+    parser.add_argument("--from-segment", type=int)
+    parser.add_argument("--to-segment", type=int)
+    parser.add_argument("--from-ms", type=int)
+    parser.add_argument("--to-ms", type=int)
     args = parser.parse_args()
     try:
+        if args.retained_dir:
+            meta = export_retained(args.retained_dir, args.output, args.from_segment,
+                                   args.to_segment, args.from_ms, args.to_ms)
+            print(f"Private verified export written: {args.output} ({meta['records']} records; {', '.join(meta['notices']) or 'no gaps detected'})")
+            return 0
+        if any(value is not None for value in (args.from_segment, args.to_segment, args.from_ms, args.to_ms)):
+            raise ReportError("range options require --retained-dir")
         meta = generate(args.input, args.output)
     except (ReportError, OSError) as error:
         parser.exit(2, f"audit report: {error}\n")

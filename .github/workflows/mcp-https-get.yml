@@ -2,17 +2,6 @@ name: Constrained MCP HTTPS GET
 
 on:
   pull_request:
-    paths:
-      - 'crates/agentfw/**'
-      - 'crates/agent/**'
-      - 'crates/adapter/**'
-      - 'rule_baseline/**'
-      - 'scripts/verify-sou56-https-get.py'
-      - 'scripts/verify-sou54-create-file.py'
-      - 'scripts/fixtures/mcp_https_get_probe_server.py'
-      - 'scripts/tests/test_sou56_https_get.py'
-      - '.github/workflows/mcp-https-get.yml'
-      - 'Cargo.lock'
   workflow_dispatch:
 
 permissions:
@@ -23,7 +12,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: mcp-https-get.yml
   linux-https-get:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs), 'linux-https-get')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:

@@ -4,6 +4,14 @@ Changes to the public Soup Wall source distribution are recorded here. Release a
 
 ## Unreleased
 
+- Added explicit Linux owned MCP connection profile preview/apply/status/recover/rollback
+  (SOU-78), using reviewed immutable bundles and retained atomic host publication.
+  Generation-checked launchers, current-daemon child authority and approval epoch
+  retirement reject stale execution; authenticated provenance checkpoints retain host
+  risk across restarts. Host reload remains pending until independently exercised.
+  macOS/Windows profile upgrades remain unsupported. See
+  [MCP_PROFILE_LIFECYCLE.md](docs/operations/MCP_PROFILE_LIFECYCLE.md) for scope and limits.
+
 - Added native macOS `agentfw self-test` profile (SOU-77): delivered the
   `macos-stdio-mcp-admission-v1` profile with independent prevention witnesses,
   process group management, and verified process cleanup. It exercises an

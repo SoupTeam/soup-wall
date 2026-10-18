@@ -1,0 +1,12 @@
+{
+  "schema": "sou91-frozen-change-set/1",
+  "base_commit": "e3faa664f94ed788917131d35453f115598d6738",
+  "scenarios": {
+    "docs_only": ["README.md"],
+    "rust_agent_native": ["crates/agentfw/src/native.rs"],
+    "gateway_console": ["crates/proxy/src/main.rs"],
+    "python_classifier_eval": ["eval/eval_runner.py"],
+    "workflow_change": [".github/workflows/ci.yml"],
+    "dependabot_dependency": ["Cargo.lock"]
+  }
+}

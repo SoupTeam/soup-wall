@@ -16,6 +16,9 @@ ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("sou68_install_tests", ROOT / "scripts/install-sou68-git-profile.py")
 INSTALL = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(INSTALL)
+VERIFY_SPEC = importlib.util.spec_from_file_location("sou68_diagnostics_tests", ROOT / "scripts/verify-sou68-real-mcp.py")
+VERIFY = importlib.util.module_from_spec(VERIFY_SPEC)
+VERIFY_SPEC.loader.exec_module(VERIFY)
 
 
 class GitProfile(unittest.TestCase):
@@ -88,6 +91,69 @@ class GitProfile(unittest.TestCase):
                 self.assertEqual(witness.drain(), 0)
             finally:
                 witness.close()
+
+
+class ProtectedDiagnostics(unittest.TestCase):
+    def test_correlates_bounded_numeric_ids_and_static_lifecycle(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "collector.log").write_text("\n".join([
+                json.dumps({"event": "mcp_real_server_start", "sandbox_pid": 123}),
+                json.dumps({"event": "mcp_real_call", "host_call_id": 115, "active": 8, "state": "queued"}),
+                json.dumps({"event": "mcp_real_server_end", "cleanup_verified": True, "transport_complete": False}),
+                "Error: selected MCP server closed with incomplete state"]))
+            report = {"protected_client": {"sent": [json.dumps({"id": value}) for value in range(20)],
+                      "received": [json.dumps({"id": 9})], "exit_code": 1, "forced_cleanup": True},
+                      "reads": [{}, {}], "refusals": [{}], "sandbox_positive": True}
+            summary = VERIFY.protected_diagnostics(report, root)
+            self.assertEqual(summary["last_sent_ids"], list(range(12, 20)))
+            self.assertEqual(summary["last_received_ids"], [9])
+            self.assertEqual((summary["reads_completed"], summary["refusals_completed"]), (2, 1))
+            self.assertEqual(summary["terminal_codes"], ["server_closed_incomplete"])
+            self.assertTrue(summary["server_started"] and summary["server_ended"] and summary["forced_cleanup"])
+            self.assertEqual(summary["events"][1], {"event": "mcp_real_call", "host_call_id": 115, "active": 8, "state_queued": True})
+            self.assertEqual(summary["exit_code"], 1)
+
+    def test_never_releases_payloads_arbitrary_errors_or_unsafe_ids(self):
+        marker = "synthetic-private-payload"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "collector.log").write_text("\n".join([
+                json.dumps({"event": "mcp_real_call", "source": marker, "error": marker,
+                            "state": marker, "host_call_id": marker, "active": True, "path": marker}),
+                json.dumps({"event": marker, "sandbox_pid": 123}),
+                json.dumps({"event": [], "source": marker}),
+                "Error: MCP control request timed out " + marker,
+                "Error: " + marker,
+                "Error: MCP control request timed out"]))
+            frames = [json.dumps({"id": value, "result": marker}) for value in
+                      (True, 1.5, -1, 9007199254740992, marker, 17)]
+            frames.extend(["malformed " + marker, "[]", "null"])
+            summary = VERIFY.protected_diagnostics({"protected_client": {"sent": frames, "exit_code": marker}}, root)
+            self.assertNotIn(marker, json.dumps(summary))
+            self.assertEqual(summary["last_sent_ids"], [17])
+            self.assertEqual(summary["terminal_codes"], ["control_timeout"])
+            self.assertEqual(summary["unknown_terminal_rows"], 2)
+            self.assertEqual(summary["events"], [{"event": "mcp_real_call"}])
+            self.assertNotIn("exit_code", summary)
+
+    def test_log_bytes_rows_events_and_line_sizes_are_bounded(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.assertFalse(VERIFY.protected_diagnostics({}, root)["collector_log_available"])
+            log = root / "collector.log"
+            log.write_bytes(b"x" * (VERIFY.DIAGNOSTIC_LOG_BYTES + 1))
+            summary = VERIFY.protected_diagnostics({}, root)
+            self.assertTrue(summary["log_input_limited"])
+            self.assertEqual(summary["events"], [])
+            log.write_bytes(b"x" * (VERIFY.DIAGNOSTIC_ROW_BYTES + 1) + b"\n" + b"{}\n" * VERIFY.DIAGNOSTIC_LOG_ROWS)
+            summary = VERIFY.protected_diagnostics({}, root)
+            self.assertEqual(summary["oversized_rows"], 1)
+            self.assertTrue(summary["log_row_limit"])
+            log.write_text("\n".join(json.dumps({"event": "mcp_real_call", "host_call_id": value}) for value in range(40)))
+            summary = VERIFY.protected_diagnostics({}, root)
+            self.assertEqual(len(summary["events"]), 16)
+            self.assertEqual(summary["events"][0]["host_call_id"], 24)
 
 
 if __name__ == "__main__":

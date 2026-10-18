@@ -5,7 +5,6 @@ on:
     branches: [main]
     paths-ignore: ["**.md", "docs/**", "research/**"]
   pull_request:
-    paths-ignore: ["**.md", "docs/**", "research/**"]
   workflow_dispatch:
 
 permissions:
@@ -16,7 +15,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: benchmark.yml
   agent-scorecard:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs), 'agent-scorecard')
     name: Agent security scorecard
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 15

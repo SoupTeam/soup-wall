@@ -5,6 +5,16 @@ stdio package with MCP Python SDK 1.29.0. It extends the existing selected-serve
 relay and bubblewrap boundary. It does not replace the transport, classifier,
 policy engine, original discovery, schemas, tool names or result/error frames.
 
+Aggregate resource limits are a separate explicit opt-in. Without
+`AGENTFW_MCP_LINUX_BUDGET` this compatibility profile is unbudgeted. See
+[Linux MCP resource budgets](MCP_LINUX_RESOURCE_BUDGETS.md) for the versioned
+configuration, delegated cgroup-v2 prerequisites and fail-closed launch.
+
+[Owned Linux crash supervision](MCP_LINUX_CRASH_SUPERVISION.md) also covers this
+selected launch. It preserves the original Git process and sandbox while adding
+collector-loss ownership; process cleanup does not imply immediate native session
+retirement.
+
 **Acceptance gate:** full Linux acceptance and independent review are required.
 Baubek agreed to the narrow Git rule on October 17.
 The opt-in [Git classifier snapshot](../../rule_baseline/git_readonly_v1/rule_baseline.py)

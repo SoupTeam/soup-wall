@@ -442,7 +442,8 @@ def actual_host(stack, report):
 def positive_sandbox(stack, tests, report):
     try:
         result = subprocess.run([str(tests), "selected_server_sandbox_isolates_real_node", "--ignored", "--nocapture"],
-            env=dict(stack.env, SOU62_SANDBOX_TEST_PROFILE=str(stack.install / "profile.json")), capture_output=True, timeout=90)
+            env=dict(stack.env, SOU62_SANDBOX_TEST_PROFILE=str(stack.install / "profile.json"),
+                     SOU86_TEST_AGENTFW=str(stack.binary)), capture_output=True, timeout=90)
     except subprocess.TimeoutExpired as error:
         raw = (error.stdout or b"") + (error.stderr or b"")
         (stack.root / "sandbox-positive.log").write_bytes(raw)

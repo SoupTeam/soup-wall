@@ -1,0 +1,40 @@
+{
+  "issue": "SOU-78",
+  "acceptance_status": "incomplete",
+  "date": "2026-10-18",
+  "base_commit": "2b8185a68fb630baeb6dcfe307445fe7782e0a54",
+  "branch": "feat/sou-78-mcp-profile-transactional-lifecycle",
+  "antigravity_session": "d78c8d26-227d-4173-9898-649c2b3ba413",
+  "platform": "Darwin",
+  "source_snapshot_excludes": [
+    "docs/"
+  ],
+  "tracked_source_tree_sha256": "36c47d48a18498675bc00c4c7a63f286088d1246738290ecb9e0e51192c9f070",
+  "tracked_source_files_count": 843,
+  "changed_rust_files": {
+    "crates/agentfw/src/lifecycle.rs": "a238560174e21a60733fa92df441a05f945fe29093efcea755d3ec47f677a756",
+    "crates/agentfw/src/main.rs": "3f65270f84af71095409b5ce1ba761863a2bbeb1196a99b06885a5c0f8821c47",
+    "crates/agentfw/src/mcp/profile_author.rs": "a6d255b757e4a72fe9a0f734d4094a7a008972fb891d4f43db798e1db1085153",
+    "crates/agentfw/src/mcp/profile_lifecycle.rs": "0587cc27a1ab2eec9f759e35bc22b4f00a7bc49062644c841880ae37464b8748",
+    "crates/agentfw/src/service.rs": "a938b79636f8547ff0e71b7f5c2c8dceeb1b1cef43112ef6fb34eedcf989f6fa",
+    "crates/agentfw/tests/mcp_profile_lifecycle.rs": "52def692ebdf3b780c1106cbb5b4a17173ab168c1ea37ede68cf234edccc96f7"
+  },
+  "verification": {
+    "workspace_command": "cargo test --offline --locked --workspace --all-features",
+    "passed": 1417,
+    "failed": 0,
+    "ignored": 11,
+    "completed_suites": 61,
+    "clippy_command": "cargo clippy --offline --locked --all-targets --all-features --workspace -- -D warnings",
+    "clippy": "passed",
+    "fmt": "passed",
+    "isolation": "separate source export; repository writes denied; external network denied; loopback allowed; trusted /bin/ps allowed for cleanup witness"
+  },
+  "linux_production_acceptance": "not_run",
+  "remaining": [
+    "owned Linux connection upgrade publication and ownership journal",
+    "runtime grant/receipt/Ask revision binding",
+    "persistent host taint and incomplete-history continuity",
+    "Linux production daemon/collector upgrade, crash recovery and rollback witnesses"
+  ]
+}

@@ -20,6 +20,7 @@ use crate::handlers::Shared;
 
 pub mod approval;
 pub mod child_authority;
+pub mod continuity;
 pub mod resource;
 
 pub const CONTRACT: &str = "sw-native/1";
@@ -474,6 +475,7 @@ pub struct NativeState {
     pub registry_sha256: String,
     pub token: String,
     instance_id: String,
+    pub(crate) continuity: Option<continuity::Continuity>,
     sessions: Mutex<Sessions>,
     pub(crate) approval: Option<approval::ApprovalState>,
 }
@@ -613,9 +615,19 @@ impl NativeState {
             registry_sha256: expected.into(),
             token,
             instance_id: crate::token::generate(),
+            continuity: None,
             sessions: Mutex::default(),
             approval: None,
         })
+    }
+
+    pub fn with_continuity(
+        mut self,
+        home: &std::path::Path,
+        firewall: &mut soup_wall_agent::AgentFirewall,
+    ) -> anyhow::Result<Self> {
+        self.continuity = Some(continuity::Continuity::attach(home, &mut self, firewall)?);
+        Ok(self)
     }
 
     /// Public runtime identifier, authenticated by the native transport endpoint.
@@ -1379,6 +1391,16 @@ fn rollback_provenance_contexts(firewall: &mut soup_wall_agent::AgentFirewall, c
 }
 
 fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Response, &'static str> {
+    if request.event == "session_start"
+        && request.host_session.is_none()
+        && native
+            .continuity
+            .as_ref()
+            .is_some_and(|c| c.requires_scoped_authority())
+    {
+        return Err("native_profile_authority_required");
+    }
+
     let started = Instant::now();
     // One lock covers sequencing, inspection, admission and audit. No await,
     // external judge, or network request occurs while this guard is held.
@@ -2474,6 +2496,62 @@ mod tests {
         let audit = std::fs::read_to_string(dir.path().join("audit.jsonl")).unwrap();
         assert_eq!(audit.lines().count(), 2);
         assert!(!audit.contains(content));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn retained_disk_full_failure_withholds_native_result() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut state = Arc::try_unwrap(fixture(dir.path())).ok().unwrap();
+        let retention = crate::audit::RetentionConfig {
+            version: 1,
+            directory: dir.path().join("retained"),
+            segment_size_bytes: 64 * 1024,
+            segment_count: 2,
+            total_disk_bytes: 300_000,
+            max_record_bytes: 4096,
+        };
+        state.audit = AuditSink::open_retained(&retention).unwrap();
+        state.config.audit_retention = Some(retention.clone());
+        let st = Arc::new(state);
+        let native = st.native.as_ref().unwrap();
+        start(&st, "s");
+        let call = inspect(
+            &st,
+            native,
+            request(
+                native,
+                "s",
+                "call",
+                json!({
+                    "tool":"lookup_note", "args":{}, "schema_sha256":"a".repeat(64)
+                }),
+            ),
+        )
+        .unwrap();
+        st.audit.fail_retained_write_for_test(libc::ENOSPC);
+        let result = inspect(
+            &st,
+            native,
+            request(
+                native,
+                "s",
+                "result",
+                json!({
+                    "tool":"lookup_note", "args":{}, "call_id":call.call_id,
+                    "result_kind":"value", "delivery":"model", "content":"synthetic note"
+                }),
+            ),
+        );
+        assert_eq!(result.err(), Some("native_audit_unavailable"));
+        assert_eq!(st.audit.health()["state"], "unavailable");
+        let body = std::fs::read_to_string(
+            retention
+                .directory
+                .join("segment-00000000000000000001.jsonl"),
+        )
+        .unwrap();
+        assert!(!body.contains("native_result"));
     }
 
     #[test]

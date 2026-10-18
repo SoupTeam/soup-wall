@@ -1,0 +1,14 @@
+
+running 10 tests
+test self_test::fixture::tests::receiver_url_is_exact_numeric_loopback ... ok
+test self_test::fixture::tests::registry_pins_the_bundled_schemas ... ok
+test self_test::fixture::tests::synthetic_data_is_synthetic ... ok
+test self_test::tests::human_summary_never_reports_pass_for_incomplete ... ok
+test self_test::tests::overall_keeps_failed_incomplete_and_unsupported_distinct ... ok
+test self_test::windows::tests::cleanup_rejects_late_extra_execution_after_replies ... ok
+test self_test::windows::tests::new_report_never_opens_an_existing_file_or_hardlink ... ok
+test self_test::windows::tests::private_workspace_and_nonce_are_required_for_cleanup ... ok
+test self_test::windows::tests::receiver_has_an_independent_positive_delivery_control ... ok
+test self_test::windows::tests::reply_parser_requires_the_expected_id_and_real_error_flag ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 379 filtered out; finished in 0.21s

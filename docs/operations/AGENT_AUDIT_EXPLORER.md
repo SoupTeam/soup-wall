@@ -1,6 +1,7 @@
 # Private offline Agent audit explorer
 
-The explorer turns one explicitly selected Agent audit JSONL file into a single
+The explorer turns one explicitly selected Agent audit JSONL file or a verified
+[rotated-history export](AGENT_AUDIT_RETENTION.md#export-and-browse) into a single
 local HTML report. It is for reviewing recorded decisions and their limits; it
 does not change Agent policy, admission, approvals, the source log, or the host.
 The generator and its file-permission claims are supported on Linux. Use a
@@ -42,6 +43,13 @@ malformed lines and unsupported event versions are counted and omitted. An
 unsupported version is not interpreted using the current schema. A normal
 end-of-file can still leave a call without its result; use the per-event
 **Evidence still missing** list before drawing a conclusion.
+
+For bounded retention, first run `--retained-dir ... --output export.jsonl` as
+described in the retention guide, then use `--input export.jsonl` here. The
+export is private raw evidence. Its metadata distinguishes planned pruning,
+missing or corrupt segments, incomplete tails and selected ranges. Those
+notices remain visible in the HTML; a selected report is not a complete
+external execution history.
 
 ## Read the timeline
 
