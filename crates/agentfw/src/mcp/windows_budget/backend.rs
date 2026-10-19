@@ -54,6 +54,7 @@ fn query<T: Default>(job: HANDLE, class: JOBOBJECTINFOCLASS) -> Result<T, &'stat
 #[derive(Default, Clone, Serialize)]
 struct State {
     reason: Option<&'static str>,
+    closed: bool,
     peak_committed_bytes: u64,
     peak_active_processes: u32,
     total_processes: u32,
@@ -164,6 +165,9 @@ impl Guard {
         if let Some(reason) = state.reason {
             return Err(reason);
         }
+        if state.closed {
+            return Ok(());
+        }
         let result = if self.0.started.elapsed() >= Duration::from_millis(self.0.config.wall_millis)
         {
             Err("windows_budget_wall_deadline")
@@ -238,7 +242,7 @@ impl Budget {
             handle,
             JobObjectAssociateCompletionPortInformation,
             &JOBOBJECT_ASSOCIATE_COMPLETION_PORT {
-                CompletionKey: 1usize as *mut _,
+                CompletionKey: std::ptr::without_provenance_mut(1),
                 CompletionPort: port.as_raw_handle().cast(),
             },
         )?;
@@ -273,6 +277,23 @@ impl Budget {
     }
     pub(crate) fn guard(&self) -> Guard {
         self.guard.clone()
+    }
+
+    pub(crate) fn finish(&mut self, cleanup_verified: bool) {
+        // Capture exhaustion during graceful/reap cleanup before publishing the
+        // final transport outcome. Then stop the timer of the verified empty
+        // Job: later HTTP/session retirement cannot expire completed child work.
+        let _ = self.guard.check();
+        if let Ok(mut state) = self.guard.0.state.lock() {
+            if !cleanup_verified && state.reason.is_none() {
+                state.reason = Some("windows_budget_cleanup_unverified");
+                unsafe {
+                    TerminateJobObject(self.guard.0.job.as_raw_handle().cast(), 1);
+                }
+            }
+            state.closed = true;
+        }
+        self.task.abort();
     }
 }
 
@@ -310,5 +331,26 @@ mod tests {
             guard.report()["observed"]["reason"],
             "windows_budget_wall_deadline"
         );
+    }
+
+    #[tokio::test]
+    async fn finished_empty_job_stops_its_deadline_without_reopening_a_failure() {
+        let raw = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
+        assert!(!raw.is_null());
+        let job = Arc::new(unsafe { OwnedHandle::from_raw_handle(raw.cast()) });
+        let config = Config::read(br#"{"format":"sw-mcp/windows-job-budget/1","memoryMaxBytes":134217728,"memoryPressureBytes":100663296,"activeProcessMax":8,"cpuUserMillis":2000,"wallMillis":1000}"#).unwrap();
+        let mut budget = Budget::install(job.clone(), config).unwrap();
+        let counts: JOBOBJECT_BASIC_ACCOUNTING_INFORMATION = query(
+            job.as_raw_handle().cast(),
+            JobObjectBasicAccountingInformation,
+        )
+        .unwrap();
+        assert_eq!(counts.ActiveProcesses, 0);
+        budget.finish(true);
+        let guard = budget.guard();
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        assert!(guard.check().is_ok());
+        assert_eq!(guard.report()["observed"]["closed"], true);
+        assert!(guard.report()["observed"]["reason"].is_null());
     }
 }

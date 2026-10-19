@@ -30,7 +30,7 @@ def row(name="wall"):
                     {"pid": pid, "stopped": True, "cpu_user_100ns": 3000000, "peak_private_bytes": 50 * 1024**2} for pid in (51, 52, 53)]},
             "budget_events": [{"cleanup_verified": True, "effects_rolled_back": False,
                 "budget": {"configuration": config.copy(), "configuration_sha256": H.sha(json.dumps(ordered,separators=(",", ":")).encode()), "observed": {
-                    "reason": "windows_budget_wall_deadline", "peak_committed_bytes": 170 * 1024**2,
+                    "reason": "windows_budget_wall_deadline", "closed": True, "peak_committed_bytes": 170 * 1024**2,
                     "peak_active_processes": 5, "total_processes": 6}}}]}
 
 

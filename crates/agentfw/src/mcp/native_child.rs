@@ -391,6 +391,10 @@ impl OwnedChild {
             ownership: ProcessTree::NAME,
             failure,
         };
+        #[cfg(windows)]
+        if let Some(budget) = self.budget.as_mut() {
+            budget.finish(report.cleaned);
+        }
         self.complete = Some(report);
         report
     }

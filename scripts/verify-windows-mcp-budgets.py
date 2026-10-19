@@ -522,6 +522,7 @@ def grade(row):
     require(budget.get("configuration_sha256") == sha(json.dumps(ordered, separators=(",", ":")).encode()),
             "budget_identity_hash_mismatch")
     observed = budget["observed"]
+    require(observed.get("closed") is True, "budget_monitor_not_closed")
     require(observed["peak_committed_bytes"] <= row["configuration"]["memoryMaxBytes"], "hard_memory_exceeded")
     require(observed["peak_active_processes"] <= row["configuration"]["activeProcessMax"], "process_cap_exceeded")
     require(events[0].get("effects_rolled_back") is False, "false_rollback_claim")

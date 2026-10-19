@@ -3265,6 +3265,10 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
             tool.resource_policy.as_ref().is_some_and(|policy| policy.is_windows_handles())
         });
         let cleanup = process.cleanup(operation.is_ok() || windows_handles_profile).await;
+        let operation = operation.and_then(|()| {
+            if let Some(guard) = &budget { guard.check().map_err(anyhow::Error::msg)?; }
+            Ok(())
+        });
         if let Some(report) = process.budget_report() {
             eprintln!("{}",json!({"event":"mcp_windows_budget_end","budget":report,
                 "cleanup_verified":cleanup.cleaned&&cleanup.reaped,"effects_rolled_back":false}));
