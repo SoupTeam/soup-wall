@@ -298,13 +298,24 @@ class Acceptance:
         return {"operator_edit_preserved": True, "classifier_edit_refused": True}
 
     def daemon_loss(self):
-        process = read(self.home / "versions" / "lifecycle.json")["process"]
+        lifecycle = read(self.home / "versions" / "lifecycle.json")
+        process = lifecycle["process"]
+        expected_image = self.home / "versions" / lifecycle["active"]["binary"]
+        require(expected_image.is_relative_to(self.root), "daemon image is outside the owned fixture")
         kernel = BOUNDARY.K
         kernel.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
         kernel.TerminateProcess.restype = wintypes.BOOL
-        handle = kernel.OpenProcess(0x100001, False, process["pid"])
+        kernel.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD,
+            wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
+        kernel.QueryFullProcessImageNameW.restype = wintypes.BOOL
+        handle = kernel.OpenProcess(0x101001, False, process["pid"])
         require(handle, "owned daemon process handle unavailable")
         try:
+            image = ctypes.create_unicode_buffer(32768)
+            length = wintypes.DWORD(len(image))
+            require(kernel.QueryFullProcessImageNameW(handle, 0, image, ctypes.byref(length))
+                    and Path(image.value).resolve() == expected_image.resolve(),
+                    "daemon process identity changed; refusing to stop it")
             require(kernel.TerminateProcess(handle, 1), "could not interrupt the owned daemon")
             require(kernel.WaitForSingleObject(handle, 10000) == 0, "owned daemon did not exit")
         finally:
