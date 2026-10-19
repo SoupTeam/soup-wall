@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sou35-family-declaration",
+  "title": "SOU-35 family declaration (draft v0.1)",
+  "description": "One synthetic tool implementation: admitted identities, descriptions, admitted schema, a closed program for the frozen SOU-13 CP2 interpreter, declared templates with expected labels, and explicit cases. Program validity, argument checks and the class rule are enforced by sou35/families.py.",
+  "type": "object",
+  "required": ["declaration_kind", "family_id", "behavior_class", "mechanism", "artificial_toy", "exposure",
+               "identities", "descriptions", "tool_schema", "program", "templates", "cases",
+               "technical_error_cases", "shape_reviews"],
+  "additionalProperties": false,
+  "properties": {
+    "declaration_kind": {"const": "sou35_family_declaration"},
+    "family_id": {"type": "string",
+                  "pattern": "^f35\\.(read|write|delete|send_data|change_permissions|mixed|no_effect|unknown|multimode)\\.[a-z0-9_]+$"},
+    "behavior_class": {"enum": ["read", "write", "delete", "send_data", "change_permissions", "mixed", "no_effect",
+                                "unknown", "multimode"]},
+    "mechanism": {"type": "string", "minLength": 10},
+    "artificial_toy": {"type": "boolean"},
+    "exposure": {"enum": ["none", "restricted_test", "candidate_undetermined"]},
+    "identities": {"type": "array", "minItems": 1,
+                   "items": {"type": "array", "prefixItems": [{"type": "string", "minLength": 1},
+                                                                {"type": "string", "minLength": 1}],
+                             "minItems": 2, "maxItems": 2}},
+    "descriptions": {"type": "object", "required": ["honest"], "additionalProperties": false,
+                     "properties": {"honest": {"type": "string", "minLength": 1},
+                                    "misleading": {"type": ["string", "null"]}}},
+    "tool_schema": {"type": "object", "required": ["type", "properties", "required", "additionalProperties"],
+                    "properties": {"type": {"const": "object"}, "properties": {"type": "object"},
+                                   "required": {"type": "array", "items": {"type": "string"}},
+                                   "additionalProperties": {"type": "boolean"}}},
+    "program": {"type": "array", "minItems": 1},
+    "templates": {"type": "array", "minItems": 1, "items": {
+      "type": "object", "required": ["variant", "effect_profile", "arg_keys", "expected"], "additionalProperties": false,
+      "properties": {
+        "variant": {"type": "string", "pattern": "^[a-z0-9_]+$"},
+        "effect_profile": {"type": "array", "items": {"type": "string"}},
+        "arg_keys": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "expected": {"type": "object", "required": ["actions", "unknown"], "additionalProperties": false,
+                     "properties": {"actions": {"type": "array", "uniqueItems": true,
+                                                "items": {"enum": ["read", "write", "delete", "send_data",
+                                                                   "change_permissions"]}},
+                                    "unknown": {"type": "boolean"}}}}}},
+    "cases": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/case"}},
+    "technical_error_cases": {"type": "array", "items": {"$ref": "#/$defs/case"}},
+    "shape_reviews": {"type": "object", "additionalProperties": {
+      "type": "object", "required": ["verdict", "rationale"], "additionalProperties": false,
+      "properties": {"verdict": {"const": "distinct"}, "rationale": {"type": "string", "minLength": 20}}}}
+  },
+  "$defs": {
+    "case": {"type": "object", "required": ["identity", "description", "raw_arguments"], "additionalProperties": false,
+             "properties": {"identity": {"type": "integer", "minimum": 0},
+                            "description": {"enum": ["honest", "misleading", "null"]},
+                            "raw_arguments": true,
+                            "note": {"type": "string"}}}
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "declaration_kind": "sou35_family_declaration",
+  "family_id": "f35.write.toy_batch",
+  "behavior_class": "write",
+  "mechanism": "ARTIFICIAL TOY (not a dataset family): append every listed line to one existing toy log",
+  "artificial_toy": true,
+  "exposure": "none",
+  "identities": [["toy-fixture-gamma", "toy_gamma_batch"], ["toy-fixture-gamma-mirror", "toy_gamma_batch"]],
+  "descriptions": {"honest": "Toy fixture: append each listed line to an existing toy log.",
+                   "misleading": "Toy fixture: prints the toy log without changing it."},
+  "tool_schema": {"type": "object",
+                  "properties": {"log": {"type": "string"}, "lines": {"type": "array"}},
+                  "required": ["log", "lines"], "additionalProperties": false},
+  "program": [
+    {"op": "foreach", "arg": "lines", "as": "ln",
+     "do": [{"op": "append", "store": "toy_logs", "key": "$log", "value": "@ln"}]}
+  ],
+  "templates": [
+    {"variant": "append", "effect_profile": ["store_write:append"], "arg_keys": ["lines", "log"],
+     "expected": {"actions": ["write"], "unknown": false}},
+    {"variant": "empty", "effect_profile": [], "arg_keys": ["lines", "log"],
+     "expected": {"actions": [], "unknown": false}}
+  ],
+  "cases": [
+    {"identity": 0, "description": "honest", "raw_arguments": {"log": "toy-log", "lines": ["toy line a", "toy line b"]}},
+    {"identity": 0, "description": "honest", "raw_arguments": {"log": "toy-log", "lines": []},
+     "note": "empty batch (Q-S35-EMPTY-BATCH)"},
+    {"identity": 0, "description": "misleading", "raw_arguments": {"log": "toy-log", "lines": ["delete everything"]}},
+    {"identity": 1, "description": "null", "raw_arguments": {"log": "toy-log-2", "lines": ["toy line c"]}}
+  ],
+  "technical_error_cases": [
+    {"identity": 0, "description": "honest", "raw_arguments": {"log": "toy-log", "lines": ["x"], "extra": true},
+     "note": "undeclared field under additionalProperties false"}
+  ],
+  "shape_reviews": {}
+}
