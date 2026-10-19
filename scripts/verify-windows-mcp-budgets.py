@@ -172,7 +172,7 @@ class Windows:
             self.k.CloseHandle(handle)
 
 
-def memory_accounting_worker(mode):
+def _memory_accounting_worker(mode):
     """Isolated kernel-accounting control, never a production budget override."""
     require(mode in {"hard_only", "with_notification"}, "memory_control_mode")
     api = Windows()  # An additional finite outer Job, even if invoked directly.
@@ -232,6 +232,16 @@ def memory_accounting_worker(mode):
         # bounds this helper to 10s, and the helper itself has finite CPU/commit.
 
 
+def memory_accounting_worker(mode):
+    try:
+        return _memory_accounting_worker(mode)
+    except Exception as error:
+        # Fixed verifier codes or an exception class; never arbitrary messages,
+        # arguments, source lines or traceback paths from this private worker.
+        return {"mode": mode, "failure_code": str(error) if isinstance(error, ValueError) else type(error).__name__,
+                "windows_error": ctypes.get_last_error()}
+
+
 def grade_memory_controls(controls):
     require(len(controls) == 2 and {row.get("mode") for row in controls} == {"hard_only", "with_notification"},
             "memory_accounting_control_missing")
@@ -250,13 +260,21 @@ def memory_accounting_controls(root, report):
     controls = report["memory_accounting_controls"]
     code = 'import runpy,sys; h=runpy.run_path(sys.argv[1]); print(h["canonical"](h["memory_accounting_worker"](sys.argv[2])).decode())'
     for mode in ("hard_only", "with_notification"):
-        result = subprocess.run([sys.executable, "-I", "-B", "-c", code, str(Path(__file__).resolve()), mode],
-                                cwd=root, capture_output=True, timeout=10)
-        require(len(result.stdout) + len(result.stderr) <= 16384, "memory_control_output_bound")
-        row = json.loads(result.stdout) if result.returncode == 0 else {"mode": mode}
-        row.update(exit_code=result.returncode, stdout_sha256=sha(result.stdout), stderr_sha256=sha(result.stderr))
+        row = {"mode": mode, "exit_code": None, "status": "incomplete"}
         controls.append(row)
         save(root / "results.json", report)
+        try:
+            result = subprocess.run([sys.executable, "-I", "-B", "-c", code, str(Path(__file__).resolve()), mode],
+                                    cwd=root, capture_output=True, timeout=10)
+            require(len(result.stdout) + len(result.stderr) <= 16384, "memory_control_output_bound")
+            if result.stdout:
+                row.update(json.loads(result.stdout))
+            row.update(exit_code=result.returncode, status="complete", stdout_sha256=sha(result.stdout), stderr_sha256=sha(result.stderr))
+        except Exception as error:
+            row.update(status="fail", failure_code=type(error).__name__)
+            raise
+        finally:
+            save(root / "results.json", report)
     grade_memory_controls(controls)
 
 
