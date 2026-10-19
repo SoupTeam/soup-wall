@@ -33,6 +33,9 @@ pub mod sandbox;
 pub mod self_test;
 #[cfg(target_os = "linux")]
 pub mod service;
+#[cfg(target_os = "macos")]
+#[path = "service_macos.rs"]
+pub mod service;
 pub mod spans;
 pub mod support_bundle;
 pub mod token;
