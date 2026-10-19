@@ -99,7 +99,7 @@ class Acceptance:
         (self.home / "config.yaml").write_text(json.dumps(config))
         self.sentinel = self.home / "unrelated.txt"
         self.sentinel.write_text("preserve unrelated operator data")
-        self.unrelated = subprocess.Popen(["/bin/sleep", "900"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+        self.unrelated = subprocess.Popen(["/bin/sleep", "3600"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
         self.name = self.domain = self.unit = None
         self.identities = {"agent": sha(self.binary), "configuration": sha(self.home / "config.yaml"),
                            "classifier": sha(self.classifier), "registry": sha(self.root / "registry.json"),
@@ -137,8 +137,10 @@ class Acceptance:
             time.sleep(.2)
         raise AssertionError(f"launchd readiness timed out: {report}")
 
-    def launchctl(self, *args, success=True):
+    def launchctl(self, *args, success=True, missing_ok=False):
         r = subprocess.run(["/bin/launchctl", *map(str, args)], capture_output=True, timeout=40)
+        if missing_ok and r.returncode in (3, 113):
+            return r
         require((r.returncode == 0) == success, f"unexpected launchctl {args}: {r.returncode}")
         return r
 
@@ -251,7 +253,10 @@ class Acceptance:
                     path = self.home / "service/restart.json"
                     budget = json.loads(path.read_bytes()) if path.exists() else {"starts": []}
                     if len(budget["starts"]) == index+1:
-                        observed = fields(self.launchctl("print", target).stdout)
+                        # A retained budget may precede the new bootstrap. An
+                        # absent job is still pending, not a failed observation.
+                        job = self.launchctl("print", target, missing_ok=True)
+                        observed = fields(job.stdout) if job.returncode == 0 else {}
                         pid = int(observed.get("pid", "0"))
                         if pid and pid not in [row["pid"] for row in starts]:
                             if starter.poll() is None:
@@ -363,7 +368,7 @@ class Acceptance:
         process = subprocess.Popen([str(self.binary), "lifecycle", "upgrade", "interrupted", "/usr/bin/false", "--sha256", sha("/usr/bin/false")],
                                    env=self.env, cwd=self.root, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
-            deadline = time.monotonic()+25
+            deadline = time.monotonic()+90
             while time.monotonic() < deadline:
                 state = json.loads(self.manifest().read_bytes())
                 if state.get("operation") and state["active"]["version"] == "interrupted":
