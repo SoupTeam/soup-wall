@@ -119,6 +119,12 @@ The native test binary must come from the same clean source (`cargo test --locke
 -p agentfw --lib --no-run --message-format=json` identifies the executable).
 The harness runs both atomic launch controls with `--exact` under this same
 standard user and finite outer Job; zero/ignored tests cannot count as a pass.
+Two additional short, isolated controls compare Windows raw Job peak accounting
+with actual private committed memory after rejected `VirtualAlloc` and heap
+requests, both with and without pressure notifications. Each has its own 64 MiB
+hard Job limit, finite CPU/process bounds and a 10-second parent deadline. Their
+raw counters and kernel error codes remain in the report. These controls do not
+waive the resource scenarios or turn an exceeded/missing witness into a pass.
 
 The harness assigns itself to an outer finite Job **before** starting any Agent
 or fixture: 1 GiB committed memory, 64 processes, 120 seconds user CPU and a

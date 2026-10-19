@@ -125,6 +125,22 @@ class ReportGrading(unittest.TestCase):
         with self.assertRaises(ValueError):
             H.grade_launch_controls(controls)
 
+    def test_memory_calibration_requires_actual_refusals_and_bounded_private_commit(self):
+        controls = [{"mode": mode, "exit_code": 0, "hard_bytes": 64 * 1024**2,
+                     "successful_commit_bytes": 16 * 1024**2, "large_request_bytes": 96 * 1024**2,
+                     "virtual_refused": True, "virtual_error": 1816, "heap_refused": True,
+                     **{phase: {"private_committed_bytes": 30 * 1024**2, "raw_job_peak_bytes": 128 * 1024**2}
+                        for phase in ("before", "after_virtual", "after_heap")}}
+                    for mode in ("hard_only", "with_notification")]
+        H.grade_memory_controls(controls)
+        for mutation in (lambda c: c.pop(), lambda c: c[0].update(virtual_refused=False),
+                         lambda c: c[0].update(heap_refused=False), lambda c: c[0].update(virtual_error=5),
+                         lambda c: c[0]["after_virtual"].update(private_committed_bytes=65 * 1024**2)):
+            bad = copy.deepcopy(controls)
+            mutation(bad)
+            with self.assertRaises(ValueError):
+                H.grade_memory_controls(bad)
+
     def test_case_set_contains_every_required_positive_and_restart(self):
         self.assertEqual(len(H.CASES), 20)
         self.assertEqual(len(set(H.CASES)), len(H.CASES))

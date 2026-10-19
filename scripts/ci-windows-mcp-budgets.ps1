@@ -161,6 +161,8 @@ try {
         $child.python_binary_sha256 -ne $report.python_binary_sha256 -or
         $child.atomic_launch_controls.Count -ne 2 -or
         @($child.atomic_launch_controls | Where-Object { $_.exit_code -ne 0 -or !$_.exact_one_passed }).Count -ne 0 -or
+        $child.memory_accounting_controls.Count -ne 2 -or
+        @($child.memory_accounting_controls | Where-Object { $_.exit_code -ne 0 -or !$_.virtual_refused -or !$_.heap_refused }).Count -ne 0 -or
         $child.source_manifest_sha256 -ne $report.source_manifest_sha256 -or
         $child.cases.Count -ne 20 -or @($child.cases | Where-Object { !$_.passed -or !$_.sibling_useful }).Count -ne 0) {
         throw 'native_qualification_incomplete'

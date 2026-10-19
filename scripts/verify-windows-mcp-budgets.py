@@ -104,6 +104,12 @@ class Memory(ctypes.Structure):
                                            "peak_nonpaged", "nonpaged", "pagefile", "peak_pagefile", "private")]
 
 
+class Notification(ctypes.Structure):
+    _fields_ = [("read", ctypes.c_uint64), ("write", ctypes.c_uint64), ("user", ctypes.c_int64),
+                ("memory", ctypes.c_uint64), ("tolerance", ctypes.c_int),
+                ("interval", ctypes.c_int), ("flags", W.DWORD)]
+
+
 class Windows:
     def __init__(self):
         require(os.name == "nt", "native_windows_required")
@@ -111,7 +117,9 @@ class Windows:
         self.p = ctypes.WinDLL("psapi", use_last_error=True)
         signatures = {
             "CreateJobObjectW": ([ctypes.c_void_p, W.LPCWSTR], W.HANDLE),
+            "CreateIoCompletionPort": ([W.HANDLE, W.HANDLE, ctypes.c_size_t, W.DWORD], W.HANDLE),
             "SetInformationJobObject": ([W.HANDLE, ctypes.c_int, ctypes.c_void_p, W.DWORD], W.BOOL),
+            "QueryInformationJobObject": ([W.HANDLE, ctypes.c_int, ctypes.c_void_p, W.DWORD, ctypes.c_void_p], W.BOOL),
             "AssignProcessToJobObject": ([W.HANDLE, W.HANDLE], W.BOOL),
             "GetCurrentProcess": ([], W.HANDLE),
             "CloseHandle": ([W.HANDLE], W.BOOL),
@@ -121,6 +129,8 @@ class Windows:
             "CreateToolhelp32Snapshot": ([W.DWORD, W.DWORD], W.HANDLE),
             "Process32FirstW": ([W.HANDLE, ctypes.POINTER(ProcessEntry)], W.BOOL),
             "Process32NextW": ([W.HANDLE, ctypes.POINTER(ProcessEntry)], W.BOOL),
+            "VirtualAlloc": ([ctypes.c_void_p, ctypes.c_size_t, W.DWORD, W.DWORD], ctypes.c_void_p),
+            "VirtualFree": ([ctypes.c_void_p, ctypes.c_size_t, W.DWORD], W.BOOL),
         }
         for name, (args, result) in signatures.items():
             function = getattr(self.k, name)
@@ -141,7 +151,8 @@ class Windows:
 
     def times(self, handle):
         values = [W.FILETIME() for _ in range(4)]
-        require(self.k.GetProcessTimes(handle, *(ctypes.byref(v) for v in values)), "process_time_witness")
+        require(self.k.GetProcessTimes(handle, *(ctypes.byref(v) for v in values)),
+                "process_time_witness_" + str(ctypes.get_last_error()))
         return [v.dwLowDateTime + (v.dwHighDateTime << 32) for v in values]
 
     def snapshot(self):
@@ -159,6 +170,94 @@ class Windows:
             return rows
         finally:
             self.k.CloseHandle(handle)
+
+
+def memory_accounting_worker(mode):
+    """Isolated kernel-accounting control, never a production budget override."""
+    require(mode in {"hard_only", "with_notification"}, "memory_control_mode")
+    api = Windows()  # An additional finite outer Job, even if invoked directly.
+    job = api.k.CreateJobObjectW(None, None)
+    require(job, "memory_control_job")
+    hard, small, large = 64 * 1024**2, 16 * 1024**2, 96 * 1024**2
+    if mode == "with_notification":
+        port = api.k.CreateIoCompletionPort(ctypes.c_void_p(-1).value, None, 0, 1)
+        require(port, "memory_control_port")
+        pair = (ctypes.c_void_p * 2)(1, port)
+        require(api.k.SetInformationJobObject(job, 7, ctypes.byref(pair), ctypes.sizeof(pair)),
+                "memory_control_port_association")
+        notification = Notification()
+        notification.flags, notification.memory = 0x200, hard - 65536
+        require(api.k.SetInformationJobObject(job, 12, ctypes.byref(notification), ctypes.sizeof(notification)),
+                "memory_control_notification")
+    limits = Extended()
+    limits.basic.flags, limits.basic.active, limits.basic.job_time = 0x220C, 4, 2 * 10_000_000
+    limits.job_memory = hard
+    require(api.k.SetInformationJobObject(job, 9, ctypes.byref(limits), ctypes.sizeof(limits)), "memory_control_limits")
+    require(api.k.AssignProcessToJobObject(job, api.k.GetCurrentProcess()), "memory_control_assignment")
+
+    def sample():
+        current, usage = Extended(), Memory()
+        usage.size = ctypes.sizeof(usage)
+        require(api.k.QueryInformationJobObject(job, 9, ctypes.byref(current), ctypes.sizeof(current), None),
+                "memory_control_job_query")
+        require(current.basic.flags == 0x220C and current.job_memory == hard, "memory_control_limit_drift")
+        require(api.p.GetProcessMemoryInfo(api.k.GetCurrentProcess(), ctypes.byref(usage), ctypes.sizeof(usage)),
+                "memory_control_private_query")
+        return {"raw_job_peak_bytes": current.peak_job, "private_committed_bytes": usage.private}
+
+    pointer = api.k.VirtualAlloc(None, small, 0x3000, 4)  # MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE
+    require(pointer, "memory_control_small_commit")
+    try:
+        ctypes.memset(pointer, 0x53, small)
+        before = sample()
+        denied = api.k.VirtualAlloc(None, large, 0x3000, 4)
+        error = ctypes.get_last_error()
+        if denied:
+            api.k.VirtualFree(denied, 0, 0x8000)
+        after_virtual = sample()
+        heap_refused = False
+        try:
+            block = bytearray(large)
+            del block
+        except MemoryError:
+            heap_refused = True
+        after_heap = sample()
+        return {"mode": mode, "hard_bytes": hard, "successful_commit_bytes": small,
+                "large_request_bytes": large, "virtual_refused": not denied,
+                "virtual_error": error, "heap_refused": heap_refused,
+                "before": before, "after_virtual": after_virtual, "after_heap": after_heap}
+    finally:
+        require(api.k.VirtualFree(pointer, 0, 0x8000), "memory_control_small_free")
+        # Keep private kill-on-close Job handles until process exit. The parent
+        # bounds this helper to 10s, and the helper itself has finite CPU/commit.
+
+
+def grade_memory_controls(controls):
+    require(len(controls) == 2 and {row.get("mode") for row in controls} == {"hard_only", "with_notification"},
+            "memory_accounting_control_missing")
+    for row in controls:
+        require(row.get("exit_code") == 0 and row.get("hard_bytes") == 64 * 1024**2
+                and row.get("successful_commit_bytes") == 16 * 1024**2 and row.get("large_request_bytes") == 96 * 1024**2
+                and row.get("virtual_refused") is True and row.get("virtual_error") in {8, 1455, 1816}
+                and row.get("heap_refused") is True, "memory_accounting_refusal_missing")
+        for phase in ("before", "after_virtual", "after_heap"):
+            require(16 * 1024**2 <= row[phase]["private_committed_bytes"] <= row["hard_bytes"],
+                    "memory_accounting_actual_cap_exceeded")
+            require(row[phase]["raw_job_peak_bytes"] >= 16 * 1024**2, "memory_accounting_job_peak_missing")
+
+
+def memory_accounting_controls(root, report):
+    controls = report["memory_accounting_controls"]
+    code = 'import runpy,sys; h=runpy.run_path(sys.argv[1]); print(h["canonical"](h["memory_accounting_worker"](sys.argv[2])).decode())'
+    for mode in ("hard_only", "with_notification"):
+        result = subprocess.run([sys.executable, "-I", "-B", "-c", code, str(Path(__file__).resolve()), mode],
+                                cwd=root, capture_output=True, timeout=10)
+        require(len(result.stdout) + len(result.stderr) <= 16384, "memory_control_output_bound")
+        row = json.loads(result.stdout) if result.returncode == 0 else {"mode": mode}
+        row.update(exit_code=result.returncode, stdout_sha256=sha(result.stdout), stderr_sha256=sha(result.stderr))
+        controls.append(row)
+        save(root / "results.json", report)
+    grade_memory_controls(controls)
 
 
 class Witness:
@@ -201,7 +300,9 @@ class Witness:
                 memory = Memory()
                 memory.size = ctypes.sizeof(memory)
                 if not self.api.p.GetProcessMemoryInfo(handle, ctypes.byref(memory), ctypes.sizeof(memory)):
-                    require(self.api.k.WaitForSingleObject(handle, 0) == 0, "process_memory_witness")
+                    memory_error = ctypes.get_last_error()
+                    require(self.api.k.WaitForSingleObject(handle, 0) == 0,
+                            "process_memory_witness_" + str(memory_error))
                     continue
                 row["peak_private_bytes"] = max(row["peak_private_bytes"], memory.private)
                 private += memory.private
@@ -213,7 +314,7 @@ class Witness:
             while not self.stop.wait(0.005):
                 self.sample()
         except Exception as error:
-            self.error = type(error).__name__
+            self.error = self.error or (str(error) if isinstance(error, ValueError) else type(error).__name__)
 
     def finish(self):
         self.stop.set()
@@ -221,7 +322,7 @@ class Witness:
         try:
             self.sample()
         except Exception as error:
-            self.error = type(error).__name__
+            self.error = self.error or (str(error) if isinstance(error, ValueError) else type(error).__name__)
         result = {"processes": list(self.rows.values()), "peak_owned_processes": self.peak_alive,
                   "peak_aggregate_private_bytes": self.peak_private, "observer_error": self.error,
                   "observer_stopped": not self.thread.is_alive(),
@@ -623,6 +724,7 @@ def launch_controls(binary, root, report):
 def grade_report(report):
     require(report.get("format") == FORMAT and report.get("status") == "pass", "report_incomplete")
     grade_launch_controls(report.get("atomic_launch_controls", []))
+    grade_memory_controls(report.get("memory_accounting_controls", []))
     rows = report["cases"]
     require(len(rows) == len(CASES) and {row["case"] for row in rows} == set(CASES)
             and report.get("not_run") == [], "required_case_missing_or_duplicated")
@@ -648,7 +750,8 @@ def run(args):
     report = {"format": FORMAT, "status": "incomplete", "source_commit": args.source_commit,
               "source_manifest_sha256": sha(args.source_manifest.read_bytes()),
               "binary_sha256": sha(args.agentfw.read_bytes()),
-              "native_test_binary_sha256": sha(args.native_test_binary.read_bytes()), "atomic_launch_controls": [], "harness_sha256": sha(Path(__file__).read_bytes()),
+              "native_test_binary_sha256": sha(args.native_test_binary.read_bytes()), "atomic_launch_controls": [],
+              "memory_accounting_controls": [], "harness_sha256": sha(Path(__file__).read_bytes()),
               "windows_version": platform.version(), "architecture": platform.machine(),
               "python_version": platform.python_version(), "python_binary_sha256": sha(Path(sys.executable).read_bytes()),
               "fixture_sha256": sha(SERVER.encode()),
@@ -677,6 +780,7 @@ def run(args):
         report.update(standard_user=True, administrator_group_present=False)
         api = Windows()
         launch_controls(args.native_test_binary.resolve(), root, report)
+        memory_accounting_controls(root, report)
         rig = Rig(api, args.agentfw.resolve(), root)
         report.update(rig.identities)
         peer = Client(rig, "sibling")
