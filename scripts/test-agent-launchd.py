@@ -230,29 +230,62 @@ class Acceptance:
         return {"observed_stopped_seconds": 12}
 
     def bounded_restarts(self):
-        self.service("start")
-        health = self.wait_ready()
+        # Full authenticated readiness hashes the debug executable repeatedly;
+        # waiting for it between kills lets a legitimate rolling window expire.
+        # Healthy crash recovery was already qualified above. Here interrupt the
+        # starter only after launchd owns the job, and witness rapid startup
+        # crashes directly through the durable budget and manager PID/run count.
+        starter = subprocess.Popen([str(self.binary), "service", "--home", str(self.home), "start"],
+                                   env=self.env, cwd=self.root, stdin=subprocess.DEVNULL,
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         starts = []
-        for index in range(3):
-            starts.append(health)
-            self.launchctl("kill", "SIGKILL", f"{self.domain}/{self.name}")
-            if index < 2:
-                health = self.wait_ready(health)
-        deadline = time.monotonic()+45
-        while time.monotonic() < deadline:
-            state = self.inspect()
-            if state.get("loaded") and not state.get("running") and not state.get("verified"):
-                require(len(state["restart_budget"]["starts"]) == 3, "restart budget was not retained")
-                # Independently observe that no further launch occurs after throttle.
-                first = self.launchctl("print", f"{self.domain}/{self.name}").stdout
-                time.sleep(12)
-                second = self.launchctl("print", f"{self.domain}/{self.name}").stdout
-                require(not self.inspect()["running"], "exhausted crash budget restarted")
-                self.service("stop")
-                return {"started_instances": starts, "exhausted": True,
-                        "manager_before": manager_observation(first), "manager_after": manager_observation(second)}
-            time.sleep(.3)
-        raise AssertionError("crash restart budget was not bounded")
+        target = f"{self.domain}/{self.name}"
+
+        def fields(raw):
+            return dict(line.split(" = ", 1) for line in manager_observation(raw) if " = " in line)
+
+        try:
+            for index in range(3):
+                deadline = time.monotonic()+50
+                while time.monotonic() < deadline:
+                    path = self.home / "service/restart.json"
+                    budget = json.loads(path.read_bytes()) if path.exists() else {"starts": []}
+                    if len(budget["starts"]) == index+1:
+                        observed = fields(self.launchctl("print", target).stdout)
+                        pid = int(observed.get("pid", "0"))
+                        if pid and pid not in [row["pid"] for row in starts]:
+                            if starter.poll() is None:
+                                starter.kill()
+                                starter.wait(timeout=10)
+                            starts.append({"pid": pid, "budget": budget["starts"], "manager": observed})
+                            self.launchctl("kill", "SIGKILL", target)
+                            break
+                    time.sleep(.1)
+                else:
+                    raise AssertionError(f"rapid launch {index+1} not witnessed: {starts}")
+            require(starts[-1]["budget"][-1] - starts[-1]["budget"][0] < 60,
+                    "crashes did not occur inside the actual restart window")
+            deadline = time.monotonic()+50
+            while time.monotonic() < deadline:
+                first = fields(self.launchctl("print", target).stdout)
+                if not int(first.get("pid", "0")) and first.get("last exit code") == "0":
+                    require(int(first.get("runs", "0")) == 4, "budget did not stop exactly the fourth launcher")
+                    time.sleep(12)
+                    second = fields(self.launchctl("print", target).stdout)
+                    require(not int(second.get("pid", "0")) and second.get("runs") == first["runs"],
+                            "exhausted budget launched again")
+                    require(len(json.loads((self.home / "service/restart.json").read_bytes())["starts"]) == 3,
+                            "restart budget was not retained")
+                    self.service("stop")
+                    return {"rapid_startup_crashes": starts, "exhausted": True,
+                            "starter_interrupted_after_bootstrap": True,
+                            "manager_before": first, "manager_after": second}
+                time.sleep(.2)
+            raise AssertionError(f"crash restart budget was not bounded: {first}")
+        finally:
+            if starter.poll() is None:
+                starter.kill()
+                starter.wait(timeout=10)
 
     def edited_and_foreign_jobs(self):
         original = self.unit.read_bytes()
