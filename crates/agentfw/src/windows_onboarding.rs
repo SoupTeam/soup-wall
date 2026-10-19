@@ -586,6 +586,10 @@ mod tests {
         let directory = &fixture.selection.state_directory;
         connection::verify_full_directory(&safety::check_private(directory, true).unwrap())
             .unwrap();
+        crate::private_file_windows::ensure_private_directory(directory).unwrap();
+        crate::private_file_windows::ensure_private_directory(directory).unwrap();
+        connection::verify_full_directory(&safety::check_private(directory, true).unwrap())
+            .unwrap();
         let sid = crate::private_file_windows::current_user_sid().unwrap();
         assert!(ProcessCommand::new("icacls")
             .arg(directory)

@@ -55,6 +55,7 @@ def read_live_journal(path):
 class Acceptance:
     def __init__(self, args, root):
         self.args, self.root, self.results = args, root, []
+        self.cleanup_failed = False
         whoami = Path(os.environ["SystemRoot"]) / "System32/whoami.exe"
         identity = subprocess.run([str(whoami), "/user", "/fo", "csv", "/nh"], capture_output=True, check=True, timeout=10)
         self.sid = re.findall(rb"S-1-5-21-(?:[0-9]+-){3}[0-9]+", identity.stdout)[0].decode("ascii")
@@ -387,7 +388,7 @@ class Acceptance:
                 child.communicate(timeout=10)
             try:
                 if (self.state / "onboarding.json").exists():
-                    self.invoke("remove")
+                    self.cleanup_fixture()
             finally:
                 self.values, self.state, self.home, self.host = saved
 
@@ -407,10 +408,28 @@ class Acceptance:
         for name, function in cases:
             self.record(name, function)
 
+    def cleanup_fixture(self):
+        try:
+            self.invoke("remove")
+        except Exception:
+            self.cleanup_failed = True
+            require(self.home.is_relative_to(self.root), "cleanup home is outside the owned fixture")
+            state = read(self.state / "onboarding.json")
+            marker = self.home / "onboarding-owner"
+            if marker.exists():
+                require(marker.read_text(encoding="utf-8") == state["nonce"], "cleanup ownership marker changed")
+                lifecycle = self.home / "versions" / "lifecycle.json"
+                if lifecycle.exists() and read(lifecycle).get("process"):
+                    env = dict(self.env, USERPROFILE=str(self.home.parent))
+                    stopped = subprocess.run([str(self.agent), "lifecycle", "stop"], cwd=self.root,
+                        env=env, capture_output=True, timeout=45)
+                    require(stopped.returncode == 0, "owned fixture daemon could not be stopped; retain its evidence")
+            raise
+
     def close(self):
         try:
             if (self.state / "onboarding.json").exists():
-                self.invoke("remove")
+                self.cleanup_fixture()
         finally:
             self.receiver.close()
             if self.unrelated.poll() is None:
@@ -430,7 +449,7 @@ def main():
     require(os.name == "nt" and not ctypes.windll.shell32.IsUserAnAdmin(), "a non-elevated native Windows token is required")
     require(not args.out.exists(), "fresh evidence directory required")
     args.out.mkdir(parents=True)
-    with BOUNDARY.owned_stage() as root:
+    with BOUNDARY.owned_stage(keep_on_error=True) as root:
         suite = Acceptance(args, root)
         try:
             suite.execute()
@@ -439,7 +458,9 @@ def main():
                 suite.close()
             finally:
                 report = {"schema_version": "sou90-windows-onboarding-acceptance/1",
-                    "status": "passed" if len(suite.results) == 18 and all(case["status"] == "passed" for case in suite.results) else "failed",
+                    "status": "passed" if len(suite.results) == 18 and not suite.cleanup_failed
+                        and all(case["status"] == "passed" for case in suite.results) else "failed",
+                    "cleanup_verified": not suite.cleanup_failed,
                     "native_windows": True, "elevated": False, "platform": platform.platform(),
                     "source_commit": args.source_commit,
                     "administrator_group_present": b"S-1-5-32-544" in subprocess.run(

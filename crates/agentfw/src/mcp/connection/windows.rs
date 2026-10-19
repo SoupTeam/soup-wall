@@ -147,6 +147,7 @@ fn verify_acl_requirement(file: &File, full_directory: bool) -> Result<()> {
     );
     let mut offset = 0usize;
     let mut trustees = std::collections::BTreeSet::new();
+    let mut inheritable = std::collections::BTreeSet::new();
     for index in 0..size.AceCount {
         let mut raw: *mut c_void = null_mut();
         ensure!(
@@ -173,25 +174,29 @@ fn verify_acl_requirement(file: &File, full_directory: bool) -> Result<()> {
         );
         if full_directory {
             use windows_sys::Win32::Security::{
-                CONTAINER_INHERIT_ACE, INHERIT_ONLY_ACE, OBJECT_INHERIT_ACE,
+                CONTAINER_INHERIT_ACE, INHERIT_ONLY_ACE, NO_PROPAGATE_INHERIT_ACE,
+                OBJECT_INHERIT_ACE,
             };
             use windows_sys::Win32::Storage::FileSystem::FILE_ALL_ACCESS;
-            ensure!(
-                size.AceCount == 2
-                    && (ace.Mask & FILE_ALL_ACCESS == FILE_ALL_ACCESS
-                        || ace.Mask & windows_sys::Win32::Foundation::GENERIC_ALL != 0)
-                    && u32::from(header.AceFlags)
-                        & (OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE | INHERIT_ONLY_ACE)
-                        == (OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE),
-                "owned directory ACL changed; do not repair it"
-            );
-            trustees.insert(trustee);
+            let full = ace.Mask & FILE_ALL_ACCESS == FILE_ALL_ACCESS
+                || ace.Mask & windows_sys::Win32::Foundation::GENERIC_ALL != 0;
+            let flags = u32::from(header.AceFlags);
+            if full && flags & INHERIT_ONLY_ACE == 0 {
+                trustees.insert(trustee.clone());
+            }
+            if full
+                && flags & (OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE)
+                    == (OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE)
+                && flags & NO_PROPAGATE_INHERIT_ACE == 0
+            {
+                inheritable.insert(trustee);
+            }
         }
         offset += header.AceSize as usize;
     }
     ensure!(
-        !full_directory || trustees.len() == 2,
-        "owned directory trustees changed"
+        !full_directory || (trustees.len() == 2 && inheritable.len() == 2),
+        "owned directory ACL changed; do not repair it"
     );
     Ok(())
 }
