@@ -1911,14 +1911,32 @@ def authority_control(name, collector, relay, target, observer, evidence, row, f
         before_file = evidence / "expiry-before.json"
         before = observe_file(observer, "before", target, before_file)
         time.sleep(max(0, expires_at / 1000 - time.time() + 0.05))
-        collector.send(create)
-        require(any(x.get("error_code") == "native_child_authority_expired" for x in relay.state.trace),
+        trace_start = len(relay.state.trace)
+        refusal = collector.send(create)
+        if refusal is None:
+            collector.proc.wait(timeout=5)
+            require(collector.proc.returncode != 0,
+                    "Expired collector closed without a fail-closed exit")
+        else:
+            require(refusal.get("id") == create["id"]
+                    and (refusal.get("result", {}).get("isError") is True or "error" in refusal),
+                    f"Expired authority did not produce a correlated refusal: {refusal}")
+        # The daemon's terminal-expiry sweeper may retire the session before
+        # this call arrives. Both paths must refuse before any file effect.
+        decisions = relay.state.trace[trace_start:]
+        expiry_codes = {"native_child_authority_expired", "native_session_unknown"}
+        require(any(x.get("event") == "call" and x.get("status") == 409
+                    and x.get("release") is False and x.get("error_code") in expiry_codes
+                    for x in decisions),
                 "Actual expired authority was not refused on a protected call")
         after = observe_file(observer, "after", target, evidence / "expiry-after.json", before_file)
         validate_witness_pair(name, target, before, after)
         require(not output.exists(), "Expired authority published an output")
         row["expiry"] = {"expires_at_ms": expires_at, "observed_at_ms": int(time.time() * 1000),
-                         "before": before, "after": after, "output_absent": True}
+                         "before": before, "after": after, "output_absent": True,
+                         "native_decisions": decisions,
+                         "collector_exit_code": collector.proc.poll(),
+                         "correlated_refusal": refusal is not None}
     else:
         hook_token = (daemon_home / ".agentfw/token").read_text().strip()
         donors = []
