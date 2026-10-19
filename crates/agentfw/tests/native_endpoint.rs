@@ -1736,6 +1736,7 @@ fn windows_read_call(
         network: None,
         post: None,
         windows_read: Some(agentfw::native::resource::windows_read_binding(policy, args).unwrap()),
+        macos_read: None,
     };
     let mut request = fixture.call(session, "read_document", args);
     request["contract_version"] = json!(agentfw::native::resource::WINDOWS_READ_CONTRACT);
