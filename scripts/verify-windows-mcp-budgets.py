@@ -266,7 +266,9 @@ if mode.startswith('worker-'):
    blocks.append(bytearray(1024*1024)); time.sleep(.05)
  elif role=='memory-hard':
   (root/('allocation-attempt-'+str(os.getpid()))).write_text('96MiB')
-  try: block=bytearray(96*1024*1024)
+  try:
+   block=bytearray(96*1024*1024)
+   (root/('allocation-succeeded-'+str(os.getpid()))).write_text('96MiB')
   except MemoryError: (root/('allocation-refused-'+str(os.getpid()))).write_text('refused')
  elif role=='cpu':
   stop=time.monotonic()+15; counter=0
@@ -299,6 +301,12 @@ for raw in sys.stdin:
    for _ in range(count):
     try: children.append(subprocess.Popen([sys.executable,'-I','-u',__file__,str(root),'worker-'+role],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL))
     except OSError: (root/'spawn-refused').write_text('refused'); break
+    if mode=='memory-hard':
+     # Hold each successful real allocation before starting the next worker, so
+     # the independent kernel observer must see both live committed allocations.
+     pid=str(children[-1].pid); deadline=time.monotonic()+1
+     while not any((root/(prefix+pid)).exists() for prefix in ('allocation-succeeded-','allocation-refused-')) and time.monotonic()<deadline: time.sleep(.005)
+     time.sleep(.2)
     time.sleep(.05)
    time.sleep(20)
    result={'content':[{'type':'text','text':'SOU96_LATE_RESULT_MUST_BE_WITHHELD'}]}
@@ -504,6 +512,7 @@ class Client:
                "server_started": (self.root / "started").exists(),
                "breakaway_refused": (self.root / "breakaway-refused").exists() and not (self.root / "escaped").exists(),
                "allocation_attempts": len(list(self.root.glob("allocation-attempt-*"))),
+               "allocation_successes": len(list(self.root.glob("allocation-succeeded-*"))),
                "allocation_refusals": len(list(self.root.glob("allocation-refused-*"))),
                "executed_effect_retained": (self.root / "effect.txt").exists() and (self.root / "effect.txt").read_bytes() == EFFECT}
         row["passed"] = (not forced and proof["all_stopped"] and proof["observer_error"] is None
@@ -569,7 +578,8 @@ def grade(row):
         require(max(p["peak_private_bytes"] for p in descendants) < row["configuration"]["memoryPressureBytes"], "not_aggregate_memory")
     elif name == "memory-hard":
         require(reason in {"windows_budget_memory_limit", "windows_budget_memory_pressure"}, "wrong_hard_memory_reason")
-        require(row["allocation_attempts"] >= 2 and row["allocation_refusals"] >= 1, "actual_allocation_refusal_missing")
+        require(row["allocation_attempts"] >= 3 and row["allocation_successes"] >= 2
+                and row["allocation_refusals"] >= 1, "actual_allocation_refusal_missing")
         require(sum(p["peak_private_bytes"] >= 64 * 1024**2 for p in descendants) >= 2,
                 "independent_hard_memory_allocations_missing")
     elif name == "process":
@@ -700,11 +710,15 @@ def run(args):
             save(root / "results.json", report)
             try:
                 grade(row)
+            except Exception as error:
+                row["passed"], row["failure_code"] = False, str(error) if isinstance(error, ValueError) else type(error).__name__
+            try:
                 peer_read_id += 1
                 peer.read(peer_read_id)
                 row["sibling_useful"] = True
             except Exception as error:
-                row["passed"], row["failure_code"] = False, str(error) if isinstance(error, ValueError) else type(error).__name__
+                row["passed"], row["sibling_useful"] = False, False
+                row["sibling_failure_code"] = str(error) if isinstance(error, ValueError) else type(error).__name__
             save(root / "results.json", report)
         peer.process.stdin.close()
         sibling = peer.finish(False)

@@ -237,7 +237,6 @@ impl Budget {
             JobMemoryLimit: memory,
             ..Default::default()
         };
-        set(handle, JobObjectExtendedLimitInformation, &limits)?;
         set(
             handle,
             JobObjectEndOfJobTimeInformation,
@@ -272,6 +271,10 @@ impl Budget {
                 ..Default::default()
             },
         )?;
+        // Notifications are advisory. Install the enforceable limits last so
+        // the final pre-execution configuration is the hard resource boundary,
+        // rather than an advisory limit update.
+        set(handle, JobObjectExtendedLimitInformation, &limits)?;
         let guard = Guard(Arc::new(Inner {
             job,
             port,

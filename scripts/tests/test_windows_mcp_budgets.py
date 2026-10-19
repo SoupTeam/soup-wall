@@ -85,6 +85,25 @@ class ReportGrading(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "executed_server"):
             H.grade(candidate)
 
+    def test_hard_memory_requires_two_successes_then_actual_refusal_below_the_cap(self):
+        candidate = row("memory-hard")
+        candidate.update(allocation_attempts=3, allocation_successes=2, allocation_refusals=1)
+        candidate["budget_events"][0]["budget"]["observed"]["reason"] = "windows_budget_memory_limit"
+        for process in candidate["witness"]["processes"][1:3]:
+            process["peak_private_bytes"] = 80 * 1024**2
+        H.grade(candidate)
+        for mutation in (lambda r: r.update(allocation_attempts=2),
+                         lambda r: r.update(allocation_successes=1),
+                         lambda r: r.update(allocation_refusals=0),
+                         lambda r: r["witness"]["processes"][2].update(peak_private_bytes=0),
+                         lambda r: r["budget_events"][0]["budget"]["observed"].update(
+                             peak_committed_bytes=r["configuration"]["memoryMaxBytes"] + 65536)):
+            with self.subTest(mutation=mutation):
+                bad = copy.deepcopy(candidate)
+                mutation(bad)
+                with self.assertRaises(ValueError):
+                    H.grade(bad)
+
     def test_wrong_bootstrap_error_cannot_earn_a_launch_refusal_pass(self):
         for name, code in H.REFUSALS.items():
             candidate = row(name)
