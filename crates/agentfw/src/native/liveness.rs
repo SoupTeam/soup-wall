@@ -834,7 +834,7 @@ impl CollectorLivenessClient {
         Ok(())
     }
 
-    pub async fn admission_identity(&self) -> anyhow::Result<String> {
+    pub async fn admission_identity(&self) -> anyhow::Result<reqwest::header::HeaderValue> {
         anyhow::ensure!(!self.is_uncertain(), "native_liveness_uncertain");
         let epoch = self
             .epoch
@@ -847,12 +847,15 @@ impl CollectorLivenessClient {
             .clone()
             .ok_or_else(|| anyhow::anyhow!("native_liveness_owner_token_required"))?;
         anyhow::ensure!(!self.is_uncertain(), "native_liveness_uncertain");
-        Ok(serde_json::to_string(&CollectorIdentity {
+        let mut header: reqwest::header::HeaderValue = serde_json::to_string(&CollectorIdentity {
             contract_version: LIVENESS_CONTRACT.into(),
             instance_id: self.instance_id.clone(),
             epoch,
             owner_token,
-        })?)
+        })?
+        .parse()?;
+        header.set_sensitive(true);
+        Ok(header)
     }
 
     pub async fn retire(&self) -> anyhow::Result<()> {
@@ -956,5 +959,43 @@ impl CollectorLivenessClient {
                 }
             }
         })
+    }
+}
+
+#[cfg(test)]
+mod collector_diagnostic_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn collector_owner_capability_is_carried_but_redacted_from_request_debug() {
+        let secret = "synthetic-private-owner-capability";
+        let client = CollectorLivenessClient::new(
+            reqwest::Client::new(),
+            "http://127.0.0.1:9/native/liveness/v1".into(),
+            "synthetic-token".into(),
+            "a".repeat(64),
+            "collector-session".into(),
+            "daemon-instance".into(),
+            Some(secret.into()),
+        );
+        *client.epoch.write().await = Some("native:session-epoch".into());
+        let request = reqwest::Client::new()
+            .post("http://127.0.0.1:9/native/v1")
+            .header(
+                COLLECTOR_IDENTITY_HEADER,
+                client.admission_identity().await.unwrap(),
+            )
+            .build()
+            .unwrap();
+        let header = &request.headers()[COLLECTOR_IDENTITY_HEADER];
+        let wire: Value = serde_json::from_slice(header.as_bytes()).unwrap();
+        assert_eq!(
+            wire["owner_token"], secret,
+            "private owner must still authenticate on the wire"
+        );
+        assert!(
+            !format!("{request:?}").contains(secret),
+            "request diagnostics must not disclose the collector capability"
+        );
     }
 }
