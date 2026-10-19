@@ -64,7 +64,7 @@ Epochs also appear in audit records and are not ownership credentials. Enrollmen
 
 All paths that lead to definitive session closure—explicit `session_end`, `liveness.retire`,
 autonomous background maintenance reclamation, parent session termination, and agent re-binding—converge
-on a single unified terminal retirement path:
+on a single unified terminal retirement path. An enrolled session's explicit `session_end` spends its signed grant and retires its entire descendant tree immediately, including unleased descendants. Legacy unleased `session_end` behavior remains compatible:
 
 1. **Terminal state latch**: Marks `session.terminal = true` and `lease.state = LeaseState::Terminal(reason)`. No subsequent renew, call, or retry can resurrect this session.
 2. **Cascade child retirement**: Automatically traces the provenance tree (`parent_epoch`) and terminally retires all descendant child sessions.

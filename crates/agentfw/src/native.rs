@@ -1574,7 +1574,8 @@ pub(crate) fn retire_sessions_terminal(
             if let Some(lease) = &mut session.liveness_lease {
                 lease.state = liveness::LeaseState::Terminal(reason);
             }
-            if session.parent_id.is_none() || reason != "ended" {
+            if session.parent_id.is_none() || reason != "ended" || session.liveness_lease.is_some()
+            {
                 if let (Some(digest), Some(exp)) =
                     (&session.authority_digest, session.authority_expires_at_ms)
                 {
@@ -1591,8 +1592,9 @@ pub(crate) fn retire_sessions_terminal(
         return 0;
     }
 
-    // Cascade retirement to all deep descendants (for liveness retirement and expiration sweeps)
-    if reason != "ended" {
+    // A leased session's explicit end is terminal for its complete lineage,
+    // just like retirement or expiry. Keep legacy unleased end semantics.
+    if reason != "ended" || to_retire.iter().any(|(_, s)| s.liveness_lease.is_some()) {
         let mut all_retired_epochs: BTreeSet<String> =
             to_retire.iter().map(|(_, s)| s.epoch.clone()).collect();
         loop {
@@ -1615,13 +1617,11 @@ pub(crate) fn retire_sessions_terminal(
                     if let Some(lease) = &mut session.liveness_lease {
                         lease.state = liveness::LeaseState::Terminal(reason);
                     }
-                    if session.parent_id.is_none() || reason != "ended" {
-                        if let (Some(digest), Some(exp)) =
-                            (&session.authority_digest, session.authority_expires_at_ms)
-                        {
-                            if exp > now_ms {
-                                sessions.spent_authorities.insert(digest.clone(), exp);
-                            }
+                    if let (Some(digest), Some(exp)) =
+                        (&session.authority_digest, session.authority_expires_at_ms)
+                    {
+                        if exp > now_ms {
+                            sessions.spent_authorities.insert(digest.clone(), exp);
                         }
                     }
                     all_retired_epochs.insert(session.epoch.clone());

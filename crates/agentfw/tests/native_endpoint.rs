@@ -7430,3 +7430,112 @@ async fn sou89_versioned_bootstrap_returns_owner_only_after_explicit_opt_in() {
     start["liveness"] = json!("sw-native-liveness/999");
     assert_ne!(f.post(&start).await.0, StatusCode::OK);
 }
+
+#[tokio::test]
+async fn sou89_leased_session_end_atomically_reclaims_all_descendants() {
+    let f = Fixture::new(ALLOW);
+    let (s, root, _) = scoped_start_with_ttl(
+        &f,
+        "leased-root",
+        "root",
+        None,
+        &["read_document"],
+        Some(vec![]),
+        300_000,
+    )
+    .await;
+    assert_allow(s, &root);
+    let mut enroll = reviewer_sou89_liveness(&f, "leased-root", "enroll");
+    enroll["owner_token"] = root["owner_token"].clone();
+    enroll["lease_seconds"] = json!(60);
+    let (s, r) = post_liveness(&f, &enroll).await;
+    assert_eq!(s, StatusCode::OK, "{r}");
+    for (sid, agent, parent) in [
+        ("leased-child", "child", "root"),
+        ("leased-grandchild", "grandchild", "child"),
+    ] {
+        let (s, r, _) = scoped_start_with_ttl(
+            &f,
+            sid,
+            agent,
+            Some(parent),
+            &["read_document"],
+            Some(vec![]),
+            300_000,
+        )
+        .await;
+        assert_allow(s, &r);
+        f.allowed_call(sid, "read_document", &json!({})).await;
+    }
+    let (s, r) = f.post(&f.event("leased-root", "session_end")).await;
+    assert_allow(s, &r);
+    // No background sweep or request that performs cleanup intervenes.
+    for sid in ["leased-root", "leased-child", "leased-grandchild"] {
+        let (s, r) = post_liveness(&f, &reviewer_sou89_liveness(&f, sid, "status")).await;
+        assert_eq!(
+            s,
+            StatusCode::NOT_FOUND,
+            "terminal descendant retained: {sid}: {r}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn sou89_ended_leased_child_grant_cannot_rebootstrap_but_fresh_grant_works() {
+    let f = Fixture::new(ALLOW);
+    let (s, r, _) = scoped_start_with_ttl(
+        &f,
+        "live-parent",
+        "parent",
+        None,
+        &["read_document"],
+        Some(vec![]),
+        300_000,
+    )
+    .await;
+    assert_allow(s, &r);
+    let (s, child, proof) = scoped_start_with_ttl(
+        &f,
+        "ended-child",
+        "child",
+        Some("parent"),
+        &["read_document"],
+        Some(vec![]),
+        300_000,
+    )
+    .await;
+    assert_allow(s, &child);
+    let mut enroll = reviewer_sou89_liveness(&f, "ended-child", "enroll");
+    enroll["owner_token"] = child["owner_token"].clone();
+    enroll["lease_seconds"] = json!(60);
+    let (s, r) = post_liveness(&f, &enroll).await;
+    assert_eq!(s, StatusCode::OK, "{r}");
+    let (s, r) = f.post(&f.event("ended-child", "session_end")).await;
+    assert_allow(s, &r);
+    let mut replay = f.owned_event("replayed-child", "session_start");
+    replay["host_session"] = json!("review-host");
+    replay["server_id"] = json!("resource-fixture");
+    replay["child_authority"] = json!(proof);
+    let (s, r) = f.post(&replay).await;
+    assert_eq!(
+        s,
+        StatusCode::CONFLICT,
+        "ended lease resurrected through signed grant: {r}"
+    );
+    assert_eq!(r["error_code"], "native_child_authority_already_spent");
+    let (s, r, _) = scoped_start_with_ttl(
+        &f,
+        "fresh-child",
+        "child",
+        Some("parent"),
+        &["read_document"],
+        Some(vec![]),
+        300_000,
+    )
+    .await;
+    assert_allow(s, &r);
+    f.allowed_call("fresh-child", "read_document", &json!({}))
+        .await;
+    f.allowed_call("live-parent", "read_document", &json!({}))
+        .await;
+}
