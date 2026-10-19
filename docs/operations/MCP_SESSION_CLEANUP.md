@@ -28,7 +28,7 @@ and maintain continuous liveness.
 - **Minimum Lease**: `1` second (`MIN_LEASE_SECONDS = 1`)
 - **Maximum Lease**: `60` seconds (`MAX_LEASE_SECONDS = 60`)
 - **Renewal Period**: `lease_seconds / 3` (collectors renew well before half-life)
-- **Retry Budget**: `3` attempts with 200ms backoff on network failures
+- **Retry Budget**: at most `3` attempts with at most `50ms` backoff; lease uncertainty stops further execution
 - **Maintenance Sweep Interval**: `500` ms (clamped between 50ms and 10,000ms; configurable via `config.native.liveness.maintenance_interval_ms`)
 - **Finite Cleanup Deadline**: `lease_duration + (2 * maintenance_interval)` (typically under 12 seconds for default lease; under 2 seconds for 1-second lease)
 
@@ -80,6 +80,8 @@ A dedicated background maintenance task is spawned during `agentfw serve` startu
 - Periodically executes `agentfw::native::liveness::perform_maintenance`.
 - Inspects session liveness leases using monotonic `Instant::now()`, legacy inactivity TTL (300s), and signed child authority deadlines (`now_ms >= exp`).
 - Sweeps dead and expired sessions without requiring any incoming HTTP traffic.
+- Serializes with the profile continuity transaction gate, including the first activation before continuity is enabled.
+- Samples monotonic and authority clocks after acquiring state locks; time spent waiting cannot renew an expired lease. Session-start cleanup also refreshes clocks and managed-policy state after reacquiring locks.
 - Restores daemon session and call capacity deterministically within the predeclared deadline.
 
 ---

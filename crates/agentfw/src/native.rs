@@ -1709,8 +1709,8 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         .firewall
         .lock()
         .map_err(|_| "native_inspection_unavailable")?;
-    let now = native.monotonic_now();
-    let now_ms = wall_time_ms()? + native.test_time_offset();
+    let mut now = native.monotonic_now();
+    let mut now_ms = wall_time_ms()? + native.test_time_offset();
     for session in state.entries.values_mut() {
         session.calls.retain(|_, call| call.expires > now);
     }
@@ -1762,6 +1762,12 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                     .firewall
                     .lock()
                     .map_err(|_| "native_inspection_unavailable")?;
+                now = native.monotonic_now();
+                now_ms = wall_time_ms()? + native.test_time_offset();
+                response.managed_policy = firewall.active_managed_policy();
+                if response.managed_policy.is_some() && request.policy_transition.is_none() {
+                    return Err("native_policy_transition_required");
+                }
             } else {
                 return Err("native_session_exists");
             }
@@ -1784,6 +1790,12 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                 .firewall
                 .lock()
                 .map_err(|_| "native_inspection_unavailable")?;
+            now = native.monotonic_now();
+            now_ms = wall_time_ms()? + native.test_time_offset();
+            response.managed_policy = firewall.active_managed_policy();
+            if response.managed_policy.is_some() && request.policy_transition.is_none() {
+                return Err("native_policy_transition_required");
+            }
         }
         if state.entries.len() >= MAX_SESSIONS {
             return Err("native_session_cap");
@@ -1891,6 +1903,22 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                             .firewall
                             .lock()
                             .map_err(|_| "native_inspection_unavailable")?;
+                        now = native.monotonic_now();
+                        now_ms = wall_time_ms()? + native.test_time_offset();
+                        response.managed_policy = firewall.active_managed_policy();
+                        if response.managed_policy.is_some() && request.policy_transition.is_none()
+                        {
+                            return Err("native_policy_transition_required");
+                        }
+                    }
+                    if now_ms >= grant.expires_at_ms {
+                        return Err("native_child_authority_expired");
+                    }
+                    if state
+                        .spent_authorities
+                        .contains_key(&hash(token.as_bytes()))
+                    {
+                        return Err("native_child_authority_already_spent");
                     }
                     if state.entries.values().any(|s| {
                         s.host_session.as_ref() == Some(host_session)
@@ -2811,6 +2839,104 @@ mod tests {
     fn start(st: &Shared, id: &str) {
         let native = st.native.as_ref().unwrap();
         inspect(st, native, request(native, id, "session_start", json!({}))).unwrap();
+    }
+
+    #[tokio::test]
+    async fn sou89_maintenance_waits_for_initial_profile_activation_transaction() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut st = fixture(dir.path());
+        let state = Arc::get_mut(&mut st).unwrap();
+        let native = state.native.take().unwrap();
+        state.native = Some(
+            native
+                .with_continuity(dir.path(), state.firewall.get_mut().unwrap())
+                .unwrap(),
+        );
+        start(&st, "before-activation");
+        let native = st.native.as_ref().unwrap();
+        let continuity = native.continuity.as_ref().unwrap();
+        assert!(!continuity.is_enabled());
+        let transaction = continuity.gate().lock().await;
+        native.advance_test_time_ms(301_000);
+        let blocked = tokio::time::timeout(
+            Duration::from_millis(50),
+            liveness::perform_maintenance(&st),
+        )
+        .await;
+        assert!(
+            blocked.is_err(),
+            "maintenance bypassed the initial profile transaction"
+        );
+        assert!(native
+            .sessions
+            .lock()
+            .unwrap()
+            .entries
+            .contains_key("before-activation"));
+        drop(transaction);
+        assert_eq!(liveness::perform_maintenance(&st).await, 1);
+        assert!(native.sessions.lock().unwrap().entries.is_empty());
+    }
+
+    fn liveness_contention_witness(action: &str, advance: u64, expected: &str) {
+        let dir = tempfile::tempdir().unwrap();
+        let st = fixture(dir.path());
+        start(&st, "clock-owner");
+        let native = st.native.as_ref().unwrap();
+        let session = native.sessions.lock().unwrap().entries["clock-owner"].clone();
+        let body = json!({"contract_version": liveness::LIVENESS_CONTRACT,
+            "registry_sha256": native.registry_sha256, "session_id": "clock-owner",
+            "instance_id": native.instance_id(), "action": action,
+            "owner_token": session.owner_token, "epoch": session.epoch,
+            "lease_seq": 2, "lease_seconds": 1});
+        if action == "renew" {
+            let mut state = native.sessions.lock().unwrap();
+            state.entries.get_mut("clock-owner").unwrap().liveness_lease =
+                Some(liveness::Lease::new(
+                    "clock-owner".into(),
+                    session.epoch.clone(),
+                    native.instance_id().into(),
+                    Duration::from_secs(1),
+                    native.monotonic_now(),
+                ));
+        }
+        let guard = native.sessions.lock().unwrap();
+        let worker_st = st.clone();
+        let (ready, entered) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            runtime.block_on(async move {
+                let mut headers = HeaderMap::new();
+                headers.insert("authorization", "Bearer native-unit-key".parse().unwrap());
+                ready.send(()).unwrap();
+                liveness::handler(State(worker_st), headers, body.to_string()).await
+            })
+        });
+        entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        std::thread::sleep(Duration::from_millis(100));
+        // The request is blocked on the owned state mutex while its authority expires.
+        native.advance_test_time_ms(advance);
+        drop(guard);
+        let (status, Json(reply)) = worker.join().unwrap();
+        assert_eq!(
+            status,
+            StatusCode::CONFLICT,
+            "stale clock accepted {action}: {reply}"
+        );
+        assert_eq!(reply["error_code"], expected);
+    }
+
+    #[test]
+    fn sou89_enroll_rechecks_time_after_waiting_for_the_state_lock() {
+        liveness_contention_witness("enroll", 301_000, "native_child_authority_expired");
+    }
+
+    #[test]
+    fn sou89_renew_rechecks_time_after_waiting_for_the_state_lock() {
+        liveness_contention_witness("renew", 2_000, "native_liveness_expired");
     }
 
     fn managed_transition_activate(st: &Shared, sequence: u64, policy: &str) {

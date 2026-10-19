@@ -175,11 +175,6 @@ fn enroll(
     native: &NativeState,
     request: &LivenessRequest,
 ) -> (StatusCode, Json<Value>) {
-    let now = native.monotonic_now();
-    let now_ms = match super::wall_time_ms() {
-        Ok(ms) => ms + native.test_time_offset(),
-        Err(code) => return failure(code, StatusCode::SERVICE_UNAVAILABLE),
-    };
     let configured_max = st
         .config
         .native
@@ -207,6 +202,13 @@ fn enroll(
     let mut sessions = match native.sessions.lock() {
         Ok(s) => s,
         Err(_) => return failure("native_state_unavailable", StatusCode::SERVICE_UNAVAILABLE),
+    };
+
+    // Lock contention must not extend an expired lease or authority.
+    let now = native.monotonic_now();
+    let now_ms = match super::wall_time_ms() {
+        Ok(ms) => ms + native.test_time_offset(),
+        Err(code) => return failure(code, StatusCode::SERVICE_UNAVAILABLE),
     };
 
     let epoch = {
@@ -289,15 +291,16 @@ fn renew(
     native: &NativeState,
     request: &LivenessRequest,
 ) -> (StatusCode, Json<Value>) {
+    let mut sessions = match native.sessions.lock() {
+        Ok(s) => s,
+        Err(_) => return failure("native_state_unavailable", StatusCode::SERVICE_UNAVAILABLE),
+    };
+
+    // Lock contention must not extend an expired lease or authority.
     let now = native.monotonic_now();
     let now_ms = match wall_time_ms() {
         Ok(ms) => ms + native.test_time_offset(),
         Err(code) => return failure(code, StatusCode::SERVICE_UNAVAILABLE),
-    };
-
-    let mut sessions = match native.sessions.lock() {
-        Ok(s) => s,
-        Err(_) => return failure("native_state_unavailable", StatusCode::SERVICE_UNAVAILABLE),
     };
 
     // First validate while sessions is borrowed immutably
@@ -464,12 +467,12 @@ fn retire(
 }
 
 fn status(native: &NativeState, request: &LivenessRequest) -> (StatusCode, Json<Value>) {
-    let now = native.monotonic_now();
     let sessions = match native.sessions.lock() {
         Ok(s) => s,
         Err(_) => return failure("native_state_unavailable", StatusCode::SERVICE_UNAVAILABLE),
     };
 
+    let now = native.monotonic_now();
     let Some(session) = sessions.entries.get(&request.session_id) else {
         return failure("native_session_unknown", StatusCode::NOT_FOUND);
     };
@@ -548,7 +551,7 @@ pub async fn perform_maintenance(st: &Shared) -> usize {
     };
 
     let _gate = match &native.continuity {
-        Some(c) if c.is_enabled() => Some(c.gate().lock().await),
+        Some(c) => Some(c.gate().lock().await),
         _ => None,
     };
 
@@ -559,15 +562,14 @@ pub async fn perform_maintenance(st: &Shared) -> usize {
         }
     }
 
-    let now = native.monotonic_now();
-    let now_ms = match wall_time_ms() {
-        Ok(ms) => ms + native.test_time_offset(),
-        Err(_) => return 0,
-    };
-
     let dead_targets: Vec<(String, Option<String>)> = {
         let Ok(mut sessions) = native.sessions.lock() else {
             return 0;
+        };
+        let now = native.monotonic_now();
+        let now_ms = match wall_time_ms() {
+            Ok(ms) => ms + native.test_time_offset(),
+            Err(_) => return 0,
         };
         sessions.spent_authorities.retain(|_, exp| *exp > now_ms);
         sessions
