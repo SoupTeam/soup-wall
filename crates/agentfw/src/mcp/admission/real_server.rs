@@ -1159,10 +1159,12 @@ pub(super) async fn run(
             let host = super::DiagnosticOutput {
                 inner: host,
                 failed: Arc::clone(&boundary_failed),
+                liveness: None,
             };
             let mut host = super::DiagnosticOutput {
                 inner: host,
                 failed: Arc::clone(&owner_failed),
+                liveness: collector.liveness.clone(),
             };
             let result = {
                 let exchange = relay(

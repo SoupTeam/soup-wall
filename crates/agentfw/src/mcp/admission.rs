@@ -2925,12 +2925,30 @@ where
     }
 }
 
-/// Stop host output once the owned diagnostic reader has observed a failure.
-/// A write already committed before that observation cannot be retracted; the
-/// next write/flush fails, and the outer biased select cancels the relay.
+/// Stop host output on diagnostic failure or collector lease uncertainty.
+/// Check at each write/flush poll, including when a blocked host becomes writable
+/// before the outer monitor's next tick. Earlier committed bytes cannot be retracted.
 struct DiagnosticOutput<W> {
     inner: W,
     failed: Arc<AtomicBool>,
+    liveness: Option<Arc<crate::native::liveness::CollectorLivenessClient>>,
+}
+
+impl<W> DiagnosticOutput<W> {
+    fn boundary_error(&self) -> Option<std::io::Error> {
+        let code = if self.failed.load(Ordering::Acquire) {
+            "native MCP diagnostics boundary closed"
+        } else if self
+            .liveness
+            .as_ref()
+            .is_some_and(|lease| lease.is_uncertain())
+        {
+            "native_liveness_uncertain"
+        } else {
+            return None;
+        };
+        Some(std::io::Error::new(std::io::ErrorKind::BrokenPipe, code))
+    }
 }
 
 impl<W: AsyncWrite + Unpin> AsyncWrite for DiagnosticOutput<W> {
@@ -2940,33 +2958,24 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for DiagnosticOutput<W> {
         bytes: &[u8],
     ) -> Poll<std::io::Result<usize>> {
         let this = self.get_mut();
-        if this.failed.load(Ordering::Acquire) {
-            return Poll::Ready(Err(std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe,
-                "native MCP diagnostics boundary closed",
-            )));
+        if let Some(error) = this.boundary_error() {
+            return Poll::Ready(Err(error));
         }
         Pin::new(&mut this.inner).poll_write(cx, bytes)
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<std::io::Result<()>> {
         let this = self.get_mut();
-        if this.failed.load(Ordering::Acquire) {
-            return Poll::Ready(Err(std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe,
-                "native MCP diagnostics boundary closed",
-            )));
+        if let Some(error) = this.boundary_error() {
+            return Poll::Ready(Err(error));
         }
         Pin::new(&mut this.inner).poll_flush(cx)
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<std::io::Result<()>> {
         let this = self.get_mut();
-        if this.failed.load(Ordering::Acquire) {
-            return Poll::Ready(Err(std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe,
-                "native MCP diagnostics boundary closed",
-            )));
+        if let Some(error) = this.boundary_error() {
+            return Poll::Ready(Err(error));
         }
         Pin::new(&mut this.inner).poll_shutdown(cx)
     }
@@ -3161,7 +3170,11 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
                     .take()
                     .context("MCP server stdout unavailable")?,
             );
-            let mut host = DiagnosticOutput { inner: host, failed };
+            let mut host = DiagnosticOutput {
+                inner: host,
+                failed,
+                liveness: collector.liveness.clone(),
+            };
             let result = {
                 let exchange = relay(&collector, &mut client, &mut host, &mut server, &mut child);
                 tokio::pin!(exchange);
@@ -3919,6 +3932,73 @@ mod diagnostic_output_tests {
     use super::*;
     use tokio::io::AsyncReadExt;
 
+    fn leased_output<W>(
+        inner: W,
+    ) -> (
+        DiagnosticOutput<W>,
+        Arc<crate::native::liveness::CollectorLivenessClient>,
+    ) {
+        let liveness = Arc::new(crate::native::liveness::CollectorLivenessClient::new(
+            reqwest::Client::new(),
+            "http://127.0.0.1/unused".into(),
+            "unused-token".into(),
+            "registry".into(),
+            "collector".into(),
+            "instance".into(),
+            None,
+        ));
+        (
+            DiagnosticOutput {
+                inner,
+                failed: Arc::new(AtomicBool::new(false)),
+                liveness: Some(liveness.clone()),
+            },
+            liveness,
+        )
+    }
+
+    #[tokio::test]
+    async fn liveness_failure_withholds_output_without_waiting_for_monitor_tick() {
+        let (mut observer, output) = tokio::io::duplex(64);
+        let (mut guarded, liveness) = leased_output(output);
+        guarded.write_all(b"useful\n").await.unwrap();
+        liveness.mark_failed();
+        // No outer select or 50ms monitor tick runs between failure and output.
+        assert_eq!(
+            guarded.write_all(b"withheld\n").await.unwrap_err().kind(),
+            std::io::ErrorKind::BrokenPipe
+        );
+        assert!(guarded.flush().await.is_err());
+        assert!(guarded.shutdown().await.is_err());
+        drop(guarded);
+        let mut received = Vec::new();
+        observer.read_to_end(&mut received).await.unwrap();
+        assert_eq!(received, b"useful\n");
+    }
+
+    #[tokio::test]
+    async fn liveness_failure_stops_pending_output_when_host_becomes_writable() {
+        let (mut observer, output) = tokio::io::duplex(1);
+        let (mut guarded, liveness) = leased_output(output);
+        {
+            let writing = guarded.write_all(b"xy");
+            tokio::pin!(writing);
+            assert!(futures_util::poll!(writing.as_mut()).is_pending());
+            liveness.mark_failed();
+            let mut committed = [0u8; 1];
+            observer.read_exact(&mut committed).await.unwrap();
+            assert_eq!(&committed, b"x");
+            assert!(
+                matches!(futures_util::poll!(writing.as_mut()), Poll::Ready(Err(_))),
+                "a writable host must not extend output after lease uncertainty"
+            );
+        }
+        drop(guarded);
+        let mut received = Vec::new();
+        observer.read_to_end(&mut received).await.unwrap();
+        assert!(received.is_empty());
+    }
+
     #[tokio::test]
     async fn observed_diagnostic_failure_refuses_future_output_and_flush() {
         let (mut observer, output) = tokio::io::duplex(64);
@@ -3926,6 +4006,7 @@ mod diagnostic_output_tests {
         let mut guarded = DiagnosticOutput {
             inner: output,
             failed: failed.clone(),
+            liveness: None,
         };
         guarded.write_all(b"useful\n").await.unwrap();
         failed.store(true, Ordering::Release);
@@ -3949,6 +4030,7 @@ mod diagnostic_output_tests {
         let mut guarded = DiagnosticOutput {
             inner: output,
             failed: failed.clone(),
+            liveness: None,
         };
         {
             let writing = guarded.write_all(b"xy");

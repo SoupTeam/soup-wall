@@ -129,5 +129,6 @@ Calls to `GET /native/v1/instance` are strictly read-only:
 ### Symptom: `native_liveness_uncertain` in collector logs
 - **Cause**: The collector detected that its lease renewal failed (e.g. daemon restarted, lease expired, or network partitioned).
 - **Resolution**:
-  - The collector immediately halts further tool execution and enters accepted owned cleanup.
+  - The collector refuses further native admission and enters accepted owned cleanup.
+  - Every host write, flush and shutdown poll rechecks lease uncertainty, including a blocked write becoming writable before the monitor timer fires. Bytes committed before uncertainty was observed cannot be retracted.
   - Restart the collector process with fresh credentials to acquire a new authenticated session.
