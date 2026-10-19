@@ -100,6 +100,9 @@ try {
         --out (Join-Path $Root 'results') @sourceArguments *> (Join-Path $Root 'driver.log')
     $code = $LASTEXITCODE
     Copy-Item -LiteralPath (Join-Path $Root 'results/acceptance.json') -Destination $output
+    if ($AcceptanceKind -eq 'onboarding') {
+        Copy-Item -LiteralPath (Join-Path $Root 'results/self-test.json') -Destination (Join-Path $Root 'self-test.json')
+    }
     [ordered]@{ user_sid = $identity.User.Value; profile_owner_sid = $owner; exit_code = $code } |
         ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Root 'identity.json') -Encoding utf8
 } finally {
@@ -133,6 +136,14 @@ exit $code
     if ($AcceptanceKind -eq 'onboarding' -and $child.source_commit -ne $Commit) {
         throw 'Onboarding acceptance source identity mismatch'
     }
+    if ($AcceptanceKind -eq 'onboarding') {
+        $witness = Get-Content -LiteralPath (Join-Path $stage 'self-test.json') -Raw | ConvertFrom-Json
+        if ($witness.result -ne 'passed' -or $witness.identities.agent.sha256 -ne $report.agent_sha256 -or
+            $witness.scenarios.Count -ne 5 -or $witness.cleanup.workspace -ne 'removed' -or
+            $witness.cleanup.final_effects.no_unexpected_effects -ne $true) {
+            throw 'Installed onboarding self-test evidence is incomplete or has the wrong identity'
+        }
+    }
     if ($process.ExitCode -ne 0 -or $child.status -ne 'passed' -or $child.failed -ne 0 -or
         $child.native_windows -ne $true -or $child.elevated -ne $false -or $child.administrator_group_present -ne $false -or
         $childIdentity.user_sid -ne $user.SID.Value -or $childIdentity.profile_owner_sid -ne $user.SID.Value -or
@@ -148,7 +159,7 @@ exit $code
     Write-Warning $report.error
 } finally {
     try {
-        foreach ($file in @('acceptance.json', 'identity.json', 'driver.log', 'native-tests.log', 'launcher-tests.log')) {
+        foreach ($file in @('acceptance.json', 'self-test.json', 'identity.json', 'driver.log', 'native-tests.log', 'launcher-tests.log')) {
             $path = Join-Path $stage $file
             if (Test-Path -LiteralPath $path) { Copy-Item -LiteralPath $path -Destination (Join-Path $out $file) }
         }
