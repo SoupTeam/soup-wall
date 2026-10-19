@@ -2080,16 +2080,15 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
     if request.event == "session_end" {
         let session = state
             .entries
-            .get(&request.session_id)
+            .get_mut(&request.session_id)
             .ok_or("native_session_unknown")?;
-        let session_clone = session.clone();
+        // The accepted end request and terminal cleanup have distinct audit rows.
+        // Consume this sequence before retirement allocates its next one.
+        session.seq += 1;
         audit(
             st,
             &request,
-            &Session {
-                seq: session_clone.seq + 1,
-                ..session_clone
-            },
+            session,
             &response,
             None,
             started.elapsed().as_micros(),

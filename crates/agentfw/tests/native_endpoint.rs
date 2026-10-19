@@ -630,6 +630,57 @@ async fn stages_cannot_be_replayed_or_completed_out_of_order() {
 }
 
 #[tokio::test]
+async fn sou89_session_end_audit_sequences_remain_strictly_increasing() {
+    for leased in [false, true] {
+        let f = Fixture::new(ALLOW);
+        let mut start = f.event("audit-end", "session_start");
+        if leased {
+            start["liveness"] = json!("sw-native-liveness/1");
+        }
+        let (status, receipt) = f.post(&start).await;
+        assert_allow(status, &receipt);
+        if leased {
+            let mut enroll = reviewer_sou89_liveness(&f, "audit-end", "enroll");
+            enroll["owner_token"] = receipt["owner_token"].clone();
+            let (status, reply) = post_liveness(&f, &enroll).await;
+            assert_eq!(status, StatusCode::OK, "{reply}");
+        }
+        f.allowed_call("audit-end", "read_document", &json!({}))
+            .await;
+        let (status, reply) = f.post(&f.event("audit-end", "session_end")).await;
+        assert_allow(status, &reply);
+        let audit = f.audit();
+        let epoch = &audit
+            .iter()
+            .find(|row| row["event"] == "native_session_start")
+            .unwrap()["session"];
+        let sequences: Vec<u64> = audit
+            .iter()
+            .filter(|row| &row["session"] == epoch)
+            .filter_map(|row| row["seq"].as_u64())
+            .collect();
+        assert!(
+            sequences.windows(2).all(|pair| pair[0] < pair[1]),
+            "duplicate or reordered native epoch sequence (leased={leased}): {sequences:?}"
+        );
+        assert_eq!(
+            audit
+                .iter()
+                .filter(|row| row["event"] == "native_session_end")
+                .count(),
+            1
+        );
+        assert_eq!(
+            audit
+                .iter()
+                .filter(|row| row["event"] == "native_session_ended")
+                .count(),
+            1
+        );
+    }
+}
+
+#[tokio::test]
 async fn session_end_invalidates_calls_and_restart_changes_binding_epoch() {
     let fixture = Fixture::new(ALLOW);
     fixture.start("lifecycle").await;
