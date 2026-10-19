@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native macOS ARM64 constrained read_document & create_file acceptance harness (SOU-94).
 
-Only --run starts processes. Clean source, built agentfw binary, and independent
+--run qualifies real processes; --self-test runs negative validator controls.
+Reviewed source, built agentfw binary, and an independent
 observer process are required. Every file, discovery server and relay is an owned fixture.
 No provider traffic, external network egress, or shared mutable workspace.
 Exit 0: complete passing evidence; 1: violation; 2: incomplete/unsupported.
@@ -91,7 +92,7 @@ CASES = (
     "result-withheld-attribution",
     "interrupted-cleanup-preserves-foreign",
     "same-session-continuation",
-    # Pending Linear obligations (tracked as incomplete until proven in 06b)
+    # Authority expiry and wire-budget boundaries
     "authority-expiry-refused",
     "read-byte-limit",
     "read-json-escaping-limit",
@@ -111,52 +112,10 @@ SUCCESS_CASES = {
     "same-session-continuation",
 }
 
-CHECKPOINT06B1_FOCUSED_CASES = {
-    # 14 from Checkpoint 05
-    "read-allowed-relative",
-    "read-allowed-absolute",
-    "read-compatible-alias",
-    "read-hard-deny",
-    "read-out-of-bounds-traversal",
-    "read-symlink-refused",
-    "result-withheld-attribution",
-    "create-allowed-relative",
-    "create-allowed-absolute",
-    "create-empty-content",
-    "create-byte-limit",
-    "create-compatible-alias",
-    "create-hard-deny",
-    "create-traversal-refused",
-    # 14 from Checkpoint 06a
-    "read-unknown-classifier",
-    "read-unsupported-ask",
-    "read-fifo-refused",
-    "read-hardlink-refused",
-    "read-oversize-refused",
-    "read-invalid-utf8-refused",
-    "create-unknown-classifier",
-    "create-unsupported-ask",
-    "create-existing-collision-refused",
-    "create-nested-refused",
-    "create-oversize-refused",
-    "unlisted-resource-refused",
-    "daemon-loss-refused",
-    "same-session-continuation",
-    # 2 new in Checkpoint 06b1
-    "read-byte-limit",
-    "read-json-escaping-limit",
-    # Checkpoint 06b2 protocol & authority witnesses
-    "read-leaf-drift-detected",
-    "read-parent-drift-detected",
-}
-CHECKPOINT06A_FOCUSED_CASES = CHECKPOINT06B1_FOCUSED_CASES
-CHECKPOINT06A_FOCUSED_CASES.update({"changed-binding-refused", "replayed-id-refused", "replayed-native-receipt-refused"})
 PUBLICATION_CASES = {"create-publication-gate-calibration", "create-concurrent-collision-refused",
                      "interrupted-cleanup-preserves-foreign"}
 CASES = (*CASES, "create-publication-gate-calibration")
 SUCCESS_CASES.add("create-publication-gate-calibration")
-CHECKPOINT06A_FOCUSED_CASES.update(PUBLICATION_CASES | {"create-cancellation-drop-cleanup"})
-CHECKPOINT06A_FOCUSED_CASES.update({"authority-expiry-refused", "shared-taint-incomplete-history"})
 
 HELD_CASES = {
     "read-leaf-drift-detected",
@@ -885,7 +844,7 @@ def calculate_source_snapshot(repo: Path, binary: Path, classifier: Path, fixtur
     # Git status
     git_res = subprocess.run(
         ["git", "status", "--porcelain=v1"],
-        cwd=repo, env={"GIT_CONFIG_GLOBAL": "/dev/null", "PATH": "/usr/bin:/bin"},
+        cwd=repo, env={"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_OPTIONAL_LOCKS": "0", "PATH": "/usr/bin:/bin"},
         capture_output=True, text=True
     )
     dirty_lines = [line.strip() for line in git_res.stdout.splitlines() if line.strip()]
@@ -2018,18 +1977,11 @@ def authority_control(name, collector, relay, target, observer, evidence, row, f
 
 def run_case(
     repo: Path, binary: Path, observer_py: Path, classifier_py: Path, fixture_py: Path,
-    run_dir: Path, name: str, is_focused_run: bool = True
+    run_dir: Path, name: str
 ) -> dict:
     row = {"case": name, "status": "running"}
 
-    # Bounded delivery for Checkpoint 06a: if running full default suite,
-    # non-focused cases are reported as honest incomplete
-    if is_focused_run and name not in CHECKPOINT06A_FOCUSED_CASES:
-        return {
-            "case": name,
-            "status": "incomplete",
-            "reason": "Deferred to Checkpoint 06b per bounded delivery brief",
-        }
+    require(name in CASES, f"Unknown runtime control: {name}")
 
     case_root = (run_dir / f"case_{name}").resolve()
     case_root.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -2042,7 +1994,7 @@ def run_case(
     try:
         if name in PUBLICATION_CASES - {"create-publication-gate-calibration"}:
             calibration = run_case(repo, binary, observer_py, classifier_py, fixture_py,
-                case_root / "calibration", "create-publication-gate-calibration", False)
+                case_root / "calibration", "create-publication-gate-calibration")
             require(calibration["status"] == "pass", f"Actual installed publication calibration failed: {calibration.get('error')}")
             row["publication_calibration"] = calibration
         home = (case_root / "home").resolve()
@@ -2703,7 +2655,8 @@ def main():
 
     # 6. Process Controls Acceptance Matrix
     selected_cases = [c.strip() for c in args.cases.split(",")] if args.cases else CASES
-    is_focused_run = (args.cases is None)
+    require(selected_cases and len(set(selected_cases)) == len(selected_cases) and all(c in CASES for c in selected_cases),
+            "Select unique known runtime control names")
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     run_id = f"run_{timestamp}_{os.getpid()}_{uuid.uuid4().hex[:6]}"
@@ -2716,7 +2669,7 @@ def main():
     incomplete = 0
 
     for name in selected_cases:
-        row = run_case(repo, binary, observer_py, classifier_py, fixture_py, run_dir, name, is_focused_run=is_focused_run)
+        row = run_case(repo, binary, observer_py, classifier_py, fixture_py, run_dir, name)
         report["cases"].append(row)
         if row["status"] == "pass":
             passed += 1

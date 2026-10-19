@@ -1,0 +1,54 @@
+[
+  {
+    "event": "session_start",
+    "status": 200,
+    "release": true,
+    "reason_codes": [],
+    "error_code": null
+  },
+  {
+    "path": "/native/v1",
+    "status": 200,
+    "req_len": 248,
+    "res_len": 332
+  },
+  {
+    "event": null,
+    "status": 200,
+    "release": null,
+    "reason_codes": [],
+    "error_code": null
+  },
+  {
+    "path": "/mcp",
+    "status": 200,
+    "req_len": 1306,
+    "res_len": 48
+  },
+  {
+    "event": "call",
+    "status": 200,
+    "release": true,
+    "reason_codes": [],
+    "error_code": null
+  },
+  {
+    "path": "/native/v1",
+    "status": 200,
+    "req_len": 1626,
+    "res_len": 522
+  },
+  {
+    "event": "result",
+    "status": 200,
+    "release": true,
+    "reason_codes": [],
+    "error_code": null
+  },
+  {
+    "path": "/native/v1",
+    "status": 200,
+    "req_len": 780,
+    "res_len": 500
+  }
+]

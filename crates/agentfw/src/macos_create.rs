@@ -46,7 +46,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::mcp::create_file::{CreateFileCommit, CreateFileError, MAX_CREATE_BYTES};
 
-// Exact Darwin SDK values from sys/fcntl.h, sys/mount.h, sys/clonefile.h:
+// Darwin ABI values. CLONE_RESOLVE_BENEATH is declared by XNU and is not
+// exposed by every installed SDK header; the native APFS controls qualify it.
 const O_RESOLVE_BENEATH: i32 = 0x0000_1000;
 const O_NOFOLLOW_ANY: i32 = 0x2000_0000;
 const F_GETPATH: i32 = 50;
@@ -407,8 +408,11 @@ impl PreparedCreate {
 
         let c_stage_name =
             CString::new(stage_name.as_bytes()).map_err(|_| error("stage_name_nul"))?;
-        let cleanup_and_err = |err: CreateFileError| -> CreateFileError {
-            unsafe { libc::unlinkat(stage_dir.as_raw_fd(), c_stage_name.as_ptr(), 0) };
+        let cleanup_and_err = |mut err: CreateFileError| -> CreateFileError {
+            // Metadata failure cannot prove that this name still denotes our
+            // descriptor. Preserve uncertain names instead of deleting foreign
+            // inventory; the entry is still empty at this boundary.
+            err.code = "stage_ownership_cleanup_unresolved";
             err
         };
 
@@ -440,6 +444,7 @@ impl PreparedCreate {
             return Err(cleanup_and_err(error("stage_file_initial_size_nonzero")));
         }
 
+        verify_stage_entry(stage_dir.as_raw_fd(), &c_stage_name, &stage_st)?;
         // 3. Immediately unlink the stage file BEFORE writing any payload.
         // This transitions the descriptor to strictly anonymous before holding sensitive bytes.
         // If writing, syncing, or process terminates, the anonymous descriptor is dropped
@@ -645,6 +650,38 @@ impl StagedCreate {
     }
 }
 
+fn verify_stage_entry(
+    directory: libc::c_int,
+    name: &CStr,
+    owned: &libc::stat,
+) -> Result<(), CreateFileError> {
+    let mut entry: libc::stat = unsafe { std::mem::zeroed() };
+    let rc = unsafe {
+        libc::fstatat(
+            directory,
+            name.as_ptr(),
+            &mut entry,
+            libc::AT_SYMLINK_NOFOLLOW,
+        )
+    };
+    if rc != 0 {
+        return Err(io_error(
+            "stage_ownership_cleanup_unresolved",
+            io::Error::last_os_error(),
+        ));
+    }
+    if entry.st_dev != owned.st_dev
+        || entry.st_ino != owned.st_ino
+        || entry.st_nlink != 1
+        || entry.st_size != 0
+        || (entry.st_mode & libc::S_IFMT) != libc::S_IFREG
+        || (entry.st_mode & 0o777) != 0o600
+    {
+        return Err(error("stage_ownership_cleanup_unresolved"));
+    }
+    Ok(())
+}
+
 fn find_or_create_stage_dir(expected_dev: u64, workspace: &str) -> Result<String, &'static str> {
     let tmp = std::env::var_os("AGENTFW_STAGING_DIR")
         .or_else(|| std::env::var_os("TMPDIR"))
@@ -779,6 +816,43 @@ fn is_within(target: &str, workspace: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stage_identity_refuses_foreign_replacement_without_cleanup() {
+        use std::os::unix::fs::OpenOptionsExt;
+        let (_temporary, workspace) = test_dir();
+        let directory = File::open(&workspace).unwrap();
+        let name = CString::new("owned-stage").unwrap();
+        let path = workspace.join("owned-stage");
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&path)
+            .unwrap();
+        let mut owned: libc::stat = unsafe { std::mem::zeroed() };
+        assert_eq!(unsafe { libc::fstat(file.as_raw_fd(), &mut owned) }, 0);
+        verify_stage_entry(directory.as_raw_fd(), &name, &owned).unwrap();
+        std::fs::rename(&path, workspace.join("retained-original")).unwrap();
+        std::fs::write(&path, b"foreign inventory").unwrap();
+        assert_eq!(
+            verify_stage_entry(directory.as_raw_fd(), &name, &owned)
+                .unwrap_err()
+                .code,
+            "stage_ownership_cleanup_unresolved"
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), b"foreign inventory");
+        assert_eq!(
+            std::fs::metadata(workspace.join("retained-original"))
+                .unwrap()
+                .len(),
+            0
+        );
+        assert_eq!(
+            verify_stage_entry(-1, &name, &owned).unwrap_err().code,
+            "stage_ownership_cleanup_unresolved"
+        );
+    }
     use std::path::PathBuf;
 
     fn test_dir() -> (tempfile::TempDir, PathBuf) {
@@ -962,7 +1036,9 @@ mod tests {
             "installing fixture ACL on stage directory must succeed"
         );
 
-        let err = prepared.stage_with_custom_dir(Some(&stage_dir)).unwrap_err();
+        let err = prepared
+            .stage_with_custom_dir(Some(&stage_dir))
+            .unwrap_err();
         assert_eq!(err.code, "stage_dir_has_unsupported_acl");
 
         // Clear ACL before drop so tempdir deletion succeeds cleanly
