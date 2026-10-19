@@ -197,6 +197,21 @@ fn user_sid() -> String {
         .to_string()
 }
 
+/// How `Get-Acl` prints a SID in SDDL: the built-in local Administrator (RID 500, the
+/// account hosted runners use) and Guest (RID 501) are shortened to `LA` and `LG`, every
+/// other SID is printed in full.
+fn sddl_trustee(sid: &str) -> String {
+    if sid.starts_with("S-1-5-21-") {
+        if sid.ends_with("-500") {
+            return "LA".to_string();
+        }
+        if sid.ends_with("-501") {
+            return "LG".to_string();
+        }
+    }
+    sid.to_string()
+}
+
 fn sddl(path: &Path) -> String {
     run(powershell()
         .args(["-NoProfile", "-NonInteractive", "-Command"])
@@ -209,7 +224,7 @@ fn sddl(path: &Path) -> String {
 /// SYSTEM are granted anything. SIDs, not account names, so a localised Windows passes.
 fn assert_private(path: &Path) {
     let text = sddl(path);
-    let user = user_sid();
+    let user = sddl_trustee(&user_sid());
     assert!(
         text.starts_with(&format!("O:{user}")),
         "{}: owner is not the current user: {text}",
