@@ -117,3 +117,6 @@ python scripts/test-windows-onboarding.py --agent C:\SoupWall\agentfw.exe `
 The output directory must be fresh. A local filtered administrator token does
 not substitute for clean standard-account CI acceptance. Check the account
 membership recorded in the report before interpreting the result.
+
+See the [local verification report](evidence/windows-onboarding-2026-10-19.md)
+for the tested revisions, artifact identities and acceptance limits.
