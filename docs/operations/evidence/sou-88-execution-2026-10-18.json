@@ -1,0 +1,249 @@
+{
+  "schema_version": 1,
+  "issue": "SOU-88",
+  "runtime_head": "85e3c5d96eb7b87490b5258378f9cd275dfe9720",
+  "fixture_run": "https://github.com/SoupTeam/soup-wall/actions/runs/39129742419",
+  "platforms": {
+    "amd64": {
+      "status": "pass",
+      "tested_source": "050658fe50cf456049d398fd64c4754510172c88",
+      "image_id": "sha256:579e3682a60edbef8dc167098bac70760df3c2d1f2bbd4bf40e23db44ad7e4be",
+      "agentfw_sha256": "9ed0013ab23636bd9925350b55778f18711fa726aa98ff5ff174222d88731ae6",
+      "all_fixture_cases_passed": 259,
+      "all_build_inputs_match_runtime_head": true,
+      "build_input_files": 649,
+      "build_inputs_map_sha256": "d195bcc209c60fe490d6a9406210c8c06fb966effdfd203c0c5bbd145fa43898",
+      "results_json_sha256": "d21118263375c5cd2ed505aea4aea9de48fd40144707169756d909e99645831a",
+      "tests": [
+        {
+          "test": "resource_approval_execution::sou88_https_get_real_tls_receiver_approval_controls",
+          "exit_code": 0,
+          "log_sha256": "7c9d021797cd90ef0dc72e7c7ec1f79a855283b42a12a9a2d8ba1f45c9285622",
+          "controls": [
+            {
+              "operation": "https_get",
+              "scenario": "reject",
+              "passed": true
+            },
+            {
+              "operation": "https_get",
+              "scenario": "expired",
+              "passed": true
+            },
+            {
+              "operation": "https_get",
+              "scenario": "mutated",
+              "passed": true
+            },
+            {
+              "operation": "https_get",
+              "scenario": "cancelled",
+              "passed": true
+            },
+            {
+              "operation": "https_get",
+              "scenario": "duplicate-pending",
+              "passed": true
+            },
+            {
+              "operation": "https_get",
+              "scenario": "approved",
+              "passed": true
+            }
+          ],
+          "receiver_counts": {
+            "receiver_started": 1,
+            "connection": 4,
+            "tls_verified_transport": 4,
+            "request": 4,
+            "response": 4
+          }
+        },
+        {
+          "test": "resource_approval_execution::sou88_read_document_real_executor_approval_controls",
+          "exit_code": 0,
+          "log_sha256": "351d40a45a08c320a394acc4c3add534ad01a17cd1349da92d09c1dc7e5ded0e",
+          "controls": [
+            {
+              "operation": "read_document",
+              "scenario": "reject",
+              "passed": true
+            },
+            {
+              "operation": "read_document",
+              "scenario": "expired",
+              "passed": true
+            },
+            {
+              "operation": "read_document",
+              "scenario": "mutated",
+              "passed": true
+            },
+            {
+              "operation": "read_document",
+              "scenario": "cancelled",
+              "passed": true
+            },
+            {
+              "operation": "read_document",
+              "scenario": "duplicate-pending",
+              "passed": true
+            },
+            {
+              "operation": "read_document",
+              "scenario": "approved",
+              "passed": true
+            }
+          ]
+        }
+      ]
+    },
+    "arm64": {
+      "status": "pass",
+      "tested_source": "050658fe50cf456049d398fd64c4754510172c88",
+      "image_id": "sha256:ec213d513b171c0f3b26730c564acd93cf6df85efb6231532c8c359743462832",
+      "agentfw_sha256": "43645fbc06aebf85baeb613dd9c737d49ae42d18009d93ae1ae5ce1cc047301b",
+      "all_fixture_cases_passed": 259,
+      "all_build_inputs_match_runtime_head": true,
+      "build_input_files": 649,
+      "build_inputs_map_sha256": "d195bcc209c60fe490d6a9406210c8c06fb966effdfd203c0c5bbd145fa43898",
+      "results_json_sha256": "cd9f098bd6d21fd7b802bb46f9adb0297fb914b8bb5707d101f9bbe485c170c6",
+      "tests": [
+        {
+          "test": "resource_approval_execution::sou88_https_get_real_tls_receiver_approval_controls",
+          "exit_code": 0,
+          "log_sha256": "9db667dfa4f4f332059e73a79ccfced897074388a541512698394a407aa11b44",
+          "controls": [
+            {
+              "operation": "https_get",
+              "scenario": "reject",
+              "passed": true
+            },
+            {
+              "operation": "https_get",
+              "scenario": "expired",
+              "passed": true
+            },
+            {
+              "operation": "https_get",
+              "scenario": "mutated",
+              "passed": true
+            },
+            {
+              "operation": "https_get",
+              "scenario": "cancelled",
+              "passed": true
+            },
+            {
+              "operation": "https_get",
+              "scenario": "duplicate-pending",
+              "passed": true
+            },
+            {
+              "operation": "https_get",
+              "scenario": "approved",
+              "passed": true
+            }
+          ],
+          "receiver_counts": {
+            "receiver_started": 1,
+            "connection": 4,
+            "tls_verified_transport": 4,
+            "request": 4,
+            "response": 4
+          }
+        },
+        {
+          "test": "resource_approval_execution::sou88_read_document_real_executor_approval_controls",
+          "exit_code": 0,
+          "log_sha256": "4a178748f71a7d7caf106905e53f672091b3615226f42d23b6003839e700a67d",
+          "controls": [
+            {
+              "operation": "read_document",
+              "scenario": "reject",
+              "passed": true
+            },
+            {
+              "operation": "read_document",
+              "scenario": "expired",
+              "passed": true
+            },
+            {
+              "operation": "read_document",
+              "scenario": "mutated",
+              "passed": true
+            },
+            {
+              "operation": "read_document",
+              "scenario": "cancelled",
+              "passed": true
+            },
+            {
+              "operation": "read_document",
+              "scenario": "duplicate-pending",
+              "passed": true
+            },
+            {
+              "operation": "read_document",
+              "scenario": "approved",
+              "passed": true
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "sources_sha256": {
+    "crates/agentfw/src/native/approval.rs": "4ee24208434e8515819c66e4f2115ae8a25cd4be92d2074200985ea76587e597",
+    "crates/agentfw/tests/mcp_admission.rs": "3e52de6370fd5b1078ef591d540b154166377ed05911ba1d94253386790ecf14",
+    "crates/agentfw/tests/resource_approval_witness.rs": "f1956ca7d0c22739fd28d94e77a531b3c5824610c1903a22bf5ed58e3ed623f6",
+    "crates/agentfw/tests/support/resource_approval_execution.rs": "9ce42af6c49a098918b9e6f608c1838f5a5f00be819ef02d258391aa974d7599",
+    "scripts/fixtures/mcp_https_get_probe_server.py": "02f04795516e0267b4a0ae90c0d34c46596f17211f734714ac105c0f8f37612b"
+  },
+  "exact_head_linux": {
+    "run": "https://github.com/SoupTeam/soup-wall/actions/runs/39129742339",
+    "conclusion": "success",
+    "artifact": "sou56-https-get-evidence",
+    "head": "85e3c5d96eb7b87490b5258378f9cd275dfe9720",
+    "binary_sha256": "a3fc03ffba639dc545c1b077fe9a90806dbae9f0f177005dfa6440a5b9205f6b",
+    "https_cases": {
+      "cases_run": 48,
+      "cases_expected": 48,
+      "passed": 48,
+      "failed": 0,
+      "skips": 0
+    },
+    "logs": {
+      "sou88-execution.log": {
+        "sha256": "0265aad76b97b9a584b04f585c51514f030a612057759efbff5703fd48ffe904",
+        "passed": 4,
+        "failed": 0,
+        "ignored": 0
+      },
+      "sou88-authorization.log": {
+        "sha256": "f41693de0339196d5ad6dca17e765de596cc1a239c3cde85fca272a7fce2bea1",
+        "passed": 9,
+        "failed": 0,
+        "ignored": 0
+      },
+      "sou56-native-unit.log": {
+        "sha256": "803371059db199a85cb65161c2e22f82bb3e3aa08d791909a4ef2472b77e3be4",
+        "passed": 499,
+        "failed": 0,
+        "ignored": 2
+      },
+      "sou56-native-router.log": {
+        "sha256": "bc7253fdfceb846f4f783db5f51c1cf9838a095b17b7ddb5ebc7bd06ea3172fe",
+        "passed": 120,
+        "failed": 0,
+        "ignored": 0
+      },
+      "sou56-clippy.log": {
+        "sha256": "e1c4ea258922ee439461043fe638c99b3f547e0009af836a01d3ccb64b550da0"
+      },
+      "sou56-https-get-results.json": {
+        "sha256": "af012147eebdc6b57d4e768320274766eb488c097e1d9e5fe2015338b5008bde"
+      }
+    }
+  }
+}

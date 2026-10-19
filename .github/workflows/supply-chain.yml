@@ -3,8 +3,6 @@
 name: supply-chain
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   schedule:
     - cron: "41 4 * * 1"
   workflow_dispatch:
