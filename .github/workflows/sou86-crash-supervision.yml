@@ -137,7 +137,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          unit="sou89-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          # The accepted SOU-86 delegation helper requires its owned namespace.
+          # The preceding service is collected; this launch must be fresh again.
+          unit="sou86-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           sudo systemd-run --quiet --wait --pipe --collect --unit="$unit" \
             --property="User=$(id -un)" --property="Group=$(id -gn)" \
             --property='Delegate=cpu memory pids' \
