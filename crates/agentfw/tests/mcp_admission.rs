@@ -244,6 +244,18 @@ fn classifier_test_python() -> std::path::PathBuf {
     std::path::PathBuf::from(String::from_utf8(output.stdout).unwrap().trim())
 }
 
+/// Hosted Windows runners spell TEMP with an 8.3 short name (`RUNNER~1`). The classifier
+/// store refuses alias spellings, so its tests use the real long path without `\\?\`.
+#[cfg(windows)]
+fn windows_long_path(path: &Path) -> std::path::PathBuf {
+    let canonical = path.canonicalize().unwrap();
+    let text = canonical.to_string_lossy().into_owned();
+    match text.strip_prefix(r"\\?\") {
+        Some(plain) if !plain.starts_with("UNC\\") => std::path::PathBuf::from(plain),
+        _ => canonical,
+    }
+}
+
 fn sha(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
@@ -831,6 +843,12 @@ impl Fixture {
         let root = std::env::temp_dir();
         #[cfg(unix)]
         let root = root.canonicalize().unwrap();
+        #[cfg(windows)]
+        let root = if classifier == Some("rule-package") {
+            windows_long_path(&root)
+        } else {
+            root
+        };
         let dir = tempfile::tempdir_in(root).unwrap();
         let home = dir.path().join(".agentfw");
         let stderr = dir.path().join("gateway-stderr.log");
@@ -5564,10 +5582,14 @@ async fn sou64_installed_package_classifies_in_the_real_collector_like_the_scrip
 #[cfg(any(unix, windows))]
 #[test]
 fn sou64_missing_package_is_a_selection_error_with_no_fallback() {
-    let directory = tempfile::tempdir().unwrap();
+    let root = std::env::temp_dir();
+    #[cfg(windows)]
+    let root = windows_long_path(&root);
+    let directory = tempfile::tempdir_in(root).unwrap();
     assert!(
         agentfw::classifier_runtime::worker::PackagedClassifier::from_home(directory.path())
-            .is_err()
+            .is_err(),
+        "a missing package must be a selection error"
     );
 }
 

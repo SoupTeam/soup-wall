@@ -119,6 +119,9 @@ Unix-only code path was removed to make this build.
   canonicalised (a junction spelling resolves to the real file), recorded with its SHA-256
   and re-checked on every worker start. A Microsoft Store app-execution alias, a reparse
   point as the final file, and a non-CPython interpreter are refused.
+- A profile path written with its real long names. A path that contains an 8.3 short name
+  such as `C:\Users\RUNNER~1\...` is an alias spelling and is refused with
+  `is not on a plain local NTFS path`; set `USERPROFILE` to the long spelling.
 - The standard (non-administrator) account that installed the package. The same account
   must run the collector.
 

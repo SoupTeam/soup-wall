@@ -44,8 +44,21 @@ fn python() -> PathBuf {
     PathBuf::from(String::from_utf8(output.stdout).unwrap().trim())
 }
 
+/// Hosted runners spell TEMP with an 8.3 short name (`RUNNER~1`); the store refuses alias
+/// spellings by design, so every profile in these tests lives under the real long path.
+fn long_temp_root() -> PathBuf {
+    let canonical = std::env::temp_dir().canonicalize().unwrap();
+    let text = canonical.to_string_lossy().into_owned();
+    match text.strip_prefix(r"\\?\") {
+        Some(plain) if !plain.starts_with("UNC\\") => PathBuf::from(plain),
+        _ => canonical,
+    }
+}
+
 fn home() -> tempfile::TempDir {
-    tempfile::tempdir().unwrap()
+    tempfile::Builder::new()
+        .tempdir_in(long_temp_root())
+        .unwrap()
 }
 
 fn archive(which: Which) -> Vec<u8> {
