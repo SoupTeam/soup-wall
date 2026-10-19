@@ -1104,3 +1104,119 @@ fn verify_removable(
         verify_file(path, hash, expected)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn service() -> (tempfile::TempDir, Service) {
+        let temp = tempfile::tempdir().unwrap();
+        // Darwin's /var alias is not an operator-created symlink.
+        let home = temp.path().canonicalize().unwrap();
+        let service = Service::new(&home).unwrap();
+        (temp, service)
+    }
+
+    #[test]
+    fn preview_is_private_nonmutating_and_has_no_login_installation() {
+        let (_temp, service) = service();
+        let preview = service.preview().unwrap();
+        assert!(!service.root.exists());
+        assert_eq!(preview.unit_path.parent(), Some(service.root.as_path()));
+        assert!(!preview.starts_automatically);
+        assert!(!preview.unit.contains("/bin/sh"));
+        assert!(preview
+            .unit
+            .contains("<key>ThrottleInterval</key><integer>10</integer>"));
+        assert!(preview.unit.contains("<key>SuccessfulExit</key><false/>"));
+        assert!(preview.unit.contains("<key>ProgramArguments</key>"));
+        assert_eq!(xml("a&<b>\"'"), "a&amp;&lt;b&gt;&quot;&apos;");
+        assert!(path_text(Path::new("/private/tmp/bad\npath")).is_err());
+    }
+
+    #[test]
+    fn runtime_parser_ignores_nested_pid_and_rejects_missing_or_duplicate_identity() {
+        let text = "gui/501/test = {\n path = /private/test.plist\n state = running\n program = /private/agent\n arguments = {\n /private/agent\n service\n }\n environment = {\n pid = 99\n }\n pid = 123\n}\n";
+        let job = parse_job(text).unwrap();
+        assert_eq!(job.pid, 123);
+        assert_eq!(job.arguments, ["/private/agent", "service"]);
+        assert!(parse_job(&text.replace(" path = /private/test.plist\n", "")).is_err());
+        assert!(parse_job(&text.replace(" pid = 123", " pid = 123\n pid = 124")).is_err());
+        assert!(parse_job(text.trim_end().trim_end_matches('}')).is_err());
+    }
+
+    #[test]
+    fn crash_budget_is_durable_bounded_and_rejects_foreign_journals() {
+        let (_temp, service) = service();
+        make_directory(&service.root).unwrap();
+        for _ in 0..MAX_STARTS {
+            assert!(service.consume_start().unwrap());
+        }
+        assert!(!Service::new(&service.home)
+            .unwrap()
+            .consume_start()
+            .unwrap());
+        service.reset_budget().unwrap();
+        assert!(service.consume_start().unwrap());
+        let path = service.root.join("restart.json");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(service.consume_start().is_err());
+        assert!(service.reset_budget().is_err());
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn linked_and_replaced_artifacts_cannot_be_adopted_or_removed() {
+        let (_temp, service) = service();
+        let path = service.home.join("artifact");
+        fs::write(&path, b"original").unwrap();
+        let expected = identity(&path).unwrap();
+        let old = service.home.join("old");
+        fs::rename(&path, &old).unwrap();
+        fs::write(&path, b"original").unwrap();
+        assert!(verify_file(&path, &expected.digest, Some(&expected)).is_err());
+        assert!(
+            verify_removable(Phase::Installing, &path, &expected.digest, Some(&expected)).is_err()
+        );
+        fs::remove_file(&path).unwrap();
+        std::os::unix::fs::symlink(&old, &path).unwrap();
+        assert!(identity(&path).is_err());
+        fs::remove_file(&path).unwrap();
+        fs::hard_link(&old, &path).unwrap();
+        assert!(identity(&path).is_err());
+    }
+
+    #[test]
+    fn interrupted_partial_write_can_only_remove_its_recorded_inode() {
+        let (_temp, service) = service();
+        let path = service.home.join("partial");
+        let mut file = create_private(&path).unwrap();
+        let initial = identity(&path).unwrap();
+        file.write_all(b"partial bytes").unwrap();
+        assert!(verify_removable(
+            Phase::Installing,
+            &path,
+            "expected-full-digest",
+            Some(&initial)
+        )
+        .is_ok());
+        assert!(verify_removable(Phase::Installing, &path, "expected-full-digest", None).is_err());
+        assert!(verify_removable(
+            Phase::Installed,
+            &path,
+            "expected-full-digest",
+            Some(&initial)
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn damaged_registration_reserves_the_profile_against_direct_lifecycle() {
+        let (_temp, service) = service();
+        make_directory(&service.root).unwrap();
+        fs::write(service.root.join(STATE), "invalid").unwrap();
+        assert!(service.manager().start().is_err());
+        assert!(service.manager().remove().is_err());
+        assert!(service.manager().direct_serve_guard().is_err());
+    }
+}
