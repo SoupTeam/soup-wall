@@ -4,7 +4,8 @@ param(
     [Parameter(Mandatory = $true)][string]$TestBinary,
     [Parameter(Mandatory = $true)][string]$PythonBinary,
     [Parameter(Mandatory = $true)][string]$OutputDirectory,
-    [Parameter(Mandatory = $true)][ValidatePattern('^[0-9a-f]{40}$')][string]$Commit
+    [Parameter(Mandatory = $true)][ValidatePattern('^[0-9a-f]{40}$')][string]$Commit,
+    [ValidateSet('self-test', 'onboarding')][string]$AcceptanceKind = 'self-test'
 )
 $ErrorActionPreference = 'Stop'
 if (!$IsWindows -or $env:GITHUB_ACTIONS -ne 'true') {
@@ -30,7 +31,7 @@ $user = $null
 $process = $null
 $exitCode = 1
 $report = [ordered]@{
-    schema_version = 'sou71-windows-standard-user-launcher/1'; status = 'incomplete'; source_commit = $Commit
+    schema_version = $(if ($AcceptanceKind -eq 'onboarding') { 'sou90-windows-standard-user-launcher/1' } else { 'sou71-windows-standard-user-launcher/1' }); status = 'incomplete'; source_commit = $Commit
     observed_at = [DateTime]::UtcNow.ToString('o'); child_exit_code = $null
     os_version = [Environment]::OSVersion.VersionString
     architecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
@@ -63,7 +64,7 @@ try {
     Copy-Item -LiteralPath (Split-Path -Parent $python) -Destination (Join-Path $stage 'python') -Recurse
     $childScript = Join-Path $stage 'run.ps1'
     @'
-param([string]$Root, [string]$ExpectedCommit)
+param([string]$Root, [string]$ExpectedCommit, [ValidateSet('self-test', 'onboarding')][string]$AcceptanceKind = 'self-test')
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -85,11 +86,18 @@ $env:SELF_TEST_PYTHON = $python
 try {
     & $python -B (Join-Path $source 'scripts/tests/test_windows_self_test.py') *> (Join-Path $Root 'launcher-tests.log')
     if ($LASTEXITCODE -ne 0) { throw 'Self-test launcher regressions failed' }
-    & (Join-Path $Root 'native-tests.exe') 'self_test::' --test-threads=1 *> (Join-Path $Root 'native-tests.log')
-    if ($LASTEXITCODE -ne 0) { throw 'Self-test unit regressions failed' }
-    & $python -B (Join-Path $source 'scripts/test-windows-self-test.py') `
+    $filters = @('self_test::')
+    if ($AcceptanceKind -eq 'onboarding') { $filters += 'windows_onboarding::' }
+    foreach ($filter in $filters) {
+        & (Join-Path $Root 'native-tests.exe') $filter --test-threads=1 *>> (Join-Path $Root 'native-tests.log')
+        if ($LASTEXITCODE -ne 0) { throw 'Native unit regressions failed' }
+    }
+    $driver = if ($AcceptanceKind -eq 'onboarding') { 'test-windows-onboarding.py' } else { 'test-windows-self-test.py' }
+    $sourceArguments = @()
+    if ($AcceptanceKind -eq 'onboarding') { $sourceArguments = @('--source-commit', $ExpectedCommit) }
+    & $python -B (Join-Path $source "scripts/$driver") `
         --agent (Join-Path $Root 'agentfw.exe') --baseline (Join-Path $source 'rule_baseline/rule_baseline.py') `
-        --out (Join-Path $Root 'results') *> (Join-Path $Root 'driver.log')
+        --out (Join-Path $Root 'results') @sourceArguments *> (Join-Path $Root 'driver.log')
     $code = $LASTEXITCODE
     Copy-Item -LiteralPath (Join-Path $Root 'results/acceptance.json') -Destination $output
     [ordered]@{ user_sid = $identity.User.Value; profile_owner_sid = $owner; exit_code = $code } |
@@ -105,7 +113,7 @@ try {
 }
 exit $code
 '@ | Set-Content -LiteralPath $childScript -Encoding utf8
-    $arguments = "-NoLogo -NoProfile -NonInteractive -File `"$childScript`" -Root `"$stage`" -ExpectedCommit $Commit"
+    $arguments = "-NoLogo -NoProfile -NonInteractive -File `"$childScript`" -Root `"$stage`" -ExpectedCommit $Commit -AcceptanceKind $AcceptanceKind"
     $process = Start-Process -FilePath (Join-Path $PSHOME 'pwsh.exe') -ArgumentList $arguments -Credential $credential `
         -LoadUserProfile -WorkingDirectory $stage -PassThru -WindowStyle Hidden
     if (!$process.WaitForExit(1200000)) {
@@ -122,10 +130,15 @@ exit $code
     $childIdentity = Get-Content -LiteralPath (Join-Path $stage 'identity.json') -Raw | ConvertFrom-Json
     $report.child = [ordered]@{ status = $child.status; passed = $child.passed; failed = $child.failed
         current_user_owns_temporary = $childIdentity.user_sid -eq $childIdentity.profile_owner_sid }
+    if ($AcceptanceKind -eq 'onboarding' -and $child.source_commit -ne $Commit) {
+        throw 'Onboarding acceptance source identity mismatch'
+    }
     if ($process.ExitCode -ne 0 -or $child.status -ne 'passed' -or $child.failed -ne 0 -or
         $child.native_windows -ne $true -or $child.elevated -ne $false -or $child.administrator_group_present -ne $false -or
         $childIdentity.user_sid -ne $user.SID.Value -or $childIdentity.profile_owner_sid -ne $user.SID.Value -or
-        $child.agent_sha256 -ne $report.agent_sha256 -or $child.passed -ne 19) {
+        $child.agent_sha256 -ne $report.agent_sha256 -or
+        $child.passed -ne $(if ($AcceptanceKind -eq 'onboarding') { 18 } else { 19 }) -or
+        $child.schema_version -ne $(if ($AcceptanceKind -eq 'onboarding') { 'sou90-windows-onboarding-acceptance/1' } else { 'sou71-windows-self-test-acceptance/1' })) {
         throw 'Native standard-user self-test acceptance did not satisfy all required checks'
     }
     $report.status = 'pass'

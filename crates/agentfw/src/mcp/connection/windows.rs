@@ -83,6 +83,10 @@ pub(crate) fn parent(path: &Path) -> Result<CreateParent> {
 }
 
 fn verify_acl(file: &File) -> Result<()> {
+    verify_acl_requirement(file, false)
+}
+
+fn verify_acl_requirement(file: &File, full_directory: bool) -> Result<()> {
     let mut owner: PSID = null_mut();
     let mut dacl: *mut ACL = null_mut();
     let mut descriptor: PSECURITY_DESCRIPTOR = null_mut();
@@ -142,6 +146,7 @@ fn verify_acl(file: &File) -> Result<()> {
         "cannot inspect DACL entries"
     );
     let mut offset = 0usize;
+    let mut trustees = std::collections::BTreeSet::new();
     for index in 0..size.AceCount {
         let mut raw: *mut c_void = null_mut();
         ensure!(
@@ -166,9 +171,34 @@ fn verify_acl(file: &File) -> Result<()> {
             trustee == sid || trustee == "S-1-5-18",
             "DACL grants another account access: {trustee}"
         );
+        if full_directory {
+            use windows_sys::Win32::Security::{
+                CONTAINER_INHERIT_ACE, INHERIT_ONLY_ACE, OBJECT_INHERIT_ACE,
+            };
+            use windows_sys::Win32::Storage::FileSystem::FILE_ALL_ACCESS;
+            ensure!(
+                size.AceCount == 2
+                    && (ace.Mask & FILE_ALL_ACCESS == FILE_ALL_ACCESS
+                        || ace.Mask & windows_sys::Win32::Foundation::GENERIC_ALL != 0)
+                    && u32::from(header.AceFlags)
+                        & (OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE | INHERIT_ONLY_ACE)
+                        == (OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE),
+                "owned directory ACL changed; do not repair it"
+            );
+            trustees.insert(trustee);
+        }
         offset += header.AceSize as usize;
     }
+    ensure!(
+        !full_directory || trustees.len() == 2,
+        "owned directory trustees changed"
+    );
     Ok(())
+}
+
+pub(crate) fn verify_full_directory(file: &File) -> Result<()> {
+    identity(file, true)?;
+    verify_acl_requirement(file, true)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]
@@ -275,12 +305,59 @@ fn read_private(path: &Path) -> Result<Vec<u8>> {
     Ok(read_file(path, LIMIT)?.0)
 }
 
-fn write_new(path: &Path, bytes: &[u8]) -> Result<Identity> {
+pub(crate) fn write_new(path: &Path, bytes: &[u8]) -> Result<Identity> {
     ensure!(bytes.len() <= LIMIT, "new private file exceeds limit");
     let mut file = open(path, true, false)?;
     file.write_all(bytes)?;
     file.sync_all()?;
     identity(&file, false)
+}
+
+pub(crate) fn remove_confirmed(path: &Path, expected: &[u8]) -> Result<()> {
+    use windows_sys::Win32::Storage::FileSystem::{
+        FileDispositionInfo, SetFileInformationByHandle, DELETE, FILE_DISPOSITION_INFO,
+    };
+    let _parent = parent(path)?;
+    let name: Vec<_> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let handle = unsafe {
+        CreateFileW(
+            name.as_ptr(),
+            READ_CONTROL | FILE_READ_DATA | FILE_READ_ATTRIBUTES | DELETE,
+            0,
+            null(),
+            OPEN_EXISTING,
+            FILE_FLAG_OPEN_REPARSE_POINT | FILE_ATTRIBUTE_NORMAL,
+            null_mut(),
+        )
+    };
+    ensure!(
+        handle != INVALID_HANDLE_VALUE,
+        "cannot acquire exclusive owned file removal"
+    );
+    let mut file = unsafe { File::from_raw_handle(handle) };
+    identity(&file, false)?;
+    ensure!(
+        file.metadata()?.len() <= LIMIT as u64,
+        "owned file exceeds removal limit"
+    );
+    let mut observed = Vec::new();
+    Read::by_ref(&mut file)
+        .take(LIMIT as u64 + 1)
+        .read_to_end(&mut observed)?;
+    ensure!(observed == expected, "owned file changed; removal refused");
+    let mut disposition = FILE_DISPOSITION_INFO { DeleteFile: true };
+    ensure!(
+        unsafe {
+            SetFileInformationByHandle(
+                handle,
+                FileDispositionInfo,
+                (&mut disposition as *mut FILE_DISPOSITION_INFO).cast(),
+                std::mem::size_of_val(&disposition) as u32,
+            )
+        } != 0,
+        "Windows refused owned file removal"
+    );
+    Ok(())
 }
 
 fn private_directory(path: &Path) -> Result<()> {
@@ -473,7 +550,7 @@ fn finish(record: &Publication) -> Result<()> {
     Ok(())
 }
 
-fn recover(path: &Path, mutating: bool) -> Result<()> {
+pub(crate) fn recover(path: &Path, mutating: bool) -> Result<()> {
     let journal = journal_path(path)?;
     if exists(&journal)? {
         ensure!(
@@ -487,7 +564,11 @@ fn recover(path: &Path, mutating: bool) -> Result<()> {
     Ok(())
 }
 
-fn publish(path: &Path, expected: Option<(&[u8], Identity)>, bytes: &[u8]) -> Result<()> {
+pub(crate) fn publish(
+    path: &Path,
+    expected: Option<(&[u8], Identity)>,
+    bytes: &[u8],
+) -> Result<()> {
     let _parent = parent(path)?;
     ensure!(!exists(&journal_path(path)?)?, "unfinished publication");
     let Some((before, before_id)) = expected else {
@@ -567,7 +648,7 @@ fn replace_record(record: &Publication) -> Result<()> {
     Ok(())
 }
 
-fn lock(path: &Path) -> Result<File> {
+pub(crate) fn lock(path: &Path) -> Result<File> {
     let lock_path = path
         .parent()
         .context("missing parent")?
@@ -966,6 +1047,16 @@ async fn probe(entry: &Value, tool: &str, args: &str) -> Result<String> {
 }
 
 pub(crate) async fn run(operation: &str, o: &Options) -> Result<Report> {
+    run_confirmed(operation, o, None, None, None).await
+}
+
+pub(crate) async fn run_confirmed(
+    operation: &str,
+    o: &Options,
+    expected_config: Option<&str>,
+    expected_runtime: Option<&str>,
+    expected_native: Option<&str>,
+) -> Result<Report> {
     let start = Instant::now();
     ensure!(
         o.probe_tool.is_none() || operation == "inspect",
@@ -983,6 +1074,18 @@ pub(crate) async fn run(operation: &str, o: &Options) -> Result<Report> {
     recover(&state_path, _lock.is_some())?;
     let entry = config.entry(&o.server)?;
     let mut owner = config.state(&o.server)?;
+    if let Some(expected) = expected_config {
+        ensure!(
+            operation == "connect" && crate::native::is_digest(expected),
+            "invalid connection confirmation"
+        );
+        if owner.is_none() {
+            ensure!(
+                sha(&config.bytes) == expected,
+                "host changed since onboarding preview; conflict preserved"
+            );
+        }
+    }
     let id = format!(
         "claude-{}",
         &sha(format!("{}\0{}", o.path.display(), o.server).as_bytes())[..24]
@@ -1056,6 +1159,10 @@ pub(crate) async fn run(operation: &str, o: &Options) -> Result<Report> {
             report.detail = "Agent preflight unavailable or identity mismatch";
         } else {
             let native = native?;
+            ensure!(
+                expected_native.is_none_or(|expected| native.config == expected),
+                "native configuration changed since onboarding preview"
+            );
             report.agent_sha256 = Some(native.binary.clone());
             report.registry_sha256 = Some(native.registry.clone());
             if operation == "connect" {
@@ -1093,6 +1200,19 @@ pub(crate) async fn run(operation: &str, o: &Options) -> Result<Report> {
                     });
                 }
                 let state = owner.as_mut().unwrap();
+                if let Some(expected) = expected_runtime {
+                    let arguments = state.wrapped["args"]
+                        .as_array()
+                        .context("missing wrapper arguments")?;
+                    let index = arguments
+                        .iter()
+                        .position(|argument| argument == "--runtime-sha256")
+                        .context("missing pinned runtime argument")?;
+                    ensure!(
+                        arguments.get(index + 1).and_then(Value::as_str) == Some(expected),
+                        "runtime assets changed since onboarding preview"
+                    );
+                }
                 config.validate_transaction(state)?;
                 state.phase = "pending_connect".into();
                 config.save(state)?;

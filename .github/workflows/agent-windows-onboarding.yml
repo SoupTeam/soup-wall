@@ -1,0 +1,73 @@
+name: Native Windows Agent onboarding
+
+on:
+  pull_request:
+    paths:
+      - 'crates/agentfw/src/windows_onboarding.rs'
+      - 'crates/agentfw/src/windows_onboarding/**'
+      - 'crates/agentfw/src/main.rs'
+      - 'crates/agentfw/src/lib.rs'
+      - 'crates/agentfw/src/config.rs'
+      - 'crates/agentfw/src/lifecycle.rs'
+      - 'crates/agentfw/src/mcp/connection.rs'
+      - 'crates/agentfw/src/mcp/connection/windows.rs'
+      - 'crates/agentfw/src/self_test/**'
+      - 'crates/agentfw/src/windows_read.rs'
+      - 'crates/agentfw/src/private_file_windows.rs'
+      - 'crates/agentfw/src/native.rs'
+      - 'crates/agentfw/src/protection_status.rs'
+      - 'crates/agent/policies/agent-default.yaml'
+      - 'scripts/test-windows-onboarding.py'
+      - 'scripts/test-windows-self-test.py'
+      - 'scripts/ci-windows-self-test.ps1'
+      - 'rule_baseline/rule_baseline.py'
+      - '.github/workflows/agent-windows-onboarding.yml'
+      - 'Cargo.lock'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-onboarding-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  standard-user-onboarding:
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the native Agent and focused tests
+        shell: pwsh
+        run: |
+          cargo build --locked -p agentfw --bin agentfw
+          if ($LASTEXITCODE -ne 0) { throw 'Agent build failed' }
+          cargo test --locked -p agentfw --lib --no-run --message-format=json > "$env:RUNNER_TEMP/onboarding-build.jsonl"
+          if ($LASTEXITCODE -ne 0) { throw 'Native test build failed' }
+          $tests = Get-Content "$env:RUNNER_TEMP/onboarding-build.jsonl" |
+            ForEach-Object { $_ | ConvertFrom-Json } |
+            Where-Object { $_.reason -eq 'compiler-artifact' -and $_.target.name -eq 'agentfw' -and $_.profile.test -and $_.executable }
+          if (@($tests).Count -ne 1) { throw 'Unique native test binary required' }
+          "ONBOARDING_TEST_BINARY=$($tests.executable)" | Add-Content $env:GITHUB_ENV
+      - name: Run onboarding under a disposable standard account
+        shell: pwsh
+        run: |
+          ./scripts/ci-windows-self-test.ps1 -AgentBinary ./target/debug/agentfw.exe `
+            -TestBinary $env:ONBOARDING_TEST_BINARY -PythonBinary (Get-Command python).Source `
+            -OutputDirectory "$env:RUNNER_TEMP/onboarding-results" -Commit ((git rev-parse HEAD).Trim()) `
+            -AcceptanceKind onboarding
+          if ($LASTEXITCODE -ne 0) { throw 'Native onboarding acceptance failed' }
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: native-windows-onboarding
+          path: ${{ runner.temp }}/onboarding-results/
+          if-no-files-found: error

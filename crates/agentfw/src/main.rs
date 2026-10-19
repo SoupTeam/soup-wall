@@ -456,7 +456,10 @@ fn main() -> anyhow::Result<()> {
         }
         Cmd::SelfTest(args) => std::process::exit(agentfw::self_test::run(args)),
         #[cfg(windows)]
-        Cmd::OnboardWindows { command } => agentfw::windows_onboarding::run(command),
+        Cmd::OnboardWindows { command } => {
+            prepare_lifecycle_process()?;
+            agentfw::windows_onboarding::run(command)
+        }
         Cmd::SelfTestFixture(args) => agentfw::self_test::fixture::serve(args),
         Cmd::Serve => {
             #[cfg(target_os = "linux")]

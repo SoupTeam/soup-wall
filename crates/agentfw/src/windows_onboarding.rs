@@ -11,6 +11,8 @@ use std::time::Instant;
 
 use crate::mcp::connection::{windows as connection, Options};
 
+mod transaction;
+
 const FILE_LIMIT: usize = 1024 * 1024;
 const EXECUTABLE_LIMIT: usize = 512 * 1024 * 1024;
 
@@ -46,6 +48,8 @@ pub struct Selection {
     #[arg(long)]
     pub state_directory: PathBuf,
     #[arg(long)]
+    pub workspace: PathBuf,
+    #[arg(long)]
     pub report: PathBuf,
     #[arg(long, value_parser = clap::value_parser!(u16).range(1..))]
     pub port: u16,
@@ -54,6 +58,18 @@ pub struct Selection {
 #[derive(Subcommand)]
 pub enum Command {
     Preview(Selection),
+    Apply {
+        #[command(flatten)]
+        selection: Selection,
+        #[arg(long)]
+        confirm: String,
+        #[arg(long, hide = true, value_parser = ["prepared", "configured", "installed", "daemon_started", "publishing", "connected"])]
+        pause_after: Option<String>,
+    },
+    Inspect(transaction::StateArgs),
+    Verify(transaction::StateArgs),
+    Recover(transaction::StateArgs),
+    Remove(transaction::StateArgs),
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
@@ -142,6 +158,14 @@ async fn preview_selected(selection: &Selection) -> Result<Preview> {
         "state and report must remain outside the new Agent home"
     );
     let _state_pin = connection::parent(&selection.state_directory.join("onboarding.json"))?;
+    let _workspace_pin = crate::windows_read::CreateParent::prepare_workspace(
+        &selection.workspace,
+        &selection.workspace,
+    )?;
+    ensure!(
+        Some(selection.state_directory.as_path()) != selection.host_config.parent(),
+        "use a separate state directory for onboarding"
+    );
     fresh(&selection.state_directory.join("onboarding.json"))?;
     ensure!(
         selection.port != 0,
@@ -160,12 +184,25 @@ async fn preview_selected(selection: &Selection) -> Result<Preview> {
         .iter()
         .map(|(path, digest, executable)| asset(path, digest, *executable))
         .collect::<Result<Vec<_>>>()?;
-    let _registry = crate::native::NativeState::from_bytes(
+    let registry = crate::native::NativeState::from_bytes(
         &snapshots[3].0,
         &selection.registry_sha256,
         crate::token::generate(),
     )
     .context("invalid reviewed native registry")?;
+    for resource in registry
+        .registry
+        .tools
+        .iter()
+        .filter_map(|tool| tool.resource_policy.as_ref())
+    {
+        ensure!(
+            resource.is_windows_handles()
+                && resource.workspace == selection.workspace
+                && resource.classifier_sha256 == selection.classifier_sha256,
+            "registry resources do not match the selected Windows runtime"
+        );
+    }
     let policy = soup_wall_agent::AgentPolicySet::from_yaml(
         std::str::from_utf8(&snapshots[4].0).context("policy must be UTF-8")?,
     )
@@ -199,6 +236,7 @@ async fn preview_selected(selection: &Selection) -> Result<Preview> {
     fresh(&selection.home)?;
     fresh(&selection.report)?;
     let identities = json!({
+        "runner_sha256": crate::lifecycle::sha256_file(&std::env::current_exe()?)?,
         "agent_sha256": selection.agent_sha256,
         "python_sha256": selection.python_sha256,
         "classifier_sha256": selection.classifier_sha256,
@@ -240,6 +278,34 @@ pub fn run(command: Command) -> Result<()> {
     match command {
         Command::Preview(selection) => {
             let result = runtime.block_on(preview(&selection))?;
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        }
+        Command::Apply {
+            selection,
+            confirm,
+            pause_after,
+        } => {
+            let result = runtime.block_on(transaction::apply(
+                selection,
+                &confirm,
+                pause_after.as_deref(),
+            ))?;
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        }
+        Command::Inspect(args) => {
+            let result = runtime.block_on(transaction::inspect(&args.state_directory))?;
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        }
+        Command::Verify(args) => {
+            let result = runtime.block_on(transaction::verify(&args.state_directory))?;
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        }
+        Command::Recover(args) => {
+            let result = runtime.block_on(transaction::recover(&args.state_directory))?;
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        }
+        Command::Remove(args) => {
+            let result = runtime.block_on(transaction::remove(&args.state_directory))?;
             println!("{}", serde_json::to_string_pretty(&result)?);
         }
     }
@@ -318,6 +384,7 @@ mod tests {
                 home: path(".agentfw"),
                 state_directory,
                 report: path("report.json"),
+                workspace: root.path().to_path_buf(),
                 port,
             };
             Self { root, selection }
@@ -466,6 +533,76 @@ mod tests {
         let before = std::fs::read(&alias).unwrap();
         assert!(preview_selected(&fixture.selection).await.is_err());
         assert_eq!(std::fs::read(&alias).unwrap(), before);
+    }
+
+    #[tokio::test]
+    async fn connection_confirmation_is_checked_before_daemon_access() {
+        let fixture = Fixture::new();
+        let selection = &fixture.selection;
+        let before = std::fs::read(&selection.host_config).unwrap();
+        let options = Options {
+            path: selection.host_config.clone(),
+            server: selection.server.clone(),
+            home: selection.home.clone(),
+            agent: selection.agent.clone(),
+            runtime: None,
+            probe_tool: None,
+            probe_args: None,
+        };
+        let error =
+            connection::run_confirmed("connect", &options, Some(&"0".repeat(64)), None, None)
+                .await
+                .err()
+                .unwrap();
+        assert!(error
+            .to_string()
+            .contains("host changed since onboarding preview"));
+        assert_eq!(std::fs::read(&selection.host_config).unwrap(), before);
+        assert!(!selection.home.exists());
+    }
+
+    #[test]
+    fn removal_checks_contents_and_keeps_the_verified_handle_exclusive() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let fixture = Fixture::new();
+        let file = fixture.root.path().join("owned.txt");
+        write(&file, b"owned bytes");
+        assert!(connection::remove_confirmed(&file, b"different bytes").is_err());
+        assert_eq!(std::fs::read(&file).unwrap(), b"owned bytes");
+        let retained = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&file)
+            .unwrap();
+        assert!(connection::remove_confirmed(&file, b"owned bytes").is_err());
+        drop(retained);
+        connection::remove_confirmed(&file, b"owned bytes").unwrap();
+        assert!(!file.exists());
+    }
+
+    #[test]
+    fn narrowed_owned_directory_acl_is_refused_without_repair() {
+        let fixture = Fixture::new();
+        let directory = &fixture.selection.state_directory;
+        connection::verify_full_directory(&safety::check_private(directory, true).unwrap())
+            .unwrap();
+        let sid = crate::private_file_windows::current_user_sid().unwrap();
+        assert!(ProcessCommand::new("icacls")
+            .arg(directory)
+            .args(["/grant:r", &format!("*{sid}:(OI)(CI)R")])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .unwrap()
+            .success());
+        let observed = safety::check_private(directory, true).unwrap();
+        assert!(connection::verify_full_directory(&observed).is_err());
+        drop(observed);
+        assert!(std::fs::write(
+            directory.join("operator-rights-check"),
+            b"must remain refused"
+        )
+        .is_err());
     }
 
     #[tokio::test]

@@ -22,6 +22,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | --- | --- |
 | [Self-hosting](SELF_HOSTING.md) | Build and run the Agent, Gateway and optional Console |
 | [Managed Agent lifecycle](operations/AGENT_LIFECYCLE.md) | Install, verify, upgrade, roll back and remove a user-scoped Agent |
+| [Native Windows onboarding](operations/WINDOWS_ONBOARDING.md) | Preview, apply, verify, recover and remove one owned Windows MCP setup |
 | [Upgrading](UPGRADING.md) | Existing deployment compatibility and migration guidance |
 | [Production runbook](operations/PRODUCTION_RUNBOOK.md) | Readiness, operations, alerts and recovery |
 | [TLS rotation and recovery](operations/TLS_ROTATION.md) | Disposable Caddy certificate rotation, verifying clients and recovery |

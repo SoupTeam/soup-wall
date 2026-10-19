@@ -38,7 +38,7 @@ unsafe extern "system" fn on_control(code: u32) -> i32 {
     }
 }
 
-pub(super) fn install_control_handler() -> io::Result<()> {
+pub(crate) fn install_control_handler() -> io::Result<()> {
     if unsafe { SetConsoleCtrlHandler(Some(on_control), 1) } == 0 {
         return Err(io::Error::last_os_error());
     }
@@ -263,7 +263,7 @@ fn verify_security(file: &File, directory: bool, private: bool) -> io::Result<()
     Ok(())
 }
 
-pub(super) fn check_private(path: &Path, directory: bool) -> io::Result<File> {
+pub(crate) fn check_private(path: &Path, directory: bool) -> io::Result<File> {
     open(path, directory, false)
 }
 
@@ -333,7 +333,7 @@ pub(super) fn check_parent(path: &Path) -> io::Result<()> {
     verify_security(&file, true, false)
 }
 
-pub(super) struct Owned {
+pub(crate) struct Owned {
     pub child: Child,
     job: Arc<OwnedHandle>,
     monitor_done: Arc<AtomicBool>,
@@ -344,7 +344,7 @@ pub(super) struct Owned {
     log_bytes: Arc<std::sync::atomic::AtomicUsize>,
 }
 
-pub(super) struct StopRecord {
+pub(crate) struct StopRecord {
     pub reaped: bool,
     pub group_empty: bool,
     pub exit: Option<i32>,
