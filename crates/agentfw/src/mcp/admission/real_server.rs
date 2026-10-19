@@ -1159,10 +1159,12 @@ pub(super) async fn run(
             let host = super::DiagnosticOutput {
                 inner: host,
                 failed: Arc::clone(&boundary_failed),
+                liveness: None,
             };
             let mut host = super::DiagnosticOutput {
                 inner: host,
                 failed: Arc::clone(&owner_failed),
+                liveness: collector.liveness.clone(),
             };
             let result = {
                 let exchange = relay(
@@ -1200,6 +1202,18 @@ pub(super) async fn run(
         // flags also guard the actual host write, including a pending write.
         tokio::select! {
             biased;
+            _ = async {
+                if let Some(liveness) = &collector.liveness {
+                    loop {
+                        if liveness.is_uncertain() {
+                            return;
+                        }
+                        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                    }
+                } else {
+                    std::future::pending::<()>().await;
+                }
+            } => Err(anyhow::anyhow!("native_liveness_uncertain")),
             failure = owner.wait_failure() => match failure {
                 Err(error) => Err(error),
                 Ok(()) => Err(anyhow::anyhow!("mcp_owner_monitor_stopped")),
@@ -1208,6 +1222,7 @@ pub(super) async fn run(
                 Err(error) => Err(error),
                 Ok(()) => Err(anyhow::anyhow!("mcp_budget_monitor_stopped")),
             },
+            _ = tokio::signal::ctrl_c() => Err(anyhow::anyhow!("native_mcp_interrupted")),
             result = &mut transport => result,
         }
     };

@@ -232,6 +232,17 @@ jobs:
             target/mcp-admission-demo.json
             target/sou-22-real-baseline.json
           if-no-files-found: ignore
+      - name: Verify SOU-89 native liveness and autonomous reclamation
+        run: |
+          cargo build --locked -p agentfw
+          python3 scripts/verify-sou89-native-liveness.py --binary target/debug/agentfw --out target/sou89-acceptance
+      - name: Retain SOU-89 native liveness acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou89-native-liveness-acceptance
+          path: target/sou89-acceptance/
+          if-no-files-found: warn
 
   python-classifier:
     name: Python classifier and evaluation
@@ -359,6 +370,17 @@ jobs:
           name: sou18-suite-macos
           path: ${{ runner.temp }}/sou18-suite-${{ github.run_id }}-${{ github.run_attempt }}/
           if-no-files-found: warn
+      - name: Verify SOU-89 native liveness and autonomous reclamation on macOS
+        run: |
+          cargo build --locked -p agentfw
+          python3 scripts/verify-sou89-native-liveness.py --binary target/debug/agentfw --out target/sou89-acceptance-macos
+      - name: Retain SOU-89 native liveness macOS evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou89-native-liveness-acceptance-macos
+          path: target/sou89-acceptance-macos/
+          if-no-files-found: warn
 
   agent-lifecycle-macos:
     needs: impact
@@ -445,6 +467,8 @@ jobs:
       # Each MCP case owns real processes and protected profile files. Avoid a
       # startup burst on Windows; explicit within-case concurrency remains tested.
       - run: cargo test --locked -p agentfw -- --test-threads=1
+      - name: Parallel native profile recovery and ownership regressions
+        run: cargo test --locked -p agentfw --lib mcp::profile_lifecycle::tests::recovery_ -- --nocapture --test-threads=2
       - name: Verify lifecycle under a disposable standard Windows user
         shell: pwsh
         run: |
