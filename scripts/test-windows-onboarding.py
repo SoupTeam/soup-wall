@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import ctypes
 from ctypes import wintypes
 import hashlib
@@ -233,15 +234,46 @@ class Acceptance:
         return {"self_test_scenarios": len(report["scenarios"]), "protected_send_executions": report["scenarios"][2]["observed"]["mcp_child_executions"]}
 
     def probe(self):
-        lifecycle = read(self.home / "versions" / "lifecycle.json")
-        agent = self.home / "versions" / lifecycle["active"]["binary"]
-        command = [str(agent), "mcp-connection", "inspect", "--path", str(self.host), "--server", "notes",
-                   "--home", str(self.home), "--agent", str(agent), "--runtime", str(self.home / "runtime.json"),
-                   "--probe-tool", "read_document", "--probe-args", '{"name":"project-notes"}']
-        result = subprocess.run(command, cwd=self.root, env=self.env, capture_output=True, timeout=20)
-        require(result.returncode == 0 and json.loads(result.stdout)["status"] == "verified_for_this_probe", "configured connection useful read failed")
+        entry = read(self.host)["mcpServers"]["notes"]
+        require(entry["args"][:2] == ["mcp-connection", "collector"], "configured wrapper is missing")
+        before = self.ledger.read_text().splitlines()
+        frames = [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+                "protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "onboarding", "version": "1"}}},
+            {"jsonrpc": "2.0", "method": "notifications/initialized"},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+                "name": "read_document", "arguments": {"name": "project-notes"}}},
+        ]
+        child = subprocess.Popen([entry["command"], *entry["args"]], cwd=self.root,
+            env={"SystemRoot": os.environ["SystemRoot"]}, stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        reader = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        try:
+            for frame in frames:
+                child.stdin.write(json.dumps(frame).encode() + b"\n")
+                child.stdin.flush()
+                if "id" not in frame:
+                    continue
+                line = reader.submit(child.stdout.readline, 512 * 1024 + 1).result(timeout=25)
+                require(line.endswith(b"\n") and len(line) <= 512 * 1024, "missing or oversized MCP reply")
+                reply = json.loads(line)
+                require(reply.get("id") == frame["id"] and "error" not in reply and "result" in reply,
+                        "configured connection refused the MCP request")
+            require(reply["result"].get("isError") is not True and reply["result"].get("content") == [
+                {"type": "text", "text": "Controlled onboarding notes."}], "configured connection returned the wrong note")
+            child.stdin.close()
+            child.stdin = None
+            child.communicate(timeout=10)
+            require(child.returncode == 0, "configured connection did not stop cleanly")
+        finally:
+            if child.poll() is None:
+                child.kill()
+                child.communicate(timeout=10)
+            reader.shutdown(wait=True)
         calls = [json.loads(line) for line in self.ledger.read_text().splitlines()]
-        require(calls and all(call["params"]["name"] == "read_document" for call in calls), "unexpected MCP child execution")
+        require(len(calls) == len(before) + 1 and all(call["params"]["name"] == "read_document" for call in calls),
+                "unexpected MCP child execution")
         return {"useful_read_executed": True, "no_send_execution": True}
 
     def conflict(self):

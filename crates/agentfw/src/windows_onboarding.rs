@@ -593,6 +593,14 @@ mod tests {
         let sid = crate::private_file_windows::current_user_sid().unwrap();
         assert!(ProcessCommand::new("icacls")
             .arg(directory)
+            .args(["/remove:g", &format!("*{sid}")])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .unwrap()
+            .success());
+        assert!(ProcessCommand::new("icacls")
+            .arg(directory)
             .args(["/grant:r", &format!("*{sid}:(OI)(CI)R")])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
