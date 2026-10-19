@@ -13,6 +13,14 @@ proactive bounded daemon maintenance reclamation, and a unified terminal retirem
 that restores capacity within a predeclared finite cleanup deadline while strictly preserving
 shared-host risk, taint floors, and audit integrity.
 
+Selected Linux qualification includes 70 original filesystem and 70 original Git
+startup/crash/cleanup cycles. Its disposable CI service has a finite 25-minute
+wall budget inside a 45-minute job; individual lease, reclamation, owner and
+resource bounds remain unchanged. The driver atomically checkpoints incomplete
+reports and completed process/kernel witnesses so interruption retains useful
+evidence. An incomplete checkpoint always fails qualification; only the final
+grader can publish a pass.
+
 ---
 
 ## Authenticated native liveness contract (`sw-native-liveness/1`)

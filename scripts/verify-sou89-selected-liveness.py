@@ -561,12 +561,38 @@ def grade_selected_report(report: dict, required_cases: list[str]) -> None:
         require(req_case in completed_cases, f'required_case_missing_{req_case}')
 
 
+def write_selected_report(path: Path, report: dict) -> None:
+    """Publish atomically through the accepted marker filter and private mode."""
+    temporary = path.with_suffix('.checkpoint.tmp')
+    try:
+        write(temporary, report)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def checkpoint_selected_report(path: Path, report: dict, phase: str) -> None:
+    """Retain incomplete evidence even if the disposable service is killed.
+
+    Only the existing final grader can publish a pass. Atomic replacement keeps
+    the previous complete checkpoint readable if a write is interrupted.
+    """
+    snapshot = dict(report)
+    completed = report.get('completed_churn_clients', [])
+    snapshot.update(status='incomplete', failed=max(1, report.get('failed', 0)),
+                    passed=sum(c.get('passed') is True for c in report.get('checks', [])),
+                    progress={'phase': phase, 'monotonic_seconds': time.monotonic(),
+                              'churn_completed': {kind: sum(row.get('profile') == kind for row in completed)
+                                                  for kind in ('filesystem', 'git')}})
+    write_selected_report(path, snapshot)
+
+
 def summary(report: dict) -> dict:
     bounded = {
         key: report.get(key)
         for key in (
             'format', 'mode', 'status', 'selected_production_acceptance',
-            'error', 'passed', 'failed', 'checks_count',
+            'error', 'passed', 'failed', 'checks_count', 'progress',
             'platform', 'machine', 'runtime_source_commit',
             'binary_sha256', 'git_binary_sha256', 'git_launcher_sha256',
             'source_before', 'source_after', 'binary_unchanged', 'driver_sha256',
@@ -660,10 +686,12 @@ def run_selected_acceptance(args) -> int:
                 fs_private.mkdir(mode=0o700)
                 git_private.mkdir(mode=0o700)
 
+                checkpoint_selected_report(report_file, report, 'filesystem_setup')
                 # Initialize real filesystem rig with Node @modelcontextprotocol/server-filesystem and native.liveness
                 fs = SelectedLivenessRig(args, fs_private, delegation, lease_secs=4, maint_interval_ms=100)
                 SOU86.install_fixture(fs)
 
+                checkpoint_selected_report(report_file, report, 'git_setup')
                 # Initialize real Git rig with pinned Git and native.liveness
                 git = SelectedLivenessGitRig(args, git_private, delegation, lease_secs=4, maint_interval_ms=100)
 
@@ -673,6 +701,7 @@ def run_selected_acceptance(args) -> int:
 
                 # Execute required acceptance cases for both profiles
                 for rig, kind in ((fs, 'filesystem'), (git, 'git')):
+                    checkpoint_selected_report(report_file, report, f'{kind}_lifecycle_cases')
                     reg_sha = rig.config['native']['registry_sha256']
                     status, inst_info = http_get(rig.instance_url, rig.native_token)
                     require(status == 200, f'{kind}_instance_query_failed')
@@ -731,6 +760,7 @@ def run_selected_acceptance(args) -> int:
                     check_sigkill['passed'] = True
                     check_sigkill['details']['reclaimed_autonomously'] = True
 
+                    checkpoint_selected_report(report_file, report, f'{kind}_idle_renewal')
                     # Case 2: Healthy-idle renewal followed by original useful work across complete lease periods
                     renew_client = SelectedLivenessClient(rig, f'{kind}-idle-renewal', lease_secs=4)
                     renew_client.initialize()
@@ -764,6 +794,7 @@ def run_selected_acceptance(args) -> int:
                         },
                     })
 
+                    checkpoint_selected_report(report_file, report, f'{kind}_sibling_isolation')
                     # Case 3: Surviving sibling remains healthy and useful after peer SIGKILL
                     sibling_a = SelectedLivenessClient(rig, f'{kind}-sibling-a', lease_secs=4)
                     # Pin A's independently observed cgroup and native epoch before
@@ -831,14 +862,20 @@ def run_selected_acceptance(args) -> int:
                 # Run 70 cycles on filesystem (> 64) and 70 cycles on Git (> 64)
                 churn_cycles = 70
                 for churn_rig, churn_kind in ((fs, 'filesystem'), (git, 'git')):
+                    checkpoint_selected_report(report_file, report, f'churn_{churn_kind}')
                     for i in range(churn_cycles):
                         c = SelectedLivenessClient(churn_rig, f'churn-{churn_kind}-{i}', lease_secs=2)
                         c.initialize()
-                        useful(c)
+                        useful_hash = useful(c)
                         os.kill(c.process.pid, signal.SIGKILL)
                         c_res = c.close(expect_failure=True)
                         grade_client_close(c_res, f'churn_{churn_kind}_{i}', expect_failure=True,
                                            expected_signal=signal.SIGKILL, require_kernel=bool(churn_rig.delegation))
+                        report.setdefault('completed_churn_clients', []).append({
+                            'profile': churn_kind, 'cycle': i + 1,
+                            'useful_sha256': useful_hash, 'client': c_res,
+                        })
+                        checkpoint_selected_report(report_file, report, f'churn_{churn_kind}')
                         if i % 14 == 13:
                             time.sleep(2.5)
 
@@ -856,6 +893,7 @@ def run_selected_acceptance(args) -> int:
                     'cycles_per_profile': churn_cycles,
                 })
 
+                checkpoint_selected_report(report_file, report, 'stale_and_forged_requests')
                 # Case 5: Stale and forged requests rejected on both profiles
                 for s_rig, s_kind in ((fs, 'filesystem'), (git, 'git')):
                     s_inst_id = http_get(s_rig.instance_url, s_rig.native_token)[1]['instance_id']
@@ -1014,6 +1052,7 @@ def run_selected_acceptance(args) -> int:
                     'passed': True,
                 })
 
+                checkpoint_selected_report(report_file, report, 'old_result_replay')
                 # Case 6: Old result on retired session rejected on both filesystem and Git
                 for rep_rig, rep_kind in ((fs, 'filesystem'), (git, 'git')):
                     rep_reg_sha = rep_rig.config['native']['registry_sha256']
@@ -1069,6 +1108,7 @@ def run_selected_acceptance(args) -> int:
                     'passed': True,
                 })
 
+                checkpoint_selected_report(report_file, report, 'parent_cascade')
                 # Case 7: Parent expiration cascades to child and grandchild sessions and preserves shared risk
                 useful_sample = RESOURCE.call(10, str(fs.workspace / 'notes.txt'))
                 useful_tool_name = useful_sample['params']['name']
@@ -1255,6 +1295,7 @@ def run_selected_acceptance(args) -> int:
                     'sweep_delta_ms': abs(c_ms - p_ms),
                 }
 
+                checkpoint_selected_report(report_file, report, 'restart_uncertainty_and_shared_risk')
                 # Case 8: Daemon restart causes uncertainty, activates continuity barrier, and halts execution cleanly
                 r_home = private / 'restart_test'
                 r_home.mkdir(mode=0o700)
@@ -1697,7 +1738,7 @@ def run_selected_acceptance(args) -> int:
                 report['failed'] = max(report.get('failed', 0), 1)
                 report.setdefault('error', 'source_identity_observer_failed')
         report['checks_count'] = len(report.get('checks', []))
-        write(report_file, report)
+        write_selected_report(report_file, report)
 
     print(json.dumps(summary(report), indent=2))
     return 0 if report['status'] == 'pass' else 1

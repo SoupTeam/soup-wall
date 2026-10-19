@@ -19,7 +19,7 @@ jobs:
     needs: impact
     if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'required-disposable-linux-crash-supervision')
     runs-on: ubuntu-22.04
-    timeout-minutes: 35
+    timeout-minutes: 45
     env:
       RUSTUP_TOOLCHAIN: '1.94.1'
       SOU86_ACCEPTED: '2af2f35b326e0f70660b5c4cbde8134fe4ab9751'
@@ -139,13 +139,15 @@ jobs:
           set -euo pipefail
           # The accepted SOU-86 delegation helper requires its owned namespace.
           # The preceding service is collected; this launch must be fresh again.
+          # The harness covers 140 full startup/crash/cleanup cycles. Its finite
+          # outer wall budget does not change any per-case lease or cleanup deadline.
           unit="sou86-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          sudo systemd-run --quiet --wait --pipe --collect --unit="$unit" \
+          sudo systemd-run --wait --pipe --collect --unit="$unit" \
             --property="User=$(id -un)" --property="Group=$(id -gn)" \
             --property='Delegate=cpu memory pids' \
             --property=MemoryMax=2G --property=MemorySwapMax=0 \
             --property=TasksMax=256 --property=CPUQuota=200% \
-            --property=RuntimeMaxSec=15min --property=KillMode=control-group \
+            --property=RuntimeMaxSec=25min --property=KillMode=control-group \
             --working-directory="$GITHUB_WORKSPACE" \
             /usr/bin/env "PATH=$PATH" "TMPDIR=$RUNNER_TEMP" \
             python3 -B scripts/verify-sou89-selected-liveness.py --run \

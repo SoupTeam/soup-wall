@@ -1419,7 +1419,7 @@ def test_source_observer_failure_retains_failed_report():
 
     exec(compiled, {'BASE': SimpleNamespace(source=unavailable), 'report': report,
                     'report_file': Path('/owned/output/report.json'),
-                    'write': lambda path, value: written.append(copy.deepcopy(value))})
+                    'write_selected_report': lambda path, value: written.append(copy.deepcopy(value))})
     assert len(written) == 1 and written[0]['status'] == 'fail'
     assert written[0]['error'] == 'source_identity_observer_failed'
     assert written[0]['failed'] == 1
