@@ -32,6 +32,10 @@ SCHEMA = {"type": "object", "properties": {}, "additionalProperties": False}
 CASES = ("useful", "breakaway", "memory", "memory-hard", "process", "cpu", "wall", "cancel", "collector-death",
          "restart-0", "restart-1", "restart-2", "restart-3", "restart-4", "restart-5",
          "missing-config", "invalid-config", "unsafe-acl", "spawn-failure", "transparent-refusal")
+LAUNCH_CONTROLS = (
+    "mcp::native_child::tests::atomic_job_list_owns_suspended_child_even_if_owner_dies_before_resume",
+    "mcp::native_child::tests::atomic_launch_refuses_non_job_without_executing_child",
+)
 REFUSALS = {"missing-config": "windows_budget_configuration_refused",
             "invalid-config": "windows_budget_configuration_refused",
             "unsafe-acl": "windows_budget_configuration_refused",
@@ -582,8 +586,33 @@ def grade(row):
         require(wall_seconds <= row["elapsed_seconds"] <= wall_seconds + 8, "wall_cleanup_late")
 
 
+def grade_launch_controls(controls):
+    require(len(controls) == len(LAUNCH_CONTROLS) and {item.get("test") for item in controls} == set(LAUNCH_CONTROLS),
+            "atomic_launch_control_missing")
+    for item in controls:
+        require(item.get("exit_code") == 0 and item.get("exact_one_passed") is True,
+                "atomic_launch_control_failed_or_skipped")
+
+
+def launch_controls(binary, root, report):
+    controls = report["atomic_launch_controls"]
+    for name in LAUNCH_CONTROLS:
+        # Execute the actual candidate's compiled Rust regressions, as this same
+        # genuine standard user and after the finite outer Job is established.
+        result = subprocess.run([str(binary), name, "--exact", "--test-threads=1"],
+                                cwd=root, capture_output=True, timeout=10)
+        require(len(result.stdout) + len(result.stderr) <= 32768, "launch_control_output_bound")
+        controls.append({"test": name, "exit_code": result.returncode,
+                         "exact_one_passed": (b"test result: ok. 1 passed; 0 failed; 0 ignored;" in result.stdout
+                                              and ("test " + name + " ... ok").encode() in result.stdout),
+                         "stdout_sha256": sha(result.stdout), "stderr_sha256": sha(result.stderr)})
+        save(root / "results.json", report)
+    grade_launch_controls(controls)
+
+
 def grade_report(report):
     require(report.get("format") == FORMAT and report.get("status") == "pass", "report_incomplete")
+    grade_launch_controls(report.get("atomic_launch_controls", []))
     rows = report["cases"]
     require(len(rows) == len(CASES) and {row["case"] for row in rows} == set(CASES)
             and report.get("not_run") == [], "required_case_missing_or_duplicated")
@@ -608,7 +637,8 @@ def run(args):
     require(len(args.source_commit) == 40 and all(c in "0123456789abcdef" for c in args.source_commit), "source_identity_invalid")
     report = {"format": FORMAT, "status": "incomplete", "source_commit": args.source_commit,
               "source_manifest_sha256": sha(args.source_manifest.read_bytes()),
-              "binary_sha256": sha(args.agentfw.read_bytes()), "harness_sha256": sha(Path(__file__).read_bytes()),
+              "binary_sha256": sha(args.agentfw.read_bytes()),
+              "native_test_binary_sha256": sha(args.native_test_binary.read_bytes()), "atomic_launch_controls": [], "harness_sha256": sha(Path(__file__).read_bytes()),
               "windows_version": platform.version(), "architecture": platform.machine(),
               "python_version": platform.python_version(), "python_binary_sha256": sha(Path(sys.executable).read_bytes()),
               "fixture_sha256": sha(SERVER.encode()),
@@ -636,6 +666,7 @@ def run(args):
         require(ctypes.WinDLL("shell32").IsUserAnAdmin() == 0, "non_elevated_user_required")
         report.update(standard_user=True, administrator_group_present=False)
         api = Windows()
+        launch_controls(args.native_test_binary.resolve(), root, report)
         rig = Rig(api, args.agentfw.resolve(), root)
         report.update(rig.identities)
         peer = Client(rig, "sibling")
@@ -704,6 +735,7 @@ def main():
     parser.add_argument("--grade-report", type=Path)
     parser.add_argument("--agentfw", type=Path)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--native-test-binary", type=Path)
     parser.add_argument("--source-commit")
     parser.add_argument("--source-manifest", type=Path)
     args = parser.parse_args()
@@ -714,7 +746,7 @@ def main():
         return 0
     if not args.run or args.grade_report:
         parser.error("execution requires --run")
-    if not all((args.agentfw, args.output, args.source_commit, args.source_manifest)):
+    if not all((args.agentfw, args.native_test_binary, args.output, args.source_commit, args.source_manifest)):
         parser.error("execution requires binary, output and exact source identities")
     if os.name != "nt":
         print("native_windows_required", file=sys.stderr)

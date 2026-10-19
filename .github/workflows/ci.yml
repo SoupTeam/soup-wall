@@ -501,8 +501,14 @@ jobs:
       - name: Aggregate MCP budgets under a standard Windows user
         shell: pwsh
         run: |
+          $messages = & cargo test --locked -p agentfw --lib --no-run --message-format=json
+          if ($LASTEXITCODE -ne 0) { throw 'Native budget test build failed' }
+          $artifacts = @($messages | ForEach-Object { $_ | ConvertFrom-Json } | Where-Object {
+            $_.reason -eq 'compiler-artifact' -and $_.target.name -eq 'agentfw' -and $_.executable -and $_.profile.test
+          })
+          if ($artifacts.Count -ne 1) { throw 'Expected exactly one native budget test executable' }
           ./scripts/ci-windows-mcp-budgets.ps1 -AgentBinary target/debug/agentfw.exe `
-            -Commit $env:GITHUB_SHA `
+            -NativeTestBinary $artifacts[0].executable -Commit $env:GITHUB_SHA `
             -OutputDirectory "$env:RUNNER_TEMP/windows-mcp-budgets-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
       - name: Retain all Windows MCP budget outcomes
         if: always()

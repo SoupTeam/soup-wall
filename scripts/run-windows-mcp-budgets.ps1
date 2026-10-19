@@ -28,6 +28,7 @@ try {
         $ErrorActionPreference = 'Continue'
         & $Python -I -B (Join-Path $rootPath 'verify-windows-mcp-budgets.py') --run `
             --agentfw (Join-Path $rootPath 'agentfw.exe') --source-commit $Commit `
+            --native-test-binary (Join-Path $rootPath 'native-tests.exe') `
             --source-manifest (Join-Path $rootPath 'source-manifest.json') --output $out 2>&1 |
             ForEach-Object {
                 $line = $_.ToString()

@@ -109,10 +109,16 @@ for every tracked file. Work from a fresh private directory outside the checkout
 ```powershell
 python -I C:\reviewed-source\scripts\verify-windows-mcp-budgets.py --run `
   --agentfw C:\private-acceptance\agentfw.exe `
+  --native-test-binary C:\private-acceptance\native-tests.exe `
   --source-commit <full-40-character-source-SHA> `
   --source-manifest C:\private-acceptance\source-manifest.json `
   --output C:\private-acceptance\new-evidence
 ```
+
+The native test binary must come from the same clean source (`cargo test --locked
+-p agentfw --lib --no-run --message-format=json` identifies the executable).
+The harness runs both atomic launch controls with `--exact` under this same
+standard user and finite outer Job; zero/ignored tests cannot count as a pass.
 
 The harness assigns itself to an outer finite Job **before** starting any Agent
 or fixture: 1 GiB committed memory, 64 processes, 120 seconds user CPU and a

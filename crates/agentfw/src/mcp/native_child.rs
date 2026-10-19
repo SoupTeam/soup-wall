@@ -1080,11 +1080,12 @@ mod tests {
         // Drop the last Job handle without resume, TerminateJobObject or a
         // direct kill. This is exactly the pre-execution owner-death window.
         drop(tree);
-        let status = tokio::time::timeout(CHILD_REAP, child.wait())
+        // A never-resumed child cannot exit itself. Completion after last Job
+        // close is the death witness; Windows owns the termination exit code.
+        let _status = tokio::time::timeout(CHILD_REAP, child.wait())
             .await
             .unwrap()
             .unwrap();
-        assert!(!status.success());
         let mut bytes = Vec::new();
         tokio::time::timeout(
             DRAIN_SHUTDOWN,

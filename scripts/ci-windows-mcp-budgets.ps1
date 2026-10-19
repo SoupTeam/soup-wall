@@ -3,6 +3,7 @@
 # operators run verify-windows-mcp-budgets.py directly as a standard user.
 param(
     [Parameter(Mandatory = $true)][string]$AgentBinary,
+    [Parameter(Mandatory = $true)][string]$NativeTestBinary,
     [Parameter(Mandatory = $true)][string]$OutputDirectory,
     [Parameter(Mandatory = $true)][ValidatePattern('^[0-9a-f]{40}$')][string]$Commit
 )
@@ -15,6 +16,7 @@ if (!$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $agent = (Resolve-Path -LiteralPath $AgentBinary).Path
+$nativeTests = (Resolve-Path -LiteralPath $NativeTestBinary).Path
 $python = (Get-Command python -CommandType Application).Source
 $out = [IO.Path]::GetFullPath($OutputDirectory)
 if (Test-Path -LiteralPath $out) { throw 'Refusing to overwrite budget evidence' }
@@ -27,6 +29,7 @@ $exitCode = 1
 $report = [ordered]@{
     format = 'sou96-windows-mcp-budget-launcher/1'; status = 'incomplete'; source_commit = $Commit
     binary_sha256 = (Get-FileHash -LiteralPath $agent -Algorithm SHA256).Hash.ToLowerInvariant()
+    native_test_binary_sha256 = (Get-FileHash -LiteralPath $nativeTests -Algorithm SHA256).Hash.ToLowerInvariant()
     source_manifest_sha256 = $null; child_exit_code = $null
     timeout_seconds = 240; timed_out = $false; account_removed = $false; staging_removed = $false
     error = $null
@@ -53,6 +56,7 @@ try {
     & icacls $stage /inheritance:r /grant:r "*$($identity.User.Value):(OI)(CI)F" "*$($user.SID.Value):(OI)(CI)F" '*S-1-5-18:(OI)(CI)F' | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'staging_acl_setup_failed' }
     Copy-Item -LiteralPath $agent -Destination (Join-Path $stage 'agentfw.exe')
+    Copy-Item -LiteralPath $nativeTests -Destination (Join-Path $stage 'native-tests.exe')
     Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $stage 'source-manifest.json')
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'verify-windows-mcp-budgets.py') -Destination $stage
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'run-windows-mcp-budgets.ps1') -Destination $stage
@@ -71,6 +75,9 @@ try {
     if ($process.ExitCode -ne 0 -or $child.status -ne 'pass' -or $child.standard_user -ne $true -or
         $child.administrator_group_present -ne $false -or $child.source_commit -ne $Commit -or
         $child.binary_sha256 -ne $report.binary_sha256 -or
+        $child.native_test_binary_sha256 -ne $report.native_test_binary_sha256 -or
+        $child.atomic_launch_controls.Count -ne 2 -or
+        @($child.atomic_launch_controls | Where-Object { $_.exit_code -ne 0 -or !$_.exact_one_passed }).Count -ne 0 -or
         $child.source_manifest_sha256 -ne $report.source_manifest_sha256 -or
         $child.cases.Count -ne 20 -or @($child.cases | Where-Object { !$_.passed -or !$_.sibling_useful }).Count -ne 0) {
         throw 'native_qualification_incomplete'

@@ -97,6 +97,15 @@ class ReportGrading(unittest.TestCase):
         self.assertEqual(H.refusal_code(b"Error: native_child_spawn"), "native_child_spawn")
         self.assertIsNone(H.refusal_code(b"native_child_spawn windows_budget_configuration_refused"))
 
+    def test_atomic_launch_controls_cannot_pass_by_zero_tests_or_skips(self):
+        controls = [{"test": name, "exit_code": 0, "exact_one_passed": True} for name in H.LAUNCH_CONTROLS]
+        H.grade_launch_controls(controls)
+        with self.assertRaises(ValueError):
+            H.grade_launch_controls(controls[:1])
+        controls[0]["exact_one_passed"] = False
+        with self.assertRaises(ValueError):
+            H.grade_launch_controls(controls)
+
     def test_case_set_contains_every_required_positive_and_restart(self):
         self.assertEqual(len(H.CASES), 20)
         self.assertEqual(len(set(H.CASES)), len(H.CASES))
