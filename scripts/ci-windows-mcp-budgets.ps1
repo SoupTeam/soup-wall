@@ -54,8 +54,11 @@ try {
     $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding utf8NoBOM
     $report.source_manifest_sha256 = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
     $report.phase = 'python_runtime_probe'
-    $pythonCommand = (Get-Command python -CommandType Application).Source
-    $runtimeText = & $pythonCommand -I -B -c 'import json,sys,struct; print(json.dumps({"prefix":sys.base_prefix,"bits":struct.calcsize("P")*8}))'
+    # Invoke the same command as the preceding workflow fixture checks. Command
+    # discovery can return several applications; treating their Source values as
+    # one executable path fails before Python starts. Ask the running interpreter
+    # for its real base runtime instead of copying a PATH shim.
+    $runtimeText = & python -I -B -c 'import json,sys,struct; print(json.dumps(dict(prefix=sys.base_prefix,bits=struct.calcsize(''P'')*8)))'
     if ($LASTEXITCODE -ne 0) { throw 'python_runtime_probe_failed' }
     $runtimeInfo = $runtimeText | ConvertFrom-Json
     if ($runtimeInfo.bits -ne 64) { throw 'native_64bit_python_required' }
