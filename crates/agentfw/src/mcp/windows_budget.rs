@@ -106,6 +106,8 @@ impl Config {
 #[cfg(windows)]
 mod backend;
 #[cfg(windows)]
+pub(crate) mod launch;
+#[cfg(windows)]
 pub(crate) use backend::{Budget, Guard};
 
 #[cfg(not(windows))]

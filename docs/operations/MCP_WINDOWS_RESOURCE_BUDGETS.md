@@ -41,8 +41,13 @@ No configuration paths or account identifiers enter the budget diagnostics.
 Version 1 chooses CPU time, not a CPU rate guarantee. Kernel-mode CPU time is
 reported separately and is not included in the user-time ceiling. Working-set,
 reserved address-space, machine-wide commit, filesystem space and unrelated
-processes are not covered by `memoryMaxBytes`. A 32-bit collector refuses a
-ceiling it cannot represent. Unsupported API/OS or inherited-Job combinations
+processes are not covered by `memoryMaxBytes`. Version 1 requires 64-bit Windows
+10/Server 2016 or newer and an absolute local disk `.exe` command. Relative PATH
+lookup, batch/UNC/device commands and non-ASCII environment names are refused.
+Argument/environment values preserve UTF-16, including Unicode and quotes.
+The private launch adapter accepts the native collector builder’s inherited
+environment plus explicit additions/removals; it is not a general `Command`
+replacement supporting `env_clear` or `raw_arg`. Unsupported API/OS or inherited-Job combinations
 fail closed; limits are never silently omitted. A missing environment variable
 preserves normal behavior; a set variable naming a missing/invalid file refuses
 launch. Transparent proxy mode and original-server sandbox selection refuse this
@@ -53,10 +58,16 @@ option. Linux cgroup budgets remain a separate configuration and implementation.
 The unnamed, non-inheritable Job has kill-on-close, aggregate memory, active
 process and aggregate CPU-time limits installed before the suspended child is
 created. Its private completion port and memory-pressure notification are also
-installed before execution. Assignment and membership verification must succeed
-before the single primary thread is resumed. Spawn, configuration, assignment,
-thread discovery and resume failures kill/reap the suspended child; there is no
-unowned fallback. Native nested Jobs are supported when Windows accepts the
+installed before execution. The configured launch uses
+[`PROC_THREAD_ATTRIBUTE_JOB_LIST`](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute)
+to create the process **already inside** the Job. Collector death between process
+creation and resume therefore closes the last Job handle and terminates the
+suspended process. Membership verification must succeed before its single
+primary thread is resumed. An explicit three-handle list inherits only private
+stdin/stdout/stderr pipe ends; Job, completion-port and parent pipe handles are
+not inherited. Spawn, configuration or atomic assignment failure cannot create
+an unowned running server; resume failure terminates/reaps the owned child.
+There is no unowned fallback. Native nested Jobs are supported when Windows accepts the
 hierarchy, including a more restrictive inherited parent. Neither breakaway flag
 is enabled. An incompatible inherited Job is refused before server instructions.
 
@@ -118,12 +129,18 @@ case. Real process handles, birth times, per-process committed-memory/CPU
 counters, exit observations and an already executed file effect are independent
 of the collector's budget diagnostics. Late results, forced cleanup, missing
 witnesses and partial runs cannot pass. The real suspended assignment failure
-also has a focused native Windows Rust regression using an actual incompatible
-kernel handle, without a production fault-injection option.
+also has focused native Windows Rust regressions using an actual incompatible
+kernel handle and closing the last Job handle before resume, without a production
+fault-injection option. Refusal scenarios require the specific expected fixed
+reason, not merely a nonzero exit code. The acceptance explicitly opts into the
+existing authenticated native liveness lease (2 seconds) to witness autonomous
+pending-authority expiry after collector death; resource opt-in does not silently
+enable or change liveness defaults.
 
 `results.json` retains every completed case, failure/incomplete status, source
-manifest/binary/harness/configuration hashes, bounded counters and cleanup
-outcomes. Raw server stdout/stderr, private payloads, credentials and arbitrary
+manifest/binary/Python/fixture/harness/configuration hashes, bounded counters and cleanup
+outcomes. Bootstrap failures before the first case retain sanitized exception
+type, OS error number and function/line identities. Raw server stdout/stderr, private payloads, credentials and arbitrary
 local paths are not shareable evidence. Preserve failed and late reports.
 
 The existing central Ready-for-review `agent-windows-security` job builds the

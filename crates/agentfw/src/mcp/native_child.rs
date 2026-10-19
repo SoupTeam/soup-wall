@@ -12,8 +12,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use serde::Serialize;
-use tokio::io::{AsyncRead, AsyncReadExt};
-use tokio::process::{Child, Command};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
+use tokio::process::{Child as TokioChild, Command};
 use tokio::task::JoinHandle;
 use tokio::time::{timeout_at, Instant};
 
@@ -247,6 +247,84 @@ pub(crate) struct CleanupReport {
     pub failure: Option<&'static str>,
 }
 
+// One child-owner interface. The configured Windows launch supplies an atomic
+// Job-list creation primitive; all paths retain the same ProcessTree cleanup.
+enum ChildProcess {
+    Tokio(TokioChild),
+    #[cfg(windows)]
+    Budgeted(super::windows_budget::launch::Process),
+}
+
+pub(crate) struct Child {
+    pub(crate) stdin: Option<Box<dyn AsyncWrite + Send + Unpin>>,
+    pub(crate) stdout: Option<Box<dyn AsyncRead + Send + Unpin>>,
+    pub(crate) stderr: Option<Box<dyn AsyncRead + Send + Unpin>>,
+    process: ChildProcess,
+}
+
+impl Child {
+    fn from_tokio(mut process: TokioChild) -> Self {
+        Self {
+            stdin: process.stdin.take().map(|pipe| Box::new(pipe) as _),
+            stdout: process.stdout.take().map(|pipe| Box::new(pipe) as _),
+            stderr: process.stderr.take().map(|pipe| Box::new(pipe) as _),
+            process: ChildProcess::Tokio(process),
+        }
+    }
+    #[cfg(windows)]
+    pub(crate) fn budgeted(
+        process: super::windows_budget::launch::Process,
+        stdin: impl AsyncWrite + Send + Unpin + 'static,
+        stdout: impl AsyncRead + Send + Unpin + 'static,
+        stderr: impl AsyncRead + Send + Unpin + 'static,
+    ) -> Self {
+        Self {
+            stdin: Some(Box::new(stdin)),
+            stdout: Some(Box::new(stdout)),
+            stderr: Some(Box::new(stderr)),
+            process: ChildProcess::Budgeted(process),
+        }
+    }
+    pub(crate) fn id(&self) -> Option<u32> {
+        match &self.process {
+            ChildProcess::Tokio(child) => child.id(),
+            #[cfg(windows)]
+            ChildProcess::Budgeted(child) => Some(child.id()),
+        }
+    }
+    #[cfg(windows)]
+    fn raw_handle(&self) -> Option<std::os::windows::io::RawHandle> {
+        match &self.process {
+            ChildProcess::Tokio(child) => child.raw_handle(),
+            ChildProcess::Budgeted(child) => Some(child.raw_handle()),
+        }
+    }
+    fn start_kill(&mut self) -> std::io::Result<()> {
+        match &mut self.process {
+            ChildProcess::Tokio(child) => child.start_kill(),
+            #[cfg(windows)]
+            ChildProcess::Budgeted(child) => child.start_kill(),
+        }
+    }
+    async fn wait(&mut self) -> std::io::Result<std::process::ExitStatus> {
+        match &mut self.process {
+            ChildProcess::Tokio(child) => child.wait().await,
+            #[cfg(windows)]
+            ChildProcess::Budgeted(child) => child.wait().await,
+        }
+    }
+    #[cfg(windows)]
+    fn resume_budgeted(
+        &mut self,
+        job: &std::os::windows::io::OwnedHandle,
+    ) -> Result<(), &'static str> {
+        match &mut self.process {
+            ChildProcess::Budgeted(child) => child.resume(job),
+            ChildProcess::Tokio(_) => Err("windows_budget_launch_type"),
+        }
+    }
+}
+
 /// The direct child's PID must remain unreaped until the group is signalled.
 /// Callers may extract its stdio through child_mut(), but must not call wait(),
 /// try_wait(), kill() or otherwise reap it independently of cleanup().
@@ -287,7 +365,7 @@ impl OwnedChild {
             let pid = child.id().ok_or(ChildFailure("native_child_identity"))?;
             let pid = i32::try_from(pid).map_err(|_| ChildFailure("native_child_identity"))?;
             Ok(Self {
-                child,
+                child: Child::from_tokio(child),
                 tree: ProcessTree { pid, armed: true },
                 complete: None,
             })
@@ -299,6 +377,28 @@ impl OwnedChild {
                 .map(|config| super::windows_budget::Budget::install(tree.job.clone(), config))
                 .transpose()
                 .map_err(ChildFailure)?;
+            if let Some(budget) = budget {
+                let mut child =
+                    super::windows_budget::launch::spawn_suspended(command.as_std(), &tree.job)
+                        .await
+                        .map_err(ChildFailure)?;
+                if let Err(code) = budget
+                    .guard()
+                    .check()
+                    .and_then(|()| child.resume_budgeted(&tree.job))
+                {
+                    tree.terminate();
+                    let _ = child.start_kill();
+                    let _ = tokio::time::timeout(CHILD_REAP, child.wait()).await;
+                    return Err(ChildFailure(code));
+                }
+                return Ok(Self {
+                    child,
+                    tree,
+                    complete: None,
+                    budget: Some(budget),
+                });
+            }
             command.creation_flags(
                 windows_sys::Win32::System::Threading::CREATE_SUSPENDED
                     | windows_sys::Win32::System::Threading::CREATE_NO_WINDOW,
@@ -313,10 +413,10 @@ impl OwnedChild {
                 return Err(failure);
             }
             Ok(Self {
-                child,
+                child: Child::from_tokio(child),
                 tree,
                 complete: None,
-                budget,
+                budget: None,
             })
         }
         #[cfg(not(any(unix, windows)))]
@@ -608,7 +708,7 @@ impl ProcessTree {
             armed: true,
         })
     }
-    fn assign_and_resume(&mut self, child: &Child) -> Result<(), ChildFailure> {
+    fn assign_and_resume(&mut self, child: &TokioChild) -> Result<(), ChildFailure> {
         use std::os::windows::io::{AsRawHandle, FromRawHandle};
         use windows_sys::Win32::{
             Foundation::{GetLastError, ERROR_NO_MORE_FILES, INVALID_HANDLE_VALUE},
@@ -949,6 +1049,69 @@ mod tests {
         let report = child.cleanup(true).await;
         assert!(report.cleaned && report.reaped && report.exit_success && report.graceful_observed);
         assert_eq!(report.ownership, "windows_job");
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn atomic_job_list_owns_suspended_child_even_if_owner_dies_before_resume() {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::System::JobObjects::IsProcessInJob;
+        let tree = ProcessTree::new().unwrap();
+        let program = std::path::PathBuf::from(std::env::var_os("SystemRoot").unwrap())
+            .join("System32")
+            .join("cmd.exe");
+        let mut command = std::process::Command::new(program);
+        command.args(["/d", "/c", "echo", "SOU96_MUST_NOT_EXECUTE"]);
+        let mut child = super::super::windows_budget::launch::spawn_suspended(&command, &tree.job)
+            .await
+            .unwrap();
+        let mut member = 0;
+        assert_ne!(
+            unsafe {
+                IsProcessInJob(
+                    child.raw_handle().unwrap().cast(),
+                    tree.job.as_raw_handle().cast(),
+                    &mut member,
+                )
+            },
+            0
+        );
+        assert_eq!(member, 1);
+        // Drop the last Job handle without resume, TerminateJobObject or a
+        // direct kill. This is exactly the pre-execution owner-death window.
+        drop(tree);
+        let status = tokio::time::timeout(CHILD_REAP, child.wait())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(!status.success());
+        let mut bytes = Vec::new();
+        tokio::time::timeout(
+            DRAIN_SHUTDOWN,
+            child.stdout.take().unwrap().read_to_end(&mut bytes),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(bytes.is_empty());
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn atomic_launch_refuses_non_job_without_executing_child() {
+        use std::os::windows::io::FromRawHandle;
+        use windows_sys::Win32::System::Threading::CreateEventW;
+        let raw = unsafe { CreateEventW(std::ptr::null(), 0, 0, std::ptr::null()) };
+        assert!(!raw.is_null());
+        let event = unsafe { std::os::windows::io::OwnedHandle::from_raw_handle(raw.cast()) };
+        let mut command = std::process::Command::new(
+            std::path::PathBuf::from(std::env::var_os("SystemRoot").unwrap())
+                .join("System32")
+                .join("cmd.exe"),
+        );
+        command.args(["/d", "/c", "echo", "SOU96_MUST_NOT_EXECUTE"]);
+        let result = super::super::windows_budget::launch::spawn_suspended(&command, &event).await;
+        assert!(matches!(result, Err("windows_budget_launch_refused")));
     }
 
     #[cfg(windows)]

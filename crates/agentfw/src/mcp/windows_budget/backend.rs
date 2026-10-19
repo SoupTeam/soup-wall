@@ -205,6 +205,7 @@ impl Guard {
         match self.0.state.lock() {
             Ok(state) => serde_json::json!({"format":super::FORMAT,"configuration":self.0.config,
                 "configuration_sha256":self.0.config.identity(),"observed":*state,
+                "launch_ownership":"job_list_before_execution",
                 "elapsed_millis":self.0.started.elapsed().as_millis(),"poll_millis":POLL.as_millis(),
                 "scope":"aggregate_committed_memory_active_processes_user_cpu_time_wall",
                 "filesystem_network_confinement":false}),
