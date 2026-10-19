@@ -2,7 +2,8 @@
 
 Task: [SOU-90](https://linear.app/soup-wall/issue/SOU-90), 19 October 2026.
 
-Scope: local verification; standard-account CI pending.
+Scope: local verification of the revisions below. Current CI qualification
+and standard-account artifacts are available in [PR #197](https://github.com/SoupTeam/soup-wall/pull/197/checks).
 
 ## Implementation
 
@@ -112,11 +113,12 @@ synthetic protection and pending host reload. A running host still needs an
 explicit reload. Synthetic fixture results do not establish arbitrary-server
 sandboxing or live-model effectiveness.
 
-This filtered administrator token is not a clean standard account. Current-head
-standard-account CI, Windows regression/security jobs and review remain
-unverified. The shared CI component runs native qualification for eligible
-Ready for review PRs; Draft checks alone do not run it. Local evidence does not
-close SOU-90.
+This filtered administrator token is not a clean standard account. Acceptance
+requires current-head standard-account CI, Windows regression/security jobs
+and review. The `native-windows-onboarding` CI artifact contains the launcher,
+identity and acceptance reports plus the installed self-test in `results/`.
+The shared CI component runs native qualification for eligible Ready for review
+PRs; Draft checks alone do not run it. Local evidence alone does not close SOU-90.
 
 ## Reproduction and evidence
 
