@@ -156,7 +156,11 @@ fn system32(relative: &str) -> PathBuf {
 }
 
 fn powershell() -> Command {
-    Command::new(system32("WindowsPowerShell\\v1.0\\powershell.exe"))
+    let mut command = Command::new(system32("WindowsPowerShell\\v1.0\\powershell.exe"));
+    // Hosted runners export the PowerShell 7 module path, which Windows PowerShell 5.1
+    // cannot load `Microsoft.PowerShell.Security` from; the default path is the right one.
+    command.env_remove("PSModulePath");
+    command
 }
 
 fn run(command: &mut Command) -> String {
