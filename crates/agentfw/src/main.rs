@@ -438,16 +438,16 @@ fn main() -> anyhow::Result<()> {
                 .audit_retention
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("audit_retention is not configured"))?;
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", windows))]
             {
                 agentfw::audit::recover_retention(retention)?;
                 println!("Audit retention verified and ready");
                 Ok(())
             }
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(not(any(target_os = "linux", windows)))]
             {
                 let _ = retention;
-                anyhow::bail!("bounded audit retention is supported on Linux only")
+                anyhow::bail!("bounded audit retention is supported on Linux and Windows only")
             }
         }
         Cmd::Doctor(args) => std::process::exit(agentfw::doctor::run(args)),
@@ -868,13 +868,29 @@ fn main() -> anyhow::Result<()> {
                     "MCP native admission needs the existing daemon native token"
                 );
                 let token = agentfw::token::load_or_create(&token_path)?;
-                let native = agentfw::native::NativeState::load(installed, token)?;
+                let native = agentfw::native::NativeState::load(installed, token)?
+                    .with_policy_barrier(&home)?;
                 let manifest_token_path = home.join("token");
                 anyhow::ensure!(
                     manifest_token_path.is_file(),
                     "MCP native admission needs the existing daemon manifest token"
                 );
                 let manifest_token = agentfw::token::load_or_create(&manifest_token_path)?;
+                let liveness_env_enabled = std::env::var("AGENTFW_NATIVE_LIVENESS")
+                    .map(|v| {
+                        let v = v.trim().to_ascii_lowercase();
+                        v != "0" && v != "false" && v != "no" && v != "off"
+                    })
+                    .unwrap_or(false);
+                let env_lease_seconds = std::env::var("AGENTFW_NATIVE_LIVENESS_LEASE_SECONDS")
+                    .ok()
+                    .and_then(|v| v.trim().parse::<u64>().ok());
+                let liveness_opt_in = installed.liveness.is_some()
+                    || liveness_env_enabled
+                    || env_lease_seconds.is_some();
+                let liveness_url = liveness_opt_in.then(|| cfg.endpoint_url("/native/liveness/v1"));
+                let liveness_lease_seconds = env_lease_seconds
+                    .or_else(|| installed.liveness.as_ref().map(|l| l.default_lease_seconds));
                 let admission = agentfw::mcp::admission::AdmissionCfg {
                     host_session,
                     child_authority,
@@ -893,6 +909,8 @@ fn main() -> anyhow::Result<()> {
                             wait: Duration::from_secs(native_approval_wait_seconds.min(300)),
                         }
                     }),
+                    liveness_url,
+                    liveness_lease_seconds,
                 };
                 let runtime = tokio::runtime::Builder::new_multi_thread()
                     .enable_all()
@@ -1266,6 +1284,7 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
             .map(|native| {
                 let native_token = agentfw::token::load_or_create(&home.join("native-token"))?;
                 let state = agentfw::native::NativeState::load(native, native_token)?
+                    .with_policy_barrier(&home)?
                     .with_continuity(&home, &mut firewall)?;
                 match &native.approval {
                     Some(approval) => {
@@ -1303,6 +1322,15 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
     if let Some(managed) = agentfw::managed_sync::ManagedSync::from_environment(&home)? {
         managed.restore(&state)?;
         tokio::spawn(managed.run(state.clone()));
+    }
+
+    let (maint_tx, maint_rx) = tokio::sync::watch::channel(false);
+    let maint_tx = Arc::new(maint_tx);
+    if state.native.is_some() {
+        tokio::spawn(agentfw::native::liveness::run_maintenance_loop(
+            state.clone(),
+            maint_rx,
+        ));
     }
 
     let diagnostics =
@@ -1375,6 +1403,7 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
                 let health = stop_health.clone();
                 let token = stop_token.clone();
                 let shutdown = shutdown.clone();
+                let maint_tx = maint_tx.clone();
                 async move {
                     let authorized = headers
                         .get("authorization")
@@ -1390,6 +1419,7 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
                     if let Some(sender) = shutdown.lock().unwrap().take() {
                         let _ = sender.send(());
                     }
+                    let _ = maint_tx.send(true);
                     StatusCode::OK
                 }
             }),

@@ -1,0 +1,39 @@
+name: SOU-91 trusted CI admission
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+
+  workflow_run:
+    # Default-setup CodeQL uses a dynamic "PR #<number>" workflow name.
+    workflows: [ci, 'PR #*']
+    types: [completed]
+
+permissions:
+  actions: read
+  checks: read
+  contents: read
+  pull-requests: read
+  statuses: write
+
+concurrency:
+  group: sou91-admission-${{ github.event.pull_request.number || github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+
+jobs:
+  admission:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'dynamic'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Use the same trusted revision for the workflow and its admission scripts.
+      # An event base SHA can be stale. Never checkout PR code or PR artifacts.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Verify selected exact-source CI and CodeQL evidence
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SOU91_SELECTIVE_CI: ${{ vars.SOU91_SELECTIVE_CI }}
+        run: python3 scripts/ci_admission.py --wait-seconds 0

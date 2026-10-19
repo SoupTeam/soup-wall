@@ -1,18 +1,6 @@
 name: Constrained MCP file creation
 
 on:
-  pull_request:
-    paths:
-      - 'crates/agentfw/**'
-      - 'crates/agent/**'
-      - 'crates/adapter/**'
-      - 'rule_baseline/**'
-      - 'scripts/verify-sou54-create-*.py'
-      - 'scripts/fixtures/mcp_create_file_probe_server.py'
-      - 'scripts/fixtures/limited_create_file_agent.py'
-      - 'scripts/tests/test_sou54_create*.py'
-      - '.github/workflows/mcp-create-file.yml'
-      - 'Cargo.lock'
   workflow_dispatch:
 
 permissions:
@@ -23,7 +11,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: mcp-create-file.yml
   linux-create-file:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-create-file')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:

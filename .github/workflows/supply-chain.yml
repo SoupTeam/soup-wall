@@ -3,11 +3,6 @@
 name: supply-chain
 
 on:
-  push:
-    branches: [main]
-    paths-ignore: ["**.md", "docs/**"]
-  pull_request:
-    paths-ignore: ["**.md", "docs/**"]
   schedule:
     - cron: "41 4 * * 1"
   workflow_dispatch:
@@ -20,7 +15,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: supply-chain.yml
   cargo-audit:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'cargo-audit')
     name: Cargo audit
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -37,6 +38,8 @@ jobs:
       - run: cargo audit
 
   sbom:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'sbom')
     name: CycloneDX SBOM
     runs-on: ubuntu-latest
     timeout-minutes: 15

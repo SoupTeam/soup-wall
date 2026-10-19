@@ -1,20 +1,22 @@
 name: SOU-74 installed Agent doctor
 on:
-  pull_request:
-    paths:
-      - 'crates/agentfw/**'
-      - 'docs/operations/AGENT_DOCTOR.md'
-      - 'docs/operations/evidence/sou74/**'
-      - '.github/workflows/agent-doctor.yml'
-  push:
-    branches: [codex/sou-74-agent-doctor]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: agent-doctor.yml
   agent-doctor-linux:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'agent-doctor-linux')
     name: doctor-linux
     runs-on: ubuntu-24.04
     timeout-minutes: 25

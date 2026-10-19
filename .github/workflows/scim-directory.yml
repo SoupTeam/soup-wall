@@ -1,11 +1,5 @@
-﻿name: scim-directory
+name: scim-directory
 on:
-  pull_request:
-    paths:
-      - 'crates/proxy/**'
-      - 'scripts/scim-directory*'
-      - '.github/workflows/scim-directory.yml'
-      - 'Cargo.lock'
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,7 +7,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: scim-directory.yml
   interoperability:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'interoperability')
     strategy:
       fail-fast: false
       matrix:

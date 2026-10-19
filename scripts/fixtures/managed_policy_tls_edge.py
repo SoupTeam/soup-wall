@@ -84,6 +84,13 @@ class Handler(BaseHTTPRequestHandler):
             if len(payload) > MAX_BYTES:
                 self.send_error(502)
                 return
+            # Owned negative control: preserve the signed identity while
+            # changing its payload in transit. The Agent must reject it.
+            if (config.get("tamper_policy") is True and self.command == "GET"
+                    and self.path == "/agent/v1/policy" and response.status == 200):
+                candidate = json.loads(payload)
+                candidate["policy_yaml"] += "\n# owned SOU-82 tamper control\n"
+                payload = json.dumps(candidate).encode("utf-8")
             self.send_response(response.status)
             self.send_header("Content-Length", str(len(payload)))
             # The HTTPS test edge proxies only JSON Agent API responses.

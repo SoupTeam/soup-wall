@@ -1,17 +1,6 @@
 name: Provenance memory budgets
 
 on:
-  pull_request:
-    paths:
-      - 'crates/agent/**'
-      - 'crates/agentfw/**'
-      - 'scripts/verify-sou72-provenance-budget.py'
-      - 'scripts/tests/test_sou72_provenance_budget.py'
-      - 'scripts/verify-sou62-real-mcp.py'
-      - 'scripts/mcp-admission-demo.py'
-      - 'docs/operations/PROVENANCE_MEMORY.md'
-      - '.github/workflows/provenance-memory.yml'
-      - 'Cargo.lock'
   workflow_dispatch:
 
 permissions:
@@ -22,7 +11,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: provenance-memory.yml
   required-linux-native-mcp-budget:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'required-linux-native-mcp-budget')
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     env:

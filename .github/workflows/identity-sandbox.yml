@@ -1,11 +1,6 @@
 name: identity-sandbox
 
 on:
-  push:
-    branches: [main]
-    paths-ignore: ["**.md", "docs/**", "research/**"]
-  pull_request:
-    paths-ignore: ["**.md", "docs/**", "research/**"]
   workflow_dispatch:
 
 permissions:
@@ -16,7 +11,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: identity-sandbox.yml
   vendor-driver-safety:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'vendor-driver-safety')
     name: Keycloak driver offline safety
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -30,6 +31,8 @@ jobs:
         run: target/keycloak-driver-safety/bin/python -m unittest discover -s scripts/tests -p 'test_keycloak_saml_acceptance.py' -v
 
   local-idp-evidence:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'local-idp-evidence')
     name: OIDC SAML SCIM sandbox fixtures
     runs-on: ubuntu-latest
     timeout-minutes: 20

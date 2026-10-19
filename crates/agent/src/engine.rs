@@ -94,7 +94,8 @@ impl Outcome {
 
 /// Holds all per-session state. One instance serves many sessions.
 /// Actual managed policy attached to the running firewall, not a download receipt.
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ManagedActivePolicy {
     pub revision: String,
     pub deployment_sequence: u64,

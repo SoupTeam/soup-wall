@@ -14,6 +14,7 @@ use crate::mcp::resources::{
 
 pub const CONTRACT: &str = "sw-native/resources/1";
 pub const CREATE_CONTRACT: &str = "sw-native/resources/2";
+pub const POST_CONTRACT: &str = "sw-native/resources/6";
 pub const NETWORK_CONTRACT: &str = "sw-native/resources/3";
 pub const WINDOWS_READ_CONTRACT: &str = "sw-native/resources/4";
 pub const WINDOWS_CREATE_CONTRACT: &str = "sw-native/resources/5";
@@ -113,6 +114,46 @@ pub fn https_get_schema() -> Value {
     json!({"type":"object", "properties":{
         "url":{"type":"string", "minLength":1, "maxLength":2048}
     }, "required":["url"], "additionalProperties":false})
+}
+
+/// Explicit bounded POST; content type is operator-owned, not a caller header.
+pub fn https_post_schema() -> Value {
+    json!({"type":"object", "properties":{
+        "url":{"type":"string", "minLength":1, "maxLength":2048},
+        "body":{"type":"string", "maxLength":4096}
+    }, "required":["url", "body"], "additionalProperties":false})
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct PostBinding {
+    pub method: String,
+    pub executor_profile: String,
+    pub policy_sha256: String,
+    pub args_sha256: String,
+    pub authority_sha256: String,
+    pub content_type: String,
+    pub body_sha256: String,
+    pub body_bytes: usize,
+}
+impl PostBinding {
+    fn valid(&self) -> bool {
+        self.method == "POST"
+            && self.executor_profile == crate::mcp::https_post::EXECUTOR_PROFILE
+            && matches!(
+                self.content_type.as_str(),
+                "text/plain" | "application/json"
+            )
+            && self.body_bytes <= crate::mcp::https_post::MAX_POST_BODY_BYTES
+            && [
+                &self.policy_sha256,
+                &self.args_sha256,
+                &self.authority_sha256,
+                &self.body_sha256,
+            ]
+            .iter()
+            .all(|digest| super::is_digest(digest))
+    }
 }
 
 /// Exact network execution authority, additive to (never a replacement for)
@@ -292,6 +333,8 @@ pub struct Policy {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub network: Option<crate::mcp::https_get::HttpsGetAuthority>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub post: Option<crate::mcp::https_post::HttpsPostAuthority>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub windows_read: Option<WindowsReadPolicy>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub binding: Option<ToolBinding>,
@@ -314,12 +357,16 @@ pub struct Admission {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub network: Option<NetworkBinding>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub post: Option<PostBinding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub windows_read: Option<WindowsReadBinding>,
 }
 
 impl Admission {
     pub fn contract(&self) -> &'static str {
-        if self.windows_read.is_some() {
+        if self.post.is_some() {
+            POST_CONTRACT
+        } else if self.windows_read.is_some() {
             WINDOWS_READ_CONTRACT
         } else if self.network.is_some() {
             NETWORK_CONTRACT
@@ -347,6 +394,7 @@ impl Admission {
             || self.resources.is_empty()
             || self.resources.len() > 256
             || [
+                self.post.is_some(),
                 self.network.is_some(),
                 self.execution.is_some(),
                 self.windows_read.is_some(),
@@ -355,6 +403,7 @@ impl Admission {
             .filter(|present| *present)
             .count()
                 > 1
+            || self.post.as_ref().is_some_and(|post| !post.valid())
             || self.windows_read.as_ref().is_some_and(|read| !read.valid())
             || self
                 .network
@@ -401,7 +450,9 @@ impl Policy {
     }
 
     pub fn contract(&self) -> &'static str {
-        if self.is_windows_read() {
+        if self.post.is_some() {
+            POST_CONTRACT
+        } else if self.is_windows_read() {
             WINDOWS_READ_CONTRACT
         } else if self.network.is_some() {
             NETWORK_CONTRACT
@@ -418,6 +469,10 @@ impl Policy {
         self.effective_execution()
             .as_ref()
             .is_some_and(|e| e.operation == ExecutionOperation::CreateFile)
+    }
+
+    pub fn is_https_post(&self) -> bool {
+        self.post.is_some()
     }
 
     pub fn is_https_get(&self) -> bool {
@@ -527,6 +582,7 @@ impl Policy {
         anyhow::ensure!(
             [
                 self.execution.is_some(),
+                self.post.is_some(),
                 self.binding.is_some(),
                 self.network.is_some(),
                 self.windows_read.is_some(),
@@ -716,6 +772,42 @@ impl Policy {
                         port
                     },
                 "HTTPS GET authority must select one exact URL"
+            );
+        }
+        if let Some(post) = &self.post {
+            post.validate().map_err(anyhow::Error::msg)?;
+            let selector = &self.profile.selectors[0];
+            anyhow::ensure!(
+                tool.name == "https_post"
+                    && tool.action_class == soup_wall_agent::ActionClass::Network
+                    && matches!(tool.result_provenance, super::ResultProvenance::Untrusted)
+                    && tool.schema_sha256 == super::canonical_digest(&https_post_schema())
+                    && self.executor_sha256 == crate::mcp::https_post::executor_profile_sha256()
+                    && tool.egress.len() == 1
+                    && tool.egress[0].pointer == "/url"
+                    && matches!(tool.egress[0].kind, super::EgressKind::UrlHost)
+                    && !tool.egress[0].optional
+                    && self.profile.selectors.len() == 1
+                    && selector.pointer == "/url"
+                    && selector.kind == crate::mcp::resources::ResourceKind::Url
+                    && selector.aliases.is_empty()
+                    && !selector.optional
+                    && selector.default.is_none()
+                    && !selector.allow_missing_leaf
+                    && self.allowed_resources.len() == 1,
+                "invalid operator HTTPS POST policy"
+            );
+            let (canonical, host, port) =
+                crate::mcp::resources::canonical_url(&post.endpoint.exact_url)
+                    .map_err(anyhow::Error::msg)?;
+            anyhow::ensure!(
+                self.allowed_resources[0]
+                    == Resource::Url {
+                        canonical,
+                        host,
+                        port
+                    },
+                "HTTPS POST authority must select one exact URL"
             );
         }
         if self.is_create_file() && !self.is_windows_create() {
@@ -1083,6 +1175,7 @@ pub fn https_get_binding(policy: &Policy, args: &Value) -> Result<NetworkBinding
         .validate()
         .map_err(|_| "native_https_authority_invalid")?;
     if policy.execution.is_some()
+        || policy.post.is_some()
         || policy.windows_read.is_some()
         || policy.executor_sha256 != crate::mcp::https_get::executor_profile_sha256()
     {
@@ -1103,6 +1196,46 @@ pub fn https_get_binding(policy: &Policy, args: &Value) -> Result<NetworkBinding
         authority_sha256: authority
             .executor_id()
             .map_err(|_| "native_https_authority_invalid")?,
+    })
+}
+
+/// Exact original bytes, independent of semantic JSON equivalence.
+pub fn https_post_binding(policy: &Policy, args: &Value) -> Result<PostBinding, &'static str> {
+    let authority = policy
+        .post
+        .as_ref()
+        .ok_or("native_post_authority_missing")?;
+    if policy.execution.is_some()
+        || policy.windows_read.is_some()
+        || policy.network.is_some()
+        || policy.binding.is_some()
+        || policy.executor_sha256 != crate::mcp::https_post::executor_profile_sha256()
+    {
+        return Err("native_post_executor_revision_mismatch");
+    }
+    let object = args.as_object().ok_or("native_post_arguments_invalid")?;
+    let body = args["body"]
+        .as_str()
+        .ok_or("native_post_arguments_invalid")?;
+    if object.len() != 2 || args["url"].as_str() != Some(authority.endpoint.exact_url.as_str()) {
+        return Err("native_post_url_not_allowed");
+    }
+    authority
+        .validate_body(body)
+        .map_err(|_| "native_post_body_or_authority_invalid")?;
+    Ok(PostBinding {
+        method: "POST".into(),
+        executor_profile: crate::mcp::https_post::EXECUTOR_PROFILE.into(),
+        policy_sha256: super::canonical_digest(
+            &serde_json::to_value(policy).expect("policy serializes"),
+        ),
+        args_sha256: super::canonical_digest(args),
+        authority_sha256: authority
+            .executor_id()
+            .map_err(|_| "native_post_authority_invalid")?,
+        content_type: authority.content_type.clone(),
+        body_sha256: super::hash(body.as_bytes()),
+        body_bytes: body.len(),
     })
 }
 
@@ -1295,6 +1428,11 @@ pub fn authorize(
         let derived = create_file_binding(policy, args)?;
         if &derived != bound {
             return Err("native_create_binding_mismatch");
+        }
+    }
+    if let Some(bound) = &admission.post {
+        if &https_post_binding(policy, args)? != bound {
+            return Err("native_post_binding_mismatch");
         }
     }
     if let Some(bound) = &admission.network {
@@ -1630,6 +1768,7 @@ mod tests {
             resources,
             execution: Some(create_file_binding(policy, args).unwrap()),
             network: None,
+            post: None,
             windows_read: None,
         }
     }

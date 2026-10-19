@@ -1,10 +1,5 @@
 name: Agent fleet projection
 on:
-  pull_request:
-    paths:
-      - 'crates/proxy/**'
-      - 'scripts/fleet-console-acceptance.py'
-      - '.github/workflows/agent-fleet.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -12,7 +7,13 @@ concurrency:
   group: fleet-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: agent-fleet.yml
   fleet:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'fleet')
     name: Fleet API and real dual-store browser witness
     runs-on: ubuntu-24.04
     timeout-minutes: 40

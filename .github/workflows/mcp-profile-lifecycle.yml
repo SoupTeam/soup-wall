@@ -1,15 +1,5 @@
 name: SOU-78 Linux MCP profile lifecycle
 on:
-  push:
-    branches: [feat/sou-78-mcp-profile-transactional-lifecycle]
-  pull_request:
-    paths:
-      - 'crates/agentfw/**'
-      - 'crates/agent/**'
-      - 'scripts/verify-sou78*.py'
-      - 'scripts/fixtures/sou78_profile_server.py'
-      - 'scripts/verify-sou78-linux.sh'
-      - '.github/workflows/mcp-profile-lifecycle.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -17,7 +7,13 @@ concurrency:
   group: sou78-linux-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: mcp-profile-lifecycle.yml
   linux-foundation:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-foundation')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:

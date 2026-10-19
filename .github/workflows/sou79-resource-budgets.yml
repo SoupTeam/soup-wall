@@ -1,18 +1,6 @@
 name: Linux MCP aggregate resource budgets
 
 on:
-  pull_request:
-    paths:
-      - 'crates/agentfw/**'
-      - 'crates/agent/**'
-      - 'scripts/verify-sou79-resource-budgets.py'
-      - 'scripts/tests/test_sou79_resource_budgets.py'
-      - 'scripts/verify-sou62-real-mcp.py'
-      - 'scripts/install-sou62-filesystem-profile.py'
-      - 'profiles/mcp/filesystem-readonly-v1/**'
-      - 'docs/operations/MCP_LINUX_RESOURCE_BUDGETS.md'
-      - '.github/workflows/sou79-resource-budgets.yml'
-      - 'Cargo.lock'
   workflow_dispatch:
 
 permissions:
@@ -23,7 +11,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: sou79-resource-budgets.yml
   required-disposable-delegated-linux:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'required-disposable-delegated-linux')
     # This job explicitly prepares ONE disposable, owned delegated service.
     # Other hosted checks retain their existing permissions and prerequisites.
     runs-on: ubuntu-22.04
