@@ -175,14 +175,16 @@ class SelectedLivenessGitRig(GitRig if SOU86 else object):
         self.private, self.binary, self.git, self.delegation = (
             private, args.agentfw.resolve(), args.git.resolve(), delegation
         )
-        self.clients = []
+        self.clients, self.kind = [], 'git'
         self.home, self.workspace = private / 'home', private / 'workspace'
         self.home.mkdir(mode=0o700, exist_ok=True)
-        self.workspace.mkdir(mode=0o700, exist_ok=True)
         self.env = BASE.environment(self.home)
+        self.env.update(GIT_PYTHON_GIT_EXECUTABLE=str(self.git), GIT_CONFIG_GLOBAL='/dev/null',
+                        GIT_CONFIG_NOSYSTEM='1', GIT_OPTIONAL_LOCKS='0', GIT_TERMINAL_PROMPT='0')
+        GIT.prepare_repo(self.workspace, self.git, self.env)
         install = private / 'original'
         GIT.INSTALL.install(install, self.workspace, self.git, args.git_sha256,
-                            args.git_launcher.resolve(), args.bwrap.resolve())
+                            args.bwrap.resolve(), args.git_launcher.resolve())
         self.original = json.loads((install / 'profile.json').read_text())
         self.installation = json.loads((install / 'installation.json').read_text())
         self.fixture = copy.deepcopy(self.original)
