@@ -898,6 +898,26 @@ def run_selected_acceptance(args) -> int:
                     require(status == 409 and body.get('error_code') == 'native_liveness_already_enrolled',
                             f'{s_kind}_re_enroll_not_rejected')
 
+                    # A genuine epoch still cannot authorize another owner.
+                    for action in ('renew', 'retire'):
+                        for forged_owner in (None, 'wrong-owner-capability'):
+                            forged = {
+                                'contract_version': LIVENESS_CONTRACT,
+                                'registry_sha256': s_reg_sha,
+                                'session_id': sid_forged,
+                                'instance_id': s_inst_id,
+                                'action': action,
+                                'epoch': epoch,
+                                'lease_seq': 2,
+                            }
+                            if forged_owner is not None:
+                                forged['owner_token'] = forged_owner
+                            status, body = http_post(s_rig.liveness_url, s_rig.native_token, forged)
+                            code = ('native_liveness_owner_token_required' if forged_owner is None
+                                    else 'native_liveness_owner_mismatch')
+                            require(status == 403 and body.get('error_code') == code,
+                                    f'{s_kind}_{action}_accepted_non_owner')
+
                     # Valid first renew seq 2
                     status, body = http_post(s_rig.liveness_url, s_rig.native_token, {
                         'contract_version': LIVENESS_CONTRACT,
@@ -907,6 +927,7 @@ def run_selected_acceptance(args) -> int:
                         'action': 'renew',
                         'epoch': epoch,
                         'lease_seq': 2,
+                        'owner_token': owner_tok,
                     })
                     require(status == 200, f'{s_kind}_first_renew_failed')
 
@@ -919,6 +940,7 @@ def run_selected_acceptance(args) -> int:
                         'action': 'renew',
                         'epoch': epoch,
                         'lease_seq': 2,
+                        'owner_token': owner_tok,
                     })
                     require(status == 409 and body.get('error_code') == 'native_liveness_seq_stale',
                             f'{s_kind}_stale_seq_not_rejected')
@@ -932,6 +954,7 @@ def run_selected_acceptance(args) -> int:
                         'action': 'renew',
                         'epoch': 'wrong-epoch-token',
                         'lease_seq': 3,
+                        'owner_token': owner_tok,
                     })
                     require(status == 403 and body.get('error_code') == 'native_liveness_epoch_mismatch',
                             f'{s_kind}_epoch_mismatch_not_rejected')
@@ -945,6 +968,7 @@ def run_selected_acceptance(args) -> int:
                         'action': 'renew',
                         'epoch': epoch,
                         'lease_seq': 3,
+                        'owner_token': owner_tok,
                     })
                     require(status == 409 and body.get('error_code') == 'native_instance_mismatch',
                             f'{s_kind}_instance_mismatch_not_rejected')
@@ -957,6 +981,7 @@ def run_selected_acceptance(args) -> int:
                         'instance_id': s_inst_id,
                         'action': 'retire',
                         'epoch': epoch,
+                        'owner_token': owner_tok,
                     })
 
                 report['checks'].append({
@@ -991,14 +1016,7 @@ def run_selected_acceptance(args) -> int:
                     require(result_row.get('released') is True, f'{rep_kind}_original_result_not_released')
 
                     # Retire the session
-                    status, _ = http_post(rep_rig.liveness_url, rep_rig.native_token, {
-                        'contract_version': LIVENESS_CONTRACT,
-                        'registry_sha256': rep_reg_sha,
-                        'session_id': c_replay.session_id,
-                        'instance_id': rep_inst_id,
-                        'action': 'retire',
-                        'epoch': c_replay.epoch,
-                    })
+                    status, _ = http_post(rep_rig.native_url, rep_rig.native_token, {'contract_version': NATIVE_CONTRACT, 'registry_sha256': rep_reg_sha, 'session_id': c_replay.session_id, 'event': 'session_end'})
                     require(status == 200, f'{rep_kind}_replay_collector_retire_failed')
                     close_cr = c_replay.close()
                     grade_client_close(close_cr, f'{rep_kind}_replay_client')

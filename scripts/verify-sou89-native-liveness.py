@@ -455,6 +455,7 @@ def test_idle_daemon_expiry_without_new_request(daemon: DaemonFixture) -> dict:
             "action": "renew",
             "epoch": epoch,
             "lease_seq": 2,
+            'owner_token': owner_token,
         },
     )
     assert status in (404, 409), f"Expected dead session renewal rejection, got {status} ({body})"
@@ -787,6 +788,7 @@ def test_stale_and_forged_renewals(daemon: DaemonFixture) -> dict:
             "action": "renew",
             "epoch": epoch,
             "lease_seq": 2,
+            'owner_token': owner_token,
         },
     )
     assert status == 200
@@ -803,6 +805,7 @@ def test_stale_and_forged_renewals(daemon: DaemonFixture) -> dict:
             "action": "renew",
             "epoch": epoch,
             "lease_seq": 2,
+            'owner_token': owner_token,
         },
     )
     assert status == 409 and body.get("error_code") == "native_liveness_seq_stale"
@@ -819,6 +822,7 @@ def test_stale_and_forged_renewals(daemon: DaemonFixture) -> dict:
             "action": "renew",
             "epoch": "wrong-epoch",
             "lease_seq": 3,
+            'owner_token': owner_token,
         },
     )
     assert status == 403 and body.get("error_code") == "native_liveness_epoch_mismatch"
@@ -835,6 +839,7 @@ def test_stale_and_forged_renewals(daemon: DaemonFixture) -> dict:
             "action": "renew",
             "epoch": epoch,
             "lease_seq": 3,
+            'owner_token': owner_token,
         },
     )
     assert status == 409 and body.get("error_code") == "native_instance_mismatch"
@@ -850,6 +855,7 @@ def test_stale_and_forged_renewals(daemon: DaemonFixture) -> dict:
             "instance_id": instance_id,
             "action": "retire",
             "epoch": epoch,
+            'owner_token': owner_token,
         },
     )
 
@@ -920,6 +926,7 @@ def test_old_result_replay_rejected(daemon: DaemonFixture) -> dict:
             "instance_id": instance_id,
             "action": "retire",
             "epoch": epoch,
+            'owner_token': owner_token,
         },
     )
     assert status == 200

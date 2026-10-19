@@ -6717,6 +6717,7 @@ async fn sou89_liveness_enroll_and_renew_monotonicity() {
         "session_id": "collector-live",
         "instance_id": instance_id,
         "action": "renew",
+        "owner_token": owner_token,
         "epoch": epoch,
         "lease_seq": 2,
     });
@@ -6732,6 +6733,7 @@ async fn sou89_liveness_enroll_and_renew_monotonicity() {
         "session_id": "collector-live",
         "instance_id": instance_id,
         "action": "renew",
+        "owner_token": owner_token,
         "epoch": epoch,
         "lease_seq": 2,
     });
@@ -6746,6 +6748,7 @@ async fn sou89_liveness_enroll_and_renew_monotonicity() {
         "session_id": "collector-live",
         "instance_id": instance_id,
         "action": "renew",
+        "owner_token": owner_token,
         "epoch": "wrong-secret-epoch",
         "lease_seq": 3,
     });
@@ -6760,6 +6763,7 @@ async fn sou89_liveness_enroll_and_renew_monotonicity() {
         "session_id": "collector-live",
         "instance_id": "wrong-daemon-instance",
         "action": "renew",
+        "owner_token": owner_token,
         "epoch": epoch,
         "lease_seq": 3,
     });
@@ -6826,6 +6830,7 @@ async fn sou89_liveness_renewal_cannot_extend_expired_authority() {
         "session_id": "child-live",
         "instance_id": instance_id,
         "action": "renew",
+        "owner_token": owner_token,
         "epoch": epoch,
         "lease_seq": 2,
     });
@@ -6909,6 +6914,7 @@ async fn sou89_liveness_autonomous_reclamation_and_sibling_isolation() {
         "session_id": "collector-a",
         "instance_id": instance_id,
         "action": "renew",
+        "owner_token": owner_token_a,
         "epoch": epoch_a,
         "lease_seq": 2,
     });
@@ -6974,6 +6980,7 @@ async fn sou89_liveness_explicit_retire_cascades_children_and_preserves_host_ris
         "session_id": "parent-retire",
         "instance_id": instance_id,
         "action": "retire",
+        "owner_token": owner_token_p,
         "epoch": epoch_p,
     });
     let (s, r) = post_liveness(&f, &retire_p).await;
@@ -7139,6 +7146,7 @@ async fn reviewer_r3_tombstone_saturation_must_not_restore_spent_authority() {
         assert_eq!(s, StatusCode::OK, "{r}");
         let mut retire = reviewer_sou89_liveness(&f, &sid, "retire");
         retire["epoch"] = r["epoch"].clone();
+        retire["owner_token"] = enroll["owner_token"].clone();
         let (s, r) = post_liveness(&f, &retire).await;
         assert_eq!(s, StatusCode::OK, "{r}");
     }
@@ -7208,6 +7216,7 @@ async fn sou89_ledger_saturation_fail_closed_and_expiry_lifecycle() {
         assert_eq!(s, StatusCode::OK, "{r}");
         let mut retire = reviewer_sou89_liveness(&f, &sid, "retire");
         retire["epoch"] = r["epoch"].clone();
+        retire["owner_token"] = enroll["owner_token"].clone();
         let (s, r) = post_liveness(&f, &retire).await;
         assert_eq!(s, StatusCode::OK, "{r}");
     }
@@ -7231,6 +7240,7 @@ async fn sou89_ledger_saturation_fail_closed_and_expiry_lifecycle() {
     // 4. Surviving sibling still renews and does useful work despite saturated ledger
     let mut renew = reviewer_sou89_liveness(&f, "surviving-sibling", "renew");
     renew["epoch"] = json!(sib_epoch);
+    renew["owner_token"] = sib_start["owner_token"].clone();
     renew["lease_seq"] = json!(sib_enrolled["lease_seq"].as_u64().unwrap_or(1) + 1);
     let (s, r) = post_liveness(&f, &renew).await;
     assert_eq!(s, StatusCode::OK, "sibling renewal refused: {r}");
@@ -7282,4 +7292,71 @@ async fn sou89_ledger_saturation_fail_closed_and_expiry_lifecycle() {
         "fresh grant start rejected after pruning: {start}"
     );
     assert_eq!(start["release"], true);
+}
+
+async fn sou89_owner_witness(action: &str) {
+    let f = Fixture::new(ALLOW);
+    let (_, target) = f.post(&f.event("owned-target", "session_start")).await;
+    let (_, peer) = f.post(&f.event("owned-peer", "session_start")).await;
+    let mut enroll = reviewer_sou89_liveness(&f, "owned-target", "enroll");
+    enroll["owner_token"] = target["owner_token"].clone();
+    let (status, enrolled) = post_liveness(&f, &enroll).await;
+    assert_eq!(status, StatusCode::OK);
+    let mut request = reviewer_sou89_liveness(&f, "owned-target", action);
+    // The genuine epoch is an audit identity, not a collector ownership secret.
+    let audit = std::fs::read_to_string(f.dir.path().join("audit.jsonl")).unwrap();
+    let record: Value = audit
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .find(|row| row["event"] == "native_liveness_enrolled")
+        .unwrap();
+    assert_eq!(record["session"], enrolled["epoch"]);
+    request["epoch"] = record["session"].clone();
+    if action == "renew" {
+        request["lease_seq"] = json!(2);
+    }
+    for token in [
+        None,
+        Some(peer["owner_token"].clone()),
+        Some(json!("forged-owner")),
+    ] {
+        let mut forged = request.clone();
+        if let Some(token) = token {
+            forged["owner_token"] = token;
+        }
+        let (status, reply) = post_liveness(&f, &forged).await;
+        assert_eq!(
+            status,
+            StatusCode::FORBIDDEN,
+            "{action} accepted a non-owner: {reply}"
+        );
+    }
+    request["owner_token"] = target["owner_token"].clone();
+    let (status, reply) = post_liveness(&f, &request).await;
+    assert_eq!(status, StatusCode::OK, "owner {action} refused: {reply}");
+    if action == "renew" {
+        let (status, call) = f
+            .post(&f.call("owned-target", "read_document", &json!({})))
+            .await;
+        assert_allow(status, &call);
+    } else {
+        let (status, _) = f
+            .post(&f.call("owned-target", "read_document", &json!({})))
+            .await;
+        assert_ne!(status, StatusCode::OK);
+    }
+    let (status, call) = f
+        .post(&f.call("owned-peer", "read_document", &json!({})))
+        .await;
+    assert_allow(status, &call);
+}
+
+#[tokio::test]
+async fn sou89_renew_requires_owner_beyond_the_genuine_audit_epoch() {
+    sou89_owner_witness("renew").await;
+}
+
+#[tokio::test]
+async fn sou89_retire_requires_owner_beyond_the_genuine_audit_epoch() {
+    sou89_owner_witness("retire").await;
 }

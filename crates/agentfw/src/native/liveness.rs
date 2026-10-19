@@ -157,6 +157,19 @@ pub async fn handler(
     }
 }
 
+// Epochs are audit identities. Only the per-session capability proves ownership.
+fn verify_owner(session: &super::Session, request: &LivenessRequest) -> Result<(), &'static str> {
+    use subtle::ConstantTimeEq;
+    let owner = request
+        .owner_token
+        .as_deref()
+        .ok_or("native_liveness_owner_token_required")?;
+    if !bool::from(owner.as_bytes().ct_eq(session.owner_token.as_bytes())) {
+        return Err("native_liveness_owner_mismatch");
+    }
+    Ok(())
+}
+
 fn enroll(
     st: &Shared,
     native: &NativeState,
@@ -201,19 +214,8 @@ fn enroll(
             Some(s) => s,
             None => return failure("native_session_unknown", StatusCode::NOT_FOUND),
         };
-        let Some(owner_token) = &request.owner_token else {
-            return failure(
-                "native_liveness_owner_token_required",
-                StatusCode::FORBIDDEN,
-            );
-        };
-        use subtle::ConstantTimeEq;
-        let presented_matches: bool = owner_token
-            .as_bytes()
-            .ct_eq(session.owner_token.as_bytes())
-            .into();
-        if !presented_matches {
-            return failure("native_liveness_owner_mismatch", StatusCode::FORBIDDEN);
+        if let Err(code) = verify_owner(session, request) {
+            return failure(code, StatusCode::FORBIDDEN);
         }
         if session.terminal {
             return failure("native_session_terminal", StatusCode::CONFLICT);
@@ -309,7 +311,10 @@ fn renew(
             return failure("native_session_terminal", StatusCode::CONFLICT);
         }
 
-        // Secret epoch binding check: prevents guessing session IDs or child messages from renewing
+        if let Err(code) = verify_owner(session, request) {
+            return failure(code, StatusCode::FORBIDDEN);
+        }
+        // Bind the owner capability to this exact session incarnation.
         let Some(epoch) = &request.epoch else {
             return failure("native_liveness_epoch_required", StatusCode::BAD_REQUEST);
         };
@@ -417,6 +422,10 @@ fn retire(
         Some(s) => s,
         None => return failure("native_session_unknown", StatusCode::NOT_FOUND),
     };
+
+    if let Err(code) = verify_owner(session, request) {
+        return failure(code, StatusCode::FORBIDDEN);
+    }
 
     let Some(epoch) = &request.epoch else {
         return failure("native_liveness_epoch_required", StatusCode::BAD_REQUEST);
@@ -721,6 +730,7 @@ impl CollectorLivenessClient {
             "session_id": self.session_id,
             "instance_id": self.instance_id,
             "action": "renew",
+            "owner_token": self.owner_token,
             "epoch": epoch,
             "lease_seq": next_seq,
         });
@@ -763,6 +773,7 @@ impl CollectorLivenessClient {
             "session_id": self.session_id,
             "instance_id": self.instance_id,
             "action": "retire",
+            "owner_token": self.owner_token,
             "epoch": epoch,
         });
 

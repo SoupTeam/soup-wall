@@ -34,21 +34,23 @@ and maintain continuous liveness.
 
 ### Contract actions
 
+Epochs also appear in audit records and are not ownership credentials. Enrollment, renewal and retirement require the per-session `owner_token`, which is never written to audit. The daemon bearer token remains required. A token from a sibling session is refused.
+
 1. **`enroll`**:
    - Request: `{"contract_version": "sw-native-liveness/1", "registry_sha256": "...", "session_id": "...", "instance_id": "...", "action": "enroll", "lease_seconds": 15, "owner_token": "..."}`
-   - **Per-session owner authentication**: `owner_token` returned during `session_start` must be presented and is verified in constant time (`subtle::ConstantTimeEq`). Merely possessing the shared daemon token and knowing or guessing a `session_id` is rejected with `403 Forbidden` (`native_liveness_forbidden`).
+   - **Per-session owner authentication**: `owner_token` returned during `session_start` must be presented and is verified in constant time (`subtle::ConstantTimeEq`). Merely possessing the shared daemon token and knowing or guessing a `session_id` is rejected with `403 Forbidden` (`native_liveness_owner_token_required` or `native_liveness_owner_mismatch`).
    - **Re-enrollment rejection**: Attempting to re-enroll an already enrolled session (whether active, expired, or terminal) is rejected with `409 Conflict` (`native_liveness_already_enrolled` or `native_liveness_terminal`). Expired or retired authority is terminal and cannot be revived; a fresh session must be created.
-   - Binds liveness to the daemon `instance_id` and mints an unguessable secret session `epoch`.
+   - Binds liveness to the exact daemon `instance_id` and the session `epoch` created by `session_start`; enrollment reuses that session's owner capability.
    - Response: `{"contract_version": "sw-native-liveness/1", "action": "enroll", "instance_id": "...", "session_id": "...", "epoch": "...", "lease_seconds": 15, "lease_seq": 1, "expires_in_ms": 15000, "status": "active"}`
 
 2. **`renew`**:
-   - Request: `{"contract_version": "sw-native-liveness/1", "registry_sha256": "...", "session_id": "...", "instance_id": "...", "action": "renew", "epoch": "...", "lease_seq": 2}`
+   - Request: `{"contract_version": "sw-native-liveness/1", "registry_sha256": "...", "session_id": "...", "instance_id": "...", "action": "renew", "owner_token": "...", "epoch": "...", "lease_seq": 2}`
    - Monotonicity: `lease_seq` must be strictly greater than the last accepted `lease_seq`. Stale sequences or replays return `409 Conflict` (`native_liveness_seq_stale`).
    - Authority Ceiling: A lease renewal cannot extend signed child authority (`authority_expires_at_ms`) or parent validity. If signed authority has expired, renewal returns `409 Conflict` (`native_liveness_authority_expired`).
    - Terminal Immunity: Once a session is terminal (retired, expired, or ended), renewal returns `404 Not Found` or `409 Conflict` (`native_liveness_terminal`). Authority cannot be revived.
 
 3. **`retire`**:
-   - Request: `{"contract_version": "sw-native-liveness/1", "registry_sha256": "...", "session_id": "...", "instance_id": "...", "action": "retire", "epoch": "..."}`
+   - Request: `{"contract_version": "sw-native-liveness/1", "registry_sha256": "...", "session_id": "...", "instance_id": "...", "action": "retire", "owner_token": "...", "epoch": "..."}`
    - Triggers definitive closure of the session and all its descendants via the unified terminal retirement path.
 
 4. **`status`**:
@@ -97,7 +99,7 @@ Calls to `GET /native/v1/instance` are strictly read-only:
 3. **Scoped host tombstones**: `state.scoped_hosts` remains bounded at 64 and is never evicted during session cleanup (`scoped_host_capacity_never_evicts_completed_identity_tombstones`).
 4. **Explicit error codes**: Calls directed at an authority-expired session return `native_child_authority_expired`, and calls to sessions whose parent has ended return `native_child_parent_unavailable`. They do not mask the failure as `native_session_unknown` until the session is legitimately reclaimed.
 5. **Active grant immutability**: Active unexpired grants cannot be hijacked or overwritten by duplicate agent bootstrap requests.
-6. **Replay and forgery protection**: Renewals require knowledge of the exact daemon `instance_id`, secret session `epoch`, and monotonic sequence numbers. Guessed session IDs or child messages cannot renew or retire peer sessions.
+6. **Replay and forgery protection**: Renewals require knowledge of the exact daemon `instance_id`, session `epoch` and per-session secret `owner_token`, and monotonic sequence numbers. Guessed session IDs or child messages cannot renew or retire peer sessions.
 
 ---
 

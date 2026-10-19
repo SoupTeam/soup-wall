@@ -933,6 +933,7 @@ def test_daemon_api_contracts():
                 'instance_id': inst['instance_id'],
                 'action': 'retire',
                 'epoch': enrolled_epoch,
+                'owner_token': owner_tok,
             }
             status, retire_resp = m.http_post(d.liveness_url, d.native_token, retire_req)
             assert status == 200, f"Retire failed: {retire_resp}"
@@ -1135,14 +1136,7 @@ def test_normal_eof_after_retirement():
             _, inst = m.http_get(f'http://127.0.0.1:{d.port}/native/v1/instance', d.native_token)
             raw_audit = m.read_raw_audit(d)
             enrolled = next(r for r in reversed(raw_audit) if r.get('event') == 'native_liveness_enrolled' and r.get('session_id') == sid)
-            st, reply = m.http_post(d.liveness_url, d.native_token, {
-                'contract_version': m.LIVENESS_CONTRACT,
-                'registry_sha256': d.registry_sha256,
-                'session_id': sid,
-                'instance_id': inst['instance_id'],
-                'action': 'retire',
-                'epoch': enrolled['session'],
-            })
+            st, reply = m.http_post(d.native_url, d.native_token, {'contract_version': m.NATIVE_CONTRACT, 'registry_sha256': d.registry_sha256, 'session_id': sid, 'event': 'session_end'})
             assert st == 200, f"Retire failed: {reply}"
             p.stdin.close()
             code = p.wait(timeout=8)
@@ -1411,10 +1405,7 @@ def test_collector_fail_closed_on_denied_work():
 
             st, inst = m.http_get(d.instance_url, d.native_token)
             enrolled = next(r for r in reversed(m.read_raw_audit(d)) if r.get('event') == 'native_liveness_enrolled' and r.get('session_id') == sid)
-            st, r = m.http_post(d.liveness_url, d.native_token, {
-                'contract_version': m.LIVENESS_CONTRACT, 'registry_sha256': d.registry_sha256,
-                'session_id': sid, 'instance_id': inst['instance_id'], 'action': 'retire', 'epoch': enrolled['session']
-            })
+            st, r = m.http_post(d.native_url, d.native_token, {'contract_version': m.NATIVE_CONTRACT, 'registry_sha256': d.registry_sha256, 'session_id': sid, 'event': 'session_end'})
             assert st == 200
 
             call['id'] = 11
@@ -1461,10 +1452,7 @@ def test_collector_autonomous_exit_on_renewal_failure():
 
             st, inst = m.http_get(d.instance_url, d.native_token)
             enrolled = next(r for r in reversed(m.read_raw_audit(d)) if r.get('event') == 'native_liveness_enrolled' and r.get('session_id') == sid)
-            st, r = m.http_post(d.liveness_url, d.native_token, {
-                'contract_version': m.LIVENESS_CONTRACT, 'registry_sha256': d.registry_sha256,
-                'session_id': sid, 'instance_id': inst['instance_id'], 'action': 'retire', 'epoch': enrolled['session']
-            })
+            st, r = m.http_post(d.native_url, d.native_token, {'contract_version': m.NATIVE_CONTRACT, 'registry_sha256': d.registry_sha256, 'session_id': sid, 'event': 'session_end'})
             assert st == 200
 
             code = p.wait(timeout=6.0)
@@ -1663,10 +1651,7 @@ def test_cascade_child_handling_both_scheduling_orders():
             p.stdout.readline()
             _, inst = m.http_get(d.instance_url, d.native_token)
             enrolled = next(r for r in reversed(m.read_raw_audit(d)) if r.get('event') == 'native_liveness_enrolled' and r.get('session_id') == sid)
-            st, r = m.http_post(d.liveness_url, d.native_token, {
-                'contract_version': m.LIVENESS_CONTRACT, 'registry_sha256': d.registry_sha256,
-                'session_id': sid, 'instance_id': inst['instance_id'], 'action': 'retire', 'epoch': enrolled['session']
-            })
+            st, r = m.http_post(d.native_url, d.native_token, {'contract_version': m.NATIVE_CONTRACT, 'registry_sha256': d.registry_sha256, 'session_id': sid, 'event': 'session_end'})
             assert st == 200
             assert p.wait(timeout=6) == 1
 
@@ -1717,10 +1702,7 @@ def test_cascade_child_handling_both_scheduling_orders():
             # Retire session
             _, inst = m.http_get(d.instance_url, d.native_token)
             enrolled = next(r for r in reversed(m.read_raw_audit(d)) if r.get('event') == 'native_liveness_enrolled' and r.get('session_id') == sid)
-            m.http_post(d.liveness_url, d.native_token, {
-                'contract_version': m.LIVENESS_CONTRACT, 'registry_sha256': d.registry_sha256,
-                'session_id': sid, 'instance_id': inst['instance_id'], 'action': 'retire', 'epoch': enrolled['session']
-            })
+            m.http_post(d.native_url, d.native_token, {'contract_version': m.NATIVE_CONTRACT, 'registry_sha256': d.registry_sha256, 'session_id': sid, 'event': 'session_end'})
 
             # Exact production harness child handling logic when still running
             child_denied_err = None
