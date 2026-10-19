@@ -23,19 +23,43 @@ use windows_sys::Win32::Security::Authorization::{
     ConvertStringSidToSidW, GetSecurityInfo, SetSecurityInfo, SDDL_REVISION_1, SE_FILE_OBJECT,
 };
 use windows_sys::Win32::Security::{
-    AclSizeInformation, GetAclInformation, GetSecurityDescriptorControl, GetSecurityDescriptorDacl,
-    GetTokenInformation, IsValidAcl, TokenUser, ACL, ACL_SIZE_INFORMATION,
-    DACL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION,
-    PSECURITY_DESCRIPTOR, PSID, SECURITY_ATTRIBUTES, SE_DACL_PROTECTED, TOKEN_QUERY, TOKEN_USER,
+    AclSizeInformation, GetAce, GetAclInformation, GetSecurityDescriptorControl,
+    GetSecurityDescriptorDacl, GetTokenInformation, IsValidAcl, TokenUser, ACL,
+    ACL_SIZE_INFORMATION, DACL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION,
+    PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, SECURITY_ATTRIBUTES,
+    SE_DACL_PROTECTED, TOKEN_QUERY, TOKEN_USER,
 };
 use windows_sys::Win32::Storage::FileSystem::{
     CreateDirectoryW, CreateFileW, GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
-    CREATE_NEW, FILE_APPEND_DATA, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL,
-    FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
-    FILE_READ_ATTRIBUTES, FILE_READ_DATA, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
-    FILE_WRITE_DATA, OPEN_EXISTING, READ_CONTROL, WRITE_DAC, WRITE_OWNER,
+    CREATE_NEW, FILE_APPEND_DATA, FILE_ATTRIBUTE_DEVICE, FILE_ATTRIBUTE_DIRECTORY,
+    FILE_ATTRIBUTE_NORMAL, FILE_ATTRIBUTE_OFFLINE, FILE_ATTRIBUTE_REPARSE_POINT,
+    FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_READ_ATTRIBUTES, FILE_READ_DATA,
+    FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_WRITE_DATA, OPEN_EXISTING,
+    READ_CONTROL, WRITE_DAC, WRITE_OWNER,
 };
+use windows_sys::Win32::System::Diagnostics::Debug::ReadProcessMemory;
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+
+fn copy_acl_bytes(pointer: *const c_void, buffer: &mut [u8]) -> io::Result<()> {
+    let mut copied = 0usize;
+    if unsafe {
+        ReadProcessMemory(
+            GetCurrentProcess(),
+            pointer,
+            buffer.as_mut_ptr().cast(),
+            buffer.len(),
+            &mut copied,
+        )
+    } == 0
+        || copied != buffer.len()
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "audit retention DACL contains an unreadable entry",
+        ));
+    }
+    Ok(())
+}
 
 struct LocalMemory(*mut c_void);
 
@@ -158,7 +182,7 @@ impl PrivateAcl {
         Ok(())
     }
 
-    fn for_directory() -> io::Result<Self> {
+    pub(crate) fn for_directory() -> io::Result<Self> {
         let sid = current_user_sid()?;
         // OI and CI let files and subdirectories created beneath .agentfw
         // inherit the owner-only ACL too. The directory itself is protected.
@@ -229,6 +253,140 @@ impl PrivateAcl {
         }
         Ok(())
     }
+}
+
+/// Audit retention never repairs an existing object. Unlike legacy token and
+/// audit files, every retained file and the store directory must already have
+/// the expected owner and a protected DACL with only user/System allow ACEs.
+pub(crate) fn verify_retention_security(handle: HANDLE, directory: bool) -> io::Result<()> {
+    check_kind(handle, directory)?;
+    let mut file_info = BY_HANDLE_FILE_INFORMATION::default();
+    if unsafe { GetFileInformationByHandle(handle, &mut file_info) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if file_info.dwFileAttributes & (FILE_ATTRIBUTE_DEVICE | FILE_ATTRIBUTE_OFFLINE) != 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "audit retention object is offline or a device",
+        ));
+    }
+    let user = current_user_sid()?;
+    if owner_sid(handle)? != user {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "audit retention object has a foreign owner",
+        ));
+    }
+    let mut dacl: *mut ACL = null_mut();
+    let mut descriptor: PSECURITY_DESCRIPTOR = null_mut();
+    let code = unsafe {
+        GetSecurityInfo(
+            handle,
+            SE_FILE_OBJECT,
+            DACL_SECURITY_INFORMATION,
+            null_mut(),
+            null_mut(),
+            &mut dacl,
+            null_mut(),
+            &mut descriptor,
+        )
+    };
+    if code != 0 {
+        return Err(io::Error::from_raw_os_error(code as i32));
+    }
+    let descriptor = LocalMemory(descriptor);
+    if descriptor.0.is_null() || dacl.is_null() || unsafe { IsValidAcl(dacl) } == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "audit retention DACL is absent or invalid",
+        ));
+    }
+    let mut control = 0u16;
+    let mut revision = 0u32;
+    if unsafe { GetSecurityDescriptorControl(descriptor.0, &mut control, &mut revision) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if control & SE_DACL_PROTECTED == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "audit retention DACL is not protected",
+        ));
+    }
+    let mut info = ACL_SIZE_INFORMATION {
+        AceCount: 0,
+        AclBytesInUse: 0,
+        AclBytesFree: 0,
+    };
+    if unsafe {
+        GetAclInformation(
+            dacl,
+            (&mut info as *mut ACL_SIZE_INFORMATION).cast(),
+            std::mem::size_of::<ACL_SIZE_INFORMATION>() as u32,
+            AclSizeInformation,
+        )
+    } == 0
+    {
+        return Err(io::Error::last_os_error());
+    }
+    if info.AceCount != 2 {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "audit retention DACL has unexpected entries",
+        ));
+    }
+    let mut seen_user = false;
+    let mut seen_system = false;
+    for index in 0..info.AceCount {
+        let mut raw: *mut c_void = null_mut();
+        if unsafe { GetAce(dacl, index, &mut raw) } == 0 || raw.is_null() {
+            return Err(io::Error::last_os_error());
+        }
+        // GetAce returns a pointer into the descriptor. Copy through a checked
+        // process-memory read before inspecting untrusted ACE bytes.
+        let mut header = [0u8; 4];
+        copy_acl_bytes(raw.cast(), &mut header)?;
+        let ace_size = u16::from_le_bytes([header[2], header[3]]) as usize;
+        if header[0] != 0 || !(16..=info.AclBytesInUse as usize).contains(&ace_size) {
+            // ACCESS_ALLOWED_ACE_TYPE
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "audit retention DACL contains an invalid allow entry",
+            ));
+        }
+        let mut ace = vec![0u8; ace_size];
+        copy_acl_bytes(raw.cast(), &mut ace)?;
+        if ace[..4] != header {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "audit retention DACL changed during inspection",
+            ));
+        }
+        let sub_authorities = ace[9] as usize;
+        if ace[8] != 1 || sub_authorities > 15 || 16 + 4 * sub_authorities > ace.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "audit retention DACL contains an invalid SID",
+            ));
+        }
+        let trustee = sid_to_string(ace[8..].as_ptr().cast_mut().cast())?;
+        if trustee == user && !seen_user {
+            seen_user = true;
+        } else if trustee == "S-1-5-18" && !seen_system {
+            seen_system = true;
+        } else {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "audit retention DACL contains a foreign or duplicate entry",
+            ));
+        }
+    }
+    if !seen_user || !seen_system {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "audit retention DACL lacks trusted entries",
+        ));
+    }
+    Ok(())
 }
 
 pub(crate) fn current_user_sid() -> io::Result<String> {

@@ -581,6 +581,7 @@ fn start_daemon(
     preferred: Option<u16>,
     deadline: Instant,
     configured: &mut serde_json::Map<String, Value>,
+    bounded_audit_retention: bool,
 ) -> Result<Daemon, Abort> {
     let registry_sha = sha256(&fixture::registry());
     let mut attempts = Vec::new();
@@ -604,9 +605,16 @@ fn start_daemon(
                 continue;
             }
         };
-        let config = json!({"bind": "127.0.0.1", "port": port, "enforce": true,
+        let mut config = json!({"bind": "127.0.0.1", "port": port, "enforce": true,
             "policy": ws.policy, "audit": ws.agent_dir.join("audit.jsonl"),
             "native": {"registry_path": ws.registry, "registry_sha256": registry_sha}});
+        if bounded_audit_retention {
+            config.as_object_mut().expect("object").remove("audit");
+            config["audit_retention"] = json!({"version":1,
+                "directory":ws.agent_dir.join("audit-retention"),
+                "segment_size_bytes":65536,"segment_count":4,
+                "total_disk_bytes":512000,"max_record_bytes":4096});
+        }
         let config_path = ws.agent_dir.join("config.yaml");
         let _ = std::fs::remove_file(&config_path);
         if write_new(&config_path, config.to_string().as_bytes()).is_err() {
@@ -981,7 +989,22 @@ struct Observation {
 }
 
 fn audit_records(path: &Path) -> Vec<Value> {
-    lines(path)
+    let source = if path.exists() {
+        lines(path)
+    } else {
+        let retained = path.parent().expect("audit parent").join("audit-retention");
+        let mut names: Vec<_> = std::fs::read_dir(retained)
+            .ok()
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter(|entry| entry.file_name().to_string_lossy().starts_with("segment-"))
+            .map(|entry| entry.path())
+            .collect();
+        names.sort();
+        names.iter().flat_map(|name| lines(name)).collect()
+    };
+    source
         .iter()
         .filter_map(|line| serde_json::from_slice::<Value>(line).ok())
         .filter(|record| matches!(record["event"].as_str(), Some("native_call") | Some("native_result")))
@@ -1540,6 +1563,7 @@ fn exercise(
             args.daemon_port,
             deadline,
             configured,
+            args.bounded_audit_retention,
         )?);
         let harness = processes
             .harness

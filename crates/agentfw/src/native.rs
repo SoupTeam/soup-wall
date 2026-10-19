@@ -2851,14 +2851,14 @@ mod tests {
         assert!(!audit.contains(content));
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", windows))]
     #[test]
-    fn retained_disk_full_failure_withholds_native_result() {
+    fn retained_sink_failure_withholds_native_result() {
         let dir = tempfile::tempdir().unwrap();
         let mut state = Arc::try_unwrap(fixture(dir.path())).ok().unwrap();
         let retention = crate::audit::RetentionConfig {
             version: 1,
-            directory: dir.path().join("retained"),
+            directory: dir.path().canonicalize().unwrap().join("retained"),
             segment_size_bytes: 64 * 1024,
             segment_count: 2,
             total_disk_bytes: 300_000,
@@ -2882,7 +2882,11 @@ mod tests {
             ),
         )
         .unwrap();
-        st.audit.fail_retained_write_for_test(libc::ENOSPC);
+        #[cfg(target_os = "linux")]
+        let full_disk = libc::ENOSPC;
+        #[cfg(windows)]
+        let full_disk = 112; // ERROR_DISK_FULL
+        st.audit.fail_retained_write_for_test(full_disk);
         let result = inspect(
             &st,
             native,
@@ -2905,6 +2909,55 @@ mod tests {
         )
         .unwrap();
         assert!(!body.contains("native_result"));
+    }
+
+    #[cfg(any(target_os = "linux", windows))]
+    #[test]
+    fn retained_sink_failure_withholds_native_admission() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut state = Arc::try_unwrap(fixture(dir.path())).ok().unwrap();
+        let retention = crate::audit::RetentionConfig {
+            version: 1,
+            directory: dir.path().canonicalize().unwrap().join("retained"),
+            segment_size_bytes: 64 * 1024,
+            segment_count: 2,
+            total_disk_bytes: 300_000,
+            max_record_bytes: 4096,
+        };
+        state.audit = AuditSink::open_retained(&retention).unwrap();
+        state.config.audit_retention = Some(retention.clone());
+        let st = Arc::new(state);
+        let native = st.native.as_ref().unwrap();
+        start(&st, "s");
+        #[cfg(target_os = "linux")]
+        let full_disk = libc::ENOSPC;
+        #[cfg(windows)]
+        let full_disk = 112; // ERROR_DISK_FULL
+        st.audit.fail_retained_write_for_test(full_disk);
+        let call = inspect(
+            &st,
+            native,
+            request(
+                native,
+                "s",
+                "call",
+                json!({
+                    "tool":"lookup_note", "args":{}, "schema_sha256":"a".repeat(64)
+                }),
+            ),
+        );
+        assert_eq!(call.err(), Some("native_audit_unavailable"));
+        assert_eq!(st.audit.health()["state"], "unavailable");
+        assert!(native.sessions.lock().unwrap().entries["s"]
+            .calls
+            .is_empty());
+        let body = std::fs::read_to_string(
+            retention
+                .directory
+                .join("segment-00000000000000000001.jsonl"),
+        )
+        .unwrap();
+        assert!(!body.contains("native_call"));
     }
 
     #[test]
