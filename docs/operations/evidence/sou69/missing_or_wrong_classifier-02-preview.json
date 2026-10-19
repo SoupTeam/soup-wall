@@ -1,0 +1,122 @@
+{
+  "agentfw_version": "0.3.0",
+  "checks": [
+    {
+      "action": null,
+      "detail": "Linux local-user profile; service management not requested",
+      "id": "platform",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "executable digest matches; lifecycle, mcp-connection, protection-status and self-test are available",
+      "id": "agent",
+      "status": "ok"
+    },
+    {
+      "action": "install the reviewed rule_baseline.py revision or pass its reviewed digest",
+      "detail": "classifier source does not match --classifier-sha256 (wrong revision)",
+      "id": "classifier",
+      "status": "refused"
+    },
+    {
+      "action": null,
+      "detail": "Python 3 runs in isolated mode",
+      "id": "classifier_python",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "reviewed sw-native/1 registry digest matches",
+      "id": "registry",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "shipped_default policy parses (12 rules)",
+      "id": "policy",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "reviewed workspace is an owned directory",
+      "id": "workspace",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "new Agent home will be created",
+      "id": "agent_home",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "reviewed stdio entry found; 1 other server entries and 1 other settings will be preserved",
+      "id": "server",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "127.0.0.1:47789 is available for the new Agent",
+      "id": "port",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "an explicit harmless probe call will verify the connected server",
+      "id": "probe",
+      "status": "ok"
+    }
+  ],
+  "exit_code": 4,
+  "explanation": "The plan cannot be applied; resolve the refused or conflicting checks.",
+  "inputs": {
+    "agent": {
+      "path_digest": "79dceeb4a79dfec2",
+      "sha256": "0e3705ca8b4a07e7b113211da460d642cbd513f60b8b898359a8f727544799c2"
+    },
+    "agent_home": {
+      "path_digest": "c94d91577e9c85a9"
+    },
+    "classifier": {
+      "kind": "rule-baseline",
+      "python_version": "3.13.16",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "host_config": {
+      "other_server_entries": 1,
+      "other_settings": 1,
+      "path_digest": "4c3f8f3e66125acd",
+      "selected_entry_sha256": "1d2ebeb5a15f8ac26be72135c20c0989cd660202b566230e191d3641248f2d14",
+      "sha256_at_preview": "05fd3ed296a18f999fb3a21b0f012667f1c40f256e4cb0eb703a8b1ae8cfd87d"
+    },
+    "policy": {
+      "expected_daemon_digest": "239f0d0dd71853fd710f3037b5adfc035cdd3ead53e49b652468e74473c066ee",
+      "file_sha256": "8b2bfb66b14a988a29cf2698c482bc7cd91ba550fea14ccfa63540e815eb3c57",
+      "rule_count": 12,
+      "source": "shipped_default"
+    },
+    "port": 47789,
+    "probe": true,
+    "registry": {
+      "registry_id": "notes-fixture-v1",
+      "sha256": "84ca20089de9b412d9b60d1213c78a7fddedeede6fa50cac5313228d2c7e44be"
+    },
+    "workspace": {
+      "path_digest": "d7ee655f22eb446e"
+    }
+  },
+  "next_steps": [
+    "install the reviewed rule_baseline.py revision or pass its reviewed digest"
+  ],
+  "operation": "preview",
+  "profile": {
+    "arch": "x86_64",
+    "id": "linux-local-user-mcp-v1",
+    "os": "linux",
+    "supported": true
+  },
+  "result": "refused",
+  "schema_version": "sw-onboarding/1",
+  "started_at_unix_ms": 1792432420548
+}
