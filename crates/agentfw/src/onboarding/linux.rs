@@ -847,17 +847,74 @@ fn entry_of(path: &Path) -> Option<InventoryEntry> {
     })
 }
 
+/// The Agent-home entries each step's own operation is known to produce, as exact
+/// relative paths or a single `*` that never crosses `/`. A home-wide diff is only a
+/// timing observation, so nothing outside this list is ever attributed to a step:
+/// read-only steps (identity, connection, verification, self-test in its own
+/// workspace) produce nothing here, and directory contents are never implied by
+/// the directory itself.
+pub(crate) fn step_outputs(step: &str, version: &str) -> Vec<String> {
+    let list: &[&str] = match step {
+        "write_owned_files" => &[
+            "config.yaml",
+            "onboarding",
+            "onboarding/registry.json",
+            "onboarding/policy.yaml",
+        ],
+        // `agentfw install`
+        "create_token" => &["token"],
+        // `agentfw lifecycle install <version>`
+        "lifecycle_install" => &["versions", "versions/.lock", "versions/lifecycle.json"],
+        // `agentfw lifecycle start`: the daemon's own runtime state.
+        "lifecycle_start" => &[
+            "audit.jsonl",
+            "native-token",
+            "managed-native-boundary.lock",
+            "grants",
+            "manifests",
+            "native-pending",
+            "versions/lifecycle.json",
+            "versions/.launch-*.log",
+        ],
+        // `mcp-connection inspect` probe: an audit record and its session manifest.
+        "verify_server" => &["audit.jsonl", "manifests/claude-*.json"],
+        _ => &[],
+    };
+    let mut out: Vec<String> = list.iter().map(|s| s.to_string()).collect();
+    if step == "lifecycle_install" {
+        out.push(format!("versions/agentfw-{version}"));
+    }
+    out
+}
+
+fn output_matches(pattern: &str, rel: &str) -> bool {
+    match pattern.split_once('*') {
+        None => pattern == rel,
+        Some((prefix, suffix)) => {
+            rel.len() >= prefix.len() + suffix.len()
+                && rel.starts_with(prefix)
+                && rel.ends_with(suffix)
+                && !rel[prefix.len()..rel.len() - suffix.len()].contains('/')
+        }
+    }
+}
+
 /// Record what one step created or changed, even when it stopped. An entry is adopted
-/// only when the step changed it and, before the step, it was absent or still had the
-/// recorded bytes. Being recorded is not enough: an unchanged entry keeps its prior
-/// digest, and an entry changed outside onboarding (or never ours) is never adopted,
-/// so cleanup preserves it as a conflict.
+/// only when it is a known output of that step (`outputs`), the step changed it, and
+/// before the step it was absent or still had the recorded bytes. Being recorded is not
+/// enough: an unchanged entry keeps its prior digest; an entry changed outside
+/// onboarding, never ours, or not a known output is never adopted, so cleanup
+/// preserves it as a conflict.
 pub(crate) fn adopt_step_changes(
     recorded: &mut BTreeMap<String, InventoryEntry>,
     before: &BTreeMap<String, InventoryEntry>,
     after: &BTreeMap<String, InventoryEntry>,
+    outputs: &[String],
 ) {
     for (rel, entry) in after {
+        if !outputs.iter().any(|pattern| output_matches(pattern, rel)) {
+            continue;
+        }
         let changed_by_step = before.get(rel) != Some(entry);
         let ours_before = match before.get(rel) {
             None => true,
@@ -1291,7 +1348,8 @@ impl Session<'_> {
         entry[name] = json!({"outcome": if result.is_ok() { "done" } else { "stopped" }, "elapsed_ms": elapsed});
         if self.journal.created_home && self.home().is_dir() {
             let after = inventory(self.home());
-            adopt_step_changes(&mut self.journal.inventory, &before, &after);
+            let outputs = step_outputs(name, &version_label(&self.facts.agent_sha256));
+            adopt_step_changes(&mut self.journal.inventory, &before, &after, &outputs);
         }
         if result.is_ok() {
             self.mark(name, "done")?;
@@ -2070,6 +2128,7 @@ pub fn run(command: Command) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::PermissionsExt;
 
     #[test]
     fn plain_path_refuses_relative_aliases_and_links() {
@@ -2272,6 +2331,146 @@ mod tests {
     }
 
     #[test]
+    fn concurrent_operator_file_during_a_read_only_step_is_not_adopted() {
+        // Reviewer regression: a helper outside the Agent home signals a marker, sleeps
+        // and fails; meanwhile the operator creates a file inside a runtime directory.
+        let (_dir, paths, journal) = recorded_home();
+        let home = PathBuf::from(&journal.agent_home);
+        std::fs::write(home.join("grants/g1.json"), b"operator replacement").unwrap();
+        std::fs::write(home.join("grants/new.txt"), b"operator new").unwrap();
+        std::fs::create_dir(&paths.state).unwrap();
+        let helper_dir = tempfile::tempdir().unwrap();
+        let helper_root = helper_dir.path().canonicalize().unwrap();
+        let marker = helper_root.join("started");
+        let helper = helper_root.join("helper.sh");
+        std::fs::write(
+            &helper,
+            format!("#!/bin/sh\n: > '{}'\nsleep 0.3\nexit 1\n", marker.display()),
+        )
+        .unwrap();
+        std::fs::set_permissions(&helper, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let inputs = Inputs {
+            agent: helper,
+            agent_sha256: String::new(),
+            classifier: "rule-baseline".into(),
+            classifier_script: PathBuf::new(),
+            classifier_sha256: String::new(),
+            classifier_python: PathBuf::new(),
+            registry: PathBuf::new(),
+            registry_sha256: String::new(),
+            policy: None,
+            policy_sha256: None,
+            workspace: PathBuf::new(),
+            agent_home: home.clone(),
+            host_config: PathBuf::new(),
+            server: "notes".into(),
+            port: 9,
+            probe_tool: None,
+            probe_args: None,
+            report: PathBuf::new(),
+            timeout_seconds: 60,
+        };
+        let facts = Facts::default();
+        let mut session = Session {
+            inputs: &inputs,
+            facts: &facts,
+            state: paths.state.clone(),
+            profile: paths.profile.clone(),
+            journal,
+            deadline: Instant::now() + Duration::from_secs(60),
+            evidence: serde_json::Map::new(),
+        };
+        let during = home.join("grants/during-step.txt");
+        let operator = {
+            let (marker, during) = (marker.clone(), during.clone());
+            std::thread::spawn(move || {
+                let deadline = Instant::now() + Duration::from_secs(20);
+                while !marker.exists() && Instant::now() < deadline {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                std::fs::write(&during, b"operator during step").unwrap();
+            })
+        };
+        assert!(session.step("verify_identity").is_err());
+        operator.join().unwrap();
+        assert!(marker.exists(), "the helper ran");
+        assert!(!session
+            .journal
+            .inventory
+            .contains_key("grants/during-step.txt"));
+        let mut journal = session.journal;
+        let (outcome, detail) = home_outcome(&run_rollback(&mut journal, &paths, false));
+        assert_eq!(outcome, "conflict");
+        assert!(detail.starts_with("3 untracked or changed"), "{detail}");
+        assert_eq!(std::fs::read(&during).unwrap(), b"operator during step");
+        assert_eq!(
+            std::fs::read(home.join("grants/g1.json")).unwrap(),
+            b"operator replacement"
+        );
+        assert_eq!(
+            std::fs::read(home.join("grants/new.txt")).unwrap(),
+            b"operator new"
+        );
+    }
+
+    #[test]
+    fn only_known_outputs_of_each_step_are_adopted() {
+        let version = version_label(&"a".repeat(64));
+        for step in [
+            "create_agent_home",
+            "verify_identity",
+            "connect_server",
+            "self_test",
+        ] {
+            assert!(step_outputs(step, &version).is_empty(), "{step}");
+        }
+        let adopts = |step: &str, rel: &str| {
+            step_outputs(step, &version)
+                .iter()
+                .any(|p| output_matches(p, rel))
+        };
+        assert!(adopts(
+            "lifecycle_install",
+            &format!("versions/agentfw-{version}")
+        ));
+        assert!(!adopts("lifecycle_install", "versions/agentfw-other"));
+        assert!(adopts("lifecycle_start", "grants"));
+        assert!(adopts("lifecycle_start", "versions/.launch-x.log"));
+        assert!(!adopts("lifecycle_start", "versions/.launch-x/y.log"));
+        assert!(adopts("verify_server", "manifests/claude-abc-1.json"));
+        assert!(!adopts("verify_server", "manifests/notes.json"));
+        // Directory contents are never implied by the directory, for any step.
+        for step in STEPS {
+            assert!(!adopts(step, "grants/during-step.txt"), "{step}");
+            assert!(!adopts(step, "onboarding/operator.txt"), "{step}");
+        }
+        // A file appearing during a step is adopted only if it is that step's output.
+        let entry = InventoryEntry {
+            kind: "file".into(),
+            sha256: Some("x".into()),
+        };
+        let after = BTreeMap::from([
+            ("token".to_string(), entry.clone()),
+            ("grants/during-step.txt".to_string(), entry.clone()),
+        ]);
+        let mut recorded = BTreeMap::new();
+        adopt_step_changes(
+            &mut recorded,
+            &BTreeMap::new(),
+            &after,
+            &step_outputs("self_test", &version),
+        );
+        assert!(recorded.is_empty());
+        adopt_step_changes(
+            &mut recorded,
+            &BTreeMap::new(),
+            &after,
+            &step_outputs("create_token", &version),
+        );
+        assert_eq!(recorded.keys().collect::<Vec<_>>(), vec!["token"]);
+    }
+
+    #[test]
     fn step_adoption_keeps_prior_digest_and_refuses_foreign_entries() {
         let entry = |d: &str| InventoryEntry {
             kind: "file".into(),
@@ -2292,7 +2491,8 @@ mod tests {
             ("foreign".to_string(), entry("g")),
             ("created".to_string(), entry("c")),
         ]);
-        adopt_step_changes(&mut recorded, &before, &after);
+        let all = vec!["*".to_string()];
+        adopt_step_changes(&mut recorded, &before, &after, &all);
         assert_eq!(recorded["ours"], entry("b"));
         assert_eq!(recorded["edited"], entry("a"));
         assert!(!recorded.contains_key("foreign"));
@@ -2300,7 +2500,7 @@ mod tests {
         // An unchanged entry keeps its recorded digest even when the file differs from it.
         let mut recorded = BTreeMap::from([("x".to_string(), entry("a"))]);
         let same = BTreeMap::from([("x".to_string(), entry("operator"))]);
-        adopt_step_changes(&mut recorded, &same, &same);
+        adopt_step_changes(&mut recorded, &same, &same, &all);
         assert_eq!(recorded["x"], entry("a"));
     }
 

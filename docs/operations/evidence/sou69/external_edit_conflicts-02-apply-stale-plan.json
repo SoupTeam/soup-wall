@@ -57,7 +57,7 @@
     },
     {
       "action": null,
-      "detail": "127.0.0.1:41663 is available for the new Agent",
+      "detail": "127.0.0.1:47809 is available for the new Agent",
       "id": "port",
       "status": "ok"
     },
@@ -79,11 +79,11 @@
   "explanation": "The current inputs or host files differ from the reviewed preview; nothing was changed.",
   "inputs": {
     "agent": {
-      "path_digest": "6c45afbf4a9e23c5",
-      "sha256": "e65f0abb981da984bb0c3edfa78501858eca22026c10ddc190599e6a4290feb0"
+      "path_digest": "843417e908c1d23c",
+      "sha256": "0e3705ca8b4a07e7b113211da460d642cbd513f60b8b898359a8f727544799c2"
     },
     "agent_home": {
-      "path_digest": "f6e85d07e3be2e60"
+      "path_digest": "9e13e39f5a19a19c"
     },
     "classifier": {
       "kind": "rule-baseline",
@@ -93,9 +93,9 @@
     "host_config": {
       "other_server_entries": 1,
       "other_settings": 2,
-      "path_digest": "3592d41a9f5833fe",
-      "selected_entry_sha256": "26967e5526b6a45e7388eeaf74f6b7db81d0e66f254a309b1e375374cb70e801",
-      "sha256_at_preview": "2e4e5b189bd38d068d0d8838c0268ad2526b1ced9b606ab061a755706960cda5"
+      "path_digest": "0d2a758ed3ffcafc",
+      "selected_entry_sha256": "5f2f0fb3cba4076ebb926ad434aacc0e95befce0e115dd1a9405d3f5d969bea7",
+      "sha256_at_preview": "1c48c8765927338743454b87cd5536b1794ee90556276cf789c040150b1a90c9"
     },
     "policy": {
       "expected_daemon_digest": "239f0d0dd71853fd710f3037b5adfc035cdd3ead53e49b652468e74473c066ee",
@@ -103,14 +103,14 @@
       "rule_count": 12,
       "source": "shipped_default"
     },
-    "port": 41663,
+    "port": 47809,
     "probe": true,
     "registry": {
       "registry_id": "notes-fixture-v1",
       "sha256": "84ca20089de9b412d9b60d1213c78a7fddedeede6fa50cac5313228d2c7e44be"
     },
     "workspace": {
-      "path_digest": "9f903f3da1b9b4ee"
+      "path_digest": "f9f781e20a63df80"
     }
   },
   "next_steps": [
@@ -125,5 +125,5 @@
   },
   "result": "refused",
   "schema_version": "sw-onboarding/1",
-  "started_at_unix_ms": 1792346285508
+  "started_at_unix_ms": 1792432426109
 }

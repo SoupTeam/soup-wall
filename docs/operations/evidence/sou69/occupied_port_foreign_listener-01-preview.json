@@ -57,7 +57,7 @@
     },
     {
       "action": "stop that listener, or choose another --port",
-      "detail": "127.0.0.1:40871 already has a listener that this onboarding does not own",
+      "detail": "127.0.0.1:42943 already has a listener that this onboarding does not own",
       "id": "port",
       "status": "conflict"
     },
@@ -72,11 +72,11 @@
   "explanation": "The plan cannot be applied; resolve the refused or conflicting checks.",
   "inputs": {
     "agent": {
-      "path_digest": "43f17287697a97c3",
-      "sha256": "e65f0abb981da984bb0c3edfa78501858eca22026c10ddc190599e6a4290feb0"
+      "path_digest": "0955def71b086c3b",
+      "sha256": "0e3705ca8b4a07e7b113211da460d642cbd513f60b8b898359a8f727544799c2"
     },
     "agent_home": {
-      "path_digest": "3e52ce3a8263667a"
+      "path_digest": "9636c450a4b22873"
     },
     "classifier": {
       "kind": "rule-baseline",
@@ -86,9 +86,9 @@
     "host_config": {
       "other_server_entries": 1,
       "other_settings": 1,
-      "path_digest": "a61c553e1c0d3dd0",
-      "selected_entry_sha256": "1f99a190a23d599f14a1f1bf076d8d79720a80e117929f7fa8f32c462666528b",
-      "sha256_at_preview": "4d804d75a6858e30e19327a311835e82b80e2168dc7d734744baa26cc5bc443e"
+      "path_digest": "70802c4ccd86b511",
+      "selected_entry_sha256": "57f62835462c4ace4e594710dcfb96d726d5760891a32dcdff8f28b3d29a575d",
+      "sha256_at_preview": "c01dbe4c10c771858ed1c01199041df66e0e1c6506eae319ce480bccdb71647f"
     },
     "policy": {
       "expected_daemon_digest": "239f0d0dd71853fd710f3037b5adfc035cdd3ead53e49b652468e74473c066ee",
@@ -96,14 +96,14 @@
       "rule_count": 12,
       "source": "shipped_default"
     },
-    "port": 40871,
+    "port": 42943,
     "probe": true,
     "registry": {
       "registry_id": "notes-fixture-v1",
       "sha256": "84ca20089de9b412d9b60d1213c78a7fddedeede6fa50cac5313228d2c7e44be"
     },
     "workspace": {
-      "path_digest": "da6bff3b6c486e0c"
+      "path_digest": "b89d63ec87b0b78c"
     }
   },
   "next_steps": [
@@ -118,5 +118,5 @@
   },
   "result": "refused",
   "schema_version": "sw-onboarding/1",
-  "started_at_unix_ms": 1792346275448
+  "started_at_unix_ms": 1792432420919
 }

@@ -49,11 +49,11 @@
       "step": "token"
     },
     {
-      "detail": "2 untracked or changed entries were preserved (under: grants, onboarding); nothing else was removed",
+      "detail": "3 untracked or changed entries were preserved (under: grants, onboarding); nothing else was removed",
       "outcome": "conflict",
       "step": "agent_home"
     }
   ],
   "schema_version": "sw-onboarding/1",
-  "started_at_unix_ms": 1792346300373
+  "started_at_unix_ms": 1792432433286
 }

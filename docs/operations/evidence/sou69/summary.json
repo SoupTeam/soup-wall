@@ -1,6 +1,6 @@
 {
   "schema": "sw-onboarding-acceptance/1",
-  "agentfw_sha256": "e65f0abb981da984bb0c3edfa78501858eca22026c10ddc190599e6a4290feb0",
+  "agentfw_sha256": "0e3705ca8b4a07e7b113211da460d642cbd513f60b8b898359a8f727544799c2",
   "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
   "server_sha256": "81fc37feaf8109832106246e317801c7e9c49154286fd6133549751a0b328206",
   "outside_source_checkout": true,
@@ -75,7 +75,7 @@
         "04-undo.json",
         "05-undo-purge.json"
       ],
-      "duration_s": 8.1
+      "duration_s": 3.9
     },
     {
       "scenario": "missing_or_wrong_classifier",
@@ -102,7 +102,7 @@
         "01-preview.json",
         "02-preview.json"
       ],
-      "duration_s": 0.5
+      "duration_s": 0.2
     },
     {
       "scenario": "existing_active_config",
@@ -129,7 +129,7 @@
         "01-preview.json",
         "02-apply.json"
       ],
-      "duration_s": 0.6
+      "duration_s": 0.2
     },
     {
       "scenario": "occupied_port_foreign_listener",
@@ -153,7 +153,7 @@
         "02-preview.json",
         "03-apply-after-listener.json"
       ],
-      "duration_s": 0.8
+      "duration_s": 0.7
     },
     {
       "scenario": "interrupted_and_killed_apply",
@@ -193,7 +193,7 @@
         "05-apply-after-kill.json",
         "06-undo-purge.json"
       ],
-      "duration_s": 9.0
+      "duration_s": 4.3
     },
     {
       "scenario": "external_edit_conflicts",
@@ -238,7 +238,7 @@
         "07-undo-file-conflict.json",
         "08-undo-purge.json"
       ],
-      "duration_s": 5.9
+      "duration_s": 2.8
     },
     {
       "scenario": "rollback_after_listener_race",
@@ -266,7 +266,7 @@
         "01-preview.json",
         "02-apply-race.json"
       ],
-      "duration_s": 1.5
+      "duration_s": 0.7
     },
     {
       "scenario": "foreign_files_in_agent_home",
@@ -274,6 +274,10 @@
       "checks": [
         {
           "check": "apply_verified",
+          "passed": true
+        },
+        {
+          "check": "concurrent_file_not_adopted",
           "passed": true
         },
         {
@@ -327,7 +331,7 @@
         "09-apply-race.json",
         "10-undo-after-rollback.json"
       ],
-      "duration_s": 9.7
+      "duration_s": 4.7
     },
     {
       "scenario": "unsafe_host_config",
@@ -349,12 +353,12 @@
       "reports": [
         "01-preview.json"
       ],
-      "duration_s": 0.3
+      "duration_s": 0.1
     }
   ],
   "cleanup": {
     "owned_roots_removed": true
   },
   "passed": true,
-  "duration_s": 36.6
+  "duration_s": 18.0
 }

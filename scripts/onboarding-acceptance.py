@@ -167,7 +167,8 @@ class ForeignListener:
         self.socket.bind(("127.0.0.1", port))
         self.socket.listen(8)
         self.stop = False
-        threading.Thread(target=self.serve, daemon=True).start()
+        self.thread = threading.Thread(target=self.serve, daemon=True)
+        self.thread.start()
 
     def serve(self):
         self.socket.settimeout(0.2)
@@ -179,7 +180,9 @@ class ForeignListener:
                 pass
 
     def close(self):
+        # Stop the accept loop before closing, so the port is free when close returns.
         self.stop = True
+        self.thread.join(timeout=5)
         self.socket.close()
 
 
@@ -393,9 +396,19 @@ def scenario_foreign_files(root: Root):
     before = root.sentinels()
     original = root.host_value()["mcpServers"]["notes"]
     _, _, digest = root.preview_digest()
-    code, report = root.onboard("apply", root.inputs() + ["--plan-sha256", digest], "apply")
-    check(out, "apply_verified", code == 0 and report["result"] == "verified")
+    # An operator file created inside grants/ while a verification step runs is a timing
+    # observation, not an output of that step: it must never be adopted.
+    process, report_path = root.onboard("apply", root.inputs() + ["--plan-sha256", digest], "apply", popen=True)
+    during = root.home / "grants/during-step.txt"
+    if wait_for(lambda: (root.journal() or {}).get("steps", {}).get("verify_server") == "started"):
+        during.write_bytes(b"operator during step\n")
+    process.communicate(timeout=600)
+    report = json.loads(report_path.read_text())
+    check(out, "apply_verified", process.returncode == 0 and report["result"] == "verified")
+    check(out, "concurrent_file_not_adopted", during.exists()
+          and "grants/during-step.txt" not in (root.journal() or {}).get("inventory", {}))
     files, created = add_foreign_files(root)
+    files[during] = b"operator during step\n"
     # A retry re-runs the verification steps; it must not adopt the operator's files.
     code, report = root.onboard("apply", root.inputs() + ["--plan-sha256", digest], "apply-retry")
     check(out, "retry_does_not_adopt_foreign_files", code == 0 and report["result"] == "verified"

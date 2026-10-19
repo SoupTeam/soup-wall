@@ -57,7 +57,7 @@
     },
     {
       "action": null,
-      "detail": "127.0.0.1:41909 is available for the new Agent",
+      "detail": "127.0.0.1:47789 is available for the new Agent",
       "id": "port",
       "status": "ok"
     },
@@ -72,11 +72,11 @@
   "explanation": "The plan cannot be applied; resolve the refused or conflicting checks.",
   "inputs": {
     "agent": {
-      "path_digest": "f00e10a14f279c75",
-      "sha256": "e65f0abb981da984bb0c3edfa78501858eca22026c10ddc190599e6a4290feb0"
+      "path_digest": "79dceeb4a79dfec2",
+      "sha256": "0e3705ca8b4a07e7b113211da460d642cbd513f60b8b898359a8f727544799c2"
     },
     "agent_home": {
-      "path_digest": "ab1653f9c3f938ff"
+      "path_digest": "c94d91577e9c85a9"
     },
     "classifier": {
       "kind": "rule-baseline",
@@ -86,9 +86,9 @@
     "host_config": {
       "other_server_entries": 1,
       "other_settings": 1,
-      "path_digest": "3c7b92b75925311b",
-      "selected_entry_sha256": "b897787d8cfe3512e6591535847ec32435d2aac0ae3a20f567eb8f4aaa2df3f0",
-      "sha256_at_preview": "fff2655e29d8e2013de2137ae7019ca07a3979da24dd8dffdf2220920850b52e"
+      "path_digest": "4c3f8f3e66125acd",
+      "selected_entry_sha256": "1d2ebeb5a15f8ac26be72135c20c0989cd660202b566230e191d3641248f2d14",
+      "sha256_at_preview": "05fd3ed296a18f999fb3a21b0f012667f1c40f256e4cb0eb703a8b1ae8cfd87d"
     },
     "policy": {
       "expected_daemon_digest": "239f0d0dd71853fd710f3037b5adfc035cdd3ead53e49b652468e74473c066ee",
@@ -96,14 +96,14 @@
       "rule_count": 12,
       "source": "shipped_default"
     },
-    "port": 41909,
+    "port": 47789,
     "probe": true,
     "registry": {
       "registry_id": "notes-fixture-v1",
       "sha256": "84ca20089de9b412d9b60d1213c78a7fddedeede6fa50cac5313228d2c7e44be"
     },
     "workspace": {
-      "path_digest": "6676a385c87749d8"
+      "path_digest": "d7ee655f22eb446e"
     }
   },
   "next_steps": [
@@ -118,5 +118,5 @@
   },
   "result": "refused",
   "schema_version": "sw-onboarding/1",
-  "started_at_unix_ms": 1792346274349
+  "started_at_unix_ms": 1792432420436
 }

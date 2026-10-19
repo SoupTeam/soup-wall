@@ -57,7 +57,7 @@
     },
     {
       "action": null,
-      "detail": "127.0.0.1:45285 is available for the new Agent",
+      "detail": "127.0.0.1:53783 is available for the new Agent",
       "id": "port",
       "status": "ok"
     },
@@ -75,16 +75,16 @@
     "note": "No Claude Code session was observed by onboarding; only the configured entry, the daemon identity, an explicit probe and the isolated self-test are reported.",
     "other_mcp_servers": "unknown"
   },
-  "duration_ms": 968,
+  "duration_ms": 363,
   "exit_code": 4,
-  "explanation": "127.0.0.1:45285 gained a foreign listener after preview; it was not adopted. Rollback stopped at a conflict; see rollback.",
+  "explanation": "127.0.0.1:53783 gained a foreign listener after preview; it was not adopted. Rollback stopped at a conflict; see rollback.",
   "inputs": {
     "agent": {
-      "path_digest": "054b013bf25ede9c",
-      "sha256": "e65f0abb981da984bb0c3edfa78501858eca22026c10ddc190599e6a4290feb0"
+      "path_digest": "61008ea6a8db88a1",
+      "sha256": "0e3705ca8b4a07e7b113211da460d642cbd513f60b8b898359a8f727544799c2"
     },
     "agent_home": {
-      "path_digest": "0b048d6c36c48abe"
+      "path_digest": "c6c8f224a5bd4451"
     },
     "classifier": {
       "kind": "rule-baseline",
@@ -94,9 +94,9 @@
     "host_config": {
       "other_server_entries": 1,
       "other_settings": 1,
-      "path_digest": "a115c496422bfbf3",
-      "selected_entry_sha256": "29e68f9fd63b36578f6e5fc34a2b29ec0d76be4131700b47de8736947b536699",
-      "sha256_at_preview": "f0b5449345f10ef5693ee2ca2afbae445b6de50cea9ed527e13afda7f0eb0f59"
+      "path_digest": "9183c1341e3a9147",
+      "selected_entry_sha256": "2a2055e23855f1fbd8e0cffdf00331da661b4067e71fdb65138a83f2aa13f5dd",
+      "sha256_at_preview": "f171d38ca20464e551806354ce75d98f53b09588f1735c48a91e76803ae19a77"
     },
     "policy": {
       "expected_daemon_digest": "239f0d0dd71853fd710f3037b5adfc035cdd3ead53e49b652468e74473c066ee",
@@ -104,14 +104,14 @@
       "rule_count": 12,
       "source": "shipped_default"
     },
-    "port": 45285,
+    "port": 53783,
     "probe": true,
     "registry": {
       "registry_id": "notes-fixture-v1",
       "sha256": "84ca20089de9b412d9b60d1213c78a7fddedeede6fa50cac5313228d2c7e44be"
     },
     "workspace": {
-      "path_digest": "1faa2ad2ee501c68"
+      "path_digest": "5f38000fc093e91d"
     }
   },
   "journal_steps": {
@@ -125,7 +125,7 @@
     "resolve the reason above, then preview and apply again"
   ],
   "operation": "apply",
-  "plan_sha256": "8cc7512d31af7bbff596230bd82b47d444c028e90f9bedc2306945cd4c872d58",
+  "plan_sha256": "63cf118b0d536d4175b46679b224326daf42bdce44a2c84a83a0909558c6a460",
   "profile": {
     "arch": "x86_64",
     "id": "linux-local-user-mcp-v1",
@@ -167,14 +167,14 @@
     }
   ],
   "schema_version": "sw-onboarding/1",
-  "started_at_unix_ms": 1792346301232,
+  "started_at_unix_ms": 1792432433767,
   "steps": {
     "lifecycle_install": {
-      "elapsed_ms": 252,
+      "elapsed_ms": 152,
       "outcome": "done"
     },
     "lifecycle_start": {
-      "elapsed_ms": 280,
+      "elapsed_ms": 73,
       "outcome": "stopped"
     }
   }

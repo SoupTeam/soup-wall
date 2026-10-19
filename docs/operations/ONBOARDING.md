@@ -85,11 +85,22 @@ runs:
 9. the installed `agentfw self-test` in its own isolated workspace.
 
 After every step the journal also records an **inventory** of the Agent home it
-created: each entry the step created or changed (kind and SHA-256), never
-following links. An entry is recorded only if the step changed it and, before the
-step, it was absent or still had its recorded bytes. A step that leaves an entry
-unchanged keeps its earlier digest, so a retry never adopts a file the operator
-added or edited; such files stay foreign. Cleanup uses only this record (see [Undo](#3-undo)).
+created (kind and SHA-256 per entry, never following links). An entry is recorded
+only if all of these hold:
+
+- it is a **known output of that step's own operation** (for example `token` for
+  `agentfw install`, `versions/agentfw-onboard-<prefix>` for `lifecycle install`,
+  the daemon's `audit.jsonl`, `native-token` and runtime directories for
+  `lifecycle start`, a `manifests/claude-*.json` session manifest for the probe).
+  Identity, connection, self-test and other read-only steps produce nothing here,
+  and a directory never implies its contents;
+- the step changed it;
+- before the step it was absent or still had its recorded bytes.
+
+A file that only appears while a step runs is therefore never adopted, and a retry
+keeps earlier digests, so files the operator added or edited stay foreign.
+Runtime files the Agent writes after apply (for example later session manifests)
+are not recorded either; undo preserves them for review. Cleanup uses only this record (see [Undo](#3-undo)).
 
 A lock prevents two operations on one Agent home. Each command runs in its own
 process group with a cleared environment and a bounded time.
@@ -199,7 +210,7 @@ python3 scripts/onboarding-acceptance.py --agentfw target/release/agentfw --out 
 | `interrupted_and_killed_apply` | SIGINT stops at a step boundary; rerun resumes to `verified`; SIGKILL during verification recovers |
 | `external_edit_conflicts` | a host edit after preview invalidates the plan; an edited wrapped entry or owned file blocks undo without overwrite |
 | `rollback_after_listener_race` | a listener that appears during apply is not adopted; only proven changes are rolled back |
-| `foreign_files_in_agent_home` | operator files inside `grants/` and `onboarding/` are not adopted by a retry and survive undo, purge and an automatic rollback with a `conflict`; the journal stays; undo finishes cleanly once they are removed |
+| `foreign_files_in_agent_home` | an operator file created in `grants/` while verification runs is not adopted; operator files inside `grants/` and `onboarding/` are not adopted by a retry and survive undo, purge and an automatic rollback with a `conflict`; the journal stays; undo finishes cleanly once they are removed |
 | `unsafe_host_config` | a non-private host config is refused and its permissions are not changed |
 
 ```sh
@@ -212,7 +223,8 @@ actions, conflicts for an existing home and a foreign listener, digest
 enforcement, unsafe host files, undo without a record, report non-overwrite,
 undo and rollback that preserve untracked or changed files inside runtime
 directories, a retried verification step followed by rollback that keeps an
-operator-replaced file, audit retention without purge, and an inventory that does not follow links.
+operator-replaced file, an operator file created while a read-only step runs,
+per-step known outputs, audit retention without purge, and an inventory that does not follow links.
 
 See the [SOU-69 evidence](evidence/SOU69_ONBOARDING_2026-10-18.md).
 
@@ -224,5 +236,8 @@ See the [SOU-69 evidence](evidence/SOU69_ONBOARDING_2026-10-18.md).
 - The accepted connection wrapper does not pass classifier settings to the host
   collector; host calls are admitted by the daemon policy and registry. The
   classifier is exercised by the isolated self-test.
+- Undo removes only entries recorded during apply. Runtime files the Agent writes
+  later, while you use it, are preserved and reported as a conflict; review and
+  remove them, then run undo again.
 - The legacy Claude HTTP hook still fails open; onboarding neither configures
   hooks nor claims coverage for them.

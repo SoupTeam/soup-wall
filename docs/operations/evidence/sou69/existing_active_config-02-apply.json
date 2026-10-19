@@ -57,7 +57,7 @@
     },
     {
       "action": null,
-      "detail": "127.0.0.1:47013 is available for the new Agent",
+      "detail": "127.0.0.1:35137 is available for the new Agent",
       "id": "port",
       "status": "ok"
     },
@@ -79,11 +79,11 @@
   "explanation": "Revalidation refused the plan; nothing was changed.",
   "inputs": {
     "agent": {
-      "path_digest": "05c50f258778ef78",
-      "sha256": "e65f0abb981da984bb0c3edfa78501858eca22026c10ddc190599e6a4290feb0"
+      "path_digest": "1aa101eed46ce5a3",
+      "sha256": "0e3705ca8b4a07e7b113211da460d642cbd513f60b8b898359a8f727544799c2"
     },
     "agent_home": {
-      "path_digest": "40c717060ab8e7f1"
+      "path_digest": "2973b75c247b7ff1"
     },
     "classifier": {
       "kind": "rule-baseline",
@@ -93,9 +93,9 @@
     "host_config": {
       "other_server_entries": 1,
       "other_settings": 1,
-      "path_digest": "a47b872c86a4b163",
-      "selected_entry_sha256": "ae96716f5f064b72a8c6d7e2a2e975818455fbd60614b3a22aff1a09755bc877",
-      "sha256_at_preview": "9230ec4805ab2ecb88c2e67ab0a3e942956d675869268221c160e14bcb369cc4"
+      "path_digest": "548d2e0bc0c075b9",
+      "selected_entry_sha256": "3954949b96d1ad581b238a98078eed09056ccba3c5e23b3382e6313403e7be2e",
+      "sha256_at_preview": "a1618330dc811ed24b120534b3315b88ada3258ff62b3e5df37feaee9d8b5b53"
     },
     "policy": {
       "expected_daemon_digest": "239f0d0dd71853fd710f3037b5adfc035cdd3ead53e49b652468e74473c066ee",
@@ -103,14 +103,14 @@
       "rule_count": 12,
       "source": "shipped_default"
     },
-    "port": 47013,
+    "port": 35137,
     "probe": true,
     "registry": {
       "registry_id": "notes-fixture-v1",
       "sha256": "84ca20089de9b412d9b60d1213c78a7fddedeede6fa50cac5313228d2c7e44be"
     },
     "workspace": {
-      "path_digest": "13649a2cc1dcb6e3"
+      "path_digest": "499b58b54990687b"
     }
   },
   "next_steps": [
@@ -125,5 +125,5 @@
   },
   "result": "refused",
   "schema_version": "sw-onboarding/1",
-  "started_at_unix_ms": 1792346275139
+  "started_at_unix_ms": 1792432420788
 }
