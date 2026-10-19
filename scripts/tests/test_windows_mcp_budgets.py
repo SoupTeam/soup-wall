@@ -26,12 +26,23 @@ def row(name="wall"):
             "elapsed_seconds": 6, "witness": {"peak_owned_processes": 5,
                 "observer_stopped": True, "observer_error": None, "all_stopped": True,
                 "peak_aggregate_private_bytes": 120 * 1024**2,
+                "peak_owned_child_private_bytes": 120 * 1024**2,
                 "processes": [{"pid": 50, "stopped": True, "cpu_user_100ns": 20000000, "peak_private_bytes": 30 * 1024**2}] + [
                     {"pid": pid, "stopped": True, "cpu_user_100ns": 3000000, "peak_private_bytes": 50 * 1024**2} for pid in (51, 52, 53)]},
             "budget_events": [{"cleanup_verified": True, "effects_rolled_back": False,
                 "budget": {"launch_ownership": "job_list_before_execution", "configuration": config.copy(), "configuration_sha256": H.sha(json.dumps(ordered,separators=(",", ":")).encode()), "observed": {
-                    "reason": "windows_budget_wall_deadline", "closed": True, "peak_committed_bytes": 170 * 1024**2,
+                    "reason": "windows_budget_wall_deadline", "closed": True, "raw_job_peak_bytes": 170 * 1024**2,
                     "peak_active_processes": 5, "total_processes": 6}}}]}
+
+
+def memory_controls():
+    return [{"mode": mode, "exit_code": 0, "status": "complete", "hard_bytes": 64 * 1024**2,
+             "successful_commit_bytes": 16 * 1024**2, "large_request_bytes": 96 * 1024**2,
+             "virtual_refused": True, "virtual_error": 1816, "heap_refused": True,
+             "before": {"private_committed_bytes": 30 * 1024**2, "raw_job_peak_bytes": 30 * 1024**2},
+             **{phase: {"private_committed_bytes": 30 * 1024**2, "raw_job_peak_bytes": 128 * 1024**2}
+                for phase in ("after_virtual", "after_heap")}}
+            for mode in ("hard_only", "with_notification")]
 
 
 class ReportGrading(unittest.TestCase):
@@ -47,6 +58,7 @@ class ReportGrading(unittest.TestCase):
                          lambda r: r.update(forced_cleanup=True),
                          lambda r: r.update(late_result_released=True),
                          lambda r: r.update(capture_complete=False),
+                         lambda r: r["witness"].update(peak_owned_child_private_bytes=r["configuration"]["memoryMaxBytes"] + 65536),
                          lambda r: r["witness"].update(observer_error="TimeoutError"),
                          lambda r: r["witness"]["processes"][1].update(stopped=False),
                          lambda r: r["budget_events"][0].update(effects_rolled_back=True)):
@@ -71,7 +83,7 @@ class ReportGrading(unittest.TestCase):
         candidate["budget_events"][0]["budget"]["observed"]["reason"] = "windows_budget_memory_pressure"
         H.grade(candidate)
         bad = copy.deepcopy(candidate)
-        bad["witness"]["peak_aggregate_private_bytes"] = 0
+        bad["witness"]["peak_owned_child_private_bytes"] = 0
         with self.assertRaises(ValueError):
             H.grade(bad)
         bad = copy.deepcopy(candidate)
@@ -97,7 +109,7 @@ class ReportGrading(unittest.TestCase):
                          lambda r: r.update(allocation_refusals=0),
                          lambda r: r["witness"]["processes"][2].update(peak_private_bytes=0),
                          lambda r: r["budget_events"][0]["budget"]["observed"].update(
-                             peak_committed_bytes=r["configuration"]["memoryMaxBytes"] + 65536)):
+                             raw_job_peak_bytes=r["configuration"]["memoryMaxBytes"] + 65536)):
             with self.subTest(mutation=mutation):
                 bad = copy.deepcopy(candidate)
                 mutation(bad)
@@ -126,12 +138,7 @@ class ReportGrading(unittest.TestCase):
             H.grade_launch_controls(controls)
 
     def test_memory_calibration_requires_actual_refusals_and_bounded_private_commit(self):
-        controls = [{"mode": mode, "exit_code": 0, "hard_bytes": 64 * 1024**2,
-                     "successful_commit_bytes": 16 * 1024**2, "large_request_bytes": 96 * 1024**2,
-                     "virtual_refused": True, "virtual_error": 1816, "heap_refused": True,
-                     **{phase: {"private_committed_bytes": 30 * 1024**2, "raw_job_peak_bytes": 128 * 1024**2}
-                        for phase in ("before", "after_virtual", "after_heap")}}
-                    for mode in ("hard_only", "with_notification")]
+        controls = memory_controls()
         H.grade_memory_controls(controls)
         for mutation in (lambda c: c.pop(), lambda c: c[0].update(virtual_refused=False),
                          lambda c: c[0].update(heap_refused=False), lambda c: c[0].update(virtual_error=5),
@@ -140,6 +147,32 @@ class ReportGrading(unittest.TestCase):
             mutation(bad)
             with self.assertRaises(ValueError):
                 H.grade_memory_controls(bad)
+
+    def test_raw_peak_excess_requires_calibration_and_real_bounded_allocations(self):
+        candidate = row("memory-hard")
+        candidate.update(allocation_attempts=3, allocation_successes=2, allocation_refusals=1)
+        observed = candidate["budget_events"][0]["budget"]["observed"]
+        observed.update(reason="windows_budget_memory_limit", raw_job_peak_bytes=323 * 1024**2)
+        for process in candidate["witness"]["processes"][1:3]:
+            process["peak_private_bytes"] = 80 * 1024**2
+        H.grade(candidate, memory_controls())
+        with self.assertRaisesRegex(ValueError, "uncalibrated"):
+            H.grade(candidate)
+        for mutation in (lambda r: r.update(allocation_successes=1),
+                         lambda r: r.update(allocation_refusals=0),
+                         lambda r: r["witness"].update(peak_owned_child_private_bytes=257 * 1024**2)):
+            bad = copy.deepcopy(candidate)
+            mutation(bad)
+            with self.assertRaises(ValueError):
+                H.grade(bad, memory_controls())
+        for mutation in (lambda c: c[0].update(virtual_refused=False),
+                         lambda c: c[0]["after_virtual"].update(raw_job_peak_bytes=63 * 1024**2),
+                         lambda c: c[0]["after_virtual"].update(private_committed_bytes=65 * 1024**2),
+                         lambda c: c[0]["before"].update(raw_job_peak_bytes=128 * 1024**2)):
+            bad = memory_controls()
+            mutation(bad)
+            with self.assertRaises(ValueError):
+                H.grade(candidate, bad)
 
     def test_case_set_contains_every_required_positive_and_restart(self):
         self.assertEqual(len(H.CASES), 20)

@@ -55,7 +55,9 @@ fn query<T: Default>(job: HANDLE, class: JOBOBJECTINFOCLASS) -> Result<T, &'stat
 struct State {
     reason: Option<&'static str>,
     closed: bool,
-    peak_committed_bytes: u64,
+    // Windows can retain a rejected commit charge in PeakJobMemoryUsed. Keep
+    // the raw accounting signal, without presenting it as successful allocation.
+    raw_job_peak_bytes: u64,
     peak_active_processes: u32,
     total_processes: u32,
     cpu_user_100ns: u64,
@@ -90,15 +92,15 @@ impl Guard {
         {
             return Err("windows_budget_limit_drift");
         }
-        state.peak_committed_bytes = state
-            .peak_committed_bytes
+        state.raw_job_peak_bytes = state
+            .raw_job_peak_bytes
             .max(limits.PeakJobMemoryUsed as u64);
         state.peak_active_processes = state.peak_active_processes.max(counts.ActiveProcesses);
         state.total_processes = counts.TotalProcesses;
         state.cpu_user_100ns = counts.TotalUserTime.max(0) as u64;
         state.cpu_kernel_100ns = counts.TotalKernelTime.max(0) as u64;
         state.samples = state.samples.saturating_add(1);
-        if state.peak_committed_bytes >= config.memory_pressure_bytes {
+        if state.raw_job_peak_bytes >= config.memory_pressure_bytes {
             return Err("windows_budget_memory_pressure");
         }
         if counts.ActiveProcesses >= config.active_process_max {
@@ -206,6 +208,7 @@ impl Guard {
             Ok(state) => serde_json::json!({"format":super::FORMAT,"configuration":self.0.config,
                 "configuration_sha256":self.0.config.identity(),"observed":*state,
                 "launch_ownership":"job_list_before_execution",
+                "memory_peak_semantics":"raw_job_accounting_may_include_rejected_commit_charges",
                 "elapsed_millis":self.0.started.elapsed().as_millis(),"poll_millis":POLL.as_millis(),
                 "scope":"aggregate_committed_memory_active_processes_user_cpu_time_wall",
                 "filesystem_network_confinement":false}),

@@ -33,7 +33,7 @@ No configuration paths or account identifiers enter the budget diagnostics.
 | Field | Version 1 supported range and meaning |
 | --- | --- |
 | `memoryMaxBytes` | 64 MiB–16 GiB, multiple of 64 KiB; aggregate Job committed memory hard ceiling |
-| `memoryPressureBytes` | 32 MiB up to, but excluding, the hard ceiling, multiple of 64 KiB; terminal aggregate pressure threshold |
+| `memoryPressureBytes` | 32 MiB up to, but excluding, the hard ceiling, multiple of 64 KiB; terminal raw Job charge-pressure threshold, including rejected commit charges |
 | `activeProcessMax` | 2–256; aggregate simultaneously active Job processes, including the primary server; reaching saturation is terminal |
 | `cpuUserMillis` | 100–300000 ms; aggregate **user-mode CPU time** across Job members, including exited descendants |
 | `wallMillis` | 1000–3600000 ms from budget installation; absolute deadline, including startup |
@@ -88,6 +88,13 @@ facility and retained peak counter give an additional terminal signal. A single
 rejected allocation that never reaches that threshold is not an independently
 attested memory-pressure event. Do not claim that every application-handled OOM
 is immediately detected. All live work still has the absolute wall deadline.
+`PeakJobMemoryUsed` is retained as `raw_job_peak_bytes`, with an explicit accounting
+label: Windows can include a rejected commit charge in that high-water value.
+The native controls demonstrate this with an actual NULL `VirtualAlloc`/commit
+error and heap refusal while private committed memory stays within the hard
+quota. A raw peak above the quota alone therefore does not establish that the
+processes successfully allocated that memory. Charge pressure still closes the
+output gate; raw values are never clamped or discarded.
 CPU-time enforcement is periodically evaluated by Windows, not an exact
 nanosecond stop. Acceptance retains the actual observed overshoot and cleanup
 times; a missed/late witness is a failed or incomplete run.
@@ -125,6 +132,13 @@ requests, both with and without pressure notifications. Each has its own 64 MiB
 hard Job limit, finite CPU/process bounds and a 10-second parent deadline. Their
 raw counters and kernel error codes remain in the report. These controls do not
 waive the resource scenarios or turn an exceeded/missing witness into a pass.
+The hard-refusal scenario requires two actual held allocations in separate
+descendants, a third real refusal, and independent kernel private-memory counters
+within the configured quota for the complete observed child tree (collector
+excluded). A raw Job peak above that quota is accepted only for this controlled
+refusal when both current-host calibrations independently prove rejected-charge
+accounting. Missing calibration, missing allocations, uncertain observation or
+an actual private-commit excess fails qualification.
 
 The harness assigns itself to an outer finite Job **before** starting any Agent
 or fixture: 1 GiB committed memory, 64 processes, 120 seconds user CPU and a

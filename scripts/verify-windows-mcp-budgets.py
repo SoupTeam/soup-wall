@@ -246,7 +246,8 @@ def grade_memory_controls(controls):
     require(len(controls) == 2 and {row.get("mode") for row in controls} == {"hard_only", "with_notification"},
             "memory_accounting_control_missing")
     for row in controls:
-        require(row.get("exit_code") == 0 and row.get("hard_bytes") == 64 * 1024**2
+        require(row.get("exit_code") == 0 and row.get("status") == "complete" and not row.get("failure_code")
+                and row.get("hard_bytes") == 64 * 1024**2
                 and row.get("successful_commit_bytes") == 16 * 1024**2 and row.get("large_request_bytes") == 96 * 1024**2
                 and row.get("virtual_refused") is True and row.get("virtual_error") in {8, 1455, 1816}
                 and row.get("heap_refused") is True, "memory_accounting_refusal_missing")
@@ -254,6 +255,18 @@ def grade_memory_controls(controls):
             require(16 * 1024**2 <= row[phase]["private_committed_bytes"] <= row["hard_bytes"],
                     "memory_accounting_actual_cap_exceeded")
             require(row[phase]["raw_job_peak_bytes"] >= 16 * 1024**2, "memory_accounting_job_peak_missing")
+
+
+def rejected_charge_peak_calibrated(controls):
+    grade_memory_controls(controls)
+    # Bind this interpretation to both actual controls on the same current host:
+    # a NULL/1455-or-equivalent commit, no large live-memory increase, but a raw
+    # retained peak above the hard quota. Never clamp or discard that raw value.
+    return all(row["before"]["raw_job_peak_bytes"] <= row["hard_bytes"]
+               and row["after_virtual"]["raw_job_peak_bytes"] > row["hard_bytes"]
+               and row["after_virtual"]["private_committed_bytes"] <= row["before"]["private_committed_bytes"] + 1024**2
+               and row["after_heap"]["raw_job_peak_bytes"] >= row["after_virtual"]["raw_job_peak_bytes"]
+               for row in controls)
 
 
 def memory_accounting_controls(root, report):
@@ -283,6 +296,7 @@ class Witness:
     def __init__(self, api, process):
         self.api, self.process, self.handles, self.rows = api, process, {}, {}
         self.peak_alive, self.peak_private, self.error = 0, 0, None
+        self.peak_child_private = 0
         self.stop = threading.Event()
         self.sample()
         self.thread = threading.Thread(target=self.loop, daemon=True)
@@ -306,7 +320,7 @@ class Witness:
                 self.handles[pid] = handle
                 self.rows[pid] = {"pid": pid, "created_100ns": created, "peak_private_bytes": 0,
                                   "cpu_user_100ns": 0, "cpu_kernel_100ns": 0}
-        alive, private = 0, 0
+        alive, private, child_private = 0, 0, 0
         for pid, handle in self.handles.items():
             created, _, kernel, user = self.api.times(handle)
             row = self.rows[pid]
@@ -324,8 +338,11 @@ class Witness:
                     continue
                 row["peak_private_bytes"] = max(row["peak_private_bytes"], memory.private)
                 private += memory.private
+                if pid != self.process.pid:
+                    child_private += memory.private
         self.peak_alive = max(self.peak_alive, alive)
         self.peak_private = max(self.peak_private, private)
+        self.peak_child_private = max(self.peak_child_private, child_private)
 
     def loop(self):
         try:
@@ -343,6 +360,7 @@ class Witness:
             self.error = self.error or (str(error) if isinstance(error, ValueError) else type(error).__name__)
         result = {"processes": list(self.rows.values()), "peak_owned_processes": self.peak_alive,
                   "peak_aggregate_private_bytes": self.peak_private, "observer_error": self.error,
+                  "peak_owned_child_private_bytes": self.peak_child_private,
                   "observer_stopped": not self.thread.is_alive(),
                   "all_stopped": all(row.get("stopped") for row in self.rows.values())}
         for handle in self.handles.values():
@@ -640,7 +658,7 @@ class Client:
         return row
 
 
-def grade(row):
+def grade(row, accounting_controls=None):
     require(row["passed"], "owned_process_or_release_failure")
     name = row["case"]
     proof = row["witness"]
@@ -654,6 +672,10 @@ def grade(row):
         require(not row["server_started"], "refusal_executed_server")
         require(row.get("launch_refusal_code") == REFUSALS[name], "wrong_launch_refusal_reason")
         return
+    descendants = [p for p in proof["processes"] if p["pid"] != row["collector_pid"]]
+    require(descendants and any(p["peak_private_bytes"] > 0 for p in descendants), "owned_child_memory_witness_missing")
+    require(0 <= proof["peak_owned_child_private_bytes"] <= row["configuration"]["memoryMaxBytes"],
+            "independent_hard_memory_exceeded")
     require(row["useful"], "useful_work_missing")
     require(row["native_epoch_sha256"] is not None and row["native_terminal"] in {
         "native_session_retired", "native_session_expired"}, "native_pending_authority_not_closed")
@@ -674,7 +696,9 @@ def grade(row):
             "budget_identity_hash_mismatch")
     observed = budget["observed"]
     require(observed.get("closed") is True, "budget_monitor_not_closed")
-    require(observed["peak_committed_bytes"] <= row["configuration"]["memoryMaxBytes"], "hard_memory_exceeded")
+    if observed["raw_job_peak_bytes"] > row["configuration"]["memoryMaxBytes"]:
+        require(name == "memory-hard" and accounting_controls is not None, "uncalibrated_job_peak_excess")
+        require(rejected_charge_peak_calibrated(accounting_controls), "rejected_charge_peak_not_proved")
     require(observed["peak_active_processes"] <= row["configuration"]["activeProcessMax"], "process_cap_exceeded")
     require(events[0].get("effects_rolled_back") is False, "false_rollback_claim")
     if name in {"useful", "breakaway", "sibling"}:
@@ -687,12 +711,11 @@ def grade(row):
         return
     reason = observed["reason"]
     require(reason is not None, "terminal_reason_missing")
-    descendants = [p for p in row["witness"]["processes"] if p["pid"] != row["collector_pid"]]
     require(len(descendants) >= 3, "real_descendant_witness_missing")
     if name == "memory":
         require(reason in {"windows_budget_memory_pressure", "windows_budget_memory_limit"}, "wrong_memory_reason")
-        require(observed["peak_committed_bytes"] >= row["configuration"]["memoryPressureBytes"], "aggregate_pressure_missing")
-        require(row["witness"]["peak_aggregate_private_bytes"] >= 100 * 1024**2, "independent_allocation_missing")
+        require(observed["raw_job_peak_bytes"] >= row["configuration"]["memoryPressureBytes"], "aggregate_pressure_missing")
+        require(proof["peak_owned_child_private_bytes"] >= 100 * 1024**2, "independent_allocation_missing")
         require(sum(p["peak_private_bytes"] >= 24 * 1024**2 for p in descendants) >= 2, "independent_descendant_allocations_missing")
         require(max(p["peak_private_bytes"] for p in descendants) < row["configuration"]["memoryPressureBytes"], "not_aggregate_memory")
     elif name == "memory-hard":
@@ -749,13 +772,13 @@ def grade_report(report):
     require(report.get("standard_user") is True and report.get("administrator_group_present") is False,
             "standard_user_witness_missing")
     for row in rows:
-        grade(row)
+        grade(row, report["memory_accounting_controls"])
         require(row.get("sibling_useful") is True, "sibling_followup_missing")
     restarts = [row["native_epoch_sha256"] for row in rows if row["case"].startswith("restart-")]
     require(len(set(restarts)) == 6, "restart_reused_native_epoch")
     sibling = report["sibling"]
     require(sibling.get("case") == "sibling", "independent_sibling_missing")
-    grade(sibling)
+    grade(sibling, report["memory_accounting_controls"])
 
 
 def run(args):
@@ -831,7 +854,7 @@ def run(args):
             report["cases"].append(row)
             save(root / "results.json", report)
             try:
-                grade(row)
+                grade(row, report["memory_accounting_controls"])
             except Exception as error:
                 row["passed"], row["failure_code"] = False, str(error) if isinstance(error, ValueError) else type(error).__name__
             try:
