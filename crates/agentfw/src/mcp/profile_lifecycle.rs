@@ -4177,8 +4177,8 @@ mod tests {
         assert_eq!(sha256_bytes(disk_cfg.as_bytes()), superseded_digest);
     }
 
-    #[test]
-    fn recovery_removes_incomplete_candidate_scratch_without_publishing() {
+    fn incomplete_candidate_recovery_fixture(
+    ) -> (tempfile::TempDir, ProfileManager, PathBuf, PathBuf) {
         let home_temp = tempdir().unwrap();
         let home = home_temp.path().canonicalize().unwrap();
         let mgr = ProfileManager::new(&home);
@@ -4217,20 +4217,63 @@ mod tests {
         });
         mgr.save_state(&state).unwrap();
 
-        // Recovery MUST NOT publish candidate scratch to config.yaml!
-        let rec = mgr.recover();
-        assert!(rec.is_ok());
+        (home_temp, mgr, displaced, candidate)
+    }
 
-        assert!(!mgr.config_path.exists());
-        assert!(!displaced.exists());
-        assert!(!candidate.exists());
-        let state_after = mgr.load_state().unwrap();
-        assert!(state_after.in_progress.is_none());
+    #[test]
+    fn recovery_removes_incomplete_candidate_scratch_without_publishing() {
+        // Like the other lifecycle fixtures, use an OS-assigned free port.
+        // Do not hold a bound socket: the real ownership guard also checks bind
+        // availability, not just whether a listener accepts connections.
+        let port =
+            allocate_test_port().expect("loopback port allocation is required for this test");
+        crate::config::with_test_default_port(port, || {
+            let (_home, mgr, displaced, candidate) = incomplete_candidate_recovery_fixture();
 
-        // Subsequent retry must succeed cleanly
-        let p1_dir = home.join("bundle1");
-        create_test_profile(&p1_dir, "srv-1", "tool_1");
-        assert!(mgr.install(&p1_dir, None).is_ok());
+            // Recovery MUST NOT publish candidate scratch to config.yaml!
+            let rec = mgr.recover();
+            assert!(rec.is_ok(), "recover failed: {rec:#?}");
+
+            assert!(!mgr.config_path.exists());
+            assert!(!displaced.exists());
+            assert!(!candidate.exists());
+            let state_after = mgr.load_state().unwrap();
+            assert!(state_after.in_progress.is_none());
+            assert!(state_after.active_bundle_sha256.is_none());
+            assert_eq!(state_after.generation, 0);
+
+            // Subsequent retry must succeed cleanly, on the same isolated port.
+            let p1_dir = mgr.home.join("bundle1");
+            create_test_profile(&p1_dir, "srv-1", "tool_1");
+            let retry = mgr.install(&p1_dir, None);
+            assert!(retry.is_ok(), "install retry failed: {retry:#?}");
+        });
+    }
+
+    #[test]
+    fn recovery_retains_incomplete_candidate_journal_on_unowned_port() {
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let endpoint = listener.local_addr().unwrap();
+        crate::config::with_test_default_port(endpoint.port(), || {
+            let (_home, mgr, _displaced, _candidate) = incomplete_candidate_recovery_fixture();
+            let error = mgr.recover().unwrap_err();
+            let message = format!("{error:#}");
+            assert!(
+                message.contains(
+                    "recovery confirmed baseline configuration but daemon ownership check failed"
+                ) && message.contains("agent port is occupied by an unowned process")
+                    && message.contains("refusing to clear journal"),
+                "unexpected recovery error: {message}"
+            );
+            assert!(!mgr.config_path.exists());
+            let state = mgr.load_state().unwrap();
+            assert_eq!(state.in_progress.unwrap().phase, OperationPhase::Failed);
+            assert!(state.active_bundle_sha256.is_none());
+            assert_eq!(state.generation, 0);
+            // Recovery must not stop or replace the independent listener.
+            std::net::TcpStream::connect_timeout(&endpoint, std::time::Duration::from_secs(1))
+                .unwrap();
+        });
     }
 
     #[test]

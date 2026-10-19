@@ -12,7 +12,32 @@ fn default_bind() -> String {
     "127.0.0.1".into()
 }
 fn default_port() -> u16 {
+    #[cfg(test)]
+    if let Some(port) = TEST_DEFAULT_PORT.with(std::cell::Cell::get) {
+        return port;
+    }
     8787
+}
+
+// Absent-config lifecycle tests need their own endpoint without creating the
+// very config.yaml whose absence they are testing. This override is compiled
+// only into unit tests; it is thread-local, scoped, and restored on panic.
+#[cfg(test)]
+thread_local! {
+    static TEST_DEFAULT_PORT: std::cell::Cell<Option<u16>> = const { std::cell::Cell::new(None) };
+}
+
+#[cfg(test)]
+pub(crate) fn with_test_default_port<T>(port: u16, run: impl FnOnce() -> T) -> T {
+    assert_ne!(port, 0, "test endpoint must have an allocated port");
+    struct Restore(Option<u16>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            TEST_DEFAULT_PORT.with(|value| value.set(self.0));
+        }
+    }
+    let _restore = Restore(TEST_DEFAULT_PORT.with(|value| value.replace(Some(port))));
+    run()
 }
 fn default_max_record_bytes() -> usize {
     262_144
@@ -337,6 +362,28 @@ mod tests {
         assert_eq!(c.bind, "127.0.0.1");
         assert_eq!(c.max_record_bytes, 262_144);
         assert!(!c.capture_unknown_raw);
+    }
+
+    #[test]
+    fn test_endpoint_is_thread_local_and_restored_after_nested_panic() {
+        assert_eq!(Config::default().port, 8787);
+        with_test_default_port(12345, || {
+            assert_eq!(Config::default().port, 12345);
+            assert_eq!(Config::from_yaml("{}").unwrap().port, 12345);
+            assert_eq!(Config::from_yaml("port: 9001").unwrap().port, 9001);
+            assert_eq!(
+                std::thread::spawn(|| Config::default().port)
+                    .join()
+                    .unwrap(),
+                8787
+            );
+            let result = std::panic::catch_unwind(|| {
+                with_test_default_port(12346, || panic!("fixture unwind"));
+            });
+            assert!(result.is_err());
+            assert_eq!(Config::default().port, 12345);
+        });
+        assert_eq!(Config::default().port, 8787);
     }
 
     #[test]
