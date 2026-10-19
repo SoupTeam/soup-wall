@@ -13,11 +13,12 @@
     },
     "binary_architecture": "Mach-O 64-bit executable arm64",
     "filesystem_probe_source_sha256": "09876be07f9eef96941b900db6a81d73a554641b3e8c82677964a8746754bc7c",
-    "filesystem_probe_sha256": "918cfadc58592ce10638340b237902498bd0ea7cec8a8a70e89637967a514e00"
+    "filesystem_probe_sha256": "341b8404300a5614120da83ba02f0fe42de9eebf297d082cf9f8151683b19e88"
   },
-  "base_commit": "a90c82fb3969b5594e5db951e4b9ea992228c19c",
+  "base_commit": "5fc866cc998c753bccff141926df36bf0c5ebade",
+  "merged_main_commit": "30ced9431990e8aa55381194d7616daa87733344",
   "source_overlay": "Reviewed build inputs in source-build-inputs.json; qualification precedes retained evidence/editorial additions",
-  "binary_sha256": "a68af283b3d1b13fc6b59b3db0bf4ecbb966e47f3625b8e649c821d9941e6618",
+  "binary_sha256": "726f2b050ded0a0514b0694111b91407ffebdc4dc3a9fcced5c1dc89686c1ba3",
   "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
   "runtime": {
     "passed": 41,
@@ -27,8 +28,8 @@
     "negative_validator_controls": 26
   },
   "workspace": {
-    "command": "cargo test --offline --locked --workspace --no-fail-fast -- --test-threads=1",
-    "passed": 1519,
+    "command": "cargo test --offline --locked --workspace --no-fail-fast",
+    "passed": 1556,
     "failed": 0,
     "ignored": 12,
     "result_groups": 65
@@ -52,7 +53,11 @@
     },
     {
       "kind": "parallel_test_port_collision",
-      "description": "A pre-existing profile_lifecycle test encountered an occupied unowned default daemon port during a parallel retry; final complete suite ran serially. Explicit concurrency tests still execute."
+      "description": "A pre-existing profile_lifecycle test encountered an occupied unowned default daemon port during a parallel retry; pre-merge checkpoint was qualified serially. Upstream main now contains its port-isolation fix; the final merged-source run uses normal parallel mode."
+    },
+    {
+      "kind": "upstream_terminal_expiry_contract",
+      "description": "Initial post-merge native matrices: 40 passed, 1 failed each because upstream terminal expiry retires a session before a later protected call. The witness now accepts only HTTP 409 native call refusals with a correlated error or a nonzero collector exit with native_child_authority_expired or native_session_unknown, preserves no-effect observations and requires useful independent continuation. Rust build inputs were unchanged; the complete native matrix was rerun."
     }
   ],
   "separate_policy_regression": {
@@ -62,64 +67,64 @@
   "case_input_identities": {
     "read-allowed-relative": {
       "registry.json": {
-        "sha256": "d2349a11e2c2d1712522c75a1af30ca5b14b32cb98d4088635bc1a3384ee0a33",
-        "bytes": 4920
+        "sha256": "81dc26cdae32dd48ea15f51279aa374d44088f5c36fce4be693c1f14b26baeb8",
+        "bytes": 4968
       },
       "policy.yaml": {
         "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
         "bytes": 34
       },
       "relay-trace.json": {
-        "sha256": "43cd9a2ff333b2e4b03ac3429f373ba13bf3597f8eb62dedf26bd5e050851092",
+        "sha256": "b5f83c9a0309979c4c750ae66ae62438062a20cc814e2f58871643d6cebfbf82",
         "bytes": 846
       }
     },
     "read-allowed-absolute": {
       "registry.json": {
-        "sha256": "a22e41e69987c33b8187e61f9feeb56c2bda2d3b1bbc6e3b94f68cf6e2de55e4",
-        "bytes": 4920
+        "sha256": "7e5d5618337e1461975960989f8f7ae2894edbaf6d5909031c715967168e84ca",
+        "bytes": 4968
       },
       "policy.yaml": {
         "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
         "bytes": 34
       },
       "relay-trace.json": {
-        "sha256": "cb3164bae31e169ca9f7b9f67eaa19c08a1ffb412b79317f1600cea3acceae19",
+        "sha256": "8d117a90c17d5f629f66543df3315fc17edc02d34c03a30f6d10225324d496c4",
         "bytes": 846
       }
     },
     "read-compatible-alias": {
       "registry.json": {
-        "sha256": "a661fe7ffdf08fa2ee6f514f2d381bd6904c5ad406436ed62f738de419c01012",
-        "bytes": 4920
+        "sha256": "24930ba8f25b180e48b5fa5f44f0e0ba32d8436d5597639260bd8a9fa62233a1",
+        "bytes": 4968
       },
       "policy.yaml": {
         "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
         "bytes": 34
       },
       "relay-trace.json": {
-        "sha256": "4209d1787680c358bff43eb6fdb928e702a089bd4dcd5a6e8d658c98217ec564",
+        "sha256": "4d519a540fbdf745f678c200dc625e1d481906780f39c895550d90996f736b51",
         "bytes": 846
       }
     },
     "read-hard-deny": {
       "registry.json": {
-        "sha256": "3f7ee34d32ad339ebd4ed22762bebf4ddfa0f7ab288a74f65aaf52c77827d0e9",
-        "bytes": 4836
+        "sha256": "b68233b5d975e2af47063ced6bef9e48828195acdc924b264c9e863648ec4986",
+        "bytes": 4884
       },
       "policy.yaml": {
         "sha256": "f3a9b10a526c707d88af59ff221eca8682029f7b768a6e167bcfb28991980620",
         "bytes": 121
       },
       "relay-trace.json": {
-        "sha256": "4a3b3034f9886597906bec5f2b057b64ef1839354664841bc39b36cac3c9fffc",
+        "sha256": "2093c27961478360d7f1d7e20aa3c335390865047c8954cb6ae3172d8f9551a7",
         "bytes": 667
       }
     },
     "read-unknown-classifier": {
       "registry.json": {
-        "sha256": "7ca86b90635519a726007d5794c5d15bfecf3f2634ed5957d52e6156e7735be1",
-        "bytes": 4944
+        "sha256": "9b1fe37a8f836b88dd97f3cbd7ffd8467699e706d002fef6355af83333a08664",
+        "bytes": 4992
       },
       "policy.yaml": {
         "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
@@ -132,36 +137,36 @@
     },
     "read-unsupported-ask": {
       "registry.json": {
-        "sha256": "347d5e30022943a7060cb1b3d8429da57d9c4a4087c1ad3c710bda6341ef8a5a",
-        "bytes": 4908
+        "sha256": "075a50daac5cfb9f3e73d3c3ed5079981d753daed4f7346053c6db9aa0aa63e5",
+        "bytes": 4956
       },
       "policy.yaml": {
         "sha256": "0f8ca6ecaa51aa40a9099bf4b31e957bc3b55fd6908b1170a5ddafbb2f2e9bcd",
         "bytes": 136
       },
       "relay-trace.json": {
-        "sha256": "80ba15e173f2688a2564a0cb44ad38bcb7c752e66a6b3c05a35171c01e6d4607",
+        "sha256": "f2289f53a5d6c7b7860b24584803598853226915a0128c741f5437406dd5c48a",
         "bytes": 683
       }
     },
     "shared-taint-incomplete-history": {
       "registry.json": {
-        "sha256": "66f1844d0b627739f3c61babfc43f1f149f751197bae0813f49c6bb1aab29685",
-        "bytes": 5040
+        "sha256": "10a80dfbefd7135954342c7349ea3e8f0e563f8073416437cc1835aba896f2bf",
+        "bytes": 5088
       },
       "policy.yaml": {
         "sha256": "fa818d171a582fe32458d69bfdc7abb5dffa4f740203d0d97b0b40128998dffa",
         "bytes": 158
       },
       "relay-trace.json": {
-        "sha256": "4427ffd03a855e1812ac23b4fb5c42464673a915b01a7cd5f2d56afc2e7a2dc2",
+        "sha256": "b4f27db0eead20fde2d312b08d98680ca18841f350d7b14e29f9dc2b9a953a15",
         "bytes": 3879
       }
     },
     "read-out-of-bounds-traversal": {
       "registry.json": {
-        "sha256": "0cc1111c397d142a130acf8263116ec8e534bc443f5c78f9494773413e9af729",
-        "bytes": 5004
+        "sha256": "3ee3d75d735d778348e15ccb86a246b98bd8d5d0ee0ea5f153624b0e27a7e3db",
+        "bytes": 5052
       },
       "policy.yaml": {
         "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
@@ -174,8 +179,8 @@
     },
     "read-symlink-refused": {
       "registry.json": {
-        "sha256": "7d58f58b7815c686f54a1230e75579f94e8c0e0c770cc9d0e8255ab55bae88ac",
-        "bytes": 4908
+        "sha256": "f6f9b2eed12c0119349c5945fcb16c18b1c748e9085a19c03a37068a46946183",
+        "bytes": 4956
       },
       "policy.yaml": {
         "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
@@ -188,8 +193,8 @@
     },
     "read-fifo-refused": {
       "registry.json": {
-        "sha256": "95a407fa93b5c1727b39814de29fd5a4157f657da4a4358ac140bedb1e2d6d09",
-        "bytes": 4872
+        "sha256": "60fb9f8f8dbd621f677469e2b6567b6b82c1e5268c3965d1f700ad3604ad2c70",
+        "bytes": 4920
       },
       "policy.yaml": {
         "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
@@ -202,8 +207,8 @@
     },
     "read-hardlink-refused": {
       "registry.json": {
-        "sha256": "89dbb46892b93b5f847a429c41e87a7907703c1a6db2af2f4dcdc8631369b1e6",
-        "bytes": 4920
+        "sha256": "fa5a3b12a0cfef600691253429417a15d1e8ef3433db45da001d335976da1e19",
+        "bytes": 4968
       },
       "policy.yaml": {
         "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
@@ -216,8 +221,8 @@
     },
     "read-oversize-refused": {
       "registry.json": {
-        "sha256": "62614b6b45ae1ee21a4d44e01fd092bf2da038a15b2ee31bf7cbf6a9ace2b66a",
-        "bytes": 4920
+        "sha256": "26f5976b31b0752948f6299db5fd62b951cf49e0dd0aee1e67e0616db3111e98",
+        "bytes": 4968
       },
       "policy.yaml": {
         "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
@@ -230,21 +235,77 @@
     },
     "read-invalid-utf8-refused": {
       "registry.json": {
-        "sha256": "d56f6abee4d7f6e289c4ad213b3ddd5432c09bae0b74fd7624fa91b0441c567f",
-        "bytes": 4976
+        "sha256": "08c5071856692ce30fbe0a7dabebad8388bc5cfc056d3ddefbe65dbc4365a8fd",
+        "bytes": 5024
       },
       "policy.yaml": {
         "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
         "bytes": 34
       },
       "relay-trace.json": {
-        "sha256": "f94c3cf7d2405bd5fa0b8e91e5bb441ab3d6429abf6da232cfdf95b0c197a257",
+        "sha256": "52e151e854598756fa7436ed5749cdd39710476de1f35946f6fbe24d8ca539e8",
         "bytes": 846
       }
     },
     "read-leaf-drift-detected": {
       "registry.json": {
-        "sha256": "524e009d314eef1e3851767f851ec3d0259246bc0723b66fd76fae9707c9be7c",
+        "sha256": "2b92aa29d18e704abe939a8e5622286ae1c8e71aaff9c1d7db007fa3635bd0a5",
+        "bytes": 5004
+      },
+      "policy.yaml": {
+        "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
+        "bytes": 34
+      },
+      "relay-trace.json": {
+        "sha256": "dbf28b0355f96ad572130a836becee5e6f7c929c19ac406db91ec6a63f5dbdfc",
+        "bytes": 1551
+      }
+    },
+    "read-parent-drift-detected": {
+      "registry.json": {
+        "sha256": "4b0f397646516e7584d0769886e619c0d059072f89d4552f2a5fb8d80756b775",
+        "bytes": 5036
+      },
+      "policy.yaml": {
+        "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
+        "bytes": 34
+      },
+      "relay-trace.json": {
+        "sha256": "56eed715796dd162009103348b8614bb0c0d961a0f107ddbc5113ccad7152dbf",
+        "bytes": 1551
+      }
+    },
+    "create-allowed-relative": {
+      "registry.json": {
+        "sha256": "1d0c870dc0a2d7e68c2770b10c5e6f8d45ad7a193b6fe607d2828f057975ee6a",
+        "bytes": 4992
+      },
+      "policy.yaml": {
+        "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
+        "bytes": 34
+      },
+      "relay-trace.json": {
+        "sha256": "13bd10276b527db38ac6f6c6a639fdce2d3d169668ac1381547763778073d180",
+        "bytes": 846
+      }
+    },
+    "create-allowed-absolute": {
+      "registry.json": {
+        "sha256": "3fcc7b75a463ae786106b26f2fe665d143094838acf27389f5a725325f3daabc",
+        "bytes": 4992
+      },
+      "policy.yaml": {
+        "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
+        "bytes": 34
+      },
+      "relay-trace.json": {
+        "sha256": "d9649f737e4234ac08039cbc6dc2b5141884d8ef8b5cc180e13f3cb32109d958",
+        "bytes": 847
+      }
+    },
+    "create-empty-content": {
+      "registry.json": {
+        "sha256": "5e4e2e718f78003a5f407e41225d427ae87768f89175b5fa8d244a72581fbcb0",
         "bytes": 4956
       },
       "policy.yaml": {
@@ -252,112 +313,56 @@
         "bytes": 34
       },
       "relay-trace.json": {
-        "sha256": "74eaa855474d3c6e64d1c84027e1c9fb9c719d683513001fe14e5bc93e56aebb",
-        "bytes": 1551
-      }
-    },
-    "read-parent-drift-detected": {
-      "registry.json": {
-        "sha256": "9ae33b64ba9f33a1904a5bf51cb60deaf5fa10a8cc961659a2ded7ca9a449e3f",
-        "bytes": 4988
-      },
-      "policy.yaml": {
-        "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
-        "bytes": 34
-      },
-      "relay-trace.json": {
-        "sha256": "31e8bcfaa895120a1ad9419857a323f9824d4797b034a8b391f8dea3e6cc87db",
-        "bytes": 1551
-      }
-    },
-    "create-allowed-relative": {
-      "registry.json": {
-        "sha256": "fbcf1aad86e0f2afb253fadffcbb60e0bd3eac27cac9daef2b878000dae68381",
-        "bytes": 4944
-      },
-      "policy.yaml": {
-        "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
-        "bytes": 34
-      },
-      "relay-trace.json": {
-        "sha256": "3ec800cc456c6d5494d7a9a11082c3d4d1aaa21146e72420d79f8276ae121b87",
-        "bytes": 846
-      }
-    },
-    "create-allowed-absolute": {
-      "registry.json": {
-        "sha256": "7acaff7b2e050a19a977d3c6365fb33e0643b7b5bd05cb282bc5ada585c93561",
-        "bytes": 4944
-      },
-      "policy.yaml": {
-        "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
-        "bytes": 34
-      },
-      "relay-trace.json": {
-        "sha256": "c51ef1173cd29cc9e7e1b0e66ed88d87f7afdc13cb8e2b74220cc5663c9cd111",
-        "bytes": 847
-      }
-    },
-    "create-empty-content": {
-      "registry.json": {
-        "sha256": "3b4abad6ca767c623ad53969cabec0e194b0a517f395c198a7fb5255810ea189",
-        "bytes": 4908
-      },
-      "policy.yaml": {
-        "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
-        "bytes": 34
-      },
-      "relay-trace.json": {
-        "sha256": "3c4c38825b07095096a181b91f19b888a5a65b81db75d2c66eca25296479e173",
+        "sha256": "efccd18532631fa12a2a8605ebaca3ef8fedfebcc4b2bfa02353584e476df80e",
         "bytes": 846
       }
     },
     "create-byte-limit": {
       "registry.json": {
-        "sha256": "eb6b85bfb286b720f9fe8c9fdfff13bfdcc786b661e85d02b66ea5f6c81f8290",
-        "bytes": 4872
+        "sha256": "7004a6c1c23c51d43783c0b9db2528f71b6360582f0c30dc9e7d8f2b43c24c98",
+        "bytes": 4920
       },
       "policy.yaml": {
         "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
         "bytes": 34
       },
       "relay-trace.json": {
-        "sha256": "c3d3a15b919717f1dc3ee44e612dd01f5ebfcdd3a6098ab97d8c57d808efdeb1",
+        "sha256": "85092aec4acc2bdb675886ff34b3afcd28a8e4b48994f1022ea6e9f198d5fc5f",
         "bytes": 847
       }
     },
     "create-compatible-alias": {
       "registry.json": {
-        "sha256": "ad1ff82eb1328916c7509a1fda152d077575a6b1b151c83744b75e8770768ea5",
-        "bytes": 4944
+        "sha256": "11c6dba74a5c652eaa842ea62f9b395ad423225696b2b6b74d46f97e981914d9",
+        "bytes": 4992
       },
       "policy.yaml": {
         "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
         "bytes": 34
       },
       "relay-trace.json": {
-        "sha256": "de2f60a55be337b9b4d4570a66d244a93f0550658457e82e1518f03482c1d44a",
+        "sha256": "1b6cf40422a14a42a4531fb925ae25b4842d31f1110aba0e3a545cda0d1aa62c",
         "bytes": 846
       }
     },
     "create-hard-deny": {
       "registry.json": {
-        "sha256": "ef1aa9471a95b58357734b340b5b1cee528ced3771ecec02b035b6183fd0f9d2",
-        "bytes": 4860
+        "sha256": "2107616c401fe103c221e9b6d8fcf7664d6953dd651a0cf98fbb4a93bd5d0a58",
+        "bytes": 4908
       },
       "policy.yaml": {
         "sha256": "f3a9b10a526c707d88af59ff221eca8682029f7b768a6e167bcfb28991980620",
         "bytes": 121
       },
       "relay-trace.json": {
-        "sha256": "5fe6cf0b8dcab5318196357f6d1e1a6c37992460431b9a6b71ead42b3484c647",
+        "sha256": "9d9051e265907fa832b3420e2ca9291ddad77975ebe0e7ad4bb47290637a82a5",
         "bytes": 667
       }
     },
     "create-unknown-classifier": {
       "registry.json": {
-        "sha256": "c1f6f814dca637a761d4760031133406a266f17ca33571d2b43e61240f481dc0",
-        "bytes": 4968
+        "sha256": "cf5ef376453972b811751eed2640479aec664c82515b555009d99622ff557232",
+        "bytes": 5016
       },
       "policy.yaml": {
         "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
@@ -370,22 +375,22 @@
     },
     "create-unsupported-ask": {
       "registry.json": {
-        "sha256": "66eb38c4ed63d90f6665b620c355a355d645a6436271342ca1723cf48df4ad03",
-        "bytes": 4932
+        "sha256": "fc850d34a02457e037f83fe8a489b0a91f1a6e5172fe93f72018bb4b05a6f7d7",
+        "bytes": 4980
       },
       "policy.yaml": {
         "sha256": "0f8ca6ecaa51aa40a9099bf4b31e957bc3b55fd6908b1170a5ddafbb2f2e9bcd",
         "bytes": 136
       },
       "relay-trace.json": {
-        "sha256": "f14848d2ae477b5949daf8f95fd81bd79805ad8bc894819bc137d1fdb7fb7595",
+        "sha256": "58378181719463040e9ccb63126e6d91617a644f7fdb14cddc94c16dd5adb0d9",
         "bytes": 683
       }
     },
     "create-existing-collision-refused": {
       "registry.json": {
-        "sha256": "a05189f270d9c8c96a11168bdb5a1779c1eea27248687a5d01bf5a7dcbb15f6d",
-        "bytes": 5064
+        "sha256": "119291a912a652a8a59b814aa324869699a826b2a7240be48d28a957a6a62478",
+        "bytes": 5112
       },
       "policy.yaml": {
         "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
@@ -398,22 +403,22 @@
     },
     "create-concurrent-collision-refused": {
       "registry.json": {
-        "sha256": "881101eeaf9e59ff070ddf5d6f9462dd987ca796a114a51139ba902789077b74",
-        "bytes": 5088
+        "sha256": "9455e11085bfcef3ed7d09740dbae43d49f71054e7e18ba4c361b8f5fcf36a04",
+        "bytes": 5136
       },
       "policy.yaml": {
         "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
         "bytes": 34
       },
       "relay-trace.json": {
-        "sha256": "1b9c61f74b842faf85cb68c79189334ba12f382804c9e45941f8309183b25d29",
+        "sha256": "033f9b0f302cfbeac726b5e5e621822cf7635366eb0898fde1e35338712f9a81",
         "bytes": 846
       }
     },
     "create-traversal-refused": {
       "registry.json": {
-        "sha256": "ec5545328e2ab8abebbfb0973bcf439aedb659ff370ae285b209e51f1bd36b9b",
-        "bytes": 4956
+        "sha256": "414246001889797e736f9f74444fe018faf553b1983aed722d2b9e1dece30abf",
+        "bytes": 5004
       },
       "policy.yaml": {
         "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
@@ -426,8 +431,8 @@
     },
     "create-nested-refused": {
       "registry.json": {
-        "sha256": "67af1f3057d987c55c83198076077a01c9d75f73fefe74dca5d41a59ebf13948",
-        "bytes": 4920
+        "sha256": "5cfd115a26d77d10bfe9b64b5df0cb0dd6af193aef6fbac92440d657d43fac7a",
+        "bytes": 4968
       },
       "policy.yaml": {
         "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
@@ -440,8 +445,8 @@
     },
     "create-oversize-refused": {
       "registry.json": {
-        "sha256": "9f09a2909fd8a6a59718139960b41ededfa15255349a34f2772062714f68d57f",
-        "bytes": 4944
+        "sha256": "12a500a88f8e5fa947a474ef920bdd299498cb8550007928fec06f16e198a68a",
+        "bytes": 4992
       },
       "policy.yaml": {
         "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
@@ -454,22 +459,22 @@
     },
     "create-cancellation-drop-cleanup": {
       "registry.json": {
-        "sha256": "23c7f7fa80b36b37ffc4d89227390c7f932120f391df971d1eb4a874af2c15c7",
-        "bytes": 5052
+        "sha256": "e5b2e7b25f089caae3bbc6ddc07b75970a9bdbd219f6ff888658794c403f57b1",
+        "bytes": 5100
       },
       "policy.yaml": {
         "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
         "bytes": 34
       },
       "relay-trace.json": {
-        "sha256": "eceeacbe5f133dd0a8c8bb646182be18e8906b7043b0a655f34bb81bad60e24c",
+        "sha256": "634f3b68f052289b68e6beba49dc1fe6894014ce5419563cf64de2244cadc130",
         "bytes": 1617
       }
     },
     "unlisted-resource-refused": {
       "registry.json": {
-        "sha256": "bbf7b14a1e02482035883ef9862078f14600b929c5ff50d692f2d01153ad0ee8",
-        "bytes": 4968
+        "sha256": "92a7547afc5009145ed7650c4f77171b3b00b824ec400571783e5d92472676b1",
+        "bytes": 5016
       },
       "policy.yaml": {
         "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
@@ -482,7 +487,21 @@
     },
     "changed-binding-refused": {
       "registry.json": {
-        "sha256": "8f255100c3d3bba6f1cde639d76e5ed8eb533a29913aa75de32c1c05662e1aff",
+        "sha256": "36f978d4dd173453b83abfd65ecbf8a68f3b4098c25f086a92d3c0604cb841b0",
+        "bytes": 4992
+      },
+      "policy.yaml": {
+        "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
+        "bytes": 34
+      },
+      "relay-trace.json": {
+        "sha256": "c39c315ae30c6762f3c8a78566ee91ec7beae978e6744428c599e8d4647d26f3",
+        "bytes": 1527
+      }
+    },
+    "replayed-id-refused": {
+      "registry.json": {
+        "sha256": "eabf77e91e09b2dda6538e17e122e093364a5a64d594942c9c99af2a411af60d",
         "bytes": 4944
       },
       "policy.yaml": {
@@ -490,139 +509,13 @@
         "bytes": 34
       },
       "relay-trace.json": {
-        "sha256": "b9554558cadae5712ab42e22d18581daa4f597f4554f6e8182e9fecc83ea3ecc",
-        "bytes": 1527
-      }
-    },
-    "replayed-id-refused": {
-      "registry.json": {
-        "sha256": "c6495cf74551b1c900b39ce299798afee4371caa4153de13cf44ea164f2030c5",
-        "bytes": 4896
-      },
-      "policy.yaml": {
-        "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
-        "bytes": 34
-      },
-      "relay-trace.json": {
-        "sha256": "3f51c1aa3e53bf5e936e9175d017f5f7376a98bf9a27da785fe4fc9452389a54",
+        "sha256": "be5d5c96ebc4abaa77c950cd1b9ca1ecc8273aa3daea079e3b233f29f9d2b7e8",
         "bytes": 1836
       }
     },
     "replayed-native-receipt-refused": {
       "registry.json": {
-        "sha256": "0f5efb0218426b51716ee60052b3b52bfeb8736055b5eb9f3a986b4648975bb6",
-        "bytes": 5040
-      },
-      "policy.yaml": {
-        "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
-        "bytes": 34
-      },
-      "relay-trace.json": {
-        "sha256": "5a25cf1fc6745767b95c1a9e87c4ecd5bee1511b1f3aed01b4d96e3b800127f4",
-        "bytes": 1269
-      }
-    },
-    "daemon-loss-refused": {
-      "registry.json": {
-        "sha256": "4efdf3807ba22861afa1e63be4fb7816d2e830ce26a537f635ea6305ddb64a9f",
-        "bytes": 4896
-      },
-      "policy.yaml": {
-        "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
-        "bytes": 34
-      },
-      "relay-trace.json": {
-        "sha256": "feff0384008d7de40384496e3aef1bd416c02fb9a3fc5ae4495073ca62812868",
-        "bytes": 1006
-      }
-    },
-    "result-withheld-attribution": {
-      "registry.json": {
-        "sha256": "16c77d35eeb3a3c59ae46a4586543b04fca2805afc5c8a21c1d5d0e8acdf8d4c",
-        "bytes": 4992
-      },
-      "policy.yaml": {
-        "sha256": "fdd82abdec78fe771e36f043d8718eb358fc75303da345bee8679e5dc8b37621",
-        "bytes": 143
-      },
-      "relay-trace.json": {
-        "sha256": "a990f2997963f1a6b58ebe008d82c2ff10b2b8d3c9078254f7d38295fa2d26b6",
-        "bytes": 885
-      }
-    },
-    "interrupted-cleanup-preserves-foreign": {
-      "registry.json": {
-        "sha256": "506d9f5b862d688c9fb680829f63ea4cc5a9a565ff3f5f5e4d0f617a882db6dd",
-        "bytes": 5112
-      },
-      "policy.yaml": {
-        "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
-        "bytes": 34
-      },
-      "relay-trace.json": {
-        "sha256": "5c42a700478bf86c31cf4bcb0b6fc2df6ba1583cdfdbe7a538d9fa24483a2500",
-        "bytes": 1478
-      }
-    },
-    "same-session-continuation": {
-      "registry.json": {
-        "sha256": "f6495fcecde77249645b294718d10195996fa0da47d9ae1253395762eb1fb089",
-        "bytes": 4968
-      },
-      "policy.yaml": {
-        "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
-        "bytes": 34
-      },
-      "relay-trace.json": {
-        "sha256": "3b206643777cd75d0ed7db650f7ea0976f820607ef576eea284b100d95b045f0",
-        "bytes": 846
-      }
-    },
-    "authority-expiry-refused": {
-      "registry.json": {
-        "sha256": "c4288de0215458c29a0f221b6c4849d05f66c997a3fe6a20abe2e5f4c3d69e0f",
-        "bytes": 4956
-      },
-      "policy.yaml": {
-        "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
-        "bytes": 34
-      },
-      "relay-trace.json": {
-        "sha256": "2e5735d7dea1bd3246a683b1e6badc0a485b3f35c0b70f57a8e8c0c07d77a2bd",
-        "bytes": 2147
-      }
-    },
-    "read-byte-limit": {
-      "registry.json": {
-        "sha256": "5b9b963e7dbce78ceff66d052c28315a3246c7b8ca6a6b1f6c91a6c96b08d9b6",
-        "bytes": 4862
-      },
-      "policy.yaml": {
-        "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
-        "bytes": 34
-      },
-      "relay-trace.json": {
-        "sha256": "e7cdd93363b293a51a54b1ef4819f6ac22025d09749f1048b70b551156cc0746",
-        "bytes": 848
-      }
-    },
-    "read-json-escaping-limit": {
-      "registry.json": {
-        "sha256": "7bfbe490287a3a26f606a0f0a2a860ccde213e4b5277285da51c573c7c19112a",
-        "bytes": 4968
-      },
-      "policy.yaml": {
-        "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
-        "bytes": 34
-      },
-      "relay-trace.json": {
-        "sha256": "404ef7f2ad663cee088ad1c1a22c571a10010a0db7da4347c27d666a5bbbff25",
-        "bytes": 849
-      }
-    },
-    "create-publication-gate-calibration": {
-      "registry.json": {
-        "sha256": "92f3bcb97f0995fe92478219abd72afdc0d19c1cbd77a04d5c8bb6382becf021",
+        "sha256": "5d0f50333104653373d375f57b8c2875082c808fe8fbca264b76de36d8ce8a94",
         "bytes": 5088
       },
       "policy.yaml": {
@@ -630,7 +523,119 @@
         "bytes": 34
       },
       "relay-trace.json": {
-        "sha256": "2ec609898b02c894bc212e7b170e47d13a3fc6183cd95857c1ef1945dd062b7f",
+        "sha256": "cf70fb26deb50ef72b3882d8a246bec7ff9650103fa8bfd82704d5a152af8305",
+        "bytes": 1269
+      }
+    },
+    "daemon-loss-refused": {
+      "registry.json": {
+        "sha256": "ae26f255c4d474472c1a08c75ceea42c17284e63411d869b62f844df3e6d861b",
+        "bytes": 4944
+      },
+      "policy.yaml": {
+        "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
+        "bytes": 34
+      },
+      "relay-trace.json": {
+        "sha256": "97463f116fcaf293ab5093f74a34a0a421ff6abe0ce61bd6fd0f3dc7f0b12b66",
+        "bytes": 1006
+      }
+    },
+    "result-withheld-attribution": {
+      "registry.json": {
+        "sha256": "c344dff14031b33a7582858d5bf59ce9c6ee682ccb00e3b3a99e71512f69f23f",
+        "bytes": 5040
+      },
+      "policy.yaml": {
+        "sha256": "fdd82abdec78fe771e36f043d8718eb358fc75303da345bee8679e5dc8b37621",
+        "bytes": 143
+      },
+      "relay-trace.json": {
+        "sha256": "60e6732bf577e84caabdd2144b1f52617295b0b82a329c353fb64b2e8be8efa8",
+        "bytes": 885
+      }
+    },
+    "interrupted-cleanup-preserves-foreign": {
+      "registry.json": {
+        "sha256": "43dee30c284b7a0ec678f243dd6e482db32ae97f638e382fe5572f38224974f5",
+        "bytes": 5160
+      },
+      "policy.yaml": {
+        "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
+        "bytes": 34
+      },
+      "relay-trace.json": {
+        "sha256": "b74f1fd70542e992286e94579fb4ccada2b370f228871252335deb241035398b",
+        "bytes": 1478
+      }
+    },
+    "same-session-continuation": {
+      "registry.json": {
+        "sha256": "1960097d5c755456663263ac2d420cd60066ec120cbe335511eb7cc384afa8d7",
+        "bytes": 5016
+      },
+      "policy.yaml": {
+        "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
+        "bytes": 34
+      },
+      "relay-trace.json": {
+        "sha256": "a573fc00dc59168763cdb8ebb04c7b4ce5cafb5093b36c95f155c4e98781e8e2",
+        "bytes": 846
+      }
+    },
+    "authority-expiry-refused": {
+      "registry.json": {
+        "sha256": "f177507b15a6f60f6e7d7456dcc57581431d54b2710bdac55dace98d6c2e1870",
+        "bytes": 5004
+      },
+      "policy.yaml": {
+        "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
+        "bytes": 34
+      },
+      "relay-trace.json": {
+        "sha256": "b6a5689071b1f72ac99f8ffccd2ebc0f0c1e473ca978ebde881a0f81cf29d851",
+        "bytes": 2148
+      }
+    },
+    "read-byte-limit": {
+      "registry.json": {
+        "sha256": "da4b9afadafc4edfcf5f147562249848bde40ccf2609d7b902782539e59b7d43",
+        "bytes": 4910
+      },
+      "policy.yaml": {
+        "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
+        "bytes": 34
+      },
+      "relay-trace.json": {
+        "sha256": "906a52e9278d98fdbc3393c10f3b31b0755dc48c63fb0491af18d2b3302d4653",
+        "bytes": 848
+      }
+    },
+    "read-json-escaping-limit": {
+      "registry.json": {
+        "sha256": "0a6c05b6881eca28ffd9fb32c1fe9d341f058064a690145caa1b60b845e79b80",
+        "bytes": 5016
+      },
+      "policy.yaml": {
+        "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
+        "bytes": 34
+      },
+      "relay-trace.json": {
+        "sha256": "37e73d6e41d4f9e80107e9195c3fc2430df7570ac878f26fcdd3420dd5d4ecb9",
+        "bytes": 849
+      }
+    },
+    "create-publication-gate-calibration": {
+      "registry.json": {
+        "sha256": "9edceadd980c939ff20e9e254b562e62d258bee711b9f8dd775e80a73e5a7513",
+        "bytes": 5136
+      },
+      "policy.yaml": {
+        "sha256": "53db6c3deb76e083cb962a1cb1b71c2e51f0681c2d6da8070521af017fe0bb11",
+        "bytes": 34
+      },
+      "relay-trace.json": {
+        "sha256": "83cfe85a3022b2eb77a0e6ead2f91807d3bec3d5adfa6c498f2c1fa076cfd0c4",
         "bytes": 846
       }
     }

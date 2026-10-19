@@ -42,7 +42,7 @@
   {
     "path": "/native/v1",
     "status": 200,
-    "req_len": 1697,
+    "req_len": 1701,
     "res_len": 522
   },
   {
@@ -81,7 +81,7 @@
   {
     "path": "/native/v1",
     "status": 200,
-    "req_len": 1585,
+    "req_len": 1589,
     "res_len": 522
   },
   {
