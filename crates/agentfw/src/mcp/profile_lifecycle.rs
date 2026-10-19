@@ -5381,6 +5381,11 @@ mod tests {
     fn preview_approval_cannot_authorize_a_different_target() {
         let temp = tempdir().unwrap();
         let home = temp.path().canonicalize().unwrap();
+        // This tests approval binding, so use an isolated endpoint rather than
+        // depending on the host default port being free throughout activation.
+        let port =
+            allocate_test_port().expect("loopback port allocation is required for this test");
+        fs::write(home.join("config.yaml"), format!("port: {port}\n")).unwrap();
         let mgr = ProfileManager::new(&home);
         let p1 = home.join("p1");
         let p2 = home.join("p2");
