@@ -16,7 +16,7 @@
     "filesystem_probe_sha256": "341b8404300a5614120da83ba02f0fe42de9eebf297d082cf9f8151683b19e88"
   },
   "base_commit": "5fc866cc998c753bccff141926df36bf0c5ebade",
-  "merged_main_commit": "30ced9431990e8aa55381194d7616daa87733344",
+  "merged_main_commit": "215b99e28f2c3d528ebf4b16a4959db6a06654a1",
   "source_overlay": "Reviewed build inputs in source-build-inputs.json; qualification precedes retained evidence/editorial additions",
   "binary_sha256": "726f2b050ded0a0514b0694111b91407ffebdc4dc3a9fcced5c1dc89686c1ba3",
   "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
