@@ -242,6 +242,11 @@ enum Cmd {
         #[command(subcommand)]
         command: agentfw::windows_onboarding::Command,
     },
+    /// First-use onboarding: read-only preview, explicit apply of the reviewed plan, and undo (Linux).
+    ///
+    /// Exit 0 verified/plan ready/undone, 6 configured but unverified, 3 failed, 4 incomplete or refused, 5 unsupported.
+    #[command(subcommand)]
+    Onboard(agentfw::onboarding::Command),
     /// Bundled harmless stdio MCP fixture server used by `self-test`.
     #[command(hide = true)]
     SelfTestFixture(agentfw::self_test::FixtureArgs),
@@ -460,6 +465,7 @@ fn main() -> anyhow::Result<()> {
             prepare_lifecycle_process()?;
             agentfw::windows_onboarding::run(command)
         }
+        Cmd::Onboard(command) => std::process::exit(agentfw::onboarding::run(command)),
         Cmd::SelfTestFixture(args) => agentfw::self_test::fixture::serve(args),
         Cmd::Serve => {
             #[cfg(target_os = "linux")]

@@ -45,7 +45,7 @@ class ImpactTests(unittest.TestCase):
             self.assertIn(ci_job, jobs["ci.yml"])
         for workflow in ("keycloak-oidc.yml", "keycloak-saml.yml",
                          "scim-directory.yml", "managed-policy-postgres.yml",
-                         "tls-lifecycle.yml", "monitoring.yml"):
+                         "tls-lifecycle.yml", "monitoring.yml", "gateway-sdk.yml"):
             self.assertEqual(jobs[workflow], set(WORKFLOW_JOBS[workflow]))
 
     def test_python_only_has_real_eval_without_rust_build(self):
