@@ -26,11 +26,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      # This checkout is the trusted base commit. Never checkout PR code or
-      # download PR artifacts in this privileged workflow.
+      # Use the same trusted revision for the workflow and its admission scripts.
+      # An event base SHA can be stale. Never checkout PR code or PR artifacts.
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          ref: ${{ github.workflow_sha }}
           persist-credentials: false
       - name: Verify selected exact-source CI and CodeQL evidence
         env:
