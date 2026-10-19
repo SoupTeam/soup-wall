@@ -30,6 +30,10 @@ Gateway executable. The runner itself uses portable Python APIs. The focused
 `Official SDK Gateway compatibility` workflow builds its exact checkout and
 retains Cargo build records, binary hash, source identity and runtime evidence.
 It is registered with the existing CI selection table for Gateway changes.
+PR qualification runs the same steps as `Components / gateway-sdk / official-sdk`
+through the generated shared workflow. The focused workflow remains manually
+dispatchable; it does not start a duplicate PR run. Regenerate component jobs with
+`python scripts/ci_components.py` after changing the focused workflow.
 
 ## Coverage and independent witnesses
 
