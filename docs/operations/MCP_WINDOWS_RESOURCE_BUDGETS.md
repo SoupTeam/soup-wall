@@ -42,7 +42,7 @@ Version 1 chooses CPU time, not a CPU rate guarantee. Kernel-mode CPU time is
 reported separately and is not included in the user-time ceiling. Working-set,
 reserved address-space, machine-wide commit, filesystem space and unrelated
 processes are not covered by `memoryMaxBytes`. Version 1 requires 64-bit Windows
-10/Server 2016 or newer and an absolute local disk `.exe` command. Relative PATH
+10/Server 2016 or newer and an absolute drive-qualified `.exe` command. Relative PATH
 lookup, batch/UNC/device commands and non-ASCII environment names are refused.
 Argument/environment values preserve UTF-16, including Unicode and quotes.
 The private launch adapter accepts the native collector builder’s inherited
@@ -155,6 +155,13 @@ account, outside the checkout. Its unique staging directory is under
 `ProgramData` with a protected DACL allowing only that disposable user, SYSTEM
 and the runner account; no parent or runtime permissions are widened. This avoids
 requiring the standard user to enumerate the runner’s private temporary parent.
+The CI launcher resolves the image’s real 64-bit CPython base runtime and copies
+its executable, DLLs and standard library into that same private stage, excluding
+site-packages and caches. It bounds the copy, rejects reparse points,
+verifies every copied hash and retains a runtime manifest containing only relative
+standard-library paths and hashes.
+This avoids executing a runner-only Python shim from the disposable account.
+The standard-user report’s Python executable hash must match the launcher.
 It retains source identities and all outcomes even
 on failure. There is no added per-push matrix or activation/selection policy.
 Keep the PR Draft until implementation is ready for qualification. A passing
