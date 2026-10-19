@@ -1212,7 +1212,7 @@ impl Manager {
         Ok(())
     }
 
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(target_os = "linux")]
     pub(crate) fn service_shutdown(&self, pid: u32) -> Result<()> {
         let (state, health) = self.service_snapshot()?;
         let Some(process) = state.process else {
@@ -1714,6 +1714,7 @@ mod tests {
         manager.save(&state).unwrap();
         drop(lock);
         assert!(manager.service_clear_dead().is_err());
+        #[cfg(target_os = "linux")]
         assert!(manager.service_shutdown(std::process::id()).is_err());
         assert!(pid_alive(std::process::id()).unwrap());
         assert_eq!(

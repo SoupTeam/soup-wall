@@ -549,7 +549,11 @@ impl Service {
 
     fn owned_process(&self, pid: u32) -> Result<bool> {
         let record = self.installed()?;
-        let path = process_path(pid)?;
+        let path = match process_path(pid) {
+            Ok(path) => path,
+            Err(_) if !crate::lifecycle::pid_alive(pid)? => return Ok(true),
+            Err(error) => return Err(error),
+        };
         if path == self.launcher() {
             return Ok(Some(identity(&path)?) == record.launcher_identity);
         }
@@ -835,7 +839,7 @@ fn select_domain() -> Result<String> {
 
 fn read_job(domain: &str, name: &str) -> Result<Option<Job>> {
     let (status, text) = launchctl(&["print", &format!("{domain}/{name}")])?;
-    if status == 113 {
+    if matches!(status, 3 | 113) {
         return Ok(None);
     } // ESRCH: service absent, domain separately verified.
     ensure!(status == 0, "cannot inspect launchd job (exit {status})");

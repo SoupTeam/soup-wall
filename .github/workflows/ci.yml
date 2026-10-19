@@ -413,6 +413,20 @@ jobs:
           shasum -a 256 target/debug/agentfw | tee target/sou29-macos/agentfw.sha256
           cargo test --locked -p agentfw --test lifecycle -- --test-threads=1 2>&1 | tee target/sou29-macos/lifecycle.log
           cargo test --locked -p agentfw --test self_test -- --test-threads=1 2>&1 | tee target/sou29-macos/self_test.log
+          cargo test --locked -p agentfw --lib service::tests -- --test-threads=1 2>&1 | tee target/sou29-macos/launchd-regressions.log
+      - name: Verify actual ARM64 launchd service lifecycle
+        shell: bash
+        run: |
+          python3 -B scripts/test-agent-launchd.py --run-owned-launchd \
+            --agentfw target/debug/agentfw --expected-commit "$(git rev-parse HEAD)" \
+            --output "$RUNNER_TEMP/sou93-launchd"
+      - name: Retain launchd service evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou93-launchd-service
+          path: ${{ runner.temp }}/sou93-launchd/
+          if-no-files-found: warn
       - name: Retain macOS lifecycle evidence
         if: always()
         uses: actions/upload-artifact@v7
