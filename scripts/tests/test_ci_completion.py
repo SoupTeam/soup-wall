@@ -1,7 +1,12 @@
 """Completion events cannot authorize stale sources or consume PR artifacts."""
 import argparse
+import json
+import os
 from pathlib import Path
+import re
+import shlex
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -32,6 +37,54 @@ class API:
 
 
 class Completion(unittest.TestCase):
+    def run_workflow_command(self, api, payload):
+        workflow = (Path(__file__).resolve().parents[2] /
+                    ".github/workflows/ci-admission.yml").read_text(encoding="utf-8")
+        command = re.search(r"(?m)^        run: (python3 scripts/ci_admission.py .+)$", workflow)
+        self.assertIsNotNone(command)
+        argv = shlex.split(command.group(1))[1:]
+        self.assertNotIn("--pr", argv)
+        with tempfile.TemporaryDirectory() as directory:
+            event = Path(directory) / "event.json"
+            event.write_text(json.dumps(payload), encoding="utf-8")
+            with patch.dict(os.environ, {"GITHUB_REPOSITORY": "SoupTeam/soup-wall",
+                                         "GITHUB_TOKEN": "test-only",
+                                         "GITHUB_EVENT_PATH": str(event)}), \
+                 patch.object(sys, "argv", argv), \
+                 patch.object(gate, "GitHub", return_value=api), \
+                 patch.object(gate.time, "sleep", side_effect=AssertionError("idle polling")):
+                return gate.main()
+
+    def test_workflow_command_routes_completion_using_current_repository_metadata(self):
+        # The event snapshot can be stale; only the run ID identifies what to
+        # re-read. The workflow command must not need a manually supplied PR.
+        payload = {"workflow_run": {"id": 7, "head_sha": "d" * 40,
+                                    "pull_requests": [{"number": 99}]}}
+        for state, exit_code in (("success", 0), ("pending", 0), ("failure", 1)):
+            with self.subTest(state=state):
+                api = API()
+                with patch.object(gate, "inspect", return_value=(MERGE, gate.Verdict(state, "fixture verdict"))) as inspect:
+                    self.assertEqual(self.run_workflow_command(api, payload), exit_code)
+                inspect.assert_called_once_with(api, 1, BASE, HEAD)
+                self.assertEqual([body["state"] for _, body in api.posts], ["pending", state])
+                self.assertTrue(all(path == "/statuses/" + MERGE for path, _ in api.posts))
+
+    def test_workflow_command_cannot_qualify_a_draft_on_completion(self):
+        api = API()
+        api.pr["draft"] = True
+        with patch.object(gate, "inspect", side_effect=AssertionError("draft evidence must not be polled")):
+            self.assertEqual(self.run_workflow_command(api, {"workflow_run": {"id": 7}}), 0)
+        self.assertEqual(len(api.posts), 1)
+        self.assertEqual(api.posts[0][0], "/statuses/" + MERGE)
+        self.assertEqual(api.posts[0][1]["state"], "pending")
+
+    def test_workflow_command_cannot_publish_a_status_for_a_stale_completed_head(self):
+        api = API()
+        api.run["head_sha"] = "d" * 40
+        with patch.object(gate, "inspect", side_effect=AssertionError("stale head must not be qualified")):
+            self.assertEqual(self.run_workflow_command(api, {"workflow_run": {"id": 7}}), 0)
+        self.assertEqual(api.posts, [])
+
     def test_codeql_without_pr_association_is_routed_by_current_head(self):
         api = API()
         self.assertEqual(gate.completion_targets(api, {"workflow_run": {"id": 7}}), [api.pr])
