@@ -5,6 +5,7 @@ use crate::lifecycle::Manager;
 use crate::self_test::windows_safety as safety;
 use std::collections::BTreeMap;
 use std::fs::File;
+use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 use std::process::{Command as ProcessCommand, Stdio};
 use std::time::Duration;
 
@@ -169,7 +170,7 @@ fn manager(state: &State) -> Manager {
 }
 
 async fn control(state: &State, operation: &'static str) -> Result<crate::lifecycle::Status> {
-    endpoint_owner(state)?;
+    let _process = endpoint_owner(state)?;
     let home = state.selection.home.clone();
     let version = format!("onboard-{}", &state.nonce[..16]);
     let candidate = state.selection.agent.clone();
@@ -200,7 +201,52 @@ fn lifecycle_state(state: &State) -> Result<crate::lifecycle::State> {
     serde_json::from_slice(&bytes).context("invalid owned lifecycle state")
 }
 
-fn endpoint_owner(state: &State) -> Result<bool> {
+fn pin_process(pid: u32, expected: &Path) -> Result<Option<OwnedHandle>> {
+    use std::os::windows::ffi::OsStringExt;
+    use windows_sys::Win32::Foundation::{ERROR_INVALID_PARAMETER, WAIT_OBJECT_0, WAIT_TIMEOUT};
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, WaitForSingleObject,
+        PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+    };
+    let raw = unsafe {
+        OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+            0,
+            pid,
+        )
+    };
+    if raw.is_null() {
+        let error = std::io::Error::last_os_error();
+        if error.raw_os_error() == Some(ERROR_INVALID_PARAMETER as i32) {
+            return Ok(None);
+        }
+        return Err(error.into());
+    }
+    let process = unsafe { OwnedHandle::from_raw_handle(raw) };
+    match unsafe { WaitForSingleObject(process.as_raw_handle(), 0) } {
+        WAIT_OBJECT_0 => return Ok(None),
+        WAIT_TIMEOUT => (),
+        _ => anyhow::bail!("cannot verify the managed process state"),
+    }
+    let mut image = vec![0u16; 32768];
+    let mut length = image.len() as u32;
+    ensure!(
+        unsafe {
+            QueryFullProcessImageNameW(process.as_raw_handle(), 0, image.as_mut_ptr(), &mut length)
+        } != 0
+            && length > 0
+            && length as usize <= image.len(),
+        "cannot identify the managed process image"
+    );
+    let observed = PathBuf::from(std::ffi::OsString::from_wide(&image[..length as usize]));
+    ensure!(
+        observed.canonicalize()? == expected.canonicalize()?,
+        "managed PID belongs to another executable; refusing endpoint access"
+    );
+    Ok(Some(process))
+}
+
+fn endpoint_owner(state: &State) -> Result<Option<OwnedHandle>> {
     let record = state.selection.home.join("versions").join("lifecycle.json");
     if record.try_exists()? {
         if let Some(process) = lifecycle_state(state)?.process {
@@ -208,15 +254,22 @@ fn endpoint_owner(state: &State) -> Result<bool> {
                 process.pid != 0,
                 "managed process identity is incomplete; retain recovery evidence"
             );
-            if crate::lifecycle::pid_alive(process.pid)? {
-                return Ok(true);
+            if let Some(pin) = pin_process(process.pid, &installed(state)?)? {
+                ensure!(
+                    process.binary_digest == state.selection.agent_sha256
+                        && process.config_digest == sha(state.files["config.yaml"].as_bytes())
+                        && process.port == state.selection.port
+                        && process.bind == "127.0.0.1",
+                    "managed process record does not match the owned setup"
+                );
+                return Ok(Some(pin));
             }
         }
     }
     let listener = TcpListener::bind(("127.0.0.1", state.selection.port))
         .context("foreign port occupancy preserved without sending credentials")?;
     drop(listener);
-    Ok(false)
+    Ok(None)
 }
 
 fn installed(state: &State) -> Result<PathBuf> {
@@ -241,7 +294,7 @@ fn config(state: &State) -> Result<crate::Config> {
 
 async fn daemon(state: &State) -> Result<Value> {
     check_files(state)?;
-    ensure!(endpoint_owner(state)?, "owned daemon is not running");
+    let _process = endpoint_owner(state)?.context("owned daemon is not running")?;
     let agent = installed(state)?;
     let cfg = config(state)?;
     let policy = soup_wall_agent::AgentPolicySet::from_yaml(&state.files["policy.yaml"])?;
@@ -728,4 +781,27 @@ async fn remove_locked(state: &mut State) -> Result<Value> {
     state.self_test_sha256 = None;
     save(state)?;
     Ok(summary(state, false, false))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn process_pin_rejects_a_live_foreign_image_and_handles_an_exited_process() {
+        let current = std::env::current_exe().unwrap();
+        let process = pin_process(std::process::id(), &current).unwrap().unwrap();
+        assert!(pin_process(std::process::id(), &std::env::temp_dir()).is_err());
+        drop(process);
+        let system = PathBuf::from(std::env::var_os("SystemRoot").unwrap());
+        let mut child = ProcessCommand::new(system.join("System32").join("cmd.exe"))
+            .args(["/D", "/C", "exit", "0"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        child.wait().unwrap();
+        assert!(pin_process(child.id(), &current).unwrap().is_none());
+    }
 }

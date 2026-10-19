@@ -85,6 +85,9 @@ loaded it.
 ```
 
 Recovery reconciles the lifecycle record and owned connection transaction.
+Before contacting a recorded daemon, the command checks its executable image
+and retains a Windows process handle. A live PID for another executable is
+not proof of an owned daemon.
 When an operator edits an owned configuration file or the selected host entry,
 the command refuses to replace the edit. Inspect the preserved files before
 deciding which version to keep.

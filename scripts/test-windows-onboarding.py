@@ -325,6 +325,16 @@ class Acceptance:
             foreign.listen()
             foreign.setblocking(False)
             self.invoke("recover", success=False)
+            manifest = self.home / "versions" / "lifecycle.json"
+            original = manifest.read_bytes()
+            stale = json.loads(original)
+            stale["process"]["pid"] = self.unrelated.pid
+            try:
+                manifest.write_text(json.dumps(stale), encoding="utf-8")
+                self.invoke("recover", success=False)
+                require(self.unrelated.poll() is None, "foreign PID recovery stopped an unrelated process")
+            finally:
+                manifest.write_bytes(original)
             try:
                 connection, _ = foreign.accept()
                 connection.close()
@@ -356,7 +366,7 @@ class Acceptance:
         require(result["configured"] and result["daemon_verified"], "recovery did not restore the owned daemon")
         return {"failed_verification_refused": True, "recovery_verified": True,
                 "daemon_loss_child_executions": 0, "daemon_loss_receiver_connections": 0,
-                "foreign_recovery_listener_connections": 0}
+                "foreign_recovery_listener_connections": 0, "live_foreign_pid_refused": True}
 
     def sentinels(self):
         current = read(self.host)
