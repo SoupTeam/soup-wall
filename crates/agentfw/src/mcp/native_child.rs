@@ -250,7 +250,7 @@ pub(crate) struct CleanupReport {
 // One child-owner interface. The configured Windows launch supplies an atomic
 // Job-list creation primitive; all paths retain the same ProcessTree cleanup.
 enum ChildProcess {
-    Tokio(TokioChild),
+    Tokio(Box<TokioChild>),
     #[cfg(windows)]
     Budgeted(super::windows_budget::launch::Process),
 }
@@ -268,7 +268,7 @@ impl Child {
             stdin: process.stdin.take().map(|pipe| Box::new(pipe) as _),
             stdout: process.stdout.take().map(|pipe| Box::new(pipe) as _),
             stderr: process.stderr.take().map(|pipe| Box::new(pipe) as _),
-            process: ChildProcess::Tokio(process),
+            process: ChildProcess::Tokio(Box::new(process)),
         }
     }
     #[cfg(windows)]
