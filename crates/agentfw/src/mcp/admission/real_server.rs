@@ -1157,11 +1157,13 @@ pub(super) async fn run(
             // already pending host write must observe the same withdrawal;
             // cancelling the relay alone does not provide that ordering.
             let host = super::DiagnosticOutput {
+                budget: None,
                 inner: host,
                 failed: Arc::clone(&boundary_failed),
                 liveness: None,
             };
             let mut host = super::DiagnosticOutput {
+                budget: None,
                 inner: host,
                 failed: Arc::clone(&owner_failed),
                 liveness: collector.liveness.clone(),

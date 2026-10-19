@@ -2946,12 +2946,15 @@ where
 struct DiagnosticOutput<W> {
     inner: W,
     failed: Arc<AtomicBool>,
+    budget: Option<super::windows_budget::Guard>,
     liveness: Option<Arc<crate::native::liveness::CollectorLivenessClient>>,
 }
 
 impl<W> DiagnosticOutput<W> {
     fn boundary_error(&self) -> Option<std::io::Error> {
-        let code = if self.failed.load(Ordering::Acquire) {
+        let code = if let Some(Err(reason)) = self.budget.as_ref().map(|guard| guard.check()) {
+            reason
+        } else if self.failed.load(Ordering::Acquire) {
             "native MCP diagnostics boundary closed"
         } else if self
             .liveness
@@ -3064,6 +3067,8 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
             .map(std::path::PathBuf::from)
             .unwrap_or(cwd);
         if let Some(profile) = super::server_profile::ProfileConfig::load_from_env()? {
+            ensure!(std::env::var_os(super::windows_budget::ENVIRONMENT).is_none(),
+                "Windows MCP resource budgets do not enable original-server sandbox profiles");
             return real_server::run(&collector, &profile, &workspace).await;
         }
         ensure!(
@@ -3141,6 +3146,7 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
             .env_remove("AGENTFW_HOST_SESSION")
             .env_remove("AGENTFW_TEST_CLASSIFIER_READ")
             .env_remove("AGENTFW_TEST_CLASSIFIER")
+            .env_remove(super::windows_budget::ENVIRONMENT)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -3152,6 +3158,7 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
         drop(windows_spawn_pins);
         let server_pid = process.child_mut().id();
         let ownership = process.ownership();
+        let budget = process.budget_guard();
         let mut stderr_drain = None;
         // Every pipe extraction and relay error still reaches owned cleanup.
         let operation = async {
@@ -3190,6 +3197,7 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
             let mut host = DiagnosticOutput {
                 inner: host,
                 failed,
+                budget: budget.clone(),
                 liveness: collector.liveness.clone(),
             };
             let result = {
@@ -3201,6 +3209,14 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
                         // Once diagnostic uncertainty is observed, a pending
                         // relay cannot win over that failure on the next poll.
                         biased;
+                        _ = async {
+                            if let Some(guard) = &budget {
+                                loop {
+                                    if guard.check().is_err() { return; }
+                                    tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                                }
+                            } else { std::future::pending::<()>().await; }
+                        } => break Err(anyhow::anyhow!("windows_budget_terminal")),
                         _ = async {
                             if let Some(liveness) = &collector.liveness {
                                 loop {
@@ -3232,6 +3248,11 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
             drop(server);
             result
         }.await;
+        // Capture terminal pressure even when normal relay EOF wins the race.
+        let operation = operation.and_then(|()| {
+            if let Some(guard) = &budget { guard.check().map_err(anyhow::Error::msg)?; }
+            Ok(())
+        });
         let clean_exit_required = config.native.registry.tools.iter().any(|tool| {
             tool.resource_policy.as_ref().is_some_and(|policy| {
                 policy.is_create_file() || policy.is_https_get() || policy.is_https_post() || policy.is_windows_handles()
@@ -3244,6 +3265,10 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
             tool.resource_policy.as_ref().is_some_and(|policy| policy.is_windows_handles())
         });
         let cleanup = process.cleanup(operation.is_ok() || windows_handles_profile).await;
+        if let Some(report) = process.budget_report() {
+            eprintln!("{}",json!({"event":"mcp_windows_budget_end","budget":report,
+                "cleanup_verified":cleanup.cleaned&&cleanup.reaped,"effects_rolled_back":false}));
+        }
         let stderr_report = match stderr_drain {
             Some(drain) => Some(drain.finish().await),
             None => None,
@@ -3968,6 +3993,7 @@ mod diagnostic_output_tests {
             DiagnosticOutput {
                 inner,
                 failed: Arc::new(AtomicBool::new(false)),
+                budget: None,
                 liveness: Some(liveness.clone()),
             },
             liveness,
@@ -4023,6 +4049,7 @@ mod diagnostic_output_tests {
         let mut guarded = DiagnosticOutput {
             inner: output,
             failed: failed.clone(),
+            budget: None,
             liveness: None,
         };
         guarded.write_all(b"useful\n").await.unwrap();
@@ -4047,6 +4074,7 @@ mod diagnostic_output_tests {
         let mut guarded = DiagnosticOutput {
             inner: output,
             failed: failed.clone(),
+            budget: None,
             liveness: None,
         };
         {

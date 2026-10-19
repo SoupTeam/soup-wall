@@ -254,10 +254,25 @@ pub(crate) struct OwnedChild {
     child: Child,
     tree: ProcessTree,
     complete: Option<CleanupReport>,
+    #[cfg(windows)]
+    budget: Option<super::windows_budget::Budget>,
 }
 
 impl OwnedChild {
     pub(crate) async fn spawn(command: &mut Command) -> Result<Self, ChildFailure> {
+        let config = super::windows_budget::Config::load_from_env()
+            .map_err(|_| ChildFailure("windows_budget_configuration_refused"))?;
+        Self::spawn_with_budget(command, config).await
+    }
+
+    async fn spawn_with_budget(
+        command: &mut Command,
+        config: Option<super::windows_budget::Config>,
+    ) -> Result<Self, ChildFailure> {
+        #[cfg(not(windows))]
+        if config.is_some() {
+            return Err(ChildFailure("windows_budget_platform_unsupported"));
+        }
         command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -280,6 +295,10 @@ impl OwnedChild {
         #[cfg(windows)]
         {
             let mut tree = ProcessTree::new()?;
+            let budget = config
+                .map(|config| super::windows_budget::Budget::install(tree.job.clone(), config))
+                .transpose()
+                .map_err(ChildFailure)?;
             command.creation_flags(
                 windows_sys::Win32::System::Threading::CREATE_SUSPENDED
                     | windows_sys::Win32::System::Threading::CREATE_NO_WINDOW,
@@ -297,6 +316,7 @@ impl OwnedChild {
                 child,
                 tree,
                 complete: None,
+                budget,
             })
         }
         #[cfg(not(any(unix, windows)))]
@@ -308,6 +328,28 @@ impl OwnedChild {
 
     pub(crate) fn ownership(&self) -> &'static str {
         ProcessTree::NAME
+    }
+    pub(crate) fn budget_guard(&self) -> Option<super::windows_budget::Guard> {
+        #[cfg(windows)]
+        {
+            self.budget
+                .as_ref()
+                .map(super::windows_budget::Budget::guard)
+        }
+        #[cfg(not(windows))]
+        {
+            None
+        }
+    }
+    pub(crate) fn budget_report(&self) -> Option<serde_json::Value> {
+        #[cfg(windows)]
+        {
+            self.budget_guard().map(|guard| guard.report())
+        }
+        #[cfg(not(windows))]
+        {
+            None
+        }
     }
     pub(crate) fn child_mut(&mut self) -> &mut Child {
         &mut self.child
@@ -517,7 +559,7 @@ impl ProcessTree {
 
 #[cfg(windows)]
 struct ProcessTree {
-    job: std::os::windows::io::OwnedHandle,
+    job: Arc<std::os::windows::io::OwnedHandle>,
     armed: bool,
 }
 
@@ -557,14 +599,19 @@ impl ProcessTree {
         {
             return Err(ChildFailure("native_child_job_configure"));
         }
-        Ok(Self { job, armed: true })
+        Ok(Self {
+            job: Arc::new(job),
+            armed: true,
+        })
     }
     fn assign_and_resume(&mut self, child: &Child) -> Result<(), ChildFailure> {
         use std::os::windows::io::{AsRawHandle, FromRawHandle};
         use windows_sys::Win32::{
             Foundation::{GetLastError, ERROR_NO_MORE_FILES, INVALID_HANDLE_VALUE},
             System::{
-                Diagnostics::ToolHelp::*, JobObjects::AssignProcessToJobObject, Threading::*,
+                Diagnostics::ToolHelp::*,
+                JobObjects::{AssignProcessToJobObject, IsProcessInJob},
+                Threading::*,
             },
         };
         let process = child
@@ -576,6 +623,13 @@ impl ProcessTree {
         if unsafe { AssignProcessToJobObject(self.job.as_raw_handle().cast(), process.cast()) } == 0
         {
             return Err(ChildFailure("native_child_job_assign"));
+        }
+        let mut member = 0;
+        if unsafe { IsProcessInJob(process.cast(), self.job.as_raw_handle().cast(), &mut member) }
+            == 0
+            || member == 0
+        {
+            return Err(ChildFailure("native_child_job_membership"));
         }
         // SAFETY: a read-only noninheritable system thread snapshot.
         let raw = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) };
@@ -891,5 +945,52 @@ mod tests {
         let report = child.cleanup(true).await;
         assert!(report.cleaned && report.reaped && report.exit_success && report.graceful_observed);
         assert_eq!(report.ownership, "windows_job");
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn job_assignment_failure_never_resumes_the_real_primary_thread() {
+        use std::os::windows::io::FromRawHandle;
+        use windows_sys::Win32::System::Threading::*;
+        let event = unsafe { CreateEventW(std::ptr::null(), 0, 0, std::ptr::null()) };
+        assert!(!event.is_null());
+        // A real non-Job kernel handle deliberately exercises the actual
+        // AssignProcessToJobObject failure path, with no production fault knob.
+        let mut tree = ProcessTree {
+            job: Arc::new(unsafe {
+                std::os::windows::io::OwnedHandle::from_raw_handle(event.cast())
+            }),
+            armed: true,
+        };
+        let mut command = Command::new("cmd.exe");
+        command
+            .args(["/d", "/c", "echo", "SOU96_MUST_NOT_EXECUTE"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true)
+            .creation_flags(CREATE_SUSPENDED | CREATE_NO_WINDOW);
+        let mut child = command.spawn().unwrap();
+        assert_eq!(
+            tree.assign_and_resume(&child),
+            Err(ChildFailure("native_child_job_assign"))
+        );
+        assert!(!tree.terminate());
+        child.start_kill().unwrap();
+        tokio::time::timeout(CHILD_REAP, child.wait())
+            .await
+            .unwrap()
+            .unwrap();
+        let mut bytes = Vec::new();
+        child
+            .stdout
+            .take()
+            .unwrap()
+            .read_to_end(&mut bytes)
+            .await
+            .unwrap();
+        assert!(
+            bytes.is_empty(),
+            "suspended assignment failure executed server code"
+        );
     }
 }
