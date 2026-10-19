@@ -32,6 +32,22 @@ SCHEMA = {"type": "object", "properties": {}, "additionalProperties": False}
 CASES = ("useful", "breakaway", "memory", "memory-hard", "process", "cpu", "wall", "cancel", "collector-death",
          "restart-0", "restart-1", "restart-2", "restart-3", "restart-4", "restart-5",
          "missing-config", "invalid-config", "unsafe-acl", "spawn-failure", "transparent-refusal")
+REFUSALS = {"missing-config": "windows_budget_configuration_refused",
+            "invalid-config": "windows_budget_configuration_refused",
+            "unsafe-acl": "windows_budget_configuration_refused",
+            "spawn-failure": "native_child_spawn",
+            "transparent-refusal": "windows_budget_native_admission_required"}
+
+
+def refusal_code(stderr):
+    # Only fixed known diagnostics, never retain arbitrary startup text/paths.
+    markers = {b"windows_budget_configuration_refused": "windows_budget_configuration_refused",
+               b"native_child_spawn": "native_child_spawn",
+               b"Windows MCP resource budgets require native admission": "windows_budget_native_admission_required"}
+    found = {code for marker, code in markers.items() if marker in stderr}
+    return next(iter(found)) if len(found) == 1 else None
+
+
 BASE_CONFIG = {"format": CONFIG_FORMAT, "memoryMaxBytes": 256 * 1024**2,
                "memoryPressureBytes": 160 * 1024**2, "activeProcessMax": 12,
                "cpuUserMillis": 10000, "wallMillis": 20000}
@@ -328,7 +344,7 @@ class Rig:
                            "agent_configuration_sha256": sha((home / ".agentfw/config.yaml").read_bytes())}
         self.clients = []
         self.server = root / "owned-server.py"
-        self.server.write_text(SERVER, encoding="utf-8")
+        self.server.write_text(SERVER, encoding="utf-8", newline="")
         self.daemon = subprocess.Popen([str(binary), "serve"], env=self.env, cwd=root,
                                        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.daemon_out, self.daemon_err = Capture(self.daemon.stdout), Capture(self.daemon.stderr)
@@ -479,6 +495,7 @@ class Client:
                "exit_code": self.process.returncode, "forced_cleanup": forced, "witness": proof,
                "stdout_bytes": len(stdout), "stdout_sha256": sha(stdout), "stderr_bytes": len(stderr),
                "stderr_sha256": sha(stderr), "budget_events": events,
+               "launch_refusal_code": refusal_code(stderr),
                "late_result_released": b"SOU96_LATE_RESULT_MUST_BE_WITHHELD" in stdout,
                "server_started": (self.root / "started").exists(),
                "breakaway_refused": (self.root / "breakaway-refused").exists() and not (self.root / "escaped").exists(),
@@ -503,6 +520,7 @@ def grade(row):
             "unexpected_collector_exit")
     if name in {"missing-config", "invalid-config", "unsafe-acl", "spawn-failure", "transparent-refusal"}:
         require(not row["server_started"], "refusal_executed_server")
+        require(row.get("launch_refusal_code") == REFUSALS[name], "wrong_launch_refusal_reason")
         return
     require(row["useful"], "useful_work_missing")
     require(row["native_epoch_sha256"] is not None and row["native_terminal"] in {
@@ -516,6 +534,7 @@ def grade(row):
     events = row["budget_events"]
     require(len(events) == 1 and events[0].get("cleanup_verified") is True, "budget_cleanup_evidence_missing")
     budget = events[0]["budget"]
+    require(budget.get("launch_ownership") == "job_list_before_execution", "atomic_launch_evidence_missing")
     require(budget.get("configuration") == row["configuration"], "configuration_identity_mismatch")
     ordered = {key: row["configuration"][key] for key in ("format", "memoryMaxBytes", "memoryPressureBytes",
                                                          "activeProcessMax", "cpuUserMillis", "wallMillis")}
@@ -591,7 +610,9 @@ def run(args):
               "source_manifest_sha256": sha(args.source_manifest.read_bytes()),
               "binary_sha256": sha(args.agentfw.read_bytes()), "harness_sha256": sha(Path(__file__).read_bytes()),
               "windows_version": platform.version(), "architecture": platform.machine(),
-              "python_version": platform.python_version(), "pointer_bits": ctypes.sizeof(ctypes.c_void_p) * 8,
+              "python_version": platform.python_version(), "python_binary_sha256": sha(Path(sys.executable).read_bytes()),
+              "fixture_sha256": sha(SERVER.encode()),
+              "native_liveness": {"enabled": True, "lease_seconds": 2}, "pointer_bits": ctypes.sizeof(ctypes.c_void_p) * 8,
               "standard_user": False, "administrator_group_present": None,
               "outer_limits": {"committed_memory_bytes": 1024**3, "processes": 64, "cpu_user_seconds": 120, "wall_seconds": 240},
               "cases": [], "error": None}
@@ -702,4 +723,20 @@ def main():
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except Exception as error:
+        # Startup failures may precede results.json. Retain a bounded, sanitized
+        # exception identity; never publish traceback source lines or arguments.
+        import traceback
+        frames = traceback.extract_tb(error.__traceback__)[-6:]
+        diagnostic = {"format": "sou96-windows-budget-bootstrap/1", "status": "fail",
+                      "exception_type": type(error).__name__, "errno": getattr(error, "errno", None),
+                      "winerror": getattr(error, "winerror", None),
+                      "frames": [{"function": frame.name, "line": frame.lineno} for frame in frames]}
+        if "--run" in sys.argv and "--output" in sys.argv:
+            destination = Path(sys.argv[sys.argv.index("--output") + 1])
+            destination.mkdir(parents=True, exist_ok=True)
+            save(destination / "bootstrap.json", diagnostic)
+        print(json.dumps(diagnostic), file=sys.stderr)
+        raise SystemExit(1)

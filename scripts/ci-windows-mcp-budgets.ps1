@@ -88,7 +88,7 @@ try {
     $report.error = 'windows_budget_qualification_failed'
 } finally {
     try {
-        foreach ($name in @('results.json', 'launcher.json')) {
+        foreach ($name in @('results.json', 'launcher.json', 'bootstrap.json')) {
             $source = Join-Path $stage "evidence/$name"
             if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination (Join-Path $out $name) }
         }

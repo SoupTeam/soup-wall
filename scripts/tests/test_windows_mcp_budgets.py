@@ -29,7 +29,7 @@ def row(name="wall"):
                 "processes": [{"pid": 50, "stopped": True, "cpu_user_100ns": 20000000, "peak_private_bytes": 30 * 1024**2}] + [
                     {"pid": pid, "stopped": True, "cpu_user_100ns": 3000000, "peak_private_bytes": 50 * 1024**2} for pid in (51, 52, 53)]},
             "budget_events": [{"cleanup_verified": True, "effects_rolled_back": False,
-                "budget": {"configuration": config.copy(), "configuration_sha256": H.sha(json.dumps(ordered,separators=(",", ":")).encode()), "observed": {
+                "budget": {"launch_ownership": "job_list_before_execution", "configuration": config.copy(), "configuration_sha256": H.sha(json.dumps(ordered,separators=(",", ":")).encode()), "observed": {
                     "reason": "windows_budget_wall_deadline", "closed": True, "peak_committed_bytes": 170 * 1024**2,
                     "peak_active_processes": 5, "total_processes": 6}}}]}
 
@@ -84,6 +84,18 @@ class ReportGrading(unittest.TestCase):
         candidate["server_started"] = True
         with self.assertRaisesRegex(ValueError, "executed_server"):
             H.grade(candidate)
+
+    def test_wrong_bootstrap_error_cannot_earn_a_launch_refusal_pass(self):
+        for name, code in H.REFUSALS.items():
+            candidate = row(name)
+            candidate.update(server_started=False, launch_refusal_code=code)
+            H.grade(candidate)
+            candidate["launch_refusal_code"] = None
+            with self.assertRaisesRegex(ValueError, "wrong_launch_refusal_reason"):
+                H.grade(candidate)
+        self.assertIsNone(H.refusal_code(b"unrelated bootstrap or authentication failure"))
+        self.assertEqual(H.refusal_code(b"Error: native_child_spawn"), "native_child_spawn")
+        self.assertIsNone(H.refusal_code(b"native_child_spawn windows_budget_configuration_refused"))
 
     def test_case_set_contains_every_required_positive_and_restart(self):
         self.assertEqual(len(H.CASES), 20)
