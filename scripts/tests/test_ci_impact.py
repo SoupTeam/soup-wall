@@ -45,7 +45,7 @@ class ImpactTests(unittest.TestCase):
             self.assertIn(ci_job, jobs["ci.yml"])
         for workflow in ("keycloak-oidc.yml", "keycloak-saml.yml",
                          "scim-directory.yml", "managed-policy-postgres.yml",
-                         "tls-lifecycle.yml", "monitoring.yml"):
+                         "tls-lifecycle.yml", "monitoring.yml", "gateway-sdk.yml"):
             self.assertEqual(jobs[workflow], set(WORKFLOW_JOBS[workflow]))
 
     def test_python_only_has_real_eval_without_rust_build(self):
@@ -84,19 +84,27 @@ class ImpactTests(unittest.TestCase):
 
     def test_registered_workflows_have_explicit_plan_dependencies(self):
         actual = {path.name for path in (ROOT / ".github/workflows").glob("*.yml")}
-        self.assertEqual(actual - {"release.yml", "ci-impact-plan.yml", "ci-admission.yml"},
+        self.assertEqual(actual - {"release.yml", "ci-impact-plan.yml", "ci-admission.yml", "vps-ci.yml", "ci-components.yml"},
                          set(WORKFLOW_JOBS))
         for filename, jobs in WORKFLOW_JOBS.items():
             text = (ROOT / ".github/workflows" / filename).read_text(encoding="utf-8")
             registered = set(re.findall(r"(?m)^  ([a-z][a-z0-9-]*):\s*$",
                                         text.split("jobs:\n", 1)[1]))
-            auxiliary = {"draft-checks", "main-smoke"} if filename == "ci.yml" else set()
+            auxiliary = {"draft-checks", "main-smoke", "components"} if filename == "ci.yml" else set()
             self.assertEqual(registered, set(jobs) | {"impact"} | auxiliary, filename)
             for job in jobs:
                 body = re.split(r"\n  [a-z][a-z0-9-]*:\s*\n",
                                 text.split(f"  {job}:\n", 1)[1], maxsplit=1)[0]
                 self.assertIn("needs: impact", body, (filename, job))
                 self.assertIn("needs.impact.outputs.jobs", body, (filename, job))
+
+    def test_supplemental_vps_is_outside_pr_admission_only_while_main_only(self):
+        text = (ROOT / '.github/workflows/vps-ci.yml').read_text(encoding='utf-8')
+        self.assertNotRegex(text, r'(?m)^  pull_request(?:_target)?:')
+        self.assertIn("github.ref == 'refs/heads/main'", text)
+        self.assertIn("github.repository == 'SoupTeam/soup-wall'", text)
+        self.assertIn("vars.SOUP_VPS_CI_ENABLED == 'true'", text)
+        self.assertIn("github.event_name == 'workflow_dispatch'", text)
 
 
 class AdmissionTests(unittest.TestCase):

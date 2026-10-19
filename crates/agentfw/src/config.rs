@@ -12,7 +12,32 @@ fn default_bind() -> String {
     "127.0.0.1".into()
 }
 fn default_port() -> u16 {
+    #[cfg(test)]
+    if let Some(port) = TEST_DEFAULT_PORT.with(std::cell::Cell::get) {
+        return port;
+    }
     8787
+}
+
+// Absent-config lifecycle tests need their own endpoint without creating the
+// very config.yaml whose absence they are testing. This override is compiled
+// only into unit tests; it is thread-local, scoped, and restored on panic.
+#[cfg(test)]
+thread_local! {
+    static TEST_DEFAULT_PORT: std::cell::Cell<Option<u16>> = const { std::cell::Cell::new(None) };
+}
+
+#[cfg(test)]
+pub(crate) fn with_test_default_port<T>(port: u16, run: impl FnOnce() -> T) -> T {
+    assert_ne!(port, 0, "test endpoint must have an allocated port");
+    struct Restore(Option<u16>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            TEST_DEFAULT_PORT.with(|value| value.set(self.0));
+        }
+    }
+    let _restore = Restore(TEST_DEFAULT_PORT.with(|value| value.replace(Some(port))));
+    run()
 }
 fn default_max_record_bytes() -> usize {
     262_144
@@ -129,7 +154,7 @@ pub struct Config {
     pub policy: Option<PathBuf>,
     #[serde(default)]
     pub audit: Option<PathBuf>,
-    /// Opt-in, owner-only Linux audit segments. Legacy `audit` remains unchanged
+    /// Opt-in, owner-only Linux or Windows audit segments. Legacy `audit` remains unchanged
     /// when this is absent.
     #[serde(default)]
     pub audit_retention: Option<crate::audit::RetentionConfig>,
@@ -165,6 +190,9 @@ pub struct NativeCfg {
     /// Opt-in single-use operator approval for native Ask calls. Absent = refusal.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approval: Option<NativeApprovalCfg>,
+    /// Opt-in authenticated session liveness and bounded maintenance (SOU-89).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub liveness: Option<NativeLivenessCfg>,
 }
 
 /// Bounded pending-approval lifecycle for native MCP Ask calls (SOU-48).
@@ -178,6 +206,33 @@ pub struct NativeApprovalCfg {
 
 fn default_native_approval_ttl() -> u64 {
     120
+}
+
+/// Opt-in session liveness and bounded orphan reclamation (SOU-89).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct NativeLivenessCfg {
+    /// Default lease duration in seconds (clamped to 1..=60).
+    #[serde(default = "default_liveness_lease_seconds")]
+    pub default_lease_seconds: u64,
+    /// Maximum lease duration in seconds (clamped to 1..=60).
+    #[serde(default = "default_liveness_max_lease_seconds")]
+    pub max_lease_seconds: u64,
+    /// Maintenance sweep interval in milliseconds.
+    #[serde(default = "default_liveness_maintenance_interval_ms")]
+    pub maintenance_interval_ms: u64,
+}
+
+fn default_liveness_lease_seconds() -> u64 {
+    10
+}
+
+fn default_liveness_max_lease_seconds() -> u64 {
+    60
+}
+
+fn default_liveness_maintenance_interval_ms() -> u64 {
+    500
 }
 
 impl Default for Config {
@@ -246,6 +301,24 @@ impl Config {
                 anyhow::ensure!(
                     (1..=300).contains(&approval.ttl_seconds),
                     "native approval ttl_seconds must be 1..=300"
+                );
+            }
+            if let Some(liveness) = &native.liveness {
+                anyhow::ensure!(
+                    (1..=60).contains(&liveness.default_lease_seconds),
+                    "native liveness default_lease_seconds must be 1..=60"
+                );
+                anyhow::ensure!(
+                    (1..=60).contains(&liveness.max_lease_seconds),
+                    "native liveness max_lease_seconds must be 1..=60"
+                );
+                anyhow::ensure!(
+                    liveness.default_lease_seconds <= liveness.max_lease_seconds,
+                    "native liveness default_lease_seconds cannot exceed max_lease_seconds"
+                );
+                anyhow::ensure!(
+                    (50..=10_000).contains(&liveness.maintenance_interval_ms),
+                    "native liveness maintenance_interval_ms must be 50..=10000"
                 );
             }
         }
@@ -337,6 +410,28 @@ mod tests {
         assert_eq!(c.bind, "127.0.0.1");
         assert_eq!(c.max_record_bytes, 262_144);
         assert!(!c.capture_unknown_raw);
+    }
+
+    #[test]
+    fn test_endpoint_is_thread_local_and_restored_after_nested_panic() {
+        assert_eq!(Config::default().port, 8787);
+        with_test_default_port(12345, || {
+            assert_eq!(Config::default().port, 12345);
+            assert_eq!(Config::from_yaml("{}").unwrap().port, 12345);
+            assert_eq!(Config::from_yaml("port: 9001").unwrap().port, 9001);
+            assert_eq!(
+                std::thread::spawn(|| Config::default().port)
+                    .join()
+                    .unwrap(),
+                8787
+            );
+            let result = std::panic::catch_unwind(|| {
+                with_test_default_port(12346, || panic!("fixture unwind"));
+            });
+            assert!(result.is_err());
+            assert_eq!(Config::default().port, 12345);
+        });
+        assert_eq!(Config::default().port, 8787);
     }
 
     #[test]

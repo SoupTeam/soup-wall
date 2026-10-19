@@ -1,8 +1,6 @@
 name: Native MCP diagnostic output
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:

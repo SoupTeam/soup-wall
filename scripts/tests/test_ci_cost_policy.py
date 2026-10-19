@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import sys
 import tempfile
 import unittest
@@ -61,25 +62,58 @@ class CostPolicyTests(unittest.TestCase):
                     self.assertEqual(body["state"], "pending")
                     self.assertEqual(body["context"], ci_admission.CONTEXT)
 
-    def test_every_runtime_workflow_restarts_on_ready_and_cancels_on_draft(self):
+    def test_only_root_workflow_schedules_pr_runtime_and_cancels_stale_work(self):
         for name in WORKFLOW_JOBS:
             text = (ROOT / ".github/workflows" / name).read_text(encoding="utf-8")
-            match = re.search(r"(?m)^  pull_request:\n    types: \[([^]]+)\]", text)
-            self.assertIsNotNone(match, name)
-            self.assertEqual({x.strip() for x in match.group(1).split(",")},
-                             {"opened", "synchronize", "reopened", "ready_for_review", "converted_to_draft"}, name)
-            self.assertIn("cancel-in-progress: true", text, name)
-            self.assertIn("github.event.pull_request.number || github.ref", text, name)
-            if name != "ci.yml":
+            if name == "ci.yml":
+                match = re.search(r"(?m)^  pull_request:\n    types: \[([^]]+)\]", text)
+                self.assertIsNotNone(match)
+                self.assertEqual({x.strip() for x in match.group(1).split(",")},
+                                 {"opened", "synchronize", "reopened", "ready_for_review", "converted_to_draft"})
+                self.assertIn("cancel-in-progress: true", text)
+                self.assertIn("github.event.pull_request.number || github.ref", text)
+                self.assertIn("!github.event.pull_request.draft", text)
+                self.assertIn("uses: ./.github/workflows/ci-components.yml", text)
+            else:
+                self.assertNotRegex(text, r"(?m)^  pull_request(?:_target)?:", name)
                 self.assertNotRegex(text, r"(?m)^  push:", name)
-            # Empty outputs from a skipped reusable planner must parse safely.
             self.assertNotIn("fromJSON(needs.impact.outputs.jobs)", text, name)
 
     def test_admission_also_handles_draft_transitions(self):
         text = (ROOT / ".github/workflows/ci-admission.yml").read_text(encoding="utf-8")
         self.assertIn("ready_for_review, converted_to_draft", text)
-        self.assertIn("ref: ${{ github.event.pull_request.base.sha }}", text)
         self.assertNotIn("pull_request.head.sha", text)
+
+    def test_admission_uses_the_executing_trusted_workflow_revision(self):
+        text = (ROOT / ".github/workflows/ci-admission.yml").read_text(encoding="utf-8")
+        # An event's base SHA can predate the workflow and its CLI contract.
+        # Pin both event paths to the trusted workflow revision, never PR code.
+        self.assertEqual(re.findall(r"(?m)^          ref: (.+)$", text),
+                         ["${{ github.workflow_sha }}"])
+        self.assertIn("persist-credentials: false", text)
+        self.assertNotIn("pull_request.head", text)
+
+    def test_workflow_command_derives_pr_from_event_without_qualifying_a_draft(self):
+        text = (ROOT / ".github/workflows/ci-admission.yml").read_text(encoding="utf-8")
+        command = re.search(r"(?m)^        run: (python3 scripts/ci_admission.py .+)$", text)
+        self.assertIsNotNone(command)
+        with tempfile.TemporaryDirectory() as directory:
+            api = DraftAPI()
+            event = Path(directory) / "event.json"
+            event.write_text(json.dumps({"pull_request": {
+                "number": 1, "base": {"sha": "a" * 40,
+                    "repo": {"full_name": "SoupTeam/soup-wall"}},
+            }}), encoding="utf-8")
+            with patch.dict(os.environ, {"GITHUB_REPOSITORY": "SoupTeam/soup-wall",
+                                         "GITHUB_TOKEN": "test-only",
+                                         "GITHUB_EVENT_PATH": str(event)}), \
+                 patch.object(sys, "argv", shlex.split(command.group(1))[1:]), \
+                 patch.object(ci_admission, "GitHub", return_value=api), \
+                 patch.object(ci_admission.time, "sleep", side_effect=AssertionError("idle runner")):
+                self.assertEqual(ci_admission.main(), 0)
+            self.assertEqual(len(api.posts), 1)
+            self.assertEqual(api.posts[0][0], "/statuses/" + "c" * 40)
+            self.assertEqual(api.posts[0][1]["state"], "pending")
 
     def test_skipped_drafts_cannot_satisfy_existing_required_contexts(self):
         text = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")

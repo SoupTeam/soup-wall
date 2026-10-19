@@ -623,6 +623,7 @@ Authentication/conflict refusals are audited without tokens. Protected PreToolUs
 - Scoped host tombstones are bounded at 64 per daemon lifetime. A completed host cannot revert to unsigned hook identity. New scoped host IDs beyond the cap are refused with `native_host_binding_cap`, rather than silently evicting security state.
 - Daemon restart changes `instance_id` and refuses old agent-bound grants with `native_child_authority_instance_mismatch`. In-memory history is not durable: the operator must start fresh host conversations and issue fresh grants after restart; do not resume old model context under a fresh grant. Legacy grants lacking a signed agent identity are refused on every shared-host admission, both before and after restart; selecting the older wire format cannot bypass the generation or completed-host protections. Rotating the native issuer token also invalidates existing grant signatures. There is no claim of durable model-context revocation or host enforcement during daemon outage.
 - The real-process tests exercise independent Server A/B collectors with distinct signed server/agent identities and a real parent → narrowed child tool grant, zero execution in the denied Server B ledger, a separate-session success control, and a signed hook-result → MCP-call refusal.
+- Lost, expired and orphaned MCP sessions are automatically cleaned up to restore capacity and allow restarted agents to rebind; see [MCP session cleanup](MCP_SESSION_CLEANUP.md).
 
 ## Local demonstration
 

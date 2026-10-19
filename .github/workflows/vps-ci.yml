@@ -1,0 +1,128 @@
+name: VPS CI
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Smoke or full default-feature qualification (not release acceptance)
+        type: choice
+        options: [full, smoke]
+        default: full
+
+permissions:
+  contents: read
+
+# One organization-scoped worker serializes repositories; concurrency is repo-local.
+concurrency:
+  group: vps-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: VPS Windows Rust and WSL drivers
+    if: vars.SOUP_VPS_CI_ENABLED == 'true' && github.repository == 'SoupTeam/soup-wall' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: [self-hosted, Windows, X64, soup-vps]
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      CARGO_BUILD_JOBS: 2
+      RUST_TEST_THREADS: 2
+      CARGO_TERM_COLOR: never
+      HF_HUB_OFFLINE: '1'
+      HF_DATASETS_OFFLINE: '1'
+      TRANSFORMERS_OFFLINE: '1'
+      FULL_QUALIFICATION: ${{ github.event_name == 'workflow_dispatch' && inputs.suite == 'full' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify existing service host and selected source
+        run: |
+          if (-not $env:SOUPZERO_CI_ROOT) { throw 'The owned CI host is not configured.' }
+          $preflight = Join-Path $env:SOUPZERO_CI_ROOT 'tools\Test-CiPrerequisites.ps1'
+          powershell -NoProfile -ExecutionPolicy Bypass -File $preflight -CiRoot $env:SOUPZERO_CI_ROOT -SmokeBuild
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $actual = & git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0 -or $actual -cne $env:GITHUB_SHA) { throw 'Checkout differs from selected main source.' }
+          $dirty = & git status --porcelain
+          if ($LASTEXITCODE -ne 0 -or $dirty) { throw 'Refusing a dirty initial checkout.' }
+          $drive = [IO.DriveInfo]::new([IO.Path]::GetPathRoot($env:SOUPZERO_CI_ROOT))
+          if ($drive.AvailableFreeSpace -lt 15GB) { throw 'Need 15 GiB free; no existing cache was deleted.' }
+          $output = Join-Path $env:RUNNER_TEMP "wall-vps-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          if (Test-Path -LiteralPath $output) { throw 'Refusing an existing evidence directory.' }
+          New-Item -ItemType Directory -Path $output | Out-Null
+          @{ source_sha = $actual; tree_sha = (& git rev-parse 'HEAD^{tree}'); runner = $env:RUNNER_NAME; full_qualification = $env:FULL_QUALIFICATION } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'source.json') -Encoding utf8
+          "VPS_OUTPUT=$output" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "CARGO_TARGET_DIR=$(Join-Path $env:SOUPZERO_CI_ROOT 'cache\ecosystem\soup-wall\cargo-target')" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "UV_CACHE_DIR=$(Join-Path $env:SOUPZERO_CI_ROOT 'cache\uv')" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.6'
+          enable-cache: false
+          cache-local-path: ${{ env.UV_CACHE_DIR }}
+      - name: Prepare Windows Python for Rust fixtures
+        run: |
+          $venv = Join-Path $env:VPS_OUTPUT 'windows-venv'
+          uv venv --managed-python --python 3.12 $venv
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $python = Join-Path $venv 'Scripts\python.exe'
+          uv pip install --python $python requests==2.34.2 cryptography==50.0.2 psutil==7.2.2
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          (Join-Path $venv 'Scripts') | Out-File $env:GITHUB_PATH -Append -Encoding utf8
+          "VPS_PYTHON=$python" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Refuse a different fixture interpreter
+        run: |
+          python -c "import os,sys; raise SystemExit(0 if os.path.samefile(sys.executable,sys.argv[1]) else 1)" $env:VPS_PYTHON
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Merged-source smoke on Windows
+        if: env.FULL_QUALIFICATION != 'true'
+        run: |
+          rustup run stable cargo build --locked -p agentfw --bin agentfw -p llm-firewall --bin llm-firewall
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & (Join-Path $env:CARGO_TARGET_DIR 'debug\agentfw.exe') --help
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          rustup run stable cargo test --locked -p soup-wall-adapter --lib -- --test-threads=2
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $env:VPS_PYTHON scripts/self-hosted-local-acceptance.py --gateway (Join-Path $env:CARGO_TARGET_DIR 'debug\llm-firewall.exe') --artifact-label $env:GITHUB_SHA --out (Join-Path $env:VPS_OUTPUT 'smoke.json')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Default-feature formatting
+        if: env.FULL_QUALIFICATION == 'true'
+        run: |
+          rustup component add --toolchain stable rustfmt clippy
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          rustup run stable cargo fmt --all -- --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Default-feature Clippy
+        if: env.FULL_QUALIFICATION == 'true'
+        run: |
+          rustup run stable cargo clippy --locked --workspace --all-targets -- -D warnings 2>&1 | Tee-Object -FilePath (Join-Path $env:VPS_OUTPUT 'clippy.log')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Native Windows workspace tests
+        if: env.FULL_QUALIFICATION == 'true'
+        run: |
+          rustup run stable cargo test --locked --workspace -- --test-threads=2 2>&1 | Tee-Object -FilePath (Join-Path $env:VPS_OUTPUT 'rust-tests.log')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Full Python drivers and documentation in owned Linux
+        if: env.FULL_QUALIFICATION == 'true'
+        run: pwsh -NoProfile -File scripts/ci/run-wall-python-wsl.ps1 -Source $env:GITHUB_WORKSPACE -Output (Join-Path $env:VPS_OUTPUT 'wall-linux') -SourceSha $env:GITHUB_SHA
+      - name: Stop only the owned Linux distro
+        if: always() && env.FULL_QUALIFICATION == 'true' && env.VPS_OUTPUT != ''
+        timeout-minutes: 2
+        run: pwsh -NoProfile -File scripts/ci/run-wsl-shell-checks.ps1 -Check stop
+      - uses: actions/upload-artifact@v7
+        if: always() && env.VPS_OUTPUT != ''
+        with:
+          name: wall-vps-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ env.VPS_OUTPUT }}/source.json
+            ${{ env.VPS_OUTPUT }}/smoke.json
+            ${{ env.VPS_OUTPUT }}/*.log
+            ${{ env.VPS_OUTPUT }}/wall-linux/results.json
+            ${{ env.VPS_OUTPUT }}/wall-linux/*.log
+          if-no-files-found: warn
+          retention-days: 14
