@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Generate a bounded, private, self-contained Agent audit report on Linux.
+"""Generate a bounded, private, self-contained Agent audit report.
 
 The source JSONL is untrusted and may contain secrets. Only explicitly projected
 fields enter the report. This tool never modifies the source or opens a browser.
@@ -11,12 +11,23 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
 import re
 import stat
 import sys
+
+if os.name == "nt":
+    import importlib.util
+    _io_spec = importlib.util.spec_from_file_location(
+        "agent_audit_windows_io", Path(__file__).with_name("agent_audit_windows_io.py"))
+    win_io = importlib.util.module_from_spec(_io_spec)
+    _io_spec.loader.exec_module(win_io)
+    WindowsIoError = win_io.WinStoreError
+else:
+    WindowsIoError = OSError
 
 MAX_INPUT_BYTES = 16 * 1024 * 1024
 MAX_LINE_BYTES = 64 * 1024
@@ -307,6 +318,15 @@ def _linux_filesystem(path: Path) -> str:
 
 
 def _open_input(path: Path):
+    if os.name == "nt":
+        reader = win_io.Reader(path.parent)
+        try:
+            body = reader.read(path.name, MAX_INPUT_BYTES + 1)
+            if body is None:
+                raise ReportError("input file is missing")
+            return io.BytesIO(body)
+        finally:
+            reader.close()
     _check_path_components(path)
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
     parent_fd = _open_dir_nofollow(path.parent)
@@ -474,6 +494,12 @@ def _read_report(path: Path) -> dict[str, object]:
 
 
 def _private_output(path: Path, body: bytes) -> None:
+    if os.name == "nt":
+        try:
+            win_io.private_output(path, body)
+        except win_io.WinStoreError as error:
+            raise ReportError(str(error)) from error
+        return
     _check_path_components(path)
     parent = path.parent
     if not parent.exists():
@@ -512,8 +538,8 @@ def export_retained(directory: Path, output: Path, from_segment: int | None = No
     The export is owner-only raw evidence. The HTML generator still applies its
     allowlist and report-local aliases; this local digest is not authentication.
     """
-    if os.name != "posix" or not sys.platform.startswith("linux"):
-        raise ReportError("retained export currently supports Linux only")
+    if os.name not in ("posix", "nt") or (os.name == "posix" and not sys.platform.startswith("linux")):
+        raise ReportError("retained export supports native Linux and Windows only")
     directory, output = directory.absolute(), output.absolute()
     if directory == output or directory in output.parents:
         raise ReportError("export output must be outside the retained directory")
@@ -523,21 +549,36 @@ def export_retained(directory: Path, output: Path, from_segment: int | None = No
     if ((from_segment is not None and to_segment is not None and from_segment > to_segment) or
             (from_ms is not None and to_ms is not None and from_ms > to_ms)):
         raise ReportError("selection range is reversed")
-    _check_path_components(directory)
-    if _linux_filesystem(directory) not in PRIVATE_LINUX_FILESYSTEMS:
-        raise ReportError("retained input requires a supported private Linux filesystem")
+    if os.name != "nt":
+        _check_path_components(directory)
+        if _linux_filesystem(directory) not in PRIVATE_LINUX_FILESYSTEMS:
+            raise ReportError("retained input requires a supported private Linux filesystem")
     notices: set[str] = set()
     gaps = {"intentional": 0, "unexplained": 0, "corrupt": 0}
     records: list[bytes] = []
-    parent_fd = _open_dir_nofollow(directory.parent)
-    dir_fd = os.open(directory.name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
-                     dir_fd=parent_fd)
+    reader = None
+    parent_fd = dir_fd = None
+    if os.name == "nt":
+        try:
+            reader = win_io.Reader(directory)
+        except win_io.WinStoreError as error:
+            raise ReportError(str(error)) from error
+    else:
+        parent_fd = _open_dir_nofollow(directory.parent)
+        dir_fd = os.open(directory.name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                         dir_fd=parent_fd)
     try:
-        root_stat = os.fstat(dir_fd)
-        if root_stat.st_uid != os.getuid() or root_stat.st_mode & 0o077:
-            raise ReportError("retained directory must be owner-only")
+        if reader is None:
+            root_stat = os.fstat(dir_fd)
+            if root_stat.st_uid != os.getuid() or root_stat.st_mode & 0o077:
+                raise ReportError("retained directory must be owner-only")
 
         def read_verified(name: str, limit: int) -> bytes | None:
+            if reader is not None:
+                try:
+                    return reader.read(name, limit)
+                except win_io.WinStoreError as error:
+                    raise ReportError(str(error)) from error
             named_dir = os.stat(directory.name, dir_fd=parent_fd, follow_symlinks=False)
             if (named_dir.st_dev, named_dir.st_ino) != (root_stat.st_dev, root_stat.st_ino):
                 raise ReportError("retained directory was replaced")
@@ -679,8 +720,11 @@ def export_retained(directory: Path, output: Path, from_segment: int | None = No
         if read_verified("manifest.json", MAX_MANIFEST_BYTES) != manifest_raw:
             raise ReportError("retention changed during export; retry")
     finally:
-        os.close(dir_fd)
-        os.close(parent_fd)
+        if reader is not None:
+            reader.close()
+        else:
+            os.close(dir_fd)
+            os.close(parent_fd)
     header = {"audit_export_version": 1, "notices": sorted(notices), "gaps": gaps}
     payload = json.dumps(header, separators=(",", ":"), ensure_ascii=True).encode() + b"\n" + b"".join(records)
     if len(payload) > MAX_INPUT_BYTES:
@@ -690,8 +734,8 @@ def export_retained(directory: Path, output: Path, from_segment: int | None = No
 
 
 def generate(source: Path, output: Path, template: Path | None = None) -> dict[str, object]:
-    if os.name != "posix" or not sys.platform.startswith("linux"):
-        raise ReportError("report generation currently supports Linux file permissions only")
+    if os.name not in ("posix", "nt") or (os.name == "posix" and not sys.platform.startswith("linux")):
+        raise ReportError("report generation supports native Linux and Windows only")
     source = source.absolute()
     output = output.absolute()
     if source == output:
@@ -716,7 +760,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--input", type=Path, help="explicit regular Agent audit JSONL or export path")
-    source.add_argument("--retained-dir", type=Path, help="verified Linux retention directory to export")
+    source.add_argument("--retained-dir", type=Path, help="verified retained directory to export")
     parser.add_argument("--output", required=True, type=Path, help="new private HTML report or JSONL export")
     parser.add_argument("--from-segment", type=int)
     parser.add_argument("--to-segment", type=int)
@@ -732,7 +776,7 @@ def main() -> int:
         if any(value is not None for value in (args.from_segment, args.to_segment, args.from_ms, args.to_ms)):
             raise ReportError("range options require --retained-dir")
         meta = generate(args.input, args.output)
-    except (ReportError, OSError) as error:
+    except (ReportError, OSError, WindowsIoError) as error:
         parser.exit(2, f"audit report: {error}\n")
     print(f"Report written: {args.output} ({meta['totals']['accepted']} accepted records; {meta['source_status']})")
     return 0

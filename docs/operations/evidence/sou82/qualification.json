@@ -1,0 +1,1020 @@
+{
+  "format": "sou82-qualification-history/1",
+  "initial_acceptance": {
+    "run": "https://github.com/SoupTeam/soup-wall/actions/runs/39144799684",
+    "source_commit": "57abd6f5ce70e1d57fa1388b987f8e69cc67886e",
+    "artifact_sha256": "0c7b28a376fd2a17fac9a4cf1a065263552f5f71a017d25080d04a49cdb387b6",
+    "backends": {
+      "sqlite": {
+        "status": "pass",
+        "checks": 16,
+        "binary_sha256": {
+          "agentfw": "b96b7e7dad9f2c497008bf614060f237bc3986565f66259a0d6ed191c884d1f7",
+          "console": "4234e002e66634366872239540cc0bc326c9e25693e6700e19700c54d19caa43",
+          "git": "f10e39b187b85ed179dca965b09a919a293628deea583c281d0befe7b0752181",
+          "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+          "bwrap": "f78a4413ad4e93bf07e3c5722bd198006a737e3a2c44fff42453862ac4e49833",
+          "git_launcher": "8cb6306857d566f091498a81d3102df3cf503f129e45d22f68ac2a20c7f80702"
+        }
+      },
+      "postgres": {
+        "status": "pass",
+        "checks": 16,
+        "binary_sha256": {
+          "agentfw": "b96b7e7dad9f2c497008bf614060f237bc3986565f66259a0d6ed191c884d1f7",
+          "console": "4234e002e66634366872239540cc0bc326c9e25693e6700e19700c54d19caa43",
+          "git": "f10e39b187b85ed179dca965b09a919a293628deea583c281d0befe7b0752181",
+          "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+          "bwrap": "f78a4413ad4e93bf07e3c5722bd198006a737e3a2c44fff42453862ac4e49833",
+          "git_launcher": "8cb6306857d566f091498a81d3102df3cf503f129e45d22f68ac2a20c7f80702"
+        }
+      }
+    }
+  },
+  "failed_development_controls": [
+    {
+      "run": "https://github.com/SoupTeam/soup-wall/actions/runs/39143912895",
+      "source_commit": "6aa314788770f09bb0b0f11488cc05d944074c0e",
+      "result": "failed",
+      "cause": "New test fixtures used an unsupported YAML key and insufficient retained content. Corrected before subsequent passing tests."
+    },
+    {
+      "run": "https://github.com/SoupTeam/soup-wall/actions/runs/39144979791",
+      "source_commit": "8f0d6f98faaf76b04f3d55bdc7118fee85f5c6be",
+      "result": "failed",
+      "cause": "Concurrent fork briefly inherited an open lock description after its owner dropped it. Boundary now explicitly unlocks on drop; subprocess death still releases OS locks."
+    }
+  ],
+  "agent_regressions": {
+    "run": "https://github.com/SoupTeam/soup-wall/actions/runs/39145275029",
+    "source_commit": "493d36564697f39d0045146e20b1380ab7f36a4c",
+    "passed": 504,
+    "failed": 0,
+    "declared_ignored": 3,
+    "subprocess_helper_invoked_by_parent": true
+  },
+  "final_acceptance": {
+    "run": "https://github.com/SoupTeam/soup-wall/actions/runs/39145586076",
+    "source_commit": "316310534a77e5ed97c9525dc9f95aac05fc605e",
+    "artifact_sha256": "717a0a87d895442dbef26f7f26be860bae2bdbdac7c855c5a2727acd1e9711af",
+    "archive": "acceptance-3163105.zip",
+    "backends": {
+      "sqlite": {
+        "report": "sou82-sqlite/report.json",
+        "report_sha256": "d14061235ac1dee28b1c7e7daaa28c5c66e7713add47421f09de2f8b135e7c0e",
+        "status": "pass",
+        "check_names": [
+          "agent-restart-restores-cache-and-retires-old-session",
+          "console-restart-preserves-deployments",
+          "dispatched-filesystem-read-observed-and-result-withheld",
+          "higher-sequence-rollback-restores-useful-work",
+          "old-ask-approval-cannot-authorize-after-policy-switch",
+          "original-filesystem-and-git-positive-controls",
+          "original-git-denied-without-repository-open",
+          "outage-keeps-runtime-and-useful-work",
+          "owned-resources-cleaned",
+          "queued-filesystem-read-never-opened",
+          "same-collectors-through-transitions",
+          "shared-host-risk-survives-switch",
+          "shared-release-lock-defers-activation-and-ack",
+          "source-runtime-and-profile-identities-unchanged",
+          "tampered-bundle-keeps-last-accepted-policy",
+          "wrong-digest-and-stale-ack-refused"
+        ],
+        "source": {
+          "commit": "316310534a77e5ed97c9525dc9f95aac05fc605e",
+          "tree": "67a26bbe8287afcc9621f15c2f3988339582e945",
+          "dirty": false
+        },
+        "binary_sha256": {
+          "agentfw": "c8a064c0e18378d3c9646311e6beeb5642fabf431f6f1ce75f86b38c6cc9ddf2",
+          "console": "4234e002e66634366872239540cc0bc326c9e25693e6700e19700c54d19caa43",
+          "git": "f10e39b187b85ed179dca965b09a919a293628deea583c281d0befe7b0752181",
+          "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+          "bwrap": "f78a4413ad4e93bf07e3c5722bd198006a737e3a2c44fff42453862ac4e49833",
+          "git_launcher": "8cb6306857d566f091498a81d3102df3cf503f129e45d22f68ac2a20c7f80702"
+        },
+        "transport": {
+          "origin": "https://172.18.0.2:8443",
+          "ca_sha256": "cc83e33cc71236bd9233c77219323e0644a5b9858f2e51fafdeec7c967b570ab",
+          "address": "172.18.0.2",
+          "edge_source_sha256": "9a8ceb29310525f27c93abfc4feefa0b53a9d3a0ebbe95e8e68d4b933b264923",
+          "scope": "verified HTTPS to owned nonloopback edge; bridge-local HTTP to actual Console"
+        },
+        "ordering": [
+          {
+            "index": 0,
+            "monotonic_ns": 1237894496062,
+            "event": "issued",
+            "agent": "filesystem",
+            "revision": "allow",
+            "deployment_sequence": 1,
+            "policy_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+            "status": "issued"
+          },
+          {
+            "index": 1,
+            "monotonic_ns": 1243603334919,
+            "event": "observed-active",
+            "agent": "filesystem",
+            "deployment_sequence": 1,
+            "policy_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+            "revision": "allow"
+          },
+          {
+            "index": 2,
+            "monotonic_ns": 1243604765945,
+            "event": "console-applied-ack",
+            "agent": "filesystem",
+            "revision": "allow",
+            "deployment_sequence": 1,
+            "policy_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+            "status": "applied"
+          },
+          {
+            "index": 3,
+            "monotonic_ns": 1253038987372,
+            "event": "issued",
+            "agent": "git",
+            "revision": "allow",
+            "deployment_sequence": 1,
+            "policy_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+            "status": "issued"
+          },
+          {
+            "index": 4,
+            "monotonic_ns": 1258447367579,
+            "event": "observed-active",
+            "agent": "git",
+            "deployment_sequence": 1,
+            "policy_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+            "revision": "allow"
+          },
+          {
+            "index": 5,
+            "monotonic_ns": 1258448710259,
+            "event": "console-applied-ack",
+            "agent": "git",
+            "revision": "allow",
+            "deployment_sequence": 1,
+            "policy_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+            "status": "applied"
+          },
+          {
+            "index": 6,
+            "monotonic_ns": 1274839478106,
+            "event": "issued",
+            "agent": "git",
+            "revision": "deny",
+            "deployment_sequence": 2,
+            "policy_sha256": "474ccc4b4cdd7d88ce48ca847e47118fb876c2f928e823322b84a7e80b725934",
+            "status": "issued"
+          },
+          {
+            "index": 7,
+            "monotonic_ns": 1277256071546,
+            "event": "observed-active",
+            "agent": "git",
+            "deployment_sequence": 2,
+            "policy_sha256": "474ccc4b4cdd7d88ce48ca847e47118fb876c2f928e823322b84a7e80b725934",
+            "revision": "deny"
+          },
+          {
+            "index": 8,
+            "monotonic_ns": 1277257782575,
+            "event": "console-applied-ack",
+            "agent": "git",
+            "revision": "deny",
+            "deployment_sequence": 2,
+            "policy_sha256": "474ccc4b4cdd7d88ce48ca847e47118fb876c2f928e823322b84a7e80b725934",
+            "status": "applied"
+          },
+          {
+            "index": 9,
+            "monotonic_ns": 1277641563297,
+            "event": "reader-observed-before-policy-deny",
+            "observed_readers": 8
+          },
+          {
+            "index": 10,
+            "monotonic_ns": 1277644437249,
+            "event": "issued",
+            "agent": "filesystem",
+            "revision": "deny",
+            "deployment_sequence": 2,
+            "policy_sha256": "11d390fcd6632b48ebd220a8d6de55debc6eab109023668c67657a5654bf38a0",
+            "status": "issued"
+          },
+          {
+            "index": 11,
+            "monotonic_ns": 1277946123921,
+            "event": "observed-active",
+            "agent": "filesystem",
+            "deployment_sequence": 2,
+            "policy_sha256": "11d390fcd6632b48ebd220a8d6de55debc6eab109023668c67657a5654bf38a0",
+            "revision": "deny"
+          },
+          {
+            "index": 12,
+            "monotonic_ns": 1277947295672,
+            "event": "console-applied-ack",
+            "agent": "filesystem",
+            "revision": "deny",
+            "deployment_sequence": 2,
+            "policy_sha256": "11d390fcd6632b48ebd220a8d6de55debc6eab109023668c67657a5654bf38a0",
+            "status": "applied"
+          },
+          {
+            "index": 13,
+            "monotonic_ns": 1278139939343,
+            "event": "issued",
+            "agent": "filesystem",
+            "revision": "allow",
+            "deployment_sequence": 3,
+            "policy_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+            "status": "issued"
+          },
+          {
+            "index": 14,
+            "monotonic_ns": 1279946850081,
+            "event": "observed-active",
+            "agent": "filesystem",
+            "deployment_sequence": 3,
+            "policy_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+            "revision": "allow"
+          },
+          {
+            "index": 15,
+            "monotonic_ns": 1279947994781,
+            "event": "console-applied-ack",
+            "agent": "filesystem",
+            "revision": "allow",
+            "deployment_sequence": 3,
+            "policy_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+            "status": "applied"
+          },
+          {
+            "index": 16,
+            "monotonic_ns": 1279950269273,
+            "event": "issued",
+            "agent": "git",
+            "revision": "allow",
+            "deployment_sequence": 3,
+            "policy_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+            "status": "issued"
+          },
+          {
+            "index": 17,
+            "monotonic_ns": 1281155802659,
+            "event": "observed-active",
+            "agent": "git",
+            "deployment_sequence": 3,
+            "policy_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+            "revision": "allow"
+          },
+          {
+            "index": 18,
+            "monotonic_ns": 1281157323803,
+            "event": "console-applied-ack",
+            "agent": "git",
+            "revision": "allow",
+            "deployment_sequence": 3,
+            "policy_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+            "status": "applied"
+          },
+          {
+            "index": 19,
+            "monotonic_ns": 1281280387102,
+            "event": "issued",
+            "agent": "filesystem",
+            "revision": "ask",
+            "deployment_sequence": 4,
+            "policy_sha256": "da44ce3423ac4b3a3c94b7ecd7c2498308dc184eb95d3229464ed8518774eb59",
+            "status": "issued"
+          },
+          {
+            "index": 20,
+            "monotonic_ns": 1282184462106,
+            "event": "observed-active",
+            "agent": "filesystem",
+            "deployment_sequence": 4,
+            "policy_sha256": "da44ce3423ac4b3a3c94b7ecd7c2498308dc184eb95d3229464ed8518774eb59",
+            "revision": "ask"
+          },
+          {
+            "index": 21,
+            "monotonic_ns": 1282203360814,
+            "event": "issued",
+            "agent": "filesystem",
+            "revision": "ask",
+            "deployment_sequence": 5,
+            "policy_sha256": "da44ce3423ac4b3a3c94b7ecd7c2498308dc184eb95d3229464ed8518774eb59",
+            "status": "issued"
+          },
+          {
+            "index": 22,
+            "monotonic_ns": 1284012330109,
+            "event": "observed-active",
+            "agent": "filesystem",
+            "deployment_sequence": 5,
+            "policy_sha256": "da44ce3423ac4b3a3c94b7ecd7c2498308dc184eb95d3229464ed8518774eb59",
+            "revision": "ask"
+          },
+          {
+            "index": 23,
+            "monotonic_ns": 1284018359150,
+            "event": "issued",
+            "agent": "filesystem",
+            "revision": "allow",
+            "deployment_sequence": 6,
+            "policy_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+            "status": "issued"
+          },
+          {
+            "index": 24,
+            "monotonic_ns": 1286126917941,
+            "event": "observed-active",
+            "agent": "filesystem",
+            "deployment_sequence": 6,
+            "policy_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+            "revision": "allow"
+          },
+          {
+            "index": 25,
+            "monotonic_ns": 1286182984012,
+            "event": "issued",
+            "agent": "filesystem",
+            "revision": "taint",
+            "deployment_sequence": 7,
+            "policy_sha256": "71f0d712f21216a058c4dd8ce5bc3237d9ca3f75eb62e69040a6075caea8c6da",
+            "status": "issued"
+          },
+          {
+            "index": 26,
+            "monotonic_ns": 1287990698408,
+            "event": "observed-active",
+            "agent": "filesystem",
+            "deployment_sequence": 7,
+            "policy_sha256": "71f0d712f21216a058c4dd8ce5bc3237d9ca3f75eb62e69040a6075caea8c6da",
+            "revision": "taint"
+          },
+          {
+            "index": 27,
+            "monotonic_ns": 1288104322061,
+            "event": "issued",
+            "agent": "git",
+            "revision": "deny",
+            "deployment_sequence": 4,
+            "policy_sha256": "474ccc4b4cdd7d88ce48ca847e47118fb876c2f928e823322b84a7e80b725934",
+            "status": "issued"
+          },
+          {
+            "index": 28,
+            "monotonic_ns": 1304334539102,
+            "event": "issued",
+            "agent": "git",
+            "revision": "allow",
+            "deployment_sequence": 5,
+            "policy_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+            "status": "issued"
+          },
+          {
+            "index": 29,
+            "monotonic_ns": 1305840744484,
+            "event": "observed-active",
+            "agent": "git",
+            "deployment_sequence": 5,
+            "policy_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+            "revision": "allow"
+          },
+          {
+            "index": 30,
+            "monotonic_ns": 1305842254046,
+            "event": "console-applied-ack",
+            "agent": "git",
+            "revision": "allow",
+            "deployment_sequence": 5,
+            "policy_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+            "status": "applied"
+          }
+        ],
+        "cleanup": {
+          "private_directory_removed": true,
+          "processes_stopped": true
+        },
+        "positive_git_opens": 31,
+        "denied_git_opens": 0,
+        "inflight_readers": [
+          {
+            "path": "active-0.fifo",
+            "reader_opened": true,
+            "bytes_written": 43,
+            "error": null
+          },
+          {
+            "path": "active-1.fifo",
+            "reader_opened": true,
+            "bytes_written": 43,
+            "error": null
+          },
+          {
+            "path": "active-2.fifo",
+            "reader_opened": true,
+            "bytes_written": 43,
+            "error": null
+          },
+          {
+            "path": "active-3.fifo",
+            "reader_opened": true,
+            "bytes_written": 43,
+            "error": null
+          },
+          {
+            "path": "active-4.fifo",
+            "reader_opened": true,
+            "bytes_written": 43,
+            "error": null
+          },
+          {
+            "path": "active-5.fifo",
+            "reader_opened": true,
+            "bytes_written": 43,
+            "error": null
+          },
+          {
+            "path": "active-6.fifo",
+            "reader_opened": true,
+            "bytes_written": 43,
+            "error": null
+          },
+          {
+            "path": "active-7.fifo",
+            "reader_opened": true,
+            "bytes_written": 43,
+            "error": null
+          }
+        ],
+        "queued_probes": [
+          {
+            "path": "/workspace/queued-0.fifo",
+            "device": 2049,
+            "inode": 2383319,
+            "reader_seen": false,
+            "bytes_written": 0,
+            "attempts": 156,
+            "error": null,
+            "thread_stopped": true
+          },
+          {
+            "path": "/workspace/queued-1.fifo",
+            "device": 2049,
+            "inode": 2383320,
+            "reader_seen": false,
+            "bytes_written": 0,
+            "attempts": 155,
+            "error": null,
+            "thread_stopped": true
+          },
+          {
+            "path": "/workspace/queued-2.fifo",
+            "device": 2049,
+            "inode": 2383321,
+            "reader_seen": false,
+            "bytes_written": 0,
+            "attempts": 155,
+            "error": null,
+            "thread_stopped": true
+          },
+          {
+            "path": "/workspace/queued-3.fifo",
+            "device": 2049,
+            "inode": 2383322,
+            "reader_seen": false,
+            "bytes_written": 0,
+            "attempts": 155,
+            "error": null,
+            "thread_stopped": true
+          },
+          {
+            "path": "/workspace/queued-4.fifo",
+            "device": 2049,
+            "inode": 2383323,
+            "reader_seen": false,
+            "bytes_written": 0,
+            "attempts": 156,
+            "error": null,
+            "thread_stopped": true
+          },
+          {
+            "path": "/workspace/queued-5.fifo",
+            "device": 2049,
+            "inode": 2383324,
+            "reader_seen": false,
+            "bytes_written": 0,
+            "attempts": 154,
+            "error": null,
+            "thread_stopped": true
+          },
+          {
+            "path": "/workspace/queued-6.fifo",
+            "device": 2049,
+            "inode": 2383325,
+            "reader_seen": false,
+            "bytes_written": 0,
+            "attempts": 156,
+            "error": null,
+            "thread_stopped": true
+          },
+          {
+            "path": "/workspace/queued-7.fifo",
+            "device": 2049,
+            "inode": 2383326,
+            "reader_seen": false,
+            "bytes_written": 0,
+            "attempts": 155,
+            "error": null,
+            "thread_stopped": true
+          }
+        ]
+      },
+      "postgres": {
+        "report": "sou82-postgres/report.json",
+        "report_sha256": "432be47c47e1f4f282d81d3c1f4cfb6f51b6faacf1aff2742b47864bc06a7fce",
+        "status": "pass",
+        "check_names": [
+          "agent-restart-restores-cache-and-retires-old-session",
+          "console-restart-preserves-deployments",
+          "dispatched-filesystem-read-observed-and-result-withheld",
+          "higher-sequence-rollback-restores-useful-work",
+          "old-ask-approval-cannot-authorize-after-policy-switch",
+          "original-filesystem-and-git-positive-controls",
+          "original-git-denied-without-repository-open",
+          "outage-keeps-runtime-and-useful-work",
+          "owned-resources-cleaned",
+          "queued-filesystem-read-never-opened",
+          "same-collectors-through-transitions",
+          "shared-host-risk-survives-switch",
+          "shared-release-lock-defers-activation-and-ack",
+          "source-runtime-and-profile-identities-unchanged",
+          "tampered-bundle-keeps-last-accepted-policy",
+          "wrong-digest-and-stale-ack-refused"
+        ],
+        "source": {
+          "commit": "316310534a77e5ed97c9525dc9f95aac05fc605e",
+          "tree": "67a26bbe8287afcc9621f15c2f3988339582e945",
+          "dirty": false
+        },
+        "binary_sha256": {
+          "agentfw": "c8a064c0e18378d3c9646311e6beeb5642fabf431f6f1ce75f86b38c6cc9ddf2",
+          "console": "4234e002e66634366872239540cc0bc326c9e25693e6700e19700c54d19caa43",
+          "git": "f10e39b187b85ed179dca965b09a919a293628deea583c281d0befe7b0752181",
+          "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+          "bwrap": "f78a4413ad4e93bf07e3c5722bd198006a737e3a2c44fff42453862ac4e49833",
+          "git_launcher": "8cb6306857d566f091498a81d3102df3cf503f129e45d22f68ac2a20c7f80702"
+        },
+        "transport": {
+          "origin": "https://172.18.0.2:8443",
+          "ca_sha256": "c857cb9a5e969a71e31b0ec30f65ef5793a7a43a3fe540dcff050d6a88b13100",
+          "address": "172.18.0.2",
+          "edge_source_sha256": "9a8ceb29310525f27c93abfc4feefa0b53a9d3a0ebbe95e8e68d4b933b264923",
+          "scope": "verified HTTPS to owned nonloopback edge; bridge-local HTTP to actual Console"
+        },
+        "ordering": [
+          {
+            "index": 0,
+            "monotonic_ns": 1324743736031,
+            "event": "issued",
+            "agent": "filesystem",
+            "revision": "allow",
+            "deployment_sequence": 1,
+            "policy_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+            "status": "issued"
+          },
+          {
+            "index": 1,
+            "monotonic_ns": 1330152449580,
+            "event": "observed-active",
+            "agent": "filesystem",
+            "deployment_sequence": 1,
+            "policy_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+            "revision": "allow"
+          },
+          {
+            "index": 2,
+            "monotonic_ns": 1330155201432,
+            "event": "console-applied-ack",
+            "agent": "filesystem",
+            "revision": "allow",
+            "deployment_sequence": 1,
+            "policy_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+            "status": "applied"
+          },
+          {
+            "index": 3,
+            "monotonic_ns": 1339350247068,
+            "event": "issued",
+            "agent": "git",
+            "revision": "allow",
+            "deployment_sequence": 1,
+            "policy_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+            "status": "issued"
+          },
+          {
+            "index": 4,
+            "monotonic_ns": 1344758787779,
+            "event": "observed-active",
+            "agent": "git",
+            "deployment_sequence": 1,
+            "policy_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+            "revision": "allow"
+          },
+          {
+            "index": 5,
+            "monotonic_ns": 1344761488967,
+            "event": "console-applied-ack",
+            "agent": "git",
+            "revision": "allow",
+            "deployment_sequence": 1,
+            "policy_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+            "status": "applied"
+          },
+          {
+            "index": 6,
+            "monotonic_ns": 1361141756688,
+            "event": "issued",
+            "agent": "git",
+            "revision": "deny",
+            "deployment_sequence": 2,
+            "policy_sha256": "474ccc4b4cdd7d88ce48ca847e47118fb876c2f928e823322b84a7e80b725934",
+            "status": "issued"
+          },
+          {
+            "index": 7,
+            "monotonic_ns": 1363569546547,
+            "event": "observed-active",
+            "agent": "git",
+            "deployment_sequence": 2,
+            "policy_sha256": "474ccc4b4cdd7d88ce48ca847e47118fb876c2f928e823322b84a7e80b725934",
+            "revision": "deny"
+          },
+          {
+            "index": 8,
+            "monotonic_ns": 1363571847206,
+            "event": "console-applied-ack",
+            "agent": "git",
+            "revision": "deny",
+            "deployment_sequence": 2,
+            "policy_sha256": "474ccc4b4cdd7d88ce48ca847e47118fb876c2f928e823322b84a7e80b725934",
+            "status": "applied"
+          },
+          {
+            "index": 9,
+            "monotonic_ns": 1363952376089,
+            "event": "reader-observed-before-policy-deny",
+            "observed_readers": 8
+          },
+          {
+            "index": 10,
+            "monotonic_ns": 1363960033268,
+            "event": "issued",
+            "agent": "filesystem",
+            "revision": "deny",
+            "deployment_sequence": 2,
+            "policy_sha256": "11d390fcd6632b48ebd220a8d6de55debc6eab109023668c67657a5654bf38a0",
+            "status": "issued"
+          },
+          {
+            "index": 11,
+            "monotonic_ns": 1364865133564,
+            "event": "observed-active",
+            "agent": "filesystem",
+            "deployment_sequence": 2,
+            "policy_sha256": "11d390fcd6632b48ebd220a8d6de55debc6eab109023668c67657a5654bf38a0",
+            "revision": "deny"
+          },
+          {
+            "index": 12,
+            "monotonic_ns": 1364867309209,
+            "event": "console-applied-ack",
+            "agent": "filesystem",
+            "revision": "deny",
+            "deployment_sequence": 2,
+            "policy_sha256": "11d390fcd6632b48ebd220a8d6de55debc6eab109023668c67657a5654bf38a0",
+            "status": "applied"
+          },
+          {
+            "index": 13,
+            "monotonic_ns": 1365053548172,
+            "event": "issued",
+            "agent": "filesystem",
+            "revision": "allow",
+            "deployment_sequence": 3,
+            "policy_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+            "status": "issued"
+          },
+          {
+            "index": 14,
+            "monotonic_ns": 1366860697081,
+            "event": "observed-active",
+            "agent": "filesystem",
+            "deployment_sequence": 3,
+            "policy_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+            "revision": "allow"
+          },
+          {
+            "index": 15,
+            "monotonic_ns": 1366863117667,
+            "event": "console-applied-ack",
+            "agent": "filesystem",
+            "revision": "allow",
+            "deployment_sequence": 3,
+            "policy_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+            "status": "applied"
+          },
+          {
+            "index": 16,
+            "monotonic_ns": 1366869967397,
+            "event": "issued",
+            "agent": "git",
+            "revision": "allow",
+            "deployment_sequence": 3,
+            "policy_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+            "status": "issued"
+          },
+          {
+            "index": 17,
+            "monotonic_ns": 1367472903013,
+            "event": "observed-active",
+            "agent": "git",
+            "deployment_sequence": 3,
+            "policy_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+            "revision": "allow"
+          },
+          {
+            "index": 18,
+            "monotonic_ns": 1367475245207,
+            "event": "console-applied-ack",
+            "agent": "git",
+            "revision": "allow",
+            "deployment_sequence": 3,
+            "policy_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+            "status": "applied"
+          },
+          {
+            "index": 19,
+            "monotonic_ns": 1367611470416,
+            "event": "issued",
+            "agent": "filesystem",
+            "revision": "ask",
+            "deployment_sequence": 4,
+            "policy_sha256": "da44ce3423ac4b3a3c94b7ecd7c2498308dc184eb95d3229464ed8518774eb59",
+            "status": "issued"
+          },
+          {
+            "index": 20,
+            "monotonic_ns": 1368816213521,
+            "event": "observed-active",
+            "agent": "filesystem",
+            "deployment_sequence": 4,
+            "policy_sha256": "da44ce3423ac4b3a3c94b7ecd7c2498308dc184eb95d3229464ed8518774eb59",
+            "revision": "ask"
+          },
+          {
+            "index": 21,
+            "monotonic_ns": 1368838942250,
+            "event": "issued",
+            "agent": "filesystem",
+            "revision": "ask",
+            "deployment_sequence": 5,
+            "policy_sha256": "da44ce3423ac4b3a3c94b7ecd7c2498308dc184eb95d3229464ed8518774eb59",
+            "status": "issued"
+          },
+          {
+            "index": 22,
+            "monotonic_ns": 1370946834793,
+            "event": "observed-active",
+            "agent": "filesystem",
+            "deployment_sequence": 5,
+            "policy_sha256": "da44ce3423ac4b3a3c94b7ecd7c2498308dc184eb95d3229464ed8518774eb59",
+            "revision": "ask"
+          },
+          {
+            "index": 23,
+            "monotonic_ns": 1370957370625,
+            "event": "issued",
+            "agent": "filesystem",
+            "revision": "allow",
+            "deployment_sequence": 6,
+            "policy_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+            "status": "issued"
+          },
+          {
+            "index": 24,
+            "monotonic_ns": 1373065349052,
+            "event": "observed-active",
+            "agent": "filesystem",
+            "deployment_sequence": 6,
+            "policy_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+            "revision": "allow"
+          },
+          {
+            "index": 25,
+            "monotonic_ns": 1373127585510,
+            "event": "issued",
+            "agent": "filesystem",
+            "revision": "taint",
+            "deployment_sequence": 7,
+            "policy_sha256": "71f0d712f21216a058c4dd8ce5bc3237d9ca3f75eb62e69040a6075caea8c6da",
+            "status": "issued"
+          },
+          {
+            "index": 26,
+            "monotonic_ns": 1374934349329,
+            "event": "observed-active",
+            "agent": "filesystem",
+            "deployment_sequence": 7,
+            "policy_sha256": "71f0d712f21216a058c4dd8ce5bc3237d9ca3f75eb62e69040a6075caea8c6da",
+            "revision": "taint"
+          },
+          {
+            "index": 27,
+            "monotonic_ns": 1375054994328,
+            "event": "issued",
+            "agent": "git",
+            "revision": "deny",
+            "deployment_sequence": 4,
+            "policy_sha256": "474ccc4b4cdd7d88ce48ca847e47118fb876c2f928e823322b84a7e80b725934",
+            "status": "issued"
+          },
+          {
+            "index": 28,
+            "monotonic_ns": 1390641653468,
+            "event": "issued",
+            "agent": "git",
+            "revision": "allow",
+            "deployment_sequence": 5,
+            "policy_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+            "status": "issued"
+          },
+          {
+            "index": 29,
+            "monotonic_ns": 1392148143438,
+            "event": "observed-active",
+            "agent": "git",
+            "deployment_sequence": 5,
+            "policy_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+            "revision": "allow"
+          },
+          {
+            "index": 30,
+            "monotonic_ns": 1392150492291,
+            "event": "console-applied-ack",
+            "agent": "git",
+            "revision": "allow",
+            "deployment_sequence": 5,
+            "policy_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+            "status": "applied"
+          }
+        ],
+        "cleanup": {
+          "private_directory_removed": true,
+          "processes_stopped": true
+        },
+        "positive_git_opens": 31,
+        "denied_git_opens": 0,
+        "inflight_readers": [
+          {
+            "path": "active-0.fifo",
+            "reader_opened": true,
+            "bytes_written": 43,
+            "error": null
+          },
+          {
+            "path": "active-1.fifo",
+            "reader_opened": true,
+            "bytes_written": 43,
+            "error": null
+          },
+          {
+            "path": "active-2.fifo",
+            "reader_opened": true,
+            "bytes_written": 43,
+            "error": null
+          },
+          {
+            "path": "active-3.fifo",
+            "reader_opened": true,
+            "bytes_written": 43,
+            "error": null
+          },
+          {
+            "path": "active-4.fifo",
+            "reader_opened": true,
+            "bytes_written": 43,
+            "error": null
+          },
+          {
+            "path": "active-5.fifo",
+            "reader_opened": true,
+            "bytes_written": 43,
+            "error": null
+          },
+          {
+            "path": "active-6.fifo",
+            "reader_opened": true,
+            "bytes_written": 43,
+            "error": null
+          },
+          {
+            "path": "active-7.fifo",
+            "reader_opened": true,
+            "bytes_written": 43,
+            "error": null
+          }
+        ],
+        "queued_probes": [
+          {
+            "path": "/workspace/queued-0.fifo",
+            "device": 2049,
+            "inode": 2383323,
+            "reader_seen": false,
+            "bytes_written": 0,
+            "attempts": 270,
+            "error": null,
+            "thread_stopped": true
+          },
+          {
+            "path": "/workspace/queued-1.fifo",
+            "device": 2049,
+            "inode": 2383324,
+            "reader_seen": false,
+            "bytes_written": 0,
+            "attempts": 269,
+            "error": null,
+            "thread_stopped": true
+          },
+          {
+            "path": "/workspace/queued-2.fifo",
+            "device": 2049,
+            "inode": 2383325,
+            "reader_seen": false,
+            "bytes_written": 0,
+            "attempts": 270,
+            "error": null,
+            "thread_stopped": true
+          },
+          {
+            "path": "/workspace/queued-3.fifo",
+            "device": 2049,
+            "inode": 2383326,
+            "reader_seen": false,
+            "bytes_written": 0,
+            "attempts": 272,
+            "error": null,
+            "thread_stopped": true
+          },
+          {
+            "path": "/workspace/queued-4.fifo",
+            "device": 2049,
+            "inode": 2383327,
+            "reader_seen": false,
+            "bytes_written": 0,
+            "attempts": 269,
+            "error": null,
+            "thread_stopped": true
+          },
+          {
+            "path": "/workspace/queued-5.fifo",
+            "device": 2049,
+            "inode": 2383328,
+            "reader_seen": false,
+            "bytes_written": 0,
+            "attempts": 270,
+            "error": null,
+            "thread_stopped": true
+          },
+          {
+            "path": "/workspace/queued-6.fifo",
+            "device": 2049,
+            "inode": 2383329,
+            "reader_seen": false,
+            "bytes_written": 0,
+            "attempts": 269,
+            "error": null,
+            "thread_stopped": true
+          },
+          {
+            "path": "/workspace/queued-7.fifo",
+            "device": 2049,
+            "inode": 2383330,
+            "reader_seen": false,
+            "bytes_written": 0,
+            "attempts": 270,
+            "error": null,
+            "thread_stopped": true
+          }
+        ]
+      }
+    }
+  }
+}

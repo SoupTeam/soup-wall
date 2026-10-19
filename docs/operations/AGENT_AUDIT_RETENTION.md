@@ -1,8 +1,8 @@
 # Bounded Agent audit retention on Linux
 
 The Agent can opt into private, bounded, synchronous audit segments. The default
-remains the existing single `audit.jsonl` file. The new store is supported on
-Linux only; an opt-in configuration on Windows or macOS is rejected at startup.
+remains the existing single `audit.jsonl` file. Native Windows support has a
+[separate operator guide](AGENT_AUDIT_RETENTION_WINDOWS.md); macOS is rejected.
 It retains the existing audit event bodies and the separate forensic raw-body
 opt-in. It does not add payload capture, upload evidence, or make local files
 tamper-proof against their owner.

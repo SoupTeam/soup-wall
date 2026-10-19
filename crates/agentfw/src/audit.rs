@@ -16,12 +16,15 @@ use serde::Serialize;
 #[cfg(target_os = "linux")]
 #[path = "audit_retention.rs"]
 mod retention;
-#[cfg(target_os = "linux")]
+#[cfg(windows)]
+#[path = "audit_retention_windows.rs"]
+mod retention;
+#[cfg(any(target_os = "linux", windows))]
 pub use retention::recover_retention;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", windows))]
 use retention::RetainedSink;
 
-/// Explicit versioned limits for the Linux segment store. The directory is a
+/// Explicit versioned limits for the retained segment store. The directory is a
 /// dedicated private directory, never an existing audit JSONL path.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -62,9 +65,9 @@ impl RetentionConfig {
             required <= self.total_disk_bytes && self.total_disk_bytes <= 1024 * 1024 * 1024,
             "audit total disk cap must cover all segments and metadata and be <= 1 GiB"
         );
-        #[cfg(not(target_os = "linux"))]
-        anyhow::bail!("bounded audit retention is supported on Linux only");
-        #[cfg(target_os = "linux")]
+        #[cfg(not(any(target_os = "linux", windows)))]
+        anyhow::bail!("bounded audit retention is supported on Linux and Windows only");
+        #[cfg(any(target_os = "linux", windows))]
         Ok(())
     }
 }
@@ -153,7 +156,7 @@ pub struct AuditSink {
 
 enum AuditStorage {
     Legacy(File),
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", windows))]
     Retained(Box<RetainedSink>),
 }
 
@@ -181,7 +184,7 @@ impl AuditSink {
 
     pub fn open_retained(config: &RetentionConfig) -> anyhow::Result<Self> {
         config.validate()?;
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", windows))]
         {
             Ok(Self {
                 inner: Mutex::new(AuditStorage::Retained(Box::new(RetainedSink::open(
@@ -189,9 +192,9 @@ impl AuditSink {
                 )?))),
             })
         }
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(any(target_os = "linux", windows)))]
         {
-            anyhow::bail!("bounded audit retention is supported on Linux only")
+            anyhow::bail!("bounded audit retention is supported on Linux and Windows only")
         }
     }
 
@@ -202,7 +205,7 @@ impl AuditSink {
                 AuditStorage::Legacy(_) => {
                     serde_json::json!({"mode":"legacy","state":"unverified"})
                 }
-                #[cfg(target_os = "linux")]
+                #[cfg(any(target_os = "linux", windows))]
                 AuditStorage::Retained(sink) => sink.health(),
             },
             Err(_) => {
@@ -227,7 +230,7 @@ impl AuditSink {
         *self.inner.lock().unwrap() = AuditStorage::Legacy(File::open(path).unwrap());
     }
 
-    #[cfg(all(test, target_os = "linux"))]
+    #[cfg(all(test, any(target_os = "linux", windows)))]
     pub(crate) fn fail_retained_write_for_test(&self, errno: i32) {
         let mut storage = self.inner.lock().unwrap();
         let AuditStorage::Retained(sink) = &mut *storage else {
@@ -247,7 +250,7 @@ impl AuditSink {
                 json.push('\n');
                 f.write_all(json.as_bytes())?;
             }
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", windows))]
             AuditStorage::Retained(f) => f.write_serialized(line)?,
         }
         Ok(())

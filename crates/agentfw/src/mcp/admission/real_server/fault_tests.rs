@@ -5,7 +5,9 @@
 use super::*;
 use crate::mcp::admission::{AdmissionCfg, ReadTestDouble};
 use crate::native::NativeState;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::task::{Context, Poll};
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, DuplexStream, ReadHalf, WriteHalf};
 use tokio::task::JoinHandle;
@@ -17,6 +19,56 @@ use wiremock::{
 type Reader = BufReader<ReadHalf<DuplexStream>>;
 type Writer = WriteHalf<DuplexStream>;
 
+#[derive(Default)]
+struct WriteGate {
+    blocked: AtomicBool,
+    reached: AtomicBool,
+    waker: futures_util::task::AtomicWaker,
+}
+
+impl WriteGate {
+    fn block(&self) {
+        self.reached.store(false, Ordering::SeqCst);
+        self.blocked.store(true, Ordering::SeqCst);
+    }
+    fn release(&self) {
+        self.blocked.store(false, Ordering::SeqCst);
+        self.waker.wake();
+    }
+    async fn wait(&self) {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while !self.reached.load(Ordering::SeqCst) {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("relay reached the physical write boundary");
+    }
+}
+
+struct GatedWriter(Writer, Arc<WriteGate>);
+
+impl AsyncWrite for GatedWriter {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        data: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        self.1.waker.register(cx.waker());
+        if self.1.blocked.load(Ordering::SeqCst) {
+            self.1.reached.store(true, Ordering::SeqCst);
+            return Poll::Pending;
+        }
+        Pin::new(&mut self.0).poll_write(cx, data)
+    }
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.0).poll_flush(cx)
+    }
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.0).poll_shutdown(cx)
+    }
+}
+
 struct Harness {
     host_input: Writer,
     host_output: Reader,
@@ -24,6 +76,9 @@ struct Harness {
     server_output: Writer,
     task: JoinHandle<anyhow::Result<()>>,
     daemon: MockServer,
+    boundary_home: tempfile::TempDir,
+    dispatch_gate: Arc<WriteGate>,
+    release_gate: Arc<WriteGate>,
 }
 
 impl Drop for Harness {
@@ -34,6 +89,7 @@ impl Drop for Harness {
 
 impl Harness {
     async fn new(fault: &'static str) -> Self {
+        let boundary_home = tempfile::tempdir().unwrap();
         let daemon = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path("/manifest"))
@@ -80,6 +136,8 @@ impl Harness {
             &sha(registry.as_bytes()),
             "fault-test-token".into(),
         )
+        .unwrap()
+        .with_policy_barrier(boundary_home.path())
         .unwrap();
         let config = AdmissionCfg {
             host_session: None,
@@ -94,13 +152,19 @@ impl Harness {
             classifier: Some(Arc::new(ReadTestDouble)),
             resource_profiles: BTreeMap::new(),
             approval: None,
+            liveness_url: None,
+            liveness_lease_seconds: None,
         };
         let (host, relay_host) = tokio::io::duplex(1024 * 1024);
         let (server, relay_server) = tokio::io::duplex(1024 * 1024);
         let (host_read, host_input) = tokio::io::split(host);
         let (server_read, server_output) = tokio::io::split(server);
-        let (relay_client, mut relay_host) = tokio::io::split(relay_host);
-        let (relay_server, mut relay_child) = tokio::io::split(relay_server);
+        let (relay_client, relay_host) = tokio::io::split(relay_host);
+        let (relay_server, relay_child) = tokio::io::split(relay_server);
+        let dispatch_gate = Arc::new(WriteGate::default());
+        let release_gate = Arc::new(WriteGate::default());
+        let mut relay_child = GatedWriter(relay_child, dispatch_gate.clone());
+        let mut relay_host = GatedWriter(relay_host, release_gate.clone());
         let task = tokio::spawn(async move {
             let collector = Collector::new(&config)?;
             relay(
@@ -120,6 +184,9 @@ impl Harness {
             server_output,
             task,
             daemon,
+            boundary_home,
+            dispatch_gate,
+            release_gate,
         }
     }
     async fn host(&mut self, value: Value) {
@@ -192,6 +259,39 @@ impl Harness {
             .unwrap_err()
             .to_string()
     }
+}
+
+#[tokio::test]
+async fn managed_transition_cannot_overtake_dispatch_or_host_result_write() {
+    let mut fixture = Harness::new("ordinary").await;
+    fixture.ready().await;
+    let barrier = crate::policy_transition::Barrier::new(fixture.boundary_home.path()).unwrap();
+    fixture.dispatch_gate.block();
+    fixture.call(json!("transition"), "/workspace/useful").await;
+    fixture.dispatch_gate.wait().await;
+    assert!(
+        barrier.try_activation().unwrap().is_none(),
+        "activation overtook an undispatched Allow"
+    );
+    fixture.dispatch_gate.release();
+    assert_eq!(fixture.dispatched().await["id"], "transition");
+    // Once the full request was written, a switch may proceed while the
+    // original server works. That dispatched read is never called undone.
+    let activation = barrier
+        .try_activation()
+        .unwrap()
+        .expect("dispatched work no longer blocks activation");
+    drop(activation);
+    fixture.release_gate.block();
+    fixture.server(json!({"jsonrpc":"2.0","id":"transition","result":{"content":[{"type":"text","text":"useful original"}],"structuredContent":{"content":"useful original"}}})).await;
+    fixture.release_gate.wait().await;
+    assert!(
+        barrier.try_activation().unwrap().is_none(),
+        "activation overtook inspected but unreleased content"
+    );
+    fixture.release_gate.release();
+    assert_eq!(fixture.host_reply().await["id"], "transition");
+    assert!(barrier.try_activation().unwrap().is_some());
 }
 
 #[tokio::test]

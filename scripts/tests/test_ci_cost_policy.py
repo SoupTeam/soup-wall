@@ -61,24 +61,27 @@ class CostPolicyTests(unittest.TestCase):
                     self.assertEqual(body["state"], "pending")
                     self.assertEqual(body["context"], ci_admission.CONTEXT)
 
-    def test_every_runtime_workflow_restarts_on_ready_and_cancels_on_draft(self):
+    def test_only_root_workflow_schedules_pr_runtime_and_cancels_stale_work(self):
         for name in WORKFLOW_JOBS:
             text = (ROOT / ".github/workflows" / name).read_text(encoding="utf-8")
-            match = re.search(r"(?m)^  pull_request:\n    types: \[([^]]+)\]", text)
-            self.assertIsNotNone(match, name)
-            self.assertEqual({x.strip() for x in match.group(1).split(",")},
-                             {"opened", "synchronize", "reopened", "ready_for_review", "converted_to_draft"}, name)
-            self.assertIn("cancel-in-progress: true", text, name)
-            self.assertIn("github.event.pull_request.number || github.ref", text, name)
-            if name != "ci.yml":
+            if name == "ci.yml":
+                match = re.search(r"(?m)^  pull_request:\n    types: \[([^]]+)\]", text)
+                self.assertIsNotNone(match)
+                self.assertEqual({x.strip() for x in match.group(1).split(",")},
+                                 {"opened", "synchronize", "reopened", "ready_for_review", "converted_to_draft"})
+                self.assertIn("cancel-in-progress: true", text)
+                self.assertIn("github.event.pull_request.number || github.ref", text)
+                self.assertIn("!github.event.pull_request.draft", text)
+                self.assertIn("uses: ./.github/workflows/ci-components.yml", text)
+            else:
+                self.assertNotRegex(text, r"(?m)^  pull_request(?:_target)?:", name)
                 self.assertNotRegex(text, r"(?m)^  push:", name)
-            # Empty outputs from a skipped reusable planner must parse safely.
             self.assertNotIn("fromJSON(needs.impact.outputs.jobs)", text, name)
 
     def test_admission_also_handles_draft_transitions(self):
         text = (ROOT / ".github/workflows/ci-admission.yml").read_text(encoding="utf-8")
         self.assertIn("ready_for_review, converted_to_draft", text)
-        self.assertIn("ref: ${{ github.event.pull_request.base.sha }}", text)
+        self.assertIn("ref: ${{ github.event.pull_request.base.sha || github.sha }}", text)
         self.assertNotIn("pull_request.head.sha", text)
 
     def test_skipped_drafts_cannot_satisfy_existing_required_contexts(self):
