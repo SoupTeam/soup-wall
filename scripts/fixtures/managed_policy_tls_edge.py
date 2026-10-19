@@ -32,7 +32,12 @@ class Edge(ThreadingHTTPServer):
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         ctx.load_cert_chain(f"/tls/{certificate}.pem", f"/tls/{certificate}.key")
-        return ctx.wrap_socket(raw, server_side=True), remote
+        connection = ctx.wrap_socket(raw, server_side=True)
+        # Keep certificate selection and HTTP behavior in one fixture epoch.
+        # A redirect/valid handshake already in flight must not become a proxy
+        # request when the test switches to proxy/wronghost before HTTP handling.
+        connection.edge_configuration = mode
+        return connection, remote
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -49,7 +54,7 @@ class Handler(BaseHTTPRequestHandler):
         self._serve()
 
     def _serve(self):
-        config = json.loads(self.server.configuration.read_text())
+        config = self.request.edge_configuration
         if self.path == "/healthz":
             self.send_response(200)
             self.send_header("Content-Length", "0")
