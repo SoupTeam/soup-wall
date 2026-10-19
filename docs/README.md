@@ -35,6 +35,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Agent self-test](operations/SELF_TEST.md) | One Linux command: witnessed useful reads, a refused synthetic send, daemon loss and a versioned report |
 | [Offline Agent audit explorer](operations/AGENT_AUDIT_EXPLORER.md) | Private Linux JSONL report generation, decision timeline, filters and evidence limits |
 | [Bounded Agent audit retention](operations/AGENT_AUDIT_RETENTION.md) | Opt-in Linux segments, crash recovery, private verified export and loss-aware browsing |
+| [Windows bounded Agent audit retention](operations/AGENT_AUDIT_RETENTION_WINDOWS.md) | Native local NTFS scope, private ACLs, recovery, export and standard-user acceptance |
 | [Roadmap support and evidence report](operations/ROADMAP_SUPPORT_REPORT.md) | Offline exact-source support matrix, evidence validation, private report and review boundaries |
 | [Opt-in stdio MCP admission](operations/MCP_STDIO_ADMISSION.md) | Reviewed schemas, pre-execution calls and result release to the MCP host |
 | [Managed policy transitions in active MCP sessions](operations/MANAGED_NATIVE_TRANSITIONS.md) | Dispatch/result boundaries, stale approvals, signed rollback and independent runtime evidence |

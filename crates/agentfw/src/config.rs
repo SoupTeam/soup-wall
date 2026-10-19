@@ -154,7 +154,7 @@ pub struct Config {
     pub policy: Option<PathBuf>,
     #[serde(default)]
     pub audit: Option<PathBuf>,
-    /// Opt-in, owner-only Linux audit segments. Legacy `audit` remains unchanged
+    /// Opt-in, owner-only Linux or Windows audit segments. Legacy `audit` remains unchanged
     /// when this is absent.
     #[serde(default)]
     pub audit_retention: Option<crate::audit::RetentionConfig>,
