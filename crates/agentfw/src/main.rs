@@ -432,16 +432,16 @@ fn main() -> anyhow::Result<()> {
                 .audit_retention
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("audit_retention is not configured"))?;
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", windows))]
             {
                 agentfw::audit::recover_retention(retention)?;
                 println!("Audit retention verified and ready");
                 Ok(())
             }
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(not(any(target_os = "linux", windows)))]
             {
                 let _ = retention;
-                anyhow::bail!("bounded audit retention is supported on Linux only")
+                anyhow::bail!("bounded audit retention is supported on Linux and Windows only")
             }
         }
         Cmd::Doctor(args) => std::process::exit(agentfw::doctor::run(args)),
