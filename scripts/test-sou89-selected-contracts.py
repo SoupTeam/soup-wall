@@ -264,6 +264,19 @@ def test_temporary_directory_cleanup_lifetime():
     print("PASS: test_temporary_directory_cleanup_lifetime")
 
 
+def valid_source_identity():
+    return {
+        'source_before': {'commit': 'a' * 40, 'tree': 'b' * 40, 'dirty': False},
+        'source_after': {'commit': 'a' * 40, 'tree': 'b' * 40, 'dirty': False},
+        'runtime_source_commit': 'a' * 40,
+        'binary_unchanged': True,
+        **{key: 'c' * 64 for key in (
+            'binary_sha256', 'driver_sha256', 'config_sha256', 'git_config_sha256',
+            'restart_config_sha256', 'git_binary_sha256', 'git_launcher_sha256',
+            'node_binary_sha256', 'bwrap_binary_sha256')},
+    }
+
+
 def test_production_graders_positive_and_adversarial_mutations():
     # 1. grade_crash_observation
     base_crash = {
@@ -744,9 +757,18 @@ def test_production_graders_positive_and_adversarial_mutations():
         'failed': 0,
         'checks': [{'case': c, 'passed': True} for c in m.REQUIRED_PRODUCTION_CASES],
     }
+    base_report.update(valid_source_identity())
     m.grade_selected_report(base_report, m.REQUIRED_PRODUCTION_CASES)
 
     report_mutations = [
+        ({'source_before': None}, 'candidate_source_identity_missing'),
+        ({'source_after': {'commit': 'd' * 40, 'tree': 'b' * 40, 'dirty': False}}, 'candidate_source_changed'),
+        ({'source_after': {'commit': 'a' * 40, 'tree': 'd' * 40, 'dirty': False}}, 'candidate_source_changed'),
+        ({'source_before': {'commit': 'a' * 40, 'tree': 'b' * 40, 'dirty': True}}, 'candidate_source_changed'),
+        ({'runtime_source_commit': 'd' * 40}, 'candidate_source_changed'),
+        ({'binary_unchanged': False}, 'candidate_binary_changed'),
+        ({'config_sha256': None}, 'required_identity_missing_config_sha256'),
+        ({'restart_config_sha256': 'not-a-digest'}, 'required_identity_missing_restart_config_sha256'),
         ({'status': 'fail'}, 'report_status_not_pass'),
         ({'selected_production_acceptance': False}, 'selected_production_acceptance_false'),
         ({'failed': 1}, 'report_failed_nonzero'),
@@ -1255,6 +1277,7 @@ def test_finalizer_rig_cleanup_grading():
         'failed': 0,
         'checks': [{'case': c, 'passed': True} for c in m.REQUIRED_PRODUCTION_CASES],
     }
+    rep1.update(valid_source_identity())
     env1 = {
         'fs': GoodCleanup(),
         'git': GoodCleanup(),
@@ -1262,7 +1285,9 @@ def test_finalizer_rig_cleanup_grading():
         'grade_rig_cleanup_result': m.grade_rig_cleanup_result,
         'grade_selected_report': m.grade_selected_report,
         'REQUIRED_PRODUCTION_CASES': m.REQUIRED_PRODUCTION_CASES,
-        'BASE': m.BASE,
+        'BASE': SimpleNamespace(source=lambda: valid_source_identity()['source_after']),
+        'args': SimpleNamespace(agentfw=Path('/owned/candidate')),
+        'sha': lambda _: 'c' * 64,
         'completed_all_cases': True,
     }
     exec(compiled, env1)
@@ -1279,6 +1304,7 @@ def test_finalizer_rig_cleanup_grading():
         'failed': 0,
         'checks': [{'case': m.REQUIRED_PRODUCTION_CASES[0], 'passed': True}],
     }
+    rep2.update(valid_source_identity())
     env2 = {
         'fs': GoodCleanup(),
         'git': GoodCleanup(),
@@ -1286,7 +1312,9 @@ def test_finalizer_rig_cleanup_grading():
         'grade_rig_cleanup_result': m.grade_rig_cleanup_result,
         'grade_selected_report': m.grade_selected_report,
         'REQUIRED_PRODUCTION_CASES': m.REQUIRED_PRODUCTION_CASES,
-        'BASE': m.BASE,
+        'BASE': SimpleNamespace(source=lambda: valid_source_identity()['source_after']),
+        'args': SimpleNamespace(agentfw=Path('/owned/candidate')),
+        'sha': lambda _: 'c' * 64,
     }
     exec(compiled, env2)
     assert rep2.get('status') == 'incomplete', f"Expected status 'incomplete', got {rep2.get('status')}"
@@ -1299,6 +1327,7 @@ def test_finalizer_rig_cleanup_grading():
         'failed': 1,
         'checks': [{'case': c, 'passed': c != m.REQUIRED_PRODUCTION_CASES[0]} for c in m.REQUIRED_PRODUCTION_CASES],
     }
+    rep3.update(valid_source_identity())
     env3 = {
         'fs': GoodCleanup(),
         'git': GoodCleanup(),
@@ -1306,7 +1335,9 @@ def test_finalizer_rig_cleanup_grading():
         'grade_rig_cleanup_result': m.grade_rig_cleanup_result,
         'grade_selected_report': m.grade_selected_report,
         'REQUIRED_PRODUCTION_CASES': m.REQUIRED_PRODUCTION_CASES,
-        'BASE': m.BASE,
+        'BASE': SimpleNamespace(source=lambda: valid_source_identity()['source_after']),
+        'args': SimpleNamespace(agentfw=Path('/owned/candidate')),
+        'sha': lambda _: 'c' * 64,
     }
     exec(compiled, env3)
     assert rep3.get('status') == 'fail', f"Expected status 'fail', got {rep3.get('status')}"
@@ -1319,6 +1350,7 @@ def test_finalizer_rig_cleanup_grading():
         'failed': 0,
         'checks': [{'case': c, 'passed': True} for c in m.REQUIRED_PRODUCTION_CASES],
     }
+    rep4.update(valid_source_identity())
     env4 = {
         'fs': FailedCleanup(),
         'git': GoodCleanup(),
@@ -1326,7 +1358,9 @@ def test_finalizer_rig_cleanup_grading():
         'grade_rig_cleanup_result': m.grade_rig_cleanup_result,
         'grade_selected_report': m.grade_selected_report,
         'REQUIRED_PRODUCTION_CASES': m.REQUIRED_PRODUCTION_CASES,
-        'BASE': m.BASE,
+        'BASE': SimpleNamespace(source=lambda: valid_source_identity()['source_after']),
+        'args': SimpleNamespace(agentfw=Path('/owned/candidate')),
+        'sha': lambda _: 'c' * 64,
         'completed_all_cases': True,
     }
     exec(compiled, env4)
@@ -1338,6 +1372,26 @@ def test_finalizer_rig_cleanup_grading():
     assert 'grading_error' in rep4['fs_cleanup'], "Cleanup failure must attach grading_error"
 
     print("PASS: test_finalizer_rig_cleanup_grading")
+
+
+def test_source_observer_failure_retains_failed_report():
+    tree = ast.parse((ROOT / 'scripts/verify-sou89-selected-liveness.py').read_text())
+    fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'run_selected_acceptance')
+    outer = next(n for n in fn.body if isinstance(n, ast.Try) and n.finalbody)
+    compiled = compile(ast.Module(body=outer.finalbody, type_ignores=[]), 'source_observer_finalizer', 'exec')
+    report = {'status': 'incomplete', 'failed': 0, 'source_before': valid_source_identity()['source_before']}
+    written = []
+
+    def unavailable():
+        raise OSError('owned checkout disappeared')
+
+    exec(compiled, {'BASE': SimpleNamespace(source=unavailable), 'report': report,
+                    'report_file': Path('/owned/output/report.json'),
+                    'write': lambda path, value: written.append(copy.deepcopy(value))})
+    assert len(written) == 1 and written[0]['status'] == 'fail'
+    assert written[0]['error'] == 'source_identity_observer_failed'
+    assert written[0]['failed'] == 1
+    print('PASS: test_source_observer_failure_retains_failed_report')
 
 
 def test_production_restart_setup():
@@ -1862,6 +1916,7 @@ def main():
     test_temporary_directory_cleanup_lifetime()
     test_production_graders_positive_and_adversarial_mutations()
     test_finalizer_rig_cleanup_grading()
+    test_source_observer_failure_retains_failed_report()
     test_production_restart_setup()
     test_collector_fail_closed_on_denied_work()
     test_collector_autonomous_exit_on_renewal_failure()

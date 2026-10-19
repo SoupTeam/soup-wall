@@ -543,6 +543,17 @@ def grade_selected_report(report: dict, required_cases: list[str]) -> None:
     require(report.get('status') == 'pass', 'report_status_not_pass')
     require(report.get('selected_production_acceptance') is True, 'selected_production_acceptance_false')
     require(report.get('failed') == 0, 'report_failed_nonzero')
+    before, after = report.get('source_before'), report.get('source_after')
+    require(isinstance(before, dict) and isinstance(after, dict), 'candidate_source_identity_missing')
+    require(before == after and before.get('dirty') is False
+            and re.fullmatch(r'[0-9a-f]{40}', str(before.get('commit', '')))
+            and re.fullmatch(r'[0-9a-f]{40}', str(before.get('tree', '')))
+            and before['commit'] == report.get('runtime_source_commit'), 'candidate_source_changed')
+    require(report.get('binary_unchanged') is True, 'candidate_binary_changed')
+    for key in ('binary_sha256', 'driver_sha256', 'config_sha256', 'git_config_sha256',
+                'restart_config_sha256', 'git_binary_sha256', 'git_launcher_sha256',
+                'node_binary_sha256', 'bwrap_binary_sha256'):
+        require(re.fullmatch(r'[0-9a-f]{64}', str(report.get(key, ''))), f'required_identity_missing_{key}')
     completed_cases = [c['case'] for c in report.get('checks', []) if c.get('passed')]
     for req_case in required_cases:
         require(req_case in completed_cases, f'required_case_missing_{req_case}')
@@ -556,6 +567,9 @@ def summary(report: dict) -> dict:
             'error', 'passed', 'failed', 'checks_count',
             'platform', 'machine', 'runtime_source_commit',
             'binary_sha256', 'git_binary_sha256', 'git_launcher_sha256',
+            'source_before', 'source_after', 'binary_unchanged', 'driver_sha256',
+            'config_sha256', 'git_config_sha256', 'restart_config_sha256',
+            'node_binary_sha256', 'bwrap_binary_sha256',
         )
         if key in report
     }
@@ -613,6 +627,8 @@ def run_selected_acceptance(args) -> int:
         require(hasattr(os, 'pidfd_open') and hasattr(signal, 'pidfd_send_signal'), 'pidfd_prerequisite_missing')
         # 2. Candidate source identity
         source_info = BASE.source()
+        report['source_before'] = source_info
+        report['driver_sha256'] = sha(Path(__file__))
         require(not source_info['dirty'] and source_info['commit'] == args.expected_commit, 'clean_exact_candidate_source_required')
         require(args.expected_commit == args.runtime_source_commit, 'commit_contract_mismatch')
 
@@ -626,6 +642,8 @@ def run_selected_acceptance(args) -> int:
 
         # Record binary and launcher identities
         report['binary_sha256'] = sha(args.agentfw.resolve())
+        report['node_binary_sha256'] = sha(args.node.resolve())
+        report['bwrap_binary_sha256'] = sha(args.bwrap.resolve())
         report['git_binary_sha256'] = sha(args.git.resolve())
         require(report['git_binary_sha256'] == args.git_sha256, 'git_binary_sha256_mismatch')
         report['git_launcher_sha256'] = sha(args.git_launcher.resolve())
@@ -647,6 +665,8 @@ def run_selected_acceptance(args) -> int:
                 # Initialize real Git rig with pinned Git and native.liveness
                 git = SelectedLivenessGitRig(args, git_private, delegation, lease_secs=4, maint_interval_ms=100)
 
+                report['config_sha256'] = sha(fs.home / '.agentfw/config.yaml')
+                report['git_config_sha256'] = sha(git.home / '.agentfw/config.yaml')
                 report['original_server'], report['original_git_server'] = fs.installation, git.installation
 
                 # Execute required acceptance cases for both profiles
@@ -1246,6 +1266,7 @@ def run_selected_acceptance(args) -> int:
                     fs_reg_sha,
                     policy_path=fs.private / 'original/policy.yaml',
                 )
+                report['restart_config_sha256'] = sha(r_home / '.agentfw/config.yaml')
 
                 try:
                     d1 = subprocess.Popen([str(args.agentfw.resolve()), 'serve'], env=r_env,
@@ -1641,6 +1662,8 @@ def run_selected_acceptance(args) -> int:
                     and {c.get('case') for c in report.get('checks', [])}.issuperset(set(REQUIRED_PRODUCTION_CASES))
                 )
                 if cases_completed and report.get('failed', 0) == 0:
+                    report['source_after'] = BASE.source()
+                    report['binary_unchanged'] = sha(args.agentfw.resolve()) == report['binary_sha256']
                     report['passed'] = len(report.get('checks', []))
                     report['selected_production_acceptance'] = True
                     report['status'] = 'pass'
@@ -1662,6 +1685,13 @@ def run_selected_acceptance(args) -> int:
         report['error'] = str(error)
         report['traceback'] = traceback.format_exc()
     finally:
+        if 'source_before' in report and 'source_after' not in report:
+            try:
+                report['source_after'] = BASE.source()
+            except Exception:
+                report['status'] = 'fail'
+                report['failed'] = max(report.get('failed', 0), 1)
+                report.setdefault('error', 'source_identity_observer_failed')
         report['checks_count'] = len(report.get('checks', []))
         write(report_file, report)
 

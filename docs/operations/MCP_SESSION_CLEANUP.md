@@ -17,7 +17,7 @@ shared-host risk, taint floors, and audit integrity.
 
 ## Authenticated native liveness contract (`sw-native-liveness/1`)
 
-The liveness contract is versioned separately from the core admission contract (`sw-agent-native/1`)
+The liveness contract is versioned separately from the core admission contract (`sw-native/1`)
 and is exposed at `/native/liveness/v1`. Enrolled collectors actively declare their leases
 and maintain continuous liveness.
 
