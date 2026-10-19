@@ -172,8 +172,8 @@ jobs:
               Tee-Object -FilePath "$env:RUNNER_TEMP/sou81-native.log"
           if ($LASTEXITCODE -ne 0) { throw 'Native Windows classifier runtime tests failed' }
           $log = Get-Content "$env:RUNNER_TEMP/sou81-native.log" -Raw
-          if ($log -notmatch 'test result: ok\. 18 passed; 0 failed; 1 ignored;') {
-              throw 'All 18 positive native tests must run and pass (only the latency measurement is opt-in)'
+          if ($log -notmatch 'test result: ok\. 19 passed; 0 failed; 1 ignored;') {
+              throw 'All 19 positive native tests must run and pass (only the latency measurement is opt-in)'
           }
       - name: Real collector with the installed package on Windows
         shell: pwsh
