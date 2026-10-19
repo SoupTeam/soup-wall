@@ -1438,6 +1438,147 @@ fn resource_context(profile: &Value, resources: Value) -> Value {
         "resources":resources})
 }
 
+/// In-process native-contract regression, separate from installed executor evidence.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[tokio::test]
+async fn macos_v7_v8_managed_transition_spends_old_receipts_and_recovers() {
+    use agentfw::native::resource as r;
+    for create in [false, true] {
+        for verdict in ["deny", "ask"] {
+            let mut f = Fixture::new(ALLOW);
+            let root = f.dir.path().canonicalize().unwrap();
+            let input = root.join("approved.txt");
+            std::fs::write(&input, "unchanged approved document").unwrap();
+            let target = if create {
+                root.join("new.txt")
+            } else {
+                input.clone()
+            };
+            let name = if create {
+                "create_file"
+            } else {
+                "read_document"
+            };
+            let schema = agentfw::native::canonical_digest(&if create {
+                r::macos_create_schema()
+            } else {
+                r::macos_read_schema()
+            });
+            let mut policy = json!({
+                "profile":{"server_id":"macos-policy-fixture","tool_name":name,
+                    "schema_sha256":schema,"selectors":[{"pointer":"/path","kind":"path",
+                        "allow_missing_leaf":create}]},
+                "workspace":root,"cwd":root,"classifier_sha256":"c".repeat(64),
+                "executor_sha256": if create {r::macos_create_executor_sha256()} else {r::macos_read_executor_sha256()},
+                "allowed_resources":[{"kind":"path","canonical":target}]
+            });
+            if create {
+                policy["execution"] = json!({"operation":"create_file","action":"write",
+                    "max_content_bytes":r::MACOS_CREATE_MAX_CONTENT,"executor_profile":r::MACOS_CREATE_EXECUTOR_PROFILE});
+            } else {
+                policy["macos_read"] = json!({"executor_profile":r::MACOS_READ_EXECUTOR_PROFILE,
+                    "max_content_bytes":r::MACOS_READ_MAX_CONTENT});
+            }
+            let configured = json!({"contract_version":CONTRACT,"registry_id":"macos-transition",
+                "tools":[{"name":name,"schema_sha256":schema,
+                    "action_class":if create {"side_effecting"} else {"read_only"},
+                    "result_provenance":"untrusted","egress":[],"resource_policy":policy}]});
+            let bytes = serde_json::to_vec(&configured).unwrap();
+            f.registry_sha256 = sha(&bytes);
+            f.state = make_state(
+                f.dir.path(),
+                Config {
+                    enforce: true,
+                    ..Config::default()
+                },
+                ALLOW,
+                &bytes,
+                &f.registry_sha256,
+            );
+            let policy: r::Policy = serde_json::from_value(policy).unwrap();
+            let args = if create {
+                json!({"path":"new.txt","content":"policy bytes"})
+            } else {
+                json!({"path":"approved.txt"})
+            };
+            let mut admission = resource_context(
+                &serde_json::to_value(&policy.profile).unwrap(),
+                json!([{"pointer":"/path","source":"argument","resource":policy.allowed_resources[0]}]),
+            );
+            admission["server_id"] = json!(policy.profile.server_id);
+            admission["executor_sha256"] = json!(policy.executor_sha256);
+            if create {
+                admission["execution"] =
+                    serde_json::to_value(r::macos_create_binding(&policy, &args).unwrap()).unwrap();
+            } else {
+                admission["macos_read"] =
+                    serde_json::to_value(r::macos_read_binding(&policy, &args).unwrap()).unwrap();
+            }
+            let activate = |sequence, text: &str| {
+                f.state.firewall.lock().unwrap().activate_managed_policy(
+                    AgentPolicySet::from_yaml(text).unwrap(),
+                    format!("revision-{sequence}"),
+                    sequence,
+                    sha(text.as_bytes()),
+                );
+            };
+            activate(1, ALLOW);
+            let mut start = f.event("macos-transition", "session_start");
+            start["policy_transition"] = json!(agentfw::policy_transition::CONTRACT);
+            let (status, started) = f.post(&start).await;
+            assert_allow(status, &started);
+            let mut call = resource_call(&f, "macos-transition", name, args.clone(), admission);
+            call["contract_version"] = json!(policy.contract());
+            call["schema_sha256"] = json!(schema);
+            let (status, old) = f.post(&call).await;
+            assert_eq!(status, StatusCode::OK, "{old}");
+            assert_eq!(old["contract_version"], policy.contract());
+            assert_eq!(old["release"], true, "{old}");
+            let changed = format!("default: allow\nagent_policies:\n  - name: changed-action\n    when: {{min_action_class: read_only}}\n    action: {verdict}\n");
+            activate(2, &changed);
+            let mut result = f.result(
+                "macos-transition",
+                &old,
+                name,
+                &args,
+                "value",
+                "ordinary useful result",
+            );
+            result["contract_version"] = json!(policy.contract());
+            let (status, refused) = f.post(&result).await;
+            assert_eq!(status, StatusCode::OK, "{refused}");
+            assert_eq!(refused["release"], false, "{refused}");
+            assert_eq!(refused["verdict"], verdict);
+            assert!(refused["reason_codes"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("native_policy_transition_result_refused")));
+            let (_, spent) = f.post(&result).await;
+            assert_eq!(spent["error_code"], "native_call_unknown_or_spent");
+            let (_, new_denied) = f.post(&call).await;
+            assert_eq!(new_denied["release"], false);
+            activate(3, ALLOW);
+            let (status, fresh) = f.post(&call).await;
+            assert_eq!(status, StatusCode::OK, "{fresh}");
+            assert_eq!(fresh["contract_version"], policy.contract());
+            assert_eq!(fresh["release"], true, "{fresh}");
+            result["call_id"] = fresh["call_id"].clone();
+            let (status, released) = f.post(&result).await;
+            assert_eq!(status, StatusCode::OK, "{released}");
+            assert_eq!(released["contract_version"], policy.contract());
+            assert_eq!(released["release"], true, "{released}");
+            assert_eq!(
+                std::fs::read(&input).unwrap(),
+                b"unchanged approved document"
+            );
+            assert!(
+                !root.join("new.txt").exists(),
+                "Admission alone must not publish a file"
+            );
+        }
+    }
+}
+
 #[cfg(not(windows))]
 #[tokio::test]
 async fn windows_read_v4_requests_are_unavailable_on_other_platforms() {
@@ -1722,6 +1863,7 @@ fn windows_create_call(
         network: None,
         post: None,
         windows_read: None,
+        macos_read: None,
     };
     let mut request = fixture.call(session, "create_file", args);
     request["contract_version"] = json!(agentfw::native::resource::WINDOWS_CREATE_CONTRACT);
@@ -2326,6 +2468,7 @@ fn create_file_call(
         network: None,
         post: None,
         windows_read: None,
+        macos_read: None,
     };
     let mut body = fixture.event(session, "call");
     body["contract_version"] = json!(agentfw::native::resource::CREATE_CONTRACT);
@@ -2510,6 +2653,7 @@ async fn sou67_create_file_v2_native_operator_bound_tool_name_admits_and_binds()
         network: None,
         post: None,
         windows_read: None,
+        macos_read: None,
     };
     let mut body = fixture.event("write-bound", "call");
     body["contract_version"] = json!(agentfw::native::resource::CREATE_CONTRACT);
@@ -2638,6 +2782,7 @@ async fn sou67_create_file_v2_native_operator_bound_nested_schema_admits_and_bin
         network: None,
         post: None,
         windows_read: None,
+        macos_read: None,
     };
     let mut body = fixture.event("nested-write", "call");
     body["contract_version"] = json!(agentfw::native::resource::CREATE_CONTRACT);
@@ -2840,6 +2985,7 @@ fn https_get_call(
         network: Some(agentfw::native::resource::https_get_binding(policy, &args).unwrap()),
         post: None,
         windows_read: None,
+        macos_read: None,
     };
     let mut body = fixture.event(session, "call");
     body["contract_version"] = json!(agentfw::native::resource::NETWORK_CONTRACT);
@@ -5894,6 +6040,7 @@ fn https_post_call(
         network: None,
         post: Some(agentfw::native::resource::https_post_binding(policy, &args).unwrap()),
         windows_read: None,
+        macos_read: None,
     };
     let mut body = fixture.event(session, "call");
     body["contract_version"] = json!(agentfw::native::resource::POST_CONTRACT);
