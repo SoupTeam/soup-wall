@@ -117,6 +117,9 @@ Nothing is installed in another user's profile or a system launchd domain.
 
 ## Native acceptance and evidence
 
+The [recorded native qualification](evidence/launchd/QUALIFICATION.md) retains
+the passing run and the failed development controls with exact source identities.
+
 From the exact reviewed checkout, on a disposable non-root macOS ARM64 runner:
 
 ```sh
