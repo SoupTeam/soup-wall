@@ -2,22 +2,32 @@
 from pathlib import Path
 import re
 import sys
+import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 from ci_components import blocks, generated, TARGET
+import ci_components
 from ci_impact import WORKFLOW_JOBS
 
 
 class SharedComponents(unittest.TestCase):
+    def test_generator_writes_stable_lf_output_on_every_platform(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "components.yml"
+            with patch.object(ci_components, "TARGET", target), patch.object(sys, "argv", ["ci_components.py"]):
+                self.assertEqual(ci_components.main(), 0)
+            self.assertEqual(target.read_bytes(), generated().encode("utf-8"))
+
     def test_committed_workflow_matches_all_registered_source_jobs(self):
         self.assertEqual(TARGET.read_text(), generated())
         actual = blocks(TARGET.read_text())
         expected = {f"{wf.removesuffix('.yml')}--{job}" for wf, jobs in WORKFLOW_JOBS.items()
                     if wf != "ci.yml" for job in jobs}
         self.assertEqual(set(actual), expected)
-        self.assertEqual(len(actual), 40)
+        self.assertEqual(len(actual), 41)
 
     def test_runtime_steps_and_platform_controls_are_not_replaced_by_summaries(self):
         central = blocks(TARGET.read_text())

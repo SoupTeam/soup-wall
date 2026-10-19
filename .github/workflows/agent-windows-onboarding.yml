@@ -1,29 +1,6 @@
 name: Native Windows Agent onboarding
 
 on:
-  pull_request:
-    paths:
-      - 'crates/agentfw/src/windows_onboarding.rs'
-      - 'crates/agentfw/src/windows_onboarding/**'
-      - 'crates/agentfw/src/main.rs'
-      - 'crates/agentfw/src/lib.rs'
-      - 'crates/agentfw/src/config.rs'
-      - 'crates/agentfw/src/lifecycle.rs'
-      - 'crates/agentfw/src/mcp/connection.rs'
-      - 'crates/agentfw/src/mcp/connection/windows.rs'
-      - 'crates/agentfw/src/self_test/**'
-      - 'crates/agentfw/src/windows_read.rs'
-      - 'crates/agentfw/src/private_file_windows.rs'
-      - 'crates/agentfw/src/native.rs'
-      - 'crates/agentfw/src/protection_status.rs'
-      - 'crates/agent/policies/agent-default.yaml'
-      - 'scripts/test-windows-onboarding.py'
-      - 'scripts/test-windows-self-test.py'
-      - 'scripts/tests/test_windows_self_test.py'
-      - 'scripts/ci-windows-self-test.ps1'
-      - 'rule_baseline/rule_baseline.py'
-      - '.github/workflows/agent-windows-onboarding.yml'
-      - 'Cargo.lock'
   workflow_dispatch:
 
 permissions:
@@ -34,7 +11,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: agent-windows-onboarding.yml
   standard-user-onboarding:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'standard-user-onboarding')
     runs-on: windows-2022
     timeout-minutes: 35
     steps:

@@ -32,7 +32,7 @@ class ImpactTests(unittest.TestCase):
         jobs = self.selected(["crates/agentfw/src/native.rs"])
         self.assertTrue({"test", "native-macos-resilience", "agent-windows-security"} <= jobs["ci.yml"])
         for workflow in ("mcp-real-filesystem.yml", "mcp-real-git.yml", "mcp-https-post.yml",
-                         "mcp-windows-read.yml", "sou79-resource-budgets.yml",
+                         "mcp-windows-read.yml", "agent-windows-onboarding.yml", "sou79-resource-budgets.yml",
                          "sou86-crash-supervision.yml", "provenance-memory.yml",
                          "supply-chain.yml", "license-policy.yml"):
             self.assertEqual(jobs[workflow], set(WORKFLOW_JOBS[workflow]))
