@@ -55,7 +55,19 @@ fn long_temp_root() -> PathBuf {
     }
 }
 
+/// A hosted runner starts the first interpreter of a job with a cold OS file cache, which
+/// can take longer than the 1.4 s worker start deadline. The deadline is production
+/// behaviour and stays as it is; the tests start the interpreter once, with the imports
+/// the worker needs, so that the cold-cache cost is not charged to whichever test runs first.
+fn warm_interpreter() {
+    static WARM: std::sync::Once = std::sync::Once::new();
+    WARM.call_once(|| {
+        run(Command::new(python()).args(["-I", "-c", "import hashlib, json, sys"]));
+    });
+}
+
 fn home() -> tempfile::TempDir {
+    warm_interpreter();
     tempfile::Builder::new()
         .tempdir_in(long_temp_root())
         .unwrap()
@@ -715,7 +727,7 @@ fn restart_refuses_altered_package_and_does_not_fall_back() {
     let (dir, store) = installed(Which::Frozen);
     let worker = PackagedClassifier::from_home(dir.path()).unwrap();
     let line = &inputs()[0];
-    assert!(worker.classify_raw(line).is_ok());
+    worker.classify_raw(line).expect("the worker must answer");
     let file = package_dir(&store).join("rule_baseline.py");
     std::fs::write(&file, b"def classify(x):\n    return {}\n").unwrap();
     kill_process(worker.worker_pid().unwrap());
@@ -732,7 +744,7 @@ fn interrupted_install_blocks_runtime_selection_and_running_workers_restart() {
     let (dir, store) = installed(Which::Frozen);
     let worker = PackagedClassifier::from_home(dir.path()).unwrap();
     let line = &inputs()[0];
-    assert!(worker.classify_raw(line).is_ok());
+    worker.classify_raw(line).expect("the worker must answer");
     std::fs::write(store.root().join("journal.json"), "{}").unwrap();
     assert!(store.current().is_err());
     assert!(PackagedClassifier::from_home(dir.path()).is_err());
@@ -744,7 +756,7 @@ fn interrupted_install_blocks_runtime_selection_and_running_workers_restart() {
     store.recover().unwrap();
     assert_eq!(store.inspect().unwrap()["current"], before);
     assert!(PackagedClassifier::from_home(dir.path()).is_ok());
-    assert!(worker.classify_raw(line).is_ok());
+    worker.classify_raw(line).expect("the worker must answer");
 }
 
 #[test]
@@ -789,7 +801,7 @@ fn launcher_process_tree_is_owned_and_cleaned_up_with_the_worker() {
         .unwrap();
     let worker = PackagedClassifier::from_home(&profile).unwrap();
     let line = &inputs()[0];
-    assert!(worker.classify_raw(line).is_ok());
+    worker.classify_raw(line).expect("the worker must answer");
     let pid = worker.worker_pid().unwrap();
     // A venv launcher may start the real interpreter as its child; either way every
     // process of the worker must disappear when the worker is retired.
