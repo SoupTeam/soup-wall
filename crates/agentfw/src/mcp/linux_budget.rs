@@ -512,14 +512,14 @@ mod linux {
         Ok(left.dev() == right.dev() && left.ino() == right.ino())
     }
 
-    fn read(file: &File, maximum: usize) -> Checked<Vec<u8>> {
+    fn read_record(file: &File, maximum: usize) -> std::io::Result<Vec<u8>> {
         // pread keeps observations independent of earlier reads and never
         // accepts a truncated kernel control record as a complete observation.
         let mut bytes = vec![0_u8; maximum + 1];
         let mut offset = 0;
         loop {
             if offset == bytes.len() {
-                return Err("mcp_budget_observation_failed");
+                return Err(std::io::ErrorKind::InvalidData.into());
             }
             let count = unsafe {
                 libc::pread(
@@ -530,10 +530,11 @@ mod linux {
                 )
             };
             if count < 0 {
-                if std::io::Error::last_os_error().raw_os_error() == Some(libc::EINTR) {
+                let error = std::io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::EINTR) {
                     continue;
                 }
-                return Err("mcp_budget_observation_failed");
+                return Err(error);
             }
             if count == 0 {
                 bytes.truncate(offset);
@@ -541,8 +542,24 @@ mod linux {
             }
             offset += count as usize;
             if offset > maximum {
-                return Err("mcp_budget_observation_failed");
+                return Err(std::io::ErrorKind::InvalidData.into());
             }
+        }
+    }
+
+    fn read(file: &File, maximum: usize) -> Checked<Vec<u8>> {
+        read_record(file, maximum).map_err(|_| "mcp_budget_observation_failed")
+    }
+
+    fn process_record(file: &File) -> Checked<Option<Vec<u8>>> {
+        match read_record(file, MAX_CONTROL_BYTES) {
+            Ok(bytes) => Ok(Some(bytes)),
+            // This descriptor pins the original procfs PID inode. If its task
+            // exits after open(), Linux returns ESRCH from proc_single_show;
+            // a later reuse of the numeric PID cannot retarget this descriptor.
+            // Only process records use this rule. Controller reads stay strict.
+            Err(error) if error.raw_os_error() == Some(libc::ESRCH) => Ok(None),
+            Err(_) => Err("mcp_budget_observation_failed"),
         }
     }
 
@@ -889,8 +906,10 @@ mod linux {
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
                 Err(_) => return Err("mcp_budget_membership_unverified"),
             };
-            let value = String::from_utf8(read(&file, MAX_CONTROL_BYTES)?)
-                .map_err(|_| "mcp_budget_membership_unverified")?;
+            let Some(bytes) = process_record(&file)? else {
+                return Ok(());
+            };
+            let value = String::from_utf8(bytes).map_err(|_| "mcp_budget_membership_unverified")?;
             let relative = self
                 .config_root
                 .strip_prefix(CGROUP_ROOT)
@@ -1034,7 +1053,9 @@ mod linux {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(_) => return Err("mcp_budget_membership_unverified"),
         };
-        let bytes = read(&file, MAX_CONTROL_BYTES)?;
+        let Some(bytes) = process_record(&file)? else {
+            return Ok(None);
+        };
         let value = std::str::from_utf8(&bytes).map_err(|_| "mcp_budget_membership_unverified")?;
         let close = value.rfind(')').ok_or("mcp_budget_membership_unverified")?;
         let fields: Vec<_> = value[close + 1..].split_ascii_whitespace().collect();
@@ -1045,6 +1066,75 @@ mod linux {
             .parse::<u64>()
             .map_err(|_| "mcp_budget_membership_unverified")?;
         Ok(Some((ticks, matches!(*state, "Z" | "X" | "x"))))
+    }
+
+    #[cfg(test)]
+    mod process_record_tests {
+        use super::*;
+
+        struct TestChild(std::process::Child);
+        impl Drop for TestChild {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+
+        #[test]
+        fn pinned_proc_records_report_a_reaped_task_without_hiding_control_errors() {
+            let mut child = TestChild(
+                std::process::Command::new("/bin/sleep")
+                    .arg("30")
+                    .spawn()
+                    .unwrap(),
+            );
+            let pid = child.0.id();
+            let records = [
+                File::open(format!("/proc/{pid}/cgroup")).unwrap(),
+                File::open(format!("/proc/{pid}/stat")).unwrap(),
+            ];
+            assert!(process_identity(pid).unwrap().is_some());
+            child.0.kill().unwrap();
+            child.0.wait().unwrap();
+            for file in records {
+                assert_eq!(
+                    read_record(&file, MAX_CONTROL_BYTES)
+                        .unwrap_err()
+                        .raw_os_error(),
+                    Some(libc::ESRCH),
+                    "the real pinned procfs record must identify its departed task"
+                );
+                assert!(process_record(&file).unwrap().is_none());
+                assert_eq!(
+                    read(&file, MAX_CONTROL_BYTES),
+                    Err("mcp_budget_observation_failed"),
+                    "ordinary controller observations never waive ESRCH"
+                );
+            }
+        }
+
+        #[test]
+        fn live_records_bounds_and_other_read_errors_remain_strict() {
+            let live = File::open("/proc/self/cgroup").unwrap();
+            assert!(!process_record(&live).unwrap().unwrap().is_empty());
+            let directory = tempfile::tempdir().unwrap();
+            assert_eq!(
+                process_record(&File::open(directory.path()).unwrap()),
+                Err("mcp_budget_observation_failed")
+            );
+            let oversized = tempfile::tempfile().unwrap();
+            oversized.set_len((MAX_CONTROL_BYTES + 1) as u64).unwrap();
+            assert_eq!(
+                read_record(&oversized, MAX_CONTROL_BYTES)
+                    .unwrap_err()
+                    .kind(),
+                std::io::ErrorKind::InvalidData
+            );
+            assert_eq!(
+                process_record(&oversized),
+                Err("mcp_budget_observation_failed")
+            );
+        }
     }
 }
 
