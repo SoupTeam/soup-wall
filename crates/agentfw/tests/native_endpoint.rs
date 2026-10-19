@@ -7630,3 +7630,87 @@ async fn sou89_bootstrap_status_exposes_an_epoch_only_to_its_owner() {
         .await;
     assert_allow(s, &reply);
 }
+
+async fn sou89_post_collector_guard(
+    f: &Fixture,
+    body: &Value,
+    guards: &[String],
+) -> (StatusCode, Value) {
+    let mut request = Request::builder()
+        .method("POST")
+        .uri("/native/v1")
+        .header("authorization", format!("Bearer {NATIVE_TOKEN}"))
+        .header("content-type", "application/json");
+    for guard in guards {
+        request = request.header("x-agentfw-collector-liveness", guard);
+    }
+    let response = app(f.state.clone())
+        .oneshot(request.body(Body::from(body.to_string())).unwrap())
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = to_bytes(response.into_body(), 2 * 1024 * 1024)
+        .await
+        .unwrap();
+    (status, serde_json::from_slice(&bytes).unwrap())
+}
+
+#[tokio::test]
+async fn sou89_collector_guard_rejects_forgery_and_stale_identity_without_affecting_legacy_calls() {
+    let f = Fixture::new(ALLOW);
+    let (_, start) = f.post(&f.owned_event("guarded", "session_start")).await;
+    let mut enroll = reviewer_sou89_liveness(&f, "guarded", "enroll");
+    enroll["owner_token"] = start["owner_token"].clone();
+    let (_, enrolled) = post_liveness(&f, &enroll).await;
+    let identity = json!({"contract_version":"sw-native-liveness/1", "instance_id":enroll["instance_id"],
+        "epoch":enrolled["epoch"], "owner_token":start["owner_token"]});
+    let call = f.call("guarded", "read_document", &json!({}));
+    for field in ["instance_id", "epoch", "owner_token"] {
+        let mut forged = identity.clone();
+        forged[field] = json!("forged-value");
+        let (status, reply) = sou89_post_collector_guard(&f, &call, &[forged.to_string()]).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(reply["release"], false);
+    }
+    let (status, admitted) = sou89_post_collector_guard(&f, &call, &[identity.to_string()]).await;
+    assert_allow(status, &admitted);
+    let result = f.result(
+        "guarded",
+        &admitted,
+        "read_document",
+        &json!({}),
+        "value",
+        "useful guarded document",
+    );
+    let (status, reply) = sou89_post_collector_guard(&f, &result, &[identity.to_string()]).await;
+    assert_allow(status, &reply);
+    // Trusted legacy operator controls retain their accepted schemas.
+    let (status, reply) = f.post(&f.event("guarded", "session_end")).await;
+    assert_allow(status, &reply);
+    let (_, fresh) = f.post(&f.owned_event("guarded", "session_start")).await;
+    assert_ne!(fresh["owner_token"], start["owner_token"]);
+    let (status, reply) = sou89_post_collector_guard(&f, &call, &[identity.to_string()]).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(reply["release"], false);
+    let (status, reply) = f.post(&call).await;
+    assert_allow(status, &reply);
+}
+
+#[tokio::test]
+async fn sou89_collector_guard_rejects_duplicate_malformed_and_oversized_headers() {
+    let f = Fixture::new(ALLOW);
+    f.start("header-bounds").await;
+    let call = f.call("header-bounds", "read_document", &json!({}));
+    for guards in [
+        vec!["{}".into()],
+        vec!["{".into()],
+        vec!["x".repeat(1025)],
+        vec!["{}".into(), "{}".into()],
+    ] {
+        let (status, reply) = sou89_post_collector_guard(&f, &call, &guards).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(reply["release"], false);
+    }
+    let (status, reply) = f.post(&call).await;
+    assert_allow(status, &reply);
+}

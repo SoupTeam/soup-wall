@@ -6170,3 +6170,50 @@ async fn sou89_failed_enrollment_reclaims_owned_bootstrap(mode: &str) {
     );
     assert!(executed(&fixture.ledger).is_empty());
 }
+
+#[tokio::test]
+async fn sou89_active_old_collector_cannot_inherit_a_rebound_peers_admission() {
+    let mut old = Fixture::new("lease-enroll-active-rebind", true).await;
+    old.ready().await;
+    let digest = sha(&std::fs::read(old._dir.path().join("registry.json")).unwrap());
+    let ended: Value = reqwest::Client::new()
+        .post(format!("http://127.0.0.1:{}/native/v1", old.port))
+        .bearer_auth(TOKEN)
+        .json(
+            &json!({"contract_version": CONTRACT, "registry_sha256": digest,
+            "session_id": "owned-enrollment-session", "event": "session_end"}),
+        )
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(ended["release"], true);
+    let ledger = old._dir.path().join("active-peer-executed.jsonl");
+    let stderr = old._dir.path().join("active-peer-stderr.log");
+    let (child, input, output) = spawn_gateway(
+        old._dir.path(),
+        &ledger,
+        "lease-enroll-active-rebind",
+        &stderr,
+        None,
+    );
+    let mut peer = PeerGateway {
+        child,
+        input,
+        output,
+        ledger,
+        stderr,
+    };
+    peer.ready().await;
+    let stale = old.exchange(r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_document","arguments":{}}}"#).await;
+    assert!(
+        !stale.is_some_and(|raw| raw.contains("Inventory")),
+        "stale collector inherited the fresh peer admission before its next renewal"
+    );
+    assert!(executed(&old.ledger).is_empty());
+    assert!(peer.exchange(r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"read_document","arguments":{}}}"#).await.unwrap().contains("Inventory"));
+    assert_eq!(executed(&peer.ledger).len(), 1);
+    peer.child.kill().await.unwrap();
+}

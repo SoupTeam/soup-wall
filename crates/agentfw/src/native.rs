@@ -1505,7 +1505,17 @@ pub async fn handler(
     {
         return failure("native_record_over_cap", StatusCode::PAYLOAD_TOO_LARGE);
     }
-    match inspect(&st, native, request) {
+    let identity = match liveness::collector_identity(&headers) {
+        Ok(identity) => identity,
+        Err(code) => return failure(code, StatusCode::BAD_REQUEST),
+    };
+    if request.event == "session_start" && identity.is_some() {
+        return failure(
+            "native_liveness_unexpected_identity",
+            StatusCode::BAD_REQUEST,
+        );
+    }
+    match inspect_bound(&st, native, request, identity.as_ref()) {
         Ok(response) => (
             StatusCode::OK,
             Json(serde_json::to_value(response).expect("native response serializes")),
@@ -1696,7 +1706,17 @@ fn reap_lost_sessions(st: &Shared, native: &NativeState, now: Instant, now_ms: u
     retire_sessions_terminal(st, native, &dead_targets, "expired")
 }
 
+#[cfg(test)]
 fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Response, &'static str> {
+    inspect_bound(st, native, request, None)
+}
+
+fn inspect_bound(
+    st: &Shared,
+    native: &NativeState,
+    request: Request,
+    identity: Option<&liveness::CollectorIdentity>,
+) -> Result<Response, &'static str> {
     if request.event == "session_start"
         && request.host_session.is_none()
         && native
@@ -1718,6 +1738,13 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         .firewall
         .lock()
         .map_err(|_| "native_inspection_unavailable")?;
+    if let Some(identity) = identity {
+        let session = state
+            .entries
+            .get(&request.session_id)
+            .ok_or("native_session_unknown")?;
+        identity.verify(native, session)?;
+    }
     let mut now = native.monotonic_now();
     let mut now_ms = wall_time_ms()? + native.test_time_offset();
     for session in state.entries.values_mut() {

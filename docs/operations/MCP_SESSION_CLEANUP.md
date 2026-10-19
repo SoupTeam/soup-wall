@@ -62,6 +62,7 @@ Epochs also appear in audit records and are not ownership credentials. Enrollmen
 3. **`retire`**:
    - Request: `{"contract_version": "sw-native-liveness/1", "registry_sha256": "...", "session_id": "...", "instance_id": "...", "action": "retire", "owner_token": "...", "epoch": "..."}`
    - Triggers definitive closure of the session and all its descendants via the unified terminal retirement path.
+   - Enrolled collectors also attach a bounded `x-agentfw-collector-liveness` identity header to native call/result/context and approval requests. It carries the separately versioned contract, daemon instance, epoch, and private owner capability. The daemon checks it under the same session lock as admission or approval mutation, preventing a stale collector from inheriting a replacement session before the next heartbeat. This header is never sent to the manifest inspector or original MCP server; legacy operator request and receipt schemas are unchanged.
 
 4. **`status`**:
    - Read-only check returning remaining lease milliseconds and state (`"active"`, `"expired"`, `"unleased"`, or `"terminal"`), without an epoch in operator telemetry.

@@ -19,6 +19,66 @@ use crate::handlers::Shared;
 use crate::native::NativeState;
 
 pub const LIVENESS_CONTRACT: &str = "sw-native-liveness/1";
+/// Optional identity guard on native/approval requests from an enrolled collector.
+/// The legacy operator request/receipt schemas are unchanged.
+pub const COLLECTOR_IDENTITY_HEADER: &str = "x-agentfw-collector-liveness";
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CollectorIdentity {
+    contract_version: String,
+    instance_id: String,
+    epoch: String,
+    owner_token: String,
+}
+
+pub(crate) fn collector_identity(
+    headers: &HeaderMap,
+) -> Result<Option<CollectorIdentity>, &'static str> {
+    let mut values = headers.get_all(COLLECTOR_IDENTITY_HEADER).iter();
+    let Some(value) = values.next() else {
+        return Ok(None);
+    };
+    if values.next().is_some() || value.as_bytes().len() > 1024 {
+        return Err("native_liveness_invalid_identity");
+    }
+    let identity: CollectorIdentity =
+        serde_json::from_slice(value.as_bytes()).map_err(|_| "native_liveness_invalid_identity")?;
+    if identity.contract_version != LIVENESS_CONTRACT
+        || !identifier(&identity.instance_id)
+        || !identifier(&identity.epoch)
+        || identity.owner_token.is_empty()
+        || identity.owner_token.len() > 256
+    {
+        return Err("native_liveness_invalid_identity");
+    }
+    Ok(Some(identity))
+}
+
+impl CollectorIdentity {
+    pub(crate) fn verify(
+        &self,
+        native: &NativeState,
+        session: &super::Session,
+    ) -> Result<(), &'static str> {
+        use subtle::ConstantTimeEq;
+        if self.instance_id != native.instance_id() {
+            return Err("native_instance_mismatch");
+        }
+        if self.epoch != session.epoch {
+            return Err("native_liveness_epoch_mismatch");
+        }
+        if !bool::from(
+            self.owner_token
+                .as_bytes()
+                .ct_eq(session.owner_token.as_bytes()),
+        ) {
+            return Err("native_liveness_owner_mismatch");
+        }
+        Ok(())
+    }
+}
+
 pub const MIN_LEASE_SECONDS: u64 = 1;
 pub const DEFAULT_LEASE_SECONDS: u64 = 10;
 pub const MAX_LEASE_SECONDS: u64 = 60;
@@ -772,6 +832,27 @@ impl CollectorLivenessClient {
             *dl = Some(request_start + Duration::from_secs(secs));
         }
         Ok(())
+    }
+
+    pub async fn admission_identity(&self) -> anyhow::Result<String> {
+        anyhow::ensure!(!self.is_uncertain(), "native_liveness_uncertain");
+        let epoch = self
+            .epoch
+            .read()
+            .await
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("native_liveness_not_enrolled"))?;
+        let owner_token = self
+            .owner_token
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("native_liveness_owner_token_required"))?;
+        anyhow::ensure!(!self.is_uncertain(), "native_liveness_uncertain");
+        Ok(serde_json::to_string(&CollectorIdentity {
+            contract_version: LIVENESS_CONTRACT.into(),
+            instance_id: self.instance_id.clone(),
+            epoch,
+            owner_token,
+        })?)
     }
 
     pub async fn retire(&self) -> anyhow::Result<()> {

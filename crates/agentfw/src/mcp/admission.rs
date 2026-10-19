@@ -1121,14 +1121,13 @@ impl<'a> Collector<'a> {
     }
 
     async fn post(&self, url: &str, token: &str, body: &Value) -> anyhow::Result<Value> {
-        let response = self
-            .client
-            .post(url)
-            .bearer_auth(token)
-            .json(body)
-            .send()
-            .await
-            .context("MCP admission unavailable")?;
+        let mut request = self.client.post(url).bearer_auth(token).json(body);
+        // Owner capabilities belong only to the native daemon, never the
+        // separate manifest inspector or an MCP server.
+        if url == self.config.daemon_url {
+            request = self.bind_liveness_request(request).await?;
+        }
+        let response = request.send().await.context("MCP admission unavailable")?;
         ensure!(
             response.status().is_success(),
             "MCP admission request rejected"
@@ -1148,14 +1147,30 @@ impl<'a> Collector<'a> {
         Ok(reply)
     }
 
+    async fn bind_liveness_request(
+        &self,
+        request: reqwest::RequestBuilder,
+    ) -> anyhow::Result<reqwest::RequestBuilder> {
+        match &self.liveness {
+            Some(liveness) => Ok(request.header(
+                crate::native::liveness::COLLECTOR_IDENTITY_HEADER,
+                liveness.admission_identity().await?,
+            )),
+            None => Ok(request),
+        }
+    }
+
     /// One call on the approval route. `Err(code)` is a daemon refusal code.
     async fn approval_post(&self, body: &Value) -> anyhow::Result<Result<Value, String>> {
         let approval = self.config.approval.as_ref().context("approval disabled")?;
-        let response = self
+        let request = self
             .client
             .post(&approval.url)
             .bearer_auth(&self.config.native.token)
-            .json(body)
+            .json(body);
+        let response = self
+            .bind_liveness_request(request)
+            .await?
             .send()
             .await
             .context("MCP approval unavailable")?;
