@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sou35-case",
+  "title": "SOU-35 candidate case record (draft v0.1)",
+  "description": "Draft 2020-12. $defs and the input/hashes/expected_outcome/technical_error/annotation/technical_reviews subschemas are byte-for-byte equal to eval/sou13/schema/cp2_case.schema.json (checked by tests/test_schema_compat.py). SOU-35 differs in identifiers, versions, exposure, evidence kinds and the evidence_tier block. There is no 'confirmed' label status: no record of this schema version can be Gold. Cross-field rules are enforced by sou35/records.py.",
+  "type": "object",
+  "required": ["id", "dataset_version", "split", "subset", "evaluation_group", "scenario_tags", "input_profile", "input", "hashes",
+               "expected_outcome", "technical_error", "annotation", "evidence", "evidence_strength", "label_status",
+               "open_questions", "review", "contract", "provenance",
+               "family_id", "template_id", "alias_group_id", "leakage_group_id", "exposure", "source_material", "evaluation",
+               "technical_reviews", "evidence_tier"],
+  "additionalProperties": false,
+  "$defs": {
+    "tri": {"type": ["boolean", "null"]},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "action": {"enum": ["read", "write", "delete", "send_data", "change_permissions"]},
+    "actions5": {
+      "type": "object",
+      "required": ["read", "write", "delete", "send_data", "change_permissions"],
+      "properties": {"read": {}, "write": {}, "delete": {}, "send_data": {}, "change_permissions": {}},
+      "additionalProperties": false
+    },
+    "evidence_item": {
+      "type": "object",
+      "required": ["value", "basis", "strength", "refs"],
+      "additionalProperties": false,
+      "properties": {
+        "value": {"$ref": "#/$defs/tri"},
+        "basis": {"enum": ["controlled_execution_trace", "controlled_execution_absence", "closed_semantics_absence",
+                           "environment_channel_disabled", "opaque_component", "no_established_semantics"]},
+        "strength": {"enum": ["execution", "model_execution", "declarative_execution", "environment_declaration",
+                              "not_established"]},
+        "refs": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "accepted_output": {
+      "type": "object", "required": ["name", "actions", "unknown"], "additionalProperties": false,
+      "properties": {"name": {"type": "string", "minLength": 1},
+                     "actions": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/action"}},
+                     "unknown": {"const": true}}
+    }
+  },
+  "properties": {
+    "id": {"type": "string", "pattern": "^S35-[0-9A-F]{32}$"},
+    "dataset_version": {"const": "0.1-sou35-candidate"},
+    "split": {"enum": ["unassigned", "train", "validation", "calibration", "test"]},
+    "subset": {"const": "sou35_candidate"},
+    "evaluation_group": {"enum": ["regression", "challenge", "shell", "technical_error"]},
+    "scenario_tags": {"type": "array", "items": {"type": "string"}},
+    "input_profile": {"const": "object_arguments_fixture_profile"},
+    "input": {
+      "type": "object", "required": ["tool_name", "tool_schema", "raw_arguments"], "additionalProperties": false,
+      "properties": {
+        "server_id": {"type": "string", "minLength": 1},
+        "tool_name": {"type": "string", "minLength": 1},
+        "tool_description": {"type": ["string", "null"]},
+        "tool_schema": {"type": "object"},
+        "pinned_schema": {"type": "object"},
+        "raw_arguments": {"type": ["object", "null"]}
+      }
+    },
+    "hashes": {
+      "type": "object", "required": ["input_sha256", "arguments_sha256", "definition_sha256"], "additionalProperties": false,
+      "properties": {"input_sha256": {"$ref": "#/$defs/sha256"}, "arguments_sha256": {"$ref": "#/$defs/sha256"},
+                     "definition_sha256": {"$ref": "#/$defs/sha256"}}
+    },
+    "expected_outcome": {"enum": ["classification", "technical_error"]},
+    "technical_error": {"enum": [null, "classifier_invalid", "classifier_timeout", "classifier_internal_error"]},
+    "annotation": {
+      "type": "object",
+      "required": ["per_action_targets", "known_mask", "unknown", "contract_view", "label_evidence", "rationale", "contract_rules"],
+      "additionalProperties": false,
+      "properties": {
+        "per_action_targets": {"oneOf": [{"type": "null"},
+          {"allOf": [{"$ref": "#/$defs/actions5"}], "additionalProperties": {"$ref": "#/$defs/tri"}}]},
+        "known_mask": {"oneOf": [{"type": "null"},
+          {"allOf": [{"$ref": "#/$defs/actions5"}], "additionalProperties": {"enum": [0, 1]}}]},
+        "unknown": {"type": ["boolean", "null"]},
+        "contract_view": {"oneOf": [{"type": "null"},
+          {"type": "object", "required": ["actions", "unknown"], "additionalProperties": false,
+           "properties": {"actions": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/action"}},
+                          "unknown": {"type": "boolean"}}}]},
+        "forbidden_actions": {"type": "array", "items": {"$ref": "#/$defs/action"}},
+        "label_evidence": {"oneOf": [{"type": "null"},
+          {"allOf": [{"$ref": "#/$defs/actions5"}], "additionalProperties": {"$ref": "#/$defs/evidence_item"}}]},
+        "rationale": {"type": "string"},
+        "contract_rules": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "evidence": {
+      "type": "object", "required": ["kind"],
+      "properties": {"kind": {"enum": ["declarative_semantics_execution", "input_validation"]}},
+      "if": {"properties": {"kind": {"const": "declarative_semantics_execution"}}},
+      "then": {"required": ["semantics_id", "program", "semantics_sha256", "interpreter_sha256", "tool_admission",
+                            "execution", "executed_real_tool", "fixture_code_executed"],
+               "properties": {"executed_real_tool": {"const": false}, "fixture_code_executed": {"const": false},
+                              "semantics_sha256": {"$ref": "#/$defs/sha256"},
+                              "interpreter_sha256": {"$ref": "#/$defs/sha256"}}},
+      "else": {"required": ["violations"],
+               "properties": {"violations": {"type": "array", "minItems": 1, "items": {"type": "string"}}}}
+    },
+    "evidence_strength": {"type": "string"},
+    "label_status": {"enum": ["provisional", "pending"]},
+    "open_questions": {"type": "array", "items": {"type": "string"}},
+    "review": {
+      "type": "object",
+      "required": ["annotator", "reviewer", "reviewed_at", "decision", "second_reviewer", "adjudication"],
+      "additionalProperties": false,
+      "properties": {"annotator": {"const": "ai_assisted_synthetic_draft"}, "reviewer": {"const": null},
+                     "reviewed_at": {"const": null}, "decision": {"const": null},
+                     "second_reviewer": {"const": null}, "adjudication": {"const": null}}
+    },
+    "contract": {"type": "object", "required": ["version", "sha256", "commit", "blob"]},
+    "provenance": {"type": "object", "required": ["origin", "production_data", "artificial_toy", "license"],
+                   "properties": {"production_data": {"const": false}}},
+    "family_id": {"type": "string",
+                  "pattern": "^f35\\.(read|write|delete|send_data|change_permissions|mixed|no_effect|unknown|multimode)\\.[a-z0-9_]+$"},
+    "template_id": {"type": "string", "pattern": "^tpl35\\.[a-z_]+\\.[a-z0-9_]+\\.[a-z0-9_]+$"},
+    "alias_group_id": {"type": "string", "pattern": "^ag35\\."},
+    "leakage_group_id": {"type": "string", "pattern": "^lg35\\."},
+    "exposure": {"enum": ["none", "restricted_test", "candidate_undetermined"]},
+    "source_material": {
+      "type": "object", "required": ["kind", "generator", "case_kind", "case_index", "declaration_sha256"],
+      "additionalProperties": false,
+      "properties": {"kind": {"const": "new_sou35_case"}, "generator": {"type": "string"},
+                     "case_kind": {"enum": ["classification", "technical_error"]},
+                     "case_index": {"type": "integer", "minimum": 0},
+                     "declaration_sha256": {"$ref": "#/$defs/sha256"}}
+    },
+    "evaluation": {
+      "type": "object", "required": ["role", "in_semantic_accuracy", "reason"], "additionalProperties": false,
+      "properties": {"role": {"enum": ["classification", "technical_error_check"]},
+                     "in_semantic_accuracy": {"type": "boolean"}, "reason": {"type": "string"}},
+      "if": {"properties": {"role": {"const": "technical_error_check"}}},
+      "then": {"properties": {"in_semantic_accuracy": {"const": false}}}
+    },
+    "technical_reviews": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["review_kind", "reviewer", "requested_by", "decision", "label_decisions", "evidence_confirmed",
+                     "notes", "alternative_interpretation", "reviewed_at", "source_file_sha256", "source_archive_sha256",
+                     "confirms_labels"],
+        "additionalProperties": false,
+        "properties": {
+          "review_kind": {"const": "ai_assisted_technical_review_not_human_confirmation"},
+          "reviewer": {"type": "string"}, "requested_by": {"type": "string"},
+          "decision": {"enum": ["accept", "revise", "pending"]},
+          "label_decisions": {"type": "object"},
+          "evidence_confirmed": {"enum": ["Y", "N"]},
+          "notes": {"type": "string"}, "alternative_interpretation": {"type": "string"}, "reviewed_at": {"type": "string"},
+          "source_file_sha256": {"$ref": "#/$defs/sha256"}, "source_archive_sha256": {"$ref": "#/$defs/sha256"},
+          "confirms_labels": {"const": false}
+        }
+      }
+    },
+    "evidence_tier": {
+      "type": "object",
+      "required": ["mechanical", "ai_technical_reviews", "human_semantic_approval", "inherited_decisions",
+                   "pending_decisions"],
+      "additionalProperties": false,
+      "properties": {
+        "mechanical": {"type": "object", "required": ["status", "interpreter_sha256", "compute_sha256"],
+                       "additionalProperties": false,
+                       "properties": {"status": {"enum": ["re_executed_audit_clean", "input_validation_checked"]},
+                                      "interpreter_sha256": {"$ref": "#/$defs/sha256"},
+                                      "compute_sha256": {"$ref": "#/$defs/sha256"}}},
+        "ai_technical_reviews": {"type": "integer", "minimum": 0},
+        "human_semantic_approval": {"const": null},
+        "inherited_decisions": {"type": "array", "maxItems": 0},
+        "pending_decisions": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^Q-S35-"}}
+      }
+    }
+  }
+}

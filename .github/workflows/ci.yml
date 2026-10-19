@@ -43,6 +43,11 @@ jobs:
           python3 scripts/check_docs.py
       - name: Rule classifier unit regressions
         run: python3 -m unittest discover -s rule_baseline -p 'test_*.py' -v
+      - name: SOU-35 public grouped-review and custody regressions
+        run: |
+          python3 -m venv target/sou35-venv
+          target/sou35-venv/bin/python -m pip install --disable-pip-version-check -r eval/sou13/requirements-cp2.txt
+          target/sou35-venv/bin/python eval/sou35/run_tests.py
 
   main-smoke:
     name: Main binary smoke (full qualification runs before merge)
@@ -267,6 +272,8 @@ jobs:
           target/sou13-venv/bin/python -m pip install --disable-pip-version-check -r eval/sou13/requirements-cp2.txt
           target/sou13-venv/bin/python eval/sou13/run_tests.py --expect-skipped 150
           target/sou13-venv/bin/python eval/sou13/scripts_cp2/check_release_privacy.py --root eval/sou13
+      - name: SOU-35 public grouped-review and custody regressions
+        run: target/sou13-venv/bin/python eval/sou35/run_tests.py
       - name: Optional learned classifier preparation regressions (offline)
         run: python3 -m unittest experiments.local_classifier.test_model experiments.local_classifier.test_ledger experiments.local_classifier.test_custodian experiments.local_classifier.test_gold_import -v
       - name: Task 1 frozen core regression evaluation

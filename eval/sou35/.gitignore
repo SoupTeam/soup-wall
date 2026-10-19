@@ -1,0 +1,12 @@
+# SOU-35 private artifacts. Source, schemas, toy fixtures and tests stay tracked. Real family declarations, the
+# candidate pool, id maps, seeds, generated records and any sealed/custodian material are never committed.
+/private/
+/sealed/
+/data/
+/out/
+*.jsonl
+*.csv
+*.zip
+*.sig
+id_map*.json
+__pycache__/
