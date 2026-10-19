@@ -1,4 +1,4 @@
-# macOS user-session Agent service (SOU-93)
+# macOS user-session Agent service
 
 The macOS backend of `agentfw service` manages one installed Agent in the
 current non-root user's launchd domain. It reuses the
@@ -35,8 +35,10 @@ refused.
 Install selects the available `gui/<uid>` domain, or the same user's `user/<uid>`
 domain if no GUI domain is available, and records that choice. Subsequent
 commands require the recorded domain. No unavailable session is replaced with a
-detached daemon. A logout/reboot removes the transient job; explicit `start` is
-required in the supported user session afterwards.
+detached daemon. The transient job lasts for its domain's lifetime: a GUI logout
+removes a GUI-domain job, while the user domain can outlive that GUI session.
+Reboot removes either job. Use explicit `stop` to guarantee removal, and explicit
+`start` to load it again in a supported user session.
 
 Start uses structured `launchctl bootstrap` arguments. The plist contains an
 explicit `ProgramArguments` array; the recorded launcher executes the selected
@@ -140,7 +142,7 @@ scenario or failed cleanup cannot pass. The existing `agent-lifecycle-macos` CI
 job runs this driver only when selected for full qualification; Draft PRs retain
 the repository's inexpensive checks. Linux service regressions remain in their
 existing suites. Qualification evidence must identify an actual native run;
-compilation or Linux mocks alone do not satisfy SOU-93.
+compilation or Linux mocks alone do not establish native launchd behavior.
 
 Apple's [launchd guide](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingLaunchdJobs.html)
 describes user agents and explicit program arguments. Consult the installed
