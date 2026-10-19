@@ -34,6 +34,8 @@ and maintain continuous liveness.
 
 ### Contract actions
 
+Bootstrap is also opt-in: send `"liveness": "sw-native-liveness/1"` on an authenticated `session_start` to receive the `instance_id` and private `owner_token` needed for enrollment. A legacy start without this field keeps the accepted receipt schema and remains unleased. Selecting an existing server profile alone does not enable liveness: configure the liveness lease or set `AGENTFW_NATIVE_LIVENESS=true` explicitly. Unknown bootstrap versions fail closed.
+
 Epochs also appear in audit records and are not ownership credentials. Enrollment, renewal and retirement require the per-session `owner_token`, which is never written to audit. The daemon bearer token remains required. A token from a sibling session is refused.
 
 1. **`enroll`**:

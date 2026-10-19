@@ -828,7 +828,7 @@ def test_daemon_api_contracts():
                 'contract_version': m.NATIVE_CONTRACT,
                 'registry_sha256': d.registry_sha256,
                 'session_id': sid,
-                'event': 'session_start',
+                'liveness': m.LIVENESS_CONTRACT, 'event': 'session_start',
             }
             status, resp = m.http_post(d.native_url, d.native_token, start_req)
             assert status == 200 and resp.get('release') is True, f"session_start failed: {resp}"
@@ -979,7 +979,7 @@ def test_daemon_api_contracts():
                 try:
                     sid_sel = f'test-sel-{kind}'
                     common = {'contract_version': m.NATIVE_CONTRACT, 'registry_sha256': sha, 'session_id': sid_sel}
-                    st, r = m.http_post(d_sel.native_url, d_sel.native_token, {**common, 'event': 'session_start'})
+                    st, r = m.http_post(d_sel.native_url, d_sel.native_token, {**common, 'liveness': m.LIVENESS_CONTRACT, 'event': 'session_start'})
                     assert st == 200 and r.get('release'), f"session_start failed: {r}"
                     t = next(t for t in registry['tools'] if t['name'] == tool)
                     call_without_host_id = {**common, 'event': 'call', 'tool': tool, 'args': args, 'schema_sha256': t['schema_sha256']}
@@ -1028,7 +1028,7 @@ def test_daemon_api_contracts():
 
                 common_sc = {'contract_version': m.NATIVE_CONTRACT, 'registry_sha256': sha_fs, 'session_id': 'sid-cascade-scope'}
                 st, start_sc = m.http_post(d_sc.native_url, d_sc.native_token, {
-                    **common_sc, 'event': 'session_start',
+                    **common_sc, 'liveness': m.LIVENESS_CONTRACT, 'event': 'session_start',
                     'host_session': 'host-cascade-scope', 'server_id': 'sou86-recovery',
                     'child_authority': proof_wrong
                 })
@@ -1052,7 +1052,7 @@ def test_daemon_api_contracts():
                 ], env=env_sc, text=True).strip()
                 st, start_ok = m.http_post(d_sc.native_url, d_sc.native_token, {
                     'contract_version': m.NATIVE_CONTRACT, 'registry_sha256': sha_fs, 'session_id': 'sid-cascade-scope-ok',
-                    'event': 'session_start', 'host_session': 'host-cascade-scope-ok',
+                    'liveness': m.LIVENESS_CONTRACT, 'event': 'session_start', 'host_session': 'host-cascade-scope-ok',
                     'server_id': 'sou86-recovery', 'child_authority': proof_right
                 })
                 assert st == 200 and start_ok.get('release'), f"session_start failed: {start_ok}"
@@ -1090,7 +1090,7 @@ def test_daemon_api_contracts():
                 # Native physical session_id is in a different namespace and is admitted
                 st, r_nat = m.http_post(d_risk.native_url, d_risk.native_token, {
                     'contract_version': m.NATIVE_CONTRACT, 'registry_sha256': d_risk.registry_sha256,
-                    'session_id': 'host-restart-risk', 'event': 'session_start'
+                    'session_id': 'host-restart-risk', 'liveness': m.LIVENESS_CONTRACT, 'event': 'session_start'
                 })
                 assert st == 200 and r_nat.get('release') is True, f"Native session_start failed: {r_nat}"
 
@@ -1497,7 +1497,7 @@ def test_cascade_audit_and_timing_extraction():
                 sid = f'physical-cascade-{label}'
                 st, start = m.http_post(d.native_url, d.native_token, {
                     'contract_version': m.NATIVE_CONTRACT, 'registry_sha256': sha,
-                    'session_id': sid, 'event': 'session_start', 'host_session': 'host-test-cascade',
+                    'session_id': sid, 'liveness': m.LIVENESS_CONTRACT, 'event': 'session_start', 'host_session': 'host-test-cascade',
                     'server_id': 'sou86-recovery', 'child_authority': proof
                 })
                 assert st == 200 and start['release'], start
@@ -1781,7 +1781,7 @@ def test_restart_risk_affected_host_policy_witness_and_independent_context():
         # Start authenticated native session bound to affected host
         st, start_risk = m.http_post(f'http://127.0.0.1:{port}/native/v1', tok, {
             'contract_version': m.NATIVE_CONTRACT, 'registry_sha256': sha,
-            'session_id': 'sess-bound-restart-risk', 'event': 'session_start',
+            'session_id': 'sess-bound-restart-risk', 'liveness': m.LIVENESS_CONTRACT, 'event': 'session_start',
             'host_session': 'host-restart-risk', 'server_id': 'sou86-recovery',
             'child_authority': proof_risk,
         })
@@ -1829,7 +1829,7 @@ def test_restart_risk_affected_host_policy_witness_and_independent_context():
 
         st, start_ind = m.http_post(f'http://127.0.0.1:{port}/native/v1', tok, {
             'contract_version': m.NATIVE_CONTRACT, 'registry_sha256': sha,
-            'session_id': 'sess-bound-independent', 'event': 'session_start',
+            'session_id': 'sess-bound-independent', 'liveness': m.LIVENESS_CONTRACT, 'event': 'session_start',
             'host_session': 'host-independent-ctx', 'server_id': 'sou86-recovery',
             'child_authority': proof_ind,
         })

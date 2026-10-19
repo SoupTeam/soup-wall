@@ -118,6 +118,12 @@ impl Fixture {
                "session_id": session, "event": event})
     }
 
+    fn owned_event(&self, session: &str, event: &str) -> Value {
+        let mut body = self.event(session, event);
+        body["liveness"] = json!("sw-native-liveness/1");
+        body
+    }
+
     fn call(&self, session: &str, tool: &str, args: &Value) -> Value {
         let mut body = self.event(session, "call");
         body["tool"] = json!(tool);
@@ -4875,7 +4881,7 @@ async fn scoped_start_with_ttl(
         parent.map(str::to_owned),
         resources,
     );
-    let mut start = f.event(session, "session_start");
+    let mut start = f.owned_event(session, "session_start");
     start["host_session"] = json!("review-host");
     start["server_id"] = json!("resource-fixture");
     start["child_authority"] = json!(ca::encode_token(&grant));
@@ -6652,7 +6658,9 @@ async fn post_liveness(f: &Fixture, body: &Value) -> (StatusCode, Value) {
 #[tokio::test]
 async fn sou89_liveness_enroll_and_renew_monotonicity() {
     let f = Fixture::new(ALLOW);
-    let (s, r) = f.post(&f.event("collector-live", "session_start")).await;
+    let (s, r) = f
+        .post(&f.owned_event("collector-live", "session_start"))
+        .await;
     assert_allow(s, &r);
     let owner_token = r["owner_token"].as_str().unwrap().to_string();
 
@@ -6847,11 +6855,11 @@ async fn sou89_liveness_renewal_cannot_extend_expired_authority() {
 #[tokio::test]
 async fn sou89_liveness_autonomous_reclamation_and_sibling_isolation() {
     let f = Fixture::new(ALLOW);
-    let (s, r) = f.post(&f.event("collector-a", "session_start")).await;
+    let (s, r) = f.post(&f.owned_event("collector-a", "session_start")).await;
     assert_allow(s, &r);
     let owner_token_a = r["owner_token"].as_str().unwrap().to_string();
 
-    let (s, r) = f.post(&f.event("collector-b", "session_start")).await;
+    let (s, r) = f.post(&f.owned_event("collector-b", "session_start")).await;
     assert_allow(s, &r);
 
     let instance_id = f.state.native.as_ref().unwrap().instance_id().to_string();
@@ -7034,7 +7042,7 @@ async fn reviewer_sou89_spent_signed_grant_must_not_rebootstrap() {
         agentfw::native::liveness::perform_maintenance(&f.state).await,
         1
     );
-    let mut replay = f.event("replayed-owner", "session_start");
+    let mut replay = f.owned_event("replayed-owner", "session_start");
     replay["host_session"] = json!("review-host");
     replay["server_id"] = json!("resource-fixture");
     replay["child_authority"] = json!(proof);
@@ -7090,7 +7098,9 @@ async fn reviewer_sou89_parent_close_must_reclaim_descendant() {
 #[tokio::test]
 async fn reviewer_sou89_enrol_must_not_revive_expired_unleased_session() {
     let f = Fixture::new(ALLOW);
-    let (s, start) = f.post(&f.event("expired-review", "session_start")).await;
+    let (s, start) = f
+        .post(&f.owned_event("expired-review", "session_start"))
+        .await;
     assert_allow(s, &start);
     f.state
         .native
@@ -7152,7 +7162,7 @@ async fn reviewer_r3_tombstone_saturation_must_not_restore_spent_authority() {
     }
     assert!(proofs.len() >= 512);
     proofs.sort_by(|a, b| a.0.cmp(&b.0));
-    let mut replay = f.event("cap-replay", "session_start");
+    let mut replay = f.owned_event("cap-replay", "session_start");
     replay["host_session"] = json!("review-host");
     replay["server_id"] = json!("resource-fixture");
     replay["child_authority"] = json!(proofs[0].1);
@@ -7255,7 +7265,7 @@ async fn sou89_ledger_saturation_fail_closed_and_expiry_lifecycle() {
         &proofs[proofs.len() / 2],
         &proofs[proofs.len() - 1],
     ] {
-        let mut replay = f.event("replay-attempt", "session_start");
+        let mut replay = f.owned_event("replay-attempt", "session_start");
         replay["host_session"] = json!("review-host");
         replay["server_id"] = json!("resource-fixture");
         replay["child_authority"] = json!(p);
@@ -7296,8 +7306,10 @@ async fn sou89_ledger_saturation_fail_closed_and_expiry_lifecycle() {
 
 async fn sou89_owner_witness(action: &str) {
     let f = Fixture::new(ALLOW);
-    let (_, target) = f.post(&f.event("owned-target", "session_start")).await;
-    let (_, peer) = f.post(&f.event("owned-peer", "session_start")).await;
+    let (_, target) = f
+        .post(&f.owned_event("owned-target", "session_start"))
+        .await;
+    let (_, peer) = f.post(&f.owned_event("owned-peer", "session_start")).await;
     let mut enroll = reviewer_sou89_liveness(&f, "owned-target", "enroll");
     enroll["owner_token"] = target["owner_token"].clone();
     let (status, enrolled) = post_liveness(&f, &enroll).await;
@@ -7359,4 +7371,62 @@ async fn sou89_renew_requires_owner_beyond_the_genuine_audit_epoch() {
 #[tokio::test]
 async fn sou89_retire_requires_owner_beyond_the_genuine_audit_epoch() {
     sou89_owner_witness("retire").await;
+}
+
+#[tokio::test]
+async fn sou89_legacy_session_start_keeps_the_accepted_receipt_schema() {
+    let f = Fixture::new(ALLOW);
+    let (status, reply) = f.post(&f.event("legacy-schema", "session_start")).await;
+    assert_allow(status, &reply);
+    // Exact allowed shape used by the accepted pre-liveness collector.
+    let expected = std::collections::BTreeSet::from([
+        "contract_version",
+        "registry_sha256",
+        "session_id",
+        "event",
+        "verdict",
+        "enforced",
+        "release",
+        "call_id",
+        "binding_sha256",
+        "content_sha256",
+        "reason_codes",
+    ]);
+    let actual = reply
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(
+        expected, actual,
+        "opt-in bootstrap fields leaked into a legacy receipt"
+    );
+    let (status, call) = f
+        .post(&f.call("legacy-schema", "read_document", &json!({})))
+        .await;
+    assert_allow(status, &call);
+}
+
+#[tokio::test]
+async fn sou89_versioned_bootstrap_returns_owner_only_after_explicit_opt_in() {
+    let f = Fixture::new(ALLOW);
+    let mut start = f.event("opt-in-bootstrap", "session_start");
+    start["liveness"] = json!("sw-native-liveness/1");
+    let (status, reply) = f.post(&start).await;
+    assert_allow(status, &reply);
+    assert!(reply["owner_token"]
+        .as_str()
+        .is_some_and(|value| !value.is_empty()));
+    assert_eq!(
+        reply["instance_id"],
+        f.state.native.as_ref().unwrap().instance_id()
+    );
+    let mut enroll = reviewer_sou89_liveness(&f, "opt-in-bootstrap", "enroll");
+    enroll["owner_token"] = reply["owner_token"].clone();
+    let (status, _) = post_liveness(&f, &enroll).await;
+    assert_eq!(status, StatusCode::OK);
+    start["session_id"] = json!("unknown-bootstrap-version");
+    start["liveness"] = json!("sw-native-liveness/999");
+    assert_ne!(f.post(&start).await.0, StatusCode::OK);
 }

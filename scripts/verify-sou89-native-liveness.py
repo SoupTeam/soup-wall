@@ -418,6 +418,7 @@ def test_idle_daemon_expiry_without_new_request(daemon: DaemonFixture) -> dict:
             "contract_version": NATIVE_CONTRACT,
             "registry_sha256": registry_sha256,
             "session_id": session_id,
+            'liveness': LIVENESS_CONTRACT,
             "event": "session_start",
         },
     )
@@ -706,6 +707,7 @@ def test_stale_and_forged_renewals(daemon: DaemonFixture) -> dict:
             "contract_version": NATIVE_CONTRACT,
             "registry_sha256": registry_sha256,
             "session_id": session_id,
+            'liveness': LIVENESS_CONTRACT,
             "event": "session_start",
         },
     )
@@ -876,6 +878,7 @@ def test_old_result_replay_rejected(daemon: DaemonFixture) -> dict:
             "contract_version": NATIVE_CONTRACT,
             "registry_sha256": registry_sha256,
             "session_id": session_id,
+            'liveness': LIVENESS_CONTRACT,
             "event": "session_start",
         },
     )
@@ -977,6 +980,7 @@ def test_parent_expiration_cascades_to_children(daemon: DaemonFixture) -> dict:
             "contract_version": NATIVE_CONTRACT,
             "registry_sha256": registry_sha256,
             "session_id": parent_sid,
+            'liveness': LIVENESS_CONTRACT,
             "event": "session_start",
             "host_session": "host-root",
             "server_id": "docs-server",
@@ -1009,6 +1013,7 @@ def test_parent_expiration_cascades_to_children(daemon: DaemonFixture) -> dict:
             "contract_version": NATIVE_CONTRACT,
             "registry_sha256": registry_sha256,
             "session_id": child_sid,
+            'liveness': LIVENESS_CONTRACT,
             "event": "session_start",
             "host_session": "host-root",
             "server_id": "docs-server",
@@ -1041,6 +1046,7 @@ def test_parent_expiration_cascades_to_children(daemon: DaemonFixture) -> dict:
             "contract_version": NATIVE_CONTRACT,
             "registry_sha256": registry_sha256,
             "session_id": grandchild_sid,
+            'liveness': LIVENESS_CONTRACT,
             "event": "session_start",
             "host_session": "host-root",
             "server_id": "docs-server",

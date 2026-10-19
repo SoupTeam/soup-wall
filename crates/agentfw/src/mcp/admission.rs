@@ -2974,29 +2974,6 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for DiagnosticOutput<W> {
 
 pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
     let mut collector = Collector::new(&config)?;
-    let start_reply = if let (Some(host_session), Some(child_authority)) =
-        (&collector.host_session, &collector.child_authority)
-    {
-        collector
-            .event(
-                "session_start",
-                json!({
-                    "host_session": host_session,
-                    "child_authority": child_authority,
-                    "server_id": collector.config.server_id,
-                }),
-            )
-            .await?
-    } else {
-        collector.event("session_start", json!({})).await?
-    };
-
-    let selected_profile = super::server_profile::ProfileConfig::load_from_env()
-        .ok()
-        .flatten();
-    let is_selected_profile = selected_profile
-        .as_ref()
-        .is_some_and(|p| super::server_profile::selected(Some(&p.format)));
     let env_liveness_flag = std::env::var("AGENTFW_NATIVE_LIVENESS").ok().map(|v| {
         let v = v.trim().to_ascii_lowercase();
         v != "0" && v != "false" && v != "no" && v != "off"
@@ -3007,8 +2984,20 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
     let liveness_opt_in = config.liveness_url.is_some()
         && (env_liveness_flag.unwrap_or(false)
             || config.liveness_lease_seconds.is_some()
-            || env_lease_seconds.is_some()
-            || (is_selected_profile && env_liveness_flag != Some(false)));
+            || env_lease_seconds.is_some());
+
+    let mut start_fields = json!({});
+    if let (Some(host_session), Some(child_authority)) =
+        (&collector.host_session, &collector.child_authority)
+    {
+        start_fields["host_session"] = json!(host_session);
+        start_fields["child_authority"] = json!(child_authority);
+        start_fields["server_id"] = json!(collector.config.server_id);
+    }
+    if liveness_opt_in {
+        start_fields["liveness"] = json!(crate::native::liveness::LIVENESS_CONTRACT);
+    }
+    let start_reply = collector.event("session_start", start_fields).await?;
 
     let (renewal_stop_tx, liveness_task) = if liveness_opt_in {
         let daemon_instance_id =

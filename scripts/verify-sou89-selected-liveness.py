@@ -842,6 +842,7 @@ def run_selected_acceptance(args) -> int:
                         'contract_version': NATIVE_CONTRACT,
                         'registry_sha256': s_reg_sha,
                         'session_id': sid_forged,
+                        'liveness': LIVENESS_CONTRACT,
                         'event': 'session_start',
                     })
                     require(status == 200, f'{s_kind}_forged_session_start_failed')
@@ -1428,6 +1429,7 @@ def run_selected_acceptance(args) -> int:
                             'contract_version': NATIVE_CONTRACT,
                             'registry_sha256': fs_reg_sha,
                             'session_id': 'sess-bound-restart-risk',
+                            'liveness': LIVENESS_CONTRACT,
                             'event': 'session_start',
                             'host_session': 'host-restart-risk',
                             'server_id': 'sou86-recovery',
@@ -1517,6 +1519,7 @@ def run_selected_acceptance(args) -> int:
                             'contract_version': NATIVE_CONTRACT,
                             'registry_sha256': fs_reg_sha,
                             'session_id': 'sess-bound-independent',
+                            'liveness': LIVENESS_CONTRACT,
                             'event': 'session_start',
                             'host_session': 'host-independent-ctx',
                             'server_id': 'sou86-recovery',
@@ -1562,6 +1565,7 @@ def run_selected_acceptance(args) -> int:
                             'contract_version': NATIVE_CONTRACT,
                             'registry_sha256': fs_reg_sha,
                             'session_id': 'host-restart-risk',
+                            'liveness': LIVENESS_CONTRACT,
                             'event': 'session_start',
                         },
                     )

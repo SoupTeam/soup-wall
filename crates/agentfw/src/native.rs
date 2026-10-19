@@ -903,6 +903,7 @@ impl NativeState {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Request {
+    liveness: Option<String>,
     policy_transition: Option<String>,
     contract_version: String,
     registry_sha256: String,
@@ -942,6 +943,7 @@ fn parse(body: &str) -> Result<Request, &'static str> {
     match event {
         "session_start" => {
             for key in [
+                "liveness",
                 "policy_transition",
                 "host_session",
                 "child_authority",
@@ -991,6 +993,13 @@ fn parse(body: &str) -> Result<Request, &'static str> {
     }
     if object.keys().map(String::as_str).collect::<BTreeSet<_>>() != keys {
         return Err("native_invalid_fields");
+    }
+    if request
+        .liveness
+        .as_deref()
+        .is_some_and(|version| version != liveness::LIVENESS_CONTRACT)
+    {
+        return Err("native_liveness_unsupported");
     }
     if request
         .policy_transition
@@ -2061,8 +2070,10 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                 .collect()
         };
         firewall.set_root(&session.epoch, agent_name, &tools);
-        response.instance_id = Some(native.instance_id().to_string());
-        response.owner_token = Some(owner_token);
+        if request.liveness.is_some() {
+            response.instance_id = Some(native.instance_id().to_string());
+            response.owner_token = Some(owner_token);
+        }
         state.entries.insert(request.session_id, session);
         return Ok(response);
     }
