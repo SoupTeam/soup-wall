@@ -1997,7 +1997,7 @@ jobs:
     name: "sou86-crash-supervision / required-disposable-linux-crash-supervision"
     if: contains(fromJSON(inputs.plan).workflows['sou86-crash-supervision.yml'], 'required-disposable-linux-crash-supervision')
     runs-on: ubuntu-22.04
-    timeout-minutes: 35
+    timeout-minutes: 45
     env:
       RUSTUP_TOOLCHAIN: '1.94.1'
       SOU86_ACCEPTED: '2af2f35b326e0f70660b5c4cbde8134fe4ab9751'
@@ -2082,6 +2082,11 @@ jobs:
           make -C "$RUNNER_TEMP/sou86-git-source" -j2 NO_CURL=YesPlease NO_EXPAT=YesPlease NO_TCLTK=YesPlease NO_GETTEXT=YesPlease NO_OPENSSL=YesPlease git
           cargo build --locked -p agentfw --bins --message-format=json > "$RUNNER_TEMP/sou86-candidate-build.jsonl"
           sha256sum target/debug/agentfw target/debug/agentfw-git-sandbox "$RUNNER_TEMP/sou86-git-source/git" > "$RUNNER_TEMP/sou86-candidate-binaries.txt"
+      - name: Validate SOU-89 selected liveness grader and observer contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/test-sou89-selected-contracts.py
       - name: Require original filesystem Git and independently observed crash recovery
         shell: bash
         run: |
@@ -2106,6 +2111,32 @@ jobs:
             --git-launcher "$GITHUB_WORKSPACE/target/debug/agentfw-git-sandbox" \
             --expected-commit "$(git rev-parse HEAD)" --runtime-source-commit "$(git rev-parse HEAD)" \
             --disposable-systemd-unit="$unit.service" --output "$RUNNER_TEMP/sou86-acceptance"
+      - name: Require SOU-89 selected filesystem and Git native liveness and autonomous reclamation
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The accepted SOU-86 delegation helper requires its owned namespace.
+          # The preceding service is collected; this launch must be fresh again.
+          # The harness covers 140 full startup/crash/cleanup cycles. Its finite
+          # outer wall budget does not change any per-case lease or cleanup deadline.
+          unit="sou86-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          sudo systemd-run --wait --pipe --collect --unit="$unit" \
+            --property="User=$(id -un)" --property="Group=$(id -gn)" \
+            --property='Delegate=cpu memory pids' \
+            --property=MemoryMax=2G --property=MemorySwapMax=0 \
+            --property=TasksMax=256 --property=CPUQuota=200% \
+            --property=RuntimeMaxSec=25min --property=KillMode=control-group \
+            --working-directory="$GITHUB_WORKSPACE" \
+            /usr/bin/env "PATH=$PATH" "TMPDIR=$RUNNER_TEMP" \
+            python3 -B scripts/verify-sou89-selected-liveness.py --run \
+            --agentfw "$GITHUB_WORKSPACE/target/debug/agentfw" \
+            --node "$RUNNER_TEMP/sou86-node/bin/node" --npm "$RUNNER_TEMP/sou86-node/bin/npm" \
+            --bwrap "$RUNNER_TEMP/sou86-bwrap-build/bwrap" \
+            --git "$RUNNER_TEMP/sou86-git-source/git" \
+            --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou86-git-source/git" | cut -d' ' -f1)" \
+            --git-launcher "$GITHUB_WORKSPACE/target/debug/agentfw-git-sandbox" \
+            --expected-commit "$(git rev-parse HEAD)" --runtime-source-commit "$(git rev-parse HEAD)" \
+            --disposable-systemd-unit="$unit.service" --output "$RUNNER_TEMP/sou89-selected-acceptance"
       - name: Publish separate bounded sanitized inventory and protection evidence
         if: always()
         run: |
@@ -2114,10 +2145,16 @@ jobs:
           from pathlib import Path
           spec=importlib.util.spec_from_file_location('sou86','scripts/verify-sou86-crash-supervision.py')
           driver=importlib.util.module_from_spec(spec);spec.loader.exec_module(driver)
-          for directory,protected in (('sou86-baseline-inventory',False),('sou86-acceptance',True)):
+          spec89=importlib.util.spec_from_file_location('sou89','scripts/verify-sou89-selected-liveness.py')
+          driver89=importlib.util.module_from_spec(spec89);spec89.loader.exec_module(driver89)
+          for directory,protected in (('sou86-baseline-inventory',False),('sou86-acceptance',True),('sou89-selected-acceptance',True)):
               path=Path(os.environ['RUNNER_TEMP'])/directory/'report.json'
-              report=json.loads(path.read_text()) if path.exists() else {'status':'incomplete','error':'required_report_missing','protection_acceptance':protected,'passed':0,'failed':1,'skipped':0}
-              rendered=json.dumps(driver.summary(report),indent=2)
+              if directory == 'sou89-selected-acceptance':
+                  report=json.loads(path.read_text()) if path.exists() else {'status':'incomplete','error':'required_report_missing','selected_production_acceptance':protected,'passed':0,'failed':1}
+                  rendered=json.dumps(driver89.summary(report),indent=2)
+              else:
+                  report=json.loads(path.read_text()) if path.exists() else {'status':'incomplete','error':'required_report_missing','protection_acceptance':protected,'passed':0,'failed':1,'skipped':0}
+                  rendered=json.dumps(driver.summary(report),indent=2)
               print(rendered)
               with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as stream: stream.write('```json\n'+rendered+'\n```\n')
           PY
@@ -2132,6 +2169,7 @@ jobs:
             ${{ runner.temp }}/sou86-candidate-build.jsonl
             ${{ runner.temp }}/sou86-baseline-inventory/report.json
             ${{ runner.temp }}/sou86-acceptance/report.json
+            ${{ runner.temp }}/sou89-selected-acceptance/report.json
           if-no-files-found: warn
           retention-days: 30
 

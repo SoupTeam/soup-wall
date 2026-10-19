@@ -854,6 +854,7 @@ pub fn compiled_bundle_files(
         registry_path: out.join("registry.json"),
         registry_sha256: p.profile.registry_sha256.clone(),
         approval: None,
+        liveness: None,
     };
     let native_config = json_bytes(&json!({"native":native}))?;
     let policies = json_bytes(&serde_json::to_value(
