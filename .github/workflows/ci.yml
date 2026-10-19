@@ -491,6 +491,19 @@ jobs:
       - name: Native Windows MCP fixture storage and harness checks
         run: python -m unittest discover -s scripts/tests -p 'test_windows*.py' -v
       - run: cargo build --locked -p agentfw --bin agentfw
+      - name: Aggregate MCP budgets under a standard Windows user
+        shell: pwsh
+        run: |
+          ./scripts/ci-windows-mcp-budgets.ps1 -AgentBinary target/debug/agentfw.exe `
+            -Commit $env:GITHUB_SHA `
+            -OutputDirectory "$env:RUNNER_TEMP/windows-mcp-budgets-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+      - name: Retain all Windows MCP budget outcomes
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-mcp-resource-budgets
+          path: ${{ runner.temp }}/windows-mcp-budgets-${{ github.run_id }}-${{ github.run_attempt }}/
+          if-no-files-found: error
       - name: Disposable Agent setup and daemon status
         run: python scripts/clean-setup-acceptance.py --run --agentfw target/debug/agentfw.exe --output target/clean-setup-windows.json
       - name: Retain setup and status evidence
