@@ -673,6 +673,10 @@ fn ensure_root_not_linked(root: &Path) -> anyhow::Result<()> {
         metadata.file_type().is_dir() && !metadata.file_type().is_symlink() && !reparse,
         "the classifier directory is linked or redirected; refusing to delete through it"
     );
+    // A plain final directory may still be reached through an ancestor symlink
+    // or NTFS junction. Runtime selection rejects that spelling; destructive
+    // recovery/removal must enforce the same boundary before touching files.
+    check_ancestors(root)?;
     Ok(())
 }
 

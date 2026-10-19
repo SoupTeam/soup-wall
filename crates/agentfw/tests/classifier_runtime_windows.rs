@@ -877,3 +877,27 @@ fn latency_evidence() {
 fn store_python(dir: &tempfile::TempDir) -> Value {
     Store::new(dir.path()).verify().unwrap()["python"].clone()
 }
+
+#[test]
+fn cleanup_refuses_an_ancestor_junction_without_deleting_redirected_files() {
+    for remove_all in [false, true] {
+        let directory = home();
+        let target = directory.path().join("operator-home");
+        let stage = target.join("classifier/staging-operator");
+        std::fs::create_dir_all(&stage).unwrap();
+        let canary = stage.join("preserve.txt");
+        std::fs::write(&canary, b"operator bytes").unwrap();
+        let alias = directory.path().join("redirected-home");
+        junction(&alias, &target);
+        let store = Store::new(&alias);
+        let result = if remove_all {
+            store.remove(None, true)
+        } else {
+            store.recover()
+        };
+        // Unlink the owned junction before tempfile cleanup, never its target.
+        std::fs::remove_dir(&alias).unwrap();
+        assert!(result.is_err(), "cleanup accepted an ancestor junction");
+        assert_eq!(std::fs::read(&canary).unwrap(), b"operator bytes");
+    }
+}
