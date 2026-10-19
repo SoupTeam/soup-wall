@@ -477,6 +477,17 @@ fn status(native: &NativeState, request: &LivenessRequest) -> (StatusCode, Json<
         return failure("native_session_unknown", StatusCode::NOT_FOUND);
     };
 
+    // A collector whose enrollment reply was lost may recover only its own
+    // bootstrap epoch for terminal cleanup. Operator telemetry stays unchanged.
+    let owned_epoch = if request.owner_token.is_some() {
+        if let Err(code) = verify_owner(session, request) {
+            return failure(code, StatusCode::FORBIDDEN);
+        }
+        Some(session.epoch.clone())
+    } else {
+        None
+    };
+
     let (state_str, left_ms, seq) = match &session.liveness_lease {
         Some(lease) => (
             if lease.is_expired(now) {
@@ -503,7 +514,7 @@ fn status(native: &NativeState, request: &LivenessRequest) -> (StatusCode, Json<
         action: "status".into(),
         instance_id: native.instance_id().to_string(),
         session_id: request.session_id.clone(),
-        epoch: None,
+        epoch: owned_epoch,
         lease_seconds: session
             .liveness_lease
             .as_ref()
@@ -764,9 +775,41 @@ impl CollectorLivenessClient {
     }
 
     pub async fn retire(&self) -> anyhow::Result<()> {
-        let epoch = self.epoch.read().await.clone();
-        let Some(epoch) = epoch else {
-            return Ok(());
+        // Latch uncertainty before any await, including bootstrap cleanup.
+        self.mark_failed();
+        let cached_epoch = self.epoch.read().await.clone();
+        let epoch = match cached_epoch {
+            Some(epoch) => epoch,
+            None => {
+                let response = self
+                    .client
+                    .post(&self.url)
+                    .bearer_auth(&self.token)
+                    .json(&json!({
+                        "contract_version": LIVENESS_CONTRACT,
+                        "registry_sha256": self.registry_sha256,
+                        "session_id": self.session_id,
+                        "instance_id": self.instance_id,
+                        "action": "status",
+                        "owner_token": self.owner_token,
+                    }))
+                    .send()
+                    .await?
+                    .error_for_status()?;
+                let reply: Value = response.json().await?;
+                anyhow::ensure!(
+                    reply["contract_version"] == LIVENESS_CONTRACT
+                        && reply["action"] == "status"
+                        && reply["instance_id"] == self.instance_id
+                        && reply["session_id"] == self.session_id,
+                    "liveness bootstrap identity mismatch"
+                );
+                reply["epoch"]
+                    .as_str()
+                    .filter(|epoch| identifier(epoch))
+                    .ok_or_else(|| anyhow::anyhow!("liveness bootstrap epoch unavailable"))?
+                    .to_string()
+            }
         };
 
         let body = json!({
@@ -779,15 +822,13 @@ impl CollectorLivenessClient {
             "epoch": epoch,
         });
 
-        let _ = self
-            .client
+        self.client
             .post(&self.url)
             .bearer_auth(&self.token)
             .json(&body)
             .send()
-            .await;
-
-        self.mark_failed();
+            .await?
+            .error_for_status()?;
         Ok(())
     }
 

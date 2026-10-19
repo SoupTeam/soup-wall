@@ -3030,7 +3030,9 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
         ));
         let requested_lease = config.liveness_lease_seconds.or(env_lease_seconds);
         if let Err(enroll_err) = client.enroll(requested_lease).await {
-            let _ = collector.event("session_end", json!({})).await;
+            // Never close by physical ID alone: a failed old enrollment may
+            // already have been replaced by a fresh collector owner.
+            let _ = client.retire().await;
             return Err(enroll_err);
         }
         let (stop_tx, stop_rx) = tokio::sync::watch::channel(false);

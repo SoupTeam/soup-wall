@@ -7590,3 +7590,43 @@ async fn sou89_ended_leased_child_grant_cannot_rebootstrap_but_fresh_grant_works
     f.allowed_call("live-parent", "read_document", &json!({}))
         .await;
 }
+
+#[tokio::test]
+async fn sou89_bootstrap_status_exposes_an_epoch_only_to_its_owner() {
+    let f = Fixture::new(ALLOW);
+    let (s, target) = f
+        .post(&f.owned_event("bootstrap-target", "session_start"))
+        .await;
+    assert_allow(s, &target);
+    let (_, peer) = f
+        .post(&f.owned_event("bootstrap-peer", "session_start"))
+        .await;
+    let request = reviewer_sou89_liveness(&f, "bootstrap-target", "status");
+    let (s, public) = post_liveness(&f, &request).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(public["status"], "unleased");
+    assert!(public.get("epoch").is_none());
+    for owner in [peer["owner_token"].clone(), json!("forged-owner")] {
+        let mut forged = request.clone();
+        forged["owner_token"] = owner;
+        let (s, reply) = post_liveness(&f, &forged).await;
+        assert_eq!(s, StatusCode::FORBIDDEN);
+        assert_eq!(reply["error_code"], "native_liveness_owner_mismatch");
+    }
+    let mut owned = request;
+    owned["owner_token"] = target["owner_token"].clone();
+    let (s, reply) = post_liveness(&f, &owned).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(reply["status"], "unleased");
+    let mut retire = reviewer_sou89_liveness(&f, "bootstrap-target", "retire");
+    retire["epoch"] = reply["epoch"].clone();
+    retire["owner_token"] = target["owner_token"].clone();
+    let (s, _) = post_liveness(&f, &retire).await;
+    assert_eq!(s, StatusCode::OK);
+    let (s, _) = post_liveness(&f, &owned).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (s, reply) = f
+        .post(&f.call("bootstrap-peer", "read_document", &json!({})))
+        .await;
+    assert_allow(s, &reply);
+}

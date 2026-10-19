@@ -64,7 +64,8 @@ Epochs also appear in audit records and are not ownership credentials. Enrollmen
    - Triggers definitive closure of the session and all its descendants via the unified terminal retirement path.
 
 4. **`status`**:
-   - Read-only check returning remaining lease milliseconds and state (`"active"`, `"expired"`, `"retired"`).
+   - Read-only check returning remaining lease milliseconds and state (`"active"`, `"expired"`, `"unleased"`, or `"terminal"`), without an epoch in operator telemetry.
+   - Supplying the exact `owner_token` additionally returns that owner's epoch; a different owner's token is rejected. This allows an opted-in collector to reclaim its own bootstrap after a refused enrollment or a lost enrollment reply. Cleanup still requires exact instance, owner, and epoch on `retire`; it never falls back to a physical-ID-only `session_end` that could close a replacement collector.
 
 ---
 

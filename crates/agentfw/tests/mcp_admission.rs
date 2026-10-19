@@ -245,6 +245,11 @@ fn registry_with_read_path(classified_read: bool) -> Value {
 
 #[derive(Default)]
 struct DaemonFaults {
+    stall_first_enrollment: AtomicBool,
+    reject_first_enrollment: AtomicBool,
+    lose_first_enrollment_reply: AtomicBool,
+    enrollment_started: AtomicUsize,
+    release_enrollment: Notify,
     captured_calls: Mutex<Vec<Value>>,
     mutate_approved_args: AtomicBool,
     stall_call_admission: AtomicBool,
@@ -266,6 +271,37 @@ async fn delay_call_admission(
     request: Request,
     next: Next,
 ) -> Response {
+    if request.uri().path() == "/native/liveness/v1" {
+        let (parts, body) = request.into_parts();
+        let bytes = axum::body::to_bytes(body, agentfw::native::MAX_BODY)
+            .await
+            .unwrap();
+        let mut value: Value = serde_json::from_slice(&bytes).unwrap();
+        if value["action"] == "enroll" {
+            if faults.stall_first_enrollment.swap(false, Ordering::SeqCst) {
+                faults.enrollment_started.fetch_add(1, Ordering::SeqCst);
+                faults.release_enrollment.notified().await;
+            }
+            if faults.reject_first_enrollment.swap(false, Ordering::SeqCst) {
+                // Let the real daemon reject a stale instance; never fabricate a verdict.
+                value["instance_id"] = json!("retired-daemon-instance");
+            }
+        }
+        let lose_reply = value["action"] == "enroll"
+            && faults
+                .lose_first_enrollment_reply
+                .swap(false, Ordering::SeqCst);
+        let response = next
+            .run(Request::from_parts(parts, Body::from(value.to_string())))
+            .await;
+        if lose_reply {
+            // The real daemon enrolled successfully, but the collector cannot
+            // receive its epoch. This models an ambiguous transport failure.
+            assert!(response.status().is_success());
+            return Response::builder().status(502).body(Body::empty()).unwrap();
+        }
+        return response;
+    }
     if request.uri().path() != "/native/v1" {
         return next.run(request).await;
     }
@@ -491,6 +527,12 @@ fn spawn_gateway_named(
     std::fs::write(&server_py, SERVER).unwrap();
     let mut command = Command::new(env!("CARGO_BIN_EXE_agentfw"));
     command.args(["mcp", "--native-admission"]);
+    if mode.starts_with("lease-enroll-") {
+        command
+            .env("AGENTFW_NATIVE_LIVENESS", "true")
+            .env("AGENTFW_NATIVE_LIVENESS_LEASE_SECONDS", "4")
+            .env("AGENTFW_MCP_SESSION", "owned-enrollment-session");
+    }
     command
         .env_remove("AGENTFW_HOST_SESSION")
         .env_remove("AGENTFW_CHILD_AUTHORITY");
@@ -818,6 +860,15 @@ impl Fixture {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
         let daemon_faults = Arc::new(DaemonFaults::default());
+        daemon_faults
+            .stall_first_enrollment
+            .store(mode == "lease-enroll-rebind", Ordering::SeqCst);
+        daemon_faults
+            .reject_first_enrollment
+            .store(mode == "lease-enroll-reject", Ordering::SeqCst);
+        daemon_faults
+            .lose_first_enrollment_reply
+            .store(mode == "lease-enroll-lost-reply", Ordering::SeqCst);
         let (daemon, daemon_shutdown) = start_daemon(
             listener,
             fixture_state(&home, port, enforce, approval.map(|a| a.0)),
@@ -6012,3 +6063,110 @@ default: allow
 #[cfg(target_os = "linux")]
 #[path = "support/resource_approval_execution.rs"]
 mod resource_approval_execution;
+
+#[tokio::test]
+async fn sou89_failed_enrollment_cannot_end_a_rebound_useful_peer() {
+    let mut fixture = Fixture::new("lease-enroll-rebind", true).await;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while fixture
+            .daemon_faults
+            .enrollment_started
+            .load(Ordering::SeqCst)
+            == 0
+        {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("old collector must reach enrollment");
+    let digest = sha(&std::fs::read(fixture._dir.path().join("registry.json")).unwrap());
+    let ended: Value = reqwest::Client::new()
+        .post(format!("http://127.0.0.1:{}/native/v1", fixture.port))
+        .bearer_auth(TOKEN)
+        .json(
+            &json!({"contract_version": CONTRACT, "registry_sha256": digest,
+            "session_id": "owned-enrollment-session", "event": "session_end"}),
+        )
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(ended["release"], true);
+
+    let ledger = fixture._dir.path().join("owned-peer-executed.jsonl");
+    let stderr = fixture._dir.path().join("owned-peer-stderr.log");
+    let (child, input, output) = spawn_gateway(
+        fixture._dir.path(),
+        &ledger,
+        "lease-enroll-rebind",
+        &stderr,
+        None,
+    );
+    let mut peer = PeerGateway {
+        child,
+        input,
+        output,
+        ledger,
+        stderr,
+    };
+    peer.ready().await;
+    assert!(peer.exchange(r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_document","arguments":{}}}"#)
+        .await.unwrap().contains("Inventory"));
+
+    fixture.daemon_faults.release_enrollment.notify_one();
+    fixture.assert_gateway_failed().await;
+    let continuation = peer.exchange(r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"read_document","arguments":{}}}"#).await;
+    assert!(
+        continuation.is_some_and(|raw| raw.contains("Inventory")),
+        "failed old enrollment must not retire the new owner of the same session ID"
+    );
+    assert_eq!(executed(&peer.ledger).len(), 2);
+    assert!(
+        !fixture.ledger.with_extension("jsonl.started").exists(),
+        "old collector must never spawn its server"
+    );
+    // End this test-owned useful peer after both semantic/effect witnesses.
+    // ChildStdin::shutdown alone does not close the OS pipe on every platform.
+    peer.child.kill().await.unwrap();
+}
+
+#[tokio::test]
+async fn sou89_failed_enrollment_reclaims_its_own_unleased_bootstrap() {
+    sou89_failed_enrollment_reclaims_owned_bootstrap("lease-enroll-reject").await;
+}
+
+#[tokio::test]
+async fn sou89_failed_enrollment_reclaims_its_own_accepted_but_lost_reply() {
+    sou89_failed_enrollment_reclaims_owned_bootstrap("lease-enroll-lost-reply").await;
+}
+
+async fn sou89_failed_enrollment_reclaims_owned_bootstrap(mode: &str) {
+    let mut fixture = Fixture::new(mode, true).await;
+    fixture.assert_gateway_failed().await;
+    let instance: Value = reqwest::Client::new()
+        .get(format!(
+            "http://127.0.0.1:{}/native/v1/instance",
+            fixture.port
+        ))
+        .bearer_auth(TOKEN)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let digest = sha(&std::fs::read(fixture._dir.path().join("registry.json")).unwrap());
+    let response = reqwest::Client::new()
+        .post(format!("http://127.0.0.1:{}/native/liveness/v1", fixture.port)).bearer_auth(TOKEN)
+        .json(&json!({"contract_version":"sw-native-liveness/1", "registry_sha256":digest,
+            "session_id":"owned-enrollment-session", "instance_id":instance["instance_id"], "action":"status"}))
+        .send().await.unwrap();
+    assert_eq!(
+        response.status(),
+        reqwest::StatusCode::NOT_FOUND,
+        "failed enrollment must release its own bootstrap capacity"
+    );
+    assert!(executed(&fixture.ledger).is_empty());
+}
