@@ -477,6 +477,7 @@ def main():
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--source-commit")
     args = parser.parse_args()
+    driver_sha256 = digest(__file__)
     require(args.source_commit is None or re.fullmatch(r"[0-9a-f]{40}", args.source_commit), "invalid source commit")
     require(os.name == "nt" and not ctypes.windll.shell32.IsUserAnAdmin(), "a non-elevated native Windows token is required")
     require(not args.out.exists(), "fresh evidence directory required")
@@ -498,9 +499,8 @@ def main():
                     "administrator_group_present": b"S-1-5-32-544" in subprocess.run(
                         [str(Path(os.environ["SystemRoot"]) / "System32/whoami.exe"), "/groups", "/fo", "csv"],
                         capture_output=True, check=True, timeout=10).stdout,
-                    "agent_sha256": digest(args.agent), "classifier_sha256": digest(args.baseline),
-                    "python_sha256": digest(suite.python), "registry_sha256": digest(suite.registry),
-                    "policy_sha256": digest(suite.policy), "driver_sha256": digest(__file__),
+                    **{key.replace("-", "_"): value for key, value in suite.values.items() if key.endswith("-sha256")},
+                    "driver_sha256": driver_sha256,
                     "checks": suite.results, "passed": sum(case["status"] == "passed" for case in suite.results),
                     "failed": sum(case["status"] == "failed" for case in suite.results)}
                 (args.out / "acceptance.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

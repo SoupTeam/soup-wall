@@ -323,6 +323,7 @@ pub(super) async fn apply(
             registry_path: selection.home.join("registry.json"),
             registry_sha256: selection.registry_sha256.clone(),
             approval: None,
+            liveness: None,
         }),
         ..Default::default()
     };
