@@ -257,6 +257,24 @@ scans it; that is exactly the case where the deadline would be exceeded, and the
 behaviour is a refused call, not a longer deadline. The CI run records the same distribution
 on a hosted runner as an artifact.
 
+#### Hosted-runner observations (`windows-2022`)
+
+The hosted runner differs from the developer machine in three ways that matter here, and
+none of them changed a deadline or added a retry:
+
+- `TEMP` is spelled with an 8.3 short name (`RUNNER~1`). The store refuses alias
+  spellings by design, so the tests create their profiles under the real long path.
+- The runner account is the built-in local Administrator. `Get-Acl` prints that SID in
+  SDDL as `LA`; the ACL test compares the owner in the form SDDL prints it.
+- In one of the hosted runs the very first worker start of a test process did not answer
+  within the 1.4 s start deadline (the test took about 2.1 s instead of about 0.8 s) and
+  failed closed, as designed. The failure was not captured with its error text, so the
+  cold OS file cache of a fresh runner is the likely cause, not a proven one. The tests now
+  start the interpreter once before the first profile is created and report the worker
+  error text if a call fails. Production code, the start and request deadlines and the
+  no-retry rule are unchanged: on a machine where the first launch is that slow, the first
+  call is refused and the next call starts a fresh verified worker.
+
 ## Limits
 
 The package does not defend against a compromised same-user OS (same limit as SOU-48), and

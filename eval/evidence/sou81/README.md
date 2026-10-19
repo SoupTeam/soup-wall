@@ -39,6 +39,12 @@ the budget; the correct outcome there is a refused call, which the failure tests
 what happens (`not_reached:classifier_error`, nothing executed, next call starts a fresh
 verified worker).
 
+On the hosted `windows-2022` runner one first worker start of a test process (the test took
+about 2.1 s instead of about 0.8 s) did not answer within the 1.4 s start deadline and failed
+closed. The error text was not captured, so a cold OS file cache is the likely cause, not a
+proven one. The deadline was not relaxed and no retry was added; the tests now start the
+interpreter once before creating the first profile and print the worker error if a call fails.
+
 ## Not covered
 
 Windows on ARM, network shares, ReFS, redirected profiles, multi-user and service-account
