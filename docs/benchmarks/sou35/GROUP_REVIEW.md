@@ -61,8 +61,11 @@ The external human authorization is a private JSON document:
 
 These are assertions the human must actually make, not defaults. Do not infer
 independence from a person's title, different username, or approval of rules.
-If the original decision omitted independence or exact mapping adoption, obtain
-that specific missing attestation; do not ask for a new manual 160-record review.
+If a recorded decision lacks any required attestation (independence from
+generation or adoption of the exact group mapping), obtain that specific
+attestation from the same reviewer before `apply`. A grouped review need not be
+repeated as a manual per-record review; `apply` refuses until every required
+attestation is present.
 
 ```sh
 python -m sou35.group_review apply \
