@@ -517,6 +517,12 @@ impl Service {
             }
         }
         let (binary, process) = self.manager().service_launch()?;
+        let log_path = self.home.join("versions").join(&process.launch_log);
+        private_file(&log_path)?;
+        let log = OpenOptions::new()
+            .append(true)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+            .open(log_path)?;
         let error = Command::new(binary)
             .args([
                 "lifecycle",
@@ -526,6 +532,7 @@ impl Service {
             ])
             .arg("--home")
             .arg(&self.home)
+            .stderr(Stdio::from(log))
             .exec();
         Err(error).context("cannot exec installed Agent")
     }
@@ -1019,7 +1026,7 @@ fn check_parents(path: &Path) -> Result<()> {
         );
         ensure!(
             metadata.mode() & 0o022 == 0
-                || (metadata.uid() == 0 && metadata.mode() & libc::S_ISVTX != 0),
+                || (metadata.uid() == 0 && metadata.mode() & u32::from(libc::S_ISVTX) != 0),
             "service path has a parent writable by another user"
         );
     }
