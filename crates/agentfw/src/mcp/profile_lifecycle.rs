@@ -4219,7 +4219,7 @@ mod tests {
 
         // Recovery MUST NOT publish candidate scratch to config.yaml!
         let rec = mgr.recover();
-        assert!(rec.is_ok());
+        assert!(rec.is_ok(), "recover failed: {rec:#?}");
 
         assert!(!mgr.config_path.exists());
         assert!(!displaced.exists());
