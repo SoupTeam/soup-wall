@@ -1374,6 +1374,38 @@ def test_finalizer_rig_cleanup_grading():
     print("PASS: test_finalizer_rig_cleanup_grading")
 
 
+def test_sibling_kernel_observers_are_armed_sequentially():
+    tree = ast.parse((ROOT / 'scripts/verify-sou89-selected-liveness.py').read_text())
+    fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'run_selected_acceptance')
+    profile_loop = next(n for n in ast.walk(fn) if isinstance(n, ast.For) and
+                        isinstance(n.target, ast.Tuple) and
+                        [getattr(x, 'id', None) for x in n.target.elts] == ['rig', 'kind'])
+    start = next(i for i, n in enumerate(profile_loop.body) if isinstance(n, ast.Assign) and
+                 any(isinstance(t, ast.Name) and t.id == 'sibling_a' for t in n.targets))
+    end = next(i for i, n in enumerate(profile_loop.body[start:], start) if isinstance(n, ast.Assign) and
+               any(isinstance(t, ast.Name) and t.id == 'useful_b1' for t in n.targets))
+    pending = []
+    order = []
+
+    class Collector:
+        def __init__(self, rig, label, lease_secs):
+            assert not pending, 'next observer created before the prior collector leaf was pinned'
+            pending.append(self)
+            order.append(('created', label))
+
+        def initialize(self):
+            assert pending == [self]
+            pending.clear()
+            order.append(('pinned', self))
+
+    block = ast.Module(body=profile_loop.body[start:end + 1], type_ignores=[])
+    exec(compile(block, 'sibling_observer_bootstrap', 'exec'),
+         {'SelectedLivenessClient': Collector, 'rig': object(), 'kind': 'filesystem',
+          'useful': lambda client: 'stable-original-result'})
+    assert not pending and [kind for kind, _ in order] == ['created', 'pinned', 'created', 'pinned']
+    print('PASS: test_sibling_kernel_observers_are_armed_sequentially')
+
+
 def test_source_observer_failure_retains_failed_report():
     tree = ast.parse((ROOT / 'scripts/verify-sou89-selected-liveness.py').read_text())
     fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'run_selected_acceptance')
@@ -1916,6 +1948,7 @@ def main():
     test_temporary_directory_cleanup_lifetime()
     test_production_graders_positive_and_adversarial_mutations()
     test_finalizer_rig_cleanup_grading()
+    test_sibling_kernel_observers_are_armed_sequentially()
     test_source_observer_failure_retains_failed_report()
     test_production_restart_setup()
     test_collector_fail_closed_on_denied_work()

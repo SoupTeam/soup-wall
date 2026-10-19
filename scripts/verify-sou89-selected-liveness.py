@@ -766,8 +766,10 @@ def run_selected_acceptance(args) -> int:
 
                     # Case 3: Surviving sibling remains healthy and useful after peer SIGKILL
                     sibling_a = SelectedLivenessClient(rig, f'{kind}-sibling-a', lease_secs=4)
-                    sibling_b = SelectedLivenessClient(rig, f'{kind}-sibling-b', lease_secs=10)
+                    # Pin A's independently observed cgroup and native epoch before
+                    # B can create another leaf under the same delegated root.
                     sibling_a.initialize()
+                    sibling_b = SelectedLivenessClient(rig, f'{kind}-sibling-b', lease_secs=10)
                     sibling_b.initialize()
                     useful(sibling_a)
                     useful_b1 = useful(sibling_b)
