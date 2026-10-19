@@ -508,3 +508,23 @@ fn latency_evidence() {
     }
     println!("LATENCY {}", serde_json::to_string_pretty(&report).unwrap());
 }
+
+#[test]
+fn cleanup_through_a_symlinked_root_deletes_nothing_outside_the_profile() {
+    let (dir, store) = installed(Which::Frozen);
+    let real = dir.path().join("classifier-real");
+    std::fs::rename(store.root(), &real).unwrap();
+    std::fs::create_dir(real.join("staging-attacker")).unwrap();
+    std::os::unix::fs::symlink(&real, store.root()).unwrap();
+
+    assert!(store.recover().is_err(), "recover refuses a linked root");
+    assert!(
+        store.remove(None, true).is_err(),
+        "remove refuses a linked root"
+    );
+    assert!(real.join("staging-attacker").is_dir() && real.join("current.json").is_file());
+
+    std::fs::remove_file(store.root()).unwrap();
+    std::fs::rename(&real, store.root()).unwrap();
+    assert!(store.verify().is_ok());
+}

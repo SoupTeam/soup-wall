@@ -21,6 +21,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
+#[cfg(windows)]
+use super::platform_windows as platform;
+
 pub const PACKAGE_SCHEMA: &str = "sw-classifier-package/1";
 pub const CURRENT_SCHEMA: &str = "sw-classifier-current/1";
 pub const WORKER_PROTOCOL: &str = "sw-classifier-worker/1";
@@ -411,6 +414,11 @@ pub fn probe_python(python: &Path) -> anyhow::Result<PythonRecord> {
     let canonical = python
         .canonicalize()
         .with_context(|| format!("interpreter not found: {}", python.display()))?;
+    // The ordinary `C:\...` spelling is recorded and run, not the verbatim `\\?\` one.
+    #[cfg(windows)]
+    let canonical = platform::plain_path(canonical);
+    #[cfg(windows)]
+    platform::ensure_plain_file(&canonical)?;
     ensure!(canonical.is_file(), "interpreter is not a file");
     let mut command = std::process::Command::new(&canonical);
     command
@@ -483,36 +491,36 @@ fn private_ok(metadata: &std::fs::Metadata) -> bool {
     metadata.uid() == unsafe { libc::geteuid() } && metadata.mode() & 0o077 == 0
 }
 
-#[cfg(not(unix))]
-fn private_ok(_: &std::fs::Metadata) -> bool {
-    false
-}
-
 fn ensure_supported() -> anyhow::Result<()> {
     ensure!(
-        cfg!(unix),
-        "the classifier package supports the Linux/Unix profile only"
+        cfg!(unix) || cfg!(all(windows, target_arch = "x86_64")),
+        "the classifier package supports the Linux/Unix and native Windows x86_64 profiles only"
     );
     Ok(())
 }
 
+#[cfg(unix)]
 fn write_private(path: &Path, bytes: &[u8], read_only: bool) -> anyhow::Result<()> {
     use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(if read_only { 0o400 } else { 0o600 });
-    }
-    #[cfg(not(unix))]
-    let _ = read_only;
+    options.mode(if read_only { 0o400 } else { 0o600 });
     let mut file = options.open(path)?;
     file.write_all(bytes)?;
     file.sync_all()?;
     Ok(())
 }
 
+/// Windows files are created with a protected owner-only DACL instead of mode
+/// bits; the read-only attribute adds nothing against the owner and would only
+/// make cleanup fail, so `read_only` has no Windows meaning.
+#[cfg(windows)]
+fn write_private(path: &Path, bytes: &[u8], _read_only: bool) -> anyhow::Result<()> {
+    platform::write_private(path, bytes)
+}
+
+#[cfg(unix)]
 fn atomic_write(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
     let tmp = path.with_extension(format!("tmp-{}", crate::token::generate()));
     write_private(&tmp, bytes, false)?;
@@ -521,16 +529,26 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[cfg(windows)]
+fn atomic_write(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
+    platform::atomic_write(path, bytes)
+}
+
+#[cfg(unix)]
 fn sync_dir(dir: &Path) {
-    #[cfg(unix)]
     if let Ok(handle) = std::fs::File::open(dir) {
         let _ = handle.sync_all();
     }
-    #[cfg(not(unix))]
-    let _ = dir;
 }
 
-fn read_private(path: &Path, limit: usize) -> anyhow::Result<Vec<u8>> {
+/// NTFS metadata changes are journaled and every file is flushed before it is
+/// published; Windows has no portable directory flush.
+#[cfg(windows)]
+fn sync_dir(_dir: &Path) {}
+
+#[cfg(unix)]
+fn read_private(path: &Path, limit: usize, _replaceable: bool) -> anyhow::Result<Vec<u8>> {
+    use std::os::unix::fs::OpenOptionsExt;
     let metadata =
         std::fs::symlink_metadata(path).with_context(|| format!("missing {}", path.display()))?;
     ensure!(
@@ -545,11 +563,7 @@ fn read_private(path: &Path, limit: usize) -> anyhow::Result<Vec<u8>> {
     );
     let mut options = std::fs::OpenOptions::new();
     options.read(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(libc::O_NOFOLLOW);
-    }
+    options.custom_flags(libc::O_NOFOLLOW);
     let mut bytes = Vec::new();
     options
         .open(path)?
@@ -561,6 +575,119 @@ fn read_private(path: &Path, limit: usize) -> anyhow::Result<Vec<u8>> {
         path.display()
     );
     Ok(bytes)
+}
+
+/// Pointer and journal files are replaced atomically and may be re-read by a
+/// concurrent verifier (`replaceable`); payload files never are.
+#[cfg(windows)]
+fn read_private(path: &Path, limit: usize, replaceable: bool) -> anyhow::Result<Vec<u8>> {
+    platform::read_private(path, limit, replaceable)
+}
+
+/// Create the directory if it is absent, then require it to be private to the
+/// current user (never adopted or repaired when it already exists).
+#[cfg(unix)]
+fn ensure_private_dir(dir: &Path) -> anyhow::Result<()> {
+    if !dir.exists() {
+        std::fs::create_dir_all(dir)?;
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+    }
+    let metadata = std::fs::symlink_metadata(dir)?;
+    ensure!(
+        metadata.file_type().is_dir() && private_ok(&metadata),
+        "{} must be a private directory owned by the current user",
+        dir.display()
+    );
+    Ok(())
+}
+
+#[cfg(windows)]
+fn ensure_private_dir(dir: &Path) -> anyhow::Result<()> {
+    if !dir.exists() {
+        platform::create_dir(dir)?;
+    }
+    platform::verify_dir(dir).with_context(|| {
+        format!(
+            "{} must be a private directory of the current user",
+            dir.display()
+        )
+    })
+}
+
+/// A directory this module created earlier must still be private and unlinked.
+#[cfg(unix)]
+fn verify_private_dir(dir: &Path) -> anyhow::Result<()> {
+    let metadata = std::fs::symlink_metadata(dir)
+        .with_context(|| format!("{} is not installed", dir.display()))?;
+    ensure!(
+        metadata.file_type().is_dir() && private_ok(&metadata),
+        "package directory is not private or is linked"
+    );
+    Ok(())
+}
+
+#[cfg(windows)]
+fn verify_private_dir(dir: &Path) -> anyhow::Result<()> {
+    platform::verify_dir(dir).context("package directory is not private or is linked")
+}
+
+/// No linked or redirected ancestors between the filesystem root and `root`.
+#[cfg(unix)]
+fn check_ancestors(root: &Path) -> anyhow::Result<()> {
+    for part in root.ancestors() {
+        if part.as_os_str().is_empty() {
+            continue;
+        }
+        let metadata = std::fs::symlink_metadata(part)?;
+        ensure!(
+            !metadata.file_type().is_symlink(),
+            "{} is a link; refusing to use a redirected profile",
+            part.display()
+        );
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn check_ancestors(root: &Path) -> anyhow::Result<()> {
+    platform::check_ancestors(root)
+}
+
+/// Cleanup commands delete below the root, so a root that is itself a symbolic link, a
+/// junction or any other reparse point is refused: nothing outside the profile is reached.
+fn ensure_root_not_linked(root: &Path) -> anyhow::Result<()> {
+    let metadata = match std::fs::symlink_metadata(root) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error).context("cannot inspect the classifier directory"),
+    };
+    #[cfg(windows)]
+    let reparse = {
+        use std::os::windows::fs::MetadataExt;
+        metadata.file_attributes() & 0x400 != 0
+    };
+    #[cfg(not(windows))]
+    let reparse = false;
+    ensure!(
+        metadata.file_type().is_dir() && !metadata.file_type().is_symlink() && !reparse,
+        "the classifier directory is linked or redirected; refusing to delete through it"
+    );
+    Ok(())
+}
+
+/// A new private staging directory (mode 0700 / owner-only DACL).
+#[cfg(unix)]
+fn create_staging(dir: &Path) -> anyhow::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::create_dir(dir)?;
+    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+    Ok(())
+}
+
+#[cfg(windows)]
+fn create_staging(dir: &Path) -> anyhow::Result<()> {
+    platform::create_dir(dir)
 }
 
 impl Store {
@@ -590,41 +717,16 @@ impl Store {
     fn ensure_private_dirs(&self) -> anyhow::Result<()> {
         ensure_supported()?;
         for dir in [&self.root, &self.packages()] {
-            if !dir.exists() {
-                std::fs::create_dir_all(dir)?;
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
-                }
-            }
-            let metadata = std::fs::symlink_metadata(dir)?;
-            ensure!(
-                metadata.file_type().is_dir() && private_ok(&metadata),
-                "{} must be a private directory owned by the current user",
-                dir.display()
-            );
+            ensure_private_dir(dir)?;
         }
-        // No linked or redirected ancestors between the filesystem root and here.
-        for part in self.root.ancestors() {
-            if part.as_os_str().is_empty() {
-                continue;
-            }
-            let metadata = std::fs::symlink_metadata(part)?;
-            ensure!(
-                !metadata.file_type().is_symlink(),
-                "{} is a link; refusing to use a redirected profile",
-                part.display()
-            );
-        }
-        Ok(())
+        check_ancestors(&self.root)
     }
 
     fn read_pointer(&self, path: &Path) -> anyhow::Result<Option<Pointer>> {
         if !path.exists() {
             return Ok(None);
         }
-        let pointer: Pointer = serde_json::from_slice(&read_private(path, 16 * 1024)?)
+        let pointer: Pointer = serde_json::from_slice(&read_private(path, 16 * 1024, true)?)
             .context("pointer file is not valid")?;
         ensure!(
             pointer.schema == CURRENT_SCHEMA,
@@ -639,12 +741,7 @@ impl Store {
         ensure_supported()?;
         ensure!(is_digest(id), "invalid package id");
         let dir = self.packages().join(id);
-        let metadata = std::fs::symlink_metadata(&dir)
-            .with_context(|| format!("package {id} is not installed"))?;
-        ensure!(
-            metadata.file_type().is_dir() && private_ok(&metadata),
-            "package directory is not private or is linked"
-        );
+        verify_private_dir(&dir).with_context(|| format!("package {id} cannot be used"))?;
         let mut names = Vec::new();
         for entry in std::fs::read_dir(&dir)? {
             names.push(entry?.file_name().to_string_lossy().into_owned());
@@ -654,10 +751,10 @@ impl Store {
             names == [MANIFEST_FILE, CLASSIFIER_FILE, WORKER_FILE],
             "package directory has missing or unexpected entries"
         );
-        let manifest_bytes = read_private(&dir.join(MANIFEST_FILE), 64 * 1024)?;
+        let manifest_bytes = read_private(&dir.join(MANIFEST_FILE), 64 * 1024, false)?;
         ensure!(sha(&manifest_bytes) == id, "manifest was altered");
-        let classifier = read_private(&dir.join(CLASSIFIER_FILE), MAX_FILE)?;
-        let worker = read_private(&dir.join(WORKER_FILE), MAX_FILE)?;
+        let classifier = read_private(&dir.join(CLASSIFIER_FILE), MAX_FILE, false)?;
+        let worker = read_private(&dir.join(WORKER_FILE), MAX_FILE, false)?;
         // Re-run the full archive-level validation on the installed bytes.
         let mut archive = Vec::new();
         tar_entry(&mut archive, MANIFEST_FILE, &manifest_bytes);
@@ -687,6 +784,14 @@ impl Store {
     /// The currently selected package, verified now. No fallback to anything else.
     pub fn current(&self) -> anyhow::Result<Verified> {
         ensure_supported()?;
+        // The selection pointer is read through these directories, so a junction or a
+        // foreign ACL on any of them must stop runtime selection before the read.
+        #[cfg(windows)]
+        {
+            check_ancestors(&self.root)?;
+            verify_private_dir(&self.root)?;
+            verify_private_dir(&self.packages())?;
+        }
         // Runtime selection and every worker start share the interrupted-install gate.
         ensure!(
             !self.journal_path().exists(),
@@ -731,12 +836,7 @@ impl Store {
         )?;
         let published = (|| -> anyhow::Result<()> {
             if !target.exists() {
-                std::fs::create_dir(&staging)?;
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    std::fs::set_permissions(&staging, std::fs::Permissions::from_mode(0o700))?;
-                }
+                create_staging(&staging)?;
                 write_private(&staging.join(MANIFEST_FILE), &package.manifest_bytes, true)?;
                 write_private(&staging.join(CLASSIFIER_FILE), &package.classifier, true)?;
                 write_private(&staging.join(WORKER_FILE), &package.worker, true)?;
@@ -825,6 +925,7 @@ impl Store {
     /// Clear leftovers of an interrupted install. Selection is never changed here.
     pub fn recover(&self) -> anyhow::Result<Value> {
         ensure_supported()?;
+        ensure_root_not_linked(&self.root)?;
         let mut removed = Vec::new();
         if self.root.is_dir() {
             for entry in std::fs::read_dir(&self.root)? {
@@ -850,6 +951,7 @@ impl Store {
             package.is_some() != all,
             "give exactly one of --package <id> or --all"
         );
+        ensure_root_not_linked(&self.root)?;
         if all {
             ensure!(self.root.is_dir(), "nothing is installed");
             std::fs::remove_dir_all(&self.root)?;

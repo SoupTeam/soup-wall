@@ -17,7 +17,7 @@ class SharedComponents(unittest.TestCase):
         expected = {f"{wf.removesuffix('.yml')}--{job}" for wf, jobs in WORKFLOW_JOBS.items()
                     if wf != "ci.yml" for job in jobs}
         self.assertEqual(set(actual), expected)
-        self.assertEqual(len(actual), 40)
+        self.assertEqual(len(actual), 41)
 
     def test_runtime_steps_and_platform_controls_are_not_replaced_by_summaries(self):
         central = blocks(TARGET.read_text())
