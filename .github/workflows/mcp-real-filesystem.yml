@@ -1,7 +1,6 @@
 name: Real filesystem MCP profile
 
 on:
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -18,7 +17,7 @@ jobs:
       workflow: mcp-real-filesystem.yml
   required-linux-sandbox-and-real-host:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'required-linux-sandbox-and-real-host')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'required-linux-sandbox-and-real-host')
     # This selected runtime is Linux x86-64. No host sysctl/AppArmor relaxation.
     runs-on: ubuntu-22.04
     timeout-minutes: 40

@@ -3,10 +3,6 @@
 name: supply-chain
 
 on:
-  push:
-    branches: [main]
-    paths-ignore: ["**.md", "docs/**"]
-  pull_request:
   schedule:
     - cron: "41 4 * * 1"
   workflow_dispatch:
@@ -25,7 +21,7 @@ jobs:
       workflow: supply-chain.yml
   cargo-audit:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'cargo-audit')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'cargo-audit')
     name: Cargo audit
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -43,7 +39,7 @@ jobs:
 
   sbom:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'sbom')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'sbom')
     name: CycloneDX SBOM
     runs-on: ubuntu-latest
     timeout-minutes: 15

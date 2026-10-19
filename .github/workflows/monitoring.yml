@@ -1,16 +1,13 @@
 name: protected-alert-recovery
 
 on:
-  pull_request:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: protected-alert-recovery-${{ github.workflow }}-${{ github.ref }}
+  group: protected-alert-recovery-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -20,7 +17,7 @@ jobs:
       workflow: monitoring.yml
   linux-alert-recovery:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'linux-alert-recovery')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-alert-recovery')
     name: Linux dependency alerts and protected durable recovery
     runs-on: ubuntu-24.04
     timeout-minutes: 45

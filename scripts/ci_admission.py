@@ -85,6 +85,12 @@ CHECK_NAMES: dict[str, dict[str, tuple[str, ...]]] = {
 }
 
 
+def component_names(workflow: str, job_ids: list[str]) -> tuple[str, ...]:
+    """Reviewed central job names; the PR cannot supply this mapping."""
+    return tuple("Components / " + workflow.removesuffix(".yml") + " / " + name
+                 for name in required_names(workflow, job_ids))
+
+
 def required_names(workflow: str, job_ids: list[str]) -> tuple[str, ...]:
     result: list[str] = []
     for job in job_ids:
@@ -215,6 +221,8 @@ def inspect(api: GitHub, number: int, event_base: str, event_head: str) -> tuple
         return head_sha, Verdict("failure", "merge candidate unavailable or conflicted")
     if pr.get("state") != "open" or base_sha != event_base or head_sha != event_head:
         return merge_sha, Verdict("failure", "PR source moved during admission; re-run on current candidate")
+    if pr.get("draft") is True:
+        return merge_sha, Verdict("failure", "draft PR is not a merge-qualified candidate")
     commit = api.get("/git/commits/" + merge_sha)
     parents = [item["sha"] for item in commit.get("parents", [])]
     if parents != [base_sha, head_sha]:
@@ -234,52 +242,94 @@ def inspect(api: GitHub, number: int, event_base: str, event_head: str) -> tuple
     selected = plan(paths, force_full=not active)
     actions = api.pages("/actions/runs?" + urlencode({"head_sha": head_sha,
                                                        "event": "pull_request"}), "workflow_runs")
-    selected_runs: list[tuple[str, list[str], dict[str, Any]]] = []
+    central = latest(actions, ".github/workflows/ci.yml", "pull_request", head_sha)
+    job_cache: dict[tuple[int, int], list[dict[str, Any]]] = {}
+    selected_runs: list[tuple[str, tuple[str, ...], dict[str, Any]]] = []
     for workflow, job_ids in selected["workflows"].items():
         if not job_ids:
             continue
         run = latest(actions, ".github/workflows/" + workflow, "pull_request", head_sha)
+        expected = required_names(workflow, job_ids)
+        if run is None and workflow != "ci.yml":
+            # Migration compatibility: components may share ci.yml's single
+            # planner/run, but must still supply EVERY reviewed matrix member.
+            # A green ci.yml without these exact names cannot qualify them.
+            if central is not None and central.get("status") == "completed":
+                key = (int(central["id"]), int(central["run_attempt"]))
+                if key not in job_cache:
+                    job_cache[key] = get_jobs(api, central)
+                if any(job.get("name", "").startswith("Components / ") for job in job_cache[key]):
+                    run = central
+                    expected = component_names(workflow, job_ids)
         if run is None:
             return merge_sha, Verdict("pending", "selected workflow missing: " + workflow)
         if run.get("status") != "completed":
             return merge_sha, Verdict("pending", "selected workflow unfinished: " + workflow)
         if run.get("conclusion") != "success":
             return merge_sha, Verdict("failure", "selected workflow did not succeed: " + workflow)
-        selected_runs.append((workflow, job_ids, run))
+        selected_runs.append((workflow, expected, run))
     codeql_runs = api.pages("/actions/runs?" + urlencode({"head_sha": head_sha,
                                                            "event": "dynamic"}), "workflow_runs")
     codeql = latest(codeql_runs, "dynamic/github-code-scanning/codeql", "dynamic", head_sha)
     verdict = assess_codeql(codeql, None, selected["codeql"], head_sha)
     if verdict.state == "failure" or (codeql is None or codeql.get("status") != "completed"):
         return merge_sha, verdict
-    for workflow, job_ids, run in selected_runs:
-        verdict = assess_job_names(get_jobs(api, run), required_names(workflow, job_ids), merge_sha)
+    for workflow, expected, run in selected_runs:
+        key = (int(run["id"]), int(run["run_attempt"]))
+        if key not in job_cache:
+            job_cache[key] = get_jobs(api, run)
+        verdict = assess_job_names(job_cache[key], expected, merge_sha)
         if verdict.state != "success":
             return merge_sha, Verdict(verdict.state, workflow + ": " + verdict.reason)
     verdict = assess_codeql(codeql, get_jobs(api, codeql), selected["codeql"], head_sha)
     after = api.get(f"/pulls/{number}")
+    if after.get("draft") is True:
+        return merge_sha, Verdict("failure", "PR converted to draft while evidence was inspected")
     if (after["base"]["sha"], after["head"]["sha"], after.get("merge_commit_sha")) != (base_sha, head_sha, merge_sha):
         return merge_sha, Verdict("failure", "PR source changed while evidence was inspected")
     return merge_sha, verdict
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--pr", type=int, required=True)
-    parser.add_argument("--wait-seconds", type=int, default=2700)
-    parser.add_argument("--dry-run", action="store_true")
-    args = parser.parse_args()
-    repo = os.environ["GITHUB_REPOSITORY"]
-    event = json.load(open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8"))
-    pr_event = event["pull_request"]
-    if pr_event["number"] != args.pr or pr_event["base"]["repo"]["full_name"] != repo:
-        parser.error("event does not identify the requested base PR")
-    api = GitHub(repo, os.environ["GITHUB_TOKEN"])
+def completion_targets(api: GitHub, event: dict[str, Any]) -> list[dict[str, Any]]:
+    """Use repository API metadata only, never upstream artifacts or PR code."""
+    run = api.get("/actions/runs/" + str(int(event["workflow_run"]["id"])))
+    path = str(run.get("path", "")).split("@", 1)[0]
+    allowed = ((run.get("event") == "pull_request" and path == ".github/workflows/ci.yml")
+               or (run.get("event") == "dynamic" and path.startswith("dynamic/github-code-scanning/codeql")))
+    if not allowed or run.get("status") != "completed" or not SHA.fullmatch(str(run.get("head_sha", ""))):
+        return []
+    candidates = run.get("pull_requests", [])
+    if not candidates:
+        # Default-setup CodeQL can omit PR associations, especially for forks.
+        candidates = api.pages("/pulls?state=open", "")
+    targets = []
+    seen = set()
+    for candidate in candidates:
+        number = int(candidate["number"])
+        if number in seen:
+            continue
+        seen.add(number)
+        pr = api.get(f"/pulls/{number}")
+        if pr.get("state") == "open" and pr["head"]["sha"] == run["head_sha"]:
+            targets.append(pr)
+    return targets
+
+
+def admit(api: GitHub, args: argparse.Namespace, pr_event: dict[str, Any]) -> int:
     deadline = time.monotonic() + max(0, min(args.wait_seconds, 2700))
     current = api.get(f"/pulls/{args.pr}")
     status_sha = current.get("merge_commit_sha") or current["head"]["sha"]
     if not SHA.fullmatch(status_sha):
         raise RuntimeError("invalid initial status target SHA")
+    if current.get("draft") is True:
+        # Keep admission pending, never green. GitHub also forbids merging drafts.
+        # A ready_for_review event starts fresh qualification; do not occupy a
+        # hosted runner waiting up to 45 minutes for deliberately skipped jobs.
+        if not args.dry_run:
+            api.post("/statuses/" + status_sha, {"state": "pending", "context": CONTEXT,
+                                               "description": "Draft: full qualification starts when ready for review"})
+        print("pending: draft PR; qualification deferred without runner polling", flush=True)
+        return 0
     if not args.dry_run:
         api.post("/statuses/" + status_sha, {"state": "pending", "context": CONTEXT,
                                                "description": "Checking exact-source CI evidence"})
@@ -308,6 +358,13 @@ def main() -> int:
                 return 2
             time.sleep(30)
             continue
+        if verdict.state == "pending" and args.wait_seconds == 0:
+            # Completion events recheck us without billing an idle polling runner.
+            # Missing evidence stays blocking, never a green qualification.
+            if not args.dry_run:
+                api.post("/statuses/" + sha, {"state": "pending", "context": CONTEXT,
+                                            "description": verdict.reason[:140]})
+            return 2 if args.dry_run else 0
         final_state = "failure" if verdict.state == "pending" else verdict.state
         description = ("Selected jobs and all five CodeQL analyses passed" if final_state == "success"
                        else verdict.reason)[:140]
@@ -315,6 +372,33 @@ def main() -> int:
             api.post("/statuses/" + sha, {"state": final_state, "context": CONTEXT,
                                             "description": description})
         return 0 if final_state == "success" else 1
+
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--pr", type=int)
+    parser.add_argument("--wait-seconds", type=int, default=0)
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args()
+    repo = os.environ["GITHUB_REPOSITORY"]
+    with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as event_file:
+        event = json.load(event_file)
+    api = GitHub(repo, os.environ["GITHUB_TOKEN"])
+    if "workflow_run" in event:
+        if args.pr is not None:
+            parser.error("completion routing determines the current PR from repository metadata")
+        result = 0
+        for pr in completion_targets(api, event):
+            args.pr = pr["number"]
+            result = max(result, admit(api, args, pr))
+        return result
+    pr_event = event["pull_request"]
+    if args.pr is None:
+        args.pr = pr_event["number"]
+    if pr_event["number"] != args.pr or pr_event["base"]["repo"]["full_name"] != repo:
+        parser.error("event does not identify the requested base PR")
+    return admit(api, args, pr_event)
 
 
 if __name__ == "__main__":

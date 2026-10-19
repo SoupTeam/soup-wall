@@ -1,7 +1,6 @@
 name: Linux MCP aggregate resource budgets
 
 on:
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -18,7 +17,7 @@ jobs:
       workflow: sou79-resource-budgets.yml
   required-disposable-delegated-linux:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'required-disposable-delegated-linux')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'required-disposable-delegated-linux')
     # This job explicitly prepares ONE disposable, owned delegated service.
     # Other hosted checks retain their existing permissions and prerequisites.
     runs-on: ubuntu-22.04

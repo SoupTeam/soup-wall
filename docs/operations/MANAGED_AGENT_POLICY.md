@@ -4,6 +4,10 @@
 
 ## Purpose and policy separation
 
+For policy changes while native MCP collectors remain active, see the
+[transition contract and runbook](MANAGED_NATIVE_TRANSITIONS.md), including
+`activation_pending`, result withholding and higher-sequence rollback.
+
 Console manages immutable, approved **AgentPolicySet YAML** revisions. These are not Gateway `TenantPolicyDocument` model policies; the existing Gateway policy APIs remain unchanged. Agent enrollment credentials are entirely separate from admin, tenant proxy and workspace service tokens.
 
 Rollout stages stored per enrolled Agent:

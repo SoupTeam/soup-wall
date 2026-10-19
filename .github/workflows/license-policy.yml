@@ -1,9 +1,6 @@
 name: License and provenance policy
 
 on:
-  pull_request:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -21,7 +18,7 @@ jobs:
       workflow: license-policy.yml
   rust-license-policy:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'rust-license-policy')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'rust-license-policy')
     name: Locked workspace license policy
     runs-on: ubuntu-latest
     timeout-minutes: 20

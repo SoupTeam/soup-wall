@@ -1,7 +1,6 @@
 name: TLS lifecycle
 
 on:
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -19,7 +18,7 @@ jobs:
       workflow: tls-lifecycle.yml
   linux:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'linux')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux')
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:

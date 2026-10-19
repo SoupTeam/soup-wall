@@ -1,7 +1,6 @@
 name: Constrained MCP HTTPS GET
 
 on:
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -18,7 +17,7 @@ jobs:
       workflow: mcp-https-get.yml
   linux-https-get:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'linux-https-get')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-https-get')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -42,6 +41,17 @@ jobs:
           set -o pipefail
           cargo test --locked -p agentfw --lib -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou56-native-unit.log"
           cargo test --locked -p agentfw --test native_endpoint -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou56-native-router.log"
+          cargo test --locked -p agentfw --test mcp_admission sou88 -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou88-execution.log"
+          cargo test --locked -p agentfw --test resource_approval_witness -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou88-authorization.log"
+          python3 - <<'PYCODE'
+          import os
+          from pathlib import Path
+          log = Path(os.environ['RUNNER_TEMP'], 'sou88-execution.log').read_text()
+          for operation in ('read_document', 'https_get'):
+              for scenario in ('reject', 'expired', 'mutated', 'cancelled', 'duplicate-pending', 'approved'):
+                  marker = f'SOU88_EXECUTION operation={operation} scenario={scenario} passed=true'
+                  assert log.count(marker) == 1, marker
+          PYCODE
           cargo clippy --locked -p agentfw --all-targets -- -D warnings 2>&1 | tee "$RUNNER_TEMP/sou56-clippy.log"
       - name: Require nonempty passing native evidence
         run: |
@@ -74,5 +84,6 @@ jobs:
             ${{ runner.temp }}/sou56-*.jsonl
             ${{ runner.temp }}/sou56-*.txt
             ${{ runner.temp }}/sou56-*.log
+            ${{ runner.temp }}/sou88-*.log
           if-no-files-found: warn
           retention-days: 30

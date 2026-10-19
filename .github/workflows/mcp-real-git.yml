@@ -1,7 +1,6 @@
 name: Real Git MCP profile
 
 on:
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -18,7 +17,7 @@ jobs:
       workflow: mcp-real-git.yml
   required-linux-git:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'required-linux-git')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'required-linux-git')
     runs-on: ubuntu-22.04
     timeout-minutes: 40
     env:

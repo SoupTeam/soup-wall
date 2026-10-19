@@ -1,7 +1,6 @@
 name: Native Windows MCP document read
 
 on:
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -18,7 +17,7 @@ jobs:
       workflow: mcp-windows-read.yml
   native-windows-standard-user:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'native-windows-standard-user')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-windows-standard-user')
     runs-on: windows-2022
     timeout-minutes: 40
     steps:

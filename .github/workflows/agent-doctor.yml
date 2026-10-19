@@ -1,10 +1,13 @@
 name: SOU-74 installed Agent doctor
 on:
-  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   impact:
@@ -13,7 +16,7 @@ jobs:
       workflow: agent-doctor.yml
   agent-doctor-linux:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'agent-doctor-linux')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'agent-doctor-linux')
     name: doctor-linux
     runs-on: ubuntu-24.04
     timeout-minutes: 25

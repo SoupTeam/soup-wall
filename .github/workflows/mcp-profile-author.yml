@@ -1,9 +1,12 @@
 name: SOU-65 focused MCP profile authoring
 on:
-  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   impact:
     uses: ./.github/workflows/ci-impact-plan.yml
@@ -11,7 +14,7 @@ jobs:
       workflow: mcp-profile-author.yml
   author-cli:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'author-cli')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'author-cli')
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:

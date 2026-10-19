@@ -1,7 +1,6 @@
 name: Native Windows installed Agent self-test
 
 on:
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -18,7 +17,7 @@ jobs:
       workflow: agent-windows-self-test.yml
   standard-user-self-test:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'standard-user-self-test')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'standard-user-self-test')
     runs-on: windows-2022
     timeout-minutes: 35
     steps:

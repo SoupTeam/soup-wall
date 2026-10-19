@@ -11,6 +11,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Development](DEVELOPMENT.md) | Prerequisites, platform differences, first build, local baseline and focused checks |
 | [Clean setup and status preparation](operations/CLEAN_SETUP_ACCEPTANCE.md) | Disposable Agent installation, truthful daemon-status evidence and read-only scanning audit |
 | [Change-aware CI admission](operations/CI_CHANGE_AWARE.md) | Trusted source-bound plan, aggregate status, full qualification and maintainer activation |
+| [Shared VPS CI](operations/VPS_CI.md) | Main/manual Windows smoke, default-feature checks and owned WSL driver tests on the shared team worker |
 | [Contributing](../CONTRIBUTING.md) | Pull request expectations, regression cases and compatibility rules |
 | [Architecture](ARCHITECTURE.md) | Workspace source map and decision boundaries |
 | [Source provenance](PROVENANCE.md) | License intake, attribution and the current dependency/advisory boundary |
@@ -36,6 +37,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Bounded Agent audit retention](operations/AGENT_AUDIT_RETENTION.md) | Opt-in Linux segments, crash recovery, private verified export and loss-aware browsing |
 | [Roadmap support and evidence report](operations/ROADMAP_SUPPORT_REPORT.md) | Offline exact-source support matrix, evidence validation, private report and review boundaries |
 | [Opt-in stdio MCP admission](operations/MCP_STDIO_ADMISSION.md) | Reviewed schemas, pre-execution calls and result release to the MCP host |
+| [Managed policy transitions in active MCP sessions](operations/MANAGED_NATIVE_TRANSITIONS.md) | Dispatch/result boundaries, stale approvals, signed rollback and independent runtime evidence |
 | [Native MCP diagnostic output](operations/NATIVE_MCP_STDERR.md) | Bounded discarded child stderr, safe metadata, owned cleanup and required Linux evidence |
 | [Sandboxed real filesystem MCP](operations/MCP_REAL_FILESYSTEM.md) | Explicit pinned Linux read-only server, bounded overlap/cancellation and required actual-host acceptance |
 | [Linux MCP resource budgets](operations/MCP_LINUX_RESOURCE_BUDGETS.md) | Opt-in delegated aggregate memory, CPU and task limits, wall expiry and independent Linux witnesses |

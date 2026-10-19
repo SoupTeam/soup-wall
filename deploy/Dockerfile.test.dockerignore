@@ -22,6 +22,8 @@
 !crates/adapter/tests/attack_scenarios.rs
 !crates/agentfw/tests/
 !crates/agentfw/tests/mcp_admission.rs
+!crates/agentfw/tests/support/
+!crates/agentfw/tests/support/resource_approval_execution.rs
 !crates/agentfw/tests/native_endpoint.rs
 !crates/agentfw/tests/judge_endpoint.rs
 !vendor/
@@ -30,6 +32,8 @@
 !scripts/
 !scripts/test-environment.py
 !scripts/clean-setup-acceptance.py
+!scripts/fixtures/
+!scripts/fixtures/mcp_https_get_probe_server.py
 !scripts/tests/
 !scripts/tests/test_test_environment.py
 !rule_baseline/

@@ -1,6 +1,5 @@
 name: Agent fleet projection
 on:
-  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
@@ -14,7 +13,7 @@ jobs:
       workflow: agent-fleet.yml
   fleet:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs), 'fleet')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'fleet')
     name: Fleet API and real dual-store browser witness
     runs-on: ubuntu-24.04
     timeout-minutes: 40

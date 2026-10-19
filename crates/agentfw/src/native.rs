@@ -23,6 +23,7 @@ pub mod child_authority;
 pub mod continuity;
 pub mod liveness;
 pub mod resource;
+pub mod resource_approval;
 
 pub const CONTRACT: &str = "sw-native/1";
 pub const MAX_BODY: usize = 1024 * 1024;
@@ -375,6 +376,7 @@ enum Stage {
 
 #[derive(Clone)]
 struct Call {
+    managed_policy: Option<soup_wall_agent::engine::ManagedActivePolicy>,
     host_call_id: Option<Value>,
     contract_version: &'static str,
     tool: String,
@@ -387,6 +389,7 @@ struct Call {
 
 #[derive(Clone)]
 pub(crate) struct Session {
+    policy_transition: bool,
     pub host_session: Option<String>,
     pub server_id: Option<String>,
     pub agent_id: Option<String>,
@@ -525,6 +528,12 @@ pub struct NativeState {
     pub(crate) sessions: Mutex<Sessions>,
     pub(crate) approval: Option<approval::ApprovalState>,
     test_time_offset_ms: std::sync::atomic::AtomicU64,
+    pub(crate) policy_barrier: Option<crate::policy_transition::Barrier>,
+}
+
+/// Session negotiation cannot change between the compatibility check and swap.
+pub(crate) struct PolicyTransitionGuard<'a> {
+    _sessions: MutexGuard<'a, Sessions>,
 }
 
 /// Keeps authority and parent epochs stable through a synchronous hook decision.
@@ -666,6 +675,7 @@ impl NativeState {
             sessions: Mutex::default(),
             approval: None,
             test_time_offset_ms: std::sync::atomic::AtomicU64::new(0),
+            policy_barrier: None,
         })
     }
 
@@ -676,6 +686,28 @@ impl NativeState {
     ) -> anyhow::Result<Self> {
         self.continuity = Some(continuity::Continuity::attach(home, &mut self, firewall)?);
         Ok(self)
+    }
+
+    pub fn with_policy_barrier(mut self, home: &std::path::Path) -> anyhow::Result<Self> {
+        self.policy_barrier = Some(crate::policy_transition::Barrier::new(home)?);
+        Ok(self)
+    }
+
+    pub(crate) fn policy_transition_guard(&self) -> anyhow::Result<PolicyTransitionGuard<'_>> {
+        let sessions = self
+            .sessions
+            .lock()
+            .map_err(|_| anyhow::anyhow!("native state unavailable"))?;
+        anyhow::ensure!(
+            sessions
+                .entries
+                .values()
+                .all(|session| session.policy_transition),
+            "managed activation requires transition-capable native collectors"
+        );
+        Ok(PolicyTransitionGuard {
+            _sessions: sessions,
+        })
     }
 
     /// Public runtime identifier, authenticated by the native transport endpoint.
@@ -871,6 +903,7 @@ impl NativeState {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Request {
+    policy_transition: Option<String>,
     contract_version: String,
     registry_sha256: String,
     session_id: String,
@@ -909,6 +942,7 @@ fn parse(body: &str) -> Result<Request, &'static str> {
     match event {
         "session_start" => {
             for key in [
+                "policy_transition",
                 "host_session",
                 "child_authority",
                 "server_id",
@@ -957,6 +991,13 @@ fn parse(body: &str) -> Result<Request, &'static str> {
     }
     if object.keys().map(String::as_str).collect::<BTreeSet<_>>() != keys {
         return Err("native_invalid_fields");
+    }
+    if request
+        .policy_transition
+        .as_deref()
+        .is_some_and(|v| v != crate::policy_transition::CONTRACT)
+    {
+        return Err("native_policy_transition_unsupported");
     }
     if request
         .host_session
@@ -1018,10 +1059,15 @@ fn parse(body: &str) -> Result<Request, &'static str> {
         return Err("native_invalid_fields");
     }
     if let Some(id) = &request.approval_id {
-        if !identifier(id)
-            || request.contract_version != CONTRACT
-            || request.resource_admission.is_some()
-        {
+        if !identifier(id) {
+            return Err("native_invalid_fields");
+        }
+        let is_plain = request.contract_version == CONTRACT && request.resource_admission.is_none();
+        let is_supported_resource = matches!(
+            request.contract_version.as_str(),
+            resource::CONTRACT | resource::CREATE_CONTRACT | resource::NETWORK_CONTRACT
+        ) && request.resource_admission.is_some();
+        if !is_plain && !is_supported_resource {
             return Err("native_invalid_fields");
         }
     }
@@ -1040,6 +1086,8 @@ fn parse(body: &str) -> Result<Request, &'static str> {
 
 #[derive(Serialize)]
 struct Response {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    managed_policy: Option<soup_wall_agent::engine::ManagedActivePolicy>,
     contract_version: &'static str,
     registry_sha256: String,
     session_id: String,
@@ -1667,6 +1715,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         session.calls.retain(|_, call| call.expires > now);
     }
     let mut response = Response {
+        managed_policy: firewall.active_managed_policy(),
         contract_version: match request.contract_version.as_str() {
             resource::CONTRACT => resource::CONTRACT,
             resource::CREATE_CONTRACT => resource::CREATE_CONTRACT,
@@ -1691,6 +1740,9 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         owner_token: None,
     };
     if request.event == "session_start" {
+        if firewall.active_managed_policy().is_some() && request.policy_transition.is_none() {
+            return Err("native_policy_transition_required");
+        }
         if let Some(existing) = state.entries.get(&request.session_id) {
             if existing.is_dead(now, now_ms, &state) {
                 let existing_epoch = existing.epoch.clone();
@@ -1918,6 +1970,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         });
         let owner_token = format!("owner:{}", crate::token::generate());
         let session = Session {
+            policy_transition: request.policy_transition.is_some(),
             parent_epoch,
             authority_digest: request
                 .child_authority
@@ -2121,14 +2174,37 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         }
         if let Some(policy) = &tool.resource_policy {
             if request.contract_version != policy.contract() {
+                if let Some(ref approval_id) = request.approval_id {
+                    if let Some(ref approval) = native.approval {
+                        approval.invalidate(
+                            approval_id,
+                            &request.session_id,
+                            "native_resource_contract_required",
+                        );
+                    }
+                }
                 return Err("native_resource_contract_required");
             }
             let Some(admission) = &request.resource_admission else {
+                if let Some(ref approval_id) = request.approval_id {
+                    if let Some(ref approval) = native.approval {
+                        approval.invalidate(
+                            approval_id,
+                            &request.session_id,
+                            "native_resource_contract_required",
+                        );
+                    }
+                }
                 return Err("native_resource_contract_required");
             };
             if let Err(reason) =
                 resource::authorize(policy, tool, &native.registry_sha256, args, admission)
             {
+                if let Some(ref approval_id) = request.approval_id {
+                    if let Some(ref approval) = native.approval {
+                        approval.invalidate(approval_id, &request.session_id, reason);
+                    }
+                }
                 response.verdict = "deny";
                 response.release = false;
                 response.reason_codes.push(reason.into());
@@ -2143,6 +2219,15 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                 return Ok(response);
             }
         } else if request.resource_admission.is_some() {
+            if let Some(ref approval_id) = request.approval_id {
+                if let Some(ref approval) = native.approval {
+                    approval.invalidate(
+                        approval_id,
+                        &request.session_id,
+                        "native_resource_policy_missing",
+                    );
+                }
+            }
             return Err("native_resource_policy_missing");
         }
         if total_calls >= MAX_CALLS || session.calls.len() >= MAX_SESSION_CALLS {
@@ -2166,9 +2251,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             let outcome_host = firewall.inspect_native_call(&ev_host, tool.action_class, &hosts);
             outcome = merge_provenance_outcomes(outcome, outcome_host);
         }
-        let verdict = resolved(&outcome);
-        response.verdict = verdict_label(verdict);
-        response.release = verdict == Verdict::Allow;
+        let mut verdict = resolved(&outcome);
         response.reason_codes = outcome.rule.iter().cloned().collect();
         if tool
             .resource_policy
@@ -2176,12 +2259,13 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             .is_some_and(|policy| policy.is_https_get() || policy.is_https_post())
             && !firewall.egress_hosts_allowlisted(&hosts)
         {
-            response.verdict = "deny";
-            response.release = false;
+            verdict = Verdict::Deny;
             response
                 .reason_codes
                 .push("native_https_egress_not_allowlisted".into());
         }
+        response.verdict = verdict_label(verdict);
+        response.release = verdict == Verdict::Allow;
         let legacy_bound = binding(
             &native.registry_sha256,
             &session.epoch,
@@ -2199,28 +2283,67 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             // Exact single-use operator approval, rechecked against the policy
             // verdict computed just now. A hard Deny can never be rescued.
             let approval = native.approval.as_ref().ok_or("native_approval_disabled")?;
-            match approval.redeem(
-                approval_id,
-                &request.session_id,
-                &session.epoch,
-                name,
-                &tool.schema_sha256,
-                &bound,
-                verdict,
-            ) {
-                Ok(()) => {
-                    response.verdict = "allow";
-                    response.release = true;
-                    response
-                        .reason_codes
-                        .push(format!("native_approval_redeemed:{approval_id}"));
-                }
-                Err(code) => {
-                    response.release = false;
-                    if verdict != Verdict::Deny {
-                        response.verdict = "ask";
+            if verdict == Verdict::Deny {
+                // An explicit hard Deny (including egress denial or lineage floor failure)
+                // can never be approved or redeemed. Terminally invalidate the presented approval.
+                approval.invalidate(
+                    approval_id,
+                    &request.session_id,
+                    "native_approval_hard_deny",
+                );
+                response.verdict = "deny";
+                response.release = false;
+                response
+                    .reason_codes
+                    .push("native_approval_hard_deny".into());
+            } else {
+                let revalidate = if tool.resource_policy.is_some() {
+                    resource_approval::revalidate_resource_execution(
+                        tool,
+                        args,
+                        request.resource_admission.as_ref(),
+                    )
+                } else {
+                    Ok(())
+                };
+                match revalidate {
+                    Ok(()) => {
+                        match approval.redeem(
+                            approval_id,
+                            &request.session_id,
+                            &session.epoch,
+                            name,
+                            &tool.schema_sha256,
+                            &bound,
+                            verdict,
+                        ) {
+                            Ok(()) => {
+                                response.verdict = "allow";
+                                response.release = true;
+                                response
+                                    .reason_codes
+                                    .push(format!("native_approval_redeemed:{approval_id}"));
+                            }
+                            Err(code) => {
+                                response.release = false;
+                                if verdict != Verdict::Deny {
+                                    response.verdict = "ask";
+                                }
+                                response.reason_codes.push(code.into());
+                            }
+                        }
                     }
-                    response.reason_codes.push(code.into());
+                    Err(code) => {
+                        // Terminal invalidation on failed presented approval:
+                        // a refused mutation must not leave an approval retryable under
+                        // the documented terminal-refusal contract.
+                        approval.invalidate(approval_id, &request.session_id, code);
+                        response.release = false;
+                        if verdict != Verdict::Deny {
+                            response.verdict = "ask";
+                        }
+                        response.reason_codes.push(code.into());
+                    }
                 }
             }
         }
@@ -2243,6 +2366,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             session.calls.insert(
                 id.clone(),
                 Call {
+                    managed_policy: firewall.active_managed_policy(),
                     host_call_id: request.mcp_host_call_id.clone().or_else(|| {
                         request
                             .resource_admission
@@ -2293,6 +2417,42 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         || call.args_sha256 != args_hash(args)
     {
         return Err("native_call_binding_mismatch");
+    }
+    // A previously dispatched effect cannot be undone. Its result is a new
+    // release boundary: a changed policy must authorize the original action
+    // again, without reusing an old Ask approval, before inspecting its content.
+    if call.managed_policy != firewall.active_managed_policy() {
+        let hosts = declared_hosts(tool, args)?;
+        let kind = EventKind::ToolCall {
+            tool: name.into(),
+            args: args.clone(),
+        };
+        let mut outcome =
+            firewall.inspect_native_call(&session.event(kind.clone()), tool.action_class, &hosts);
+        if let Some(host) = &session.host_session {
+            let host_outcome = firewall.inspect_native_call(
+                &session.host_event(host, session.seq, kind),
+                tool.action_class,
+                &hosts,
+            );
+            outcome = merge_provenance_outcomes(outcome, host_outcome);
+        }
+        let verdict = resolved(&outcome);
+        if verdict != Verdict::Allow {
+            response.verdict = verdict_label(verdict);
+            response.release = false;
+            response.reason_codes = vec!["native_policy_transition_result_refused".into()];
+            response.reason_codes.extend(outcome.rule.iter().cloned());
+            audit(
+                st,
+                &request,
+                session,
+                &response,
+                Some(&outcome),
+                started.elapsed().as_micros(),
+            )?;
+            return Ok(response);
+        }
     }
     let content = request.content.as_deref().ok_or("native_content_missing")?;
     let texts = if request.event == "result" {
@@ -2548,6 +2708,9 @@ fn audit(
         "delivery": request.delivery,
         "call_id": response.call_id, "binding_sha256": response.binding_sha256,
         "content_sha256": response.content_sha256, "reason_codes": response.reason_codes});
+    if let Some(policy) = &response.managed_policy {
+        record["managed_policy"] = json!(policy);
+    }
     if let Some(host_session) = &session.host_session {
         record["host_session"] = json!(host_session);
     }
@@ -2648,6 +2811,196 @@ mod tests {
     fn start(st: &Shared, id: &str) {
         let native = st.native.as_ref().unwrap();
         inspect(st, native, request(native, id, "session_start", json!({}))).unwrap();
+    }
+
+    fn managed_transition_activate(st: &Shared, sequence: u64, policy: &str) {
+        st.firewall.lock().unwrap().activate_managed_policy(
+            soup_wall_agent::AgentPolicySet::from_yaml(policy).unwrap(),
+            format!("revision-{sequence}"),
+            sequence,
+            hash(policy.as_bytes()),
+        );
+    }
+
+    fn managed_transition_start(st: &Shared) {
+        let native = st.native.as_ref().unwrap();
+        inspect(
+            st,
+            native,
+            request(
+                native,
+                "transition",
+                "session_start",
+                json!({"policy_transition": crate::policy_transition::CONTRACT}),
+            ),
+        )
+        .unwrap();
+    }
+
+    fn managed_transition_call(st: &Shared) -> Response {
+        let native = st.native.as_ref().unwrap();
+        inspect(
+            st,
+            native,
+            request(
+                native,
+                "transition",
+                "call",
+                json!({"tool":"lookup_note", "args":{}, "schema_sha256":"a".repeat(64)}),
+            ),
+        )
+        .unwrap()
+    }
+
+    fn managed_transition_result(st: &Shared, call: &Response) -> Result<Response, &'static str> {
+        let native = st.native.as_ref().unwrap();
+        inspect(
+            st,
+            native,
+            request(
+                native,
+                "transition",
+                "result",
+                json!({"tool":"lookup_note", "args":{}, "call_id":call.call_id,
+                "content":"ordinary useful result", "result_kind":"value", "delivery":"parent"}),
+            ),
+        )
+    }
+
+    #[test]
+    fn managed_transition_rechecks_old_call_even_when_new_result_policy_allows() {
+        for verdict in ["deny", "ask"] {
+            let dir = tempfile::tempdir().unwrap();
+            let st = fixture(dir.path());
+            managed_transition_activate(&st, 1, "default: allow\n");
+            managed_transition_start(&st);
+            let call = managed_transition_call(&st);
+            assert!(call.release);
+            let policy = format!("default: allow\nagent_policies:\n  - name: changed-read\n    when: {{action_class: read_only}}\n    action: {verdict}\n");
+            managed_transition_activate(&st, 2, &policy);
+            // The new rule matches only the action; ordinary result text alone
+            // would pass. Reusing the old call receipt must still withhold it.
+            let response = managed_transition_result(&st, &call).unwrap();
+            assert!(!response.release);
+            assert_eq!(response.verdict, verdict);
+            assert!(response
+                .reason_codes
+                .iter()
+                .any(|c| c == "native_policy_transition_result_refused"));
+            assert_eq!(response.managed_policy.unwrap().deployment_sequence, 2);
+            assert_eq!(
+                managed_transition_result(&st, &call).err(),
+                Some("native_call_unknown_or_spent")
+            );
+        }
+    }
+
+    #[test]
+    fn managed_transition_rollback_keeps_session_and_allows_new_useful_work() {
+        let dir = tempfile::tempdir().unwrap();
+        let st = fixture(dir.path());
+        managed_transition_activate(&st, 1, "default: allow\n");
+        managed_transition_start(&st);
+        let old = managed_transition_call(&st);
+        managed_transition_activate(&st, 2, "default: deny\n");
+        assert!(!managed_transition_call(&st).release);
+        assert!(!managed_transition_result(&st, &old).unwrap().release);
+        managed_transition_activate(&st, 3, "default: allow\n");
+        let fresh = managed_transition_call(&st);
+        assert!(fresh.release);
+        assert_eq!(
+            fresh.managed_policy.as_ref().unwrap().deployment_sequence,
+            3
+        );
+        assert!(managed_transition_result(&st, &fresh).unwrap().release);
+        assert_eq!(
+            managed_transition_result(&st, &old).err(),
+            Some("native_call_unknown_or_spent")
+        );
+    }
+
+    #[test]
+    fn managed_transition_preserves_existing_taint_and_incomplete_history() {
+        let dir = tempfile::tempdir().unwrap();
+        let st = fixture(dir.path());
+        managed_transition_start(&st);
+        let epoch = st.native.as_ref().unwrap().sessions.lock().unwrap().entries["transition"]
+            .epoch
+            .clone();
+        {
+            let mut fw = st.firewall.lock().unwrap();
+            fw.admit_native_result(&event(
+                &epoch,
+                2,
+                EventKind::ToolResult {
+                    tool: "lookup_note".into(),
+                    content: "A long neutral note from an untrusted native source retained across managed policy transitions.".into(),
+                    source: Provenance::Native {
+                        registry: "transition-fixture".into(),
+                        tool: "lookup_note".into(),
+                    },
+                },
+            ));
+            fw.mark_provenance_incomplete(&epoch);
+            assert!(fw.taint_len(&epoch) > 0);
+        }
+        for sequence in 1..=3 {
+            managed_transition_activate(&st, sequence, "default: allow\n");
+            let fw = st.firewall.lock().unwrap();
+            assert!(fw.taint_len(&epoch) > 0);
+            assert!(fw.provenance_incomplete(&epoch));
+        }
+        // Incomplete history constrains sensitive reads, while ordinary
+        // read-only continuation remains useful.
+        assert!(managed_transition_call(&st).release);
+        let native = st.native.as_ref().unwrap();
+        let sensitive = inspect(
+            &st,
+            native,
+            request(
+                native,
+                "transition",
+                "call",
+                json!({
+                    "tool":"lookup_note", "args":{"path":"/workspace/.env"},
+                    "schema_sha256":"a".repeat(64)
+                }),
+            ),
+        )
+        .unwrap();
+        assert!(!sensitive.release);
+        assert!(sensitive
+            .reason_codes
+            .iter()
+            .any(|code| code == "taint-history-incomplete"));
+    }
+
+    #[test]
+    fn managed_transition_legacy_collector_cannot_cross_first_activation() {
+        let dir = tempfile::tempdir().unwrap();
+        let st = fixture(dir.path());
+        let native = st.native.as_ref().unwrap();
+        start(&st, "legacy");
+        assert!(native.policy_transition_guard().is_err());
+        inspect(
+            &st,
+            native,
+            request(native, "legacy", "session_end", json!({})),
+        )
+        .unwrap();
+        assert!(native.policy_transition_guard().is_ok());
+        managed_transition_activate(&st, 1, "default: allow\n");
+        assert_eq!(
+            inspect(
+                &st,
+                native,
+                request(native, "legacy", "session_start", json!({}))
+            )
+            .err(),
+            Some("native_policy_transition_required")
+        );
+        managed_transition_start(&st);
+        assert!(native.policy_transition_guard().is_ok());
     }
 
     fn mcp_host_completion(
