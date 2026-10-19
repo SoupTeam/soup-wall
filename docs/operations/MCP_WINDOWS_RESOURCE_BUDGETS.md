@@ -151,7 +151,11 @@ local paths are not shareable evidence. Preserve failed and late reports.
 
 The existing central Ready-for-review `agent-windows-security` job builds the
 actual candidate and runs `ci-windows-mcp-budgets.ps1` under a disposable standard
-account, outside the checkout. It retains source identities and all outcomes even
+account, outside the checkout. Its unique staging directory is under
+`ProgramData` with a protected DACL allowing only that disposable user, SYSTEM
+and the runner account; no parent or runtime permissions are widened. This avoids
+requiring the standard user to enumerate the runner’s private temporary parent.
+It retains source identities and all outcomes even
 on failure. There is no added per-push matrix or activation/selection policy.
 Keep the PR Draft until implementation is ready for qualification. A passing
 macOS unit test or a Job API mock does **not** establish Windows acceptance.

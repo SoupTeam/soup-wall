@@ -22,7 +22,10 @@ $out = [IO.Path]::GetFullPath($OutputDirectory)
 if (Test-Path -LiteralPath $out) { throw 'Refusing to overwrite budget evidence' }
 [IO.Directory]::CreateDirectory($out) | Out-Null
 $name = 'swb' + [guid]::NewGuid().ToString('N').Substring(0, 12)
-$stage = Join-Path ([IO.Path]::GetTempPath()) $name
+# runner TEMP can have non-traversable/listable parent ACLs for the disposable
+# user. Keep the unique stage outside the checkout under ProgramData, with the
+# same protected user/SYSTEM/runner-only ACL on the stage itself.
+$stage = Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) $name
 $user = $null
 $process = $null
 $exitCode = 1

@@ -10,12 +10,16 @@ $PSNativeCommandUseErrorActionPreference = $false
 $rootPath = (Resolve-Path -LiteralPath $Root).Path
 $out = Join-Path $rootPath 'evidence'
 $exitCode = 1
-$report = [ordered]@{ format = 'sou96-windows-budget-standard-user/1'; status = 'incomplete'; error = $null; phase = 'standard_user_check'; exception_type = $null; hresult = $null; native_exit_code = $null; python_error_types = @(); python_trace_lines = @() }
+$report = [ordered]@{ format = 'sou96-windows-budget-standard-user/1'; status = 'incomplete'; error = $null; phase = 'standard_user_check'; exception_type = $null; hresult = $null; failure_line = $null; native_exit_code = $null; python_error_types = @(); python_trace_lines = @() }
 try {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = [Security.Principal.WindowsPrincipal]::new($identity)
     if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'standard_user_required' }
-    Set-Location -LiteralPath $rootPath
+    $report.phase = 'private_working_directory'
+    # Set the native process directory without asking the PowerShell filesystem
+    # provider to enumerate a runner-owned parent outside this private stage.
+    [Environment]::CurrentDirectory = $rootPath
+    $report.phase = 'private_temp'
     $env:TEMP = $rootPath
     $env:TMP = $rootPath
     $report.phase = 'python_invocation'
@@ -52,6 +56,7 @@ try {
     $report.error = 'standard_user_acceptance_failed'
     $report.exception_type = $_.Exception.GetType().Name
     $report.hresult = $_.Exception.HResult
+    $report.failure_line = $_.InvocationInfo.ScriptLineNumber
     $exitCode = 1
 } finally {
     [IO.Directory]::CreateDirectory($out) | Out-Null
