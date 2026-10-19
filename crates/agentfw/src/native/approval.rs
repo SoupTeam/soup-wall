@@ -394,8 +394,31 @@ pub async fn handler(
     {
         return failure("native_invalid_identity", StatusCode::BAD_REQUEST);
     }
+    let identity = match super::liveness::collector_identity(&headers) {
+        Ok(identity) => identity,
+        Err(code) => return failure(code, StatusCode::BAD_REQUEST),
+    };
+    // Hold the native owner stable through status/cancel (native -> records).
+    // Opening takes the same native lock itself before creating any record.
+    let owner_guard = if request.action != "request" && identity.is_some() {
+        let state = match native.sessions.lock() {
+            Ok(state) => state,
+            Err(_) => return failure("native_state_unavailable", StatusCode::SERVICE_UNAVAILABLE),
+        };
+        let verified = state
+            .entries
+            .get(&request.session_id)
+            .ok_or("native_session_unknown")
+            .and_then(|session| identity.as_ref().unwrap().verify(native, session));
+        if let Err(code) = verified {
+            return failure(code, StatusCode::CONFLICT);
+        }
+        Some(state)
+    } else {
+        None
+    };
     let result = match request.action.as_str() {
-        "request" => open(&st, native, approval, &request),
+        "request" => open_bound(&st, native, approval, &request, identity.as_ref()),
         "status" => {
             let Some(id) = request.pending_id.as_deref().filter(|id| identifier(id)) else {
                 return failure("native_invalid_fields", StatusCode::BAD_REQUEST);
@@ -415,6 +438,7 @@ pub async fn handler(
         }
         _ => Err("native_invalid_event"),
     };
+    drop(owner_guard);
     match result {
         Ok(value) => (StatusCode::OK, Json(value)),
         Err(code) => failure(code, StatusCode::CONFLICT),
@@ -452,11 +476,22 @@ fn cancel(
     )
 }
 
+#[cfg(test)]
 fn open(
     st: &Shared,
     native: &super::NativeState,
     approval: &ApprovalState,
     request: &ApprovalRequest,
+) -> Result<Value, &'static str> {
+    open_bound(st, native, approval, request, None)
+}
+
+fn open_bound(
+    st: &Shared,
+    native: &super::NativeState,
+    approval: &ApprovalState,
+    request: &ApprovalRequest,
+    identity: Option<&super::liveness::CollectorIdentity>,
 ) -> Result<Value, &'static str> {
     let source = match request.source.as_deref() {
         Some("daemon") => Source::Daemon,
@@ -480,6 +515,9 @@ fn open(
         .entries
         .get(&request.session_id)
         .ok_or("native_session_unknown")?;
+    if let Some(identity) = identity {
+        identity.verify(native, session)?;
+    }
     if super::validate_lineage(&state, session, now_ms(), Instant::now()).is_err() {
         return Err("native_approval_hard_deny");
     }
@@ -1300,5 +1338,76 @@ mod tests {
             policy.executor_sha256 = "0".repeat(64);
         }
         assert!(!crate::native::resource_approval::is_supported_linux_resource_tool(&tool));
+    }
+    #[tokio::test]
+    async fn sou89_collector_guard_binds_approval_open_status_and_cancel_to_the_owner() {
+        let env = env(Some(60));
+        let start = env
+            .send(
+                "s1",
+                json!({"event":"session_start", "liveness":"sw-native-liveness/1"}),
+            )
+            .unwrap();
+        let epoch = env.native().sessions.lock().unwrap().entries["s1"]
+            .epoch
+            .clone();
+        let identity = json!({"contract_version":"sw-native-liveness/1", "instance_id":env.native().instance_id(),
+            "epoch":epoch, "owner_token":start.owner_token.unwrap()});
+        let headers = |identity: &Value| {
+            let mut h = HeaderMap::new();
+            h.insert(
+                "authorization",
+                format!("Bearer {}", env.native().token).parse().unwrap(),
+            );
+            h.insert(
+                super::super::liveness::COLLECTOR_IDENTITY_HEADER,
+                identity.to_string().parse().unwrap(),
+            );
+            h
+        };
+        let request = json!({"contract_version":CONTRACT,"registry_sha256":env.native().registry_sha256,
+            "session_id":"s1","action":"request","source":"daemon","tool":"delete_note",
+            "schema_sha256":"a".repeat(64),"args":{"name":"inventory"}});
+        let mut forged = identity.clone();
+        forged["owner_token"] = json!("peer-owner");
+        let (status, _) = handler(
+            AxState(env.st.clone()),
+            headers(&forged),
+            request.to_string(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert!(operator_list(env.home()).is_empty());
+        let (status, Json(opened)) = handler(
+            AxState(env.st.clone()),
+            headers(&identity),
+            request.to_string(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let pending = opened["pending_id"].as_str().unwrap();
+        for action in ["status", "cancel"] {
+            let body = json!({"contract_version":CONTRACT,"registry_sha256":env.native().registry_sha256,
+                "session_id":"s1","action":action,"pending_id":pending});
+            let (status, _) =
+                handler(AxState(env.st.clone()), headers(&forged), body.to_string()).await;
+            assert_eq!(status, StatusCode::CONFLICT);
+            assert_eq!(env.state("s1", pending), "pending");
+            let (status, Json(reply)) = handler(
+                AxState(env.st.clone()),
+                headers(&identity),
+                body.to_string(),
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(
+                reply["state"],
+                if action == "status" {
+                    "pending"
+                } else {
+                    "cancelled"
+                }
+            );
+        }
     }
 }

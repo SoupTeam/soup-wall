@@ -21,6 +21,7 @@ use crate::handlers::Shared;
 pub mod approval;
 pub mod child_authority;
 pub mod continuity;
+pub mod liveness;
 pub mod resource;
 pub mod resource_approval;
 
@@ -30,6 +31,7 @@ pub const MAX_CONTENT: usize = 262_144;
 const MAX_SESSIONS: usize = 64;
 const MAX_CALLS: usize = 256;
 const MAX_SESSION_CALLS: usize = 64;
+pub(crate) const MAX_SPENT_AUTHORITIES: usize = MAX_SESSIONS * 8;
 const TTL: Duration = Duration::from_secs(300);
 
 #[derive(Clone, Debug, Deserialize)]
@@ -86,7 +88,7 @@ pub fn is_digest(value: &str) -> bool {
             .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
 }
 
-fn identifier(value: &str) -> bool {
+pub(crate) fn identifier(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
         && value
@@ -372,6 +374,7 @@ enum Stage {
     Context,
 }
 
+#[derive(Clone)]
 struct Call {
     managed_policy: Option<soup_wall_agent::engine::ManagedActivePolicy>,
     host_call_id: Option<Value>,
@@ -384,7 +387,8 @@ struct Call {
     result_kind: Option<String>,
 }
 
-struct Session {
+#[derive(Clone)]
+pub(crate) struct Session {
     policy_transition: bool,
     pub host_session: Option<String>,
     pub server_id: Option<String>,
@@ -393,15 +397,38 @@ struct Session {
     pub granted_tools: Vec<String>,
     pub granted_resources: Option<Vec<String>>,
     pub authority_expires_at_ms: Option<u64>,
-    parent_epoch: Option<String>,
+    pub(crate) parent_epoch: Option<String>,
     authority_digest: Option<String>,
-    epoch: String,
+    pub(crate) epoch: String,
+    pub(crate) owner_token: String,
     seq: u64,
-    touched: Instant,
+    pub(crate) touched: Instant,
     calls: BTreeMap<String, Call>,
+    pub(crate) liveness_lease: Option<liveness::Lease>,
+    pub(crate) terminal: bool,
 }
 
 impl Session {
+    pub(crate) fn is_dead(&self, now: Instant, now_ms: u64, sessions: &Sessions) -> bool {
+        if self.terminal {
+            return true;
+        }
+        if let Some(lease) = &self.liveness_lease {
+            if lease.is_expired(now) || validate_lineage(sessions, self, now_ms, now).is_err() {
+                return true;
+            }
+        } else if now.duration_since(self.touched) >= TTL {
+            return true;
+        }
+        if self
+            .authority_expires_at_ms
+            .is_some_and(|exp| now_ms >= exp)
+        {
+            return true;
+        }
+        false
+    }
+
     fn event_at(&self, seq: u64, kind: EventKind) -> AgentEvent {
         event_scoped(
             &self.epoch,
@@ -428,21 +455,31 @@ impl Session {
 }
 
 #[derive(Default)]
-struct Sessions {
-    entries: BTreeMap<String, Session>,
+pub(crate) struct Sessions {
+    pub(crate) entries: BTreeMap<String, Session>,
     // Bounded tombstones prevent a completed scoped host from silently reverting
     // to unsigned hooks. Reaching the cap refuses new host IDs until restart.
-    scoped_hosts: BTreeSet<String>,
+    pub(crate) scoped_hosts: BTreeSet<String>,
+    // Spent child authority ledger: maps authority_digest to expires_at_ms.
+    // Prevents reuse of signed child authority grants across sessions or after reclamation.
+    pub(crate) spent_authorities: BTreeMap<String, u64>,
+}
+
+pub fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 fn wall_time_ms() -> Result<u64, &'static str> {
-    Ok(SystemTime::now()
+    SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_err(|_| "native_clock_unavailable")?
-        .as_millis() as u64)
+        .map(|d| d.as_millis() as u64)
+        .map_err(|_| "native_clock_unavailable")
 }
 
-fn validate_lineage(
+pub(crate) fn validate_lineage(
     state: &Sessions,
     session: &Session,
     now_ms: u64,
@@ -450,10 +487,19 @@ fn validate_lineage(
 ) -> Result<(), &'static str> {
     let mut current = session;
     for _ in 0..=MAX_SESSIONS {
-        if now.duration_since(current.touched) >= TTL
-            || current
-                .authority_expires_at_ms
-                .is_some_and(|expires| now_ms >= expires)
+        if current.terminal {
+            return Err("native_child_parent_unavailable");
+        }
+        if let Some(lease) = &current.liveness_lease {
+            if lease.is_expired(now) {
+                return Err("native_child_parent_unavailable");
+            }
+        } else if now.duration_since(current.touched) >= TTL {
+            return Err("native_child_authority_expired");
+        }
+        if current
+            .authority_expires_at_ms
+            .is_some_and(|expires| now_ms >= expires)
         {
             return Err("native_child_authority_expired");
         }
@@ -479,8 +525,9 @@ pub struct NativeState {
     pub token: String,
     instance_id: String,
     pub(crate) continuity: Option<continuity::Continuity>,
-    sessions: Mutex<Sessions>,
+    pub(crate) sessions: Mutex<Sessions>,
     pub(crate) approval: Option<approval::ApprovalState>,
+    test_time_offset_ms: std::sync::atomic::AtomicU64,
     pub(crate) policy_barrier: Option<crate::policy_transition::Barrier>,
 }
 
@@ -627,6 +674,7 @@ impl NativeState {
             continuity: None,
             sessions: Mutex::default(),
             approval: None,
+            test_time_offset_ms: std::sync::atomic::AtomicU64::new(0),
             policy_barrier: None,
         })
     }
@@ -666,6 +714,25 @@ impl NativeState {
     /// Scoped grant nonces bind to it without changing the HMAC wire encoding.
     pub fn instance_id(&self) -> &str {
         &self.instance_id
+    }
+
+    pub fn test_time_offset(&self) -> u64 {
+        self.test_time_offset_ms
+            .load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    pub fn monotonic_now(&self) -> Instant {
+        Instant::now() + Duration::from_millis(self.test_time_offset())
+    }
+
+    pub fn set_test_time_offset_ms(&self, offset_ms: u64) {
+        self.test_time_offset_ms
+            .store(offset_ms, std::sync::atomic::Ordering::Release);
+    }
+
+    pub fn advance_test_time_ms(&self, delta_ms: u64) {
+        self.test_time_offset_ms
+            .fetch_add(delta_ms, std::sync::atomic::Ordering::SeqCst);
     }
 
     /// Enable the opt-in pending-approval lifecycle (SOU-48). Absent = refusal.
@@ -836,6 +903,7 @@ impl NativeState {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Request {
+    liveness: Option<String>,
     policy_transition: Option<String>,
     contract_version: String,
     registry_sha256: String,
@@ -875,6 +943,7 @@ fn parse(body: &str) -> Result<Request, &'static str> {
     match event {
         "session_start" => {
             for key in [
+                "liveness",
                 "policy_transition",
                 "host_session",
                 "child_authority",
@@ -924,6 +993,13 @@ fn parse(body: &str) -> Result<Request, &'static str> {
     }
     if object.keys().map(String::as_str).collect::<BTreeSet<_>>() != keys {
         return Err("native_invalid_fields");
+    }
+    if request
+        .liveness
+        .as_deref()
+        .is_some_and(|version| version != liveness::LIVENESS_CONTRACT)
+    {
+        return Err("native_liveness_unsupported");
     }
     if request
         .policy_transition
@@ -1034,6 +1110,10 @@ struct Response {
     #[serde(skip_serializing_if = "Option::is_none")]
     resources_sha256: Option<String>,
     reason_codes: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    instance_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    owner_token: Option<String>,
 }
 
 fn merge_provenance_outcomes(mut local: Outcome, host: Outcome) -> Outcome {
@@ -1321,6 +1401,7 @@ fn failure(code: &'static str, status: StatusCode) -> (StatusCode, Json<Value>) 
 }
 
 /// Trusted issuer bootstrap; the identifier itself conveys no authority.
+/// Kept read-only so status polling does not mutate daemon state or bypass audit/continuity.
 pub async fn instance(State(st): State<Shared>, headers: HeaderMap) -> (StatusCode, Json<Value>) {
     let Some(native) = &st.native else {
         return failure("native_not_configured", StatusCode::NOT_FOUND);
@@ -1335,24 +1416,46 @@ pub async fn instance(State(st): State<Shared>, headers: HeaderMap) -> (StatusCo
     let Ok(sessions) = native.sessions.lock() else {
         return failure("native_state_unavailable", StatusCode::SERVICE_UNAVAILABLE);
     };
-    let Ok(now_ms) = wall_time_ms() else {
-        return failure("native_clock_unavailable", StatusCode::SERVICE_UNAVAILABLE);
-    };
-    let bindings: Vec<Value> = sessions.entries.values()
-        .filter(|s| s.host_session.is_some() && s.agent_id.is_some() && validate_lineage(&sessions, s, now_ms, Instant::now()).is_ok())
-        .map(|s| json!({"host_session":s.host_session,"agent_id":s.agent_id,"binding_sha256":hash(s.epoch.as_bytes())})).collect();
     let Ok(firewall) = st.firewall.lock() else {
         return failure(
             "native_inspection_unavailable",
             StatusCode::SERVICE_UNAVAILABLE,
         );
     };
+    let now = native.monotonic_now();
+    let now_ms = match wall_time_ms() {
+        Ok(ms) => ms + native.test_time_offset(),
+        Err(code) => return failure(code, StatusCode::SERVICE_UNAVAILABLE),
+    };
+    let bindings: Vec<Value> = sessions
+        .entries
+        .values()
+        .filter(|s| {
+            s.host_session.is_some()
+                && s.agent_id.is_some()
+                && !s.is_dead(now, now_ms, &sessions)
+                && validate_lineage(&sessions, s, now_ms, now).is_ok()
+        })
+        .map(|s| {
+            json!({
+                "host_session": s.host_session,
+                "agent_id": s.agent_id,
+                "binding_sha256": hash(s.epoch.as_bytes())
+            })
+        })
+        .collect();
     (
         StatusCode::OK,
-        Json(
-            json!({"instance_id":native.instance_id(), "registry_sha256":native.registry_sha256,"bindings":bindings,
-            "provenance":{"accounting_revision":"sw-provenance-storage/1","limits":firewall.provenance_limits(),"usage":firewall.provenance_usage()}}),
-        ),
+        Json(json!({
+            "instance_id": native.instance_id(),
+            "registry_sha256": native.registry_sha256,
+            "bindings": bindings,
+            "provenance": {
+                "accounting_revision": "sw-provenance-storage/1",
+                "limits": firewall.provenance_limits(),
+                "usage": firewall.provenance_usage(),
+            }
+        })),
     )
 }
 
@@ -1402,7 +1505,17 @@ pub async fn handler(
     {
         return failure("native_record_over_cap", StatusCode::PAYLOAD_TOO_LARGE);
     }
-    match inspect(&st, native, request) {
+    let identity = match liveness::collector_identity(&headers) {
+        Ok(identity) => identity,
+        Err(code) => return failure(code, StatusCode::BAD_REQUEST),
+    };
+    if request.event == "session_start" && identity.is_some() {
+        return failure(
+            "native_liveness_unexpected_identity",
+            StatusCode::BAD_REQUEST,
+        );
+    }
+    match inspect_bound(&st, native, request, identity.as_ref()) {
         Ok(response) => (
             StatusCode::OK,
             Json(serde_json::to_value(response).expect("native response serializes")),
@@ -1438,7 +1551,172 @@ fn rollback_provenance_contexts(firewall: &mut soup_wall_agent::AgentFirewall, c
     }
 }
 
+/// Unified terminal retirement path for definitive session closure, expiration,
+/// and orphan reclamation. Respects audit-before-release, durability/checkpoints,
+/// and profile transition gates. Does not revive authority if audit or checkpoint fails.
+pub(crate) fn retire_sessions_terminal(
+    st: &Shared,
+    native: &NativeState,
+    targets: &[(String, Option<String>)],
+    reason: &'static str,
+) -> usize {
+    let mut sessions = match native.sessions.lock() {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+
+    let now = native.monotonic_now();
+    let now_ms = wall_time_ms().unwrap_or(0) + native.test_time_offset();
+
+    let mut to_retire = Vec::new();
+    for (id, expected_epoch) in targets {
+        if let Some(session) = sessions.entries.get(id) {
+            if let Some(epoch) = expected_epoch {
+                if &session.epoch != epoch {
+                    continue;
+                }
+            }
+            if reason == "expired" && !session.is_dead(now, now_ms, &sessions) {
+                continue;
+            }
+            let mut session = sessions.entries.remove(id).unwrap();
+            session.terminal = true;
+            if let Some(lease) = &mut session.liveness_lease {
+                lease.state = liveness::LeaseState::Terminal(reason);
+            }
+            if session.parent_id.is_none() || reason != "ended" || session.liveness_lease.is_some()
+            {
+                if let (Some(digest), Some(exp)) =
+                    (&session.authority_digest, session.authority_expires_at_ms)
+                {
+                    if exp > now_ms {
+                        sessions.spent_authorities.insert(digest.clone(), exp);
+                    }
+                }
+            }
+            to_retire.push((id.clone(), session));
+        }
+    }
+
+    if to_retire.is_empty() {
+        return 0;
+    }
+
+    // A leased session's explicit end is terminal for its complete lineage,
+    // just like retirement or expiry. Keep legacy unleased end semantics.
+    if reason != "ended" || to_retire.iter().any(|(_, s)| s.liveness_lease.is_some()) {
+        let mut all_retired_epochs: BTreeSet<String> =
+            to_retire.iter().map(|(_, s)| s.epoch.clone()).collect();
+        loop {
+            let child_ids: Vec<String> = sessions
+                .entries
+                .iter()
+                .filter(|(_, s)| {
+                    s.parent_epoch
+                        .as_ref()
+                        .is_some_and(|pe| all_retired_epochs.contains(pe))
+                })
+                .map(|(id, _)| id.clone())
+                .collect();
+            if child_ids.is_empty() {
+                break;
+            }
+            for cid in child_ids {
+                if let Some(mut session) = sessions.entries.remove(&cid) {
+                    session.terminal = true;
+                    if let Some(lease) = &mut session.liveness_lease {
+                        lease.state = liveness::LeaseState::Terminal(reason);
+                    }
+                    if let (Some(digest), Some(exp)) =
+                        (&session.authority_digest, session.authority_expires_at_ms)
+                    {
+                        if exp > now_ms {
+                            sessions.spent_authorities.insert(digest.clone(), exp);
+                        }
+                    }
+                    all_retired_epochs.insert(session.epoch.clone());
+                    to_retire.push((cid, session));
+                }
+            }
+        }
+    }
+
+    sessions.spent_authorities.retain(|_, exp| *exp > now_ms);
+
+    let count = to_retire.len();
+
+    if let Some(approval) = &native.approval {
+        for (id, _) in &to_retire {
+            approval.close_session(id, reason);
+        }
+    }
+
+    let Ok(mut firewall) = st.firewall.lock() else {
+        return 0;
+    };
+
+    for (id, session) in &to_retire {
+        if let (Some(host), Some(agent)) = (&session.host_session, &session.agent_id) {
+            firewall.end_agent(host, agent);
+        }
+        firewall.inspect(&session.event_at(session.seq + 1, EventKind::SessionEnd));
+        st.spans.end_session(&session.epoch);
+
+        let record = json!({
+            "at_ms": now_ms,
+            "session": session.epoch,
+            "session_id": id,
+            "seq": session.seq + 1,
+            "event": format!("native_session_{reason}"),
+            "verdict": "allow",
+            "shadow": false,
+            "released": false,
+            "registry_sha256": native.registry_sha256,
+            "host_session": session.host_session,
+            "agent_id": session.agent_id,
+            "parent_id": session.parent_id,
+        });
+        if st.audit.write_native(&record).is_err() {
+            firewall.mark_all_provenance_incomplete();
+        }
+    }
+
+    drop(firewall);
+    drop(sessions);
+
+    count
+}
+
+#[allow(dead_code)]
+fn reap_lost_sessions(st: &Shared, native: &NativeState, now: Instant, now_ms: u64) -> usize {
+    let dead_targets: Vec<(String, Option<String>)> = {
+        let Ok(sessions) = native.sessions.lock() else {
+            return 0;
+        };
+        sessions
+            .entries
+            .iter()
+            .filter(|(_, s)| s.is_dead(now, now_ms, &sessions))
+            .map(|(id, s)| (id.clone(), Some(s.epoch.clone())))
+            .collect()
+    };
+    if dead_targets.is_empty() {
+        return 0;
+    }
+    retire_sessions_terminal(st, native, &dead_targets, "expired")
+}
+
+#[cfg(test)]
 fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Response, &'static str> {
+    inspect_bound(st, native, request, None)
+}
+
+fn inspect_bound(
+    st: &Shared,
+    native: &NativeState,
+    request: Request,
+    identity: Option<&liveness::CollectorIdentity>,
+) -> Result<Response, &'static str> {
     if request.event == "session_start"
         && request.host_session.is_none()
         && native
@@ -1456,29 +1734,19 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         .sessions
         .lock()
         .map_err(|_| "native_state_unavailable")?;
-    let now = Instant::now();
     let mut firewall = st
         .firewall
         .lock()
         .map_err(|_| "native_inspection_unavailable")?;
-    let expired: Vec<String> = state
-        .entries
-        .iter()
-        .filter(|(_, s)| now.duration_since(s.touched) >= TTL)
-        .map(|(id, _)| id.clone())
-        .collect();
-    for id in expired {
-        if let Some(old) = state.entries.remove(&id) {
-            if let Some(approval) = &native.approval {
-                approval.close_session(&id, "session_expired");
-            }
-            if let (Some(host), Some(agent)) = (&old.host_session, &old.agent_id) {
-                firewall.end_agent(host, agent);
-            }
-            firewall.inspect(&old.event_at(old.seq + 1, EventKind::SessionEnd));
-            st.spans.end_session(&old.epoch);
-        }
+    if let Some(identity) = identity {
+        let session = state
+            .entries
+            .get(&request.session_id)
+            .ok_or("native_session_unknown")?;
+        identity.verify(native, session)?;
     }
+    let mut now = native.monotonic_now();
+    let mut now_ms = wall_time_ms()? + native.test_time_offset();
     for session in state.entries.values_mut() {
         session.calls.retain(|_, call| call.expires > now);
     }
@@ -1504,13 +1772,66 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         content_sha256: request.content.as_ref().map(|c| hash(c.as_bytes())),
         resources_sha256: None,
         reason_codes: vec![],
+        instance_id: None,
+        owner_token: None,
     };
     if request.event == "session_start" {
         if firewall.active_managed_policy().is_some() && request.policy_transition.is_none() {
             return Err("native_policy_transition_required");
         }
-        if state.entries.contains_key(&request.session_id) {
-            return Err("native_session_exists");
+        if let Some(existing) = state.entries.get(&request.session_id) {
+            if existing.is_dead(now, now_ms, &state) {
+                let existing_epoch = existing.epoch.clone();
+                drop(state);
+                drop(firewall);
+                retire_sessions_terminal(
+                    st,
+                    native,
+                    &[(request.session_id.clone(), Some(existing_epoch))],
+                    "expired",
+                );
+                state = native
+                    .sessions
+                    .lock()
+                    .map_err(|_| "native_state_unavailable")?;
+                firewall = st
+                    .firewall
+                    .lock()
+                    .map_err(|_| "native_inspection_unavailable")?;
+                now = native.monotonic_now();
+                now_ms = wall_time_ms()? + native.test_time_offset();
+                response.managed_policy = firewall.active_managed_policy();
+                if response.managed_policy.is_some() && request.policy_transition.is_none() {
+                    return Err("native_policy_transition_required");
+                }
+            } else {
+                return Err("native_session_exists");
+            }
+        }
+        let dead_targets: Vec<(String, Option<String>)> = state
+            .entries
+            .iter()
+            .filter(|(_, s)| s.is_dead(now, now_ms, &state))
+            .map(|(id, s)| (id.clone(), Some(s.epoch.clone())))
+            .collect();
+        if !dead_targets.is_empty() {
+            drop(state);
+            drop(firewall);
+            retire_sessions_terminal(st, native, &dead_targets, "expired");
+            state = native
+                .sessions
+                .lock()
+                .map_err(|_| "native_state_unavailable")?;
+            firewall = st
+                .firewall
+                .lock()
+                .map_err(|_| "native_inspection_unavailable")?;
+            now = native.monotonic_now();
+            now_ms = wall_time_ms()? + native.test_time_offset();
+            response.managed_policy = firewall.active_managed_policy();
+            if response.managed_policy.is_some() && request.policy_transition.is_none() {
+                return Err("native_policy_transition_required");
+            }
         }
         if state.entries.len() >= MAX_SESSIONS {
             return Err("native_session_cap");
@@ -1522,10 +1843,6 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                     .as_deref()
                     .ok_or("native_child_authority_missing")?;
                 let key = child_authority::derive_key(&native.token);
-                let now_ms = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .map_err(|_| "native_clock_unavailable")?
-                    .as_millis() as u64;
                 let grant = child_authority::verify_token(
                     &key,
                     token,
@@ -1551,6 +1868,24 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                         ChildAuthorityError::MalformedToken => "native_child_authority_malformed",
                     }
                 })?;
+                let auth_digest = hash(token.as_bytes());
+                state.spent_authorities.retain(|_, exp| *exp > now_ms);
+                if state.spent_authorities.contains_key(&auth_digest)
+                    || state
+                        .entries
+                        .values()
+                        .any(|s| s.authority_digest.as_deref() == Some(&auth_digest))
+                {
+                    return Err("native_child_authority_already_spent");
+                }
+                let active_signed = state
+                    .entries
+                    .values()
+                    .filter(|s| s.authority_digest.is_some())
+                    .count();
+                if state.spent_authorities.len() + active_signed >= MAX_SPENT_AUTHORITIES {
+                    return Err("native_authority_ledger_saturated");
+                }
                 if let Some(req_agent) = &request.agent_id {
                     if grant.agent_id.as_ref() != Some(req_agent) {
                         return Err("native_invalid_identity");
@@ -1582,6 +1917,45 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                     return Err("native_invalid_identity");
                 }
                 if let Some(agent) = &agent_id {
+                    let dead_sessions: Vec<(String, Option<String>)> = state
+                        .entries
+                        .iter()
+                        .filter(|(_, s)| {
+                            s.host_session.as_ref() == Some(host_session)
+                                && s.agent_id.as_ref() == Some(agent)
+                                && s.is_dead(now, now_ms, &state)
+                        })
+                        .map(|(id, s)| (id.clone(), Some(s.epoch.clone())))
+                        .collect();
+                    if !dead_sessions.is_empty() {
+                        drop(state);
+                        drop(firewall);
+                        retire_sessions_terminal(st, native, &dead_sessions, "expired");
+                        state = native
+                            .sessions
+                            .lock()
+                            .map_err(|_| "native_state_unavailable")?;
+                        firewall = st
+                            .firewall
+                            .lock()
+                            .map_err(|_| "native_inspection_unavailable")?;
+                        now = native.monotonic_now();
+                        now_ms = wall_time_ms()? + native.test_time_offset();
+                        response.managed_policy = firewall.active_managed_policy();
+                        if response.managed_policy.is_some() && request.policy_transition.is_none()
+                        {
+                            return Err("native_policy_transition_required");
+                        }
+                    }
+                    if now_ms >= grant.expires_at_ms {
+                        return Err("native_child_authority_expired");
+                    }
+                    if state
+                        .spent_authorities
+                        .contains_key(&hash(token.as_bytes()))
+                    {
+                        return Err("native_child_authority_already_spent");
+                    }
                     if state.entries.values().any(|s| {
                         s.host_session.as_ref() == Some(host_session)
                             && s.agent_id.as_ref() == Some(agent)
@@ -1658,6 +2032,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                 })
                 .map(|s| s.epoch.clone())
         });
+        let owner_token = format!("owner:{}", crate::token::generate());
         let session = Session {
             policy_transition: request.policy_transition.is_some(),
             parent_epoch,
@@ -1666,6 +2041,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                 .as_ref()
                 .map(|proof| hash(proof.as_bytes())),
             epoch: format!("native:{}", crate::token::generate()),
+            owner_token: owner_token.clone(),
             seq: 1,
             touched: now,
             calls: BTreeMap::new(),
@@ -1676,6 +2052,8 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
             granted_tools,
             granted_resources,
             authority_expires_at_ms,
+            liveness_lease: None,
+            terminal: false,
         };
         let created = register_provenance_contexts(
             &mut firewall,
@@ -1719,33 +2097,38 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
                 .collect()
         };
         firewall.set_root(&session.epoch, agent_name, &tools);
+        if request.liveness.is_some() {
+            response.instance_id = Some(native.instance_id().to_string());
+            response.owner_token = Some(owner_token);
+        }
         state.entries.insert(request.session_id, session);
         return Ok(response);
     }
     if request.event == "session_end" {
         let session = state
             .entries
-            .remove(&request.session_id)
+            .get_mut(&request.session_id)
             .ok_or("native_session_unknown")?;
-        if let Some(approval) = &native.approval {
-            approval.close_session(&request.session_id, "session_ended");
-        }
-        if let (Some(host), Some(agent)) = (&session.host_session, &session.agent_id) {
-            firewall.end_agent(host, agent);
-        }
-        firewall.inspect(&session.event_at(session.seq + 1, EventKind::SessionEnd));
-        st.spans.end_session(&session.epoch);
+        // The accepted end request and terminal cleanup have distinct audit rows.
+        // Consume this sequence before retirement allocates its next one.
+        session.seq += 1;
         audit(
             st,
             &request,
-            &Session {
-                seq: session.seq + 1,
-                ..session
-            },
+            session,
             &response,
             None,
             started.elapsed().as_micros(),
         )?;
+        let session_epoch = session.epoch.clone();
+        drop(state);
+        drop(firewall);
+        retire_sessions_terminal(
+            st,
+            native,
+            &[(request.session_id.clone(), Some(session_epoch))],
+            "ended",
+        );
         return Ok(response);
     }
     let total_calls: usize = state.entries.values().map(|s| s.calls.len()).sum();
@@ -1753,7 +2136,7 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
         .entries
         .get(&request.session_id)
         .ok_or("native_session_unknown")?;
-    validate_lineage(&state, session, wall_time_ms()?, now)?;
+    validate_lineage(&state, session, now_ms, now)?;
     let session = state
         .entries
         .get_mut(&request.session_id)
@@ -2493,6 +2876,104 @@ mod tests {
     fn start(st: &Shared, id: &str) {
         let native = st.native.as_ref().unwrap();
         inspect(st, native, request(native, id, "session_start", json!({}))).unwrap();
+    }
+
+    #[tokio::test]
+    async fn sou89_maintenance_waits_for_initial_profile_activation_transaction() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut st = fixture(dir.path());
+        let state = Arc::get_mut(&mut st).unwrap();
+        let native = state.native.take().unwrap();
+        state.native = Some(
+            native
+                .with_continuity(dir.path(), state.firewall.get_mut().unwrap())
+                .unwrap(),
+        );
+        start(&st, "before-activation");
+        let native = st.native.as_ref().unwrap();
+        let continuity = native.continuity.as_ref().unwrap();
+        assert!(!continuity.is_enabled());
+        let transaction = continuity.gate().lock().await;
+        native.advance_test_time_ms(301_000);
+        let blocked = tokio::time::timeout(
+            Duration::from_millis(50),
+            liveness::perform_maintenance(&st),
+        )
+        .await;
+        assert!(
+            blocked.is_err(),
+            "maintenance bypassed the initial profile transaction"
+        );
+        assert!(native
+            .sessions
+            .lock()
+            .unwrap()
+            .entries
+            .contains_key("before-activation"));
+        drop(transaction);
+        assert_eq!(liveness::perform_maintenance(&st).await, 1);
+        assert!(native.sessions.lock().unwrap().entries.is_empty());
+    }
+
+    fn liveness_contention_witness(action: &str, advance: u64, expected: &str) {
+        let dir = tempfile::tempdir().unwrap();
+        let st = fixture(dir.path());
+        start(&st, "clock-owner");
+        let native = st.native.as_ref().unwrap();
+        let session = native.sessions.lock().unwrap().entries["clock-owner"].clone();
+        let body = json!({"contract_version": liveness::LIVENESS_CONTRACT,
+            "registry_sha256": native.registry_sha256, "session_id": "clock-owner",
+            "instance_id": native.instance_id(), "action": action,
+            "owner_token": session.owner_token, "epoch": session.epoch,
+            "lease_seq": 2, "lease_seconds": 1});
+        if action == "renew" {
+            let mut state = native.sessions.lock().unwrap();
+            state.entries.get_mut("clock-owner").unwrap().liveness_lease =
+                Some(liveness::Lease::new(
+                    "clock-owner".into(),
+                    session.epoch.clone(),
+                    native.instance_id().into(),
+                    Duration::from_secs(1),
+                    native.monotonic_now(),
+                ));
+        }
+        let guard = native.sessions.lock().unwrap();
+        let worker_st = st.clone();
+        let (ready, entered) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            runtime.block_on(async move {
+                let mut headers = HeaderMap::new();
+                headers.insert("authorization", "Bearer native-unit-key".parse().unwrap());
+                ready.send(()).unwrap();
+                liveness::handler(State(worker_st), headers, body.to_string()).await
+            })
+        });
+        entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        std::thread::sleep(Duration::from_millis(100));
+        // The request is blocked on the owned state mutex while its authority expires.
+        native.advance_test_time_ms(advance);
+        drop(guard);
+        let (status, Json(reply)) = worker.join().unwrap();
+        assert_eq!(
+            status,
+            StatusCode::CONFLICT,
+            "stale clock accepted {action}: {reply}"
+        );
+        assert_eq!(reply["error_code"], expected);
+    }
+
+    #[test]
+    fn sou89_enroll_rechecks_time_after_waiting_for_the_state_lock() {
+        liveness_contention_witness("enroll", 301_000, "native_child_authority_expired");
+    }
+
+    #[test]
+    fn sou89_renew_rechecks_time_after_waiting_for_the_state_lock() {
+        liveness_contention_witness("renew", 2_000, "native_liveness_expired");
     }
 
     fn managed_transition_activate(st: &Shared, sequence: u64, policy: &str) {

@@ -78,6 +78,11 @@ pub fn app_with_diagnostics(
             "/native/v1",
             post(native::handler).layer(axum::extract::DefaultBodyLimit::max(native::MAX_BODY)),
         )
+        .route(
+            "/native/liveness/v1",
+            post(native::liveness::handler)
+                .layer(axum::extract::DefaultBodyLimit::max(native::MAX_BODY)),
+        )
         .route("/native/v1/instance", get(native::instance))
         .route(
             native::continuity::BARRIER,

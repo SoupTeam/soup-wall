@@ -50,6 +50,7 @@ impl Fixture {
                 registry_path,
                 registry_sha256: sha.clone(),
                 approval: None,
+                liveness: None,
             }),
             ..Config::default()
         };

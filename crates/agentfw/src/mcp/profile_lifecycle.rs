@@ -801,11 +801,13 @@ impl ProfileManager {
         let revision_dir = self.revisions.join(bundle_sha256);
         let registry_path = revision_dir.join("registry.json");
         let approval = cfg.native.as_ref().and_then(|n| n.approval.clone());
+        let liveness = cfg.native.as_ref().and_then(|n| n.liveness.clone());
 
         cfg.native = Some(NativeCfg {
             registry_path,
             registry_sha256: registry_sha256.to_string(),
             approval,
+            liveness,
         });
         cfg.validate()?;
 
@@ -5379,6 +5381,11 @@ mod tests {
     fn preview_approval_cannot_authorize_a_different_target() {
         let temp = tempdir().unwrap();
         let home = temp.path().canonicalize().unwrap();
+        // This tests approval binding, so use an isolated endpoint rather than
+        // depending on the host default port being free throughout activation.
+        let port =
+            allocate_test_port().expect("loopback port allocation is required for this test");
+        fs::write(home.join("config.yaml"), format!("port: {port}\n")).unwrap();
         let mgr = ProfileManager::new(&home);
         let p1 = home.join("p1");
         let p2 = home.join("p2");
