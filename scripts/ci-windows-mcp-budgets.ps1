@@ -38,6 +38,7 @@ $report = [ordered]@{
     source_manifest_sha256 = $null; child_exit_code = $null
     timeout_seconds = 240; timed_out = $false; account_removed = $false; staging_removed = $false
     error = $null; phase = 'source_snapshot'; exception_type = $null; hresult = $null; failure_line = $null
+    cleanup_exception_type = $null; cleanup_hresult = $null; cleanup_failure_line = $null
 }
 try {
     $head = (& git -C $repo rev-parse HEAD).Trim()
@@ -148,6 +149,10 @@ try {
     $report.phase = 'native_report_validation'
     $resultPath = Join-Path $stage 'evidence/results.json'
     if (!(Test-Path -LiteralPath $resultPath)) { throw 'native_evidence_missing' }
+    $childLauncher = Get-Content -LiteralPath (Join-Path $stage 'evidence/launcher.json') -Raw | ConvertFrom-Json
+    if ($childLauncher.status -ne 'pass' -or $childLauncher.staging_acl_restored -ne $true) {
+        throw 'standard_user_launcher_or_cleanup_failed'
+    }
     $child = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
     if ($process.ExitCode -ne 0 -or $child.status -ne 'pass' -or $child.standard_user -ne $true -or
         $child.administrator_group_present -ne $false -or $child.source_commit -ne $Commit -or
@@ -200,6 +205,9 @@ try {
     } catch {
         $report.status = 'fail'
         $report.error = 'evidence_retention_or_disposable_cleanup_failed'
+        $report.cleanup_exception_type = $_.Exception.GetType().Name
+        $report.cleanup_hresult = $_.Exception.HResult
+        $report.cleanup_failure_line = $_.InvocationInfo.ScriptLineNumber
         $exitCode = 1
     }
     if ($process) { $process.Dispose() }

@@ -10,7 +10,7 @@ $PSNativeCommandUseErrorActionPreference = $false
 $rootPath = (Resolve-Path -LiteralPath $Root).Path
 $out = Join-Path $rootPath 'evidence'
 $exitCode = 1
-$report = [ordered]@{ format = 'sou96-windows-budget-standard-user/1'; status = 'incomplete'; error = $null; phase = 'standard_user_check'; exception_type = $null; hresult = $null; failure_line = $null; native_exit_code = $null; python_error_types = @(); python_trace_lines = @() }
+$report = [ordered]@{ format = 'sou96-windows-budget-standard-user/1'; status = 'incomplete'; error = $null; phase = 'standard_user_check'; exception_type = $null; hresult = $null; failure_line = $null; native_exit_code = $null; python_error_types = @(); python_trace_lines = @(); staging_acl_restored = $false }
 try {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = [Security.Principal.WindowsPrincipal]::new($identity)
@@ -60,6 +60,22 @@ try {
     $exitCode = 1
 } finally {
     [IO.Directory]::CreateDirectory($out) | Out-Null
+    try {
+        # Only after the native harness exits, restore descendants to this
+        # fixture's existing private stage ACL. Agent-created protected files
+        # otherwise prevent the runner from removing the disposable tree. The
+        # root keeps its user/SYSTEM/runner-only DACL; never reset it to ProgramData.
+        & icacls (Join-Path $rootPath '*') /reset /T /Q /C 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'disposable_descendant_acl_restore_failed' }
+        $report.staging_acl_restored = $true
+    } catch {
+        $report.status = 'fail'
+        $report.error = 'disposable_descendant_acl_restore_failed'
+        $report.exception_type = $_.Exception.GetType().Name
+        $report.hresult = $_.Exception.HResult
+        $report.failure_line = $_.InvocationInfo.ScriptLineNumber
+        $exitCode = 1
+    }
     $report | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $out 'launcher.json') -Encoding utf8NoBOM
 }
 exit $exitCode

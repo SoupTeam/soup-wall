@@ -162,6 +162,11 @@ verifies every copied hash and retains a runtime manifest containing only relati
 standard-library paths and hashes.
 This avoids executing a runner-only Python shim from the disposable account.
 The standard-user report’s Python executable hash must match the launcher.
+After the native harness exits, the fixture user restores only descendants to
+the stage’s existing private ACL so the runner can remove Agent-created
+protected files. The stage root keeps its protected user/SYSTEM/runner-only ACL;
+it is never reset to ProgramData permissions. This cleanup happens after native
+observations and cannot turn a failed scenario into a pass.
 It retains source identities and all outcomes even
 on failure. There is no added per-push matrix or activation/selection policy.
 Keep the PR Draft until implementation is ready for qualification. A passing
