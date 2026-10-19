@@ -155,13 +155,16 @@ impl Guard {
             | JOB_OBJECT_LIMIT_JOB_TIME
     }
 
-    pub(crate) fn check(&self) -> Result<(), &'static str> {
-        let mut state = self.0.state.lock().map_err(|_| {
+    fn state(&self) -> Result<std::sync::MutexGuard<'_, State>, &'static str> {
+        self.0.state.lock().map_err(|_| {
             unsafe {
                 TerminateJobObject(self.0.job.as_raw_handle().cast(), 1);
             }
             "windows_budget_observation_failed"
-        })?;
+        })
+    }
+
+    fn check_locked(&self, state: &mut State) -> Result<(), &'static str> {
         if let Some(reason) = state.reason {
             return Err(reason);
         }
@@ -172,7 +175,7 @@ impl Guard {
         {
             Err("windows_budget_wall_deadline")
         } else {
-            self.observe(&mut state)
+            self.observe(state)
         };
         if let Err(reason) = result {
             // Publish sticky terminal state while holding the same gate checked
@@ -183,6 +186,19 @@ impl Guard {
             }
         }
         result
+    }
+
+    pub(crate) fn check(&self) -> Result<(), &'static str> {
+        let mut state = self.state()?;
+        self.check_locked(&mut state)
+    }
+
+    pub(crate) fn with_output<T>(&self, output: impl FnOnce() -> T) -> Result<T, &'static str> {
+        let mut state = self.state()?;
+        self.check_locked(&mut state)?;
+        // Serialize write submission with publication of terminal budget state.
+        // A Pending poll releases the gate and must recheck it when repolled.
+        Ok(output())
     }
 
     pub(crate) fn report(&self) -> serde_json::Value {

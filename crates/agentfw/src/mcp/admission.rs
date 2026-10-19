@@ -2952,9 +2952,7 @@ struct DiagnosticOutput<W> {
 
 impl<W> DiagnosticOutput<W> {
     fn boundary_error(&self) -> Option<std::io::Error> {
-        let code = if let Some(Err(reason)) = self.budget.as_ref().map(|guard| guard.check()) {
-            reason
-        } else if self.failed.load(Ordering::Acquire) {
+        let code = if self.failed.load(Ordering::Acquire) {
             "native MCP diagnostics boundary closed"
         } else if self
             .liveness
@@ -2967,6 +2965,26 @@ impl<W> DiagnosticOutput<W> {
         };
         Some(std::io::Error::new(std::io::ErrorKind::BrokenPipe, code))
     }
+
+    fn guarded_io<T>(
+        &mut self,
+        output: impl FnOnce(&mut W) -> Poll<std::io::Result<T>>,
+    ) -> Poll<std::io::Result<T>> {
+        if let Some(error) = self.boundary_error() {
+            return Poll::Ready(Err(error));
+        }
+        if let Some(guard) = &self.budget {
+            match guard.with_output(|| output(&mut self.inner)) {
+                Ok(result) => result,
+                Err(reason) => Poll::Ready(Err(std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    reason,
+                ))),
+            }
+        } else {
+            output(&mut self.inner)
+        }
+    }
 }
 
 impl<W: AsyncWrite + Unpin> AsyncWrite for DiagnosticOutput<W> {
@@ -2975,27 +2993,18 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for DiagnosticOutput<W> {
         cx: &mut TaskContext<'_>,
         bytes: &[u8],
     ) -> Poll<std::io::Result<usize>> {
-        let this = self.get_mut();
-        if let Some(error) = this.boundary_error() {
-            return Poll::Ready(Err(error));
-        }
-        Pin::new(&mut this.inner).poll_write(cx, bytes)
+        self.get_mut()
+            .guarded_io(|inner| Pin::new(inner).poll_write(cx, bytes))
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<std::io::Result<()>> {
-        let this = self.get_mut();
-        if let Some(error) = this.boundary_error() {
-            return Poll::Ready(Err(error));
-        }
-        Pin::new(&mut this.inner).poll_flush(cx)
+        self.get_mut()
+            .guarded_io(|inner| Pin::new(inner).poll_flush(cx))
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<std::io::Result<()>> {
-        let this = self.get_mut();
-        if let Some(error) = this.boundary_error() {
-            return Poll::Ready(Err(error));
-        }
-        Pin::new(&mut this.inner).poll_shutdown(cx)
+        self.get_mut()
+            .guarded_io(|inner| Pin::new(inner).poll_shutdown(cx))
     }
 }
 
@@ -4094,6 +4103,45 @@ mod diagnostic_output_tests {
         assert!(
             received == b"x",
             "bytes committed before failure are not retracted or extended"
+        );
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_budget_stops_a_pending_partial_host_write() {
+        use std::os::windows::io::{FromRawHandle, OwnedHandle};
+        let raw = unsafe {
+            windows_sys::Win32::System::JobObjects::CreateJobObjectW(
+                std::ptr::null(),
+                std::ptr::null(),
+            )
+        };
+        assert!(!raw.is_null());
+        let job = Arc::new(unsafe { OwnedHandle::from_raw_handle(raw.cast()) });
+        let config = super::super::windows_budget::Config::read(br#"{"format":"sw-mcp/windows-job-budget/1","memoryMaxBytes":134217728,"memoryPressureBytes":100663296,"activeProcessMax":8,"cpuUserMillis":2000,"wallMillis":1000}"#).unwrap();
+        let mut budget = super::super::windows_budget::Budget::install(job, config).unwrap();
+        let (mut observer, output) = tokio::io::duplex(1);
+        let mut guarded = DiagnosticOutput {
+            inner: output,
+            failed: Arc::new(AtomicBool::new(false)),
+            budget: Some(budget.guard()),
+            liveness: None,
+        };
+        {
+            let writing = guarded.write_all(b"xy");
+            tokio::pin!(writing);
+            assert!(futures_util::poll!(writing.as_mut()).is_pending());
+            tokio::time::sleep(tokio::time::Duration::from_millis(1100)).await;
+            assert!(writing.await.is_err());
+        }
+        drop(guarded);
+        let mut received = Vec::new();
+        observer.read_to_end(&mut received).await.unwrap();
+        assert_eq!(received, b"x");
+        budget.finish(true);
+        assert_eq!(
+            budget.guard().report()["observed"]["reason"],
+            "windows_budget_wall_deadline"
         );
     }
 }

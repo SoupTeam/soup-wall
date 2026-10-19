@@ -116,6 +116,9 @@ impl Guard {
     pub(crate) fn check(&self) -> Result<(), &'static str> {
         Ok(())
     }
+    pub(crate) fn with_output<T>(&self, output: impl FnOnce() -> T) -> Result<T, &'static str> {
+        Ok(output())
+    }
 }
 
 #[cfg(test)]
