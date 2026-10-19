@@ -293,6 +293,17 @@ class Acceptance:
                 starter.wait(timeout=10)
 
     def edited_and_foreign_jobs(self):
+        record_path = self.home / "service/ownership.json"
+        original_record = record_path.read_bytes()
+        try:
+            damaged = json.loads(original_record)
+            damaged["launcher_identity"] = None
+            record_path.write_text(json.dumps(damaged))
+            self.service("start", success=False)
+            self.service("uninstall", success=False)
+            require(self.unit.exists() and not self.inspect()["verified"], "unrecorded file adopted or removed")
+        finally:
+            record_path.write_bytes(original_record)
         original = self.unit.read_bytes()
         try:
             self.unit.write_bytes(original+b"\n<!-- deliberate edit -->\n")
@@ -324,7 +335,8 @@ class Acceptance:
         finally:
             launcher.unlink()
             saved.rename(launcher)
-        return {"edited_plist_refused": True, "foreign_job_preserved": True, "replaced_launcher_refused": True}
+        return {"missing_identity_refused": True, "edited_plist_refused": True,
+                "foreign_job_preserved": True, "replaced_launcher_refused": True}
 
     def conflicting_process_and_port(self):
         self.service("start")

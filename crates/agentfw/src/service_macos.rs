@@ -506,7 +506,12 @@ impl Service {
 
     pub fn launch(&self) -> Result<()> {
         use std::os::unix::process::CommandExt;
-        self.internal()?;
+        if let Err(error) = self.internal() {
+            // An invalid ownership record cannot authorize a budget write. Exit
+            // successfully so KeepAlive does not retry this refusal forever.
+            eprintln!("launchd ownership refused: {error:#}");
+            return Ok(());
+        }
         match self.consume_start() {
             Ok(true) => {}
             Ok(false) => return Ok(()),
@@ -1089,9 +1094,11 @@ fn identity(path: &Path) -> Result<Identity> {
 }
 
 fn verify_file(path: &Path, hash: &str, expected: Option<&Identity>) -> Result<()> {
+    let expected =
+        expected.context("service file has no recorded identity; refusing adoption or removal")?;
     let actual = identity(path)?;
     ensure!(
-        actual.digest == hash && expected.is_none_or(|value| value == &actual),
+        actual.digest == hash && expected == &actual,
         "owned service file changed or was replaced: {}",
         path.display()
     );
@@ -1182,6 +1189,11 @@ mod tests {
         let path = service.home.join("artifact");
         fs::write(&path, b"original").unwrap();
         let expected = identity(&path).unwrap();
+        for phase in [Phase::Installing, Phase::Installed, Phase::Removing] {
+            assert!(verify_removable(phase, &path, &expected.digest, None).is_err());
+        }
+        assert!(verify_file(&path, &expected.digest, None).is_err());
+        assert!(path.exists());
         let old = service.home.join("old");
         fs::rename(&path, &old).unwrap();
         fs::write(&path, b"original").unwrap();
@@ -1229,5 +1241,9 @@ mod tests {
         assert!(service.manager().start().is_err());
         assert!(service.manager().remove().is_err());
         assert!(service.manager().direct_serve_guard().is_err());
+        // Refusal is a successful launcher exit for KeepAlive purposes, without
+        // touching an unverified registration's restart budget.
+        assert!(service.launch().is_ok());
+        assert!(!service.root.join("restart.json").exists());
     }
 }
