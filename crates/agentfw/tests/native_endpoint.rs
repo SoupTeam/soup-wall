@@ -3126,7 +3126,7 @@ async fn sou83_original_write_reused_native_result_authority_is_spent_and_peer_c
     call["mcp_host_call_id"] = json!("create-one");
     let (status, admitted) = fixture.post(&call).await;
     assert_allow(status, &admitted);
-    let original = json!({"jsonrpc":"2.0","id":"sou83-native-original-call-1","result":{
+    let original = json!({"jsonrpc":"2.0","id":"create-one","result":{
         "content":[{"type":"text","text":"Successfully wrote"}],
         "structuredContent":{"content":"Successfully wrote"}
     }})
