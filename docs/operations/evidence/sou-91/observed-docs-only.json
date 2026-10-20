@@ -1,0 +1,137 @@
+{
+  "cache_misses": null,
+  "cache_misses_note": "Review exact-run cache step logs; the Actions jobs API has no hit/miss field.",
+  "cancelled_pr_runs_at_head": 0,
+  "ci": {
+    "attempts": 1,
+    "conclusion": "success",
+    "copied_forward_job_records": 0,
+    "executed_jobs": 2,
+    "head_sha": "c0b18f49ef3ee60f35889f13d994699b9812f1ee",
+    "latest_attempt_active_job_names": [
+      "Documentation links",
+      "impact / Candidate bb21623517b4392ea3acf27c8a8799162ac8916a"
+    ],
+    "latest_attempt_skipped_job_names": [
+      "Agent lifecycle on macOS",
+      "Components / agent-doctor / doctor-linux",
+      "Components / agent-fleet / Fleet API and real dual-store browser witness",
+      "Components / agent-windows-self-test / standard-user-self-test",
+      "Components / benchmark / Agent security scorecard",
+      "Components / classifier-runtime-windows / native-windows-classifier-runtime",
+      "Components / console-recovery / owned-recovery",
+      "Components / gate-ci / validate-gate-matrix",
+      "Components / gateway-sdk / official-sdk",
+      "Components / identity-sandbox / Keycloak driver offline safety",
+      "Components / identity-sandbox / OIDC SAML SCIM sandbox fixtures",
+      "Components / keycloak-oidc / Genuine Keycloak OIDC on Linux (${{ matrix.backend }})",
+      "Components / keycloak-saml / Genuine Keycloak SAML on Linux (${{ matrix.backend }})",
+      "Components / license-policy / Locked workspace license policy",
+      "Components / managed-credential-rotation / Real Console + Agent credential rotation (${{ matrix.backend }})",
+      "Components / managed-credential-rotation / Rust formatting preview (read-only)",
+      "Components / managed-group-rollout / group-rollout",
+      "Components / managed-policy-demo / Signed activation and rollback on real Agent",
+      "Components / managed-policy-postgres / PostgreSQL migration and real Agent rollout",
+      "Components / managed-policy-tls / Real Agent verified HTTPS rollout and rollback",
+      "Components / mcp-create-file / linux-create-file",
+      "Components / mcp-https-get / linux-https-get",
+      "Components / mcp-https-post / linux-https-post",
+      "Components / mcp-profile-author / author-cli",
+      "Components / mcp-profile-lifecycle / linux-foundation",
+      "Components / mcp-real-filesystem / required-linux-sandbox-and-real-host",
+      "Components / mcp-real-git / required-linux-git",
+      "Components / mcp-windows-connection / standard-user-acceptance",
+      "Components / mcp-windows-create / linux-read-create-https-regressions",
+      "Components / mcp-windows-create / native-windows-standard-user",
+      "Components / mcp-windows-read / native-windows-standard-user",
+      "Components / monitoring / Linux dependency alerts and protected durable recovery",
+      "Components / native-mcp-stderr / native-platform-launch (${{ matrix.os }})",
+      "Components / native-mcp-stderr / required-linux-native-stderr",
+      "Components / provenance-memory / required-linux-native-mcp-budget",
+      "Components / scim-directory / interoperability (${{ matrix.backend }})",
+      "Components / sou79-resource-budgets / required-disposable-delegated-linux",
+      "Components / sou86-crash-supervision / required-disposable-linux-crash-supervision",
+      "Components / supply-chain / Cargo audit",
+      "Components / supply-chain / CycloneDX SBOM",
+      "Components / test-environment / Linux fixture baseline (${{ matrix.platform }})",
+      "Components / test-environment / Windows launcher guidance and reporting",
+      "Components / tls-lifecycle / linux",
+      "Draft fast checks (not merge qualification)",
+      "Main binary smoke (full qualification runs before merge)",
+      "Native macOS admission resilience",
+      "Python classifier and evaluation",
+      "SAML ${{ matrix.target }}",
+      "docker-build",
+      "github.event_name == 'pull_request' && github.event.pull_request.draft && 'Deferred - agent-windows-security' || 'agent-windows-security'",
+      "github.event_name == 'pull_request' && github.event.pull_request.draft && 'Deferred - all-features' || 'all-features'",
+      "github.event_name == 'pull_request' && github.event.pull_request.draft && 'Deferred - test' || 'test'",
+      "postgres-integration",
+      "redis-integration"
+    ],
+    "latest_attempt_wall_minutes": 0.3,
+    "modeled_required_checks_missing_or_unsuccessful": [],
+    "run_id": 39404708355,
+    "runner_minutes": 0.23,
+    "status": "completed",
+    "timings_unavailable": 0,
+    "wall_minutes": 0.3
+  },
+  "codeql": {
+    "attempts": 1,
+    "conclusion": "success",
+    "copied_forward_job_records": 0,
+    "executed_jobs": 5,
+    "head_sha": "c0b18f49ef3ee60f35889f13d994699b9812f1ee",
+    "latest_attempt_wall_minutes": 9.15,
+    "required_analyses": {
+      "Analyze (actions)": [
+        {
+          "conclusion": "success",
+          "head_sha": "c0b18f49ef3ee60f35889f13d994699b9812f1ee"
+        }
+      ],
+      "Analyze (c-cpp)": [
+        {
+          "conclusion": "success",
+          "head_sha": "c0b18f49ef3ee60f35889f13d994699b9812f1ee"
+        }
+      ],
+      "Analyze (javascript-typescript)": [
+        {
+          "conclusion": "success",
+          "head_sha": "c0b18f49ef3ee60f35889f13d994699b9812f1ee"
+        }
+      ],
+      "Analyze (python)": [
+        {
+          "conclusion": "success",
+          "head_sha": "c0b18f49ef3ee60f35889f13d994699b9812f1ee"
+        }
+      ],
+      "Analyze (rust)": [
+        {
+          "conclusion": "success",
+          "head_sha": "c0b18f49ef3ee60f35889f13d994699b9812f1ee"
+        }
+      ]
+    },
+    "required_analyses_missing_or_unsuccessful": [],
+    "run_id": 39404707367,
+    "runner_minutes": 12.3,
+    "status": "completed",
+    "timings_unavailable": 0,
+    "wall_minutes": 9.15
+  },
+  "head_sha": "c0b18f49ef3ee60f35889f13d994699b9812f1ee",
+  "modeled_selective_job_ids": 1,
+  "modeled_selective_plan": "docs",
+  "observed_runner_minutes_including_codeql": 12.53,
+  "observed_wall_minutes_including_codeql": 9.15,
+  "organization_billed_minutes": null,
+  "path_source": "actual-pr-files",
+  "pr": 201,
+  "sample_paths": [
+    "README.md"
+  ],
+  "schema": "sou91-runner-observation/2"
+}

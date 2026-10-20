@@ -97,6 +97,13 @@ launches and bounded safe metadata. Fixed terminal reasons include
 native work and verifies cleanup. A dispatched operation may already have run;
 withholding its result does not undo its effects.
 
+Membership failures also retain a single `membership_failure` diagnostic in budget
+metadata: a fixed observation phase, an optional numeric PID and an optional errno
+where the failed open exposes one. Cleanup and concurrent observations cannot
+overwrite the first recorded cause. Raw procfs contents, host paths and child output
+are not included. This diagnostic does not retry or waive any membership check;
+an absent diagnostic in an older report cannot establish a more specific cause.
+
 The selected Linux runtime also uses [owned crash supervision](MCP_LINUX_CRASH_SUPERVISION.md)
 outside this server budget. Once its private owner is armed, collector loss can
 stop the selected server and remove this launch's leaf without running collector

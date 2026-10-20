@@ -1,0 +1,7 @@
+default: allow
+agent_policies:
+  - name: shared-untrusted-write
+    when:
+      taint: [network, mcp]
+      min_action_class: side_effecting
+    action: deny

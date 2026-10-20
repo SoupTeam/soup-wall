@@ -1,0 +1,6 @@
+default: allow
+agent_policies:
+  - name: explicit-hard-deny
+    when:
+      min_action_class: read_only
+    action: deny

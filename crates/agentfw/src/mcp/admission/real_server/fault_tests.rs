@@ -19,6 +19,150 @@ use wiremock::{
 type Reader = BufReader<ReadHalf<DuplexStream>>;
 type Writer = WriteHalf<DuplexStream>;
 
+fn installed_registry_entries(format: &str) -> Vec<Value> {
+    let manifest = server_profile::original_manifest_for(format).unwrap();
+    let profiles = server_profile::classify_manifest_for(format, &manifest).unwrap();
+    manifest["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|tool| {
+            let name = tool["name"].as_str().unwrap();
+            let supported = profiles[name].unsupported_reason.is_none();
+            let action = match name {
+                "write_file" | "edit_file" | "create_directory" => "side_effecting",
+                "move_file" => "destructive",
+                _ if format == server_profile::git::FORMAT && !supported => "destructive",
+                _ => "read_only",
+            };
+            let mut entry = json!({"name":name,
+                "schema_sha256":sha(canonical(&tool["inputSchema"]).to_string().as_bytes()),
+                "action_class":action,"result_provenance":"untrusted","egress":[]});
+            if supported {
+                entry["mcp_result_profile"] = json!(format);
+            }
+            entry
+        })
+        .collect()
+}
+
+fn installed_registry_config(tools: Vec<Value>) -> anyhow::Result<AdmissionCfg> {
+    let registry = json!({"contract_version":CONTRACT,"registry_id":"installed-shared-regression","tools":tools}).to_string();
+    Ok(AdmissionCfg {
+        host_session: None,
+        child_authority: None,
+        daemon_url: "http://127.0.0.1:1/native".into(),
+        manifest_url: "http://127.0.0.1:1/manifest".into(),
+        manifest_token: "never-used-test-token".into(),
+        server_id: "installed-shared-regression".into(),
+        native: NativeState::from_bytes(
+            registry.as_bytes(),
+            &sha(registry.as_bytes()),
+            "test-token".into(),
+        )?,
+        command: "never-spawned".into(),
+        args: vec![],
+        classifier: None,
+        resource_profiles: BTreeMap::new(),
+        approval: None,
+        liveness_url: None,
+        liveness_lease_seconds: None,
+    })
+}
+
+#[tokio::test]
+async fn selected_registry_shared_daemon_accepts_both_exact_original_profiles() {
+    let formats = [server_profile::FORMAT, server_profile::git::FORMAT];
+    let tools = formats
+        .into_iter()
+        .flat_map(installed_registry_entries)
+        .collect();
+    let config = installed_registry_config(tools).unwrap();
+    let collector = Collector::new(&config).unwrap();
+    for format in formats {
+        let manifest = server_profile::original_manifest_for(format).unwrap();
+        let profiles = server_profile::classify_manifest_for(format, &manifest).unwrap();
+        validate_registry(
+            &collector,
+            &profiles,
+            manifest["tools"].as_array().unwrap(),
+            format,
+        )
+        .expect("a daemon registry may explicitly install both original read-only server families");
+    }
+}
+
+#[tokio::test]
+async fn selected_registry_shared_daemon_preserves_each_family_authority_and_schema_pins() {
+    for (format, local_read, foreign_read) in [
+        (server_profile::FORMAT, "read_text_file", "git_show"),
+        (server_profile::git::FORMAT, "git_show", "read_text_file"),
+    ] {
+        let original: Vec<_> = [server_profile::FORMAT, server_profile::git::FORMAT]
+            .into_iter()
+            .flat_map(installed_registry_entries)
+            .collect();
+        let manifest = server_profile::original_manifest_for(format).unwrap();
+        let profiles = server_profile::classify_manifest_for(format, &manifest).unwrap();
+        for name in [local_read, foreign_read] {
+            for (field, value) in [
+                ("schema_sha256", json!("0".repeat(64))),
+                ("action_class", json!("destructive")),
+                ("result_provenance", json!("trusted")),
+                ("mcp_result_profile", Value::Null),
+                (
+                    "mcp_result_profile",
+                    json!(if name == "git_show" {
+                        server_profile::FORMAT
+                    } else {
+                        server_profile::git::FORMAT
+                    }),
+                ),
+                ("egress", json!(["https://owned.invalid"])),
+            ] {
+                let mut tools = original.clone();
+                tools.iter_mut().find(|tool| tool["name"] == name).unwrap()[field] = value;
+                if let Ok(config) = installed_registry_config(tools) {
+                    let collector = Collector::new(&config).unwrap();
+                    assert!(
+                        validate_registry(
+                            &collector,
+                            &profiles,
+                            manifest["tools"].as_array().unwrap(),
+                            format
+                        )
+                        .is_err(),
+                        "{format} accepted weakened {field} for {name}"
+                    );
+                }
+            }
+        }
+        let mut missing = original.clone();
+        missing.retain(|tool| tool["name"] != local_read);
+        let config = installed_registry_config(missing).unwrap();
+        assert!(validate_registry(
+            &Collector::new(&config).unwrap(),
+            &profiles,
+            manifest["tools"].as_array().unwrap(),
+            format
+        )
+        .is_err());
+        let mut unknown = original;
+        unknown.push(
+            json!({"name":"not_an_installed_original_tool","schema_sha256":"a".repeat(64),
+            "action_class":"read_only","result_provenance":"untrusted","egress":[]}),
+        );
+        let config = installed_registry_config(unknown).unwrap();
+        assert!(validate_registry(
+            &Collector::new(&config).unwrap(),
+            &profiles,
+            manifest["tools"].as_array().unwrap(),
+            format
+        )
+        .is_err());
+    }
+}
+
 #[derive(Default)]
 struct WriteGate {
     blocked: AtomicBool,
@@ -70,6 +214,7 @@ impl AsyncWrite for GatedWriter {
 }
 
 struct Harness {
+    format: &'static str,
     host_input: Writer,
     host_output: Reader,
     server_input: Reader,
@@ -89,6 +234,9 @@ impl Drop for Harness {
 
 impl Harness {
     async fn new(fault: &'static str) -> Self {
+        Self::for_format(fault, server_profile::FORMAT).await
+    }
+    async fn for_format(fault: &'static str, format: &'static str) -> Self {
         let boundary_home = tempfile::tempdir().unwrap();
         let daemon = MockServer::start().await;
         Mock::given(method("POST"))
@@ -124,12 +272,18 @@ impl Harness {
                 if fault=="stalled-admission" && value["event"]=="call" {response.set_delay(Duration::from_secs(60))} else {response}
             }).mount(&daemon).await;
         let manifest = server_profile::original_manifest();
-        let tools=manifest["tools"].as_array().unwrap().iter().map(|tool| {
+        let mut tools=manifest["tools"].as_array().unwrap().iter().map(|tool| {
             let unsupported=matches!(tool["name"].as_str().unwrap(),"write_file"|"edit_file"|"create_directory"|"move_file"|"read_media_file");
             let mut entry=json!({"name":tool["name"],"schema_sha256":sha(canonical(&tool["inputSchema"]).to_string().as_bytes()),"action_class":"read_only","result_provenance":"untrusted","egress":[]});
             if !unsupported {entry["mcp_result_profile"]=json!(server_profile::FORMAT);}
             entry
         }).collect::<Vec<_>>();
+        if format == server_profile::git::FORMAT {
+            tools = installed_registry_entries(format);
+        }
+        if fault == "shared-registry" {
+            tools.extend(installed_registry_entries(server_profile::git::FORMAT));
+        }
         let registry=json!({"contract_version":CONTRACT,"registry_id":"selected-relay-faults","tools":tools}).to_string();
         let native = NativeState::from_bytes(
             registry.as_bytes(),
@@ -173,11 +327,12 @@ impl Harness {
                 &mut relay_host,
                 &mut BufReader::new(relay_server),
                 &mut relay_child,
-                server_profile::FORMAT,
+                format,
             )
             .await
         });
         Self {
+            format,
             host_input,
             host_output: BufReader::new(host_read),
             server_input: BufReader::new(server_read),
@@ -218,7 +373,18 @@ impl Harness {
     async fn ready(&mut self) {
         self.host(json!({"jsonrpc":"2.0","id":"init","method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"fault-test","version":"1"}}})).await;
         assert_eq!(self.dispatched().await["id"], "init");
-        self.server(json!({"jsonrpc":"2.0","id":"init","result":{"protocolVersion":"2025-11-25","capabilities":{"tools":{"listChanged":true}},"serverInfo":{"name":"secure-filesystem-server","version":"0.2.0"}}})).await;
+        let initialization = if self.format == server_profile::git::FORMAT {
+            serde_json::from_str::<Value>(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../profiles/mcp/git-readonly-v1/upstream-initialize.json"
+            )))
+            .unwrap()["result"]
+                .clone()
+        } else {
+            json!({"protocolVersion":"2025-11-25","capabilities":{"tools":{"listChanged":true}},"serverInfo":{"name":"secure-filesystem-server","version":"0.2.0"}})
+        };
+        self.server(json!({"jsonrpc":"2.0","id":"init","result":initialization}))
+            .await;
         assert_eq!(self.host_reply().await["id"], "init");
         self.host(json!({"jsonrpc":"2.0","method":"notifications/initialized"}))
             .await;
@@ -230,7 +396,7 @@ impl Harness {
             .await;
         assert_eq!(self.dispatched().await["method"], "tools/list");
         self.server(
-            json!({"jsonrpc":"2.0","id":"list","result":server_profile::original_manifest()}),
+            json!({"jsonrpc":"2.0","id":"list","result":server_profile::original_manifest_for(self.format).unwrap()}),
         )
         .await;
         assert_eq!(
@@ -238,7 +404,11 @@ impl Harness {
                 .as_array()
                 .unwrap()
                 .len(),
-            14
+            if self.format == server_profile::git::FORMAT {
+                12
+            } else {
+                14
+            }
         );
     }
     async fn call(&mut self, id: Value, path: &str) {
@@ -259,6 +429,39 @@ impl Harness {
             .unwrap_err()
             .to_string()
     }
+}
+
+#[tokio::test]
+async fn selected_registry_shared_daemon_does_not_dispatch_foreign_tools_through_filesystem() {
+    let mut fixture = Harness::new("shared-registry").await;
+    fixture.ready().await;
+    fixture
+        .host(json!({"jsonrpc":"2.0","id":"foreign","method":"tools/call",
+        "params":{"name":"git_show","arguments":{"repo_path":"/workspace","revision":"HEAD"}}}))
+        .await;
+    let refused = fixture.host_reply().await;
+    assert_eq!(refused["id"], "foreign");
+    assert_eq!(refused["error"]["code"], -32601);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), fixture.server_input.fill_buf())
+            .await
+            .is_err(),
+        "an unadvertised foreign tool reached the filesystem server"
+    );
+    assert!(
+        !fixture
+            .daemon
+            .received_requests()
+            .await
+            .unwrap()
+            .iter()
+            .any(|request| {
+                request.url.path() == "/native"
+                    && serde_json::from_slice::<Value>(&request.body).unwrap()["event"] == "call"
+            }),
+        "a foreign tool acquired native call authority through this collector"
+    );
+    fixture.useful(json!("useful-after-foreign-refusal")).await;
 }
 
 #[tokio::test]
@@ -436,6 +639,101 @@ async fn selected_fault_actual_call_deadline_reclaims_grant_and_discards_late_re
         .as_str()
         .unwrap()
         .contains("LATE_UNADMITTED_PAYLOAD")));
+}
+
+#[tokio::test]
+async fn selected_git_cancellation_drains_without_aborting_siblings_or_freeing_physical_slots() {
+    let mut fixture = Harness::for_format("ordinary", server_profile::git::FORMAT).await;
+    fixture.ready().await;
+    for id in 0..WIRE_LIMIT {
+        fixture
+            .host(json!({"jsonrpc":"2.0","id":id,"method":"tools/call",
+            "params":{"name":"git_show","arguments":{"repo_path":"/workspace","revision":"HEAD"}}}))
+            .await;
+        assert_eq!(fixture.dispatched().await["id"], id);
+        fixture
+            .host(json!({"jsonrpc":"2.0","method":"notifications/cancelled",
+            "params":{"requestId":id}}))
+            .await;
+        let reply = fixture.host_reply().await;
+        assert_eq!(reply["id"], id);
+        assert_eq!(reply["error"]["code"], -32800);
+    }
+    fixture
+        .host(json!({"jsonrpc":"2.0","id":"full","method":"tools/call",
+        "params":{"name":"git_show","arguments":{"repo_path":"/workspace","revision":"HEAD"}}}))
+        .await;
+    let refused = fixture.host_reply().await;
+    assert_eq!(refused["id"], "full");
+    assert_eq!(refused["error"]["code"], -32003);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), fixture.server_input.fill_buf())
+            .await
+            .is_err(),
+        "no cancellation or seventeenth physical request may reach the original Git server"
+    );
+    for id in 0..WIRE_LIMIT {
+        fixture.server(json!({"jsonrpc":"2.0","id":id,"result":{"content":[{"type":"text","text":"LATE_CANCELLED_GIT_PAYLOAD"}]}})).await;
+    }
+    // The useful peer can proceed only after actual original completions return
+    // the physical capacity. A dropped local grant alone cannot free a slot.
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    fixture
+        .host(json!({"jsonrpc":"2.0","id":"peer","method":"tools/call",
+        "params":{"name":"git_show","arguments":{"repo_path":"/workspace","revision":"HEAD"}}}))
+        .await;
+    assert_eq!(fixture.dispatched().await["id"], "peer");
+    let result = json!({"jsonrpc":"2.0","id":"peer","result":{"content":[{"type":"text","text":"useful original Git peer"}]}});
+    fixture.server(result.clone()).await;
+    assert_eq!(
+        fixture.host_reply().await,
+        result,
+        "late cancelled results must never reach the host"
+    );
+    let requests = fixture.daemon.received_requests().await.unwrap();
+    let completions: Vec<Value> = requests
+        .iter()
+        .filter_map(|request| serde_json::from_slice(&request.body).ok())
+        .filter(|request: &Value| request["event"] == "result")
+        .collect();
+    assert_eq!(
+        completions.len(),
+        WIRE_LIMIT + 2,
+        "all cancelled/refused grants and the useful peer complete exactly once"
+    );
+    assert!(completions.iter().all(|request| !request["content"]
+        .as_str()
+        .unwrap()
+        .contains("LATE_CANCELLED_GIT_PAYLOAD")));
+}
+
+#[tokio::test]
+async fn selected_git_withdrawn_nonresponding_request_keeps_its_original_deadline() {
+    let mut fixture = Harness::for_format("ordinary", server_profile::git::FORMAT).await;
+    fixture.ready().await;
+    fixture
+        .host(json!({"jsonrpc":"2.0","id":"hung","method":"tools/call",
+        "params":{"name":"git_show","arguments":{"repo_path":"/workspace","revision":"HEAD"}}}))
+        .await;
+    assert_eq!(fixture.dispatched().await["id"], "hung");
+    fixture.host(json!({"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":"hung"}})).await;
+    assert_eq!(fixture.host_reply().await["error"]["code"], -32800);
+    let error = tokio::time::timeout(
+        crate::mcp::admission::IO_TIMEOUT + Duration::from_secs(3),
+        &mut fixture.task,
+    )
+    .await
+    .expect("withdrawal must not remove the physical work deadline")
+    .unwrap()
+    .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "MCP server did not finish a withdrawn request within its bound"
+    );
+    assert!(
+        Harness::read(&mut fixture.server_input).await.is_none(),
+        "no abort notification reached the pinned Git SDK"
+    );
 }
 
 #[tokio::test]
