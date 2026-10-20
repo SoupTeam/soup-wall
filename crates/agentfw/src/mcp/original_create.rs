@@ -202,6 +202,24 @@ mod linux {
         }
     }
 
+    /// A valid original error can be released after native inspection, but
+    /// must never carry verified bytes into the publication branch. Partial
+    /// stage artifacts left by a failed upstream operation are discarded.
+    fn validate_original_output(
+        stage: &OwnedStage,
+        selected: &CreateSelection,
+        reply: &serde_json::Value,
+    ) -> anyhow::Result<Option<VerifiedOutput>> {
+        let profiles = super::super::server_profile::filesystem_create::classify_manifest(
+            &super::super::server_profile::original_manifest(),
+        )?;
+        match profiles["write_file"].validate_result(reply)? {
+            "value" => stage.verify(selected).map(Some),
+            "error" => Ok(None),
+            _ => anyhow::bail!("unsupported original create result kind"),
+        }
+    }
+
     // No access to the real workspace is passed to this exchange. Even a
     // compromised original upstream process can only mutate its one ephemeral
     // /workspace stage and sandbox-private tmpfs. The caller must separately
@@ -209,7 +227,7 @@ mod linux {
     pub(crate) async fn run_original_upstream(
         profile: &crate::mcp::server_profile::ProfileConfig,
         original_args: &serde_json::Value,
-    ) -> anyhow::Result<(Vec<u8>, VerifiedOutput)> {
+    ) -> anyhow::Result<(Vec<u8>, Option<VerifiedOutput>)> {
         use crate::mcp::{server_profile, server_sandbox};
         use serde_json::{json, Value};
         use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -352,14 +370,11 @@ mod linux {
                 )
                 .await?;
                 let (reply, raw) = receive(&mut reader, 3).await?;
-                ensure!(
-                    reply.get("error").is_none() && write.validate_result(&reply)? == "value",
-                    "original upstream failed to create its isolated output"
-                );
+                write.validate_result(&reply)?;
                 // Explicitly close the original server input; the namespace
                 // owner is always reaped before inspecting the stage.
                 writer.shutdown().await?;
-                Ok::<_, anyhow::Error>(raw)
+                Ok::<_, anyhow::Error>((raw, reply))
             };
             // The original process may keep stderr open after write_file.
             // Never await stderr EOF before stopping the child.
@@ -397,14 +412,14 @@ mod linux {
         };
         // Always attempt all owned cleanup before examining any original
         // output, including on a timed-out or malformed RPC.
-        let result = outcome?;
+        let (result, reply) = outcome?;
         owner_quiesce?;
         budget_check?;
         budget_cleanup?;
         owner_cleanup?;
         child_cleanup?;
         stderr_cleanup?;
-        let verified = stage.verify(&selected)?;
+        let verified = validate_original_output(&stage, &selected, &reply)?;
         Ok((result, verified))
     }
 
@@ -451,6 +466,7 @@ mod linux {
             profile.workspace = workspace.canonicalize().unwrap();
             let args = json!({"path":"/workspace/original.txt","content":"upstream 🌍"});
             let (raw, verified) = super::run_original_upstream(&profile, &args).await.unwrap();
+            let verified = verified.expect("successful original create has verified output");
             assert_eq!(verified.leaf, "original.txt");
             assert_eq!(verified.content, "upstream 🌍");
             assert_eq!(
@@ -480,6 +496,38 @@ mod linux {
             }
             assert_eq!(fs::read(&outside).unwrap(), b"outside unchanged");
             assert_eq!(fs::read_dir(&workspace).unwrap().count(), 0);
+        }
+
+        #[test]
+        fn original_errors_never_grant_publication_even_with_partial_stage_artifacts() {
+            let stage = OwnedStage::new().unwrap();
+            let root = stage.path().to_path_buf();
+            let selected = selected("approved.txt", "exact authorized bytes");
+            // A failed upstream write may have left partial output. Neither a
+            // JSON-RPC error nor an isError tool result may publish it.
+            original_file(&stage, "approved.txt", b"partial");
+            let errors = [
+                json!({"jsonrpc":"2.0","id":3,"error":{"code":-32603,"message":"original failure"}}),
+                json!({"jsonrpc":"2.0","id":3,"result":{"isError":true,
+                    "content":[{"type":"text","text":"Error: ENOSPC: no space left"}]}}),
+            ];
+            for reply in errors {
+                assert!(validate_original_output(&stage, &selected, &reply)
+                    .unwrap()
+                    .is_none());
+            }
+            let false_success = json!({"jsonrpc":"2.0","id":3,"result":{
+                "content":[{"type":"text","text":"success"}],
+                "structuredContent":{"content":"success"}}});
+            assert!(validate_original_output(&stage, &selected, &false_success).is_err());
+            let hidden = json!({"jsonrpc":"2.0","id":3,"error":{
+                "code":-32603,"message":"failure","data":{"uninspected":"payload"}}});
+            assert!(validate_original_output(&stage, &selected, &hidden).is_err());
+            drop(stage);
+            assert!(
+                !root.exists(),
+                "failed upstream artifacts must be discarded"
+            );
         }
 
         #[test]

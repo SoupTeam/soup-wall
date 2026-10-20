@@ -1443,11 +1443,17 @@ Promise.all([probe({{host:'127.0.0.1',port:{port}}}),probe({{path:'/workspace/eg
             );
             out.unwrap();
             err.unwrap();
+            // The owner intentionally stays alive until its explicit stop.
+            // Do not wait for that process before completing the handshake.
+            owner.quiesce().await.unwrap();
+            if let Some(budget) = budget.as_mut() {
+                budget.finish().await.unwrap();
+            }
+            owner.finish().await.unwrap();
             (output, errors, child.wait().await.unwrap())
         })
         .await;
         // Always stop the owner and reap the child, including on timeout.
-        let quiesce = owner.quiesce().await;
         let budget_cleanup = if let Some(budget) = budget.as_mut() {
             budget.finish().await
         } else {
@@ -1455,7 +1461,6 @@ Promise.all([probe({{host:'127.0.0.1',port:{port}}}),probe({{path:'/workspace/eg
         };
         let owner_cleanup = owner.finish().await;
         let child_cleanup = terminate(&mut child).await;
-        quiesce.unwrap();
         budget_cleanup.unwrap();
         owner_cleanup.unwrap();
         child_cleanup.unwrap();

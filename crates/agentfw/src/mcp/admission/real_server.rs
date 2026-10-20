@@ -79,7 +79,7 @@ enum WorkEvent {
     Admitted(String, anyhow::Result<Decision>),
     Inspected(String, anyhow::Result<Option<Release>>),
     #[cfg(target_os = "linux")]
-    Created(String, anyhow::Result<(Vec<u8>, VerifiedOutput)>),
+    Created(String, anyhow::Result<(Vec<u8>, Option<VerifiedOutput>)>),
     #[cfg(target_os = "linux")]
     CreateInspected(String, anyhow::Result<Option<Release>>, VerifiedOutput),
     #[cfg(target_os = "linux")]
@@ -948,11 +948,20 @@ where
                                     "unexpected original-server response correlation");
                                 decoded["id"] = call.id.clone();
                                 let raw = frame(&decoded);
-                                workers.push(Box::pin(async move {
-                                    WorkEvent::CreateInspected(worker_key,
-                                        inspect(collector, &input, grant, raw, "value").await,
-                                        verified)
-                                }));
+                                if let Some(verified) = verified {
+                                    workers.push(Box::pin(async move {
+                                        WorkEvent::CreateInspected(worker_key,
+                                            inspect(collector, &input, grant, raw, "value").await,
+                                            verified)
+                                    }));
+                                } else {
+                                    // Preserve the valid ORIGINAL error. It
+                                    // has no output/publication capability.
+                                    workers.push(Box::pin(async move {
+                                        WorkEvent::Inspected(worker_key,
+                                            inspect(collector, &input, grant, raw, "error").await)
+                                    }));
+                                }
                             }
                             Err(_) => {
                                 let failure = error(&call.id, -32603,

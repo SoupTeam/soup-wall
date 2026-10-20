@@ -61,6 +61,7 @@ Paths below are relative to the repository. `relay` means
 | Source | Required behavior | Implementation | Executable evidence / limit | Status |
 | --- | --- | --- | --- | --- |
 | Deliver 1 | Separate opt-in pinned ORIGINAL profile; original discovery and schemas | `server_profile/filesystem_create.rs`, installer, `server_profile.rs` | Four profile tests; original manifest equality in installed driver | Confirmed baseline |
+| Deliver 1 | Preserve valid original JSON-RPC/tool errors without publishing partial output | Audit found producer converted upstream errors to a generic relay failure; corrected producer returns no verified-output capability for validated error, relay routes original frame through native inspection | `original_errors_never_grant_publication_even_with_partial_stage_artifacts`: JSON-RPC and isError errors, partial output cleanup, false success and hidden error data refusal | Corrected in audit; focused local proof, new-source CI required |
 | Deliver 1 | Exact path/content only, <=4096 UTF-8 bytes, no aliases or nested/hidden targets | `filesystem_create::validate_request`, relay input gate | Bounds, Unicode-byte, alias, extra-field unit controls; real refusal cases | Confirmed baseline |
 | Deliver 1; ownership | Preserve read-only and Git authority; refuse all other mutators | Profile selection, relay registry validation | `selected_registry_*` authority/schema/family controls; required Git CI | Confirmed baseline |
 | Deliver 1 | Record runtime/dependency/schema identities and untrusted provenance | Pinned SOU-62 installation; exact original schema hashes, native registry | Installer/loader controls; install metadata and CI binary/tree identities | Confirmed baseline |
@@ -118,6 +119,16 @@ artifact download host. The ZIP bytes/digest have **not** been independently
 verified in this audit; the fetched job log and actual source were inspected.
 
 ## Remaining acceptance decisions
+
+The first audit candidate `d019d3e` failed required filesystem job
+[118762618002](https://github.com/SoupTeam/soup-wall/actions/runs/39461705469/job/118762618002):
+the new active writable-stage probe timed out. Source inspection found that
+the probe waited for the trusted owner's exit before sending its explicit
+quiesce/stop handshake. The follow-up fixes that test lifecycle ordering;
+it does not increase the timeout, weaken an assertion or retry unchanged
+source. This failed result and its artifact 12283287717 remain retained.
+The same follow-up preserves valid original upstream errors without giving
+them any publication capability. Both changes require new-source CI.
 
 The original task still requires single-use Ask and wider typed-resource,
 epoch-transition, worker-crash, stage-boundary and original race qualification.

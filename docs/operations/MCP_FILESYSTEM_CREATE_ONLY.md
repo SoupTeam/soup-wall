@@ -41,6 +41,12 @@ semantics and unsafe/missing native receipts do **not** publish files.
    potentially committed; the system never claims that late cancellation or
    withholding can undo `linkat`.
 
+A valid original JSON-RPC error or `isError` tool result is separately passed
+through native result inspection with its original error fields. It carries
+no verified output/publication capability; any partial private-stage files
+are discarded after owned process cleanup. Malformed responses and failed
+containment/cleanup still produce a bounded relay failure, without publication.
+
 ## Validation and limits
 
 Linux profile/stage/unit/clippy tests are separate from the accepted read-only
