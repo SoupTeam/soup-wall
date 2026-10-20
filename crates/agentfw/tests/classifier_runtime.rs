@@ -508,3 +508,52 @@ fn latency_evidence() {
     }
     println!("LATENCY {}", serde_json::to_string_pretty(&report).unwrap());
 }
+
+#[test]
+fn cleanup_through_a_symlinked_root_deletes_nothing_outside_the_profile() {
+    let (dir, store) = installed(Which::Frozen);
+    let real = dir.path().join("classifier-real");
+    std::fs::rename(store.root(), &real).unwrap();
+    std::fs::create_dir(real.join("staging-attacker")).unwrap();
+    std::os::unix::fs::symlink(&real, store.root()).unwrap();
+
+    assert!(store.recover().is_err(), "recover refuses a linked root");
+    assert!(
+        store.remove(None, true).is_err(),
+        "remove refuses a linked root"
+    );
+    assert!(real.join("staging-attacker").is_dir() && real.join("current.json").is_file());
+
+    std::fs::remove_file(store.root()).unwrap();
+    std::fs::rename(&real, store.root()).unwrap();
+    assert!(store.verify().is_ok());
+}
+
+#[test]
+fn cleanup_refuses_a_linked_ancestor_without_deleting_redirected_files() {
+    use std::os::unix::fs::symlink;
+    let mut outcomes = Vec::new();
+    for remove_all in [false, true] {
+        let directory = home();
+        let target = directory.path().join("operator-home");
+        let stage = target.join("classifier/staging-operator");
+        std::fs::create_dir_all(&stage).unwrap();
+        let canary = stage.join("preserve.txt");
+        std::fs::write(&canary, b"operator bytes").unwrap();
+        let alias = directory.path().join("redirected-home");
+        symlink(&target, &alias).unwrap();
+        let store = Store::new(&alias);
+        let refused = if remove_all {
+            store.remove(None, true).is_err()
+        } else {
+            store.recover().is_err()
+        };
+        outcomes.push((remove_all, refused, canary.exists()));
+    }
+    assert!(
+        outcomes
+            .iter()
+            .all(|(_, refused, preserved)| *refused && *preserved),
+        "cleanup must refuse ancestor redirection and preserve foreign bytes: {outcomes:?}"
+    );
+}

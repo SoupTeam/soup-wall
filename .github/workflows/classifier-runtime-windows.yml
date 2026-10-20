@@ -1,0 +1,103 @@
+name: Native Windows classifier package runtime
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: classifier-runtime-windows-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  impact:
+    uses: ./.github/workflows/ci-impact-plan.yml
+    with:
+      workflow: classifier-runtime-windows.yml
+  native-windows-classifier-runtime:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-windows-classifier-runtime')
+    runs-on: windows-2022
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Prerequisites and pinned classifier bytes (a missing prerequisite fails the job)
+        id: prerequisites
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $IsWindows) { throw 'Native Windows is required' }
+          if ([Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne 'X64') { throw 'x86_64 is required' }
+          $python = (& python -I -c 'import sys; print(sys.executable)').Trim()
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $python)) { throw 'A local CPython is required' }
+          if ($python -match 'WindowsApps') { throw 'A Microsoft Store alias is not a supported interpreter' }
+          "AGENTFW_TEST_PYTHON=$python" | Add-Content $env:GITHUB_ENV
+          $drive = (Get-Item -LiteralPath $env:GITHUB_WORKSPACE).PSDrive.Name
+          $fs = (Get-Volume -DriveLetter $drive).FileSystem
+          if ($fs -ne 'NTFS') { throw "Local NTFS is required, found $fs" }
+          $pins = @{
+            'rule_baseline/rule_baseline.py' = 'd2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd'
+            'rule_baseline/rev2/rule_baseline.py' = 'd0b4fc02720ee5ff38dec73d5992c6bdee9eda8595282e33015e60d07ce33ea5'
+          }
+          foreach ($path in $pins.Keys) {
+            $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actual -ne $pins[$path]) { throw "$path does not match its pinned digest ($actual)" }
+          }
+          @{ commit = (& git rev-parse HEAD).Trim(); rustc = (& rustc --version); python = $python
+             python_version = (& python -I -c 'import sys; print(sys.version.split()[0])').Trim()
+             python_sha256 = (Get-FileHash -LiteralPath $python -Algorithm SHA256).Hash.ToLowerInvariant()
+             os = [Environment]::OSVersion.VersionString; filesystem = $fs } |
+            ConvertTo-Json | Set-Content "$env:RUNNER_TEMP/sou81-identities.json"
+      - name: Native Windows package lifecycle, ACL, junction, tamper and worker tests
+        shell: pwsh
+        run: |
+          & cargo test --locked -p agentfw --test classifier_runtime_windows -- --test-threads=1 2>&1 |
+              Tee-Object -FilePath "$env:RUNNER_TEMP/sou81-native.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Native Windows classifier runtime tests failed' }
+          $log = Get-Content "$env:RUNNER_TEMP/sou81-native.log" -Raw
+          if ($log -notmatch 'test result: ok\. 20 passed; 0 failed; 1 ignored;') {
+              throw 'All 20 positive native tests must run and pass (only the latency measurement is opt-in)'
+          }
+      - name: Real collector with the installed package on Windows
+        shell: pwsh
+        run: |
+          & cargo test --locked -p agentfw --test mcp_admission sou64 -- --test-threads=1 2>&1 |
+              Tee-Object -FilePath "$env:RUNNER_TEMP/sou81-collector.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Collector tests failed' }
+          $log = Get-Content "$env:RUNNER_TEMP/sou81-collector.log" -Raw
+          if ($log -notmatch 'test result: ok\. 2 passed; 0 failed; 0 ignored;') {
+              throw 'Both installed-package collector tests must run and pass'
+          }
+      - name: Cold and warm latency distribution (deadlines and retries unchanged)
+        shell: pwsh
+        run: |
+          & cargo test --locked -p agentfw --test classifier_runtime_windows -- --ignored --nocapture latency 2>&1 |
+              Tee-Object -FilePath "$env:RUNNER_TEMP/sou81-latency.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Latency measurement failed: a cold start exceeded its unchanged deadline or a call failed' }
+      - name: Production collector from a clean installed directory
+        shell: pwsh
+        run: |
+          & cargo build --locked -p agentfw --bin agentfw
+          if ($LASTEXITCODE -ne 0) { throw 'Agent build failed' }
+          & python -I scripts/classifier-runtime-windows-acceptance.py --require-windows `
+              --python $env:AGENTFW_TEST_PYTHON --agentfw target/debug/agentfw.exe `
+              --out "$env:RUNNER_TEMP/sou81-acceptance.json" 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/sou81-acceptance.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Clean-directory acceptance failed' }
+      - name: Retain identities, logs and measurements
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou81-native-windows-classifier-runtime-evidence
+          path: |
+            ${{ runner.temp }}/sou81-*.json
+            ${{ runner.temp }}/sou81-*.log
+          if-no-files-found: warn
+          retention-days: 30

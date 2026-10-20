@@ -27,7 +27,7 @@ class SharedComponents(unittest.TestCase):
         expected = {f"{wf.removesuffix('.yml')}--{job}" for wf, jobs in WORKFLOW_JOBS.items()
                     if wf != "ci.yml" for job in jobs}
         self.assertEqual(set(actual), expected)
-        self.assertEqual(len(actual), 42)
+        self.assertEqual(len(actual), 43)
         self.assertIn("gateway-sdk--official-sdk", actual)
         self.assertIn("mcp-https-post--linux-https-post", actual)
 
