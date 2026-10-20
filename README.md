@@ -112,3 +112,4 @@ The [architecture guide](docs/ARCHITECTURE.md) maps the three product surfaces t
 ## Provenance and license
 
 Soup Wall is licensed under [Apache-2.0](LICENSE). It is derived from [carbon-evolution/llm-firewall](https://github.com/carbon-evolution/llm-firewall) by Arthur Lin and contributors. Keep the upstream attribution in [NOTICE](NOTICE) and the source intake rules in [docs/PROVENANCE.md](docs/PROVENANCE.md). Model weights and third-party datasets have separate terms and are not silently bundled with this source.
+
