@@ -1,0 +1,106 @@
+{
+  "format": "sou97-pilot-gate-manifest/1",
+  "purpose": "SOU-97 acceptance gate inputs. Every identity is the sha256 of raw committed bytes. This manifest selects nothing at runtime and grants no authority.",
+  "candidate": {
+    "path": "rule_baseline/pilot_readonly_v1/rule_baseline.py",
+    "sha256": "9f4a532b5d1b1f6d375eba1e9a2ffca1164bfab038bdc6fa3532cbd9584eef1e",
+    "revision": "pilot_readonly_v1.1"
+  },
+  "superseded_candidates": {
+    "82a41dded79cf560cefc5ab6894e9f247d31fec2992b2b7b6d0fcad02c0494f4": "pilot_readonly_v1 (ef0d17b); historical development result only"
+  },
+  "baselines": {
+    "filesystem": {"path": "rule_baseline/rule_baseline.py", "sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"},
+    "git": {"path": "rule_baseline/git_readonly_v1/rule_baseline.py", "sha256": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474"}
+  },
+  "inputs": {
+    "eval/eval_runner.py": "760085c0faf23a8409e52d6fd5ebc97bedf64fd67c0547f1d6fb33bbc5bebe6e",
+    "rule_baseline/evaluate_dev.py": "74de74ccc7f2c5f97fda5efba69eb9e70b22d7c1722e1505d3f7fff9fa0f9e05",
+    "eval/fixtures/soup_pilot_readonly_matrix_v0.1.json": "3d19281c56d0c330761a36289b50c1df524a28c63bad88392ca85b94faf7da36",
+    "eval/fixtures/soup_pilot_readonly_supplement_v0.1.json": "a09cac0679a0e1876089c91c604ae0b511558b7173a0ee3464e7cd225e2cd366",
+    "profiles/mcp/filesystem-readonly-v1/policy.yaml": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+    "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954",
+    "profiles/mcp/filesystem-readonly-v1/upstream-identity.json": "bd2b235f11e4e3ccd31467185b33b26751a626ed23e499ca72392b56dc9849ca",
+    "profiles/mcp/git-readonly-v1/policy.yaml": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+    "profiles/mcp/git-readonly-v1/upstream-tools-list.json": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b",
+    "profiles/mcp/git-readonly-v1/upstream-identity.json": "90fbf2f84db1fee38145914adaf851c35d9b8b3735dc4e78caf7820c507e09e4"
+  },
+  "evidence": {
+    "source_commit": "ca1302153cbcdf7f25ecc4a83bdedd4bf2e380ec",
+    "recorded_in": "47bd8faa0d1b283fda7cc99519bfafbba787deec",
+    "note": "Reports were generated in a clean checkout of source_commit and committed afterwards in recorded_in; they cannot exist at source_commit.",
+    "reports": [
+      {
+        "fixture": "eval/fixtures/soup_pilot_readonly_matrix_v0.1.json",
+        "runs": {
+          "eval/evidence/sou97/v1.1/pilot/matrix/run1/pilot_report.json": "c60fd0a49366ad8be4cf887acc7acbcd1305b4cd405504c4d4d0b1a5cae16166",
+          "eval/evidence/sou97/v1.1/pilot/matrix/run2/pilot_report.json": "8bfb481d23efe09e790974a4e047a7e6bf0ae66f89f0e78fb24af46cd760876f"
+        }
+      },
+      {
+        "fixture": "eval/fixtures/soup_pilot_readonly_supplement_v0.1.json",
+        "runs": {
+          "eval/evidence/sou97/v1.1/pilot/supplement/run1/pilot_report.json": "f5abc8bc183258f67308395e17f171a1144be4eabe8cda8fd049f6f72894b014",
+          "eval/evidence/sou97/v1.1/pilot/supplement/run2/pilot_report.json": "21e68de513cfce58f6e4c887ef9a601616dbbcd17879dd3d4a74bc2c6d8b8d32"
+        }
+      }
+    ]
+  },
+  "measurement": {
+    "latency_calls": 200,
+    "latency_spawns": 20,
+    "request_timeout_s": 5.0,
+    "bridge_inner_timeout_ms": 1500,
+    "note": "Existing measurement parameters and deadlines only. No relative latency threshold has been approved."
+  },
+  "acknowledged_inherited": {
+    "note": "Pre-existing limitations of the selected baselines that the candidate keeps unchanged. Acknowledgement records them; it does not make them correct. Any limitation not listed here, or any new one, fails the gate.",
+    "known_risk_misses": {
+      "PMF-U05": "move_file predicts read+write without delete; unsupported by the filesystem profile and refused before dispatch",
+      "PMG-U03": "git_reset is unknown, so write is not predicted; unsupported by the Git profile",
+      "PMG-U04": "git_checkout is unknown, so write is not predicted; unsupported by the Git profile"
+    },
+    "expected_d06_not_met": {
+      "PMF-V01": "null arguments are masked as a classification (inherited D06 gap; v0.5 E01)",
+      "PMF-V02": "array arguments are masked as a classification (inherited D06 gap; v0.5 E02)",
+      "PMF-V03": "non-JSON text arguments are masked as a classification (inherited D06 gap)",
+      "PMG-V01": "null Git arguments are masked as a classification (inherited D06 gap)"
+    },
+    "pending_safety_violations": {
+      "PMF-A01": "read_file with an undeclared field is read/unknown=false by the generic read verb rule; the profile refuses the form"
+    },
+    "failed_classifications": {
+      "PMF-R08": "profile-refused empty directory_tree path; classifier abstains",
+      "PMF-R09": "profile-refused path '/'; classifier abstains",
+      "PMF-R10": "profile-refused 257-item array; classifier abstains (partial unknown)",
+      "PMF-R11": "profile-refused 257-item exclude array; classifier abstains",
+      "PMF-U05": "see known_risk_misses",
+      "PMF-V01": "see expected_d06_not_met",
+      "PMF-V02": "see expected_d06_not_met",
+      "PMF-V03": "see expected_d06_not_met",
+      "PMG-R01": "profile-refused git_log max_count 0; classifier abstains",
+      "PMG-R02": "profile-refused git_log max_count 21; classifier abstains",
+      "PMG-R03": "profile-refused context_lines 21; classifier predicts write with unknown",
+      "PMG-R04": "profile-refused revision 'main'; classifier abstains",
+      "PMG-R05": "profile-refused revision 'HEAD~1'; classifier abstains",
+      "PMG-R06": "profile-refused revision 'HEAD:../outside'; classifier abstains",
+      "PMG-R07": "profile-refused repo_path '/etc'; classifier abstains",
+      "PMG-R08": "profile-refused repo_path '/workspace/'; classifier abstains",
+      "PMG-R09": "profile-refused start_timestamp; classifier abstains",
+      "PMG-U03": "see known_risk_misses",
+      "PMG-U04": "see known_risk_misses",
+      "PMG-U07": "unsupported git_branch is unknown",
+      "PMG-V01": "see expected_d06_not_met",
+      "PSF-R01": "profile-refused pattern over 16384 bytes; classifier abstains",
+      "PSF-R02": "profile-refused multi-byte pattern over 16384 bytes; classifier abstains",
+      "PSF-R03": "profile-refused 4-byte pattern over 16384 bytes; classifier abstains",
+      "PSF-R04": "profile-refused path with a control character; classifier abstains"
+    }
+  },
+  "runtime": {
+    "evidence_format": "sou97-runtime-evidence/1",
+    "required_profiles": ["filesystem", "git"],
+    "required_platform_prefix": "Linux",
+    "note": "Full runtime qualification needs candidate-specific original-server runs. No such evidence exists yet; the drivers do not select the candidate."
+  }
+}
