@@ -1,5 +1,6 @@
 """Completion events cannot authorize stale sources or consume PR artifacts."""
 import argparse
+import fnmatch
 import json
 import os
 from pathlib import Path
@@ -37,6 +38,22 @@ class API:
 
 
 class Completion(unittest.TestCase):
+    def test_default_codeql_workflow_name_is_subscribed_not_only_run_title(self):
+        # Live regression: workflow 351475764 is named CodeQL, whereas run
+        # 39380135694 is titled PR #201. workflow_run filters the former.
+        workflow = (Path(__file__).resolve().parents[2] /
+                    ".github/workflows/ci-admission.yml").read_text(encoding="utf-8")
+        trigger = workflow.split("  workflow_run:\n", 1)[1].split("\npermissions:", 1)[0]
+        match = re.search(r"(?m)^    workflows: \[(.+)\]$", trigger)
+        self.assertIsNotNone(match)
+        subscriptions = [value.strip().strip("\"'") for value in match.group(1).split(",")]
+        for name in ("ci", "CodeQL"):
+            with self.subTest(workflow_name=name):
+                self.assertTrue(any(fnmatch.fnmatchcase(name, pattern)
+                                    for pattern in subscriptions))
+        # A PR-style run title alone must not stand in for its workflow name.
+        self.assertFalse(fnmatch.fnmatchcase("CodeQL", "PR #*"))
+
     def run_workflow_command(self, api, payload):
         workflow = (Path(__file__).resolve().parents[2] /
                     ".github/workflows/ci-admission.yml").read_text(encoding="utf-8")

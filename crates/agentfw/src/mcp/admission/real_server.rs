@@ -297,10 +297,31 @@ fn validate_registry(
         collector.config.resource_profiles.is_empty(),
         "selected server cannot mix brokered resource profiles"
     );
+    // One daemon may explicitly install both accepted original server families.
+    // Validate peer entries against their own pinned manifest without adding
+    // them to this relay's callable profiles or advertised discovery result.
+    // Arbitrary unadvertised registry entries remain a startup refusal.
+    let peer_format = match format {
+        server_profile::FORMAT => server_profile::git::FORMAT,
+        server_profile::git::FORMAT => server_profile::FORMAT,
+        _ => bail!("unsupported selected registry profile"),
+    };
+    let peer_manifest = server_profile::original_manifest_for(peer_format)?;
+    let peer_profiles = server_profile::classify_manifest_for(peer_format, &peer_manifest)?;
+    let peer_tools = peer_manifest["tools"]
+        .as_array()
+        .context("peer selected manifest tools missing")?;
     for tool in &collector.config.native.registry.tools {
-        let definition = tools
+        let (definition, profile, expected_format) = tools
             .iter()
             .find(|value| value["name"] == tool.name)
+            .map(|definition| (definition, &profiles[&tool.name], format))
+            .or_else(|| {
+                peer_tools
+                    .iter()
+                    .find(|value| value["name"] == tool.name)
+                    .map(|definition| (definition, &peer_profiles[&tool.name], peer_format))
+            })
             .context("selected registry contains an unadvertised tool")?;
         ensure!(
             tool.schema_sha256 == sha(canonical(&definition["inputSchema"]).to_string().as_bytes()),
@@ -310,7 +331,7 @@ fn validate_registry(
             tool.resource_policy.is_none(),
             "selected server cannot acquire built-in resource authority"
         );
-        if profiles[&tool.name].unsupported_reason.is_none() {
+        if profile.unsupported_reason.is_none() {
             ensure!(
                 tool.action_class == soup_wall_agent::ActionClass::ReadOnly
                     && tool.egress.is_empty()
@@ -318,7 +339,7 @@ fn validate_registry(
                         tool.result_provenance,
                         crate::native::ResultProvenance::Untrusted
                     )
-                    && tool.mcp_result_profile.as_deref() == Some(format),
+                    && tool.mcp_result_profile.as_deref() == Some(expected_format),
                 "selected read authority is not explicitly installed"
             );
         }
@@ -347,6 +368,18 @@ fn validate_registry(
 const WIRE_LIMIT: usize = ACTIVE_LIMIT * 2;
 const FORWARDED_CANCELLATIONS: usize = ACTIVE_LIMIT;
 
+fn forwarded_cancellation_limit(format: &str) -> usize {
+    // The pinned Git SDK drops CancelScope::__exit__'s suppression result.
+    // A wire abort during response backpressure kills its sibling tasks/stdio.
+    // Withdraw locally and drain instead: keep the physical slot and deadline
+    // until the original response arrives, without modifying the upstream server.
+    if format == server_profile::git::FORMAT {
+        0
+    } else {
+        FORWARDED_CANCELLATIONS
+    }
+}
+
 async fn relay<R, W, S, T>(
     collector: &Collector<'_>,
     client: &mut R,
@@ -370,6 +403,7 @@ where
     let mut used = BTreeSet::new();
     let mut wire: BTreeMap<String, (Instant, bool)> = BTreeMap::new();
     let mut forwarded_cancellations = 0;
+    let cancellation_limit = forwarded_cancellation_limit(format);
     let mut grants = BTreeSet::new();
     let mut workers: FuturesUnordered<Work<'_>> = FuturesUnordered::new();
     let mut profiles: BTreeMap<String, server_profile::ToolProfile> = BTreeMap::new();
@@ -473,7 +507,7 @@ where
                                 calls.remove(&key);
                             }
                             Phase::Running(grant) => {
-                                if forwarded_cancellations < FORWARDED_CANCELLATIONS {
+                                if forwarded_cancellations < cancellation_limit {
                                     forwarded_cancellations += 1;
                                     if let Some(item) = wire.get_mut(&key) {
                                         item.1 = true;
@@ -1034,7 +1068,7 @@ where
                             calls.remove(&key);
                         }
                         Phase::Running(grant) => {
-                            if forwarded_cancellations < FORWARDED_CANCELLATIONS {
+                            if forwarded_cancellations < cancellation_limit {
                                 forwarded_cancellations += 1;
                                 if let Some(item) = wire.get_mut(&key) {
                                     item.1 = true;
@@ -1063,21 +1097,124 @@ where
     }
 }
 
-async fn drain_stderr(mut stream: tokio::process::ChildStderr) -> anyhow::Result<usize> {
+// Untrusted stderr remains withheld. These fixed markers and a streaming digest
+// are operator diagnostics only, never authority or a reason to release output.
+const STDERR_MARKERS: &[(&[u8], &str)] = &[
+    (
+        b"AssertionError: Request already responded to",
+        "request_already_responded",
+    ),
+    (
+        b"RuntimeError: RequestResponder must be used as a context manager",
+        "responder_context_missing",
+    ),
+    (b"anyio.BrokenResourceError", "broken_resource"),
+    (b"anyio.ClosedResourceError", "closed_resource"),
+    (b"ExceptionGroup:", "exception_group"),
+    (b"KeyError:", "key_error"),
+    (b"PermissionError:", "permission_error"),
+    (b"RuntimeError:", "runtime_error"),
+    (b"FileNotFoundError:", "file_not_found"),
+    (b"OSError:", "os_error"),
+    (b"AssertionError:", "assertion_error"),
+    (b"ValueError:", "value_error"),
+    (b"TypeError:", "type_error"),
+    (b"BrokenPipeError:", "broken_pipe"),
+    (b"BlockingIOError:", "blocking_io"),
+    (b"anyio.EndOfStream", "end_of_stream"),
+];
+
+#[derive(Default)]
+struct StderrWitness {
+    received: usize,
+    digest: sha2::Sha256,
+    tail: Vec<u8>,
+    markers: BTreeSet<&'static str>,
+}
+
+fn relay_failure_code(error: &anyhow::Error) -> &'static str {
+    // Match complete fixed strings only. Never copy arbitrary error details,
+    // which may contain untrusted protocol data or operational paths/URLs.
+    for cause in error.chain() {
+        match cause.to_string().as_str() {
+            "unknown or duplicate MCP response ID" => return "response_id_unbound",
+            "MCP response arrived in an invalid call phase" => return "response_phase_invalid",
+            "selected MCP server closed with incomplete state" => {
+                return "server_closed_incomplete"
+            }
+            "MCP server did not finish a withdrawn request within its bound" => {
+                return "withdrawn_request_incomplete"
+            }
+            "MCP control request timed out" => return "control_timeout",
+            "MCP stdio write timed out" => return "stdio_write_timeout",
+            "MCP admission unavailable" => return "admission_unavailable",
+            "MCP admission request rejected" => return "admission_rejected",
+            "MCP response must contain exactly one result or error" => {
+                return "response_shape_invalid"
+            }
+            "server response ID missing" => return "response_id_missing",
+            _ => {}
+        }
+    }
+    "unknown_transport_failure"
+}
+
+impl StderrWitness {
+    fn observe(&mut self, bytes: &[u8]) {
+        use sha2::Digest;
+        self.received = self.received.saturating_add(bytes.len());
+        self.digest.update(bytes);
+        self.tail.extend_from_slice(bytes);
+        for (needle, marker) in STDERR_MARKERS {
+            if self
+                .tail
+                .windows(needle.len())
+                .any(|window| window == *needle)
+            {
+                self.markers.insert(marker);
+            }
+        }
+        // Preserve only enough overlap to recognize a marker split across reads.
+        let keep = STDERR_MARKERS
+            .iter()
+            .map(|(value, _)| value.len())
+            .max()
+            .unwrap_or(1)
+            - 1;
+        if self.tail.len() > keep {
+            self.tail.drain(..self.tail.len() - keep);
+        }
+    }
+
+    fn metadata(&self, complete: bool) -> Value {
+        use sha2::Digest;
+        json!({"event":"mcp_real_stderr", "received_bytes":self.received,
+            "sha256":format!("{:x}",self.digest.clone().finalize()),
+            "markers":self.markers,"complete":complete,"released":false,
+            "origin":"untrusted_server_stderr"})
+    }
+}
+
+async fn drain_stderr(mut stream: tokio::process::ChildStderr) -> anyhow::Result<()> {
     use tokio::io::AsyncReadExt;
     let mut buffer = [0u8; 8192];
-    let mut received = 0usize;
-    loop {
-        let count = stream.read(&mut buffer).await?;
-        if count == 0 {
-            return Ok(received);
+    let mut witness = StderrWitness::default();
+    let result = async {
+        loop {
+            let count = stream.read(&mut buffer).await?;
+            if count == 0 {
+                return Ok(());
+            }
+            witness.observe(&buffer[..count]);
+            ensure!(
+                witness.received <= 1024 * 1024,
+                "selected MCP server stderr quota exceeded"
+            );
         }
-        received = received.saturating_add(count);
-        ensure!(
-            received <= 1024 * 1024,
-            "selected MCP server stderr quota exceeded"
-        );
     }
+    .await;
+    eprintln!("{}", witness.metadata(result.is_ok()));
+    result
 }
 
 pub(super) async fn run(
@@ -1124,7 +1261,7 @@ pub(super) async fn run(
         "sandbox":server_sandbox::profile_name(&profile.format),"sandbox_workspace":server_sandbox::SANDBOX_WORKSPACE,
         "sandbox_pid":sandbox_pid,"owner":owner.metadata(),"resource_budget":budget_mode,
         "active_limit":ACTIVE_LIMIT,"queued_limit":QUEUE_LIMIT,"wire_limit":WIRE_LIMIT,
-        "forwarded_cancellation_limit":FORWARDED_CANCELLATIONS})
+        "forwarded_cancellation_limit":forwarded_cancellation_limit(&profile.format)})
     );
     let operation = {
         let transport = async {
@@ -1157,11 +1294,13 @@ pub(super) async fn run(
             // already pending host write must observe the same withdrawal;
             // cancelling the relay alone does not provide that ordering.
             let host = super::DiagnosticOutput {
+                budget: None,
                 inner: host,
                 failed: Arc::clone(&boundary_failed),
                 liveness: None,
             };
             let mut host = super::DiagnosticOutput {
+                budget: None,
                 inner: host,
                 failed: Arc::clone(&owner_failed),
                 liveness: collector.liveness.clone(),
@@ -1180,12 +1319,21 @@ pub(super) async fn run(
                     result = &mut exchange => result,
                     drained = stderr_task.as_mut().expect("stderr task") => {
                         stderr_task = None;
-                        let received = drained.context("selected server stderr worker failed")??;
-                        eprintln!("{}",json!({"event":"mcp_real_stderr","received_bytes":received,"released":false}));
+                        drained.context("selected server stderr worker failed")??;
                         exchange.await
                     }
                 }
             };
+            if let Err(error) = &result {
+                // Record the relay's actual first failure before stdin shutdown
+                // can provoke a secondary wrapper/server exit. The owner select
+                // arm can otherwise win while this shutdown is still pending.
+                eprintln!(
+                    "{}",
+                    json!({"event":"mcp_real_transport_failure",
+                    "failure_code":relay_failure_code(error),"released":false})
+                );
+            }
             let _ = tokio::time::timeout(std::time::Duration::from_secs(1), child.shutdown()).await;
             drop(child);
             result
@@ -1250,13 +1398,7 @@ pub(super) async fn run(
     let cleanup = server_sandbox::terminate(&mut process).await;
     let stderr_cleanup = if let Some(mut task) = stderr_task {
         match tokio::time::timeout(std::time::Duration::from_secs(1), &mut task).await {
-            Ok(Ok(Ok(received))) => {
-                eprintln!(
-                    "{}",
-                    json!({"event":"mcp_real_stderr","received_bytes":received,"released":false})
-                );
-                Ok(())
-            }
+            Ok(Ok(Ok(()))) => Ok(()),
             Ok(Ok(Err(error))) => Err(error),
             Ok(Err(error)) => Err(anyhow::anyhow!(
                 "selected server stderr worker failed: {error}"
@@ -1312,6 +1454,55 @@ pub(super) async fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn relay_failure_metadata_does_not_echo_untrusted_context_or_suffixes() {
+        let error = anyhow::anyhow!("unknown or duplicate MCP response ID")
+            .context("private URL and payload");
+        assert_eq!(relay_failure_code(&error), "response_id_unbound");
+        let error = anyhow::anyhow!("unknown or duplicate MCP response ID: private payload");
+        assert_eq!(relay_failure_code(&error), "unknown_transport_failure");
+        assert_eq!(
+            relay_failure_code(&anyhow::anyhow!("arbitrary private payload")),
+            "unknown_transport_failure"
+        );
+    }
+    #[test]
+    fn stderr_witness_matches_split_markers_but_never_serializes_untrusted_bytes() {
+        for (needle, marker) in STDERR_MARKERS {
+            for split in 0..=needle.len() {
+                let mut witness = StderrWitness::default();
+                witness.observe(b"private arbitrary path and MCP payload ");
+                witness.observe(&needle[..split]);
+                witness.observe(&needle[split..]);
+                witness.observe(b" secret tail");
+                let value = witness.metadata(true);
+                assert!(value["markers"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|value| value == marker));
+                let output = value.to_string();
+                assert!(!output.contains("private arbitrary"));
+                assert!(!output.contains("secret tail"));
+                assert_eq!(value["released"], false);
+                assert_eq!(value["origin"], "untrusted_server_stderr");
+            }
+        }
+        let mut witness = StderrWitness::default();
+        for _ in 0..128 {
+            witness.observe(&[b'x'; 8192]);
+        }
+        assert_eq!(witness.received, 1024 * 1024);
+        assert!(witness.tail.len() < 128);
+        assert!(witness.metadata(false)["markers"]
+            .as_array()
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            witness.metadata(false)["sha256"],
+            sha(&vec![b'x'; 1024 * 1024])
+        );
+    }
     #[test]
     fn ids_keep_json_type_and_refuse_unsafe_numbers() {
         assert_ne!(rpc_key(&json!(1)).unwrap(), rpc_key(&json!("1")).unwrap());

@@ -192,6 +192,30 @@ struct State {
     cleanup_verified: bool,
 }
 
+#[derive(Clone, Copy, Debug, Serialize)]
+struct MembershipFailure {
+    phase: &'static str,
+    pid: Option<u32>,
+    errno: Option<i32>,
+}
+
+#[derive(Default)]
+struct MembershipFailures(Mutex<Option<MembershipFailure>>);
+
+impl MembershipFailures {
+    fn record(&self, phase: &'static str, pid: Option<u32>, errno: Option<i32>) {
+        // Cleanup and concurrent observers must not replace the first cause.
+        self.0
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .get_or_insert(MembershipFailure { phase, pid, errno });
+    }
+
+    fn snapshot(&self) -> Option<MembershipFailure> {
+        *self.0.lock().unwrap_or_else(|error| error.into_inner())
+    }
+}
+
 impl Default for State {
     fn default() -> Self {
         Self {
@@ -414,8 +438,13 @@ impl OwnedBudget {
 
     pub(crate) fn metadata(&self) -> Value {
         let state = self.state();
+        #[cfg(target_os = "linux")]
+        let membership_failure = self.linux.membership_failures.snapshot();
+        #[cfg(not(target_os = "linux"))]
+        let membership_failure: Option<MembershipFailure> = None;
         json!({"format":FORMAT,"budget_sha256":self.identity,"leaf":self.leaf,
             "limits":self.config.limits(),"reason":state.reason,
+            "membership_failure":membership_failure,
             "failed":self.failure.load(Ordering::Acquire),"stats":state.stats,
             "cleanup_verified":state.cleanup_verified})
     }
@@ -512,14 +541,14 @@ mod linux {
         Ok(left.dev() == right.dev() && left.ino() == right.ino())
     }
 
-    fn read(file: &File, maximum: usize) -> Checked<Vec<u8>> {
+    fn read_record(file: &File, maximum: usize) -> std::io::Result<Vec<u8>> {
         // pread keeps observations independent of earlier reads and never
         // accepts a truncated kernel control record as a complete observation.
         let mut bytes = vec![0_u8; maximum + 1];
         let mut offset = 0;
         loop {
             if offset == bytes.len() {
-                return Err("mcp_budget_observation_failed");
+                return Err(std::io::ErrorKind::InvalidData.into());
             }
             let count = unsafe {
                 libc::pread(
@@ -530,10 +559,11 @@ mod linux {
                 )
             };
             if count < 0 {
-                if std::io::Error::last_os_error().raw_os_error() == Some(libc::EINTR) {
+                let error = std::io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::EINTR) {
                     continue;
                 }
-                return Err("mcp_budget_observation_failed");
+                return Err(error);
             }
             if count == 0 {
                 bytes.truncate(offset);
@@ -541,8 +571,24 @@ mod linux {
             }
             offset += count as usize;
             if offset > maximum {
-                return Err("mcp_budget_observation_failed");
+                return Err(std::io::ErrorKind::InvalidData.into());
             }
+        }
+    }
+
+    fn read(file: &File, maximum: usize) -> Checked<Vec<u8>> {
+        read_record(file, maximum).map_err(|_| "mcp_budget_observation_failed")
+    }
+
+    fn process_record(file: &File) -> Checked<Option<Vec<u8>>> {
+        match read_record(file, MAX_CONTROL_BYTES) {
+            Ok(bytes) => Ok(Some(bytes)),
+            // This descriptor pins the original procfs PID inode. If its task
+            // exits after open(), Linux returns ESRCH from proc_single_show;
+            // a later reuse of the numeric PID cannot retarget this descriptor.
+            // Only process records use this rule. Controller reads stay strict.
+            Err(error) if error.raw_os_error() == Some(libc::ESRCH) => Ok(None),
+            Err(_) => Err("mcp_budget_observation_failed"),
         }
     }
 
@@ -633,11 +679,22 @@ mod linux {
         root_type: File,
         root_procs: File,
         expected_leader: Option<(u32, u64)>,
+        pub(super) membership_failures: MembershipFailures,
         pub(super) started: std::time::Instant,
         pub(super) removed: bool,
     }
 
     impl Boundary {
+        fn membership_error(
+            &self,
+            phase: &'static str,
+            pid: Option<u32>,
+            errno: Option<i32>,
+        ) -> &'static str {
+            self.membership_failures.record(phase, pid, errno);
+            "mcp_budget_membership_unverified"
+        }
+
         pub(super) fn crash_cleanup(
             &self,
         ) -> Checked<(super::super::linux_owner::CleanupSpec, Vec<File>)> {
@@ -728,6 +785,7 @@ mod linux {
                 root_type,
                 root_procs,
                 expected_leader: None,
+                membership_failures: MembershipFailures::default(),
                 started: std::time::Instant::now(),
                 removed: false,
             })
@@ -834,11 +892,11 @@ mod linux {
                 return Ok(stats);
             }
             if stats.pids_current > config.pids_max {
-                return Err("mcp_budget_membership_unverified");
+                return Err(self.membership_error("current_task_count", None, None));
             }
             let members = self.members()?;
             if members.len() > MAX_TASKS || members.len() as u64 > config.pids_max {
-                return Err("mcp_budget_membership_unverified");
+                return Err(self.membership_error("member_count", None, None));
             }
             for pid in &members {
                 self.member(*pid)?;
@@ -846,9 +904,24 @@ mod linux {
             if let Some((pid, ticks)) = self.expected_leader {
                 // Zombies have no live membership; their PID remains reserved
                 // by the existing process owner until it performs the final reap.
-                if let Some((current_ticks, zombie)) = process_identity(pid)? {
-                    if current_ticks != ticks || (!zombie && !members.contains(&pid)) {
-                        return Err("mcp_budget_membership_unverified");
+                let identity = process_identity(pid).inspect_err(|_| {
+                    self.membership_failures
+                        .record("leader_identity_read", Some(pid), None);
+                })?;
+                if let Some((current_ticks, zombie)) = identity {
+                    if current_ticks != ticks {
+                        return Err(self.membership_error(
+                            "leader_identity_changed",
+                            Some(pid),
+                            None,
+                        ));
+                    }
+                    if !zombie && !members.contains(&pid) {
+                        return Err(self.membership_error(
+                            "leader_absent_from_snapshot",
+                            Some(pid),
+                            None,
+                        ));
                     }
                 }
             }
@@ -861,22 +934,22 @@ mod linux {
 
         fn members(&self) -> Checked<BTreeSet<u32>> {
             let bytes = read(&self.procs, MAX_TASKS * 12)?;
-            let value =
-                std::str::from_utf8(&bytes).map_err(|_| "mcp_budget_membership_unverified")?;
+            let value = std::str::from_utf8(&bytes)
+                .map_err(|_| self.membership_error("members_utf8", None, None))?;
             let mut members = BTreeSet::new();
             for line in value.lines() {
                 let pid = line
                     .parse::<u32>()
-                    .map_err(|_| "mcp_budget_membership_unverified")?;
+                    .map_err(|_| self.membership_error("member_pid_parse", None, None))?;
                 if pid == 0 {
-                    return Err("mcp_budget_membership_unverified");
+                    return Err(self.membership_error("member_zero_pid", None, None));
                 }
                 // The kernel explicitly permits duplicate entries while
                 // processes migrate/exit. The bounded raw record limits work;
                 // duplicates themselves do not indicate an ownership failure.
                 members.insert(pid);
                 if members.len() > MAX_TASKS {
-                    return Err("mcp_budget_membership_unverified");
+                    return Err(self.membership_error("members_capacity", None, None));
                 }
             }
             Ok(members)
@@ -887,21 +960,34 @@ mod linux {
             let file = match File::open(path) {
                 Ok(file) => file,
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-                Err(_) => return Err("mcp_budget_membership_unverified"),
+                Err(error) => {
+                    return Err(self.membership_error(
+                        "member_open",
+                        Some(pid),
+                        error.raw_os_error(),
+                    ))
+                }
             };
-            let value = String::from_utf8(read(&file, MAX_CONTROL_BYTES)?)
-                .map_err(|_| "mcp_budget_membership_unverified")?;
+            let Some(bytes) = process_record(&file)? else {
+                return Ok(());
+            };
+            let value = String::from_utf8(bytes)
+                .map_err(|_| self.membership_error("member_utf8", Some(pid), None))?;
             let relative = self
                 .config_root
                 .strip_prefix(CGROUP_ROOT)
-                .map_err(|_| "mcp_budget_membership_unverified")?
+                .map_err(|_| self.membership_error("member_root", Some(pid), None))?
                 .join(&self.name);
             let expected = format!("0::/{}", relative.to_string_lossy());
             if value.trim() != expected {
-                if process_identity(pid)?.is_none_or(|(_, zombie)| zombie) {
+                let identity = process_identity(pid).inspect_err(|_| {
+                    self.membership_failures
+                        .record("member_exit_identity_read", Some(pid), None);
+                })?;
+                if identity.is_none_or(|(_, zombie)| zombie) {
                     return Ok(());
                 }
-                return Err("mcp_budget_membership_unverified");
+                return Err(self.membership_error("member_outside_leaf", Some(pid), None));
             }
             Ok(())
         }
@@ -1034,7 +1120,9 @@ mod linux {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(_) => return Err("mcp_budget_membership_unverified"),
         };
-        let bytes = read(&file, MAX_CONTROL_BYTES)?;
+        let Some(bytes) = process_record(&file)? else {
+            return Ok(None);
+        };
         let value = std::str::from_utf8(&bytes).map_err(|_| "mcp_budget_membership_unverified")?;
         let close = value.rfind(')').ok_or("mcp_budget_membership_unverified")?;
         let fields: Vec<_> = value[close + 1..].split_ascii_whitespace().collect();
@@ -1046,11 +1134,99 @@ mod linux {
             .map_err(|_| "mcp_budget_membership_unverified")?;
         Ok(Some((ticks, matches!(*state, "Z" | "X" | "x"))))
     }
+
+    #[cfg(test)]
+    mod process_record_tests {
+        use super::*;
+
+        struct TestChild(std::process::Child);
+        impl Drop for TestChild {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+
+        #[test]
+        fn pinned_proc_records_report_a_reaped_task_without_hiding_control_errors() {
+            let mut child = TestChild(
+                std::process::Command::new("/bin/sleep")
+                    .arg("30")
+                    .spawn()
+                    .unwrap(),
+            );
+            let pid = child.0.id();
+            let records = [
+                File::open(format!("/proc/{pid}/cgroup")).unwrap(),
+                File::open(format!("/proc/{pid}/stat")).unwrap(),
+            ];
+            assert!(process_identity(pid).unwrap().is_some());
+            child.0.kill().unwrap();
+            child.0.wait().unwrap();
+            for file in records {
+                assert_eq!(
+                    read_record(&file, MAX_CONTROL_BYTES)
+                        .unwrap_err()
+                        .raw_os_error(),
+                    Some(libc::ESRCH),
+                    "the real pinned procfs record must identify its departed task"
+                );
+                assert!(process_record(&file).unwrap().is_none());
+                assert_eq!(
+                    read(&file, MAX_CONTROL_BYTES),
+                    Err("mcp_budget_observation_failed"),
+                    "ordinary controller observations never waive ESRCH"
+                );
+            }
+        }
+
+        #[test]
+        fn live_records_bounds_and_other_read_errors_remain_strict() {
+            let live = File::open("/proc/self/cgroup").unwrap();
+            assert!(!process_record(&live).unwrap().unwrap().is_empty());
+            let directory = tempfile::tempdir().unwrap();
+            assert_eq!(
+                process_record(&File::open(directory.path()).unwrap()),
+                Err("mcp_budget_observation_failed")
+            );
+            let oversized = tempfile::tempfile().unwrap();
+            oversized.set_len((MAX_CONTROL_BYTES + 1) as u64).unwrap();
+            assert_eq!(
+                read_record(&oversized, MAX_CONTROL_BYTES)
+                    .unwrap_err()
+                    .kind(),
+                std::io::ErrorKind::InvalidData
+            );
+            assert_eq!(
+                process_record(&oversized),
+                Err("mcp_budget_observation_failed")
+            );
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn first_membership_diagnostic_survives_concurrent_cleanup_observations() {
+        let failures = Arc::new(MembershipFailures::default());
+        assert!(failures.snapshot().is_none());
+        // Synthetic numeric errno: this recorder also compiles on non-Unix hosts.
+        failures.record("member_open", Some(123), Some(13));
+        std::thread::scope(|scope| {
+            for _ in 0..8 {
+                let failures = Arc::clone(&failures);
+                scope.spawn(move || {
+                    failures.record("members_capacity", None, None);
+                });
+            }
+        });
+        let value = serde_json::to_value(failures.snapshot()).unwrap();
+        assert_eq!(value, json!({"phase":"member_open", "pid":123, "errno":13}));
+        assert_eq!(value.as_object().unwrap().len(), 3);
+    }
 
     fn valid() -> Value {
         json!({"format":FORMAT,"delegationRoot":"/sys/fs/cgroup/owned/budgets",

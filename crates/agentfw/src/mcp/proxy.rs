@@ -78,6 +78,10 @@ async fn ask_daemon(
 /// and rejected) replaces it with a JSON-RPC error carrying the same id.
 pub async fn run(cfg: ProxyCfg) -> anyhow::Result<()> {
     anyhow::ensure!(
+        std::env::var_os(super::windows_budget::ENVIRONMENT).is_none(),
+        "Windows MCP resource budgets require native admission"
+    );
+    anyhow::ensure!(
         std::env::var_os(super::linux_budget::ENVIRONMENT).is_none(),
         "Linux MCP resource budgets require native admission and a selected filesystem or Git server profile"
     );

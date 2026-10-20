@@ -1,0 +1,7 @@
+default: allow
+agent_policies:
+  - name: fixture-result-injection
+    when:
+      detector: injection
+      facet: tool_result
+    action: ask

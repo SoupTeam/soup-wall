@@ -142,7 +142,16 @@ The driver creates its own repository and Agent home. Unwrapped upstream reads
 and a real index mutation calibrate behavior. Protected reads compare original
 results; rejected operations have useful follow-ups and an unchanged repository
 snapshot. A verified owned server PID is briefly stopped to make overlap and
-queued/inflight cancellation deterministic, then resumed. Daemon-loss admission
+queued/inflight cancellation deterministic, then resumed. Sixteen consecutive
+rounds use fresh request IDs within the same original process/session, requiring
+two correlated withdrawals and fourteen useful peer replies per round. The
+inflight target must actually reach the child wire; a count of pending admission
+work is insufficient. Git cancellations withdraw delivery locally and drain the
+original response; no abort notification reaches this pinned server. Physical
+slots remain occupied until a response arrives, with the original deadline and
+sixteen-request limit unchanged. Partial replies and the failed round
+remain in failed reports; a previous successful round cannot mask a later loss.
+Daemon-loss admission
 and process cleanup are checked. A separate real Python/Git sandbox probe checks
 readability, denied writes, outside-file isolation, inherited descriptors,
 environment, separate namespaces and a calibrated TCP receiver. That probe is
@@ -154,3 +163,44 @@ it is never a successful skip. Full independent denied-execution/result-injectio
 witness coverage and the positive Linux run remain required before completion.
 Existing filesystem acceptance runs alongside this profile in CI. Neither this
 profile nor its synthetic fixture constitutes general Git repository support.
+
+## Failed-run diagnostics
+
+Selected-server stderr remains withheld from the MCP host and is not written as
+a raw log. Operator diagnostics retain its byte count, streaming SHA-256, EOF
+completeness and a finite set of exception markers. Markers are untrusted server
+observations, not authenticated exception reports, policy inputs or permission
+to release a result. Arbitrary exception text, paths and payloads never appear
+in that summary. The existing 1 MiB stderr quota is unchanged.
+
+The private owner retains the first observed sandbox-wrapper exit code or signal
+and whether it preceded the quiesce acknowledgment. Cleanup cannot replace that
+witness with its own termination status or erase an earlier failure. This is a
+wrapper status, not the original Python process's exit code or exception. The
+bounded acceptance summary also preserves fixed owner failure codes. The
+relay-error summary is recorded before stdin shutdown, because an ensuing
+wrapper failure can otherwise win the owner select while shutdown is pending.
+Only fixed full-string error codes are retained; arbitrary contexts and suffixes
+remain withheld. A later
+successful run does not explain or relabel an earlier failed overlap/cancellation
+run; preserve the original artifact and qualify the exact candidate separately.
+
+## Pinned SDK cancellation compatibility
+
+The original `mcp-server-git 2026.10.10` uses `mcp 1.29.0` and `anyio 4.15.1`
+on pinned Python 3.11.14. These versions satisfy their declared dependency
+constraints. Under response backpressure, however, `RequestResponder.__exit__`
+discards the Boolean result of `CancelScope.__exit__`. Cancellation escapes the
+request task, cancels sibling handlers and the session receive loop, and leaves
+`stdio_server.stdin_reader` sending into a closed peer (`BrokenResourceError`
+inside `ExceptionGroup`, exit 1). A controlled original-server reproduction also
+fails on Python 3.14; this is not a Windows Job-budget or cleanup failure.
+
+For this exact Git profile the relay therefore uses local withdrawal and bounded
+draining from the first cancellation, including deadline withdrawal. It does not
+patch the original package, suppress server exceptions, restart the session or
+release a late cancelled result. Native grants are reclaimed immediately; the
+physical request retains its slot and original deadline until it completes. A
+nonresponding withdrawn request still terminates the transport at that deadline.
+Filesystem's existing finite best-effort wire cancellation remains unchanged.
+See the [upstream cancellation report](https://github.com/modelcontextprotocol/python-sdk/issues/2610).

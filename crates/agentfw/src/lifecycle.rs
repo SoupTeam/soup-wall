@@ -125,7 +125,7 @@ impl Manager {
         expected_sha256: &str,
     ) -> Result<Record> {
         let _lock = self.lock()?;
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
         ensure!(
@@ -153,7 +153,7 @@ impl Manager {
         candidate: &Path,
         expected_sha256: &str,
     ) -> Result<Record> {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         if crate::service::registered(&self.home) {
             return crate::service::Service::new(&self.home)?.upgrade(
                 version,
@@ -162,7 +162,7 @@ impl Manager {
             );
         }
         let _lock = self.lock()?;
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
         ensure!(
@@ -216,12 +216,12 @@ impl Manager {
     }
 
     pub fn rollback(&self) -> Result<Record> {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         if crate::service::registered(&self.home) {
             return crate::service::Service::new(&self.home)?.rollback();
         }
         let _lock = self.lock()?;
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
         ensure!(
@@ -326,7 +326,7 @@ impl Manager {
     }
 
     pub fn status(&self) -> Result<Status> {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         if crate::service::registered(&self.home) {
             return crate::service::Service::new(&self.home)?.status();
         }
@@ -335,7 +335,7 @@ impl Manager {
     }
 
     pub(crate) fn status_locked(&self) -> Result<Status> {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         if crate::service::registered(&self.home) {
             return crate::service::Service::new(&self.home)?.status();
         }
@@ -386,12 +386,12 @@ impl Manager {
     }
 
     pub fn start(&self) -> Result<()> {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         if crate::service::registered(&self.home) {
             return crate::service::Service::new(&self.home)?.start();
         }
         let _lock = self.lock()?;
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
         ensure!(
@@ -402,12 +402,12 @@ impl Manager {
     }
 
     pub fn stop(&self) -> Result<()> {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         if crate::service::registered(&self.home) {
             return crate::service::Service::new(&self.home)?.stop();
         }
         let _lock = self.lock()?;
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
         ensure!(
@@ -418,12 +418,12 @@ impl Manager {
     }
 
     pub fn restart(&self) -> Result<()> {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         if crate::service::registered(&self.home) {
             return crate::service::Service::new(&self.home)?.restart();
         }
         let _lock = self.lock()?;
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
         ensure!(
@@ -440,7 +440,7 @@ impl Manager {
         was_running: bool,
         candidate_instance: Option<&str>,
     ) -> Result<()> {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         if crate::service::registered(&self.home) {
             return crate::service::Service::new(&self.home)?.restart_with_ownership_check(
                 expected_instance,
@@ -449,7 +449,7 @@ impl Manager {
             );
         }
         let _lock = self.lock()?;
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
         ensure!(
@@ -482,12 +482,12 @@ impl Manager {
     }
 
     pub fn recover(&self) -> Result<()> {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         if crate::service::registered(&self.home) {
             return crate::service::Service::new(&self.home)?.recover();
         }
         let _lock = self.lock()?;
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
         self.cleanup_pending_stage(&mut state)?;
@@ -528,7 +528,7 @@ impl Manager {
 
     pub fn remove(&self) -> Result<()> {
         let _lock = self.lock()?;
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         crate::service::require_unregistered(&self.home)?;
         let mut state = self.load()?;
         ensure!(
@@ -894,14 +894,14 @@ impl Manager {
         }
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub fn direct_serve_guard(&self) -> Result<OperationLock> {
         let lock = self.lock()?;
         crate::service::require_unregistered(&self.home)?;
         Ok(lock)
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub(crate) fn service_snapshot(&self) -> Result<(State, Option<ManagedHealth>)> {
         // Atomic manifest replacement permits a read without blocking the launcher.
         let state = self.load()?;
@@ -909,7 +909,7 @@ impl Manager {
         Ok((state, health))
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub(crate) fn service_prepare_upgrade(
         &self,
         version: &str,
@@ -937,7 +937,7 @@ impl Manager {
         Ok(to)
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub(crate) fn service_prepare_rollback(&self, was_running: bool) -> Result<Record> {
         let _lock = self.lock()?;
         let mut state = self.load()?;
@@ -958,7 +958,7 @@ impl Manager {
         Ok(to)
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub(crate) fn service_recover_staging(&self) -> Result<()> {
         let _lock = self.lock()?;
         let mut state = self.load()?;
@@ -994,7 +994,7 @@ impl Manager {
         Ok(())
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub(crate) fn service_select(&self, selected: &Record) -> Result<()> {
         let _lock = self.lock()?;
         let mut state = self.load()?;
@@ -1017,7 +1017,7 @@ impl Manager {
         self.save(&state)
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub(crate) fn service_finish(&self) -> Result<()> {
         let _lock = self.lock()?;
         let mut state = self.load()?;
@@ -1029,7 +1029,7 @@ impl Manager {
         self.save(&state)
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub(crate) fn service_launch(&self) -> Result<(PathBuf, ProcessRecord)> {
         let _lock = self.lock()?;
         let mut state = self.load()?;
@@ -1042,7 +1042,7 @@ impl Manager {
         );
         // A staged candidate never changes the running version. During a switch,
         // only the two journaled versions may boot; recovery restores `from`.
-        // systemd has reaped the old main process before invoking a new launcher.
+        // The service manager has reaped the old main process before invoking a new launcher.
         // A reused/live PID is never cleared solely because the endpoint is down.
         self.clear_dead_record(&mut state)?;
         let next_inst = self.read_next_instance()?;
@@ -1062,7 +1062,7 @@ impl Manager {
         Ok((binary, process))
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub(crate) fn set_next_instance(&self, instance: Option<&str>) -> Result<()> {
         let path = self.root.join(".next_instance");
         match instance {
@@ -1088,7 +1088,7 @@ impl Manager {
         Ok(())
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn instance_in_durable_journal(&self, inst: &str) -> bool {
         let mcp_state_path = self
             .home
@@ -1139,7 +1139,7 @@ impl Manager {
         false
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub(crate) fn read_next_instance(&self) -> Result<Option<String>> {
         let path = self.root.join(".next_instance");
         if !path.exists() {
@@ -1188,7 +1188,7 @@ impl Manager {
         Ok(Some(inst.to_string()))
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub(crate) fn service_clear_dead(&self) -> Result<()> {
         let _lock = self.lock()?;
         let mut state = self.load()?;
@@ -1235,10 +1235,12 @@ impl Manager {
             }
             std::thread::sleep(Duration::from_millis(100));
         }
-        bail!("authenticated shutdown timed out; systemd will bound cleanup to this unit")
+        bail!(
+            "authenticated shutdown timed out; the service manager will bound cleanup to this job"
+        )
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub(crate) fn service_installable(&self) -> Result<()> {
         let state = self.load()?;
         ensure!(
@@ -1348,7 +1350,11 @@ impl Manager {
 
 pub fn sha256_file(path: &Path) -> Result<String> {
     let mut file = File::open(path).with_context(|| format!("read {}", path.display()))?;
-    let mut hasher = Sha256::new();
+    // File identities include large debug executables. Use the already-linked
+    // native SHA-256 implementation so repeated, full-byte startup verification
+    // does not spend the readiness deadline in unoptimized Rust compression.
+    // Do not cache identities: every call must still detect changed file bytes.
+    let mut hasher = aws_lc_rs::digest::Context::new(&aws_lc_rs::digest::SHA256);
     let mut buffer = [0u8; 65536];
     loop {
         let count = file.read(&mut buffer)?;
@@ -1357,7 +1363,12 @@ pub fn sha256_file(path: &Path) -> Result<String> {
         }
         hasher.update(&buffer[..count]);
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(hasher
+        .finish()
+        .as_ref()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect())
 }
 
 fn sha256(bytes: &[u8]) -> String {
@@ -1556,7 +1567,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn service_switch_is_journaled_and_staging_failure_keeps_active_version() {
         let temp = tempfile::tempdir().unwrap();
         let manager = Manager::new(temp.path());
@@ -1600,7 +1611,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn stopped_service_rollback_and_interrupted_stage_keep_running_intent() {
         let temp = tempfile::tempdir().unwrap();
         let manager = Manager::new(temp.path());
@@ -1691,7 +1702,7 @@ mod tests {
         }));
     }
     #[test]
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn service_refuses_to_clear_or_stop_a_live_unverified_pid() {
         let temp = tempfile::tempdir().unwrap();
         let manager = Manager::new(temp.path());
@@ -1712,6 +1723,7 @@ mod tests {
         manager.save(&state).unwrap();
         drop(lock);
         assert!(manager.service_clear_dead().is_err());
+        #[cfg(target_os = "linux")]
         assert!(manager.service_shutdown(std::process::id()).is_err());
         assert!(pid_alive(std::process::id()).unwrap());
         assert_eq!(
@@ -1720,7 +1732,7 @@ mod tests {
         );
     }
     #[test]
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn permission_denial_is_not_evidence_that_a_pid_is_dead() {
         assert!(pid_alive(1).unwrap());
         assert!(pid_alive(u32::MAX).is_err());
@@ -1769,7 +1781,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn read_next_instance_preserves_journaled_instance_across_caller_death() {
         let temp = tempfile::tempdir().unwrap();
         let manager = Manager::new(temp.path());
