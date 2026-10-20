@@ -94,6 +94,18 @@ def refused_response(client, timeout=8):
     return type(response.get("id")) is int and response["id"] == 50 and BASE.refused(response)
 
 
+def inspected_output(text, pending_id, binding):
+    # The accepted CLI prints one JSON record followed by its exact operator
+    # command hint. Keep that interface and reject arbitrary trailing output.
+    record, end = json.JSONDecoder().raw_decode(text)
+    hint = ("To approve exactly this call:\n  agentfw native-approval approve "
+            + pending_id + " --binding " + binding)
+    require(isinstance(record, dict) and record.get("pending_id") == pending_id
+            and record.get("binding_sha256") == binding and text[end:].strip() == hint,
+            "operator inspect identity or command hint changed")
+    return record
+
+
 class Rig:
     def __init__(self, args, root, kind):
         self.args, self.root, self.kind = args, root, kind
@@ -262,7 +274,9 @@ def qualify(rig, report):
             pending(args, rig.env, empty=True)
         else:
             waiting = pending(args, rig.env)
-            inspected = json.loads(command(args, rig.env, "native-approval", "inspect", waiting["pending_id"]))
+            output = command(args, rig.env, "native-approval", "inspect", waiting["pending_id"])
+            (rig.root / (case + ".operator-inspect.log")).write_text(output + "\n")
+            inspected = inspected_output(output, waiting["pending_id"], waiting["binding_sha256"])
             require(inspected["args"] == rig.frame()["params"]["arguments"], "operator inspected different arguments")
             require(inspected["selected_invocation"]["host_call_id"] == 50, "operator inspected different host request")
             require(inspected["selected_invocation"]["request_sha256"] == BASE.hashlib.sha256(client.sent[-1]).hexdigest(),

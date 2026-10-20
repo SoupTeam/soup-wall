@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Fault controls for independent kernel witness; no Linux execution claim."""
 import importlib.util
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -44,6 +45,22 @@ class Witness(unittest.TestCase):
         self.assertEqual(self.count(trace, "filesystem"), 0)
         trace += '15 openat(AT_FDCWD, "/workspace/notes.txt", O_RDONLY|O_CLOEXEC) = 4\n'
         self.assertEqual(self.count(trace, "filesystem"), 1)
+
+
+class OperatorInspect(unittest.TestCase):
+    def test_record_and_exact_existing_cli_hint_are_required(self):
+        pending, binding = "owned-call", "a" * 64
+        record = {"pending_id": pending, "binding_sha256": binding, "args": {"path": "/workspace/notes.txt"}}
+        text = json.dumps(record, indent=2) + "\nTo approve exactly this call:\n  agentfw native-approval approve " + pending + " --binding " + binding
+        self.assertEqual(M.inspected_output(text, pending, binding), record)
+        for bad, identifier, digest in [
+            (text + "\n{}", pending, binding),
+            (json.dumps(record), pending, binding),
+            (text, "foreign-call", binding),
+            (text, pending, "b" * 64),
+        ]:
+            with self.subTest(text=bad, identifier=identifier, digest=digest), self.assertRaises(ValueError):
+                M.inspected_output(bad, identifier, digest)
 
 if __name__ == "__main__":
     unittest.main()
