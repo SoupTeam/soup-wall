@@ -116,6 +116,16 @@ jobs:
             --claude "$RUNNER_TEMP/sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --sandbox-test-binary "$SOU62_SANDBOX_TEST_BINARY" --expected-commit "$(git rev-parse HEAD)" \
             --output "$RUNNER_TEMP/sou62-acceptance" 2>&1 | tee "$RUNNER_TEMP/sou62-acceptance.log"
+      - name: SOU-98 same-preset original-server acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/verify-sou62-real-mcp.py --run --pilot-preset --agentfw "$PWD/target/debug/agentfw" \
+            --node "$RUNNER_TEMP/sou62-runtime/bin/node" --npm "$RUNNER_TEMP/sou62-runtime/bin/npm" \
+            --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" \
+            --claude "$RUNNER_TEMP/sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --sandbox-test-binary "$SOU62_SANDBOX_TEST_BINARY" --expected-commit "$(git rev-parse HEAD)" \
+            --output "$RUNNER_TEMP/sou98-filesystem" 2>&1 | tee "$RUNNER_TEMP/sou98-filesystem.log"
       - name: Required combined original-server, shared-session, hooks and actual Claude Code smoke
         shell: bash
         run: |
@@ -229,6 +239,8 @@ jobs:
         with:
           name: sou62-real-filesystem-mcp-evidence
           path: |
+            ${{ runner.temp }}/sou98-filesystem/**
+            ${{ runner.temp }}/sou98-filesystem.log
             ${{ runner.temp }}/sou100-selection.json
             ${{ runner.temp }}/sou100-selected-policy.yaml
             ${{ runner.temp }}/sou100-registry-regressions.log
