@@ -14,6 +14,10 @@ on:
         description: Run only the merged-source smoke command (not full qualification)
         type: boolean
         default: false
+      workspace_acceptance:
+        description: Include offline original AgentDojo workspace witnesses in the selected smoke run
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -66,6 +70,20 @@ jobs:
           cache-bin: false
       - name: Build the actual merged Agent and Gateway
         run: cargo build --locked -p agentfw --bin agentfw -p llm-firewall --bin llm-firewall
+      - name: Selected original AgentDojo workspace acceptance
+        if: github.event_name == 'workflow_dispatch' && inputs.workspace_acceptance
+        run: |
+          cargo fmt --all -- --check
+          cargo test --locked -p agentfw --lib native::workspace
+          bash scripts/agentdojo-workspace-acceptance.sh "$RUNNER_TEMP/sou85-acceptance"
+      - name: Retain selected workspace evidence
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.workspace_acceptance
+        uses: actions/upload-artifact@v7
+        with:
+          name: agentdojo-workspace-offline
+          path: ${{ runner.temp }}/sou85-acceptance/offline/
+          if-no-files-found: error
+          retention-days: 30
       - name: Check Agent CLI and the versioned adapter contract
         run: |
           target/debug/agentfw --help

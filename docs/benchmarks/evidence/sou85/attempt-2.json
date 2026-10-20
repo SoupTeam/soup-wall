@@ -1,0 +1,15 @@
+{
+  "status": "incomplete",
+  "model_calls": 0,
+  "effectiveness_claim": false,
+  "error_type": "AdapterError",
+  "error": "Workspace acceptance failed: get_current_day:policy_withheld",
+  "source_sha256": {
+    "cli": "5ca7b9891df81b336476ad5de0c826e88400d1eef4255d261d0670a62347766f",
+    "agentdojo_live": "2113ce9c2c26cf46c2a67c47572d097b9c288311a90d665f98c8fb0876f2867b",
+    "agentdojo_native": "a241aef23bcd199dc23376af318b5b7b8d93b2495b754310f106d52105ea27bc",
+    "agentdojo_protocol": "616b02850b348c919df5f88200a9c80f12ba61aaa1fb593412a2acf8b1695959",
+    "agentdojo_workspace": "233a4144c6997e2f28d90742053405652eae8295b83d3bf23a41b63157e2e6f8",
+    "agentdojo_workspace_checks": "240bcc46a97548b8bcde97c5ef6c0a526806e405e05141df78aa63e888837c70"
+  }
+}
