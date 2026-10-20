@@ -3139,9 +3139,8 @@ async fn sou83_original_write_reused_native_result_authority_is_spent_and_peer_c
         "value",
         &original,
     );
+    // The selected native result contract is closed: no expected_* fields.
     result["delivery"] = json!("mcp_host");
-    result["expected_binding_sha256"] = admitted["binding_sha256"].clone();
-    result["expected_contract_version"] = json!(CONTRACT);
     let (status, allowed) = fixture.post(&result).await;
     assert_eq!(status, StatusCode::OK, "{allowed}");
     assert_eq!(allowed["release"], true, "{allowed}");
