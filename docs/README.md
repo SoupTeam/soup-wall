@@ -54,6 +54,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Constrained MCP HTTPS POST](operations/MCP_HTTPS_POST.md) | Exact recipient and UTF-8 payload authority, single-use dispatch and conservative effect accounting |
 | [Constrained Windows MCP reads](operations/MCP_WINDOWS_READ.md) | Handle-bound local document reads, explicit v4 authority and native standard-user verification |
 | [Constrained Windows MCP file creation](operations/MCP_WINDOWS_CREATE.md) | Exact v5 create authority, retained parent handles, atomic no-overwrite publication and native verification |
+| [Constrained macOS MCP file executors](operations/MCP_MACOS_FILE_EXECUTORS.md) | Native macOS ARM64 constrained APFS read/create executors, anonymous staging, atomic publication and acceptance |
 | [Identity interoperability](operations/IDENTITY_INTEROPERABILITY.md) | Local identity fixtures, external metadata probes and pilot gates |
 | [Keycloak SAML acceptance](operations/KEYCLOAK_SAML_ACCEPTANCE.md) | Pinned vendor-runtime setup and signed SAML checks |
 | [Linux SAML lifecycle](operations/KEYCLOAK_SAML_LINUX.md) | Genuine browser login, PostgreSQL sessions and explicit signing-key rotation |

@@ -976,6 +976,8 @@ fn parse(body: &str) -> Result<Request, &'static str> {
                     | resource::NETWORK_CONTRACT
                     | resource::WINDOWS_READ_CONTRACT
                     | resource::WINDOWS_CREATE_CONTRACT
+                    | resource::MACOS_READ_CONTRACT
+                    | resource::MACOS_CREATE_CONTRACT
             ) {
                 keys.insert("resource_admission");
             }
@@ -1033,6 +1035,8 @@ fn parse(body: &str) -> Result<Request, &'static str> {
                 | resource::NETWORK_CONTRACT
                 | resource::WINDOWS_READ_CONTRACT
                 | resource::WINDOWS_CREATE_CONTRACT
+                | resource::MACOS_READ_CONTRACT
+                | resource::MACOS_CREATE_CONTRACT
         )
         || (matches!(event, "session_start" | "session_end")
             && request.contract_version != CONTRACT)
@@ -1045,6 +1049,16 @@ fn parse(body: &str) -> Result<Request, &'static str> {
     if request.contract_version == resource::WINDOWS_CREATE_CONTRACT && !cfg!(windows) {
         return Err("native_windows_create_platform_unsupported");
     }
+    if request.contract_version == resource::MACOS_READ_CONTRACT
+        && !cfg!(all(target_os = "macos", target_arch = "aarch64"))
+    {
+        return Err("native_macos_read_platform_unsupported");
+    }
+    if request.contract_version == resource::MACOS_CREATE_CONTRACT
+        && !cfg!(all(target_os = "macos", target_arch = "aarch64"))
+    {
+        return Err("native_macos_create_platform_unsupported");
+    }
     if event == "call"
         && matches!(
             request.contract_version.as_str(),
@@ -1054,6 +1068,8 @@ fn parse(body: &str) -> Result<Request, &'static str> {
                 | resource::NETWORK_CONTRACT
                 | resource::WINDOWS_READ_CONTRACT
                 | resource::WINDOWS_CREATE_CONTRACT
+                | resource::MACOS_READ_CONTRACT
+                | resource::MACOS_CREATE_CONTRACT
         )
     {
         let admission = request
@@ -1759,6 +1775,8 @@ fn inspect_bound(
             resource::NETWORK_CONTRACT => resource::NETWORK_CONTRACT,
             resource::WINDOWS_READ_CONTRACT => resource::WINDOWS_READ_CONTRACT,
             resource::WINDOWS_CREATE_CONTRACT => resource::WINDOWS_CREATE_CONTRACT,
+            resource::MACOS_READ_CONTRACT => resource::MACOS_READ_CONTRACT,
+            resource::MACOS_CREATE_CONTRACT => resource::MACOS_CREATE_CONTRACT,
             _ => CONTRACT,
         },
         registry_sha256: native.registry_sha256.clone(),

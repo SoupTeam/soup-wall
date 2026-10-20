@@ -18,15 +18,25 @@ pub const POST_CONTRACT: &str = "sw-native/resources/6";
 pub const NETWORK_CONTRACT: &str = "sw-native/resources/3";
 pub const WINDOWS_READ_CONTRACT: &str = "sw-native/resources/4";
 pub const WINDOWS_CREATE_CONTRACT: &str = "sw-native/resources/5";
+pub const MACOS_READ_CONTRACT: &str = "sw-native/resources/7";
+pub const MACOS_CREATE_CONTRACT: &str = "sw-native/resources/8";
 pub const CREATE_FILE_EXECUTOR_PROFILE: &str = "sw-native/create-file/linux-root-child/1";
 pub const WINDOWS_READ_EXECUTOR_PROFILE: &str = "sw-native/read-document/windows-handles/1";
 pub const WINDOWS_CREATE_EXECUTOR_PROFILE: &str = "sw-native/create-file/windows-handles/1";
+pub const MACOS_READ_EXECUTOR_PROFILE: &str = "sw-native/read-document/macos-descriptors/1";
+pub const MACOS_CREATE_EXECUTOR_PROFILE: &str = "sw-native/create-file/macos-descriptors/1";
 pub const READ_DOCUMENT_EXECUTOR_PROFILE: &str = "sw-native/read-document/direct/1";
 pub const BINDING_CONTRACT: &str = "sw-native/binding/1";
 pub const WINDOWS_READ_MAX_CONTENT: usize = super::MAX_CONTENT;
+/// Conservative macOS-only raw document read boundary (40 KiB).
+/// Accounts for worst-case 6x JSON escaping expansion of raw bytes (e.g. control characters / NUL bytes)
+/// plus serialized JSON-RPC envelope and host call ID overhead, ensuring the wire response
+/// strictly stays within the native transport MAX_CONTENT / max_record_bytes budget (262,144 bytes).
+pub const MACOS_READ_MAX_CONTENT: usize = 40_960;
 // Keep the complete original content within the selected rule classifier's
 // reviewed leaf bound; a truncated/unknown prediction must remain blocked.
 pub const CREATE_FILE_MAX_CONTENT: usize = 4_096;
+pub const MACOS_CREATE_MAX_CONTENT: usize = CREATE_FILE_MAX_CONTENT;
 
 /// A semantic executor revision, not attestation of a running binary.
 pub fn create_file_executor_sha256() -> String {
@@ -43,11 +53,29 @@ pub fn windows_create_executor_sha256() -> String {
     super::hash(WINDOWS_CREATE_EXECUTOR_PROFILE.as_bytes())
 }
 
+pub fn macos_read_executor_sha256() -> String {
+    super::hash(MACOS_READ_EXECUTOR_PROFILE.as_bytes())
+}
+
+pub fn macos_create_executor_sha256() -> String {
+    super::hash(MACOS_CREATE_EXECUTOR_PROFILE.as_bytes())
+}
+
 /// The only read operation installed by the Windows handle-bound profile.
 pub fn windows_read_schema() -> Value {
     json!({"type":"object", "properties":{
         "path":{"type":"string", "minLength":1, "maxLength":4096}
     }, "required":["path"], "additionalProperties":false})
+}
+
+pub fn macos_read_schema() -> Value {
+    json!({"type":"object", "properties":{
+        "path":{"type":"string", "minLength":1, "maxLength":4096}
+    }, "required":["path"], "additionalProperties":false})
+}
+
+pub fn macos_create_schema() -> Value {
+    create_file_schema()
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -61,6 +89,20 @@ impl WindowsReadPolicy {
     fn supported(&self) -> bool {
         self.executor_profile == WINDOWS_READ_EXECUTOR_PROFILE
             && self.max_content_bytes == WINDOWS_READ_MAX_CONTENT
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MacosReadPolicy {
+    pub executor_profile: String,
+    pub max_content_bytes: usize,
+}
+
+impl MacosReadPolicy {
+    fn supported(&self) -> bool {
+        self.executor_profile == MACOS_READ_EXECUTOR_PROFILE
+            && self.max_content_bytes == MACOS_READ_MAX_CONTENT
     }
 }
 
@@ -84,6 +126,32 @@ impl WindowsReadBinding {
     fn valid(&self) -> bool {
         self.executor_profile == WINDOWS_READ_EXECUTOR_PROFILE
             && self.max_content_bytes == WINDOWS_READ_MAX_CONTENT
+            && [
+                &self.policy_sha256,
+                &self.args_sha256,
+                &self.workspace_sha256,
+                &self.target_sha256,
+            ]
+            .iter()
+            .all(|digest| super::is_digest(digest))
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MacosReadBinding {
+    pub executor_profile: String,
+    pub max_content_bytes: usize,
+    pub policy_sha256: String,
+    pub args_sha256: String,
+    pub workspace_sha256: String,
+    pub target_sha256: String,
+}
+
+impl MacosReadBinding {
+    fn valid(&self) -> bool {
+        self.executor_profile == MACOS_READ_EXECUTOR_PROFILE
+            && self.max_content_bytes == MACOS_READ_MAX_CONTENT
             && [
                 &self.policy_sha256,
                 &self.args_sha256,
@@ -252,7 +320,10 @@ impl ToolBinding {
                 });
         let max_content_bytes = self.max_content_bytes.unwrap_or(match self.operation {
             ExecutionOperation::CreateFile => CREATE_FILE_MAX_CONTENT,
-            ExecutionOperation::ReadDocument => super::MAX_CONTENT,
+            ExecutionOperation::ReadDocument => match self.executor_profile.as_deref() {
+                Some(MACOS_READ_EXECUTOR_PROFILE) => MACOS_READ_MAX_CONTENT,
+                _ => super::MAX_CONTENT,
+            },
         });
         ExecutionPolicy {
             operation: self.operation,
@@ -286,15 +357,18 @@ impl ExecutionPolicy {
             && self.max_content_bytes == CREATE_FILE_MAX_CONTENT
             && matches!(
                 self.executor_profile.as_str(),
-                CREATE_FILE_EXECUTOR_PROFILE | WINDOWS_CREATE_EXECUTOR_PROFILE
+                CREATE_FILE_EXECUTOR_PROFILE
+                    | WINDOWS_CREATE_EXECUTOR_PROFILE
+                    | MACOS_CREATE_EXECUTOR_PROFILE
             ))
             || (self.operation == ExecutionOperation::ReadDocument
                 && self.action == ExecutionAction::Read
-                && self.max_content_bytes == super::MAX_CONTENT
-                && matches!(
-                    self.executor_profile.as_str(),
-                    READ_DOCUMENT_EXECUTOR_PROFILE | WINDOWS_READ_EXECUTOR_PROFILE
-                ))
+                && ((self.executor_profile == MACOS_READ_EXECUTOR_PROFILE
+                    && self.max_content_bytes == MACOS_READ_MAX_CONTENT)
+                    || (matches!(
+                        self.executor_profile.as_str(),
+                        READ_DOCUMENT_EXECUTOR_PROFILE | WINDOWS_READ_EXECUTOR_PROFILE
+                    ) && self.max_content_bytes == super::MAX_CONTENT)))
     }
 }
 
@@ -305,7 +379,9 @@ impl ExecutionBinding {
             && self.max_content_bytes == CREATE_FILE_MAX_CONTENT
             && matches!(
                 self.executor_profile.as_str(),
-                CREATE_FILE_EXECUTOR_PROFILE | WINDOWS_CREATE_EXECUTOR_PROFILE
+                CREATE_FILE_EXECUTOR_PROFILE
+                    | WINDOWS_CREATE_EXECUTOR_PROFILE
+                    | MACOS_CREATE_EXECUTOR_PROFILE
             )
             && [
                 &self.policy_sha256,
@@ -337,6 +413,8 @@ pub struct Policy {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub windows_read: Option<WindowsReadPolicy>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub macos_read: Option<MacosReadPolicy>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub binding: Option<ToolBinding>,
 }
 
@@ -360,6 +438,8 @@ pub struct Admission {
     pub post: Option<PostBinding>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub windows_read: Option<WindowsReadBinding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub macos_read: Option<MacosReadBinding>,
 }
 
 impl Admission {
@@ -368,6 +448,8 @@ impl Admission {
             POST_CONTRACT
         } else if self.windows_read.is_some() {
             WINDOWS_READ_CONTRACT
+        } else if self.macos_read.is_some() {
+            MACOS_READ_CONTRACT
         } else if self.network.is_some() {
             NETWORK_CONTRACT
         } else if self
@@ -376,6 +458,12 @@ impl Admission {
             .is_some_and(|execution| execution.executor_profile == WINDOWS_CREATE_EXECUTOR_PROFILE)
         {
             WINDOWS_CREATE_CONTRACT
+        } else if self
+            .execution
+            .as_ref()
+            .is_some_and(|execution| execution.executor_profile == MACOS_CREATE_EXECUTOR_PROFILE)
+        {
+            MACOS_CREATE_CONTRACT
         } else if self.execution.is_some() {
             CREATE_CONTRACT
         } else {
@@ -398,6 +486,7 @@ impl Admission {
                 self.network.is_some(),
                 self.execution.is_some(),
                 self.windows_read.is_some(),
+                self.macos_read.is_some(),
             ]
             .into_iter()
             .filter(|present| *present)
@@ -405,6 +494,7 @@ impl Admission {
                 > 1
             || self.post.as_ref().is_some_and(|post| !post.valid())
             || self.windows_read.as_ref().is_some_and(|read| !read.valid())
+            || self.macos_read.as_ref().is_some_and(|read| !read.valid())
             || self
                 .network
                 .as_ref()
@@ -454,10 +544,14 @@ impl Policy {
             POST_CONTRACT
         } else if self.is_windows_read() {
             WINDOWS_READ_CONTRACT
+        } else if self.is_macos_read() {
+            MACOS_READ_CONTRACT
         } else if self.network.is_some() {
             NETWORK_CONTRACT
         } else if self.is_windows_create() {
             WINDOWS_CREATE_CONTRACT
+        } else if self.is_macos_create() {
+            MACOS_CREATE_CONTRACT
         } else if self.is_create_file() {
             CREATE_CONTRACT
         } else {
@@ -495,6 +589,24 @@ impl Policy {
 
     pub fn is_windows_handles(&self) -> bool {
         self.is_windows_read() || self.is_windows_create()
+    }
+
+    pub fn is_macos_read(&self) -> bool {
+        self.macos_read.is_some()
+            || self
+                .effective_execution()
+                .as_ref()
+                .is_some_and(|e| e.executor_profile == MACOS_READ_EXECUTOR_PROFILE)
+    }
+
+    pub fn is_macos_create(&self) -> bool {
+        self.effective_execution()
+            .as_ref()
+            .is_some_and(|execution| execution.executor_profile == MACOS_CREATE_EXECUTOR_PROFILE)
+    }
+
+    pub fn is_macos_descriptors(&self) -> bool {
+        self.is_macos_read() || self.is_macos_create()
     }
 
     pub fn path_selector(&self) -> &str {
@@ -586,6 +698,7 @@ impl Policy {
                 self.binding.is_some(),
                 self.network.is_some(),
                 self.windows_read.is_some(),
+                self.macos_read.is_some(),
             ]
             .into_iter()
             .filter(|present| *present)
@@ -636,6 +749,57 @@ impl Policy {
                     && self.allowed_resources.len() == 1
                     && matches!(&self.allowed_resources[0], Resource::Path { .. }),
                 "invalid operator Windows read policy"
+            );
+        }
+        if self.is_macos_read() {
+            anyhow::ensure!(
+                cfg!(all(target_os = "macos", target_arch = "aarch64")),
+                "macOS read authority is unsupported on this platform"
+            );
+            let execution = self.effective_execution();
+            let path_sel = self.path_selector();
+            anyhow::ensure!(
+                crate::mcp::resources::valid_pointer(path_sel),
+                "invalid selector pointer"
+            );
+            if let Some(resp) = self.response_contract() {
+                anyhow::ensure!(
+                    resp == "sw-native/response/text/1" || resp == "mcp/text_result/1",
+                    "unsupported response contract"
+                );
+            }
+            let selector = &self.profile.selectors[0];
+            let is_legacy_macos_read =
+                (tool.name == "read_document" || tool.name == "read_file") && path_sel == "/path";
+            if is_legacy_macos_read {
+                anyhow::ensure!(
+                    tool.schema_sha256 == super::canonical_digest(&macos_read_schema()),
+                    "invalid operator macOS read policy"
+                );
+            }
+            if let Some(read) = &self.macos_read {
+                anyhow::ensure!(read.supported(), "unsupported macos_read contract");
+            }
+            if let Some(exec) = &execution {
+                anyhow::ensure!(exec.supported(), "unsupported execution contract");
+            }
+            anyhow::ensure!(
+                tool.name == self.profile.tool_name
+                    && tool.action_class == soup_wall_agent::ActionClass::ReadOnly
+                    && matches!(tool.result_provenance, super::ResultProvenance::Untrusted)
+                    && tool.egress.is_empty()
+                    && self.executor_sha256 == macos_read_executor_sha256()
+                    && self.workspace == self.cwd
+                    && self.profile.selectors.len() == 1
+                    && selector.pointer == path_sel
+                    && selector.kind == crate::mcp::resources::ResourceKind::Path
+                    && selector.aliases.is_empty()
+                    && !selector.optional
+                    && selector.default.is_none()
+                    && !selector.allow_missing_leaf
+                    && self.allowed_resources.len() == 1
+                    && matches!(&self.allowed_resources[0], Resource::Path { .. }),
+                "invalid operator macOS read policy"
             );
         }
         if self.is_windows_create() {
@@ -708,6 +872,75 @@ impl Policy {
             // later generic DOS path resolution or filesystem mutation.
             return Ok(());
         }
+        if self.is_macos_create() {
+            anyhow::ensure!(
+                cfg!(all(target_os = "macos", target_arch = "aarch64")),
+                "macOS create authority is unsupported on this platform"
+            );
+            let execution = self
+                .effective_execution()
+                .expect("macOS create policy selected");
+            let path_sel = self.path_selector();
+            let content_sel = self.content_selector();
+            anyhow::ensure!(
+                crate::mcp::resources::valid_pointer(path_sel)
+                    && crate::mcp::resources::valid_pointer(content_sel),
+                "invalid selector pointer"
+            );
+            anyhow::ensure!(
+                path_sel != content_sel
+                    && !path_sel.starts_with(&format!("{content_sel}/"))
+                    && !content_sel.starts_with(&format!("{path_sel}/")),
+                "ambiguous or overlapping selectors"
+            );
+            if let Some(resp) = self.response_contract() {
+                anyhow::ensure!(
+                    resp == "sw-native/response/text/1" || resp == "mcp/text_result/1",
+                    "unsupported response contract"
+                );
+            }
+            let selector = &self.profile.selectors[0];
+            let is_legacy_macos_create =
+                tool.name == "create_file" && path_sel == "/path" && content_sel == "/content";
+            if is_legacy_macos_create {
+                anyhow::ensure!(
+                    tool.schema_sha256 == super::canonical_digest(&create_file_schema()),
+                    "invalid operator macOS create policy"
+                );
+            }
+            anyhow::ensure!(
+                execution.supported()
+                    && tool.name == self.profile.tool_name
+                    && tool.action_class == soup_wall_agent::ActionClass::SideEffecting
+                    && matches!(tool.result_provenance, super::ResultProvenance::Untrusted)
+                    && tool.egress.is_empty()
+                    && self.executor_sha256 == macos_create_executor_sha256()
+                    && self.workspace == self.cwd
+                    && self.profile.selectors.len() == 1
+                    && selector.pointer == path_sel
+                    && selector.kind == crate::mcp::resources::ResourceKind::Path
+                    && selector.aliases.is_empty()
+                    && !selector.optional
+                    && selector.default.is_none()
+                    && selector.allow_missing_leaf
+                    && self.allowed_resources.len() == 1,
+                "invalid operator macOS create policy"
+            );
+            let [Resource::Path { canonical }] = self.allowed_resources.as_slice() else {
+                anyhow::bail!("macOS create authority must select an exact path");
+            };
+            #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+            let _pin = crate::macos_create::PreparedCreate::prepare(
+                &self.workspace,
+                &self.cwd,
+                canonical,
+                canonical,
+                "",
+            )?;
+            #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+            let _ = canonical;
+            return Ok(());
+        }
         // V4 validates and locks each component through the native executor.
         // Ordinary DOS path APIs are not used afterward: directory handles do
         // not prevent a drive-letter device mapping from being changed.
@@ -728,7 +961,21 @@ impl Policy {
         } else {
             None
         };
-        if !self.is_windows_read() {
+        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+        let _macos_validation_pin = if self.is_macos_read() {
+            let [Resource::Path { canonical }] = self.allowed_resources.as_slice() else {
+                anyhow::bail!("macOS read authority must select an exact path");
+            };
+            Some(crate::macos_read::PreparedRead::prepare(
+                &self.workspace,
+                &self.cwd,
+                canonical,
+                canonical,
+            )?)
+        } else {
+            None
+        };
+        if !self.is_windows_read() && !self.is_macos_read() {
             anyhow::ensure!(
                 self.workspace.is_dir()
                     && self.cwd.is_dir()
@@ -1164,6 +1411,236 @@ pub(crate) fn windows_create_evidence(
     }])
 }
 
+fn macos_read_arguments<'a>(
+    policy: &'a Policy,
+    args: &'a Value,
+) -> Result<(&'a str, &'a str), &'static str> {
+    if !policy.is_macos_read() {
+        return Err("native_macos_read_authority_missing");
+    }
+    let supported = if let Some(read) = &policy.macos_read {
+        read.supported()
+    } else if let Some(exec) = policy.effective_execution() {
+        exec.supported()
+    } else {
+        false
+    };
+    if !supported
+        || policy.network.is_some()
+        || policy.windows_read.is_some()
+        || policy.executor_sha256 != macos_read_executor_sha256()
+        || policy.workspace != policy.cwd
+    {
+        return Err("native_macos_read_executor_revision_mismatch");
+    }
+    let path_ptr = policy.path_selector();
+    let is_legacy = (policy.profile.tool_name == "read_document"
+        || policy.profile.tool_name == "read_file")
+        && path_ptr == "/path";
+    if is_legacy {
+        let object = args
+            .as_object()
+            .ok_or("native_macos_read_arguments_invalid")?;
+        if object.len() != 1 {
+            return Err("native_macos_read_arguments_invalid");
+        }
+    }
+    let path_val = crate::mcp::resources::selected(args, path_ptr)
+        .map_err(|_| "native_macos_read_arguments_invalid")?
+        .ok_or("native_macos_read_arguments_invalid")?;
+    let original = path_val
+        .as_str()
+        .ok_or("native_macos_read_arguments_invalid")?;
+    if original.is_empty() || original.len() > 4096 || original.chars().any(char::is_control) {
+        return Err("native_macos_read_arguments_invalid");
+    }
+    let [Resource::Path { canonical }] = policy.allowed_resources.as_slice() else {
+        return Err("native_macos_read_authority_invalid");
+    };
+    Ok((original, canonical))
+}
+
+pub fn macos_read_binding(policy: &Policy, args: &Value) -> Result<MacosReadBinding, &'static str> {
+    let (original, canonical) = macos_read_arguments(policy, args)?;
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    {
+        let prepared = crate::macos_read::PreparedRead::prepare(
+            &policy.workspace,
+            &policy.cwd,
+            original,
+            canonical,
+        )
+        .map_err(|_| "native_macos_read_target_invalid")?;
+        macos_read_binding_with_identity(policy, args, prepared.identity())
+    }
+    #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+    {
+        let _ = (original, canonical);
+        Err("native_macos_read_platform_unsupported")
+    }
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub(crate) fn macos_read_binding_with_identity(
+    policy: &Policy,
+    args: &Value,
+    identity: &crate::macos_read::ReadIdentity,
+) -> Result<MacosReadBinding, &'static str> {
+    let (_, canonical) = macos_read_arguments(policy, args)?;
+    Ok(MacosReadBinding {
+        executor_profile: MACOS_READ_EXECUTOR_PROFILE.into(),
+        max_content_bytes: MACOS_READ_MAX_CONTENT,
+        policy_sha256: super::canonical_digest(
+            &serde_json::to_value(policy).expect("policy serializes"),
+        ),
+        args_sha256: super::canonical_digest(args),
+        workspace_sha256: super::canonical_digest(&json!({
+            "workspace": policy.workspace,
+            "cwd": policy.cwd,
+            "root_dev": identity.root_dev,
+            "root_ino": identity.root_ino,
+        })),
+        target_sha256: super::canonical_digest(&json!({
+            "canonical": canonical,
+            "leaf_dev": identity.leaf_dev,
+            "leaf_ino": identity.leaf_ino,
+        })),
+    })
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub(crate) fn macos_read_evidence(
+    policy: &Policy,
+    args: &Value,
+    identity: &crate::macos_read::ReadIdentity,
+) -> Result<Vec<ResourceEvidence>, &'static str> {
+    macos_read_binding_with_identity(policy, args, identity)?;
+    Ok(vec![ResourceEvidence {
+        pointer: policy.path_selector().into(),
+        source: crate::mcp::resources::EvidenceSource::Argument,
+        resource: policy.allowed_resources[0].clone(),
+    }])
+}
+
+fn macos_create_arguments<'a>(
+    policy: &'a Policy,
+    args: &'a Value,
+) -> Result<(&'a str, &'a str, &'a str), &'static str> {
+    let execution = policy
+        .effective_execution()
+        .ok_or("native_macos_create_authority_missing")?;
+    if !policy.is_macos_create()
+        || !execution.supported()
+        || policy.windows_read.is_some()
+        || policy.macos_read.is_some()
+        || policy.network.is_some()
+        || policy.executor_sha256 != macos_create_executor_sha256()
+        || policy.workspace != policy.cwd
+    {
+        return Err("native_macos_create_executor_revision_mismatch");
+    }
+    let path_ptr = policy.path_selector();
+    let content_ptr = policy.content_selector();
+    let is_legacy = policy.profile.tool_name == "create_file"
+        && path_ptr == "/path"
+        && content_ptr == "/content";
+    if is_legacy {
+        let object = args
+            .as_object()
+            .ok_or("native_macos_create_arguments_invalid")?;
+        if object.len() != 2 {
+            return Err("native_macos_create_arguments_invalid");
+        }
+    }
+    let path_val = crate::mcp::resources::selected(args, path_ptr)
+        .map_err(|_| "native_macos_create_arguments_invalid")?
+        .ok_or("native_macos_create_arguments_invalid")?;
+    let original = path_val
+        .as_str()
+        .ok_or("native_macos_create_arguments_invalid")?;
+    let content_val = crate::mcp::resources::selected(args, content_ptr)
+        .map_err(|_| "native_macos_create_arguments_invalid")?
+        .ok_or("native_macos_create_arguments_invalid")?;
+    let content = content_val
+        .as_str()
+        .ok_or("native_macos_create_arguments_invalid")?;
+    if original.is_empty()
+        || original.len() > 4096
+        || original.chars().any(char::is_control)
+        || content.len() > CREATE_FILE_MAX_CONTENT
+    {
+        return Err("native_macos_create_arguments_invalid");
+    }
+    let [Resource::Path { canonical }] = policy.allowed_resources.as_slice() else {
+        return Err("native_macos_create_authority_invalid");
+    };
+    Ok((original, canonical, content))
+}
+
+pub fn macos_create_binding(
+    policy: &Policy,
+    args: &Value,
+) -> Result<ExecutionBinding, &'static str> {
+    let (original, canonical, content) = macos_create_arguments(policy, args)?;
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    {
+        let prepared = crate::macos_create::PreparedCreate::prepare(
+            &policy.workspace,
+            &policy.cwd,
+            original,
+            canonical,
+            content,
+        )
+        .map_err(|_| "native_macos_create_target_invalid")?;
+        macos_create_binding_with_identity(policy, args, prepared.identity())
+    }
+    #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+    {
+        let _ = (original, canonical, content);
+        Err("native_macos_create_platform_unsupported")
+    }
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub(crate) fn macos_create_binding_with_identity(
+    policy: &Policy,
+    args: &Value,
+    identity: &crate::macos_create::CreateIdentity,
+) -> Result<ExecutionBinding, &'static str> {
+    let (_, _, content) = macos_create_arguments(policy, args)?;
+    Ok(ExecutionBinding {
+        operation: ExecutionOperation::CreateFile,
+        action: ExecutionAction::Write,
+        max_content_bytes: CREATE_FILE_MAX_CONTENT,
+        executor_profile: MACOS_CREATE_EXECUTOR_PROFILE.into(),
+        policy_sha256: super::canonical_digest(
+            &serde_json::to_value(policy).expect("policy serializes"),
+        ),
+        args_sha256: super::canonical_digest(args),
+        content_sha256: super::hash(content.as_bytes()),
+        workspace_sha256: super::canonical_digest(&json!({
+            "workspace": policy.workspace,
+            "cwd": policy.cwd,
+            "root_dev": identity.root_dev,
+            "root_ino": identity.root_ino,
+        })),
+    })
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub(crate) fn macos_create_evidence(
+    policy: &Policy,
+    args: &Value,
+    identity: &crate::macos_create::CreateIdentity,
+) -> Result<Vec<ResourceEvidence>, &'static str> {
+    macos_create_binding_with_identity(policy, args, identity)?;
+    Ok(vec![ResourceEvidence {
+        pointer: policy.path_selector().into(),
+        source: crate::mcp::resources::EvidenceSource::Argument,
+        resource: policy.allowed_resources[0].clone(),
+    }])
+}
+
 /// No DNS lookup or request is performed here. The constrained executor checks
 /// and pins the current resolved addresses against this immutable authority.
 pub fn https_get_binding(policy: &Policy, args: &Value) -> Result<NetworkBinding, &'static str> {
@@ -1177,6 +1654,7 @@ pub fn https_get_binding(policy: &Policy, args: &Value) -> Result<NetworkBinding
     if policy.execution.is_some()
         || policy.post.is_some()
         || policy.windows_read.is_some()
+        || policy.macos_read.is_some()
         || policy.executor_sha256 != crate::mcp::https_get::executor_profile_sha256()
     {
         return Err("native_https_executor_revision_mismatch");
@@ -1285,6 +1763,9 @@ pub fn create_file_binding(
 ) -> Result<ExecutionBinding, &'static str> {
     if policy.is_windows_create() {
         return windows_create_binding(policy, args);
+    }
+    if policy.is_macos_create() {
+        return macos_create_binding(policy, args);
     }
     let execution = policy
         .effective_execution()
@@ -1417,6 +1898,22 @@ pub fn authorize(
     } else {
         None
     };
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    let macos_create_pin = if policy.is_macos_create() {
+        let (original, canonical, content) = macos_create_arguments(policy, args)?;
+        Some(
+            crate::macos_create::PreparedCreate::prepare(
+                &policy.workspace,
+                &policy.cwd,
+                original,
+                canonical,
+                content,
+            )
+            .map_err(|_| "native_macos_create_target_invalid")?,
+        )
+    } else {
+        None
+    };
     if let Some(bound) = &admission.execution {
         #[cfg(windows)]
         let derived = if let Some(prepared) = windows_create_pin.as_ref() {
@@ -1424,7 +1921,13 @@ pub fn authorize(
         } else {
             create_file_binding(policy, args)?
         };
-        #[cfg(not(windows))]
+        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+        let derived = if let Some(prepared) = macos_create_pin.as_ref() {
+            macos_create_binding_with_identity(policy, args, prepared.identity())?
+        } else {
+            create_file_binding(policy, args)?
+        };
+        #[cfg(not(any(windows, all(target_os = "macos", target_arch = "aarch64"))))]
         let derived = create_file_binding(policy, args)?;
         if &derived != bound {
             return Err("native_create_binding_mismatch");
@@ -1473,6 +1976,37 @@ pub fn authorize(
             return Err("native_windows_read_binding_mismatch");
         }
     }
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    let macos_read_pin = if admission.macos_read.is_some() {
+        let (original, canonical) = macos_read_arguments(policy, args)?;
+        Some(
+            crate::macos_read::PreparedRead::prepare(
+                &policy.workspace,
+                &policy.cwd,
+                original,
+                canonical,
+            )
+            .map_err(|_| "native_macos_read_target_invalid")?,
+        )
+    } else {
+        None
+    };
+    if let Some(bound) = &admission.macos_read {
+        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+        let derived_binding = macos_read_binding_with_identity(
+            policy,
+            args,
+            macos_read_pin
+                .as_ref()
+                .expect("macOS read metadata pinned")
+                .identity(),
+        )?;
+        #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+        let derived_binding = macos_read_binding(policy, args)?;
+        if &derived_binding != bound {
+            return Err("native_macos_read_binding_mismatch");
+        }
+    }
     let profile_sha256 = super::canonical_digest(
         &serde_json::to_value(&policy.profile).expect("profile serializes"),
     );
@@ -1497,9 +2031,37 @@ pub fn authorize(
         }
         return Ok(());
     }
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    if let Some(prepared) = macos_create_pin.as_ref() {
+        let resources = macos_create_evidence(policy, args, prepared.identity())?;
+        if resources != admission.resources {
+            return Err("native_resource_argument_mismatch");
+        }
+        if resources
+            .iter()
+            .any(|evidence| !policy.allowed_resources.contains(&evidence.resource))
+        {
+            return Err("native_resource_not_allowed");
+        }
+        return Ok(());
+    }
     #[cfg(windows)]
     if let Some(prepared) = windows_read_pin.as_ref() {
         let resources = windows_read_evidence(policy, args, prepared.identity())?;
+        if resources != admission.resources {
+            return Err("native_resource_argument_mismatch");
+        }
+        if resources
+            .iter()
+            .any(|evidence| !policy.allowed_resources.contains(&evidence.resource))
+        {
+            return Err("native_resource_not_allowed");
+        }
+        return Ok(());
+    }
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    if let Some(prepared) = macos_read_pin.as_ref() {
+        let resources = macos_read_evidence(policy, args, prepared.identity())?;
         if resources != admission.resources {
             return Err("native_resource_argument_mismatch");
         }
@@ -1695,6 +2257,186 @@ mod windows_read_contract_tests {
     }
 }
 
+#[cfg(test)]
+mod macos_read_contract_tests {
+    use super::*;
+
+    fn fixture() -> (tempfile::TempDir, super::super::Tool, Policy) {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().canonicalize().unwrap();
+        let target = root.join("approved.txt");
+        std::fs::write(&target, "approved bytes").unwrap();
+        let schema = super::super::canonical_digest(&macos_read_schema());
+        let tool = serde_json::from_value(json!({
+            "name":"read_document", "schema_sha256":schema,
+            "action_class":"read_only", "result_provenance":"untrusted", "egress":[]
+        }))
+        .unwrap();
+        let policy = serde_json::from_value(json!({
+            "profile":{"server_id":"macos-read-fixture","tool_name":"read_document",
+                "schema_sha256":schema,"selectors":[{"pointer":"/path","kind":"path"}]},
+            "workspace":root,"cwd":root,"executor_sha256":macos_read_executor_sha256(),
+            "classifier_sha256":"c".repeat(64),
+            "allowed_resources":[{"kind":"path","canonical":target}],
+            "macos_read":{"executor_profile":MACOS_READ_EXECUTOR_PROFILE,
+                "max_content_bytes":MACOS_READ_MAX_CONTENT}
+        }))
+        .unwrap();
+        (directory, tool, policy)
+    }
+
+    #[test]
+    fn macos_read_v7_binding_shape_preserves_distinct_contracts() {
+        let read = MacosReadBinding {
+            executor_profile: MACOS_READ_EXECUTOR_PROFILE.into(),
+            max_content_bytes: MACOS_READ_MAX_CONTENT,
+            policy_sha256: "a".repeat(64),
+            args_sha256: "b".repeat(64),
+            workspace_sha256: "c".repeat(64),
+            target_sha256: "d".repeat(64),
+        };
+        let mut admission: Admission = serde_json::from_value(json!({
+            "server_id":"macos-read-fixture","host_call_id":1,
+            "profile_sha256":"a".repeat(64),"executor_sha256":"b".repeat(64),
+            "classifier_sha256":"c".repeat(64),"snapshot_sha256":"d".repeat(64),
+            "definition_sha256":"e".repeat(64),"input_sha256":"f".repeat(64),
+            "resources":[{"pointer":"/path","source":"argument",
+                "resource":{"kind":"path","canonical":"approved.txt"}}],
+            "macos_read":read
+        }))
+        .unwrap();
+        assert_eq!(admission.contract(), MACOS_READ_CONTRACT);
+        assert_eq!(admission.validate_shape(), Ok(()));
+        for field in [
+            "executor_profile",
+            "max_content_bytes",
+            "policy_sha256",
+            "args_sha256",
+            "workspace_sha256",
+            "target_sha256",
+        ] {
+            let mut changed = serde_json::to_value(&admission).unwrap();
+            changed["macos_read"][field] = if field == "max_content_bytes" {
+                json!(MACOS_READ_MAX_CONTENT + 1)
+            } else {
+                json!("unsupported")
+            };
+            assert_eq!(
+                serde_json::from_value::<Admission>(changed)
+                    .unwrap()
+                    .validate_shape(),
+                Err("native_resource_invalid"),
+                "{field}"
+            );
+        }
+        admission.execution = Some(ExecutionBinding {
+            operation: ExecutionOperation::CreateFile,
+            action: ExecutionAction::Write,
+            max_content_bytes: CREATE_FILE_MAX_CONTENT,
+            executor_profile: MACOS_CREATE_EXECUTOR_PROFILE.into(),
+            policy_sha256: "a".repeat(64),
+            args_sha256: "b".repeat(64),
+            content_sha256: "c".repeat(64),
+            workspace_sha256: "d".repeat(64),
+        });
+        assert_eq!(admission.validate_shape(), Err("native_resource_invalid"));
+        admission.execution = None;
+        admission.macos_read = None;
+        assert_eq!(admission.contract(), CONTRACT);
+    }
+
+    #[test]
+    fn macos_read_authority_requires_explicit_reviewed_semantics() {
+        let (_directory, tool, policy) = fixture();
+        assert_eq!(policy.contract(), MACOS_READ_CONTRACT);
+        assert_eq!(
+            policy.validate(&tool).is_ok(),
+            cfg!(all(target_os = "macos", target_arch = "aarch64"))
+        );
+        for field in ["max_content_bytes", "executor_profile"] {
+            let mut changed = serde_json::to_value(&policy).unwrap();
+            changed["macos_read"][field] = if field == "max_content_bytes" {
+                json!(MACOS_READ_MAX_CONTENT + 1)
+            } else {
+                json!("unsupported")
+            };
+            let changed: Policy = serde_json::from_value(changed).unwrap();
+            assert!(changed.validate(&tool).is_err());
+        }
+    }
+
+    #[test]
+    fn bound_macos_read_policy_with_non_path_resource_refuses_without_panic() {
+        let (_directory, tool, _) = fixture();
+        let schema = super::super::canonical_digest(&macos_read_schema());
+        let policy: Policy = serde_json::from_value(json!({
+            "profile": {
+                "server_id": "test",
+                "tool_name": "custom_read",
+                "schema_sha256": schema,
+                "selectors": [{"pointer": "/path", "kind": "path"}]
+            },
+            "workspace": "/private/tmp",
+            "cwd": "/private/tmp",
+            "executor_sha256": macos_read_executor_sha256(),
+            "classifier_sha256": "b".repeat(64),
+            "allowed_resources": [{
+                "kind": "url",
+                "canonical": "https://example.com/",
+                "host": "example.com",
+                "port": 443
+            }],
+            "binding": {
+                "contract_version": "sw-native/binding/1",
+                "operation": "read_document",
+                "path_selector": "/path",
+                "executor_profile": MACOS_READ_EXECUTOR_PROFILE
+            }
+        }))
+        .unwrap();
+        assert!(policy.validate(&tool).is_err());
+    }
+}
+
+#[cfg(test)]
+mod macos_create_contract_tests {
+    use super::*;
+
+    fn fixture() -> (tempfile::TempDir, super::super::Tool, Policy) {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().canonicalize().unwrap();
+        let target = root.join("new_file.txt");
+        let schema = super::super::canonical_digest(&macos_create_schema());
+        let tool = serde_json::from_value(json!({
+            "name":"create_file", "schema_sha256":schema,
+            "action_class":"side_effecting", "result_provenance":"untrusted", "egress":[]
+        }))
+        .unwrap();
+        let policy = serde_json::from_value(json!({
+            "profile":{"server_id":"macos-create-fixture","tool_name":"create_file",
+                "schema_sha256":schema,"selectors":[{"pointer":"/path","kind":"path","allow_missing_leaf":true}]},
+            "workspace":root,"cwd":root,"executor_sha256":macos_create_executor_sha256(),
+            "classifier_sha256":"c".repeat(64),
+            "allowed_resources":[{"kind":"path","canonical":target}],
+            "execution":{"operation":"create_file","action":"write",
+                "executor_profile":MACOS_CREATE_EXECUTOR_PROFILE,
+                "max_content_bytes":MACOS_CREATE_MAX_CONTENT}
+        }))
+        .unwrap();
+        (directory, tool, policy)
+    }
+
+    #[test]
+    fn macos_create_v8_preserves_contract_and_rejects_unqualified() {
+        let (_directory, tool, policy) = fixture();
+        assert_eq!(policy.contract(), MACOS_CREATE_CONTRACT);
+        assert_eq!(
+            policy.validate(&tool).is_ok(),
+            cfg!(all(target_os = "macos", target_arch = "aarch64"))
+        );
+    }
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
@@ -1770,6 +2512,7 @@ mod tests {
             network: None,
             post: None,
             windows_read: None,
+            macos_read: None,
         }
     }
 
