@@ -23,7 +23,8 @@ shared Claude session or live-model effectiveness.
 | Filesystem write/edit/create/move, Git add/commit/reset/checkout/create-branch | Unsupported selected-profile dispatch; policy additionally denies recognized effect classes |
 | Filesystem media, Git branch enumeration | Unsupported by selected profile |
 | `directory_tree` with accepted filesystem classifier | Known coverage gap: unknown, policy Ask, collector refuses; not an authorized operation |
-| Multiple recognized action labels or any unknown remainder | Existing conservative classifier-to-native projection preserves ambiguity; Ask/refusal, never reinterpret as read |
+| Mixed read + write/delete/send/permission labels | Existing production policy composes all labels; risky evidence is not discarded. Read-only authority cannot authorize effects; Deny takes precedence |
+| Unknown remainder or uncertainty >= 0.8 | Existing production policy returns Ask unless a hard Deny already applies; collector refuses without an accepted approval path |
 | Changed schema, unknown tool, invalid or extra arguments, out-of-workspace path/repository | Admission/profile refusal; not a classification-accuracy error |
 | Missing classifier, malformed response, timeout or unavailable daemon | Fail closed; technical failure recorded separately, not evidence of correct semantic classification |
 | Detected Medium/High instruction override in original result | Deny result release; preserve bytes for inspection, no sanitizing into trusted content |

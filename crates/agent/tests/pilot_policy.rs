@@ -130,3 +130,35 @@ fn declaration_drift_shadow_and_subagent_floors_remain() {
         Verdict::Deny
     );
 }
+
+#[test]
+fn incomplete_history_keeps_sensitive_read_ask_floor() {
+    let policy = AgentPolicySet::from_yaml(POLICY).unwrap();
+    let decision = policy.evaluate(&Signals {
+        action_class: Some(ActionClass::ReadOnly),
+        touches_sensitive_path: true,
+        provenance_incomplete: true,
+        ..Signals::default()
+    });
+    assert_eq!(decision.verdict, Verdict::Ask);
+    assert_eq!(decision.rule.as_deref(), Some("taint-history-incomplete"));
+}
+
+#[test]
+fn secret_and_pii_egress_remain_denied_even_for_previously_allowlisted_hosts() {
+    for args in [
+        json!({"url":"https://api.anthropic.com", "data":"AKIAIOSFODNN7EXAMPLE"}),
+        json!({"url":"https://github.com", "data":"alice@example.com"}),
+    ] {
+        let mut fw = firewall();
+        let outcome = fw.inspect_native_call(
+            &event(EventKind::ToolCall {
+                tool: "opaque".into(),
+                args,
+            }),
+            ActionClass::Network,
+            &["github.com".into()],
+        );
+        assert_eq!(outcome.verdict, Verdict::Deny);
+    }
+}
