@@ -50,7 +50,10 @@ DIAGNOSTIC_LOG_ROWS = 2048
 DIAGNOSTIC_ROW_BYTES = 4096
 DIAGNOSTIC_EVENTS = frozenset(("mcp_real_server_start", "mcp_real_server_end", "mcp_real_call",
                                "mcp_real_stderr", "mcp_real_budget_start", "mcp_real_budget_end",
-                               "mcp_real_owner_start", "mcp_real_owner_end"))
+                               "mcp_real_owner_start", "mcp_real_owner_end", "mcp_real_transport_failure"))
+RELAY_FAILURES = frozenset(("response_id_unbound", "response_phase_invalid", "server_closed_incomplete",
+    "withdrawn_request_incomplete", "control_timeout", "stdio_write_timeout", "admission_unavailable", "admission_rejected",
+    "response_shape_invalid", "response_id_missing", "unknown_transport_failure"))
 OWNER_FAILURES = frozenset(("mcp_owner_sandbox_failed", "mcp_owner_namespace_lost", "mcp_owner_control_failed",
     "mcp_owner_control_invalid", "mcp_owner_control_closed", "mcp_owner_parent_lost", "mcp_owner_startup_failed",
     "mcp_owner_liveness_expired", "mcp_owner_monitor_stopped", "mcp_owner_boundary_failed", "mcp_owner_cleanup_unverified"))
@@ -187,6 +190,8 @@ def protected_diagnostics(report, root):
             event["state_" + state] = True
         if row.get("mode") in ("enforced", "unbudgeted"):
             event["budget_enforced"] = row["mode"] == "enforced"
+        if row["event"] == "mcp_real_transport_failure" and type(row.get("failure_code")) is str and row["failure_code"] in RELAY_FAILURES:
+            event["failure_code"] = row["failure_code"]
         owner = row.get("owner")
         if isinstance(owner, dict):
             if type(owner.get("reason")) is str and owner["reason"] in OWNER_FAILURES:

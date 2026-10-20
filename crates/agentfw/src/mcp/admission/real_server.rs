@@ -368,6 +368,18 @@ fn validate_registry(
 const WIRE_LIMIT: usize = ACTIVE_LIMIT * 2;
 const FORWARDED_CANCELLATIONS: usize = ACTIVE_LIMIT;
 
+fn forwarded_cancellation_limit(format: &str) -> usize {
+    // The pinned Git SDK drops CancelScope::__exit__'s suppression result.
+    // A wire abort during response backpressure kills its sibling tasks/stdio.
+    // Withdraw locally and drain instead: keep the physical slot and deadline
+    // until the original response arrives, without modifying the upstream server.
+    if format == server_profile::git::FORMAT {
+        0
+    } else {
+        FORWARDED_CANCELLATIONS
+    }
+}
+
 async fn relay<R, W, S, T>(
     collector: &Collector<'_>,
     client: &mut R,
@@ -391,6 +403,7 @@ where
     let mut used = BTreeSet::new();
     let mut wire: BTreeMap<String, (Instant, bool)> = BTreeMap::new();
     let mut forwarded_cancellations = 0;
+    let cancellation_limit = forwarded_cancellation_limit(format);
     let mut grants = BTreeSet::new();
     let mut workers: FuturesUnordered<Work<'_>> = FuturesUnordered::new();
     let mut profiles: BTreeMap<String, server_profile::ToolProfile> = BTreeMap::new();
@@ -494,7 +507,7 @@ where
                                 calls.remove(&key);
                             }
                             Phase::Running(grant) => {
-                                if forwarded_cancellations < FORWARDED_CANCELLATIONS {
+                                if forwarded_cancellations < cancellation_limit {
                                     forwarded_cancellations += 1;
                                     if let Some(item) = wire.get_mut(&key) {
                                         item.1 = true;
@@ -1055,7 +1068,7 @@ where
                             calls.remove(&key);
                         }
                         Phase::Running(grant) => {
-                            if forwarded_cancellations < FORWARDED_CANCELLATIONS {
+                            if forwarded_cancellations < cancellation_limit {
                                 forwarded_cancellations += 1;
                                 if let Some(item) = wire.get_mut(&key) {
                                     item.1 = true;
@@ -1117,6 +1130,33 @@ struct StderrWitness {
     digest: sha2::Sha256,
     tail: Vec<u8>,
     markers: BTreeSet<&'static str>,
+}
+
+fn relay_failure_code(error: &anyhow::Error) -> &'static str {
+    // Match complete fixed strings only. Never copy arbitrary error details,
+    // which may contain untrusted protocol data or operational paths/URLs.
+    for cause in error.chain() {
+        match cause.to_string().as_str() {
+            "unknown or duplicate MCP response ID" => return "response_id_unbound",
+            "MCP response arrived in an invalid call phase" => return "response_phase_invalid",
+            "selected MCP server closed with incomplete state" => {
+                return "server_closed_incomplete"
+            }
+            "MCP server did not finish a withdrawn request within its bound" => {
+                return "withdrawn_request_incomplete"
+            }
+            "MCP control request timed out" => return "control_timeout",
+            "MCP stdio write timed out" => return "stdio_write_timeout",
+            "MCP admission unavailable" => return "admission_unavailable",
+            "MCP admission request rejected" => return "admission_rejected",
+            "MCP response must contain exactly one result or error" => {
+                return "response_shape_invalid"
+            }
+            "server response ID missing" => return "response_id_missing",
+            _ => {}
+        }
+    }
+    "unknown_transport_failure"
 }
 
 impl StderrWitness {
@@ -1221,7 +1261,7 @@ pub(super) async fn run(
         "sandbox":server_sandbox::profile_name(&profile.format),"sandbox_workspace":server_sandbox::SANDBOX_WORKSPACE,
         "sandbox_pid":sandbox_pid,"owner":owner.metadata(),"resource_budget":budget_mode,
         "active_limit":ACTIVE_LIMIT,"queued_limit":QUEUE_LIMIT,"wire_limit":WIRE_LIMIT,
-        "forwarded_cancellation_limit":FORWARDED_CANCELLATIONS})
+        "forwarded_cancellation_limit":forwarded_cancellation_limit(&profile.format)})
     );
     let operation = {
         let transport = async {
@@ -1284,6 +1324,16 @@ pub(super) async fn run(
                     }
                 }
             };
+            if let Err(error) = &result {
+                // Record the relay's actual first failure before stdin shutdown
+                // can provoke a secondary wrapper/server exit. The owner select
+                // arm can otherwise win while this shutdown is still pending.
+                eprintln!(
+                    "{}",
+                    json!({"event":"mcp_real_transport_failure",
+                    "failure_code":relay_failure_code(error),"released":false})
+                );
+            }
             let _ = tokio::time::timeout(std::time::Duration::from_secs(1), child.shutdown()).await;
             drop(child);
             result
@@ -1404,6 +1454,18 @@ pub(super) async fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn relay_failure_metadata_does_not_echo_untrusted_context_or_suffixes() {
+        let error = anyhow::anyhow!("unknown or duplicate MCP response ID")
+            .context("private URL and payload");
+        assert_eq!(relay_failure_code(&error), "response_id_unbound");
+        let error = anyhow::anyhow!("unknown or duplicate MCP response ID: private payload");
+        assert_eq!(relay_failure_code(&error), "unknown_transport_failure");
+        assert_eq!(
+            relay_failure_code(&anyhow::anyhow!("arbitrary private payload")),
+            "unknown_transport_failure"
+        );
+    }
     #[test]
     fn stderr_witness_matches_split_markers_but_never_serializes_untrusted_bytes() {
         for (needle, marker) in STDERR_MARKERS {

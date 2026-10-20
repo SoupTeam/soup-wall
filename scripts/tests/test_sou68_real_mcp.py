@@ -94,6 +94,22 @@ class GitProfile(unittest.TestCase):
 
 
 class ProtectedDiagnostics(unittest.TestCase):
+    def test_first_relay_failure_and_partial_later_round_are_retained(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "collector.log").write_text("\n".join([
+                json.dumps({"event": "mcp_real_transport_failure", "failure_code": "response_id_unbound", "released": False}),
+                json.dumps({"event": "mcp_real_transport_failure", "failure_code": "private details"}),
+                "Error: mcp_owner_sandbox_failed"]))
+            failed = {"passed": False, "replies": [{"id": 2034}]}
+            summary = VERIFY.protected_diagnostics({"overlap_rounds": [{"passed": True}, failed], "overlap": failed}, root)
+            self.assertFalse(summary["overlap_complete"])
+            self.assertEqual((summary["overlap_rounds_attempted"], summary["overlap_rounds_completed"]), (2, 1))
+            self.assertEqual(summary["events"][0]["failure_code"], "response_id_unbound")
+            self.assertEqual(summary["events"][1], {"event": "mcp_real_transport_failure"})
+            self.assertEqual(summary["terminal_codes"], ["mcp_owner_sandbox_failed"])
+            self.assertNotIn("private details", json.dumps(summary))
+
     def test_owner_first_failure_and_wrapper_status_survive_summary(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

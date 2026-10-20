@@ -146,8 +146,10 @@ queued/inflight cancellation deterministic, then resumed. Sixteen consecutive
 rounds use fresh request IDs within the same original process/session, requiring
 two correlated withdrawals and fourteen useful peer replies per round. The
 inflight target must actually reach the child wire; a count of pending admission
-work is insufficient. This covers both the existing finite server-cancellation
-budget and subsequent bounded draining. Partial replies and the failed round
+work is insufficient. Git cancellations withdraw delivery locally and drain the
+original response; no abort notification reaches this pinned server. Physical
+slots remain occupied until a response arrives, with the original deadline and
+sixteen-request limit unchanged. Partial replies and the failed round
 remain in failed reports; a previous successful round cannot mask a later loss.
 Daemon-loss admission
 and process cleanup are checked. A separate real Python/Git sandbox probe checks
@@ -175,6 +177,30 @@ The private owner retains the first observed sandbox-wrapper exit code or signal
 and whether it preceded the quiesce acknowledgment. Cleanup cannot replace that
 witness with its own termination status or erase an earlier failure. This is a
 wrapper status, not the original Python process's exit code or exception. The
-bounded acceptance summary also preserves fixed owner failure codes. A later
+bounded acceptance summary also preserves fixed owner failure codes. The
+relay-error summary is recorded before stdin shutdown, because an ensuing
+wrapper failure can otherwise win the owner select while shutdown is pending.
+Only fixed full-string error codes are retained; arbitrary contexts and suffixes
+remain withheld. A later
 successful run does not explain or relabel an earlier failed overlap/cancellation
 run; preserve the original artifact and qualify the exact candidate separately.
+
+## Pinned SDK cancellation compatibility
+
+The original `mcp-server-git 2026.10.10` uses `mcp 1.29.0` and `anyio 4.15.1`
+on pinned Python 3.11.14. These versions satisfy their declared dependency
+constraints. Under response backpressure, however, `RequestResponder.__exit__`
+discards the Boolean result of `CancelScope.__exit__`. Cancellation escapes the
+request task, cancels sibling handlers and the session receive loop, and leaves
+`stdio_server.stdin_reader` sending into a closed peer (`BrokenResourceError`
+inside `ExceptionGroup`, exit 1). A controlled original-server reproduction also
+fails on Python 3.14; this is not a Windows Job-budget or cleanup failure.
+
+For this exact Git profile the relay therefore uses local withdrawal and bounded
+draining from the first cancellation, including deadline withdrawal. It does not
+patch the original package, suppress server exceptions, restart the session or
+release a late cancelled result. Native grants are reclaimed immediately; the
+physical request retains its slot and original deadline until it completes. A
+nonresponding withdrawn request still terminates the transport at that deadline.
+Filesystem's existing finite best-effort wire cancellation remains unchanged.
+See the [upstream cancellation report](https://github.com/modelcontextprotocol/python-sdk/issues/2610).
