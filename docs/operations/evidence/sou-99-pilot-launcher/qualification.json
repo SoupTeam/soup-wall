@@ -1,14 +1,14 @@
 {
   "contract_version": "sw-pilot-launcher/1",
   "status": "pass",
-  "evaluated_at": "2026-10-20T19:14:26.579711+00:00",
+  "evaluated_at": "2026-10-20T19:17:07.886461+00:00",
   "real_model_evaluation": false,
   "scripted_owned_provider": true,
   "zero_paid_api_calls_verified": true,
   "scenario_type": "fixture_server_acceptance",
   "binary_identity": {
     "path": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/debug/agentfw",
-    "sha256": "6fe3188e064e6a4a40c150d2703e2c04daaf40d8d00779720dd049bf78b97127"
+    "sha256": "33d2bdc685d02ad2866c07a778ddb03e1bd0110cbf28605c29d76da55c5e5db5"
   },
   "claude_identity": {
     "path": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/claude-code/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
@@ -77,8 +77,8 @@
     "status": "preview_ready",
     "host_session": "pilot-acceptance-session-preview-01",
     "claude_path": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/claude-code/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
-    "workspace_path": "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-qkh4isd9/workspace",
-    "private_config_dir": "/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/soup-wall-pilot-6a116b07b3b69cc54abf580454b5a922",
+    "workspace_path": "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-zv6vtln_/workspace",
+    "private_config_dir": "/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/soup-wall-pilot-6d079e6d07bc21d377366ff47f2c5109",
     "allowed_tools": [
       "directory_tree",
       "get_file_info",
@@ -180,10 +180,10 @@
     "report": {
       "contract_version": "sw-pilot-launcher/1",
       "status": "completed",
-      "host_session": "7973a3ac-18a3-4f2c-87b6-a63015b83176",
+      "host_session": "0530c4c3-7b8c-42c7-b0ec-63f5be8abb23",
       "claude_path": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/claude-code/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
-      "workspace_path": "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-qkh4isd9/workspace",
-      "private_config_dir": "/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/soup-wall-pilot-455d59e1e458eb47dc9b825ed1ea1fcb",
+      "workspace_path": "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-zv6vtln_/workspace",
+      "private_config_dir": "/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/soup-wall-pilot-4f3f587e3dcfc28a66eb9a116a1fe31f",
       "allowed_tools": [
         "git_reset",
         "git_status",
@@ -202,11 +202,11 @@
             "filesystem",
             "--native-admission",
             "--host-session",
-            "7973a3ac-18a3-4f2c-87b6-a63015b83176",
+            "0530c4c3-7b8c-42c7-b0ec-63f5be8abb23",
             "--child-authority",
             "[REDACTED]",
             "--home",
-            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-qkh4isd9/home/.agentfw",
+            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-zv6vtln_/home/.agentfw",
             "--",
             "/opt/homebrew/opt/python@3.14/bin/python3.14",
             "-u",
@@ -214,7 +214,7 @@
             "--role",
             "filesystem",
             "--workspace",
-            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-qkh4isd9/workspace",
+            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-zv6vtln_/workspace",
             "--tools",
             "read_text_file"
           ],
@@ -232,11 +232,11 @@
             "git",
             "--native-admission",
             "--host-session",
-            "7973a3ac-18a3-4f2c-87b6-a63015b83176",
+            "0530c4c3-7b8c-42c7-b0ec-63f5be8abb23",
             "--child-authority",
             "[REDACTED]",
             "--home",
-            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-qkh4isd9/home/.agentfw",
+            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-zv6vtln_/home/.agentfw",
             "--",
             "/opt/homebrew/opt/python@3.14/bin/python3.14",
             "-u",
@@ -244,7 +244,7 @@
             "--role",
             "git",
             "--workspace",
-            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-qkh4isd9/workspace",
+            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-zv6vtln_/workspace",
             "--tools",
             "git_status,git_reset"
           ],
@@ -270,8 +270,8 @@
     },
     "audit": {
       "host_claude_binary": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/claude-code/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
-      "host_session": "7973a3ac-18a3-4f2c-87b6-a63015b83176",
-      "private_config_dir": "/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/soup-wall-pilot-455d59e1e458eb47dc9b825ed1ea1fcb",
+      "host_session": "0530c4c3-7b8c-42c7-b0ec-63f5be8abb23",
+      "private_config_dir": "/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/soup-wall-pilot-4f3f587e3dcfc28a66eb9a116a1fe31f",
       "allowed_tools": [
         "git_reset",
         "git_status",
@@ -289,8 +289,8 @@
       "phase3_destructive_refused": true,
       "phase3_refusal_detail": "Soup Wall withheld MCP invocation (deny-destructive)\n\n<system-reminder>\n<total_tokens>14999890 tokens left</total_tokens>\n</system-reminder>",
       "phase3_zero_effects": true,
-      "git_head_before": "5426c753a9d41e4ad2532c73912a078f4da0c6e9",
-      "git_head_after": "5426c753a9d41e4ad2532c73912a078f4da0c6e9",
+      "git_head_before": "e31338a8a8985950c9c062562717316b74901a65",
+      "git_head_after": "e31338a8a8985950c9c062562717316b74901a65",
       "phase4_continuation": true,
       "model_recorded_steps": 4,
       "zero_paid_api_calls": true
@@ -300,7 +300,7 @@
     "private_config_dir_removed": true,
     "zero_orphaned_processes": true,
     "process_group_reaping_witness": {
-      "descendant_pid": 31572,
+      "descendant_pid": 31989,
       "all_descendants_terminated": true,
       "verification_method": "os_kill_probe_after_exit_0"
     }

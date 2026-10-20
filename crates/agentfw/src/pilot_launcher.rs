@@ -428,11 +428,10 @@ pub fn resolve_server_runtime(
         if let Ok(profile) = crate::mcp::server_profile::ProfileConfig::read(&bytes) {
             let (cmd, args) = match server_id {
                 FILESYSTEM_SERVER_ID => {
-                    let entry = profile.package_root.join(crate::mcp::server_profile::SERVER_ENTRYPOINT);
-                    let args = vec![
-                        entry.display().to_string(),
-                        "/workspace".to_string(),
-                    ];
+                    let entry = profile
+                        .package_root
+                        .join(crate::mcp::server_profile::SERVER_ENTRYPOINT);
+                    let args = vec![entry.display().to_string(), "/workspace".to_string()];
                     (profile.runtime_path.display().to_string(), args)
                 }
                 GIT_SERVER_ID => {
@@ -449,9 +448,11 @@ pub fn resolve_server_runtime(
                 other => bail!("unsupported server_id {:?} for ProfileConfig", other),
             };
 
-            let canonical_ws = workspace.canonicalize()
+            let canonical_ws = workspace
+                .canonicalize()
                 .with_context(|| format!("canonicalize workspace {:?}", workspace))?;
-            profile.validate_command(&cmd, &args, &canonical_ws)
+            profile
+                .validate_command(&cmd, &args, &canonical_ws)
                 .context("profile validate_command contract check failed")?;
 
             let mut full_cmd = vec![cmd];
@@ -460,13 +461,20 @@ pub fn resolve_server_runtime(
         }
 
         // 2. Parse as JSON to support command-based profile fixtures or runtimePath configs
-        let val: serde_json::Value = serde_json::from_slice(&bytes)
-            .with_context(|| format!("profile at {:?} is neither valid ProfileConfig nor valid JSON", profile_file))?;
+        let val: serde_json::Value = serde_json::from_slice(&bytes).with_context(|| {
+            format!(
+                "profile at {:?} is neither valid ProfileConfig nor valid JSON",
+                profile_file
+            )
+        })?;
 
         // If it declared an installed MCP format, reject the invalid profile
         if let Some(format) = val.get("format").and_then(|f| f.as_str()) {
             if format.starts_with("sw-mcp/") {
-                bail!("invalid MCP server profile at {:?}: failed ProfileConfig validation", profile_file);
+                bail!(
+                    "invalid MCP server profile at {:?}: failed ProfileConfig validation",
+                    profile_file
+                );
             }
         }
 
@@ -677,8 +685,8 @@ pub fn verify_daemon_policy(config: &ValidatedConfig, _daemon_token: &str) -> Re
 
     let policy_bytes = fs::read(policy_path)
         .with_context(|| format!("read selected policy file at {:?}", policy_path))?;
-    let policy_str = std::str::from_utf8(&policy_bytes)
-        .context("selected policy file is not valid UTF-8")?;
+    let policy_str =
+        std::str::from_utf8(&policy_bytes).context("selected policy file is not valid UTF-8")?;
     let selected_policy_set = soup_wall_agent::AgentPolicySet::from_yaml(policy_str)
         .context("selected policy file does not parse as valid AgentPolicySet")?;
     let selected_policy_sha256 = format!(
@@ -730,7 +738,9 @@ pub fn verify_daemon_policy(config: &ValidatedConfig, _daemon_token: &str) -> Re
             .context("daemon policy does not parse as valid AgentPolicySet")?;
         let daemon_policy_sha256 = format!(
             "{:x}",
-            Sha256::digest(serde_json::to_vec(&daemon_policy_set).context("serialize daemon policy set")?)
+            Sha256::digest(
+                serde_json::to_vec(&daemon_policy_set).context("serialize daemon policy set")?
+            )
         );
 
         ensure!(
@@ -961,7 +971,10 @@ pub fn write_per_process_mcp_config(
             } else if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&bytes) {
                 if let Some(format) = val.get("format").and_then(|f| f.as_str()) {
                     if format.starts_with("sw-mcp/") {
-                        bail!("invalid MCP server profile at {:?}: failed ProfileConfig validation", profile_file);
+                        bail!(
+                            "invalid MCP server profile at {:?}: failed ProfileConfig validation",
+                            profile_file
+                        );
                     }
                 }
             }
