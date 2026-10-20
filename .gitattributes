@@ -47,3 +47,5 @@ rule_baseline/runtime/** text eol=lf
 # pins the working-tree bytes and changes no committed byte.
 rule_baseline/rule_baseline.py text eol=lf
 rule_baseline/rev2/rule_baseline.py text eol=lf
+# SOU-97: the pilot candidate is selected by raw-byte SHA-256 on every platform.
+rule_baseline/pilot_readonly_v1/rule_baseline.py text eol=lf
