@@ -1,6 +1,8 @@
 """SOU-97: the additive --pilot-report mode of eval_runner.py (the default mode must stay unchanged)."""
 import json
+import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -134,10 +136,19 @@ PROVENANCE_INPUTS = ("eval/eval_runner.py", "rule_baseline/evaluate_dev.py", "ru
                      "profiles/mcp/git-readonly-v1/upstream-identity.json")
 
 
+def remove_tree(path):
+    """Remove a test directory, including Git's read-only object files on Windows; never fail silently."""
+    def writable(func, target, _):
+        os.chmod(target, stat.S_IWRITE)
+        func(target)
+    if Path(path).exists():
+        shutil.rmtree(path, onerror=writable)
+
+
 def isolated_git(*args, cwd):
     # No user/system configuration: no autocrlf, hooks or signing settings leak into the throwaway repository.
-    env = {**{k: v for k, v in __import__("os").environ.items() if k in ("PATH", "SYSTEMROOT", "TEMP", "TMP")},
-           "GIT_CONFIG_GLOBAL": __import__("os").devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+    env = {**{k: v for k, v in os.environ.items() if k in ("PATH", "SYSTEMROOT", "TEMP", "TMP")},
+           "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
     return subprocess.run(["git", "-c", "user.name=sou97-test", "-c", "user.email=sou97-test@example.test",
                            "-c", "core.autocrlf=false", *args], cwd=cwd, env=env, capture_output=True, text=True, check=True)
 
@@ -160,7 +171,7 @@ class Provenance(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        shutil.rmtree(cls.tmp, ignore_errors=True)
+        remove_tree(cls.tmp)
 
     def report(self, root, out, *extra):
         done = subprocess.run([sys.executable, "-B", str(root / "eval/eval_runner.py"), "eval/fixtures/soup_pilot_readonly_matrix_v0.1.json",
