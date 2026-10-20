@@ -39,11 +39,18 @@ the budget; the correct outcome there is a refused call, which the failure tests
 what happens (`not_reached:classifier_error`, nothing executed, next call starts a fresh
 verified worker).
 
-On the hosted `windows-2022` runner one first worker start of a test process (the test took
-about 2.1 s instead of about 0.8 s) did not answer within the 1.4 s start deadline and failed
-closed. The error text was not captured, so a cold OS file cache is the likely cause, not a
-proven one. The deadline was not relaxed and no retry was added; the tests now start the
-interpreter once before creating the first profile and print the worker error if a call fails.
+On the hosted `windows-2022` runner (run 39306638704, CPython 3.12.10) the direct worker first
+call measured p50 87.7 ms, p95 99.5 ms, max 103.7 ms (frozen) and p50 85.1 ms, p95 85.8 ms,
+max 88.0 ms (rev2), 15 starts each; warm calls p50 0.32 ms, p95 0.44 ms, max 0.63 ms, 300
+calls each; single-shot p50 52.0 ms (frozen) and 53.8 ms (rev2), 20 calls each. The
+production-collector acceptance run on the same runner passed 50 of 50 checks, with 5 cold
+collector starts (slowest 155 ms) and 125 warm calls without a failure. One run; not a guarantee.
+
+In one other hosted run the first worker call of a test process failed. By the log
+timestamps the test took 2.1 s instead of 0.8 s, which is consistent with the 1.4 s start
+deadline but not proven: the error text was not captured. The deadline was not relaxed and no
+retry was added; the tests now start the interpreter once before creating the first profile
+and print the worker error if a call fails.
 
 ## Not covered
 
