@@ -19,6 +19,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import queue
 import re
 import shutil
 import signal
@@ -48,11 +49,19 @@ def load(name, filename):
 BASE = load("pilot_filesystem", "verify-sou62-real-mcp.py")
 GIT = load("pilot_git", "verify-sou68-real-mcp.py")
 SHARED = load("pilot_shared", "verify-sou62-sou63-combined.py")
+RESOURCE = load("pilot_bounded_capture", "verify-sou79-resource-budgets.py")
 ROLES = ("agentfw", "git_launcher", "sandbox_tests", "node", "npm", "bwrap", "git", "claude", "python")
 TOOLS = {"filesystem": ("read_text_file", "list_directory", "write_file"),
          "git": ("git_show", "git_status", "git_diff", "git_reset")}
 POINTER = "/workspace/forbidden.fifo\n"
 NOTES = "Owned pilot working notes: inspect the pending change; café, қазақша.\n"
+# The filesystem-only proof policy denies even a LOW heuristic finding. Its
+# long-base64 signal also matches ordinary Git object IDs. Keep the existing
+# rules, but use an explicit pilot threshold rather than altering a detector,
+# suppressing Git metadata or presenting that stricter policy as useful here.
+PILOT_POLICY = SHARED.PROOF_POLICY.replace(
+    "when: { detector: injection, facet: tool_result }",
+    "when: { detector: injection, facet: tool_result, min_severity: medium }")
 
 
 def private_json(path, value):
@@ -141,6 +150,55 @@ class BoundedRequests(list):
 
 
 class Client(BASE.Client):
+    def __init__(self, command, env, cwd, stderr, label):
+        self.label, self.sent, self.received, self.notifications = label, [], [], []
+        self.forced_cleanup, self.closed = False, False
+        self.unexpected_replies, self.stream_evidence = [], None
+        self.process = subprocess.Popen(command, env=env, cwd=cwd, stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=stderr, start_new_session=True)
+        self.process_witness = BASE.ProcessWitness(self.process.pid)
+        # Reuse the accepted bounded protocol observer. The parent base client
+        # is convenient for exchanges, but its unbounded queue is unsuitable
+        # for an installed-candidate qualification of unexpected/late output.
+        self.capture = RESOURCE.Capture(self.process.stdout, True)
+        self.lines, self.reader = self.capture.frames, self.capture.thread
+
+    def close(self):
+        if self.closed:
+            return self.process.returncode
+        result = super().close()
+        self.stream_evidence = self.capture.finish()
+        while True:
+            try:
+                raw = self.lines.get_nowait()
+            except queue.Empty:
+                break
+            if raw is None:
+                continue
+            self.received.append(raw)
+            value = strict_json(raw)
+            if "id" in value:
+                self.unexpected_replies.append(value["id"])
+            else:
+                self.notifications.append(value)
+        self.closed = True
+        return result
+
+    def validate_capture(self):
+        require(self.closed and self.stream_evidence["error"] is None
+                and self.stream_evidence["thread_stopped"] is True
+                and self.stream_evidence["bytes"] <= LIMITS["host_bytes"]
+                and not self.unexpected_replies, "client_wire_observation_incomplete")
+
+    def receive(self, timeout=35):
+        value, raw = super().receive(timeout)
+        require(strict_json(raw) == value, "client_wire_parse_changed")
+        return value, raw
+
+    def transcript(self):
+        return {**super().transcript(), "stream_capture": self.stream_evidence,
+                "unexpected_reply_ids": self.unexpected_replies}
+
     def initialize(self):
         protocol = "2025-11-25" if self.kind == "git" else "2025-06-18"
         response, _ = self.exchange({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
@@ -206,6 +264,18 @@ class Pilot:
         require(path.stat().st_size <= 8 * 1024 * 1024, "audit_bound")
         return [json.loads(line) for line in path.read_bytes().splitlines() if line]
 
+    def redact(self, raw):
+        for secret in self.secrets:
+            raw = raw.replace(secret.encode(), b"[REDACTED]")
+        return raw
+
+    def retain_json(self, name, value):
+        raw = self.redact(canonical(value))
+        require(len(raw) <= LIMITS["host_bytes"], "owned_evidence_byte_limit")
+        target = self.output / name
+        owned_bytes(target, raw + b"\n")
+        return {"file": name, "sha256": sha(target), "complete": True}
+
     def http(self, route):
         request = urllib.request.Request(f"http://127.0.0.1:{self.port}" + route,
                                         headers={"Authorization": "Bearer " + self.native_token})
@@ -262,7 +332,7 @@ class Pilot:
         private_json(registry, {"contract_version": "sw-native/1", "registry_id": "installed-development-pilot-v1", "tools": tools})
         self.registry_sha256 = sha(registry)
         policy = installed / "policy.yaml"
-        policy.write_text(SHARED.PROOF_POLICY, encoding="utf-8")
+        policy.write_text(PILOT_POLICY, encoding="utf-8")
         policy.chmod(0o600)
         self.policy_sha256 = sha(policy)
         subprocess.run([str(self.binary), "install"], env=self.env, cwd=self.workspace,
@@ -283,7 +353,7 @@ class Pilot:
         return {"source_independent_runtime": True, "agentfw_sha256": sha(self.binary),
                 "profiles": self.installed, "policy_sha256": self.policy_sha256,
                 "registry_sha256": self.registry_sha256, "config_sha256": self.config_sha256,
-                "instance_id": instance, "policy_scope": "existing-combined-proof-policy",
+                "instance_id": instance, "policy_scope": "combined-proof-with-medium-result-injection-threshold",
                 "classifier_scope": "existing-per-server-rule-baselines"}
 
     def prepare_workspaces(self):
@@ -293,7 +363,7 @@ class Pilot:
         self.workspace = self.private / "filesystem-workspace"
         self.workspace.mkdir(mode=0o700)
         self.git_workspace = self.private / "git-workspace"
-        GIT.prepare_repo(self.git_workspace, self.paths["git"], self.env)
+        self.git_injection_revision = GIT.prepare_repo(self.git_workspace, self.paths["git"], self.env)
         (self.workspace / "guide.txt").write_text(BASE.TEXT, encoding="utf-8")
         (self.workspace / "notes.txt").write_text(NOTES, encoding="utf-8")
         (self.workspace / "source.txt").write_text(POINTER, encoding="utf-8")
@@ -402,6 +472,10 @@ class Pilot:
                     response, _ = client.exchange(BASE.call(30, {"path": str(target), "content": "owned calibration"}, "write_file"))
                     require(not BASE.refused(response) and target.read_text() == "owned calibration", "write_witness_not_calibrated")
                     target.unlink()
+                else:
+                    response, _ = client.exchange(BASE.call(31, {"repo_path": str(self.git_workspace),
+                        "revision": self.git_injection_revision}, "git_show"))
+                    require(GIT.INJECTION in GIT.text(response), "original_injection_not_calibrated")
         # Every negative FIFO is first read through the exact installed path.
         # The observer is not allowed to infer prevention from an absent reader
         # when it has never seen this inode's real reader.
@@ -424,6 +498,9 @@ class Pilot:
                 require(GIT.text(response) == self.controls[("git", "git_show", "default")], "git_witness_control_not_useful")
                 git_opens = watch.drain()
                 require(git_opens > 0, "git_open_witness_not_calibrated")
+                response, _ = client.exchange(frame(46, "git", "git_show", {"revision": self.git_injection_revision}))
+                require(BASE.refused(response) and "combined-deny-result-injection" in json.dumps(response)
+                        and GIT.INJECTION not in json.dumps(response), "git_injection_result_released")
         finally:
             watch.close()
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -432,9 +509,12 @@ class Pilot:
         require(self.receiver.bodies == ["owned receiver calibration"], "receiver_witness_not_calibrated")
         self.receiver.bodies.clear()
         require(self.controls[("filesystem", "read_text_file", "guide")] == BASE.TEXT, "original_useful_content_changed")
+        original_evidence = self.retain_json("original-server-results.json", {"/".join(key): value for key, value in self.controls.items()})
         return {"original_results": {"/".join(key): hashlib.sha256(value.encode()).hexdigest() for key, value in self.controls.items()},
                 "fifo": calibrations, "git_original_opens": git_opens,
-                "original_write_observed": True, "receiver_positive_observed": True, **self.preserve()}
+                "git_history_with_object_id_useful": True, "original_injection_result_withheld": True,
+                "original_write_observed": True, "receiver_positive_observed": True,
+                "original_evidence": original_evidence, **self.preserve()}
 
     def host(self, label, batches, before_batch=None, host=None, proofs=None):
         """Run the actual selected host. A batch is one provider parallel proposal.
@@ -532,8 +612,12 @@ class Pilot:
             cleanup = witness.finish()
             # Original owned frames remain private; public report contains only
             # digests/counts. Even failed/late output is retained for diagnosis.
-            owned_bytes(self.output / (label + "-host.jsonl"), raw)
-            owned_bytes(self.output / (label + "-host.stderr"), error_output)
+            safe_raw, safe_error = self.redact(raw), self.redact(error_output)
+            owned_bytes(self.output / (label + "-host.jsonl"), safe_raw)
+            owned_bytes(self.output / (label + "-host.stderr"), safe_error)
+            provider_record = self.retain_json(label + "-provider-results.json", {
+                "proposed_batches": expected, "observed_tool_results": model.results,
+                "provider_requests": len(model.requests), "latencies_ms": latencies})
             messages = [json.loads(line) for line in raw.splitlines() if line.startswith(b"{")]
             initial = [r for r in messages if r.get("type") == "system" and r.get("subtype") == "init"]
             finals = [r for r in messages if r.get("type") == "result"]
@@ -545,9 +629,11 @@ class Pilot:
                 "proposal_sha256": digest(uses), "returned_results_sha256": digest(model.results),
                 "provider_requests": len(model.requests), "provider_requests_sha256": hashlib.sha256(b"".join(model.requests)).hexdigest(),
                 "host_output_sha256": hashlib.sha256(raw).hexdigest(), "latencies_ms": latencies,
+                "provider_result_evidence": provider_record,
                 "process_cleanup": cleanup, "actual_host": True, "provider": "owned-scripted-loopback",
                 "live_model_effectiveness": "not_measured"}
             self.hosts.append(evidence)
+            require(raw == safe_raw and error_output == safe_error, "host_credential_exposure")
             require(not provider_errors and not timed_out and process.returncode == 0 and len(finals) == 1
                     and not finals[0].get("is_error"), "actual_host_incomplete")
             require(len(initial) == 1 and initial[0].get("session_id") == host, "actual_host_session_changed")
@@ -675,11 +761,13 @@ class Pilot:
             require(not queued_record["reader_seen"] and queued_record["bytes_written"] == 0, "queued_cancel_executed")
             require(all(row["reader_opened"] and row["bytes_written"] == len(BASE.FIFO_TEXT.encode()) and row["error"] is None
                         for row in fifo.records), "parallel_execution_witness_incomplete")
+            wire = client.transcript()
             evidence = {"driver_scope": "explicit-MCP-client-on-the-same-installed-product",
                 "active_original_calls": 8, "cancelled": {"inflight_executed": 1, "queued_not_executed": 1},
                 "useful_correlated_results": 7, "fifo": fifo.records, "queued_fifo": queued_record,
                 "sibling_useful": True, "same_session_follow_up": True,
-                "transcript_sha256": digest(client.transcript())}
+                "sent_sha256": wire["sent_sha256"], "received_sha256": wire["received_sha256"],
+                "client_wire_file": f"client-{self.clients.index(client):02d}-wire.json"}
         return {**evidence, **self.preserve()}
 
     def collector_recovery(self):
@@ -787,6 +875,7 @@ class Pilot:
         for client in reversed(self.clients):
             try:
                 client.close()
+                client.validate_capture()
                 require(not client.forced_cleanup and client.process_witness.final["all_stopped"], "client_cleanup_incomplete")
                 require(client.process.returncode == getattr(client, "expected_exit", 0), "unexpected_client_exit")
             except Exception:
@@ -849,12 +938,13 @@ class Pilot:
                 raw = stream.read(LIMITS["host_bytes"] + 1)
             complete = len(raw) <= LIMITS["host_bytes"]
             raw = raw[:LIMITS["host_bytes"]]
-            for secret in self.secrets:
-                raw = raw.replace(secret.encode(), b"[REDACTED]")
+            raw = self.redact(raw)
             target = self.output / (f"owned-{index:02d}-" + path.name)
             target.write_bytes(raw)
             target.chmod(0o600)
             retained.append({"file": target.name, "sha256": sha(target), "complete": complete})
+        for index, client in enumerate(self.clients):
+            retained.append(self.retain_json(f"client-{index:02d}-wire.json", client.transcript()))
         require(len(retained) <= 64 and all(row["complete"] for row in retained), "owned_evidence_incomplete")
         return retained
 

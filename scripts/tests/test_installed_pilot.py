@@ -229,6 +229,45 @@ class RuntimeBoundaryControls(unittest.TestCase):
             finally:
                 pilot.receiver.close()
 
+    def test_original_owned_results_are_retained_for_independent_regrading(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            private, output = root / "private", root / "output"
+            private.mkdir()
+            output.mkdir()
+            pilot = PILOT.Pilot(private, output, {role: Path(sys.executable).resolve() for role in PILOT.ROLES}, CONTRACT.new_report())
+            try:
+                pilot.secrets = ["owned-test-capability"]
+                original = {"received": ['{"id":7,"result":{"content":"useful café"}}\n'],
+                            "error": "owned-test-capability"}
+                record = pilot.retain_json("wire.json", original)
+                retained = json.loads((output / "wire.json").read_bytes())
+                self.assertEqual(retained["received"], original["received"])
+                self.assertEqual(retained["error"], "[REDACTED]")
+                self.assertEqual(record["sha256"], CONTRACT.sha(output / "wire.json"))
+                with self.assertRaises(FileExistsError):
+                    pilot.retain_json("wire.json", {"overwrite": True})
+            finally:
+                pilot.receiver.close()
+
+    def test_late_correlated_reply_is_retained_and_fails_capture(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            script = ('import sys,json\nsys.stdin.readline()\n'
+                      'print(json.dumps({"id":1,"result":{}}),flush=True)\n'
+                      'print(json.dumps({"id":2,"result":{"late":"must not pass"}}),flush=True)\n')
+            with (root / "stderr").open("wb") as log:
+                client = PILOT.Client([sys.executable, "-I", "-c", script], dict(), root, log, "owned-late-control")
+                try:
+                    reply, _ = client.exchange({"jsonrpc": "2.0", "id": 1, "method": "ping"})
+                    self.assertEqual(reply["id"], 1)
+                finally:
+                    client.close()
+                self.assertEqual(client.unexpected_replies, [2])
+                self.assertEqual(len(client.transcript()["received"]), 2)
+                with self.assertRaisesRegex(CONTRACT.Failure, "client_wire_observation_incomplete"):
+                    client.validate_capture()
+
 
 if __name__ == "__main__":
     unittest.main()

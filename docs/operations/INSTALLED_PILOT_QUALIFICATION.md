@@ -6,9 +6,16 @@ Messages provider is an owned loopback script. This measures actual-host
 interoperability, useful execution, refusal and recovery. It does not measure a
 live model's effectiveness, certify pilot readiness, or complete Phase 4.
 
-The runtime uses the existing per-server rule baselines and the existing
-[combined proof policy](../../scripts/verify-sou62-sou63-combined.py), including
-Ask for a read derived from MCP content. It does not install a product preset,
+The runtime uses the existing per-server rule baselines and an explicitly scoped
+variant of the [combined proof policy](../../scripts/verify-sou62-sou63-combined.py),
+including Ask for a read derived from MCP content. Result injection requires
+medium severity. The filesystem-only proof policy's LOW heuristic also matches
+ordinary 40-character Git object IDs, so its unconditional detector rule falsely
+interrupts original Git history. The initial failure is retained; detectors and
+shipped policies are unchanged. Calibration requires both useful original Git
+history with its object ID and withholding a real original-server injection
+result. This scoped threshold is not evidence that every LOW finding is benign.
+It does not install a product preset,
 train a model, change an existing host profile, or implement another kit builder.
 The ordinary filesystem/Git profile installers remain the preparation interface.
 
@@ -73,7 +80,8 @@ The original denominator is **12 cases**, retained even after a failed setup:
 
 1. Exact installed source, binaries, classifiers, policy, registry and profiles.
 2. The required real filesystem and Git sandbox positives, with no fallback.
-3. Witness calibration: original useful bytes, an original controlled write,
+3. Witness calibration: original useful bytes, useful Git object IDs versus a
+   withheld original injection result, an original controlled write,
    each negative FIFO's actual reader, repository kernel OPEN observations, and
    an owned loopback receiver. The controlled write is an executed effect; the
    driver explicitly removes only its synthetic calibration file afterwards.
@@ -117,7 +125,10 @@ Limits are declared before execution: two required benign workflows, zero
 false interruptions, 180 seconds per exercise case, 600 seconds for preparation,
 15 seconds for collector reclamation/daemon restart, 150 seconds per Claude
 process, 32 provider requests per host run, 8 MiB per retained host/log stream,
-and a 256 KiB public result. Individual subprocesses have their own timeouts;
+and a 256 KiB public result. The reused MCP observer caps frames at 256 KiB,
+256 observed records and 64 pending frames. An overflow, partial EOF or unread
+late reply fails final qualification; expected useful replies cannot hide it.
+Individual subprocesses have their own timeouts;
 case totals exceeding the declared bound fail even if output arrives late.
 The enclosing CI job also retains its existing 40-minute hard timeout.
 
@@ -131,7 +142,9 @@ WSL requires its own actual Linux run and does not inherit a hosted Linux result
 
 Output is private (`0700` directory, `0600` report/logs). Original **owned
 synthetic** host frames, failures, late output and sanitized collector/native
-audit logs remain alongside the bounded content-free summary. Host settings,
+audit logs remain alongside the bounded content-free summary. Original-server
+reference results, provider-observed tool results and complete owned MCP wire
+transcripts are retained for independent regrading. Host settings,
 environments and bearer/proof files are never retained. Do not point this
 development-only exercise at customer workspaces or treat its targeted token
 redaction as a general user-data scrubber.

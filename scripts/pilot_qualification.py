@@ -25,7 +25,8 @@ CASES = (
 STATES = ("passed", "failed", "incomplete", "unsupported")
 LIMITS = {"case_seconds": 180, "setup_seconds": 600, "recovery_seconds": 15,
           "host_bytes": 8 * 1024 * 1024, "report_bytes": 256 * 1024,
-          "provider_requests": 32, "benign_workflows": 2}
+          "provider_requests": 32, "benign_workflows": 2,
+          "mcp_frame_bytes": 262144, "mcp_observed_frames": 256, "mcp_pending_frames": 64}
 
 
 class Failure(ValueError):
