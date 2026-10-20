@@ -1359,6 +1359,146 @@ print(json.dumps(result))
         }
     }
 
+    /// The writable stage uses a different seccomp branch from read-only.
+    /// Exercise that branch against independently calibrated receivers; an
+    /// idle upstream server making no network calls is not an egress probe.
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    #[ignore = "requires SOU62_SANDBOX_TEST_PROFILE and real Linux namespaces"]
+    async fn original_create_stage_confines_active_egress_and_runtime_writes() {
+        use std::io::{Read, Write};
+        use std::net::{TcpListener, TcpStream};
+        use std::os::unix::fs::PermissionsExt;
+        use std::os::unix::net::{UnixListener, UnixStream};
+        use tokio::io::AsyncReadExt;
+
+        let config = std::env::var_os("SOU62_SANDBOX_TEST_PROFILE").unwrap();
+        let mut profile = ProfileConfig::read(&std::fs::read(config).unwrap()).unwrap();
+        profile.format = super::super::server_profile::filesystem_create::FORMAT.to_owned();
+        let owned = tempfile::tempdir().unwrap();
+        let stage = owned.path().join("stage");
+        std::fs::create_dir(&stage).unwrap();
+        std::fs::set_permissions(&stage, std::fs::Permissions::from_mode(0o700)).unwrap();
+        profile.workspace = stage.clone();
+        let outside = owned.path().join("outside");
+        std::fs::write(&outside, b"unchanged").unwrap();
+        let receiver = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = receiver.local_addr().unwrap();
+        let mut sender = TcpStream::connect(address).unwrap();
+        sender.write_all(b"calibrate").unwrap();
+        let (mut received, _) = receiver.accept().unwrap();
+        let mut bytes = [0; 9];
+        received.read_exact(&mut bytes).unwrap();
+        assert_eq!(&bytes, b"calibrate");
+        drop((sender, received));
+        receiver.set_nonblocking(true).unwrap();
+        let socket_path = stage.join("egress.sock");
+        let unix = UnixListener::bind(&socket_path).unwrap();
+        let calibration = UnixStream::connect(&socket_path).unwrap();
+        drop(unix.accept().unwrap());
+        drop(calibration);
+        unix.set_nonblocking(true).unwrap();
+        let script = format!(
+            r#"
+const fs = require('node:fs'), net = require('node:net');
+const denied = f => {{ try {{ f(); return false; }} catch {{ return true; }} }};
+fs.writeFileSync('/workspace/created.txt', 'private stage');
+const result = {{
+  stageWrite: fs.readFileSync('/workspace/created.txt','utf8') === 'private stage',
+  runtimeWriteDenied: denied(() => fs.writeFileSync('/mcp-runtime/node','bad')),
+  packageWriteDenied: denied(() => fs.writeFileSync('/mcp-server/escape','bad')),
+  outsideReadDenied: denied(() => fs.readFileSync({outside})),
+  outsideWriteDenied: denied(() => fs.writeFileSync({outside},'bad')),
+  inheritedSecretAbsent: process.env.SOU83_INHERITED_SECRET === undefined,
+  netNamespace: fs.readlinkSync('/proc/self/ns/net'),
+  pidNamespace: fs.readlinkSync('/proc/self/ns/pid')
+}};
+const probe = options => new Promise(resolve => {{
+  let socket, done = false;
+  const finish = denied => {{ if(done) return; done=true; if(socket) socket.destroy(); resolve(denied); }};
+  try {{ socket = net.connect(options); socket.on('connect', () => finish(false));
+    socket.on('error', () => finish(true)); socket.setTimeout(500, () => finish(true));
+  }} catch {{ finish(true); }}
+}});
+Promise.all([probe({{host:'127.0.0.1',port:{port}}}),probe({{path:'/workspace/egress.sock'}})])
+ .then(([tcp,unix]) => {{ result.tcpDenied=tcp; result.unixDenied=unix; console.log(JSON.stringify(result)); }});
+"#,
+            outside = serde_json::to_string(&outside).unwrap(),
+            port = address.port()
+        );
+        let mut prepared = prepare_linux_command(&profile, &["-e".into(), script], true).unwrap();
+        prepared
+            .command
+            .env("SOU83_INHERITED_SECRET", "must-not-reach-stage");
+        let (mut child, mut budget, mut owner, _) = prepared.spawn().await.unwrap();
+        drop(child.stdin.take());
+        let mut stdout = child.stdout.take().unwrap();
+        let mut stderr = child.stderr.take().unwrap();
+        let collected = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            let mut output = Vec::new();
+            let mut errors = Vec::new();
+            let (out, err) = tokio::join!(
+                stdout.read_to_end(&mut output),
+                stderr.read_to_end(&mut errors)
+            );
+            out.unwrap();
+            err.unwrap();
+            (output, errors, child.wait().await.unwrap())
+        })
+        .await;
+        // Always stop the owner and reap the child, including on timeout.
+        let quiesce = owner.quiesce().await;
+        let budget_cleanup = if let Some(budget) = budget.as_mut() {
+            budget.finish().await
+        } else {
+            Ok(())
+        };
+        let owner_cleanup = owner.finish().await;
+        let child_cleanup = terminate(&mut child).await;
+        quiesce.unwrap();
+        budget_cleanup.unwrap();
+        owner_cleanup.unwrap();
+        child_cleanup.unwrap();
+        let (output, errors, status) = collected.expect("bounded create-stage probe");
+        assert!(status.success(), "{}", String::from_utf8_lossy(&errors));
+        let result: serde_json::Value = serde_json::from_slice(&output).unwrap();
+        for key in [
+            "stageWrite",
+            "runtimeWriteDenied",
+            "packageWriteDenied",
+            "outsideReadDenied",
+            "outsideWriteDenied",
+            "inheritedSecretAbsent",
+            "tcpDenied",
+            "unixDenied",
+        ] {
+            assert_eq!(result[key], true, "create sandbox boundary: {key}");
+        }
+        for namespace in ["net", "pid"] {
+            assert_ne!(
+                result[format!("{namespace}Namespace")].as_str().unwrap(),
+                std::fs::read_link(format!("/proc/self/ns/{namespace}"))
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+            );
+        }
+        assert_eq!(std::fs::read(&outside).unwrap(), b"unchanged");
+        assert_eq!(
+            std::fs::read(stage.join("created.txt")).unwrap(),
+            b"private stage"
+        );
+        assert_eq!(
+            receiver.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+        assert_eq!(
+            unix.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+        println!("SOU83_CREATE_SANDBOX_POSITIVE {result}");
+    }
+
     /// An explicitly invoked positive acceptance test. A missing runtime,
     /// bubblewrap feature, or namespace permission is a failure, never a skip.
     #[cfg(target_os = "linux")]

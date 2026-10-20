@@ -22,6 +22,7 @@ import queue
 import re
 import shutil
 import stat
+import statistics
 import subprocess
 import sys
 import tempfile
@@ -48,6 +49,14 @@ READ_CASES = (
 SANDBOX_WITNESSES = ("allowed_read", "workspace_write_denied", "outside_read_denied", "outside_write_denied",
     "egress_witness_calibrated", "egress_denied", "pathname_unix_socket_denied", "fifo_witness_calibrated",
     "fifo_write_denied", "inherited_env_absent", "host_descriptors_absent", "private_net_pid")
+SOU83_CASES = (
+    "sou83-actual-native-create-published", "sou83-create-read-verify-same-session",
+    "sou83-overwrite-traversal-oversize-refused", "sou83-existing-symlink-refused",
+    "sou83-actual-spent-host-id-replay-refused", "sou83-late-cancellation-keeps-commit",
+    "sou83-real-creating-cancellation-no-publication",
+    "sou83-real-creating-daemon-loss-no-publication", "sou83-restart-useful-read-continuation",
+    "sou83-fresh-create-after-cancellation", "sou83-fresh-create-after-daemon-restart",
+)
 
 
 def load(name, filename):
@@ -675,8 +684,51 @@ def protected_original_create(stack, root, bwrap, npm, report):
     baseline = snapshot(stack.workspace)
     expected = "SOU-83 exact original written bytes 🌍"
     leaf = stack.workspace / "sou83-protected.txt"
+    published = [leaf]
+    protected_ns = []
     outside = root / "sou83-outside-sentinel"
     outside.write_text("outside unchanged", encoding="utf-8")
+    # A small matched-payload latency observation, not a throughput benchmark.
+    # Both samples exclude initialize/tools-list and include write RPC roundtrip;
+    # protected calls additionally include native gates, fresh sandbox and sync.
+    direct_ns = []
+    with tempfile.TemporaryDirectory(prefix="sou83-calibration-", dir=root) as temporary, (
+            stack.root / "sou83-unwrapped-create.log").open("wb") as log:
+        control_root = Path(temporary)
+        control = Client([str(stack.node), str(entry), str(control_root)], env,
+                         control_root, log, "unwrapped original create calibration")
+        try:
+            control.initialize()
+            for index in range(3):
+                target = control_root / f"sample-{index}.txt"
+                start = time.monotonic_ns()
+                reply, _ = control.exchange(call(f"calibration-{index}", {
+                    "path":str(target), "content":expected}, "write_file"))
+                direct_ns.append(time.monotonic_ns() - start)
+                require(not refused(reply) and target.read_text(encoding="utf-8") == expected,
+                        "unwrapped original create calibration failed")
+                read, _ = control.exchange(call(f"calibration-read-{index}", {
+                    "path":str(target)}, "read_text_file"))
+                require(result_text(read) == expected, "unwrapped original create/read mismatch")
+        finally:
+            control.close()
+            report["sou83_unwrapped_create_client"] = control.transcript()
+        require(control.process_witness.final["all_stopped"], "unwrapped calibration process leaked")
+
+    def fresh_write(client, index):
+        target = stack.workspace / f"sou83-continuation-{index}.txt"
+        start = time.monotonic_ns()
+        response, _ = client.exchange(call(f"sou83-fresh-{index}", {
+            "path":"/workspace/" + target.name, "content":expected}, "write_file"))
+        protected_ns.append(time.monotonic_ns() - start)
+        require(not refused(response) and target.read_text(encoding="utf-8") == expected,
+                "fresh original create continuation failed")
+        published.append(target)
+        read, _ = client.exchange(call(f"sou83-fresh-read-{index}", {
+            "path":"/workspace/" + target.name}, "read_text_file"))
+        require(result_text(read) == expected and stat.S_IMODE(target.stat().st_mode) == 0o600,
+                "fresh original create/read/verify failed")
+
     daemon = None
     client = None
     with (stack.root / "sou83-create-daemon.log").open("wb") as log, (
@@ -709,6 +761,12 @@ def protected_original_create(stack, root, bwrap, npm, report):
                     and result_text(read) == expected,
                     "native protected original create -> read continuation failed")
             report["checks"].append({"case":"sou83-create-read-verify-same-session", "passed":True})
+            client.send(cancel("sou83-create-1"))
+            after_commit, _ = client.exchange(call("sou83-read-after-late-cancel", {
+                "path":"/workspace/sou83-protected.txt"}, "read_text_file"))
+            require(result_text(after_commit) == expected and leaf.read_text(encoding="utf-8") == expected,
+                    "late cancellation claimed rollback or damaged an already committed create")
+            report["checks"].append({"case":"sou83-late-cancellation-keeps-commit", "passed":True})
             for index, args in enumerate([
                 {"path":"/workspace/sou83-protected.txt", "content":"overwrite blocked"},
                 {"path":"/workspace/../sou83-outside-sentinel", "content":"bad"},
@@ -726,6 +784,17 @@ def protected_original_create(stack, root, bwrap, npm, report):
                         "denied original mutation created another file")
             report["checks"].append({"case":"sou83-overwrite-traversal-oversize-refused",
                                      "passed":True})
+            alias = stack.workspace / "sou83-existing-link.txt"
+            alias.symlink_to(outside)
+            try:
+                reply, _ = client.exchange(call("sou83-symlink-target", {
+                    "path":"/workspace/" + alias.name, "content":"bad"}, "write_file"))
+                require(refused(reply) and alias.is_symlink()
+                        and outside.read_text(encoding="utf-8") == "outside unchanged",
+                        "original create followed/replaced an existing symlink")
+            finally:
+                alias.unlink()
+            report["checks"].append({"case":"sou83-existing-symlink-refused", "passed":True})
             # A replay is a *reused host/native authority*, not a second
             # attempt to overwrite an already committed destination.
             replay_id = "sou83-create-1"
@@ -765,6 +834,8 @@ def protected_original_create(stack, root, bwrap, npm, report):
                     "cancelled original write broke the useful same-session reader")
             report["checks"].append({"case":"sou83-real-creating-cancellation-no-publication",
                                      "passed":True})
+            fresh_write(client, 0)
+            report["checks"].append({"case":"sou83-fresh-create-after-cancellation", "passed":True})
 
             # Force a real native-daemon outage *after* it granted the call
             # and the original one-call sandbox reached Creating. A stopped
@@ -805,9 +876,20 @@ def protected_original_create(stack, root, bwrap, npm, report):
                                      "passed":True})
             report["checks"].append({"case":"sou83-restart-useful-read-continuation",
                                      "passed":True})
+            fresh_write(client, 1)
+            fresh_write(client, 2)
+            report["checks"].append({"case":"sou83-fresh-create-after-daemon-restart", "passed":True})
+            report["sou83_create_latency"] = {
+                "clock":"monotonic_ns", "samples":3, "payload_bytes":len(expected.encode("utf-8")),
+                "unwrapped_ns":direct_ns, "protected_ns":protected_ns,
+                "unwrapped_median_ns":statistics.median(direct_ns),
+                "protected_median_ns":statistics.median(protected_ns),
+                "median_ratio":statistics.median(protected_ns) / statistics.median(direct_ns),
+                "scope":"warm unwrapped write RPC versus native-gated fresh sandbox plus durable publication; initialize/read excluded",
+            }
 
             changes = snapshot(stack.workspace)
-            require(set(changes) == set(baseline) | {"sou83-protected.txt"},
+            require(set(changes) == set(baseline) | {path.name for path in published},
                     "create-only profile introduced extra unexpected artifacts")
             require(all(changes[key] == value for key, value in baseline.items()),
                     "original create mutated unrelated workspace objects")
@@ -818,7 +900,7 @@ def protected_original_create(stack, root, bwrap, npm, report):
                 "native_registry_sha256":sha(create_install / "registry.json"),
                 "result_correlated_to_host":True,
                 "published_sha256":sha(leaf),
-                "permitted_effects":1, "denied_effects":0,
+                "permitted_effects":len(published), "denied_effects":0,
                 "same_session_read_verified":True,
                 "outside_marker_unchanged":True,
             }
@@ -832,7 +914,8 @@ def protected_original_create(stack, root, bwrap, npm, report):
             "protected create daemon not reaped")
     require(client is not None and client.process_witness.final["all_stopped"],
             "protected create server child/owner not reaped")
-    leaf.unlink()
+    for path in published:
+        path.unlink()
     outside.unlink()
     require(snapshot(stack.workspace) == baseline,
             "native create acceptance did not restore owned workspace")
@@ -936,6 +1019,32 @@ def grade(report):
     require(report["source_before"] == report["source_after"] and report["source_before"]["dirty"] is False,
             "source identity is incomplete")
     require(report["skipped"] == 0 and report["failed"] == 0, "required evidence was skipped or failed")
+    create_checks = [row["case"] for row in report["checks"] if row.get("passed") is True]
+    require(all(create_checks.count(name) == 1 for name in SOU83_CASES),
+            "required original-create controls missing or duplicated")
+    create = report["sou83_native_protected_create"]
+    require(create["status"] == "pass" and create["original_upstream"] is True
+            and create["result_correlated_to_host"] is True
+            and create["permitted_effects"] == 4 and create["denied_effects"] == 0
+            and create["same_session_read_verified"] is True and create["outside_marker_unchanged"] is True,
+            "original-create effect witness incomplete")
+    for field in ("native_registry_sha256", "published_sha256"):
+        require(re.fullmatch(r"[a-f0-9]{64}", create[field]) is not None, "original-create identity missing")
+    for name in ("sou83_original_create_positive", "sou83_create_boundary_probe"):
+        probe = report[name]
+        require(probe["status"] == "pass" and probe["exit_code"] == 0
+                and re.fullmatch(r"[a-f0-9]{64}", probe["log_sha256"]) is not None,
+                "required original-create sandbox probe missing")
+    latency = report["sou83_create_latency"]
+    require(latency["clock"] == "monotonic_ns" and latency["samples"] == 3
+            and latency["payload_bytes"] > 0, "original-create latency observation missing")
+    for name in ("unwrapped", "protected"):
+        samples = latency[name + "_ns"]
+        require(len(samples) == 3 and all(type(value) is int and value > 0 for value in samples)
+                and latency[name + "_median_ns"] == statistics.median(samples),
+                "original-create latency samples/median mismatch")
+    require(latency["median_ratio"] == latency["protected_median_ns"] / latency["unwrapped_median_ns"],
+            "original-create latency ratio mismatch")
     for name in ("binary_sha256", "sandbox_test_binary_sha256", "driver_sha256", "claude_sha256"):
         require(re.fullmatch(r"[a-f0-9]{64}", report[name]) is not None, "exact binary/source witness missing")
     require(report["required_positive_sandbox"]["status"] == "pass"
@@ -1091,6 +1200,17 @@ def run(args):
             require(original_positive,
                     "SOU-83 original server staging witness failed: "
                     + original_raw[-4000:].decode("utf-8", "replace"))
+            probe_name = "original_create_stage_confines_active_egress_and_runtime_writes"
+            probe = subprocess.run([str(tests), probe_name, "--ignored", "--nocapture"],
+                                   env=positive_env, capture_output=True, timeout=90)
+            probe_raw = probe.stdout + probe.stderr
+            (output / "sou83-create-boundaries.log").write_bytes(probe_raw[:1024 * 1024])
+            require(probe.returncode == 0 and b"SOU83_CREATE_SANDBOX_POSITIVE" in probe_raw
+                    and re.search(rb"1 passed; 0 failed", probe_raw) is not None,
+                    "create-stage active egress/runtime probe failed: "
+                    + probe_raw[-4000:].decode("utf-8", "replace"))
+            report["sou83_create_boundary_probe"] = {"status":"pass", "exit_code":0,
+                "log_sha256":sha(output / "sou83-create-boundaries.log")}
             with (output / "daemon.log").open("wb") as log:
                 daemon = stack.daemon = subprocess.Popen([str(binary), "serve"], env=stack.env, stdout=log, stderr=log)
                 require(DEMO.wait_healthy(port, daemon), "owned enforcing daemon failed to start")
@@ -1126,7 +1246,11 @@ def run(args):
         receiver.close()
         write(output / "report.json", report)
     print(json.dumps({"status": report["status"], "passed": report["passed"], "failed": report["failed"],
-                      "skipped": report["skipped"], "error": report.get("error"), "report": str(output / "report.json")}))
+                      "skipped": report["skipped"], "error": report.get("error"), "report": str(output / "report.json"),
+                      "sou83_create_latency":report.get("sou83_create_latency"),
+                      "sou83_create_boundary_probe":report.get("sou83_create_boundary_probe"),
+                      "sou83_native_protected_create":report.get("sou83_native_protected_create"),
+                      "sou83_checks":[row for row in report["checks"] if row["case"].startswith("sou83-")]}))
     return 0 if report["status"] == "pass" else 1
 
 

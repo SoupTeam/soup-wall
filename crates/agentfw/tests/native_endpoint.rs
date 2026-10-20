@@ -3164,6 +3164,53 @@ async fn sou83_original_write_reused_native_result_authority_is_spent_and_peer_c
     let (status, continued) = fixture.post(&followup).await;
     assert_allow(status, &continued);
     assert_ne!(continued["call_id"], admitted["call_id"]);
+
+    // A mismatch on an unused original-create receipt must fail and spend
+    // that receipt, not just fail because the first successful call was spent.
+    for mismatch in ["target", "content", "host"] {
+        let host_id = format!("create-binding-{mismatch}");
+        let mut request = call.clone();
+        request["mcp_host_call_id"] = json!(host_id);
+        let (status, grant) = fixture.post(&request).await;
+        assert_allow(status, &grant);
+        let original = json!({"jsonrpc":"2.0","id":host_id,"result":{
+            "content":[{"type":"text","text":"Successfully wrote"}],
+            "structuredContent":{"content":"Successfully wrote"}
+        }})
+        .to_string();
+        let mut valid = fixture.result(
+            "sou83-spent-native",
+            &grant,
+            "write_file",
+            &args,
+            "value",
+            &original,
+        );
+        valid["delivery"] = json!("mcp_host");
+        let mut altered = valid.clone();
+        match mismatch {
+            "target" => altered["args"]["path"] = json!("/workspace/substituted.txt"),
+            "content" => altered["args"]["content"] = json!("substituted bytes"),
+            _ => {
+                let mut decoded: Value = serde_json::from_str(&original).unwrap();
+                decoded["id"] = json!("foreign-host-call");
+                altered["content"] = json!(decoded.to_string());
+            }
+        }
+        let (status, denied) = fixture.post(&altered).await;
+        assert_failure(status, &denied, StatusCode::CONFLICT);
+        assert_eq!(
+            denied["error_code"],
+            if mismatch == "host" {
+                "native_host_call_mismatch"
+            } else {
+                "native_call_binding_mismatch"
+            }
+        );
+        let (status, replay) = fixture.post(&valid).await;
+        assert_failure(status, &replay, StatusCode::CONFLICT);
+        assert_eq!(replay["error_code"], "native_call_unknown_or_spent");
+    }
 }
 
 #[tokio::test]

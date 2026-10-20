@@ -30,6 +30,16 @@ def host_read_result():
 
 def complete_report():
     return {"source_before": {"commit": "1" * 40, "dirty": False}, "source_after": {"commit": "1" * 40, "dirty": False},
+            "checks":[{"case":name, "passed":True} for name in VERIFY.SOU83_CASES],
+            "sou83_native_protected_create":{"status":"pass", "original_upstream":True,
+                "result_correlated_to_host":True, "permitted_effects":4, "denied_effects":0,
+                "same_session_read_verified":True, "outside_marker_unchanged":True,
+                "native_registry_sha256":"b"*64, "published_sha256":"c"*64},
+            "sou83_original_create_positive":{"status":"pass", "exit_code":0, "log_sha256":"a"*64},
+            "sou83_create_boundary_probe":{"status":"pass", "exit_code":0, "log_sha256":"a"*64},
+            "sou83_create_latency":{"clock":"monotonic_ns", "samples":3, "payload_bytes":40,
+                "unwrapped_ns":[10,20,30], "protected_ns":[100,200,300],
+                "unwrapped_median_ns":20, "protected_median_ns":200, "median_ratio":10},
             "skipped": 0, "failed": 0, **{name: "a" * 64 for name in
                 ["binary_sha256", "sandbox_test_binary_sha256", "driver_sha256", "claude_sha256"]},
             "required_positive_sandbox": {"status": "pass", "exit_code": 0, "witnesses": {name: True for name in VERIFY.SANDBOX_WITNESSES}},
@@ -117,6 +127,24 @@ class ProfileIdentities(unittest.TestCase):
 class EvidenceControls(unittest.TestCase):
     def test_complete_independent_evidence_passes(self):
         VERIFY.grade(complete_report())
+
+    def test_original_create_missing_fault_effect_boundary_or_latency_never_grades_pass(self):
+        mutations = [
+            lambda r: r["checks"].pop(),
+            lambda r: r["checks"].append(r["checks"][0]),
+            lambda r: r["checks"][0].update(passed=False),
+            lambda r: r["sou83_native_protected_create"].update(denied_effects=1),
+            lambda r: r["sou83_native_protected_create"].update(permitted_effects=1),
+            lambda r: r["sou83_native_protected_create"].update(result_correlated_to_host=False),
+            lambda r: r["sou83_create_boundary_probe"].update(status="skipped"),
+            lambda r: r["sou83_create_latency"].update(protected_ns=[]),
+            lambda r: r["sou83_create_latency"].update(median_ratio=1),
+        ]
+        for mutation in mutations:
+            report = complete_report()
+            mutation(report)
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                VERIFY.grade(report)
 
     def test_positive_sandbox_missing_or_skipped_is_not_a_passing_test(self):
         for value in [None, {"status": "skipped", "exit_code": 0}, {"status": "pass", "exit_code": 1}]:

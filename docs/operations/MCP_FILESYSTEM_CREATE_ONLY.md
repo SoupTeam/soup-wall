@@ -59,19 +59,35 @@ traversal, extra-field and oversize refusals, spent host IDs, Creating-phase
 cancellation, daemon loss before publication and useful read continuation.
 The outside sentinel and unrelated workspace entries must remain unchanged;
 the independent egress receiver must receive no requests. The final workspace
-contains only the deliberately committed successful create.
+contains only deliberately committed successful creates.
 
 These controls were independently reviewed on `97db581` (42/42 original
 filesystem controls and 15/15 combined real-host controls). They describe that
 source's evidence, not a qualification of a later merge candidate. Every new
 candidate still needs its own required CI and reviewer acceptance.
 
+Additional required controls now check a late cancellation after commit,
+an existing symlink target, and fresh original create/read/verify after a
+cancelled call and after daemon restart. A separate writable-stage Node probe
+actively attempts TCP and Unix-socket egress against calibrated receivers and
+tries runtime/package/outside writes. This tests the writable-stage seccomp
+branch, separately from the read-only boundary. The evidence grader requires
+these controls; adding them is not a claim they passed on an untested source.
+
+The driver also records three matched-payload unwrapped and protected write
+RPC latencies using `monotonic_ns`, their medians and ratio. Initialization and
+verification reads are excluded. The protected sample includes native gates,
+fresh sandbox/owner startup and durable atomic publication; the unwrapped
+sample uses a warm original server. These small observations do not measure
+throughput or tail latency. Read the current-source report for actual numbers.
+
 Ask remains unsupported and fails closed. The daemon-loss witness is not a
 claim of exhaustive worker/process-crash coverage, and read continuation is
-not proof of a fresh successful write after every failure. Create-specific
-policy-epoch transitions, exhaustive crash/egress injection and measured
-performance overhead remain outside the demonstrated increment. Stage/unit
-tests alone do not establish those properties.
+not proof of a fresh successful write after every possible failure. Create-specific
+policy-epoch transitions and exhaustive crash/egress injection remain outside
+the demonstrated increment. Stage/unit tests alone do not establish those
+properties. See the [complete requirements/review audit](MCP_FILESYSTEM_CREATE_AUDIT.md)
+for sources, implementation evidence and remaining full-task requirements.
 
 ## Private operator installation (new, opt-in)
 
