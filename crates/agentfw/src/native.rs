@@ -2246,6 +2246,9 @@ fn inspect_bound(
             return Err("native_schema_mismatch");
         }
         if tool.workspace_profile.is_some() {
+            if session.host_session.is_some() {
+                return Err("native_workspace_delegation_unsupported");
+            }
             workspace::extract(tool, args)?;
         }
         if let Some(policy) = &tool.resource_policy {

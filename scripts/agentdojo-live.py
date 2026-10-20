@@ -31,6 +31,12 @@ native = types.ModuleType("agentdojo_native")
 native.__file__ = str(NATIVE_PATH)
 sys.modules["agentdojo_native"] = native
 exec(compile(NATIVE_BYTES, str(NATIVE_PATH), "exec", dont_inherit=True), native.__dict__)
+WORKSPACE_PATH = MODULE_PATH.with_name("agentdojo_workspace.py")
+WORKSPACE_BYTES = WORKSPACE_PATH.read_bytes()
+workspace = types.ModuleType("agentdojo_workspace")
+workspace.__file__ = str(WORKSPACE_PATH)
+sys.modules["agentdojo_workspace"] = workspace
+exec(compile(WORKSPACE_BYTES, str(WORKSPACE_PATH), "exec", dont_inherit=True), workspace.__dict__)
 PROTOCOL_PATH = MODULE_PATH.with_name("agentdojo_protocol.py")
 PROTOCOL_BYTES = PROTOCOL_PATH.read_bytes()
 protocol = types.ModuleType("agentdojo_protocol")
@@ -108,6 +114,7 @@ def main():
             exec(compile(raw, str(path), "exec", dont_inherit=True), helper.__dict__)
             snapshots[name] = adapter.digest(raw)
         checks = sys.modules["agentdojo_workspace_checks"]
+        installed_lock_identity()
         if args.mode == "workspace-profile":
             checks.prepare(args.upstream_checkout, repo, args.report_out)
             print(json.dumps({"status":"proposal_only","model_calls":0,"live_approved":False}))
@@ -564,6 +571,9 @@ def run_live(args, repo):
                                    "Serial pipeline, one original ToolsExecutor, fixed server bounds and expiry",
                                    "Cost reservation uses request bytes, not verified tokens or a provider invoice",
                                    "Fixture evidence is not independent attack effectiveness or task utility"])
+        if native_registry.workspace_profile_sha256 is not None:
+            report.update(workspace_profile_sha256=native_registry.workspace_profile_sha256,
+                          workspace_adapter_source_sha256=adapter.digest(WORKSPACE_BYTES))
     return report
 
 

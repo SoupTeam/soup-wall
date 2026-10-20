@@ -55,6 +55,8 @@ Unsupported paths refuse before the original callable:
 - Event/ambiguous attachment dictionaries refuse. Original `send_email` treats
   any `file_id` as a file attachment even when `type` says event; this profile
   does not silently reinterpret that ambiguity.
+- Delegated host/child sessions are unsupported for this benchmark profile;
+  logical workspace resources cannot silently inherit filesystem/network grants.
 
 The other suite functions remain available. There is no coding-tool fallback.
 The shipped policy is unchanged: unknown destinations may Ask, tainted

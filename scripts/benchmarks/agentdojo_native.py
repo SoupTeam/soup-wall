@@ -87,6 +87,8 @@ class Registry:
         self.raw = bytes(raw)
         self.sha256 = adapter.digest(self.raw)
         self._tools = copy.deepcopy(tools)
+        self.workspace_profile_sha256 = (agentdojo_workspace.snapshot()[1]
+            if value["registry_id"] == "agentdojo-workspace/1" else None)
 
     def schema(self, function):
         name = function.name
@@ -106,6 +108,7 @@ class NativeClient(adapter.HookClient):
         super().__init__(url, token, session)
         self.registry = registry
         self.withheld = False
+        self.failed_event = None
         self._bindings = {}
 
     def request(self, event, **fields):
@@ -177,6 +180,7 @@ class NativeClient(adapter.HookClient):
                 self._bindings.clear()
         except (adapter.AdapterError, OSError, ValueError, TypeError, KeyError, HTTPException, HTTPError, URLError):
             self.failed = True
+            self.failed_event = event if event in {"session_start", "session_end", "call", "result", "context"} else "unknown"
             raise adapter.AdapterError("Native transport or admission contract failed") from None
         if not reply["release"]:
             self.withheld = True

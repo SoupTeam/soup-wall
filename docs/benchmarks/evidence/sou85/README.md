@@ -19,3 +19,15 @@ labels were not changed.
 
 The initial run is not acceptance. Subsequent exact-source evidence is retained
 in the `agentdojo-workspace-offline` CI artifact while implementation continues.
+
+## Retained context-control failure
+
+[Attempt 2](attempt-2.json), source
+`733916f66d46ef0441a583d2a69cebfb01e99f14`,
+[CI run](https://github.com/SoupTeam/soup-wall/actions/runs/39412080807),
+passed the email refusal controls and result withholding. Its context control
+incorrectly expected a policy verdict for an invalid original call ID. The
+daemon instead refused the context envelope after the original function and
+result admission. The corrected control requires that exact context failure,
+one original execution, and a stopped trajectory. It does not claim an injection
+detector verdict, task completion or prevented attack.

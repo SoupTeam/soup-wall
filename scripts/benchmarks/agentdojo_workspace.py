@@ -14,10 +14,11 @@ import agentdojo_live as adapter
 
 PROFILE = "agentdojo-workspace/1"
 PROFILE_PATH = Path(__file__).resolve().parents[2] / "crates/agentfw/profiles/agentdojo-workspace-v1.json"
+PROFILE_BYTES = PROFILE_PATH.read_bytes()
 
 
 def snapshot():
-    raw = PROFILE_PATH.read_bytes()
+    raw = PROFILE_BYTES
     value = json.loads(raw)
     if value["profile"] != PROFILE or value["upstream_revision"] != adapter.REVISION:
         raise adapter.AdapterError("Workspace profile identity mismatch")
