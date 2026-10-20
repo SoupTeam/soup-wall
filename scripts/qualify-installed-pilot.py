@@ -36,6 +36,7 @@ import uuid
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from pilot_qualification import CASES, LIMITS, Failure, canonical, digest, measure, new_report, require, sha, write_report
+import wsl_preflight
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -1018,8 +1019,11 @@ def negative_controls(args):
                 "changed-asset": "staged_classifier_changed"}
     for name, reason in expected.items():
         output = args.output / ("negative-" + name)
-        result = subprocess.run([sys.executable, "-B", str(Path(__file__).resolve()), "--run", "--selection", str(args.selection),
-            "--expected-commit", args.expected_commit, "--output", str(output), "--fault", name],
+        command = [sys.executable, "-B", str(Path(__file__).resolve()), "--run", "--selection", str(args.selection),
+                   "--expected-commit", args.expected_commit, "--output", str(output), "--fault", name]
+        if getattr(args, "wsl_root", None):
+            command.extend(["--wsl-root", str(args.wsl_root)])
+        result = subprocess.run(command,
             env={key: value for key, value in os.environ.items() if key in ("PATH", "LANG")},
             cwd=ROOT, capture_output=True, timeout=30)
         report = json.loads((output / "report.json").read_text())
@@ -1058,7 +1062,11 @@ def run(args):
         report["selected_sha256"] = {key: selection["files"][key]["sha256"] for key in paths}
         require(platform.system() == "Linux" and platform.machine() == "x86_64", "linux_x86_64_required")
         # Prerequisite validation happens before profile downloads or execution.
-        private = tempfile.TemporaryDirectory(prefix="installed-pilot-")
+        wsl_root = getattr(args, "wsl_root", None)
+        if wsl_root is not None:
+            report["wsl_preflight"] = wsl_preflight.inspect(wsl_root, paths, output=args.output)
+            require(report["wsl_preflight"]["status"] == "ready", "wsl_prerequisites_not_ready")
+        private = tempfile.TemporaryDirectory(prefix="installed-pilot-", dir=wsl_root)
         pilot = Pilot(Path(private.name), args.output, paths, report, selection["expected_refusal"])
         version = subprocess.check_output([str(paths["claude"]), "--version"], env=pilot.env, cwd=pilot.private,
                                           timeout=15, text=True).strip()
@@ -1138,8 +1146,24 @@ def main():
     parser.add_argument("--selection", type=Path)
     parser.add_argument("--expected-commit")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--wsl-root", type=Path,
+                        help="Opt in to WSL2 checks and stage under this existing private /home directory.")
+    parser.add_argument("--wsl-preflight", action="store_true",
+                        help="Inspect WSL prerequisites only; never start the installed pilot or download assets.")
     parser.add_argument("--fault", choices=("bad-candidate", "missing-sandbox", "changed-asset"), help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.wsl_preflight:
+        if args.run or not args.wsl_root:
+            parser.error("--wsl-preflight requires --wsl-root and cannot be combined with --run")
+        if bool(args.selection) != bool(args.expected_commit):
+            parser.error("Supply --selection and --expected-commit together")
+        paths = None
+        if args.selection:
+            require(args.selection.stat().st_size <= 65536, "selection_byte_limit")
+            _, paths = validate_selection(strict_json(args.selection.read_bytes()), args.expected_commit)
+        report = wsl_preflight.inspect(args.wsl_root, paths, output=args.output)
+        print(json.dumps(report, indent=2))
+        return 0 if report["status"] == "ready" else 1
     if not args.run:
         print(json.dumps({"status": "plan", "executed": False, "cases": CASES, "limits": LIMITS,
                           "live_provider": False, "runtime_downloads": "existing-pinned-profile-installers-only"}))
