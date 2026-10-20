@@ -171,6 +171,7 @@ class NativeClient(adapter.HookClient):
             self.receipts.append({"event": event, "tool": fields.get("tool"),
                                   "request_sha256": adapter.digest(body), "response_sha256": adapter.digest(raw),
                                   "decision": reply["verdict"], "release": reply["release"],
+                                  "reason_codes": list(reply["reason_codes"]),
                                   "binding_sha256": reply["binding_sha256"], "content_sha256": reply["content_sha256"]})
             if event == "session_end":
                 self._bindings.clear()

@@ -59,6 +59,10 @@ Unsupported paths refuse before the original callable:
 The other suite functions remain available. There is no coding-tool fallback.
 The shipped policy is unchanged: unknown destinations may Ask, tainted
 destructive effects Deny. Withholding a result never undoes an earlier effect.
+The shipped PII floor also makes ordinary email recipients an unattended Ask,
+including allowlisted domains. Offline controls preserve that refusal and
+calibrate actual email effects separately with the unchanged undefended runtime;
+they do not claim unattended protected email utility.
 The original guarded runner stops a withheld/failed trajectory; no evaluator
 result or fabricated prevention/utility score is reported for it.
 

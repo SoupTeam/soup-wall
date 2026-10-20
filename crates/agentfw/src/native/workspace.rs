@@ -36,11 +36,16 @@ pub fn validate(tool: &Tool) -> anyhow::Result<()> {
 }
 
 pub fn validate_registry(registry: &Registry) -> anyhow::Result<()> {
-    if registry.registry_id == PROFILE || registry.tools.iter().any(|t| t.workspace_profile.is_some()) {
+    if registry.registry_id == PROFILE
+        || registry.tools.iter().any(|t| t.workspace_profile.is_some())
+    {
         anyhow::ensure!(
             registry.registry_id == PROFILE
                 && registry.tools.len() == inventory()["tools"].as_array().unwrap().len()
-                && registry.tools.iter().all(|t| t.workspace_profile.as_deref() == Some(PROFILE)),
+                && registry
+                    .tools
+                    .iter()
+                    .all(|t| t.workspace_profile.as_deref() == Some(PROFILE)),
             "workspace profile must cover the complete original suite"
         );
     }
@@ -81,11 +86,9 @@ fn shape(schema: &Value, root: &Value, value: &Value, depth: usize) -> bool {
             if let Some(props) = schema["properties"].as_object() {
                 // Validated runtime arguments materialize all optional defaults.
                 fields.len() == props.len()
-                    && props.iter().all(|(k, s)| {
-                        fields
-                            .get(k)
-                            .is_some_and(|v| shape(s, root, v, depth + 1))
-                    })
+                    && props
+                        .iter()
+                        .all(|(k, s)| fields.get(k).is_some_and(|v| shape(s, root, v, depth + 1)))
             } else {
                 fields.len() <= 32
             }
@@ -114,7 +117,10 @@ pub fn extract(tool: &Tool, args: &Value) -> Result<Value, &'static str> {
     let mut resources = vec![];
     for selector in row["resources"].as_array().expect("reviewed selectors") {
         let value = if let Some(pointer) = selector["pointer"].as_str() {
-            text(args.pointer(pointer).ok_or("native_workspace_resource_missing")?)?
+            text(
+                args.pointer(pointer)
+                    .ok_or("native_workspace_resource_missing")?,
+            )?
         } else {
             "*"
         };
@@ -155,14 +161,14 @@ pub fn extract(tool: &Tool, args: &Value) -> Result<Value, &'static str> {
         {
             // Original send_email treats ANY file_id as a file attachment, even
             // when type says event. Refuse ambiguous combinations instead.
-            if attachment["type"] != "file"
-                || attachment.as_object().is_none_or(|a| a.len() != 2)
-            {
+            if attachment["type"] != "file" || attachment.as_object().is_none_or(|a| a.len() != 2) {
                 return Err("native_workspace_attachment_unsupported");
             }
-            resources.push(json!({"kind":"cloud_drive_file","access":"attach_reference",
+            resources.push(
+                json!({"kind":"cloud_drive_file","access":"attach_reference",
                 "value":text(&attachment["file_id"])?,
-                "source":format!("/attachments/{index}/file_id")}));
+                "source":format!("/attachments/{index}/file_id")}),
+            );
         }
     }
     Ok(json!({"profile":PROFILE,"resources":resources,"destinations":destinations}))
@@ -174,10 +180,16 @@ mod tests {
 
     fn tool(name: &str) -> Tool {
         let value = inventory();
-        let row = value["tools"].as_array().unwrap().iter().find(|r| r["name"] == name).unwrap();
+        let row = value["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["name"] == name)
+            .unwrap();
         serde_json::from_value(json!({"name":name,"schema_sha256":row["schema_sha256"],
             "action_class":row["action_class"],"result_provenance":"untrusted",
-            "egress":row["egress"],"workspace_profile":PROFILE})).unwrap()
+            "egress":row["egress"],"workspace_profile":PROFILE}))
+        .unwrap()
     }
 
     #[test]
@@ -214,7 +226,8 @@ mod tests {
             "subject":"","body":"","attachments":null});
         assert!(extract(&t, &good).is_ok());
         for (field, value) in [
-            ("recipients", json!([])), ("bcc", json!([""])),
+            ("recipients", json!([])),
+            ("bcc", json!([""])),
             ("attachments", json!([{"type":"event","event_details":{}}])),
             ("attachments", json!([{"type":"event","file_id":"13"}])),
         ] {
@@ -225,18 +238,25 @@ mod tests {
         let mut missing = good;
         missing.as_object_mut().unwrap().remove("bcc");
         assert!(extract(&t, &missing).is_err());
-        for name in ["create_calendar_event","cancel_calendar_event","reschedule_calendar_event"] {
-            assert_eq!(extract(&tool(name), &json!({})).unwrap_err(),"native_workspace_unsupported");
+        for name in [
+            "create_calendar_event",
+            "cancel_calendar_event",
+            "reschedule_calendar_event",
+        ] {
+            assert_eq!(
+                extract(&tool(name), &json!({})).unwrap_err(),
+                "native_workspace_unsupported"
+            );
         }
     }
 
     #[test]
     fn resource_ids_are_logical_and_collections_are_explicit() {
         let extracted = extract(&tool("get_file_by_id"), &json!({"file_id":"13"})).unwrap();
-        assert_eq!(extracted["resources"][0]["kind"],"cloud_drive_file");
+        assert_eq!(extracted["resources"][0]["kind"], "cloud_drive_file");
         assert!(extract(&tool("get_file_by_id"), &json!({"file_id":""})).is_err());
         let all = extract(&tool("list_files"), &json!({})).unwrap();
-        assert_eq!(all["resources"][0]["value"],"*");
-        assert_eq!(all["resources"][0]["source"],"reviewed_collection");
+        assert_eq!(all["resources"][0]["value"], "*");
+        assert_eq!(all["resources"][0]["source"], "reviewed_collection");
     }
 }
