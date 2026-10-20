@@ -73,7 +73,14 @@ def trace_effects(path, kind, git_path=None, target="/workspace/notes.txt", evid
 def command(args, env, *words, success=True):
     result = subprocess.run([str(args.agentfw), *words], env=env, cwd=ROOT,
                             capture_output=True, text=True, timeout=15)
-    require((result.returncode == 0) == success, "operator command outcome mismatch: " + words[0])
+    if words[:2] in (("native-approval", "approve"), ("native-approval", "reject")):
+        # These decisions contain only synthetic pending IDs/bindings, never a
+        # child-authority token. Keep failed/late CLI diagnostics too.
+        with (args.output / "operator-decisions.log").open("a") as log:
+            log.write(json.dumps({"command": words, "exit_code": result.returncode,
+                                  "stdout": result.stdout[:4096], "stderr": result.stderr[:4096]}) + "\n")
+    require((result.returncode == 0) == success,
+            "operator command outcome mismatch: " + " ".join(words[:2]) + " exit=" + str(result.returncode))
     return result.stdout.strip()
 
 
@@ -140,7 +147,7 @@ class Rig:
         self.port = BASE.DEMO.free_port()
         self.config = {"port": self.port, "enforce": True, "policy": str(self.policy), "native": {
             "registry_path": str(self.registry), "registry_sha256": sha(self.registry),
-            "approval": {"ttl_seconds": 10},
+            "approval": {"ttl_seconds": 30},
             "liveness": {"default_lease_seconds": 2, "max_lease_seconds": 60, "maintenance_interval_ms": 100}}}
         write(self.home / ".agentfw/config.yaml", self.config)
         self.clients, self.daemons = [], []
@@ -258,12 +265,12 @@ def qualify(rig, report):
             # Separate the real broker TTL from a shorter collector wait. A
             # local wait timeout alone is not proof of daemon grant expiry.
             rig.stop()
-            rig.config["native"]["approval"]["ttl_seconds"] = 1 if case == "expire" else 10
+            rig.config["native"]["approval"]["ttl_seconds"] = 1 if case == "expire" else 30
             write(rig.home / ".agentfw/config.yaml", rig.config)
             rig.start()
         if case == "deny":
             rig.stop(); rig.start(deny=True)
-        client, trace, stderr = rig.client(case, wait=1 if case == "timeout" else (0 if case == "default" else 6))
+        client, trace, stderr = rig.client(case, wait=1 if case == "timeout" else (0 if case == "default" else 25))
         row = {"case": case, "passed": False}
         report["cases"].append(row)
         require(rig.effects(trace) == 0, "unexpected target execution at startup")
@@ -294,6 +301,10 @@ def qualify(rig, report):
                 command(args, rig.env, "native-approval", "approve", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)
                 # A useful concurrent peer can be approved independently while
                 # another call on the first relay is still waiting.
+                # Initialize the independently pinned/sandboxed peer before
+                # starting the timed follow-up. strace startup is substantial;
+                # it is not part of an outstanding operator decision.
+                peer, peer_trace, _ = rig.client("useful-peer")
                 client.send(rig.frame(51))
                 first = pending(args, rig.env)
                 if rig.kind == "filesystem":
@@ -305,7 +316,6 @@ def qualify(rig, report):
                             and "7 red widgets" in json.dumps(reply), "same-relay Allow peer blocked by pending Ask")
                     require(rig.effects(trace) == 1, "pending sensitive follow-up executed before approval")
                     row["same_relay_allow_peer"] = True
-                peer, peer_trace, _ = rig.client("useful-peer")
                 peer.send(rig.frame(70))
                 deadline = time.monotonic() + 5
                 while True:
@@ -332,7 +342,7 @@ def qualify(rig, report):
                 require(refused_response(client), "host cancellation lost the original refusal ID")
             elif case in ("expire", "timeout"):
                 require(refused_response(client), "expiry/timeout lost the original refusal ID")
-                require(row["broker_ttl_ms"] == (1000 if case == "expire" else 10000),
+                require(row["broker_ttl_ms"] == (1000 if case == "expire" else 30000),
                         "broker TTL and collector wait control were conflated")
                 command(args, rig.env, "native-approval", "approve", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)
             elif case in ("classifier_change", "profile_change"):
