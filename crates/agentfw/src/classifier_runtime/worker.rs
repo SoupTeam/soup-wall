@@ -19,6 +19,8 @@ use anyhow::{bail, ensure, Context};
 use serde::{Deserialize, Serialize};
 
 use super::package::{sha, Store, Verified, WORKER_PROTOCOL};
+#[cfg(windows)]
+use super::platform_windows as platform;
 use crate::mcp::admission::{
     parse_classifier_reply, Classification, Invocation, InvocationClassifier,
 };
@@ -32,10 +34,16 @@ const START_DEADLINE: Duration = Duration::from_millis(1400);
 // Verifies the exact bytes of the installed files (one read each), executes the
 // classifier unchanged under a non-main module name, then hands control to the framing
 // loop. Nothing is imported from the package directory.
+//
+// Platform neutral on purpose: the files are opened as raw bytes (O_BINARY exists only
+// on Windows, where the CRT would otherwise translate line endings and stop at Ctrl-Z)
+// and the reply stream is fixed to UTF-8 with bare "\n" frames, so the bytes the worker
+// writes are identical on every platform and independent of the console code page.
 const WORKER_BOOTSTRAP: &str = r#"import hashlib, os, sys
+sys.stdout.reconfigure(encoding="utf-8", newline="\n")
 directory, classifier_sha, worker_sha = sys.argv[1:]
 def load(name, expected):
-    fd = os.open(os.path.join(directory, name), os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    fd = os.open(os.path.join(directory, name), os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0))
     with os.fdopen(fd, "rb") as handle:
         data = handle.read(1024 * 1024 + 1)
     if len(data) > 1024 * 1024 or hashlib.sha256(data).hexdigest() != expected:
@@ -80,12 +88,25 @@ struct Worker {
     to_worker: SyncSender<Vec<u8>>,
     from_worker: Receiver<Result<Vec<u8>, String>>,
     next_id: u64,
+    /// Owns the worker and everything it starts (Windows Job Object).
+    #[cfg(windows)]
+    tree: platform::JobTree,
+    /// Counts retirements whose job could not be proven empty.
+    #[cfg(windows)]
+    unclean: std::sync::Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl Drop for Worker {
     fn drop(&mut self) {
+        #[cfg(windows)]
+        self.tree.terminate();
         let _ = self.child.kill();
         let _ = self.child.wait();
+        #[cfg(windows)]
+        if !self.tree.wait_empty(Duration::from_secs(2)) {
+            self.unclean
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
     }
 }
 
@@ -130,6 +151,9 @@ pub struct PackagedClassifier {
     deadline: Duration,
     /// Number of worker processes started (identity/latency evidence and tests).
     starts: std::sync::atomic::AtomicU64,
+    /// Retired workers whose process tree could not be proven empty (always 0 when sound).
+    #[cfg(windows)]
+    unclean: std::sync::Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl PackagedClassifier {
@@ -143,6 +167,8 @@ impl PackagedClassifier {
             state: Mutex::new(None),
             deadline: REQUEST_DEADLINE,
             starts: Default::default(),
+            #[cfg(windows)]
+            unclean: Default::default(),
         })
     }
 
@@ -158,6 +184,12 @@ impl PackagedClassifier {
 
     pub fn starts(&self) -> u64 {
         self.starts.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Retired workers whose Job Object was not verified empty (Windows evidence).
+    #[cfg(windows)]
+    pub fn unclean_retirements(&self) -> u64 {
+        self.unclean.load(std::sync::atomic::Ordering::SeqCst)
     }
 
     fn start(&self) -> anyhow::Result<Worker> {
@@ -177,13 +209,32 @@ impl PackagedClassifier {
             .arg(&verified.classifier_sha256)
             .arg(&verified.worker_sha256)
             .env_clear()
-            .current_dir("/")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
+        #[cfg(unix)]
+        command.current_dir("/");
+        // Python needs SystemRoot to initialise on Windows; nothing else is passed.
+        // The process starts suspended so it is inside its Job Object before it runs.
+        #[cfg(windows)]
+        let tree = {
+            use std::os::windows::process::CommandExt;
+            use windows_sys::Win32::System::Threading::{CREATE_NO_WINDOW, CREATE_SUSPENDED};
+            let root = std::env::var_os("SystemRoot").context("SystemRoot is not set")?;
+            command.env("SystemRoot", &root).current_dir(&root);
+            command.creation_flags(CREATE_SUSPENDED | CREATE_NO_WINDOW);
+            platform::JobTree::new()?
+        };
         let mut child = command
             .spawn()
             .context("classifier worker could not start")?;
+        #[cfg(windows)]
+        if let Err(error) = tree.assign_and_resume(&child) {
+            tree.terminate();
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(error.context("classifier worker could not be started inside its job"));
+        }
         self.starts
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let mut stdin = child.stdin.take().context("worker stdin missing")?;
@@ -219,6 +270,10 @@ impl PackagedClassifier {
             to_worker,
             from_worker,
             next_id: 1,
+            #[cfg(windows)]
+            tree,
+            #[cfg(windows)]
+            unclean: self.unclean.clone(),
         };
         let frame = worker
             .from_worker
