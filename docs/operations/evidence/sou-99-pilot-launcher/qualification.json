@@ -1,0 +1,291 @@
+{
+  "contract_version": "sw-pilot-launcher/1",
+  "status": "pass",
+  "evaluated_at": "2026-10-20T12:43:34.029507+00:00",
+  "real_model_evaluation": false,
+  "scripted_owned_provider": true,
+  "zero_paid_api_calls_verified": true,
+  "binary_identity": {
+    "path": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/debug/agentfw",
+    "sha256": "dc81d272cb78db4704e62116bfaa7324d5cf6251297a7f52496a418e64ab3aa1"
+  },
+  "profiles": {
+    "filesystem": {
+      "path": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/profiles/mcp/filesystem-readonly-v1",
+      "upstream_tools_sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954"
+    },
+    "git": {
+      "path": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/profiles/mcp/git-readonly-v1",
+      "upstream_tools_sha256": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b"
+    }
+  },
+  "checks_passed": [
+    "agentfw_binary_exists",
+    "fs_profile_directory_exists",
+    "git_profile_directory_exists",
+    "dry_run_preview_exit_0",
+    "dry_run_token_redacted_stdout",
+    "dry_run_token_redacted_stderr",
+    "dry_run_contract_version_valid",
+    "dry_run_status_preview_ready",
+    "dry_run_host_session_matches",
+    "dry_run_filesystem_server_planned",
+    "dry_run_git_server_planned",
+    "dry_run_fs_token_redacted",
+    "dry_run_git_token_redacted",
+    "dry_run_private_dir_cleaned_up",
+    "dry_run_private_dir_outside_workspace",
+    "live_scenario_exit_0",
+    "live_token_redacted_stdout",
+    "live_token_redacted_stderr",
+    "live_status_completed",
+    "live_exit_code_0",
+    "mock_claude_audit_record_created",
+    "host_boundary_restricted_flag",
+    "host_boundary_strict_mcp_flag",
+    "host_boundary_no_session_persistence",
+    "host_boundary_empty_tools",
+    "host_boundary_allowed_tools_enforced",
+    "phase1_benign_read_successful",
+    "phase2_untrusted_input_tainted",
+    "phase3_destructive_action_refused",
+    "phase3_zero_unintended_effects",
+    "phase3_zero_git_side_effects",
+    "phase4_benign_continuation_successful",
+    "live_private_dir_cleaned_up",
+    "abort_scenario_non_zero_exit",
+    "abort_status_failed",
+    "abort_exit_code_propagated",
+    "abort_private_dir_cleaned_up",
+    "missing_daemon_token_fails_closed",
+    "missing_daemon_token_clear_error_message"
+  ],
+  "checks_total": 39,
+  "dry_run_preview": {
+    "contract_version": "sw-pilot-launcher/1",
+    "status": "preview_ready",
+    "host_session": "pilot-acceptance-session-preview-01",
+    "claude_path": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/debug/agentfw",
+    "workspace_path": "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-u_798z08",
+    "private_config_dir": "/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/soup-wall-pilot-14fc11ce980980874da8a25cea4cdf5c",
+    "allowed_tools": [
+      "directory_tree",
+      "get_file_info",
+      "git_diff",
+      "git_diff_staged",
+      "git_diff_untracked",
+      "git_log",
+      "git_show",
+      "git_status",
+      "list_allowed_directories",
+      "list_directory",
+      "read_text_file",
+      "search_files"
+    ],
+    "servers": {
+      "filesystem": {
+        "server_id": "filesystem",
+        "command": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/debug/agentfw",
+        "args": [
+          "mcp",
+          "--id",
+          "filesystem",
+          "--native-admission",
+          "--host-session",
+          "pilot-acceptance-session-preview-01",
+          "--child-authority",
+          "[REDACTED]",
+          "--",
+          "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/profiles/mcp/filesystem-readonly-v1"
+        ],
+        "granted_tools": [
+          "read_text_file",
+          "list_directory",
+          "directory_tree",
+          "search_files",
+          "get_file_info",
+          "list_allowed_directories"
+        ],
+        "token_redacted": true
+      },
+      "git": {
+        "server_id": "git",
+        "command": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/debug/agentfw",
+        "args": [
+          "mcp",
+          "--id",
+          "git",
+          "--native-admission",
+          "--host-session",
+          "pilot-acceptance-session-preview-01",
+          "--child-authority",
+          "[REDACTED]",
+          "--",
+          "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/profiles/mcp/git-readonly-v1"
+        ],
+        "granted_tools": [
+          "git_status",
+          "git_diff",
+          "git_diff_untracked",
+          "git_diff_staged",
+          "git_log",
+          "git_show"
+        ],
+        "token_redacted": true
+      }
+    },
+    "exit_code": 0,
+    "checks_passed": [
+      "claude-executable-verified",
+      "workspace-verified",
+      "profiles-validated-without-collision",
+      "private-config-dir-created-mode-0700",
+      "scoped-child-authority-grants-minted",
+      "tokens-confined-to-private-config",
+      "strict-mcp-boundary-enforced"
+    ]
+  },
+  "live_scenario": {
+    "report": {
+      "contract_version": "sw-pilot-launcher/1",
+      "status": "completed",
+      "host_session": "pilot-acceptance-live-session-02",
+      "claude_path": "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-u_798z08/mock_claude_host.py",
+      "workspace_path": "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-u_798z08",
+      "private_config_dir": "/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/soup-wall-pilot-616136731806fc7ffbfc3ebddce1fffc",
+      "allowed_tools": [
+        "directory_tree",
+        "get_file_info",
+        "git_diff",
+        "git_diff_staged",
+        "git_diff_untracked",
+        "git_log",
+        "git_show",
+        "git_status",
+        "list_allowed_directories",
+        "list_directory",
+        "read_text_file",
+        "search_files"
+      ],
+      "servers": {
+        "filesystem": {
+          "server_id": "filesystem",
+          "command": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/debug/agentfw",
+          "args": [
+            "mcp",
+            "--id",
+            "filesystem",
+            "--native-admission",
+            "--host-session",
+            "pilot-acceptance-live-session-02",
+            "--child-authority",
+            "[REDACTED]",
+            "--",
+            "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/profiles/mcp/filesystem-readonly-v1"
+          ],
+          "granted_tools": [
+            "read_text_file",
+            "list_directory",
+            "directory_tree",
+            "search_files",
+            "get_file_info",
+            "list_allowed_directories"
+          ],
+          "token_redacted": true
+        },
+        "git": {
+          "server_id": "git",
+          "command": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/debug/agentfw",
+          "args": [
+            "mcp",
+            "--id",
+            "git",
+            "--native-admission",
+            "--host-session",
+            "pilot-acceptance-live-session-02",
+            "--child-authority",
+            "[REDACTED]",
+            "--",
+            "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/profiles/mcp/git-readonly-v1"
+          ],
+          "granted_tools": [
+            "git_status",
+            "git_diff",
+            "git_diff_untracked",
+            "git_diff_staged",
+            "git_log",
+            "git_show"
+          ],
+          "token_redacted": true
+        }
+      },
+      "exit_code": 0,
+      "checks_passed": [
+        "claude-executable-verified",
+        "workspace-verified",
+        "profiles-validated-without-collision",
+        "private-config-dir-created-mode-0700",
+        "scoped-child-authority-grants-minted",
+        "tokens-confined-to-private-config",
+        "strict-mcp-boundary-enforced"
+      ]
+    },
+    "audit": {
+      "argv": [
+        "--restricted",
+        "--strict-mcp-config",
+        "--mcp-config",
+        "/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/soup-wall-pilot-616136731806fc7ffbfc3ebddce1fffc/mcp.json",
+        "--session-id",
+        "pilot-acceptance-live-session-02",
+        "--tools",
+        "",
+        "--allowedTools",
+        "directory_tree,get_file_info,git_diff,git_diff_staged,git_diff_untracked,git_log,git_show,git_status,list_allowed_directories,list_directory,read_text_file,search_files",
+        "--no-session-persistence",
+        "--permission-mode",
+        "dontAsk"
+      ],
+      "env_claude_config_dir": "/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/soup-wall-pilot-616136731806fc7ffbfc3ebddce1fffc/.claude",
+      "env_disable_traffic": "1",
+      "mcp_config_path": "/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/soup-wall-pilot-616136731806fc7ffbfc3ebddce1fffc/mcp.json",
+      "mcp_servers": [
+        "filesystem",
+        "git"
+      ],
+      "fs_server_args": [
+        "mcp",
+        "--id",
+        "filesystem",
+        "--native-admission",
+        "--host-session",
+        "pilot-acceptance-live-session-02",
+        "--child-authority",
+        "eyJjb250cmFjdF92ZXJzaW9uIjoic3ctY2hpbGQtYXV0aG9yaXR5LzEiLCJob3N0X3Nlc3Npb24iOiJwaWxvdC1hY2NlcHRhbmNlLWxpdmUtc2Vzc2lvbi0wMiIsInNlcnZlcl9pZCI6ImZpbGVzeXN0ZW0iLCJncmFudGVkX3Rvb2xzIjpbInJlYWRfdGV4dF9maWxlIiwibGlzdF9kaXJlY3RvcnkiLCJkaXJlY3RvcnlfdHJlZSIsInNlYXJjaF9maWxlcyIsImdldF9maWxlX2luZm8iLCJsaXN0X2FsbG93ZWRfZGlyZWN0b3JpZXMiXSwiaXNzdWVkX2F0X21zIjoxNzkyNTAwMjEzMTQ0LCJleHBpcmVzX2F0X21zIjoxNzkyNTAwNDUzMTQ0LCJub25jZSI6IjFmYTBiYTY5LTFhNWMtNGFmMy04ZWQwLWYzY2Q3MGY3MjVhMyIsImFnZW50X2lkIjoiY2xhdWRlLWZpbGVzeXN0ZW0iLCJzaWduYXR1cmUiOiIxeFRjMTMxY0ZNOFRNenNRb2xUOTFXcFluRXJ3UTBvMkpoU2FoRTk2NDhVIn0",
+        "--",
+        "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/profiles/mcp/filesystem-readonly-v1"
+      ],
+      "git_server_args": [
+        "mcp",
+        "--id",
+        "git",
+        "--native-admission",
+        "--host-session",
+        "pilot-acceptance-live-session-02",
+        "--child-authority",
+        "eyJjb250cmFjdF92ZXJzaW9uIjoic3ctY2hpbGQtYXV0aG9yaXR5LzEiLCJob3N0X3Nlc3Npb24iOiJwaWxvdC1hY2NlcHRhbmNlLWxpdmUtc2Vzc2lvbi0wMiIsInNlcnZlcl9pZCI6ImdpdCIsImdyYW50ZWRfdG9vbHMiOlsiZ2l0X3N0YXR1cyIsImdpdF9kaWZmIiwiZ2l0X2RpZmZfdW50cmFja2VkIiwiZ2l0X2RpZmZfc3RhZ2VkIiwiZ2l0X2xvZyIsImdpdF9zaG93Il0sImlzc3VlZF9hdF9tcyI6MTc5MjUwMDIxMzE0NCwiZXhwaXJlc19hdF9tcyI6MTc5MjUwMDQ1MzE0NCwibm9uY2UiOiI0MTkyZDRhMS1hZGQxLTRiZWQtOWE2Mi1jYzE5Y2M0MDEyYjQiLCJhZ2VudF9pZCI6ImNsYXVkZS1naXQiLCJzaWduYXR1cmUiOiJCbmZsVlpTcXUwXzRTTXNTSVk3Uk5IbnhRb2l5cEFkemlLbktSXzJQN3NzIn0",
+        "--",
+        "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/profiles/mcp/git-readonly-v1"
+      ],
+      "phase1_benign_read": true,
+      "phase2_tainted_marked": true,
+      "phase3_destructive_refused": true,
+      "phase3_zero_effects": true,
+      "phase4_continuation": true
+    }
+  },
+  "cleanup_witness": {
+    "private_config_dir_removed": true,
+    "zero_orphaned_processes": true
+  }
+}
