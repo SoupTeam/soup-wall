@@ -1,0 +1,16 @@
+{
+  "format": "sw-pilot-policy/1",
+  "preset": "linux-readonly-v1",
+  "accepted_base": "77a3b611ba537f8ae33b7a0a981a59248503ba36",
+  "files": {
+    "profiles/pilot/linux-readonly-v1/policy.yaml": "265310a63dac1cb304f3aa8cc54bb10a0edcd96794f707b2283c8e73279cf040",
+    "rule_baseline/rule_baseline.py": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+    "rule_baseline/git_readonly_v1/rule_baseline.py": "cfae72f1770e0243c8edc7f37922e7558ce9246b9332cf4720490d4812bbd584",
+    "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954",
+    "profiles/mcp/filesystem-readonly-v1/upstream-identity.json": "bd2b235f11e4e3ccd31467185b33b26751a626ed23e499ca72392b56dc9849ca",
+    "profiles/mcp/filesystem-readonly-v1/policy.yaml": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+    "profiles/mcp/git-readonly-v1/upstream-tools-list.json": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b",
+    "profiles/mcp/git-readonly-v1/upstream-identity.json": "90fbf2f84db1fee38145914adaf851c35d9b8b3735dc4e78caf7820c507e09e4",
+    "profiles/mcp/git-readonly-v1/policy.yaml": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c"
+  }
+}
