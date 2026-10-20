@@ -154,3 +154,20 @@ it is never a successful skip. Full independent denied-execution/result-injectio
 witness coverage and the positive Linux run remain required before completion.
 Existing filesystem acceptance runs alongside this profile in CI. Neither this
 profile nor its synthetic fixture constitutes general Git repository support.
+
+## Failed-run diagnostics
+
+Selected-server stderr remains withheld from the MCP host and is not written as
+a raw log. Operator diagnostics retain its byte count, streaming SHA-256, EOF
+completeness and a finite set of exception markers. Markers are untrusted server
+observations, not authenticated exception reports, policy inputs or permission
+to release a result. Arbitrary exception text, paths and payloads never appear
+in that summary. The existing 1 MiB stderr quota is unchanged.
+
+The private owner retains the first observed sandbox-wrapper exit code or signal
+and whether it preceded the quiesce acknowledgment. Cleanup cannot replace that
+witness with its own termination status or erase an earlier failure. This is a
+wrapper status, not the original Python process's exit code or exception. The
+bounded acceptance summary also preserves fixed owner failure codes. A later
+successful run does not explain or relabel an earlier failed overlap/cancellation
+run; preserve the original artifact and qualify the exact candidate separately.

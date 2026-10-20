@@ -94,6 +94,45 @@ class GitProfile(unittest.TestCase):
 
 
 class ProtectedDiagnostics(unittest.TestCase):
+    def test_owner_first_failure_and_wrapper_status_survive_summary(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "collector.log").write_text("\n".join([
+                json.dumps({"event": "mcp_real_stderr", "received_bytes": 3113,
+                            "sha256": "a" * 64, "markers": ["exception_group", "request_already_responded"],
+                            "complete": True, "released": False, "origin": "untrusted_server_stderr"}),
+                json.dumps({"event": "mcp_real_owner_end", "cleanup_verified": True, "observed_failure": True,
+                            "owner": {"reason": "mcp_owner_sandbox_failed", "secret": "never publish",
+                                      "sandbox_exit": {"code": 1, "signal": None, "before_quiesce": True}}}),
+                "Error: mcp_owner_sandbox_failed"]))
+            summary = VERIFY.protected_diagnostics({}, root)
+            self.assertEqual(summary["unknown_terminal_rows"], 0)
+            self.assertEqual(summary["terminal_codes"], ["mcp_owner_sandbox_failed"])
+            self.assertEqual(summary["events"][0]["markers"], ["exception_group", "request_already_responded"])
+            self.assertEqual(summary["events"][0]["sha256"], "a" * 64)
+            owner = summary["events"][1]
+            self.assertEqual(owner["owner_failure_code"], "mcp_owner_sandbox_failed")
+            self.assertEqual(owner["sandbox_exit"], {"code": 1, "signal": None, "before_quiesce": True})
+            self.assertNotIn("never publish", json.dumps(summary))
+
+    def test_malformed_exit_and_untrusted_markers_never_leave_summary(self):
+        valid = {"code": 1, "signal": None, "before_quiesce": True}
+        mutations = [{"code": True}, {"code": 256}, {"code": -1}, {"code": "private"},
+                     {"signal": 9}, {"code": None}, {"before_quiesce": 1}, {"path": "private"},
+                     {"code": None, "signal": 0}, {"code": None, "signal": 65}]
+        for change in mutations:
+            self.assertIsNone(VERIFY.safe_sandbox_exit(dict(valid, **change)))
+        self.assertEqual(VERIFY.safe_sandbox_exit({"code": None, "signal": 9, "before_quiesce": False}),
+                         {"code": None, "signal": 9, "before_quiesce": False})
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for markers in (["private"], [False], [["private"]], ["runtime_error"] * (len(VERIFY.STDERR_MARKERS) + 1), "private"):
+                (root / "collector.log").write_text(json.dumps({"event": "mcp_real_stderr", "markers": markers,
+                    "sha256": "PRIVATE" * 11, "origin": "private", "complete": "private",
+                    "owner": {"reason": ["private"], "sandbox_exit": dict(valid, path="private")}}))
+                event = VERIFY.protected_diagnostics({}, root)["events"][0]
+                self.assertEqual(event, {"event": "mcp_real_stderr"})
+
     def test_correlates_bounded_numeric_ids_and_static_lifecycle(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

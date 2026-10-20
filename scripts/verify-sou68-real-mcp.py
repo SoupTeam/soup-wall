@@ -48,7 +48,14 @@ DIAGNOSTIC_LOG_BYTES = 1048576
 DIAGNOSTIC_LOG_ROWS = 2048
 DIAGNOSTIC_ROW_BYTES = 4096
 DIAGNOSTIC_EVENTS = frozenset(("mcp_real_server_start", "mcp_real_server_end", "mcp_real_call",
-                               "mcp_real_stderr", "mcp_real_budget_start", "mcp_real_budget_end"))
+                               "mcp_real_stderr", "mcp_real_budget_start", "mcp_real_budget_end",
+                               "mcp_real_owner_start", "mcp_real_owner_end"))
+OWNER_FAILURES = frozenset(("mcp_owner_sandbox_failed", "mcp_owner_namespace_lost", "mcp_owner_control_failed",
+    "mcp_owner_control_invalid", "mcp_owner_control_closed", "mcp_owner_parent_lost", "mcp_owner_startup_failed",
+    "mcp_owner_liveness_expired", "mcp_owner_monitor_stopped", "mcp_owner_boundary_failed", "mcp_owner_cleanup_unverified"))
+STDERR_MARKERS = frozenset(("request_already_responded", "responder_context_missing", "broken_resource",
+    "closed_resource", "exception_group", "key_error", "permission_error", "runtime_error", "file_not_found", "os_error",
+    "assertion_error", "value_error", "type_error", "broken_pipe", "blocking_io", "end_of_stream"))
 DIAGNOSTIC_TERMINALS = {
     b"Error: selected MCP server closed with incomplete state": "server_closed_incomplete",
     b"Error: MCP server did not finish a withdrawn request within its bound": "withdrawn_request_incomplete",
@@ -77,6 +84,16 @@ DIAGNOSTIC_TERMINALS = {
     b"Error: native MCP diagnostics boundary closed": "output_boundary_closed",
     b"Error: unsupported or malformed MCP JSON": "protocol_json_invalid",
 }
+DIAGNOSTIC_TERMINALS.update({("Error: " + code).encode("ascii"): code for code in OWNER_FAILURES})
+
+
+def safe_sandbox_exit(value):
+    if not isinstance(value, dict) or set(value) != {"code", "signal", "before_quiesce"} or type(value["before_quiesce"]) is not bool:
+        return None
+    code, sig = value["code"], value["signal"]
+    if (type(code) is int and 0 <= code <= 255 and sig is None) or (code is None and type(sig) is int and 1 <= sig <= 64):
+        return dict(value)
+    return None
 
 
 def diagnostic_ids(frames):
@@ -156,7 +173,8 @@ def protected_diagnostics(report, root):
             if type(value) is int and 0 <= value <= 9007199254740991:
                 event[key] = value
         for key in ("cleanup_verified", "transport_complete", "budget_requested", "budget_cleanup_verified",
-                    "budget_failure_observed", "observed_failure", "execution_dispatched", "released"):
+                    "budget_failure_observed", "observed_failure", "execution_dispatched", "released", "complete",
+                    "owner_failure_observed", "owner_cleanup_verified"):
             if type(row.get(key)) is bool:
                 event[key] = row[key]
         state = row.get("state")
@@ -164,6 +182,22 @@ def protected_diagnostics(report, root):
             event["state_" + state] = True
         if row.get("mode") in ("enforced", "unbudgeted"):
             event["budget_enforced"] = row["mode"] == "enforced"
+        owner = row.get("owner")
+        if isinstance(owner, dict):
+            if type(owner.get("reason")) is str and owner["reason"] in OWNER_FAILURES:
+                event["owner_failure_code"] = owner["reason"]
+            status = safe_sandbox_exit(owner.get("sandbox_exit"))
+            if status is not None:
+                event["sandbox_exit"] = status
+        if row["event"] == "mcp_real_stderr":
+            digest = row.get("sha256")
+            if type(digest) is str and len(digest) == 64 and all(c in "0123456789abcdef" for c in digest):
+                event["sha256"] = digest
+            markers = row.get("markers")
+            if isinstance(markers, list) and len(markers) <= len(STDERR_MARKERS) and all(type(item) is str and item in STDERR_MARKERS for item in markers):
+                event["markers"] = sorted(set(markers))
+            if row.get("origin") == "untrusted_server_stderr":
+                event["origin"] = "untrusted_server_stderr"
         if row["event"] == "mcp_real_server_start":
             summary["server_started"] = True
         elif row["event"] == "mcp_real_server_end":
