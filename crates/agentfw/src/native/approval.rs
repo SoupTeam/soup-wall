@@ -897,15 +897,25 @@ pub fn operator_approve(
     };
     let key = native_key(&grant::derive_key(hook_token));
     let store = GrantStore::new(&grants_dir(home));
-    if let Err(error) = store.issue(&key, &action, now, expires - now, id.to_string()) {
-        let _ = std::fs::remove_file(pending_dir(home).join(format!("{id}.deciding")));
-        return Err(error.into());
-    }
+    let (issued, _) = match store.issue(&key, &action, now, expires - now, id.to_string()) {
+        Ok(issued) => issued,
+        Err(error) => {
+            let _ = std::fs::remove_file(pending_dir(home).join(format!("{id}.deciding")));
+            return Err(error.into());
+        }
+    };
     let dir = pending_dir(home);
-    let _ = std::fs::rename(
+    if std::fs::rename(
         dir.join(format!("{id}.deciding")),
         dir.join(format!("{id}.approved")),
-    );
+    )
+    .is_err()
+    {
+        // Retirement/cancellation may remove the claim before issue completes.
+        // Never leave an orphan grant on disk. Redemption may also have won
+        // already; discarding its now-absent file cannot undo that action.
+        store.discard(&issued);
+    }
     Ok(())
 }
 

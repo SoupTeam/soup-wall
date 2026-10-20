@@ -431,3 +431,36 @@ fn approval_expiry_pruning_removes_files_without_evicting_live_sibling() {
             .release
     );
 }
+
+#[test]
+fn failed_operator_decision_publication_discards_only_its_grant() {
+    let env = env(Some(60));
+    env.start("subject");
+    env.start("peer");
+    let args = json!({"name":"synthetic"});
+    let subject = env
+        .open("subject", "delete_note", args.clone(), "daemon")
+        .unwrap();
+    let peer = env
+        .open("peer", "delete_note", args.clone(), "daemon")
+        .unwrap();
+    // Force the same real filesystem rename failure reached when a private
+    // deciding claim disappears during cancellation. No production pause hook.
+    std::fs::create_dir(pending_dir(env.home()).join(format!("{}.approved", id(&subject))))
+        .unwrap();
+    env.approve(&subject);
+    assert!(GrantStore::new(&grants_dir(env.home()))
+        .pending()
+        .is_empty());
+    assert!(
+        !env.call("subject", "delete_note", args.clone(), Some(&id(&subject)))
+            .unwrap()
+            .release
+    );
+    env.approve(&peer);
+    assert!(
+        env.call("peer", "delete_note", args, Some(&id(&peer)))
+            .unwrap()
+            .release
+    );
+}
