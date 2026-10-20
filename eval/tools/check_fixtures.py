@@ -3,7 +3,8 @@
 
 Checks, all without running a classifier:
   1. frozen fixture files are byte-identical to their recorded digests;
-  2. make_v05.py regenerates the committed v0.5/v0.2 fixtures byte for byte;
+  2. make_v05.py regenerates the committed v0.5/v0.2 fixtures byte for byte, and
+     make_pilot_matrix_v01.py regenerates the SOU-97 pilot matrix byte for byte;
   3. every fixture passes the runner's structural validation;
   4. v0.5/v0.2 follow the accepted SOU-10 v0.4 rules used for this version:
      decision IDs only, D07 for every expected no-op, D06 for every expected
@@ -27,6 +28,7 @@ sys.path.insert(0, str(ROOT / "eval" / "tools"))
 sys.dont_write_bytecode = True
 
 import eval_runner  # noqa: E402
+import make_pilot_matrix_v01  # noqa: E402
 import make_v05  # noqa: E402
 
 FROZEN = {
@@ -34,8 +36,11 @@ FROZEN = {
     "soup_task1_challenge_cases_v0.1.json": "48a445b5d53dd2cc77a999616f7042eff1962eaf8291ee099e6e88b5fe621a69",
     "soup_task1_mixed_actions_urtisto_v0.1.json": "9cab289f9fda0c6ac3b6cca0ad74e1e19adff0f7898d67807f4219b6bdf0701a",
     "soup_task1_benign_comparison_urtisto_v0.1.json": "636d31cd5248502ab8a07716671c5885827e47941748e121be9efa04e483f195",
+    # SOU-97: frozen before any candidate classifier existed.
+    "soup_pilot_readonly_matrix_v0.1.json": "3d19281c56d0c330761a36289b50c1df524a28c63bad88392ca85b94faf7da36",
 }
 GENERATED = ("soup_task1_evaluation_cases_v0.5.json", "soup_task1_challenge_cases_v0.2.json")
+PILOT_GENERATED = ("soup_pilot_readonly_matrix_v0.1.json",)
 DECISION_IDS = {f"D{n:02d}" for n in range(1, 11)}
 
 
@@ -80,10 +85,14 @@ def main() -> int:
         for name in GENERATED:
             if sha256(Path(tmp) / name) != sha256(FIXTURES / name):
                 errs.append(f"{name}: does not match a fresh make_v05.py run")
+        make_pilot_matrix_v01.main(["--out-dir", tmp])
+        for name in PILOT_GENERATED:
+            if sha256(Path(tmp) / name) != sha256(FIXTURES / name):
+                errs.append(f"{name}: does not match a fresh make_pilot_matrix_v01.py run")
     for name in list(FROZEN) + list(GENERATED):
         data = json.loads((FIXTURES / name).read_text(encoding="utf-8"))
         errs += eval_runner.validate_fixture(data, name)
-        if name in GENERATED:
+        if name in GENERATED or name in PILOT_GENERATED:
             errs += contract_problems(data, name)
         print(f"{name}: sha256 {sha256(FIXTURES / name)} {json.dumps(counts(data))}")
     if errs:
