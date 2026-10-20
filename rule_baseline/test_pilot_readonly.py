@@ -219,6 +219,42 @@ class LeafBound(unittest.TestCase):
                 assert_not_proven(self, event('read_multiple_files', args))
 
 
+class LongPatternLimit(unittest.TestCase):
+    """Verified technical limit (SOU-97 3A): the pinned schemas declare no maxLength, so the profile admits
+    pattern strings up to DEFAULT_STRING_BYTES = 16 KiB of UTF-8 (input.rs). The proof checks at most
+    MAX_LEAF_CHARS = 4096 characters, so 4097 characters up to 16 KiB stay admitted-but-abstained (unknown, Ask)."""
+
+    def test_profile_bound_is_the_documented_constant(self):
+        source = (ROOT / 'crates/agentfw/src/mcp/input.rs').read_text(encoding='utf-8')
+        self.assertIn('const DEFAULT_STRING_BYTES: usize = 16 * 1024;', source)
+        self.assertIn('let max_bytes = max_chars.map_or(DEFAULT_STRING_BYTES, |max| max * 4);', source)
+        for name in ('search_files', 'directory_tree'):
+            props = FS[name]['inputSchema']['properties']
+            self.assertNotIn('maxLength', props['excludePatterns']['items'])
+        self.assertNotIn('maxLength', FS['search_files']['inputSchema']['properties']['pattern'])
+        self.assertEqual(MODULE.MAX_LEAF_CHARS, 4096)
+
+    def search(self, pattern):
+        return event('search_files', {'path': '/workspace', 'pattern': pattern})
+
+    def test_boundary(self):
+        self.assertTrue(proven_read(classify(self.search('a' * 4096))))
+        self.assertTrue(proven_read(classify(self.search('é' * 4096))))  # 8192 bytes, inside the profile bound
+        for pattern in ('a' * 4097, 'a' * 16384, 'é' * 8192, 'a' * 16385):
+            with self.subTest(length=len(pattern), bytes=len(pattern.encode())):
+                result = assert_not_proven(self, self.search(pattern))
+                self.assertTrue(result['unknown'], result)
+                self.assertTrue(result['truncated'], result)
+        tree = event('directory_tree', {'path': '/workspace', 'excludePatterns': ['ok', 'x' * 4097]})
+        self.assertTrue(assert_not_proven(self, tree)['unknown'])
+
+    def test_admitted_control_characters_abstain(self):
+        # The profile does not restrict pattern characters; the proof refuses them, keeping the baseline result.
+        for pattern in ('a\tb', 'line\nnext', '\x00', 'x\x85'):
+            with self.subTest(pattern=pattern):
+                assert_not_proven(self, self.search(pattern))
+
+
 class PreservedContracts(unittest.TestCase):
     def test_known_risks_are_preserved(self):
         for name, args, risk in (('write_file', {'path': '/workspace/a', 'content': 'x'}, 'write'),

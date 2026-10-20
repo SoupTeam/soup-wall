@@ -55,8 +55,20 @@ Forms that still abstain, deliberately and as in the baseline:
 - patterns longer than 4096 characters;
 - patterns containing control characters.
 
-The profile admits patterns of up to 65 536 characters, so an admitted pattern longer than 4096
-characters is still a benign abstention. It is documented here and not counted as unsupported.
+**Verified limit (corrected in Increment 3A).** The pinned schemas declare no `maxLength` for
+`pattern` or `excludePatterns` items. The profile's input validator therefore applies its default
+string bound, `DEFAULT_STRING_BYTES = 16 * 1024` (`crates/agentfw/src/mcp/input.rs`), so it admits
+each such string up to 16 384 UTF-8 bytes. The earlier statement here, "up to 65 536 characters",
+was wrong: 65 536 is the cap on an explicit `maxLength`, which these schemas don't have.
+
+A pattern of 4097 characters up to 16 384 bytes, or one containing control characters, is admitted
+by the profile but abstained on by this candidate (`unknown`, so native Ask). That is a benign false
+interruption in the safe direction, not an unsupported input. The frozen matrix has no such case.
+`rule_baseline/test_pilot_readonly.py` (LongPatternLimit) pins this boundary and the profile
+constant.
+
+Raising the proof's per-string bound to the profile's 16 384 bytes would be a candidate change with
+a new sha256. It needs owner approval and is not part of this revision.
 
 ## Unchanged known limits
 
