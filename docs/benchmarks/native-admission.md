@@ -81,8 +81,10 @@ On Linux with Git, Python and Cargo:
 bash scripts/agentdojo-workspace-acceptance.sh
 ```
 
-This requires fresh `target/sou85-upstream`, `target/sou85-driver` and
-`target/sou85-offline` directories. It obtains pinned public source and the
+This requires a fresh `target/sou85-acceptance` directory (or a fresh directory
+passed as the script's first argument). Its `upstream`, `driver` and `offline`
+subdirectories retain the inputs and reports. CI selects a directory under
+`RUNNER_TEMP`, outside Rust's build cache. It obtains pinned public source and the
 existing dependency lock, builds the actual Agent, then invokes the existing
 runner. No provider/model call or credential access is performed. With prepared
 inputs the acceptance command is:

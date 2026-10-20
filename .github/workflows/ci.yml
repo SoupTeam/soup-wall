@@ -73,21 +73,15 @@ jobs:
       - name: Selected original AgentDojo workspace acceptance
         if: github.event_name == 'workflow_dispatch' && inputs.workspace_acceptance
         run: |
-          mkdir -p target/sou85-format
-          cargo fmt --all
-          git diff --binary > target/sou85-format/format.patch
-          git restore .
-          cargo test --locked -p agentfw native::workspace
-          bash scripts/agentdojo-workspace-acceptance.sh
-          test ! -s target/sou85-format/format.patch
+          cargo fmt --all -- --check
+          cargo test --locked -p agentfw --lib native::workspace
+          bash scripts/agentdojo-workspace-acceptance.sh "$RUNNER_TEMP/sou85-acceptance"
       - name: Retain selected workspace evidence
         if: always() && github.event_name == 'workflow_dispatch' && inputs.workspace_acceptance
         uses: actions/upload-artifact@v7
         with:
           name: agentdojo-workspace-offline
-          path: |
-            target/sou85-offline/
-            target/sou85-format/
+          path: ${{ runner.temp }}/sou85-acceptance/offline/
           if-no-files-found: error
           retention-days: 30
       - name: Check Agent CLI and the versioned adapter contract

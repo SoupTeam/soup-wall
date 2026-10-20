@@ -31,3 +31,11 @@ daemon instead refused the context envelope after the original function and
 result admission. The corrected control requires that exact context failure,
 one original execution, and a stopped trajectory. It does not claim an injection
 detector verdict, task completion or prevented attack.
+
+## Expanded-run setup failure
+
+The expanded [run at 404d9e5](https://github.com/SoupTeam/soup-wall/actions/runs/39413880468)
+passed its build and four Rust tests, then refused pre-existing temporary
+inputs restored by the Rust target cache. No expanded workspace result was
+produced. The procedure now accepts a fresh owned base directory, and CI selects
+`RUNNER_TEMP` outside that cache. It still refuses an existing selected directory.
