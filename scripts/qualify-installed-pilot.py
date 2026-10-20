@@ -28,7 +28,6 @@ import tempfile
 import threading
 import time
 import traceback
-from types import SimpleNamespace
 import urllib.request
 import uuid
 
@@ -53,6 +52,7 @@ ROLES = ("agentfw", "git_launcher", "sandbox_tests", "node", "npm", "bwrap", "gi
 TOOLS = {"filesystem": ("read_text_file", "list_directory", "write_file"),
          "git": ("git_show", "git_status", "git_diff", "git_reset")}
 POINTER = "/workspace/forbidden.fifo\n"
+NOTES = "Owned pilot working notes: inspect the pending change; café, қазақша.\n"
 
 
 def private_json(path, value):
@@ -65,6 +65,18 @@ def owned_bytes(path, value):
         stream.write(value)
 
 
+def strict_json(raw):
+    def pairs(items):
+        result = {}
+        for name, value in items:
+            require(name not in result, "duplicate_json_input_key")
+            result[name] = value
+        return result
+    def invalid(_):
+        raise Failure("nonfinite_json_input")
+    return json.loads(raw, object_pairs_hook=pairs, parse_constant=invalid)
+
+
 def source():
     result = BASE.source()
     files = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT, timeout=15).split(b"\0")
@@ -72,7 +84,7 @@ def source():
     return result
 
 
-def validate_selection(selection, expected, fault=None):
+def validate_selection(selection, expected):
     require(selection.get("format") == "sw-installed-pilot-selection/1", "selection_version")
     before = source()
     require(not before["dirty"] and before["commit"] == expected
@@ -81,6 +93,7 @@ def validate_selection(selection, expected, fault=None):
     paths = {}
     for role in ROLES:
         item = selection["files"][role]
+        require(Path(item["path"]).is_absolute(), "absolute_selected_path_required")
         require(Path(item["path"]).is_file(), "selected_executable_unavailable")
         path = Path(item["path"]).resolve(strict=True)
         require(path.is_file() and os.access(path, os.X_OK), "selected_executable_unavailable")
@@ -112,6 +125,19 @@ class BoundedStream:
         require(not self.thread.is_alive() and self.error is None, "stream_incomplete")
         require(self.total <= LIMITS["host_bytes"], "host_output_limit")
         return bytes(self.data)
+
+
+class BoundedRequests(list):
+    """Apply the provider bound even to auxiliary/count-token requests."""
+    def __init__(self):
+        super().__init__()
+        self.bytes = 0
+
+    def append(self, raw):
+        require(type(raw) is bytes and len(self) < LIMITS["provider_requests"]
+                and self.bytes + len(raw) <= LIMITS["host_bytes"], "provider_request_bound")
+        self.bytes += len(raw)
+        super().append(raw)
 
 
 class Client(BASE.Client):
@@ -165,8 +191,10 @@ class Pilot:
         self.clients, self.logs, self.hosts, self.secrets, self.bindings = [], [], [], [], []
         self.daemon = self.daemon_witness = self.unrelated = None
         self.installed, self.baseline, self.controls = {}, None, {}
+        self.home = private / "home"
+        self.home.mkdir(mode=0o700)
         self.receiver = BASE.DEMO.Receiver()
-        self.env = BASE.environment(private / "home")
+        self.env = BASE.environment(self.home)
         self.env["PATH"] = str(paths["node"].parent) + os.pathsep + os.defpath
         self.env["GIT_CONFIG_NOSYSTEM"] = "1"
         self.env["GIT_CONFIG_GLOBAL"] = "/dev/null"
@@ -198,8 +226,6 @@ class Pilot:
         return self.http("/native/v1/instance")["instance_id"]
 
     def prepare(self, fault=None):
-        self.home = self.private / "home"
-        self.home.mkdir(mode=0o700)
         installed = self.private / "installed"
         installed.mkdir(mode=0o700)
         self.binary, self.launcher = installed / "agentfw", installed / "agentfw-git-sandbox"
@@ -218,16 +244,11 @@ class Pilot:
                     stream.write(b"\n# controlled invalid asset\n")
             require(sha(target) == sha(ROOT / relative), "staged_classifier_changed")
             self.classifiers[kind] = target
-        self.workspace = self.private / "workspace"
-        GIT.prepare_repo(self.workspace, self.paths["git"], self.env)
-        (self.workspace / "guide.txt").write_text(BASE.TEXT, encoding="utf-8")
-        (self.workspace / "source.txt").write_text(POINTER, encoding="utf-8")
-        for name in ("forbidden.fifo", "outage.fifo", *(f"parallel-{i}.fifo" for i in range(9))):
-            os.mkfifo(self.workspace / name, 0o600)
+        self.prepare_workspaces()
         self.installs = {kind: self.private / (kind + "-profile") for kind in TOOLS}
         BASE.INSTALL.install(self.installs["filesystem"], self.workspace, self.paths["node"],
                              self.paths["bwrap"], self.paths["npm"])
-        GIT.INSTALL.install(self.installs["git"], self.workspace, self.paths["git"], sha(self.paths["git"]),
+        GIT.INSTALL.install(self.installs["git"], self.git_workspace, self.paths["git"], sha(self.paths["git"]),
                             self.paths["bwrap"], self.launcher)
         tools = []
         for kind, path in self.installs.items():
@@ -251,6 +272,7 @@ class Pilot:
             "policy": str(policy), "native": {"registry_path": str(registry), "registry_sha256": self.registry_sha256}})
         self.config_sha256 = sha(self.home / ".agentfw/config.yaml")
         self.baseline = BASE.snapshot(self.workspace)
+        self.git_baseline = BASE.snapshot(self.git_workspace)
         self.sentinel = self.private / "unrelated.txt"
         self.sentinel.write_text("owned unrelated survivor\n", encoding="utf-8")
         self.sentinel_sha256 = sha(self.sentinel)
@@ -264,6 +286,23 @@ class Pilot:
                 "instance_id": instance, "policy_scope": "existing-combined-proof-policy",
                 "classifier_scope": "existing-per-server-rule-baselines"}
 
+    def prepare_workspaces(self):
+        # The accepted Git profile refuses special files anywhere in its tree.
+        # Filesystem FIFO execution witnesses therefore belong to a separate
+        # owned workspace, not to the repository or an excluded subtree.
+        self.workspace = self.private / "filesystem-workspace"
+        self.workspace.mkdir(mode=0o700)
+        self.git_workspace = self.private / "git-workspace"
+        GIT.prepare_repo(self.git_workspace, self.paths["git"], self.env)
+        (self.workspace / "guide.txt").write_text(BASE.TEXT, encoding="utf-8")
+        (self.workspace / "notes.txt").write_text(NOTES, encoding="utf-8")
+        (self.workspace / "source.txt").write_text(POINTER, encoding="utf-8")
+        for name in ("forbidden.fifo", "outage.fifo", *(f"parallel-{i}.fifo" for i in range(9))):
+            os.mkfifo(self.workspace / name, 0o600)
+
+    def workspace_for(self, kind):
+        return self.git_workspace if kind == "git" else self.workspace
+
     def mint(self, host, kind, agent):
         instance = self.http("/native/v1/instance")
         require(instance["registry_sha256"] == self.registry_sha256, "active_registry_changed")
@@ -275,17 +314,19 @@ class Pilot:
         self.secrets.append(proof)
         claims = json.loads(base64.urlsafe_b64decode(proof + "=" * (-len(proof) % 4)))
         require(claims["host_session"] == host and claims["agent_id"] == agent
-                and claims["server_id"] == kind and claims["nonce"].startswith(instance["instance_id"] + "."),
+                and claims["server_id"] == kind and claims["nonce"].startswith(instance["instance_id"] + ".")
+                and len(claims["granted_tools"]) == len(TOOLS[kind]) and set(claims["granted_tools"]) == set(TOOLS[kind]),
                 "minted_authority_identity_changed")
         self.bindings.append({"host_session": host, "agent_id": agent, "server_id": kind,
-                              "instance_id": instance["instance_id"], "proof_sha256": hashlib.sha256(proof.encode()).hexdigest()})
+                              "instance_id": instance["instance_id"], "tools": claims["granted_tools"],
+                              "proof_sha256": hashlib.sha256(proof.encode()).hexdigest()})
         return proof
 
     def command(self, kind, direct=False):
         profile = json.loads((self.installs[kind] / "profile.json").read_text())
         if kind == "git":
             server = [profile["runtimePath"], "-I", "-B", "-m", "mcp_server_git", "--repository",
-                      str(self.workspace) if direct else "/workspace"]
+                      str(self.git_workspace) if direct else "/workspace"]
         else:
             server = [profile["runtimePath"], str(Path(profile["packageRoot"]) /
                       "node_modules/@modelcontextprotocol/server-filesystem/dist/index.js"),
@@ -293,7 +334,7 @@ class Pilot:
         return server if direct else [str(self.binary), "mcp", "--native-admission", "--id", kind, "--", *server]
 
     def collector_env(self, kind, host, proof):
-        return dict(self.env, AGENTFW_WORKSPACE=str(self.workspace),
+        return dict(self.env, AGENTFW_WORKSPACE=str(self.workspace_for(kind)),
             AGENTFW_MCP_SERVER_PROFILE=str(self.installs[kind] / "profile.json"),
             AGENTFW_CLASSIFIER="rule-baseline", AGENTFW_RULE_BASELINE=str(self.classifiers[kind]),
             AGENTFW_CLASSIFIER_PYTHON=str(self.paths["python"]), AGENTFW_HOST_SESSION=host,
@@ -307,7 +348,7 @@ class Pilot:
         log = log_path.open("wb")
         self.logs.append(log)
         env = self.env if direct else self.collector_env(kind, host, proof or self.mint(host, kind, agent))
-        client = Client(self.command(kind, direct), env, self.workspace, log, label)
+        client = Client(self.command(kind, direct), env, self.workspace_for(kind), log, label)
         client.kind, client.log_path, client.host_session, client.agent_id = kind, log_path, host, agent
         self.clients.append(client)
         try:
@@ -335,11 +376,13 @@ class Pilot:
 
     def preserve(self):
         require(BASE.snapshot(self.workspace) == self.baseline, "workspace_effect_detected")
+        require(BASE.snapshot(self.git_workspace) == self.git_baseline, "repository_effect_detected")
         require(self.receiver.bodies == [], "forbidden_delivery_detected")
         require(self.unrelated.poll() is None and BASE.ProcessWitness.identity(self.unrelated.pid) == self.unrelated_start,
                 "unrelated_process_lost")
         require(sha(self.sentinel) == self.sentinel_sha256, "unrelated_file_changed")
-        return {"workspace_snapshot_sha256": digest(self.baseline), "unrelated_file_sha256": self.sentinel_sha256,
+        return {"workspace_snapshot_sha256": digest(self.baseline), "repository_snapshot_sha256": digest(self.git_baseline),
+                "unrelated_file_sha256": self.sentinel_sha256,
                 "unrelated_process_alive": True, "receiver_deliveries": 0}
 
     def calibrate(self):
@@ -347,9 +390,9 @@ class Pilot:
         # read the owned bytes and cause a controlled mutation without a gate.
         for kind, calls in (("filesystem", (("read_text_file", {"path": str(self.workspace / "guide.txt")}),
                                               ("read_text_file", {"path": str(self.workspace / "notes.txt")}))),
-                            ("git", (("git_show", {"repo_path": str(self.workspace), "revision": "HEAD"}),
-                                     ("git_status", {"repo_path": str(self.workspace)}),
-                                     ("git_diff", {"repo_path": str(self.workspace), "target": "HEAD", "context_lines": 3})))):
+                            ("git", (("git_show", {"repo_path": str(self.git_workspace), "revision": "HEAD"}),
+                                     ("git_status", {"repo_path": str(self.git_workspace)}),
+                                     ("git_diff", {"repo_path": str(self.git_workspace), "target": "HEAD", "context_lines": 3})))):
             with self.client(kind, direct=True) as client:
                 for identifier, (tool, arguments) in enumerate(calls, 10):
                     response, _ = client.exchange(BASE.call(identifier, arguments, tool))
@@ -373,7 +416,7 @@ class Pilot:
                 record = fifo.finish()
             require(record["reader_seen"] and record["bytes_written"] == len(BASE.FIFO_TEXT.encode()), "fifo_witness_not_calibrated")
             calibrations[name] = record
-        watch = GIT.RepositoryWitness(self.workspace / ".git")
+        watch = GIT.RepositoryWitness(self.git_workspace / ".git")
         try:
             with self.client("git") as client:
                 watch.drain()
@@ -411,7 +454,7 @@ class Pilot:
         proofs = proofs or {kind: self.mint(host, kind, label + "-" + kind) for kind in TOOLS}
         config = directory / "mcp.json"
         private_json(config, {"mcpServers": {kind: {"command": str(self.paths["python"]),
-            "args": ["-I", str(wrapper), str(directory / (kind + ".log")), str(self.workspace), *self.command(kind)],
+            "args": ["-I", str(wrapper), str(directory / (kind + ".log")), str(self.workspace_for(kind)), *self.command(kind)],
             "env": self.collector_env(kind, host, proofs[kind])} for kind in TOOLS}})
         expected, index = [], 0
         for batch in batches:
@@ -423,6 +466,7 @@ class Pilot:
                 index += 1
             expected.append(proposals)
         model = BASE.DEMO.ScriptedModel([])
+        model.requests = BoundedRequests()
         offered, callbacks, provider_errors = set(), set(), []
         latencies, proposed_at = {}, {}
         lock = threading.Lock()
@@ -542,7 +586,7 @@ class Pilot:
 
     def refusal(self):
         probe = SHARED.FifoProbe(self.workspace / "forbidden.fifo")
-        watch = GIT.RepositoryWitness(self.workspace / ".git")
+        watch = GIT.RepositoryWitness(self.git_workspace / ".git")
         git_observations = {}
         def observe(index, results):
             if index == 2:
@@ -747,6 +791,15 @@ class Pilot:
                 require(client.process.returncode == getattr(client, "expected_exit", 0), "unexpected_client_exit")
             except Exception:
                 errors.append("client_cleanup_failed")
+                # Emergency cleanup cannot turn the failed witness green. Pin
+                # each observed owned descendant by start time; never signal
+                # an unobserved process, a recycled PID or the unrelated guard.
+                for (pid, start) in list(client.process_witness.observed):
+                    if pid != os.getpid() and BASE.ProcessWitness.identity(pid) == start:
+                        try:
+                            os.kill(pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
         if self.daemon is not None:
             BASE.DEMO.stop(self.daemon)
             self.daemon.wait(timeout=10)
@@ -839,7 +892,8 @@ def run(args):
     selected = {}
     def prepare():
         nonlocal pilot, private, selected
-        selection = json.loads(args.selection.read_text())
+        require(args.selection.stat().st_size <= 65536, "selection_byte_limit")
+        selection = strict_json(args.selection.read_bytes())
         if args.fault == "bad-candidate":
             selection["source"]["commit"] = "0" * 40
         if args.fault == "missing-sandbox":

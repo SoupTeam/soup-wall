@@ -4,6 +4,8 @@ import copy
 import importlib.util
 import json
 from pathlib import Path
+import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -117,6 +119,23 @@ class RuntimeBoundaryControls(unittest.TestCase):
             with self.assertRaises(ValueError):
                 PILOT.host_text(value, "filesystem")
 
+    def test_selection_duplicate_keys_and_nonfinite_values_are_not_last_wins(self):
+        for raw in ('{"source":1,"source":2}', '{"value":NaN}', '{"value":Infinity}'):
+            with self.assertRaises(CONTRACT.Failure):
+                PILOT.strict_json(raw)
+
+    def test_auxiliary_provider_requests_obey_count_and_total_bytes_bounds(self):
+        with patch.dict(CONTRACT.LIMITS, provider_requests=2, host_bytes=5):
+            requests = PILOT.BoundedRequests()
+            requests.append(b'123')
+            with self.assertRaises(CONTRACT.Failure):
+                requests.append(b'456')
+            self.assertEqual(requests, [b'123'])
+            requests.append(b'45')
+            with self.assertRaises(CONTRACT.Failure):
+                requests.append(b'')
+            self.assertEqual(requests.bytes, 5)
+
     def test_stream_overflow_drains_real_child_but_cannot_be_accepted(self):
         process = subprocess.Popen([sys.executable, "-I", "-c", "import os; os.write(1,b'x'*4096)"], stdout=subprocess.PIPE)
         with patch.dict(CONTRACT.LIMITS, host_bytes=128):
@@ -185,6 +204,28 @@ class RuntimeBoundaryControls(unittest.TestCase):
                 self.assertNotIn("owned-signed-proof", payload)
                 self.assertFalse(any(path.suffix == ".json" for path in output.iterdir()))
                 self.assertEqual((output / rows[0]["file"]).stat().st_mode & 0o777, 0o600)
+            finally:
+                pilot.receiver.close()
+
+    def test_real_git_fixture_has_no_filesystem_fifo_witnesses(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            private, output = root / "private", root / "output"
+            private.mkdir()
+            output.mkdir()
+            paths = {role: Path(sys.executable).resolve() for role in PILOT.ROLES}
+            paths["git"] = Path(shutil.which("git")).resolve()
+            pilot = PILOT.Pilot(private, output, paths, CONTRACT.new_report())
+            try:
+                pilot.prepare_workspaces()
+                self.assertTrue(stat.S_ISFIFO((pilot.workspace / "forbidden.fifo").lstat().st_mode))
+                self.assertNotEqual(pilot.workspace_for("git"), pilot.workspace_for("filesystem"))
+                self.assertTrue(all(stat.S_ISREG(p.lstat().st_mode) or stat.S_ISDIR(p.lstat().st_mode)
+                                    for p in pilot.git_workspace.rglob("*")))
+                result = subprocess.run([str(paths["git"]), "show", "HEAD:notes.txt"], cwd=pilot.git_workspace,
+                                        env=pilot.env, capture_output=True, check=True, timeout=10)
+                self.assertEqual(result.stdout, b"synthetic original text\n")
+                self.assertEqual((pilot.workspace / "notes.txt").read_text(), PILOT.NOTES)
             finally:
                 pilot.receiver.close()
 

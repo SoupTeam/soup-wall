@@ -61,6 +61,12 @@ profiles are outside the source checkout. No personal Claude state or inherited
 provider credentials are used. Downloading the already pinned runtime assets is
 preparation; protected collector startup never downloads a server.
 
+The filesystem witness directory and synthetic Git repository are separate
+owned roots. The accepted Git profile forbids special files throughout its
+repository: filesystem FIFO witnesses must not be placed in that repository or
+hidden from its validator. Both selected servers keep their original virtual
+`/workspace` mapping and independently recorded profile identities.
+
 ## Fixed exercise and witnesses
 
 The original denominator is **12 cases**, retained even after a failed setup:
