@@ -124,7 +124,6 @@ class Rig:
         self.home, self.workspace = root / "home", root / "workspace"
         self.target = "credentials.txt"
         self.home.mkdir(parents=True, mode=0o700)
-        self.workspace.mkdir(mode=0o700)
         self.env = BASE.environment(self.home)
         self.env.update(GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1",
                         GIT_OPTIONAL_LOCKS="0", GIT_TERMINAL_PROMPT="0",
@@ -136,6 +135,7 @@ class Rig:
             GIT.prepare_repo(self.workspace, args.git, self.env)
             GIT.INSTALL.install(self.installed, self.workspace, args.git, sha(args.git), args.bwrap, args.git_launcher)
         else:
+            self.workspace.mkdir(mode=0o700)
             (self.workspace / "notes.txt").write_text("SOU105 synthetic useful inventory: 7 red widgets\n")
             (self.workspace / self.target).write_text("SOU105 synthetic useful inventory: 7 red widgets\n")
             BASE.INSTALL.install(self.installed, self.workspace, args.node, args.bwrap, args.npm)
