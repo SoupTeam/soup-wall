@@ -1,0 +1,153 @@
+# Installed development pilot qualification
+
+SOU-100 runs one installed Linux x86-64 Agent with the original pinned filesystem
+and Git MCP servers through the selected Claude Code 2.1.251 executable. The
+Messages provider is an owned loopback script. This measures actual-host
+interoperability, useful execution, refusal and recovery. It does not measure a
+live model's effectiveness, certify pilot readiness, or complete Phase 4.
+
+The runtime uses the existing per-server rule baselines and the existing
+[combined proof policy](../../scripts/verify-sou62-sou63-combined.py), including
+Ask for a read derived from MCP content. It does not install a product preset,
+train a model, change an existing host profile, or implement another kit builder.
+The ordinary filesystem/Git profile installers remain the preparation interface.
+
+## Inputs and one qualification command
+
+Use a clean exact checkout. Follow the existing locked build and pinned runtime
+preparation in [filesystem acceptance](MCP_REAL_FILESYSTEM.md) and
+[Git acceptance](GIT_MCP_PROFILE.md). The executable steps, including Node,
+bubblewrap, Git, Claude Code and library-test selection, are in the existing
+[Linux workflow](../../.github/workflows/mcp-real-filesystem.yml). No sysctl,
+AppArmor, seccomp or host permission relaxation is part of this procedure.
+
+After the normal build, record `sw-installed-pilot-selection/1` in a private
+JSON file outside the checkout. The workflow's `PILOT_SELECTION` step is the
+executable example. It records `source()` from the driver (commit, tree, clean
+state and digest of every tracked file), plus absolute paths and SHA-256 for:
+
+| Role | Selected input |
+| --- | --- |
+| `agentfw`, `git_launcher` | `agentfw` and `agentfw-git-sandbox` from the same locked build |
+| `sandbox_tests` | The actual Agent library-test executable from Cargo JSON |
+| `node`, `npm` | The accepted filesystem profile's pinned Node distribution |
+| `bwrap`, `git` | The accepted bubblewrap and Git builds |
+| `claude` | The existing locked actual Claude Code host package |
+| `python` | The explicit Python interpreter for the classifiers and witnesses |
+
+The sidecar is caller-attested build evidence, not a signed binary provenance
+certificate. Retain Cargo build JSON, runtime archive hashes and the selection
+with the run. The command rechecks all selected files and source before/after;
+a digest supplied by the same caller is not an independent publisher signature.
+
+```sh
+python3 -B scripts/qualify-installed-pilot.py --run \
+  --selection /absolute/private/selection.json \
+  --expected-commit FULL_REVIEWED_COMMIT \
+  --output /absolute/private/new-run-directory
+```
+
+Omitting `--run` prints the protocol without executing anything. Output must be
+new and outside the checkout. Rerunning never overwrites an earlier failed run.
+For a later accepted combined candidate, repeat the existing build, record its
+new exact selection, and use the same command with a new output directory.
+An older report cannot qualify that later candidate.
+
+Agent, Git launcher and the two unchanged classifier files are staged in a new
+private temporary directory. Both original profile installers prepare their
+locked packages there. The merged native registry retains every original tool
+schema and profile declaration. The host project, Agent home, policy and server
+profiles are outside the source checkout. No personal Claude state or inherited
+provider credentials are used. Downloading the already pinned runtime assets is
+preparation; protected collector startup never downloads a server.
+
+## Fixed exercise and witnesses
+
+The original denominator is **12 cases**, retained even after a failed setup:
+
+1. Exact installed source, binaries, classifiers, policy, registry and profiles.
+2. The required real filesystem and Git sandbox positives, with no fallback.
+3. Witness calibration: original useful bytes, an original controlled write,
+   each negative FIFO's actual reader, repository kernel OPEN observations, and
+   an owned loopback receiver. The controlled write is an executed effect; the
+   driver explicitly removes only its synthetic calibration file afterwards.
+4. Actual Claude reads a guide and original Git history in one parallel proposal.
+5. Actual Claude reads the working file and original Git diff in another proposal.
+6. Actual Claude encounters an untrusted path, proposes the resulting FIFO read,
+   receives native Ask without a FIFO reader, proposes an unsupported Git reset,
+   then continues useful reads on both servers. The reset refusal belongs to the
+   selected read-only profile before native admission; it is not a policy Deny.
+7. A genuinely independent Claude conversation successfully reads that same
+   FIFO and Git history. It must not inherit the affected conversation's risk.
+8. Explicit MCP client calls on the same installation: eight independently
+   observed blocked reads, one queued cancellation, one in-flight cancellation,
+   seven correlated useful replies, reusable capacity and a useful Git sibling.
+   The in-flight call **executed** before cancellation; no rollback is claimed.
+9. SIGKILL of one useful collector, automatic original-process cleanup and lease
+   expiry without SessionEnd, useful surviving Git sibling, fresh collector epoch
+   and useful reconnection. This is one integrated crash, not another stress suite.
+10. Actual-host useful read, daemon SIGKILL before a FIFO proposal, correlated
+    host error with no reader, new daemon instance, explicit old-grant rejection,
+    then a **fresh** Claude conversation with fresh grants and useful results.
+    An outage error is technical unavailability, not a policy decision.
+11. The same executable command rejects changed candidate identity, a missing
+    sandbox executable and a changed staged classifier. Child failed results
+    remain in separate directories; the controls do not become positive runs.
+12. Exact workspace/repository snapshots, unrelated process/file survival up to
+    teardown, all owned process cleanup, unchanged source/assets and stage removal.
+
+Original server output and actual provider-returned useful bytes must agree.
+Parser errors, absent tool results, host retries, missing hooks, lost responses
+and an empty delivery ledger alone are not prevention evidence. FIFO probes are
+calibrated on the same inodes before negative observations. Kernel Git OPEN
+observations distinguish refusal from repository access during the unsupported
+reset. Exact snapshots include the Git index and objects. The receiver is only a
+calibrated observation here: no general egress protection is certified by a
+two-server read-only exercise.
+
+## Bounds, outcomes and evidence
+
+Limits are declared before execution: two required benign workflows, zero
+false interruptions, 180 seconds per exercise case, 600 seconds for preparation,
+15 seconds for collector reclamation/daemon restart, 150 seconds per Claude
+process, 32 provider requests per host run, 8 MiB per retained host/log stream,
+and a 256 KiB public result. Individual subprocesses have their own timeouts;
+case totals exceeding the declared bound fail even if output arrives late.
+The enclosing CI job also retains its existing 40-minute hard timeout.
+
+`report.json` contains passed/failed/incomplete/unsupported distinctions, the
+original denominators, false interruptions, per-tool end-to-end latency, setup
+and recovery durations, exact installed identities and remaining blockers. Every
+mandatory case must pass; a supported component's historical CI is not imported
+as a current installed-system pass. An unavailable Linux sandbox cannot become
+a skip or a fallback positive. macOS and native Windows are outside this pilot;
+WSL requires its own actual Linux run and does not inherit a hosted Linux result.
+
+Output is private (`0700` directory, `0600` report/logs). Original **owned
+synthetic** host frames, failures, late output and sanitized collector/native
+audit logs remain alongside the bounded content-free summary. Host settings,
+environments and bearer/proof files are never retained. Do not point this
+development-only exercise at customer workspaces or treat its targeted token
+redaction as a general user-data scrubber.
+
+## Remaining work for October 22–24
+
+Until this exact installed candidate has completed every required positive, its
+status is **unqualified**, irrespective of other green component checks. Read
+the run's `remaining_blockers` first and retain its initial failed artifacts.
+Fix an in-scope runtime defect only with its failing witness, focused regression
+and useful continuation. Re-run on the resulting exact candidate.
+
+Keep these owner boundaries explicit when converging on the final candidate:
+
+| Priority | Boundary / owner | Required follow-up |
+| --- | --- | --- |
+| P0 | Installed runtime / SOU-100 | Reproduce and resolve mandatory failures on current accepted source; no readiness claim while any case is failing |
+| P0 | Classifier / SOU-97 | Re-run with the accepted classifier increment; report any unsupported benign tool with exact tool/schema/arguments and current classification, rather than changing classifier behavior here |
+| P1 | Kit / SOU-87 | Reuse the accepted archive's exact assets when available; archive composition and kit-negative controls stay with that owner |
+| P1 | Persistent onboarding / SOU-101 and host launcher owner | Hand over a minimal reproduction for setup/host-launch defects; this temporary stage is not persistent onboarding or a new launcher |
+| P1 | Support report / SOU-80; CI scheduling / SOU-91 | Supply exact run identities/results; do not invent report validation support or alter scheduling policy in this driver |
+
+These are convergence requirements, not fabricated discoveries or reasons to
+wait before running accepted main. No sealed evaluation data, training, paid
+provider call, release, prerelease or registry publication is authorized here.
