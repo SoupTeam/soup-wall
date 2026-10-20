@@ -825,6 +825,7 @@ pub fn verify_daemon_policy(config: &ValidatedConfig, _daemon_token: &str) -> Re
 }
 
 #[cfg(unix)]
+#[allow(dead_code)]
 async fn terminate_process_group(pgid: u32, grace: Duration) {
     let target = -(pgid as i32);
     unsafe {
@@ -837,6 +838,7 @@ async fn terminate_process_group(pgid: u32, grace: Duration) {
 }
 
 #[cfg(not(unix))]
+#[allow(dead_code)]
 async fn terminate_process_group(_pgid: u32, _grace: Duration) {}
 
 /// Mint HMAC-signed scoped child authority grants bound to the live daemon instance.
@@ -1264,13 +1266,11 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
             // Check if child has exited
             match child.try_wait() {
                 Ok(Some(status)) => {
-                    #[cfg(unix)]
                     terminate_process_group(child_pid, Duration::from_millis(50)).await;
                     return Ok(status);
                 }
                 Ok(None) => {}
                 Err(e) => {
-                    #[cfg(unix)]
                     terminate_process_group(child_pid, Duration::from_millis(50)).await;
                     return Err(anyhow::anyhow!("error waiting for child: {}", e));
                 }
@@ -1278,7 +1278,6 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
 
             tokio::select! {
                 _ = tokio::time::sleep_until(deadline) => {
-                    #[cfg(unix)]
                     terminate_process_group(child_pid, Duration::from_millis(200)).await;
                     #[cfg(not(unix))]
                     {
@@ -1288,7 +1287,6 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                     bail!("pilot host execution exceeded declared timeout of {}s", timeout.as_secs());
                 }
                 _ = tokio::signal::ctrl_c() => {
-                    #[cfg(unix)]
                     terminate_process_group(child_pid, Duration::from_millis(200)).await;
                     #[cfg(not(unix))]
                     {
@@ -1307,7 +1305,6 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                     #[cfg(not(unix))]
                     futures_util::future::pending::<()>().await;
                 } => {
-                    #[cfg(unix)]
                     terminate_process_group(child_pid, Duration::from_millis(200)).await;
                     #[cfg(not(unix))]
                     {
@@ -1321,7 +1318,6 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                         match probe_daemon_liveness(&home_path, &current_token).await {
                             Ok(live_id) if live_id == initial_instance => {}
                             _ => {
-                                #[cfg(unix)]
                                 terminate_process_group(child_pid, Duration::from_millis(200)).await;
                                 #[cfg(not(unix))]
                                 {
