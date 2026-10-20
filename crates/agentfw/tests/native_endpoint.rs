@@ -3122,9 +3122,11 @@ async fn sou83_original_write_reused_native_result_authority_is_spent_and_peer_c
     let args = json!({"path":"/workspace/approved.txt","content":"known approved bytes"});
     let mut call = fixture.call("sou83-spent-native", "write_file", &args);
     call["schema_sha256"] = registry["tools"][0]["schema_sha256"].clone();
+    // Selected original MCP tools bind the exact host JSON-RPC ID at native call admission.
+    call["mcp_host_call_id"] = json!("create-one");
     let (status, admitted) = fixture.post(&call).await;
     assert_allow(status, &admitted);
-    let original = json!({"jsonrpc":"2.0","id":"create-one","result":{
+    let original = json!({"jsonrpc":"2.0","id":"sou83-native-original-call-1","result":{
         "content":[{"type":"text","text":"Successfully wrote"}],
         "structuredContent":{"content":"Successfully wrote"}
     }})
@@ -3159,6 +3161,7 @@ async fn sou83_original_write_reused_native_result_authority_is_spent_and_peer_c
         &json!({"path":"/workspace/other.txt","content":"another authorized call"}),
     );
     followup["schema_sha256"] = registry["tools"][0]["schema_sha256"].clone();
+    followup["mcp_host_call_id"] = json!("create-two");
     let (status, continued) = fixture.post(&followup).await;
     assert_allow(status, &continued);
     assert_ne!(continued["call_id"], admitted["call_id"]);
