@@ -1,5 +1,9 @@
 # Native MCP Ask approval (SOU-48)
 
+The original filesystem/Git relay now has a separate bounded integration of
+this same broker; see [selected read-only invocation approval](SELECTED_MCP_ASK_APPROVAL.md)
+for its supported profiles, authority requirements and concurrency behavior.
+
 Opt-in, bounded, single-use operator approval and resume for **one outstanding**
 supported native MCP `tools/call` that the policy answers with **Ask**. This is an
 internal candidate increment, not a release. Default configuration keeps the
