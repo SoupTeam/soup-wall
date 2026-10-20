@@ -9,7 +9,8 @@ live model's effectiveness, certify pilot readiness, or complete Phase 4.
 The runtime uses the existing per-server rule baselines and an explicitly scoped
 variant of the [combined proof policy](../../scripts/verify-sou62-sou63-combined.py),
 including Ask for a read derived from MCP content. Result injection requires
-medium severity. The filesystem-only proof policy's LOW heuristic also matches
+medium severity, matching the accepted [Git profile](../../profiles/mcp/git-readonly-v1/policy.yaml).
+The filesystem-only proof policy's LOW heuristic also matches
 ordinary 40-character Git object IDs, so its unconditional detector rule falsely
 interrupts original Git history. The initial failure is retained; detectors and
 shipped policies are unchanged. Calibration requires both useful original Git
@@ -111,6 +112,11 @@ The original denominator is **12 cases**, retained even after a failed setup:
     teardown, all owned process cleanup, unchanged source/assets and stage removal.
 
 Original server output and actual provider-returned useful bytes must agree.
+Git text block arrays are decoded without dropping non-text or extra fields;
+filesystem structured text keeps its separate exact shape. Replayed authority
+must receive an explicit native HTTP 409 instance-mismatch response for the same
+old grant. The collector's intentionally generic rejected-request stderr and
+an EOF alone are insufficient; diagnostic response bodies stay out of its log.
 Parser errors, absent tool results, host retries, missing hooks, lost responses
 and an empty delivery ledger alone are not prevention evidence. FIFO probes are
 calibrated on the same inodes before negative observations. Kernel Git OPEN

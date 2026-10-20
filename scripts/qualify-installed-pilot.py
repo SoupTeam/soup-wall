@@ -29,6 +29,7 @@ import tempfile
 import threading
 import time
 import traceback
+import urllib.error
 import urllib.request
 import uuid
 
@@ -224,7 +225,14 @@ def frame(identifier, kind, tool, arguments):
 
 
 def host_text(value, kind):
-    require(value.get("is_error") is False and isinstance(value.get("content"), str), "host_useful_result_missing")
+    require(value.get("is_error") is False, "host_useful_result_missing")
+    if kind == "git" and isinstance(value.get("content"), list):
+        blocks = value["content"]
+        require(0 < len(blocks) <= 32 and all(type(block) is dict and set(block) == {"type", "text"}
+                and block["type"] == "text" and isinstance(block["text"], str) for block in blocks),
+                "host_original_text_blocks_changed")
+        return "".join(block["text"] for block in blocks)
+    require(isinstance(value.get("content"), str), "host_useful_result_missing")
     content = re.sub(r"\n\n?<system-reminder>\n<total_tokens>[0-9]+ tokens left</total_tokens>\n</system-reminder>$",
                      "", value["content"])
     if kind == "filesystem":
@@ -283,6 +291,30 @@ class Pilot:
             raw = response.read(1024 * 1024 + 1)
         require(len(raw) <= 1024 * 1024, "instance_response_bound")
         return json.loads(raw)
+
+    def stale_authority_refusal(self, host, proof):
+        # Collector stderr deliberately hides rejected HTTP response bodies.
+        # Observe the same old grant at the native boundary independently;
+        # neither the generic collector error nor EOF proves instance fencing.
+        body = {"contract_version": "sw-native/1", "registry_sha256": self.registry_sha256,
+                "session_id": "pilot-replay-" + uuid.uuid4().hex, "event": "session_start",
+                "host_session": host, "server_id": "filesystem", "child_authority": proof}
+        request = urllib.request.Request(f"http://127.0.0.1:{self.port}/native/v1", canonical(body),
+            headers={"Authorization": "Bearer " + self.native_token, "Content-Type": "application/json"})
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        try:
+            with opener.open(request, timeout=10):
+                raise Failure("stale_authority_was_accepted")
+        except urllib.error.HTTPError as error:
+            with error:
+                raw = error.read(16385)
+            require(error.code == 409 and len(raw) <= 16384, "stale_authority_wrong_http_failure")
+            reply = strict_json(raw)
+            require(reply.get("contract_version") == "sw-native/1" and reply.get("release") is False
+                    and reply.get("error_code") == "native_child_authority_instance_mismatch",
+                    "stale_grant_explicit_refusal_missing")
+            return {"status": error.code, "error_code": reply["error_code"], "release": False,
+                    "response_sha256": hashlib.sha256(raw).hexdigest()}
 
     def start_daemon(self):
         log = (self.private / ("daemon-" + str(len(self.logs)) + ".log")).open("wb")
@@ -841,8 +873,8 @@ class Pilot:
         started = time.monotonic()
         new_instance = self.start_daemon()
         require(new_instance != old_instance, "daemon_instance_resurrected")
-        # An EOF alone proves nothing. The exact old signed authority must also
-        # have the explicit native instance-mismatch refusal in its own log.
+        # An EOF or generic request error alone proves nothing. Also obtain the
+        # explicit native instance-mismatch response for the same old grant.
         refused = None
         try:
             with self.client("filesystem", host, "outage-filesystem", proof=proofs["filesystem"]) as stale:
@@ -851,9 +883,10 @@ class Pilot:
         except ValueError:
             refused = self.clients[-1]
             refusal_log = refused.log_path.read_bytes()
-            require(refused.process.returncode != 0 and b"native_child_authority_instance_mismatch" in refusal_log,
-                    "stale_grant_explicit_refusal_missing")
+            require(refused.process.returncode == 1 and b"MCP admission request rejected" in refusal_log
+                    and not refused.received, "stale_collector_not_refused")
             refused.expected_exit = refused.process.returncode
+        native_refusal = self.stale_authority_refusal(host, proofs["filesystem"])
         require(time.monotonic() - started <= LIMITS["recovery_seconds"], "daemon_recovery_deadline")
         fresh, fresh_results = self.host("fresh", [[("filesystem", "read_text_file", {"path": "/workspace/guide.txt"}),
                                                    ("git", "git_show", {"revision": "HEAD"})]])
@@ -863,6 +896,7 @@ class Pilot:
         return {"outage_host": evidence, "outage_fifo": record, "stopped_before_proposal": True,
                 "outcome": "technical-unavailability-not-policy-deny", "old_instance_id": old_instance,
                 "new_instance_id": new_instance, "stale_authority_refusal": "native_child_authority_instance_mismatch",
+                "native_refusal": native_refusal,
                 "fresh_host": fresh, "old_context_resumed": False, **self.preserve()}
 
     def cleanup(self):

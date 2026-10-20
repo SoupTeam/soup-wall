@@ -2,6 +2,7 @@
 """Adversarial measurement controls, not installed-host acceptance evidence."""
 import copy
 import importlib.util
+import io
 import json
 from pathlib import Path
 import shutil
@@ -10,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import urllib.error
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -118,6 +120,38 @@ class RuntimeBoundaryControls(unittest.TestCase):
                       {"is_error": False, "content": "prefix useful suffix"}):
             with self.assertRaises(ValueError):
                 PILOT.host_text(value, "filesystem")
+
+    def test_actual_host_git_text_blocks_preserve_bytes_and_reject_other_content(self):
+        original = "commit " + "e" * 40 + "\n--- /dev/null\n+++ notes.txt\n+café\n"
+        self.assertEqual(PILOT.host_text({"is_error": False, "content": [{"type": "text", "text": original}]}, "git"), original)
+        for content in ([], [{"type": "image", "text": original}], [{"type": "text", "text": original, "hidden": "extra"}],
+                        [{"type": "text", "text": False}], [original]):
+            with self.assertRaises(CONTRACT.Failure):
+                PILOT.host_text({"is_error": False, "content": content}, "git")
+        with self.assertRaises(CONTRACT.Failure):
+            PILOT.host_text({"is_error": True, "content": [{"type": "text", "text": original}]}, "git")
+
+    def test_stale_authority_requires_precise_native_http_refusal(self):
+        pilot = PILOT.Pilot.__new__(PILOT.Pilot)
+        pilot.port, pilot.native_token, pilot.registry_sha256 = 12345, "private-token", "c" * 64
+        valid = {"contract_version": "sw-native/1", "release": False,
+                 "error_code": "native_child_authority_instance_mismatch"}
+        def response(code, value):
+            return urllib.error.HTTPError("http://127.0.0.1:12345/native/v1", code, "owned fixture", {},
+                                          io.BytesIO(json.dumps(value).encode()))
+        with patch.object(PILOT.urllib.request, "build_opener") as factory:
+            factory.return_value.open.side_effect = response(409, valid)
+            evidence = pilot.stale_authority_refusal("host", "old-private-proof")
+            self.assertEqual(evidence["error_code"], valid["error_code"])
+            request = factory.return_value.open.call_args.args[0]
+            self.assertEqual(json.loads(request.data)["child_authority"], "old-private-proof")
+            self.assertNotIn("old-private-proof", json.dumps(evidence))
+            for code, reply in ((401, valid), (409, {**valid, "release": True}),
+                                (409, {**valid, "error_code": "native_invalid_identity"}),
+                                (409, {**valid, "contract_version": "wrong"})):
+                factory.return_value.open.side_effect = response(code, reply)
+                with self.assertRaises(CONTRACT.Failure):
+                    pilot.stale_authority_refusal("host", "old-private-proof")
 
     def test_selection_duplicate_keys_and_nonfinite_values_are_not_last_wins(self):
         for raw in ('{"source":1,"source":2}', '{"value":NaN}', '{"value":Infinity}'):
