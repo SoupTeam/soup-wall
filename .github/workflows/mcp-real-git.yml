@@ -7,6 +7,10 @@ on:
         description: Also run the SOU-97 pilot candidate classifier through the original server (opt-in)
         type: boolean
         default: false
+      sou97_git_diagnostic:
+        description: Diagnostic only, never acceptance - repeat the SOU-68 overlap cancellation against the unwrapped original Git server (opt-in)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -104,6 +108,27 @@ jobs:
             --expected-commit "$(git rev-parse HEAD)" \
             --classifier-script "$PWD/rule_baseline/pilot_readonly_v1/rule_baseline.py" --classifier-sha256 "$CANDIDATE_SHA256" \
             --output "$RUNNER_TEMP/sou97-git-candidate" 2>&1 | tee "$RUNNER_TEMP/sou97-git-candidate.log"
+      - name: SOU-97 diagnostic only (never acceptance) - original Git server cancellation overlap
+        if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_git_diagnostic == 'true' }}
+        continue-on-error: true
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/diagnose-sou97-git-cancellation.py --run \
+            --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
+            --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
+            --expected-commit "$(git rev-parse HEAD)" --trials 20 --max-seconds 480 \
+            --output "$RUNNER_TEMP/diagnostic-sou97-git" 2>&1 | tee "$RUNNER_TEMP/diagnostic-sou97-git.log"
+      - name: Retain SOU-97 diagnostic-only output (never acceptance evidence)
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_git_diagnostic == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou97-git-cancellation-diagnostic
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/diagnostic-sou97-git.log
+            ${{ runner.temp }}/diagnostic-sou97-git/diagnostic.json
       - name: Retain exact-source synthetic evidence
         if: always()
         uses: actions/upload-artifact@v7
