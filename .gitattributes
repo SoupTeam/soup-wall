@@ -6,6 +6,10 @@ vendor/kryptering/** text eol=lf
 
 # SOU-36 frozen plan and protocol evidence are bound by raw-byte SHA-256: keep LF on every platform.
 scripts/benchmarks/agentdojo-sou36-workspace.plan.json text eol=lf
+crates/agentfw/profiles/agentdojo-workspace-v1.json text eol=lf
+docs/benchmarks/evidence/sou85/** text eol=lf
+crates/agentfw/profiles/upstream-notices/** text eol=lf
+scripts/agentdojo-workspace-acceptance.sh text eol=lf
 docs/benchmarks/evidence/sou36/** text eol=lf
 
 # SOU-13 sources are pinned by raw-byte SHA-256 (CP1 freeze, CP2 dev handoff): no platform conversion.
@@ -47,3 +51,7 @@ rule_baseline/runtime/** text eol=lf
 # pins the working-tree bytes and changes no committed byte.
 rule_baseline/rule_baseline.py text eol=lf
 rule_baseline/rev2/rule_baseline.py text eol=lf
+
+# SOU-98 explicit preset and selected Git snapshot use committed byte identities.
+profiles/pilot/linux-readonly-v1/** text eol=lf
+rule_baseline/git_readonly_v1/rule_baseline.py text eol=lf

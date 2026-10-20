@@ -1,0 +1,98 @@
+# SPDX-License-Identifier: Apache-2.0
+# SOU-98 explicit Linux pilot policy, v1. Never replaces the global default.
+# Existing filesystem rule IDs retained for comparable effect acceptance.
+agent_policies:
+  - name: filesystem-profile-deny-destructive
+    when: { action_class: destructive }
+    action: deny
+  - name: filesystem-profile-deny-write
+    when: { action_class: side_effecting }
+    action: deny
+  - name: filesystem-profile-deny-network
+    when: { action_class: network }
+    action: deny
+  - name: filesystem-profile-deny-privilege
+    when: { action_class: privilege_changing }
+    action: deny
+  # Untrusted content driving a destructive action is the canonical indirect-injection
+  # kill chain. Never merely ask.
+  - name: deny-tainted-destructive
+    when: { taint: [network, mcp, subagent, native], action_class: destructive }
+    action: deny
+    message: "Blocked: destructive action derived from untrusted content"
+
+  - name: deny-tainted-privilege
+    when: { taint: [network, mcp, subagent, native], action_class: privilege_changing }
+    action: deny
+    message: "Blocked: privilege change derived from untrusted content"
+
+  # A subagent may never hold a tool its parent lacks.
+  - name: deny-subagent-escalation
+    when: { subagent_escalation: true }
+    action: deny
+    message: "Blocked: subagent requested tools beyond its parent's grant"
+
+  # Secrets or PII heading out over the network.
+  - name: deny-secret-egress
+    when: { detector: secret, facet: tool_args, min_action_class: network }
+    action: deny
+    message: "Blocked: secret in the arguments of a network call"
+
+  # A credential-shaped path plus an outbound send. Neither is alarming alone —
+  # repos are full of `.env.example` and `credentials.md`, and sending data is
+  # routine — but reading one and then posting is the exfiltration shape. Sits
+  # after deny-secret-egress: a call that is both a sensitive-path reference AND a
+  # detected secret must deny, not merely ask.
+  - name: ask-sensitive-path-egress
+    when: { touches_sensitive_path: true, min_action_class: network }
+    action: ask
+    message: "This call sends data and references a credential path. Allow?"
+
+  - name: ask-pii-egress
+    when: { detector: pii, facet: tool_args, min_action_class: network }
+    action: ask
+    message: "This call sends personal data to an external host. Allow?"
+
+  # Injected instructions arriving in a tool result or a tool description.
+  - name: git-profile-refuse-result-injection
+    when: { detector: injection, facet: tool_result, min_severity: medium }
+    action: deny
+    message: "Blocked: tool result contains instruction-like content"
+
+  - name: ask-injection-in-tool-description
+    when: { detector: injection, facet: tool_description, min_severity: medium }
+    action: ask
+    message: "An MCP tool description contains instructions aimed at the agent. Trust this server?"
+
+  # A pinned MCP server whose manifest changed since we last saw it — the "rug pull".
+  - name: ask-manifest-drift
+    when: { mcp_manifest_changed: true }
+    action: ask
+    message: "An MCP server's tool manifest changed since it was pinned. Review the diff before trusting it."
+
+  # Two servers, or a server and a builtin, declaring the same tool name.
+  - name: ask-tool-shadow
+    when: { mcp_tool_shadow: true }
+    action: ask
+    message: "This MCP server declares a tool name that collides with another tool. Allow?"
+
+  - name: ask-unknown-host
+    when: { egress_not_allowlisted: true }
+    action: ask
+    message: "This call reaches a host that is not on the allowlist. Allow?"
+
+  # Taint alone does not distinguish ordinary follow-up work from malicious
+  # instructions. Ask the local judge if one is configured; otherwise use the
+  # declared allow fallback.
+  # This weaker fallback follows every explicit Ask: taint must never turn a send
+  # to an unknown host from Ask into Allow. Allowlisted ordinary side effects keep
+  # their existing fallback. The judge may only tighten this to `ask`, never past
+  # it. See crates/agentfw/src/judge.rs for the content-only judge prompt.
+  - name: escalate-tainted-side-effect
+    when: { taint: [network, mcp, subagent, native], min_action_class: side_effecting }
+    action: escalate
+    fallback: allow
+    message: "This action uses content fetched earlier from an untrusted source."
+
+egress_allowlist: []
+default: allow
