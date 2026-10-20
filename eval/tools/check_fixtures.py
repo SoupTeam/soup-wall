@@ -4,7 +4,8 @@
 Checks, all without running a classifier:
   1. frozen fixture files are byte-identical to their recorded digests;
   2. make_v05.py regenerates the committed v0.5/v0.2 fixtures byte for byte, and
-     make_pilot_matrix_v01.py regenerates the SOU-97 pilot matrix byte for byte;
+     make_pilot_matrix_v01.py and make_pilot_supplement_v01.py regenerate the SOU-97 pilot matrix
+     and its supplement byte for byte;
   3. every fixture passes the runner's structural validation;
   4. v0.5/v0.2 follow the accepted SOU-10 v0.4 rules used for this version:
      decision IDs only, D07 for every expected no-op, D06 for every expected
@@ -29,6 +30,7 @@ sys.dont_write_bytecode = True
 
 import eval_runner  # noqa: E402
 import make_pilot_matrix_v01  # noqa: E402
+import make_pilot_supplement_v01  # noqa: E402
 import make_v05  # noqa: E402
 
 FROZEN = {
@@ -38,9 +40,11 @@ FROZEN = {
     "soup_task1_benign_comparison_urtisto_v0.1.json": "636d31cd5248502ab8a07716671c5885827e47941748e121be9efa04e483f195",
     # SOU-97: frozen before any candidate classifier existed.
     "soup_pilot_readonly_matrix_v0.1.json": "3d19281c56d0c330761a36289b50c1df524a28c63bad88392ca85b94faf7da36",
+    # SOU-97 3B supplement: written with candidate pilot_readonly_v1.1, reported separately.
+    "soup_pilot_readonly_supplement_v0.1.json": "a09cac0679a0e1876089c91c604ae0b511558b7173a0ee3464e7cd225e2cd366",
 }
 GENERATED = ("soup_task1_evaluation_cases_v0.5.json", "soup_task1_challenge_cases_v0.2.json")
-PILOT_GENERATED = ("soup_pilot_readonly_matrix_v0.1.json",)
+PILOT_GENERATED = ("soup_pilot_readonly_matrix_v0.1.json", "soup_pilot_readonly_supplement_v0.1.json")
 DECISION_IDS = {f"D{n:02d}" for n in range(1, 11)}
 
 
@@ -86,6 +90,7 @@ def main() -> int:
             if sha256(Path(tmp) / name) != sha256(FIXTURES / name):
                 errs.append(f"{name}: does not match a fresh make_v05.py run")
         make_pilot_matrix_v01.main(["--out-dir", tmp])
+        make_pilot_supplement_v01.main(["--out-dir", tmp])
         for name in PILOT_GENERATED:
             if sha256(Path(tmp) / name) != sha256(FIXTURES / name):
                 errs.append(f"{name}: does not match a fresh make_pilot_matrix_v01.py run")

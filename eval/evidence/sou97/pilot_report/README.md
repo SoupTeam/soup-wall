@@ -1,5 +1,9 @@
 # SOU-97 pilot report (Increment 3A): offline classification and latency
 
+> **Historical development result.** This evidence measures the superseded candidate revision
+> `pilot_readonly_v1` (sha256 `82a41dded79cf560cefc5ab6894e9f247d31fec2992b2b7b6d0fcad02c0494f4`,
+> commit `ef0d17b`). It is **not** evidence for `pilot_readonly_v1.1`; see `../v1.1/`.
+
 These files are produced by the additive `eval/eval_runner.py --pilot-report` mode: two runs of the
 same command on the same host. **They are not runtime acceptance and not an acceptance decision.**
 Native policy verdicts and execution effects were not measured; the reports say `not_measured` for

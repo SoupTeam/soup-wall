@@ -1,5 +1,9 @@
 # SOU-97 candidate evidence (Increment 2): offline classification only
 
+> **Historical development result.** This evidence measures the superseded candidate revision
+> `pilot_readonly_v1` (sha256 `82a41dded79cf560cefc5ab6894e9f247d31fec2992b2b7b6d0fcad02c0494f4`,
+> commit `ef0d17b`). It is **not** evidence for `pilot_readonly_v1.1`; see `../v1.1/`.
+
 This evidence compares the candidate `rule_baseline/pilot_readonly_v1` with each profile's currently
 selected classifier, on the matrix that was frozen in `f8e7a2e` and on the unchanged public
 fixtures. No expectation, fixture, evaluator, policy, driver or CI file changed.

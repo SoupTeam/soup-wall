@@ -12,8 +12,10 @@ Output: core   {"actions": [...], "unknown": bool}  (the approved contract's sem
 Technical failures use status "error" plus a `failure` code and are never a valid classification.
 The module is a single stdlib-only file because the daemon executes it as one source snapshot.
 
-Revision pilot_readonly_v1 (SOU-97) is git_readonly_v1 plus one exact-schema proof for three original
+Revision pilot_readonly_v1.1 (SOU-97) is git_readonly_v1 plus one exact-schema proof for three original
 read-only filesystem tools (see _bounded_fs_read). It is selected only explicitly; it grants nothing.
+It supersedes pilot_readonly_v1 (sha256 82a41dde...), which bounded glob patterns by 4096 characters and
+refused control characters in them.
 
 Principles
 - The tool description is UNTRUSTED. It never adds or removes a category. It is
@@ -41,7 +43,7 @@ UNKNOWN = "unknown"
 THRESHOLD = 0.5
 MAX_DEPTH, MAX_LEAVES, MAX_LEAF_CHARS, MAX_DESC_CHARS = 6, 200, 4096, 2000
 # Output envelope bounds. The Rust bridge reads at most 16 KiB of reply and a reason of 1..1024 bytes.
-REVISION = "pilot_readonly_v1"
+REVISION = "pilot_readonly_v1.1"
 INTERFACE = "sw-classifier-core/0.4"
 MAX_NAME_CHARS, MAX_INPUT_BYTES, MAX_REASON_CHARS = 256, 1024 * 1024, 1000
 MAX_EVIDENCE, MAX_CODES, MAX_REPLY_BYTES = 8, 24, 12 * 1024
@@ -668,11 +670,23 @@ FS_ARGS = {  # name: (required keys, optional keys); every value is checked belo
     'search_files': ({'path', 'pattern'}, {'excludePatterns'}),
 }
 FS_MAX_ITEMS = 256  # the selected profile's array bound (crates/agentfw/src/mcp/input.rs MAX_ITEMS)
+# The pinned schemas declare no maxLength, so the profile bounds every string by its default
+# DEFAULT_STRING_BYTES = 16 KiB of UTF-8 (input.rs). Paths keep the tighter 4096-byte workspace rule.
+FS_MAX_STRING_BYTES = 16 * 1024
+FS_MAX_PATH_BYTES = 4096
+
+
+def _utf8_len(value: str) -> int | None:
+    """UTF-8 length as the native profile measures it; None for text it cannot carry (lone surrogates)."""
+    try:
+        return len(value.encode('utf-8'))
+    except UnicodeEncodeError:
+        return None
 
 
 def _workspace_path(value: Any) -> bool:
     """Mirror of the profile's validate_workspace_path (server_profile.rs); stricter is allowed, looser is not."""
-    if not isinstance(value, str) or not value or len(value.encode('utf-8')) > MAX_LEAF_CHARS:
+    if not isinstance(value, str) or not value or (_utf8_len(value) or FS_MAX_PATH_BYTES + 1) > FS_MAX_PATH_BYTES:
         return False
     if any(ord(c) < 32 or 127 <= ord(c) < 160 for c in value) or '\\' in value or ':' in value or value.startswith('~'):
         return False
@@ -681,18 +695,37 @@ def _workspace_path(value: Any) -> bool:
     return not value.startswith('/') or value == '/workspace' or value.startswith('/workspace/')
 
 
-def _text_list(value: Any, minimum: int) -> bool:
-    return (isinstance(value, list) and minimum <= len(value) <= FS_MAX_ITEMS
-            and all(isinstance(v, str) and len(v) <= MAX_LEAF_CHARS
-                    and not any(ord(c) < 32 or 127 <= ord(c) < 160 for c in v) for v in value))
+def _glob_list(value: Any, minimum: int) -> bool:
+    """Glob patterns of the original server: every admitted string is matching data only.
+
+    The pinned server passes `pattern` and `excludePatterns` solely to minimatch() against relative paths
+    of entries it lists (dist/index.js directory_tree, dist/lib.js searchFilesWithValidation); they never
+    name a file, a command or content. minimatch 10.2.6 rejects only patterns longer than 65536 UTF-16
+    units, beyond any 16 KiB UTF-8 string. Control characters are literal pattern characters. So any
+    profile-admitted string (at most 16 KiB of valid UTF-8, including empty) is read-only data.
+    """
+    if not isinstance(value, list) or not minimum <= len(value) <= FS_MAX_ITEMS:
+        return False
+    for item in value:
+        if not isinstance(item, str):
+            return False
+        size = _utf8_len(item)
+        if size is None or size > FS_MAX_STRING_BYTES:
+            return False
+    return True
+
+
+def _path_list(value: Any) -> bool:
+    return isinstance(value, list) and 1 <= len(value) <= FS_MAX_ITEMS and all(_workspace_path(v) for v in value)
 
 
 def _bounded_fs_read(name: str, args: Any, event: dict) -> bool:
     """True only for an exact original read form whose every argument value was inspected here.
 
-    The generic walker stops at MAX_LEAVES values; this proof does not, because it checks each of at
-    most FS_MAX_ITEMS bounded strings itself. Any other form returns False and is classified exactly as
-    before. A name alone, a description, or server_id never establishes the proof.
+    The generic walker stops at MAX_LEAVES values and MAX_LEAF_CHARS characters; this proof does not,
+    because it checks each of at most FS_MAX_ITEMS strings, bounded in UTF-8 bytes, itself. Any other
+    form returns False and is classified exactly as before. A name alone, a description, or server_id
+    never establishes the proof.
     """
     if name not in FS_READ_SCHEMAS:
         return False
@@ -705,12 +738,12 @@ def _bounded_fs_read(name: str, args: Any, event: dict) -> bool:
     if not isinstance(args, dict) or not required <= set(args) <= required | optional:
         return False
     if name == 'read_multiple_files':
-        return _text_list(args['paths'], 1) and all(_workspace_path(p) for p in args['paths'])
+        return _path_list(args['paths'])
     if not _workspace_path(args['path']):
         return False
-    if 'excludePatterns' in args and not _text_list(args['excludePatterns'], 0):
+    if 'excludePatterns' in args and not _glob_list(args['excludePatterns'], 0):
         return False
-    return 'pattern' not in args or _text_list([args['pattern']], 1)
+    return 'pattern' not in args or _glob_list([args['pattern']], 1)
 
 
 def _classify(event: Any) -> dict[str, Any]:
@@ -747,7 +780,7 @@ def _classify(event: Any) -> dict[str, Any]:
     fs_read = _bounded_fs_read(name, args, event)
     if fs_read:
         # Paths and glob patterns of an exact original read form are data; each was checked above,
-        # so the generic walker's leaf bound no longer limits what was examined.
+        # so the generic walker's leaf-count and leaf-length bounds no longer limit what was examined.
         ev('read', 0.95, 'args', 'bounded original filesystem read with exact schema')
         walk.truncated = False
     elif git_read is True:

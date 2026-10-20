@@ -1,21 +1,39 @@
-# pilot_readonly_v1 (SOU-97 candidate)
+# pilot_readonly_v1.1 (SOU-97 candidate)
 
 This is a separately identified candidate for the read-only filesystem and Git pilot profiles.
 **It is not selected by default, it is not packaged, and it has no held-out result.** The frozen,
 rev2 and `git_readonly_v1` artifacts are unchanged byte for byte.
 
-- File: `rule_baseline/pilot_readonly_v1/rule_baseline.py`, sha256 `82a41dded79cf560cefc5ab6894e9f247d31fec2992b2b7b6d0fcad02c0494f4`
+- File: `rule_baseline/pilot_readonly_v1/rule_baseline.py`, sha256 `9f4a532b5d1b1f6d375eba1e9a2ffca1164bfab038bdc6fa3532cbd9584eef1e`
   (LF on every platform via `.gitattributes`)
-- `REVISION = "pilot_readonly_v1"`, `INTERFACE = "sw-classifier-core/0.4"`, `THRESHOLD = 0.5`
-- Derived from `git_readonly_v1` (sha256 `8a57c58d…18474`). The only change is a 70-line addition:
-  `FS_READ_SCHEMAS`, `_workspace_path`, `_text_list`, `_bounded_fs_read`, and one branch in `_classify`.
+- `REVISION = "pilot_readonly_v1.1"`, `INTERFACE = "sw-classifier-core/0.4"`, `THRESHOLD = 0.5`
+- Derived from `git_readonly_v1` (sha256 `8a57c58d…18474`). The only additions are
+  `FS_READ_SCHEMAS`, `FS_ARGS`, the `FS_MAX_*` bounds, `_utf8_len`, `_workspace_path`, `_glob_list`,
+  `_path_list`, `_bounded_fs_read`, and one branch in `_classify`.
 - Explicit selection, with the digest verified by the caller:
   `AGENTFW_CLASSIFIER=rule-baseline AGENTFW_RULE_BASELINE=<abs path to this file>`. Offline:
   `python3 eval/eval_runner.py <fixtures> --classifier-path rule_baseline/pilot_readonly_v1 --out-dir <out>`.
   Nothing in the runtime, drivers, CI or profiles selects it.
-- Regressions: `rule_baseline/test_pilot_readonly.py`. Evidence: `eval/evidence/sou97/candidate/`.
+- Regressions: `rule_baseline/test_pilot_readonly.py`. Current evidence: `eval/evidence/sou97/v1.1/`.
 
-## What changed against git_readonly_v1
+## Revision history
+
+| Revision | sha256 | Commit | Status |
+|---|---|---|---|
+| `pilot_readonly_v1` | `82a41dded79cf560cefc5ab6894e9f247d31fec2992b2b7b6d0fcad02c0494f4` | `ef0d17b` | Superseded. Its results in `eval/evidence/sou97/candidate/` and `eval/evidence/sou97/pilot_report/` are historical development results and are **not** evidence for v1.1. |
+| `pilot_readonly_v1.1` | `9f4a532b5d1b1f6d375eba1e9a2ffca1164bfab038bdc6fa3532cbd9584eef1e` | this revision | Current candidate. |
+
+v1.1 changes only the bounds of the existing proof:
+
+1. Glob patterns (`pattern`, `excludePatterns` items) are now bounded by the profile's 16 384 UTF-8
+   bytes, instead of 4096 characters with control characters refused. Every admitted pattern is
+   proven read-only matching data (see below).
+2. Path length is measured in UTF-8 bytes, without raising an exception on text the native profile
+   cannot carry. v1 raised `UnicodeEncodeError` on a lone surrogate, which turned into
+   `classifier_internal_error`; v1.1 refuses the proof and keeps the `git_readonly_v1` result.
+   Paths keep the profile's 4096-byte, no-control-character workspace rule.
+
+## The proof
 
 `_bounded_fs_read` proves `read` (weight 0.95, `unknown=false`) only for an exact original form of
 `directory_tree`, `read_multiple_files` or `search_files`. Every one of these must hold:
@@ -28,56 +46,48 @@ rev2 and `git_readonly_v1` artifacts are unchanged byte for byte.
 - every path passes a mirror of the profile's `validate_workspace_path`: non-empty, at most 4096
   UTF-8 bytes, no control characters, no `\`, `:` or leading `~`, no empty, `.` or `..` segments,
   and absolute paths only at or under `/workspace`;
-- every array holds at most 256 strings (the profile's `MAX_ITEMS`), each at most 4096 characters
-  with no control characters, and `paths` is non-empty.
+- `paths` holds 1 to 256 such paths (the profile's `MAX_ITEMS`);
+- `excludePatterns` holds 0 to 256 strings, and `pattern` is one string, each at most 16 384 bytes
+  of valid UTF-8 (the empty string is allowed).
 
 The tool description and `server_id` are never consulted. When any of these checks fails, the call
 goes to the unchanged `git_readonly_v1` rules and the output is byte-identical. The schema hash is
 semantic evidence only. Discovery pinning, registry/argument admission, native policy and the OS
-sandbox remain the authority.
+sandbox remain the authority. Because the proof inspects every value itself, it clears the generic
+walker's `truncated` flag. `MAX_LEAVES` (200 values) and `MAX_LEAF_CHARS` (4096 characters) are
+unchanged for every other call.
 
-### directory_tree
+## Why every admitted glob pattern is read-only (verified in 3B)
 
-The baseline returns `unknown`: neither `directory` nor `tree` is a verb, and `path` and
-`excludePatterns` carry no evidence. This produced Ask (`classifier_ask`) for a supported read. The
-proof resolves it without adding any name vocabulary.
+- **The profile.** The pinned schemas declare no `maxLength` for `pattern` or `excludePatterns`
+  items. `crates/agentfw/src/mcp/input.rs` therefore applies `DEFAULT_STRING_BYTES = 16 * 1024` and
+  admits any string up to 16 384 UTF-8 bytes, including control characters. Only paths are further
+  restricted, by `validate_workspace_path`.
+- **The original server.** I read `@modelcontextprotocol/server-filesystem` 2026.8.31 from the npm
+  tarball. Its archive sha256 `a239da27…1b1a` and entrypoint sha256 `729dc851…9935` both equal the
+  values in `profiles/mcp/filesystem-readonly-v1/upstream-identity.json`.
+  - `directory_tree` (`dist/index.js`) passes each exclude pattern only to
+    `minimatch(relativePath, pattern | "**/"+pattern | "**/"+pattern+"/**", {dot: true})`.
+  - `search_files` (`dist/lib.js` `searchFilesWithValidation`) passes `pattern` and exclude patterns
+    only to `minimatch(relativePath, …, {dot: true})`.
+  - The only filesystem operations are `validatePath` and `fs.readdir` on the validated `path`. A
+    pattern never names a file, a command or content.
+- **minimatch 10.2.6.** Its sha512 integrity matches the lockfile. Its only input rejection is a
+  pattern longer than 65 536 UTF-16 code units. A 16 384-byte UTF-8 string has at most 16 384 code
+  units (16 390 with the `**/…/**` wrapping), so admitted patterns are never rejected. Even a
+  rejection would be an error result, not an effect.
 
-### The 200-value inspection bound (MAX_LEAVES) versus the profile's 256-item arrays
+Glob semantics (wildcards, braces, negation, `..` inside a pattern) only select which listed
+entries are returned. They cannot reach outside the validated directory walk.
 
-The generic walker stops after 200 argument values and then reports `truncated`, which caps
-confidence at 0.2 (uncertainty 0.8, so native Ask). The profile admits arrays of up to 256 items.
-For the three proof tools, the proof checks every item itself: at most 256 bounded strings, well
-inside the 1 MiB classifier input and 262 144-byte frame limits. Because nothing is left unexamined,
-it clears the walker's `truncated` flag. `MAX_LEAVES` and every other generic bound are unchanged.
+## Remaining limits (unchanged, reported as they are)
 
-Forms that still abstain, deliberately and as in the baseline:
-- arrays of more than 256 items, which the profile refuses anyway;
-- patterns longer than 4096 characters;
-- patterns containing control characters.
-
-**Verified limit (corrected in Increment 3A).** The pinned schemas declare no `maxLength` for
-`pattern` or `excludePatterns` items. The profile's input validator therefore applies its default
-string bound, `DEFAULT_STRING_BYTES = 16 * 1024` (`crates/agentfw/src/mcp/input.rs`), so it admits
-each such string up to 16 384 UTF-8 bytes. The earlier statement here, "up to 65 536 characters",
-was wrong: 65 536 is the cap on an explicit `maxLength`, which these schemas don't have.
-
-A pattern of 4097 characters up to 16 384 bytes, or one containing control characters, is admitted
-by the profile but abstained on by this candidate (`unknown`, so native Ask). That is a benign false
-interruption in the safe direction, not an unsupported input. The frozen matrix has no such case.
-`rule_baseline/test_pilot_readonly.py` (LongPatternLimit) pins this boundary and the profile
-constant.
-
-Raising the proof's per-string bound to the profile's 16 384 bytes would be a candidate change with
-a new sha256. It needs owner approval and is not part of this revision.
-
-## Unchanged known limits
-
-- `move_file` → `read, write` without `delete` (PMF-U05).
-- `git_reset` and `git_checkout` → `unknown` (PMG-U03, PMG-U04).
-
-All three tools are refused by the selected profiles before dispatch. `write` on a ReadOnly baseline
-and `unknown` both already stop native execution. They are reported as risky misses and are not
-changed here.
-
-The D06 masking of null, array or non-JSON arguments is inherited from the frozen and
-`git_readonly_v1` rules (PMF-V01 to V03, PMG-V01; v0.5 E01 and E02).
+- Arrays of more than 256 items, patterns over 16 384 UTF-8 bytes, and paths over 4096 bytes or with
+  control characters are all refused by the profile. The candidate keeps the baseline result for
+  them (an abstention).
+- `read_file` and `read_text_file` with oversized values are refused by the profile as well.
+- Known risky misses: `move_file` → `read, write` without `delete` (PMF-U05); `git_reset` and
+  `git_checkout` → `unknown` (PMG-U03, PMG-U04). The selected profiles refuse all three tools before
+  dispatch.
+- D06 masking of null, array or non-JSON arguments is inherited from the frozen and
+  `git_readonly_v1` rules (PMF-V01 to V03, PMG-V01; v0.5 E01 and E02).
