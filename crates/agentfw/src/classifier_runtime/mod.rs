@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Installable, verified rule-classifier runtime with a bounded persistent worker (SOU-64).
 pub mod package;
+#[cfg(windows)]
+mod platform_windows;
 pub mod worker;
