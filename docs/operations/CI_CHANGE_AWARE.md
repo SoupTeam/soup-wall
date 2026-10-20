@@ -216,8 +216,8 @@ For example, the read-only API returned zero managed CodeQL runs on old PR
 showed five successful analyses on its reviewed head. An administrator should
 first refresh the old PR against current main, without changing the CodeQL
 ruleset, then inspect the new head's CodeQL runs and the PR checks panel. If
-configuration is still missing, inspect **Settings → Security and quality →
-Advanced Security → CodeQL default setup** and the five language/threshold
+configuration is still missing, inspect **Settings â†’ Security and quality â†’
+Advanced Security â†’ CodeQL default setup** and the five language/threshold
 settings. The current token received HTTP 403 for the default-setup API; only
 an authorized maintainer can verify that setting. Do not add a duplicate
 advanced-setup workflow, lower thresholds, or treat missing/neutral analyses
@@ -259,7 +259,7 @@ blocking status; it never becomes green from a timeout or skipped test. This
 avoids allocating an idle runner for up to 45 minutes. Routing reads the run and
 current PR from the repository API, ignores obsolete heads and validates the
 upstream workflow path/event; it never downloads artifacts or executes PR code.
-CodeQL's dynamic `PR #*` workflow names are matched by a workflow-name glob.
+Default-setup CodeQL's workflow is named `CodeQL`; `PR #<number>` is an individual run title. The completion subscription includes `CodeQL` explicitly, while the trusted router still verifies the API event, path and current PR head. A run-title glob alone does not subscribe to the `CodeQL` workflow.
 Only trusted base/default-branch scripts are executed. An older PR that still
 uses legacy parallel workflows must refresh from current main before it can
 rely on the new completion orchestration. Full legacy manual qualification is
