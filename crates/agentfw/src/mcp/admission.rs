@@ -385,6 +385,8 @@ pub enum ProductionVerdict {
 pub struct ClassifiedAssessment {
     pub verdict: ProductionVerdict,
     pub ambiguous_or_unknown: bool,
+    /// Selected read-only approval cannot rescue an empty or mixed assessment.
+    pub known_read_only: bool,
 }
 
 impl ClassifiedAssessment {
@@ -392,6 +394,7 @@ impl ClassifiedAssessment {
         Self {
             verdict: ProductionVerdict::Allow,
             ambiguous_or_unknown: false,
+            known_read_only: true,
         }
     }
 }
@@ -1073,6 +1076,7 @@ impl<'a> Collector<'a> {
             eval.map(|verdict| ClassifiedAssessment {
                 verdict,
                 ambiguous_or_unknown,
+                known_read_only: !ambiguous_or_unknown && res.actions.as_slice() == ["read"],
             })
         } else {
             Err(mapped.err().unwrap_or("classifier_unavailable"))
