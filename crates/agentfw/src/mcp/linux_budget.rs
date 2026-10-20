@@ -1213,7 +1213,8 @@ mod tests {
     fn first_membership_diagnostic_survives_concurrent_cleanup_observations() {
         let failures = Arc::new(MembershipFailures::default());
         assert!(failures.snapshot().is_none());
-        failures.record("member_open", Some(123), Some(libc::EACCES));
+        // Synthetic numeric errno: this recorder also compiles on non-Unix hosts.
+        failures.record("member_open", Some(123), Some(13));
         std::thread::scope(|scope| {
             for _ in 0..8 {
                 let failures = Arc::clone(&failures);
@@ -1223,10 +1224,7 @@ mod tests {
             }
         });
         let value = serde_json::to_value(failures.snapshot()).unwrap();
-        assert_eq!(
-            value,
-            json!({"phase":"member_open", "pid":123, "errno":libc::EACCES})
-        );
+        assert_eq!(value, json!({"phase":"member_open", "pid":123, "errno":13}));
         assert_eq!(value.as_object().unwrap().len(), 3);
     }
 
