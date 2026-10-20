@@ -16,8 +16,25 @@ pub struct Options {
     pub probe_tool: Option<String>,
     #[arg(long, requires = "probe_tool")]
     pub probe_args: Option<String>,
-    /// Linux only: start the selected original server under an accepted read-only
-    /// profile (`profile.json` from the filesystem or Git profile installer).
+    /// Selected original-server launch settings. Not parsed here: profile transitions
+    /// flatten these options next to their own `--classifier-script`, so the
+    /// connection commands parse them through [`ProfileLaunch`] instead.
+    #[arg(skip)]
+    pub server_profile: Option<PathBuf>,
+    #[arg(skip)]
+    pub classifier_script: Option<PathBuf>,
+    #[arg(skip)]
+    pub classifier_python: Option<PathBuf>,
+    #[cfg(windows)]
+    #[arg(long)]
+    pub runtime: Option<PathBuf>,
+}
+
+/// Linux only: start the selected original server under an accepted read-only
+/// profile. Parsed only by preview/connect/inspect/disconnect.
+#[derive(clap::Args, Default)]
+pub struct ProfileLaunch {
+    /// `profile.json` written by the filesystem or Git profile installer.
     #[arg(long, requires_all = ["classifier_script", "classifier_python"])]
     pub server_profile: Option<PathBuf>,
     /// Reviewed rule-baseline source the profile collector classifies with.
@@ -26,9 +43,26 @@ pub struct Options {
     /// Absolute Python 3 interpreter for that classifier.
     #[arg(long, requires = "server_profile")]
     pub classifier_python: Option<PathBuf>,
-    #[cfg(windows)]
-    #[arg(long)]
-    pub runtime: Option<PathBuf>,
+}
+
+/// Arguments of one connection command: the shared options plus the optional
+/// profile launch. Boxed in [`Command`] to keep the command enum small.
+#[derive(clap::Args)]
+pub struct ConnectionArgs {
+    #[command(flatten)]
+    pub options: Options,
+    #[command(flatten)]
+    pub launch: ProfileLaunch,
+}
+
+impl ConnectionArgs {
+    pub fn into_options(self) -> Options {
+        let mut options = self.options;
+        options.server_profile = self.launch.server_profile;
+        options.classifier_script = self.launch.classifier_script;
+        options.classifier_python = self.launch.classifier_python;
+        options
+    }
 }
 
 #[derive(clap::Subcommand)]
@@ -36,12 +70,12 @@ pub enum Command {
     /// Transactionally change an existing owned Linux connection profile.
     Profile {
         #[command(subcommand)]
-        command: crate::mcp::profile_upgrade::Command,
+        command: Box<crate::mcp::profile_upgrade::Command>,
     },
-    Preview(Options),
-    Connect(Options),
-    Inspect(Options),
-    Disconnect(Options),
+    Preview(Box<ConnectionArgs>),
+    Connect(Box<ConnectionArgs>),
+    Inspect(Box<ConnectionArgs>),
+    Disconnect(Box<ConnectionArgs>),
     #[cfg(windows)]
     #[command(hide = true)]
     Collector {
@@ -88,7 +122,7 @@ pub async fn inspect_read_only(options: &Options) -> anyhow::Result<&'static str
 
 pub fn run(command: Command) -> anyhow::Result<()> {
     let command = match command {
-        Command::Profile { command } => return crate::mcp::profile_upgrade::run(command),
+        Command::Profile { command } => return crate::mcp::profile_upgrade::run(*command),
         other => other,
     };
     #[cfg(not(target_os = "linux"))]
@@ -98,7 +132,7 @@ pub fn run(command: Command) -> anyhow::Result<()> {
     | Command::Disconnect(o) = &command
     {
         anyhow::ensure!(
-            o.server_profile.is_none(),
+            o.launch.server_profile.is_none(),
             "selected original-server profiles require Linux"
         );
     }
@@ -124,10 +158,10 @@ pub fn run(command: Command) -> anyhow::Result<()> {
     #[cfg(target_os = "linux")]
     {
         let (operation, options) = match command {
-            Command::Preview(o) => ("preview", o),
-            Command::Connect(o) => ("connect", o),
-            Command::Inspect(o) => ("inspect", o),
-            Command::Disconnect(o) => ("disconnect", o),
+            Command::Preview(o) => ("preview", o.into_options()),
+            Command::Connect(o) => ("connect", o.into_options()),
+            Command::Inspect(o) => ("inspect", o.into_options()),
+            Command::Disconnect(o) => ("disconnect", o.into_options()),
             Command::Profile { .. } => unreachable!(),
         };
         let runtime = tokio::runtime::Builder::new_current_thread()
@@ -146,10 +180,10 @@ pub fn run(command: Command) -> anyhow::Result<()> {
         #[cfg(windows)]
         {
             let (operation, options) = match command {
-                Command::Preview(o) => ("preview", o),
-                Command::Connect(o) => ("connect", o),
-                Command::Inspect(o) => ("inspect", o),
-                Command::Disconnect(o) => ("disconnect", o),
+                Command::Preview(o) => ("preview", o.into_options()),
+                Command::Connect(o) => ("connect", o.into_options()),
+                Command::Inspect(o) => ("inspect", o.into_options()),
+                Command::Disconnect(o) => ("disconnect", o.into_options()),
                 Command::Profile { .. } => unreachable!(),
                 Command::Collector { .. } => unreachable!(),
             };
@@ -176,6 +210,134 @@ pub fn run(command: Command) -> anyhow::Result<()> {
 
 #[cfg(windows)]
 mod windows;
+
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+    use clap::{CommandFactory, Parser};
+
+    #[derive(Parser)]
+    struct Cli {
+        #[command(subcommand)]
+        command: Command,
+    }
+
+    fn parse(args: &[&str]) -> Command {
+        Cli::try_parse_from(std::iter::once("mcp-connection").chain(args.iter().copied()))
+            .unwrap()
+            .command
+    }
+
+    const BASE: [&str; 8] = [
+        "--path",
+        "/c/mcp.json",
+        "--server",
+        "s",
+        "--home",
+        "/h/.agentfw",
+        "--agent",
+        "/b/agentfw",
+    ];
+
+    #[test]
+    fn every_connection_and_profile_transition_command_builds() {
+        // Duplicate argument names panic only when clap builds a subcommand.
+        Cli::command().debug_assert();
+        let target = [
+            "--source-profile",
+            "/p/v1",
+            "--profile",
+            "/p/v2",
+            "--host-session",
+            "h",
+            "--classifier-script",
+            "/r/rule_baseline.py",
+        ];
+        for (operation, extra) in [
+            ("preview", vec![]),
+            ("apply", vec!["--approval", "digest"]),
+            ("preview", vec!["--rollback"]),
+            ("apply", vec!["--rollback", "--approval", "digest"]),
+        ] {
+            let args: Vec<&str> = ["profile", operation]
+                .into_iter()
+                .chain(BASE)
+                .chain(target)
+                .chain(extra)
+                .collect();
+            let Command::Profile { command } = parse(&args) else {
+                panic!("not a profile transition");
+            };
+            match *command {
+                crate::mcp::profile_upgrade::Command::Preview(t)
+                | crate::mcp::profile_upgrade::Command::Apply { target: t, .. } => {
+                    assert_eq!(
+                        t.classifier_script.unwrap(),
+                        PathBuf::from("/r/rule_baseline.py")
+                    );
+                    assert!(t.connection.server_profile.is_none());
+                    assert!(t.connection.classifier_script.is_none());
+                }
+                _ => panic!("unexpected transition"),
+            }
+        }
+        for operation in ["status", "recover"] {
+            let args: Vec<&str> = ["profile", operation].into_iter().chain(BASE).collect();
+            assert!(matches!(parse(&args), Command::Profile { .. }));
+        }
+    }
+
+    #[test]
+    fn connection_commands_parse_the_profile_launch_into_options() {
+        let args: Vec<&str> = ["connect"]
+            .into_iter()
+            .chain(BASE)
+            .chain([
+                "--server-profile",
+                "/i/profile.json",
+                "--classifier-script",
+                "/h/c.py",
+                "--classifier-python",
+                "/usr/bin/python3.12",
+            ])
+            .collect();
+        let Command::Connect(args) = parse(&args) else {
+            panic!("not connect");
+        };
+        let options = args.into_options();
+        assert_eq!(
+            options.server_profile.unwrap(),
+            PathBuf::from("/i/profile.json")
+        );
+        assert_eq!(options.classifier_script.unwrap(), PathBuf::from("/h/c.py"));
+        assert_eq!(
+            options.classifier_python.unwrap(),
+            PathBuf::from("/usr/bin/python3.12")
+        );
+        // The launch settings are all-or-nothing, and absent for the generic path.
+        let partial: Vec<&str> = ["preview"]
+            .into_iter()
+            .chain(BASE)
+            .chain(["--server-profile", "/i/profile.json"])
+            .collect();
+        assert!(Cli::try_parse_from(std::iter::once("x").chain(partial)).is_err());
+        let generic: Vec<&str> = ["inspect"].into_iter().chain(BASE).collect();
+        let Command::Inspect(args) = parse(&generic) else {
+            panic!("not inspect");
+        };
+        assert!(args.into_options().server_profile.is_none());
+    }
+
+    #[test]
+    fn the_command_enum_stays_small() {
+        // The top-level CLI enum embeds this type; keep large payloads boxed.
+        assert!(
+            std::mem::size_of::<Command>() <= 160,
+            "{}",
+            std::mem::size_of::<Command>()
+        );
+    }
+}
 
 #[cfg(target_os = "linux")]
 pub(crate) mod linux {
