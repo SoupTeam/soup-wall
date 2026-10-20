@@ -1477,6 +1477,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Required first: every diagnostic test, including the Linux-only ones, must run and pass; a skip fails.
+          if ! python3 -B - <<'PY' 2>&1 | tee "$RUNNER_TEMP/diagnostic-sou97-git-tests.log"; then
+          import sys, unittest
+          suite = unittest.defaultTestLoader.discover("scripts/tests", pattern="test_sou97_git_cancellation_diagnostic.py")
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          print(f"diagnostic tests: run={result.testsRun} failures={len(result.failures)} errors={len(result.errors)} skipped={len(result.skipped)}")
+          sys.exit(0 if result.wasSuccessful() and result.testsRun > 0 and not result.skipped else 1)
+          PY
+            echo "::error title=SOU-97 Git diagnostic tests::diagnostic tests failed or skipped; the experiment did not run"
+            exit 1
+          fi
           python3 -B scripts/diagnose-sou97-git-cancellation.py --run \
             --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
             --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
@@ -1489,6 +1500,7 @@ jobs:
           name: sou97-git-cancellation-diagnostic
           if-no-files-found: warn
           path: |
+            ${{ runner.temp }}/diagnostic-sou97-git-tests.log
             ${{ runner.temp }}/diagnostic-sou97-git.log
             ${{ runner.temp }}/diagnostic-sou97-git/diagnostic.json
       - name: Retain exact-source synthetic evidence

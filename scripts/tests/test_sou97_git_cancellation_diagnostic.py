@@ -210,7 +210,15 @@ class Workflow(unittest.TestCase):
                 self.assertIn("timeout-minutes: 20", run)
                 self.assertIn("--trials 20 --max-seconds 480", run)
                 self.assertIn('--output "$RUNNER_TEMP/diagnostic-sou97-git"', run)
+                # The diagnostic's own tests run first and are required: a failure or any skip stops the experiment.
+                tests = run.index('pattern="test_sou97_git_cancellation_diagnostic.py"')
+                self.assertLess(tests, run.index("scripts/diagnose-sou97-git-cancellation.py --run"))
+                self.assertIn("sys.exit(0 if result.wasSuccessful() and result.testsRun > 0 and not result.skipped else 1)", run)
+                self.assertRegex(run, r"(?s)::error title=SOU-97 Git diagnostic tests::[^\n]*\n\s*exit 1\n\s*fi\n")
+                # Normal CI and default acceptance never run these tests.
+                self.assertEqual(text.count("test_sou97_git_cancellation_diagnostic"), 1)
                 upload = self.step(text, "Retain SOU-97 diagnostic-only output (never acceptance evidence)")
+                self.assertIn("${{ runner.temp }}/diagnostic-sou97-git-tests.log", upload)
                 self.assertIn("if: ${{ always() && " + gate + " }}", upload)
                 self.assertIn("name: sou97-git-cancellation-diagnostic", upload)
                 self.assertNotIn("continue-on-error", upload)
@@ -219,12 +227,16 @@ class Workflow(unittest.TestCase):
                 acceptance = self.step(text, "Retain exact-source synthetic evidence")
                 for pattern in re.findall(r"\$\{\{ runner\.temp \}\}/(\S+)", acceptance):
                     self.assertFalse(Path("diagnostic-sou97-git.log").match(pattern), pattern)
+                    self.assertFalse(Path("diagnostic-sou97-git-tests.log").match(pattern), pattern)
                     self.assertFalse(Path("diagnostic-sou97-git/diagnostic.json").match(pattern), pattern)
         source = (ROOT / ".github/workflows/mcp-real-git.yml").read_text(encoding="utf-8")
         self.assertRegex(source, r"(?m)^      sou97_git_diagnostic:\n        description: Diagnostic only[^\n]*\n"
                                  r"        type: boolean\n        default: false$")
         # The generated copy runs under workflow_call from ci.yml, whose dispatch has no such input.
         self.assertNotIn("sou97_git_diagnostic:", (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+        for path in (ROOT / ".github/workflows").glob("*.yml"):
+            if path.name not in ("mcp-real-git.yml", "ci-components.yml"):
+                self.assertNotIn("test_sou97_git_cancellation_diagnostic", path.read_text(encoding="utf-8"), path.name)
 
 
 FAKE_SERVER = textwrap.dedent("""\
