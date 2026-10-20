@@ -28,3 +28,4 @@ pub mod server_sandbox;
 #[cfg(unix)]
 mod stdio;
 pub mod store;
+pub(crate) mod windows_budget;

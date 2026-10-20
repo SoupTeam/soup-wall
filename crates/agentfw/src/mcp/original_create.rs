@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Confined filesystem MCP original-create *staging*, not a write authority.
-//! A future authenticated caller must execute the ORIGINAL pinned server in
-//! the separate sandbox against this fresh private stage, stop/reap the server,
-//! inspect its actual output and receive native result-release/policy authority
-//! before using the atomic publisher. Nothing here dispatches user mutations.
+//! The authenticated relay executes the ORIGINAL pinned server in a separate
+//! sandbox against this fresh private stage, stops/reaps the server, inspects
+//! its actual output and obtains native result-release/policy authority before
+//! using the atomic publisher. This module never publishes to the workspace.
 
 #[cfg(target_os = "linux")]
 mod linux {

@@ -112,6 +112,29 @@ class ObserverControls(unittest.TestCase):
         self.assertEqual(event, {'event': 'mcp_real_server_end', 'cleanup_verified': True})
         self.assertIsNone(V.safe_event({'event': V.MARKERS[0].decode()}))
 
+    def test_fixed_membership_diagnostic_survives_actual_stream_capture(self):
+        diagnostic = {'phase': 'member_open', 'pid': 123, 'errno': 13}
+        event = {'event': 'mcp_real_budget_end', 'budget': {
+            'format': V.BUDGET_FORMAT, 'reason': 'mcp_budget_membership_unverified',
+            'failed': True, 'membership_failure': diagnostic}}
+        captured = self.capture([json.dumps(event).encode() + b'\n'])
+        self.assertEqual(captured['events'][0]['budget']['membership_failure'], diagnostic)
+        self.assertEqual(captured['events'][0]['budget']['reason'], 'mcp_budget_membership_unverified')
+
+    def test_membership_diagnostics_reject_unbounded_or_untrusted_fields(self):
+        valid = {'phase': 'leader_absent_from_snapshot', 'pid': 123, 'errno': None}
+        for change in ({'phase': '/private/host/path'}, {'pid': True}, {'pid': -1},
+                       {'pid': 2**32}, {'errno': True}, {'errno': -1}, {'errno': 4096},
+                       {'raw': 'arbitrary child output'}):
+            with self.subTest(change=change):
+                value = {'format': V.BUDGET_FORMAT, 'membership_failure': {**valid, **change}}
+                self.assertNotIn('membership_failure', V.safe_budget(value))
+
+    def test_no_membership_failure_and_absent_old_field_remain_distinct(self):
+        self.assertEqual(V.safe_budget({'format': V.BUDGET_FORMAT, 'membership_failure': None})[
+            'membership_failure'], None)
+        self.assertNotIn('membership_failure', V.safe_budget({'format': V.BUDGET_FORMAT}))
+
     def test_evidence_writer_refuses_raw_child_markers(self):
         with tempfile.TemporaryDirectory() as directory:
             for marker in V.MARKERS[:2]:

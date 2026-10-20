@@ -1123,7 +1123,7 @@ fn check_recovery_daemon_ownership(
 
 impl ProfileManager {
     fn service_operation_lock(&self) -> Result<Option<crate::lifecycle::OperationLock>> {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         if crate::service::registered(&self.home) {
             let s = crate::service::Service::new(&self.home)?;
             return Ok(Some(s.operation_lock()?));
@@ -1612,7 +1612,7 @@ impl ProfileManager {
         expected_bundle_sha: Option<&str>,
     ) -> Result<InstalledRecord> {
         let _lock = self.lock()?;
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         if crate::service::registered(&self.home) {
             crate::service::Service::new(&self.home)?.require_instance_launcher()?;
         }
@@ -1955,7 +1955,7 @@ impl ProfileManager {
         accept_diff: Option<&str>,
     ) -> Result<InstalledRecord> {
         let _lock = self.lock()?;
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         if crate::service::registered(&self.home) {
             crate::service::Service::new(&self.home)?.require_instance_launcher()?;
         }
@@ -2333,7 +2333,7 @@ impl ProfileManager {
         accept_diff: Option<&str>,
     ) -> Result<InstalledRecord> {
         let _lock = self.lock()?;
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         if crate::service::registered(&self.home) {
             crate::service::Service::new(&self.home)?.require_instance_launcher()?;
         }
@@ -2718,7 +2718,7 @@ impl ProfileManager {
     /// Recovers from an interrupted or crashed operation.
     pub fn recover(&self) -> Result<()> {
         let _lock = self.lock()?;
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         if crate::service::registered(&self.home) {
             crate::service::Service::new(&self.home)?.require_instance_launcher()?;
         }

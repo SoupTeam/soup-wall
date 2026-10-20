@@ -302,6 +302,7 @@ impl Gateway {
             "AGENTFW_CHILD_AUTHORITY",
             "AGENTFW_MCP_SERVER_PROFILE",
             "AGENTFW_MCP_LINUX_BUDGET",
+            "AGENTFW_MCP_WINDOWS_BUDGET",
             "AGENTFW_CLASSIFIER",
             "AGENTFW_RULE_BASELINE",
             "AGENTFW_TEST_CLASSIFIER",
@@ -315,6 +316,9 @@ impl Gateway {
         }
         if mode == "unselected-budget" {
             command.env("AGENTFW_MCP_LINUX_BUDGET", root.join("not-opened.json"));
+        }
+        if mode == "windows-budget-refused" {
+            command.env("AGENTFW_MCP_WINDOWS_BUDGET", root.join("not-opened.json"));
         }
         let mut child = command.spawn().expect("production collector must spawn");
         let input = child.stdin.take();
@@ -918,4 +922,55 @@ async fn transparent_mcp_resource_budget_refuses_before_server_start() {
         !marker.exists(),
         "an unsupported budget must never be ignored"
     );
+}
+
+#[tokio::test]
+async fn native_windows_budget_missing_or_unsupported_refuses_before_server_start() {
+    let mut fixture = Fixture::new("windows-budget-refused").await;
+    let status = tokio::time::timeout(DEADLINE, fixture.gateway.child.wait())
+        .await
+        .expect("Windows budget refusal deadline")
+        .unwrap();
+    assert!(!status.success());
+    assert!(fixture.gateway.receive().await.is_none());
+    let observed = fixture.gateway.stderr.take().unwrap().await.unwrap();
+    assert!(String::from_utf8_lossy(&observed.retained)
+        .contains("windows_budget_configuration_refused"));
+    assert!(!fixture.gateway.directory.join("server.pid").exists());
+    assert_eq!(fixture.gateway.executions(), 0);
+    fixture.assert_audit_private();
+}
+
+#[tokio::test]
+async fn transparent_windows_budget_refuses_instead_of_ignoring_operator_intent() {
+    let root = tempfile::tempdir().unwrap();
+    let marker = root.path().join("must-not-execute");
+    let output = tokio::time::timeout(
+        DEADLINE,
+        Command::new(env!("CARGO_BIN_EXE_agentfw"))
+            .args(["mcp", "--id", "windows-budget", "--", python(), "-I", "-c"])
+            .arg("import pathlib,sys; pathlib.Path(sys.argv[1]).write_bytes(b'executed')")
+            .arg(&marker)
+            .env(
+                if cfg!(windows) { "USERPROFILE" } else { "HOME" },
+                root.path(),
+            )
+            .env(
+                "AGENTFW_MCP_WINDOWS_BUDGET",
+                root.path().join("missing.json"),
+            )
+            .env_remove("AGENTFW_CHILD_AUTHORITY")
+            .env_remove("AGENTFW_HOST_SESSION")
+            .stdin(Stdio::null())
+            .kill_on_drop(true)
+            .output(),
+    )
+    .await
+    .expect("transparent Windows budget deadline")
+    .unwrap();
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr)
+        .contains("Windows MCP resource budgets require native admission"));
+    assert!(!marker.exists());
 }

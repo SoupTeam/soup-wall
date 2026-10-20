@@ -257,6 +257,7 @@ impl AsyncWrite for GatedWriter {
 }
 
 struct Harness {
+    format: &'static str,
     host_input: Writer,
     host_output: Reader,
     server_input: Reader,
@@ -276,6 +277,9 @@ impl Drop for Harness {
 
 impl Harness {
     async fn new(fault: &'static str) -> Self {
+        Self::for_format(fault, server_profile::FORMAT).await
+    }
+    async fn for_format(fault: &'static str, format: &'static str) -> Self {
         let boundary_home = tempfile::tempdir().unwrap();
         let daemon = MockServer::start().await;
         Mock::given(method("POST"))
@@ -317,6 +321,9 @@ impl Harness {
             if !unsupported {entry["mcp_result_profile"]=json!(server_profile::FORMAT);}
             entry
         }).collect::<Vec<_>>();
+        if format == server_profile::git::FORMAT {
+            tools = installed_registry_entries(format);
+        }
         if fault == "shared-registry" {
             tools.extend(installed_registry_entries(server_profile::git::FORMAT));
         }
@@ -364,7 +371,7 @@ impl Harness {
                 &mut BufReader::new(relay_server),
                 &mut relay_child,
                 &server_profile::ProfileConfig {
-                    format: server_profile::FORMAT.to_owned(),
+                    format: format.to_owned(),
                     workspace: std::path::PathBuf::from("/tmp"),
                     runtime_path: std::path::PathBuf::from("/tmp/node"),
                     runtime_sha256: String::new(),
@@ -380,6 +387,7 @@ impl Harness {
             .await
         });
         Self {
+            format,
             host_input,
             host_output: BufReader::new(host_read),
             server_input: BufReader::new(server_read),
@@ -420,7 +428,18 @@ impl Harness {
     async fn ready(&mut self) {
         self.host(json!({"jsonrpc":"2.0","id":"init","method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"fault-test","version":"1"}}})).await;
         assert_eq!(self.dispatched().await["id"], "init");
-        self.server(json!({"jsonrpc":"2.0","id":"init","result":{"protocolVersion":"2025-11-25","capabilities":{"tools":{"listChanged":true}},"serverInfo":{"name":"secure-filesystem-server","version":"0.2.0"}}})).await;
+        let initialization = if self.format == server_profile::git::FORMAT {
+            serde_json::from_str::<Value>(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../profiles/mcp/git-readonly-v1/upstream-initialize.json"
+            )))
+            .unwrap()["result"]
+                .clone()
+        } else {
+            json!({"protocolVersion":"2025-11-25","capabilities":{"tools":{"listChanged":true}},"serverInfo":{"name":"secure-filesystem-server","version":"0.2.0"}})
+        };
+        self.server(json!({"jsonrpc":"2.0","id":"init","result":initialization}))
+            .await;
         assert_eq!(self.host_reply().await["id"], "init");
         self.host(json!({"jsonrpc":"2.0","method":"notifications/initialized"}))
             .await;
@@ -432,7 +451,7 @@ impl Harness {
             .await;
         assert_eq!(self.dispatched().await["method"], "tools/list");
         self.server(
-            json!({"jsonrpc":"2.0","id":"list","result":server_profile::original_manifest()}),
+            json!({"jsonrpc":"2.0","id":"list","result":server_profile::original_manifest_for(self.format).unwrap()}),
         )
         .await;
         assert_eq!(
@@ -440,7 +459,11 @@ impl Harness {
                 .as_array()
                 .unwrap()
                 .len(),
-            14
+            if self.format == server_profile::git::FORMAT {
+                12
+            } else {
+                14
+            }
         );
     }
     async fn call(&mut self, id: Value, path: &str) {
@@ -671,6 +694,101 @@ async fn selected_fault_actual_call_deadline_reclaims_grant_and_discards_late_re
         .as_str()
         .unwrap()
         .contains("LATE_UNADMITTED_PAYLOAD")));
+}
+
+#[tokio::test]
+async fn selected_git_cancellation_drains_without_aborting_siblings_or_freeing_physical_slots() {
+    let mut fixture = Harness::for_format("ordinary", server_profile::git::FORMAT).await;
+    fixture.ready().await;
+    for id in 0..WIRE_LIMIT {
+        fixture
+            .host(json!({"jsonrpc":"2.0","id":id,"method":"tools/call",
+            "params":{"name":"git_show","arguments":{"repo_path":"/workspace","revision":"HEAD"}}}))
+            .await;
+        assert_eq!(fixture.dispatched().await["id"], id);
+        fixture
+            .host(json!({"jsonrpc":"2.0","method":"notifications/cancelled",
+            "params":{"requestId":id}}))
+            .await;
+        let reply = fixture.host_reply().await;
+        assert_eq!(reply["id"], id);
+        assert_eq!(reply["error"]["code"], -32800);
+    }
+    fixture
+        .host(json!({"jsonrpc":"2.0","id":"full","method":"tools/call",
+        "params":{"name":"git_show","arguments":{"repo_path":"/workspace","revision":"HEAD"}}}))
+        .await;
+    let refused = fixture.host_reply().await;
+    assert_eq!(refused["id"], "full");
+    assert_eq!(refused["error"]["code"], -32003);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), fixture.server_input.fill_buf())
+            .await
+            .is_err(),
+        "no cancellation or seventeenth physical request may reach the original Git server"
+    );
+    for id in 0..WIRE_LIMIT {
+        fixture.server(json!({"jsonrpc":"2.0","id":id,"result":{"content":[{"type":"text","text":"LATE_CANCELLED_GIT_PAYLOAD"}]}})).await;
+    }
+    // The useful peer can proceed only after actual original completions return
+    // the physical capacity. A dropped local grant alone cannot free a slot.
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    fixture
+        .host(json!({"jsonrpc":"2.0","id":"peer","method":"tools/call",
+        "params":{"name":"git_show","arguments":{"repo_path":"/workspace","revision":"HEAD"}}}))
+        .await;
+    assert_eq!(fixture.dispatched().await["id"], "peer");
+    let result = json!({"jsonrpc":"2.0","id":"peer","result":{"content":[{"type":"text","text":"useful original Git peer"}]}});
+    fixture.server(result.clone()).await;
+    assert_eq!(
+        fixture.host_reply().await,
+        result,
+        "late cancelled results must never reach the host"
+    );
+    let requests = fixture.daemon.received_requests().await.unwrap();
+    let completions: Vec<Value> = requests
+        .iter()
+        .filter_map(|request| serde_json::from_slice(&request.body).ok())
+        .filter(|request: &Value| request["event"] == "result")
+        .collect();
+    assert_eq!(
+        completions.len(),
+        WIRE_LIMIT + 2,
+        "all cancelled/refused grants and the useful peer complete exactly once"
+    );
+    assert!(completions.iter().all(|request| !request["content"]
+        .as_str()
+        .unwrap()
+        .contains("LATE_CANCELLED_GIT_PAYLOAD")));
+}
+
+#[tokio::test]
+async fn selected_git_withdrawn_nonresponding_request_keeps_its_original_deadline() {
+    let mut fixture = Harness::for_format("ordinary", server_profile::git::FORMAT).await;
+    fixture.ready().await;
+    fixture
+        .host(json!({"jsonrpc":"2.0","id":"hung","method":"tools/call",
+        "params":{"name":"git_show","arguments":{"repo_path":"/workspace","revision":"HEAD"}}}))
+        .await;
+    assert_eq!(fixture.dispatched().await["id"], "hung");
+    fixture.host(json!({"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":"hung"}})).await;
+    assert_eq!(fixture.host_reply().await["error"]["code"], -32800);
+    let error = tokio::time::timeout(
+        crate::mcp::admission::IO_TIMEOUT + Duration::from_secs(3),
+        &mut fixture.task,
+    )
+    .await
+    .expect("withdrawal must not remove the physical work deadline")
+    .unwrap()
+    .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "MCP server did not finish a withdrawn request within its bound"
+    );
+    assert!(
+        Harness::read(&mut fixture.server_input).await.is_none(),
+        "no abort notification reached the pinned Git SDK"
+    );
 }
 
 #[tokio::test]

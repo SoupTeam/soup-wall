@@ -52,17 +52,32 @@ fails that acceptance. Its independent markers show original upstream output
 while the *real* workspace and outside marker remain unchanged before release.
 The race test rejects replacement of the workspace root after its initial pin.
 
-The full protected original-create → read → verify host continuation,
-single-use operator Ask approval, policy-epoch-replay fault coverage, measured
-performance overhead and end-to-end crash/fault/egress witnesses are still
-needed before PR #196 can leave Draft. This document does not claim that the
-partial unit or original-stage positive run proves all those properties.
+The required acceptance also installs the actual create-only profile, loads its
+full registry through the native daemon, and exercises original-create → read →
+verify through the collector and atomic publisher. It checks overwrite,
+traversal, extra-field and oversize refusals, spent host IDs, Creating-phase
+cancellation, daemon loss before publication and useful read continuation.
+The outside sentinel and unrelated workspace entries must remain unchanged;
+the independent egress receiver must receive no requests. The final workspace
+contains only the deliberately committed successful create.
+
+These controls were independently reviewed on `97db581` (42/42 original
+filesystem controls and 15/15 combined real-host controls). They describe that
+source's evidence, not a qualification of a later merge candidate. Every new
+candidate still needs its own required CI and reviewer acceptance.
+
+Ask remains unsupported and fails closed. The daemon-loss witness is not a
+claim of exhaustive worker/process-crash coverage, and read continuation is
+not proof of a fresh successful write after every failure. Create-specific
+policy-epoch transitions, exhaustive crash/egress injection and measured
+performance overhead remain outside the demonstrated increment. Stage/unit
+tests alone do not establish those properties.
 
 ## Private operator installation (new, opt-in)
 
 Run `python3 scripts/install-sou83-filesystem-create-profile.py --destination /private/new-profile --workspace /private/owned-workspace --node /trusted/node --bwrap /trusted/bwrap` to preview; add `--run` to create a **new** 0700 installation. The script uses the accepted SOU-62 installer and exact pinned ORIGINAL package/runtime/notices, then writes owner-private `profile.json`, `registry.json` and a distinct `policy.yaml`. No existing read-only installation or Agent home is updated. For this opt-in profile, the exact selected original `write_file` is the sole supported side-effecting tool; all other original mutators remain unsupported. The new profile policy removes only the read-only install's general side-effecting deny; it keeps destructive/network/privilege/result-injection denial. Do not share this profile policy with any wider registry.
 
-Binding the installed profile to an authenticated client/native daemon still requires operator review of the new registry/policy hashes, matching source and one-use Ask behavior; the installer does not activate any server automatically.
+Binding the installed profile to an authenticated client/native daemon still requires operator review of the new registry/policy hashes and matching source; the installer does not activate any server automatically. Ask cannot be resumed by this profile.
 
 The pinned ORIGINAL server may create an ordinary `0644` file via its default Node umask. This file remains inaccessible to other users under the private `0700` staging root. After child cleanup, the inspector validates a single matching owner-held regular inode, rejects special/execute bits, and normalizes its permissions to `0600` through the pinned descriptor before comparing its approved content. No untrusted file is released or published before that check.
 

@@ -24,6 +24,7 @@ pub mod continuity;
 pub mod liveness;
 pub mod resource;
 pub mod resource_approval;
+pub mod workspace;
 
 pub const CONTRACT: &str = "sw-native/1";
 pub const MAX_BODY: usize = 1024 * 1024;
@@ -56,6 +57,9 @@ pub struct Tool {
     /// original text result channels. Absent preserves strict legacy parsing.
     #[serde(default)]
     pub mcp_result_profile: Option<String>,
+    /// Reviewed original AgentDojo workspace semantics; absent keeps schema-1 behavior.
+    #[serde(default)]
+    pub workspace_profile: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -66,7 +70,7 @@ pub enum ResultProvenance {
     LocalProject,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Egress {
     pub pointer: String,
@@ -74,7 +78,7 @@ pub struct Egress {
     pub optional: bool,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EgressKind {
     UrlHost,
@@ -618,6 +622,7 @@ impl NativeState {
             "invalid native registry"
         );
         let mut names = BTreeSet::new();
+        workspace::validate_registry(&registry)?;
         for tool in &registry.tools {
             anyhow::ensure!(
                 identifier(&tool.name)
@@ -628,6 +633,9 @@ impl NativeState {
             );
             if let Some(policy) = &tool.resource_policy {
                 policy.validate(tool)?;
+            }
+            if tool.workspace_profile.is_some() {
+                workspace::validate(tool)?;
             }
             if let Some(profile) = &tool.mcp_result_profile {
                 // One explicitly installed ORIGINAL filesystem create is the
@@ -2269,6 +2277,12 @@ fn inspect_bound(
         if request.schema_sha256.as_deref() != Some(tool.schema_sha256.as_str()) {
             return Err("native_schema_mismatch");
         }
+        if tool.workspace_profile.is_some() {
+            if session.host_session.is_some() {
+                return Err("native_workspace_delegation_unsupported");
+            }
+            workspace::extract(tool, args)?;
+        }
         if let Some(policy) = &tool.resource_policy {
             if request.contract_version != policy.contract() {
                 if let Some(ref approval_id) = request.approval_id {
@@ -2815,6 +2829,23 @@ fn audit(
         "content_sha256": response.content_sha256, "reason_codes": response.reason_codes});
     if let Some(policy) = &response.managed_policy {
         record["managed_policy"] = json!(policy);
+    }
+    if request.event == "call" {
+        if let Some(tool) = st.native.as_ref().and_then(|native| {
+            native.registry.tools.iter().find(|tool| {
+                request.tool.as_deref() == Some(tool.name.as_str())
+                    && tool.workspace_profile.is_some()
+            })
+        }) {
+            if let Some(extracted) = request
+                .args
+                .as_ref()
+                .and_then(|args| workspace::extract(tool, args).ok())
+            {
+                record["workspace_profile"] = json!(workspace::PROFILE);
+                record["workspace_resources_sha256"] = json!(canonical_digest(&extracted));
+            }
+        }
     }
     if let Some(host_session) = &session.host_session {
         record["host_session"] = json!(host_session);

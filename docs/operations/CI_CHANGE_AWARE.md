@@ -144,11 +144,29 @@ python3 scripts/check_docs.py
 
 Run `actionlint` against all workflow files before submitting changes. The
 frozen six scenarios are in `evidence/sou-91/frozen-scenarios.json`. Use
-`scripts/ci_runner_metrics.py --pr NUMBER` with a read-only `GITHUB_TOKEN` to
-measure a comparable PR: it sums each completed job's observed start/end time
-and reports wall time, cancellations and missing timings separately. It does
-**not** report the organization's billed minutes. Never describe selected-job
-timings from an older PR as a measured after-run saving.
+`scripts/ci_runner_metrics.py --pr NUMBER --run-id CI_RUN_ID` with a
+read-only `GITHUB_TOKEN` to pin one exact-head `ci.yml` PR qualification.
+For a source-matched full-mode control, dispatch `ci.yml` with
+`smoke_only: false` on a branch that points to the same head commit, then run
+`scripts/ci_runner_metrics.py --full-dispatch-run-id RUN_ID --expected-head SHA`.
+The tool verifies the `workflow_dispatch` event and SHA and labels that run
+ineligible for PR admission. The manual run checks the branch head, whereas
+PR qualification checks the test-merge commit; report that source/event
+distinction and cache differences when comparing occupancy.
+For PR measurements, the tool reports the central workflow and managed CodeQL
+separately, sums actual
+job start/end intervals across rerun attempts, and counts copied-forward
+successful job records once. GitHub may timestamp skipped checks; they consume
+no runner minutes in this report. Missing CodeQL or unfinished job timings
+leave the combined total unavailable. The modeled path plan is labeled
+separately from observed jobs; a path override is never actual PR evidence.
+Wall time spans run creation through final update, including queue and time
+between rerun attempts; the latest attempt's own wall time is separate.
+The Actions jobs API has no cache hit/miss field, so inspect the exact run's
+cache step logs and record misses separately. These numbers are observed
+occupancy, **not** the organization's billed minutes. Compare complete full
+and selective runs on the same frozen change class and compatible source;
+do not describe selected-job timings from an older PR as measured savings.
 
 For explicit full qualification, dispatch `ci` with `smoke_only: false` on a
 reviewed source ref; it includes all components and ignores path selection.
@@ -158,20 +176,25 @@ separate operator-controlled gate and must not be dispatched as an intermediate
 CI measurement. The aggregate PR status accepts only `pull_request` runs and
 managed CodeQL `dynamic` runs for its exact source, never a manual dispatch.
 
-## Safe bootstrap and maintainer activation
+## Safe bootstrap, maintainer activation and recovery
 
-The current `main` ruleset is ID `24846282` (verify the live ID first). It has
-strict required `Documentation links`, `test`, `all-features` and
-`agent-windows-security` checks from GitHub Actions integration `15368`, one
-approving review, and CodeQL `high_or_higher` security alerts / `errors` code
-quality threshold. A token without ruleset administration cannot change this
-configuration. The PR's trusted `pull_request_target` workflow also cannot
+Ruleset `24846282` (verify the live ID first) retains the original strict
+`Documentation links`, `test`, `all-features` and `agent-windows-security`
+checks from GitHub Actions integration `15368`, one approving review, and
+CodeQL `high_or_higher` security alerts / `errors` code quality threshold.
+Since October 20, 2026 it also requires `SOU-91 candidate admission` from the
+same integration. The maintainer set `SOU91_SELECTIVE_CI` to
+`enabled-after-negative-controls` after testing the gate; the live ruleset and
+variable still need to be read back for any new PR run. A token without
+ruleset administration cannot change this configuration. The PR's trusted
+`pull_request_target` workflow also cannot
 run from a file that is only on a PR branch; it becomes available when merged
-to the default branch. **Merge this code only with the activation variable
-absent.** The default full plan is a bootstrap invariant, tested for a plain
-`README.md` change. The existing required execution checks continue to run.
+to the default branch. During initial installation, the variable was absent and
+the default full plan was a bootstrap invariant, tested for a plain `README.md`
+change. Keep this fail-closed behavior for any subsequent changes to the gate.
 
-After review and installation on main, keep the variable absent and verify a
+The initial installation sequence was completed before October 20 activation.
+For a future replacement gate, keep the variable absent and verify a
 controlled documentation-only PR still runs all registered jobs. Confirm its
 `SOU-91 candidate admission` status targets the current test-merge commit.
 Run positive, missing, failed and stale-candidate controls against the trusted
@@ -201,11 +224,11 @@ gh variable get SOU91_SELECTIVE_CI --repo SoupTeam/soup-wall
 The planner reads the ruleset again on each PR run; the trusted gate does so
 independently. If either cannot verify the ruleset, the planner runs full, or
 the gate demands full evidence and blocks an insufficient run. Remove the
-variable to return to full qualification immediately. After activation, run
+variable to return to full qualification immediately. With activation in place, run
 controlled selective PRs for the six frozen path sets and record exact source,
 selected and skipped jobs, CodeQL, cache hits/misses, observed job minutes,
 wall time and cancellations against comparable full runs. Keep SOU-91 open
-until those measurements and negative controls are reviewed. The current
+until those measurements and negative controls are reviewed. A
 workflow-changing PR is a full run and cannot establish the 30% target.
 
 ## Missing CodeQL configuration on older PR heads
@@ -216,8 +239,8 @@ For example, the read-only API returned zero managed CodeQL runs on old PR
 showed five successful analyses on its reviewed head. An administrator should
 first refresh the old PR against current main, without changing the CodeQL
 ruleset, then inspect the new head's CodeQL runs and the PR checks panel. If
-configuration is still missing, inspect **Settings â†’ Security and quality â†’
-Advanced Security â†’ CodeQL default setup** and the five language/threshold
+configuration is still missing, inspect **Settings -> Security and quality ->
+Advanced Security -> CodeQL default setup** and the five language/threshold
 settings. The current token received HTTP 403 for the default-setup API; only
 an authorized maintainer can verify that setting. Do not add a duplicate
 advanced-setup workflow, lower thresholds, or treat missing/neutral analyses
@@ -249,7 +272,8 @@ are unchanged. Drafts and main smoke never invoke component qualification.
 This removes 34 repeated planner allocations per full Ready run: the expected
 full check count falls from 105 to 71 with the same runtime matrix. This is a job
 count reduction, not a measured percentage of billed cost. Selective scheduling
-still requires its reviewed activation and live required-context readback.
+was activated after reviewed negative controls and a live required-context
+readback; each new candidate independently repeats the readback.
 
 ### Completion-driven admission
 
