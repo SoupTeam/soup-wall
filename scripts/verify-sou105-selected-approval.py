@@ -34,7 +34,7 @@ BASE = load("sou105_fs", "verify-sou62-real-mcp.py")
 GIT = load("sou105_git", "verify-sou68-real-mcp.py")
 require, sha, write = BASE.require, BASE.sha, BASE.write
 FORMAT = "sw-mcp/selected-approval-acceptance/1"
-CASES = ("approve", "reject", "expire", "cancel", "wrong_binding", "classifier_change", "profile_change",
+CASES = ("approve", "reject", "expire", "timeout", "cancel", "wrong_binding", "classifier_change", "profile_change",
          "disconnect", "collector_death", "restart", "default", "deny")
 
 
@@ -224,9 +224,16 @@ def qualify(rig, report):
     report["calibration"] = {"effects": 1, "result_sha256": BASE.hashlib.sha256(original_raw).hexdigest(),
                              "syscall_trace_sha256": sha(trace), "raw_trace_exported": False}
     for case in CASES:
+        if case in ("expire", "timeout"):
+            # Separate the real broker TTL from a shorter collector wait. A
+            # local wait timeout alone is not proof of daemon grant expiry.
+            rig.stop()
+            rig.config["native"]["approval"]["ttl_seconds"] = 1 if case == "expire" else 10
+            write(rig.home / ".agentfw/config.yaml", rig.config)
+            rig.start()
         if case == "deny":
             rig.stop(); rig.start(deny=True)
-        client, trace, stderr = rig.client(case, wait=1 if case == "expire" else (0 if case == "default" else 6))
+        client, trace, stderr = rig.client(case, wait=1 if case == "timeout" else (0 if case == "default" else 6))
         row = {"case": case, "passed": False}
         report["cases"].append(row)
         require(rig.effects(trace) == 0, "unexpected target execution at startup")
@@ -246,6 +253,7 @@ def qualify(rig, report):
             require(rig.effects(trace) == 0, "original server executed before explicit approval")
             row["preapproval_effects"] = 0
             row["binding_sha256"] = waiting["binding_sha256"]
+            row["broker_ttl_ms"] = inspected["expires_at_ms"] - inspected["created_at_ms"]
             if case == "approve":
                 command(args, rig.env, "native-approval", "approve", waiting["pending_id"], "--binding", waiting["binding_sha256"])
                 response, raw = client.receive(timeout=10)
@@ -281,8 +289,11 @@ def qualify(rig, report):
             elif case == "cancel":
                 client.send(BASE.cancel(50))
                 require(BASE.refused(client.receive()[0]), "host cancellation did not refuse")
-            elif case == "expire":
+            elif case in ("expire", "timeout"):
                 require(BASE.refused(client.receive(timeout=8)[0]), "expired approval dispatched")
+                require(row["broker_ttl_ms"] == (1000 if case == "expire" else 10000),
+                        "broker TTL and collector wait control were conflated")
+                command(args, rig.env, "native-approval", "approve", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)
             elif case in ("classifier_change", "profile_change"):
                 asset = rig.classifier if case == "classifier_change" else rig.installed / "profile.json"
                 saved = asset.read_bytes()
