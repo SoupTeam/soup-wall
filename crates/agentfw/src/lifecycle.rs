@@ -1350,7 +1350,11 @@ impl Manager {
 
 pub fn sha256_file(path: &Path) -> Result<String> {
     let mut file = File::open(path).with_context(|| format!("read {}", path.display()))?;
-    let mut hasher = Sha256::new();
+    // File identities include large debug executables. Use the already-linked
+    // native SHA-256 implementation so repeated, full-byte startup verification
+    // does not spend the readiness deadline in unoptimized Rust compression.
+    // Do not cache identities: every call must still detect changed file bytes.
+    let mut hasher = aws_lc_rs::digest::Context::new(&aws_lc_rs::digest::SHA256);
     let mut buffer = [0u8; 65536];
     loop {
         let count = file.read(&mut buffer)?;
@@ -1359,7 +1363,12 @@ pub fn sha256_file(path: &Path) -> Result<String> {
         }
         hasher.update(&buffer[..count]);
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(hasher
+        .finish()
+        .as_ref()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect())
 }
 
 fn sha256(bytes: &[u8]) -> String {

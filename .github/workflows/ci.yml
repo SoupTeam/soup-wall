@@ -418,6 +418,7 @@ jobs:
           } | tee target/sou29-macos/environment.log
           cargo build --locked -p agentfw --bin agentfw
           shasum -a 256 target/debug/agentfw | tee target/sou29-macos/agentfw.sha256
+          cargo test --locked -p agentfw --test lifecycle_digest -- --nocapture --test-threads=1 2>&1 | tee target/sou29-macos/lifecycle-digest.log
           cargo test --locked -p agentfw --test lifecycle -- --test-threads=1 2>&1 | tee target/sou29-macos/lifecycle.log
           cargo test --locked -p agentfw --test self_test -- --test-threads=1 2>&1 | tee target/sou29-macos/self_test.log
           cargo test --locked -p agentfw --lib service::tests -- --test-threads=1 2>&1 | tee target/sou29-macos/launchd-regressions.log
