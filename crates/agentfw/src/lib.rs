@@ -24,6 +24,10 @@ pub mod native;
 pub mod onboarding;
 pub mod policy_transition;
 pub use native::child_authority;
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub(crate) mod macos_create;
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub(crate) mod macos_read;
 pub mod preflight;
 #[cfg(windows)]
 mod private_file_windows;

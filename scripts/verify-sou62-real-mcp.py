@@ -289,6 +289,24 @@ def wait_event(path, predicate, reason, timeout=15):
     raise ValueError(reason)
 
 
+def wait_create_dispatch(log_path, identifier, timeout=12):
+    """Independently witness Native Allow and entry into Phase::Creating."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if log_path.exists():
+            for raw in log_path.read_bytes().splitlines():
+                try:
+                    record = json.loads(raw)
+                except (ValueError, UnicodeError):
+                    continue
+                if record.get("event") == "mcp_original_create_state" and (
+                    record.get("host_call_id") == identifier and record.get("state") == "creating"
+                ):
+                    return record
+        time.sleep(0.01)
+    raise ValueError("original create did not enter Phase::Creating after Native Allow")
+
+
 class FIFOWitness:
     """Owned parent writes only after the actual server has opened each FIFO."""
     def __init__(self, paths):
@@ -706,8 +724,88 @@ def protected_original_create(stack, root, bwrap, npm, report):
                         "denied original mutation changed outside sentinel")
                 require(not (stack.workspace / "another.txt").exists(),
                         "denied original mutation created another file")
-            report["checks"].append({"case":"sou83-replay-overwrite-traversal-oversize-refused",
+            report["checks"].append({"case":"sou83-overwrite-traversal-oversize-refused",
                                      "passed":True})
+            # A replay is a *reused host/native authority*, not a second
+            # attempt to overwrite an already committed destination.
+            replay_id = "sou83-create-1"
+            replay, _ = client.exchange(call(replay_id, {
+                "path":"/workspace/replay-must-not-appear.txt",
+                "content":"replayed authority"}, "write_file"))
+            require(replay["id"] == replay_id and replay.get("error", {}).get("code") == -32600,
+                    "spent original host/native authority was accepted or ended the relay")
+            require(not (stack.workspace / "replay-must-not-appear.txt").exists(),
+                    "replayed original authority published an unrelated file")
+            followup, _ = client.exchange(call("sou83-after-replay", {
+                "path":"/workspace/sou83-protected.txt"}, "read_text_file"))
+            require(result_text(followup) == expected,
+                    "refused spent authority broke useful same-session continuation")
+            report["checks"].append({"case":"sou83-actual-spent-host-id-replay-refused", "passed":True})
+
+            # The original child is expensive to start. An independent
+            # post-native-Allow creating marker is emitted before its
+            # asynchronous one-call sandbox begins. Cancel in that window:
+            # no file may be linked into the real workspace.
+            cancelled = stack.workspace / "sou83-cancel-unpublished.txt"
+            cancelled_id = "sou83-create-cancel"
+            client.send(call(cancelled_id, {"path":"/workspace/" + cancelled.name,
+                         "content":"cancel before publication"}, "write_file"))
+            wait_create_dispatch(stack.root / "sou83-create-collector.log", cancelled_id)
+            client.send(cancel(cancelled_id))
+            cancelled_reply, _ = client.receive(timeout=15)
+            require(cancelled_reply.get("id") == cancelled_id
+                    and cancelled_reply.get("error", {}).get("code") == -32800,
+                    "Phase::Creating cancellation did not return the correlated refusal")
+            # Allow the original isolated child to reach bounded cleanup.
+            time.sleep(1.0)
+            require(not cancelled.exists(), "cancelled creating-phase file became visible")
+            after_cancel, _ = client.exchange(call("sou83-after-cancel", {
+                "path":"/workspace/sou83-protected.txt"}, "read_text_file"))
+            require(result_text(after_cancel) == expected,
+                    "cancelled original write broke the useful same-session reader")
+            report["checks"].append({"case":"sou83-real-creating-cancellation-no-publication",
+                                     "passed":True})
+
+            # Force a real native-daemon outage *after* it granted the call
+            # and the original one-call sandbox reached Creating. A stopped
+            # daemon can never issue an authorized native result release.
+            lost = stack.workspace / "sou83-daemon-loss-unpublished.txt"
+            loss_id = "sou83-create-daemon-loss"
+            client.send(call(loss_id, {"path":"/workspace/" + lost.name,
+                         "content":"must not commit after daemon death"}, "write_file"))
+            wait_create_dispatch(stack.root / "sou83-create-collector.log", loss_id)
+            DEMO.stop(daemon)
+            require(daemon.poll() is not None, "native daemon survived fault injection")
+            try:
+                response, _ = client.receive(timeout=12)
+            except (ValueError, queue.Empty):
+                response = None
+            require(response is None or (response.get("id") == loss_id and refused(response)),
+                    "daemon-loss write was released after the native authority disappeared")
+            time.sleep(0.5)
+            require(not lost.exists(), "native daemon loss allowed create publication")
+            client.close()
+            report["sou83_create_fault_client"] = client.transcript()
+
+            # New healthy daemon/session proves that the outage did not
+            # corrupt installed registry, original server or useful read.
+            daemon = subprocess.Popen([str(stack.binary), "serve"], env=env,
+                                      stdout=log, stderr=log)
+            require(DEMO.wait_healthy(port, daemon), "native daemon failed to restart after write fault")
+            client = Client(command, create_env, stack.workspace, client_log,
+                            "protected create useful continuation after daemon loss")
+            client.initialize()
+            after_restart, _ = client.exchange(call("sou83-after-daemon-restart", {
+                "path":"/workspace/sou83-protected.txt"}, "read_text_file"))
+            require(result_text(after_restart) == expected,
+                    "daemon-loss original create broke healthy read continuation")
+            require(not lost.exists() and not cancelled.exists(),
+                    "failed/cancelled original create leaked a published destination")
+            report["checks"].append({"case":"sou83-real-creating-daemon-loss-no-publication",
+                                     "passed":True})
+            report["checks"].append({"case":"sou83-restart-useful-read-continuation",
+                                     "passed":True})
+
             changes = snapshot(stack.workspace)
             require(set(changes) == set(baseline) | {"sou83-protected.txt"},
                     "create-only profile introduced extra unexpected artifacts")

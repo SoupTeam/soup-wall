@@ -1,0 +1,6 @@
+default: allow
+agent_policies:
+  - name: explicit-ask-fails-closed-on-macos
+    when:
+      min_action_class: read_only
+    action: ask

@@ -590,10 +590,15 @@ where
                 }
                 let request_id = &value["id"];
                 let key = rpc_key(request_id)?;
-                ensure!(
-                    used.len() < super::MAX_REQUESTS && used.insert(key.clone()),
-                    "duplicate MCP ID or request-count limit"
-                );
+                ensure!(used.len() < super::MAX_REQUESTS, "MCP request-count limit");
+                if !used.insert(key.clone()) {
+                    // A replayed/previously spent host ID must never reach
+                    // another native admission. Preserve useful read/write
+                    // peers instead of terminating the entire session.
+                    write(host, &error(request_id, -32600,
+                        "Replayed or spent MCP request ID refused")).await?;
+                    continue;
+                }
                 if !params.is_object() {
                     write(
                         host,
@@ -869,6 +874,14 @@ where
                                         let runner = profile.clone();
                                         call.phase = Phase::Creating(grant);
                                         call.dispatched = true;
+                                        // The external Linux acceptance can
+                                        // observe actual post-admission creation
+                                        // without exposing content or credentials.
+                                        eprintln!("{}", json!({
+                                            "event":"mcp_original_create_state",
+                                            "host_call_id":call.id,
+                                            "state":"creating"
+                                        }));
                                         workers.push(Box::pin(async move {
                                             WorkEvent::Created(worker_key,
                                                 run_original_upstream(&runner, &args).await)
