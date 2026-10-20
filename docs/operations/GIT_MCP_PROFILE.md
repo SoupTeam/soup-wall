@@ -142,7 +142,14 @@ The driver creates its own repository and Agent home. Unwrapped upstream reads
 and a real index mutation calibrate behavior. Protected reads compare original
 results; rejected operations have useful follow-ups and an unchanged repository
 snapshot. A verified owned server PID is briefly stopped to make overlap and
-queued/inflight cancellation deterministic, then resumed. Daemon-loss admission
+queued/inflight cancellation deterministic, then resumed. Sixteen consecutive
+rounds use fresh request IDs within the same original process/session, requiring
+two correlated withdrawals and fourteen useful peer replies per round. The
+inflight target must actually reach the child wire; a count of pending admission
+work is insufficient. This covers both the existing finite server-cancellation
+budget and subsequent bounded draining. Partial replies and the failed round
+remain in failed reports; a previous successful round cannot mask a later loss.
+Daemon-loss admission
 and process cleanup are checked. A separate real Python/Git sandbox probe checks
 readability, denied writes, outside-file isolation, inherited descriptors,
 environment, separate namespaces and a calibrated TCP receiver. That probe is
