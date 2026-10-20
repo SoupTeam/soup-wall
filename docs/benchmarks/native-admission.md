@@ -86,8 +86,9 @@ passed as the script's first argument). Its `upstream`, `driver` and `offline`
 subdirectories retain the inputs and reports. CI selects a directory under
 `RUNNER_TEMP`, outside Rust's build cache. It obtains pinned public source and the
 existing dependency lock, builds the actual Agent, then invokes the existing
-runner. No provider/model call or credential access is performed. With prepared
-inputs the acceptance command is:
+runner. No external provider/model call or ambient credential access is
+performed. The legacy compatibility fixture uses its owned scripted loopback
+server. With prepared inputs the workspace acceptance command is:
 
 ```sh
 python -B scripts/agentdojo-live.py --mode workspace-fixture \

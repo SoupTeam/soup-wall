@@ -30,6 +30,8 @@ class WorkspaceProfileTests(unittest.TestCase):
     def test_schema_and_inventory_drift_refuse(self):
         with self.assertRaises(adapter.AdapterError):
             workspace.registry_bytes(self.functions[:-1])
+        with self.assertRaises(adapter.AdapterError):
+            workspace.registry_bytes(self.functions + [self.functions[0]])
         self.functions[0].parameters.model_json_schema = lambda: {"type":"object"}
         with self.assertRaises(adapter.AdapterError):
             workspace.registry_bytes(self.functions)

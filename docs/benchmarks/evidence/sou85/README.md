@@ -1,7 +1,7 @@
 # SOU-85 original workspace acceptance
 
 Scope: scripted offline controls of original AgentDojo functions/evaluators and
-the actual Agent daemon. No provider calls or Phase 4 effectiveness claim.
+the actual Agent daemon. No external provider calls or Phase 4 effectiveness claim.
 Reproduction is in [native admission](../../native-admission.md#offline-reproduction).
 
 ## Retained initial failure

@@ -41,8 +41,9 @@ def validate_declaration(tool):
 def registry_bytes(functions):
     """Verify every original schema before producing an explicit opt-in registry."""
     profile, _ = snapshot()
+    functions = list(functions)
     actual = {f.name: f for f in functions}
-    if set(actual) != {row["name"] for row in profile["tools"]}:
+    if len(actual) != len(functions) or set(actual) != {row["name"] for row in profile["tools"]}:
         raise adapter.AdapterError("Original workspace function inventory changed")
     for row in profile["tools"]:
         schema = actual[row["name"]].parameters.model_json_schema()
