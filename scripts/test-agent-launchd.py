@@ -62,6 +62,28 @@ def manager_observation(raw):
             if line.startswith("\t") and not line.startswith("\t\t") and line.strip().startswith(wanted)]
 
 
+def startup_observation(home):
+    """Retain bounded startup milestones before failed-start cleanup removes them."""
+    observation = {"token_present": (home / "token").is_file()}
+    for relative, key in (("service/restart.json", "budget"), ("versions/lifecycle.json", "lifecycle")):
+        try:
+            value = json.loads((home / relative).read_bytes())
+            if key == "budget":
+                starts = value.get("starts", [])
+                observation["admitted_starts"] = [n for n in starts[:3] if type(n) is int]
+            else:
+                process = value.get("process")
+                observation["process_recorded"] = isinstance(process, dict)
+                if isinstance(process, dict) and type(process.get("pid")) is int:
+                    observation["pid"] = process["pid"]
+        except FileNotFoundError:
+            observation[key + "_present"] = False
+        except (OSError, ValueError, TypeError, AttributeError):
+            observation[key + "_readable"] = False
+    # Never copy tokens, arbitrary journal fields, environment or raw launch logs.
+    return observation
+
+
 class Acceptance:
     def __init__(self, binary, output, report):
         self.demo = load_demo()
@@ -107,12 +129,42 @@ class Acceptance:
         report.update(profile=str(self.home), identities=self.identities, unrelated_pid=self.unrelated.pid)
 
     def command(self, *args, success=True):
-        result = subprocess.run([str(self.binary), *map(str, args)], env=self.env, cwd=self.root,
-                                stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+        if args[0] == "service" and args[-1] == "start":
+            result = self.observe_start(args)
+        else:
+            result = subprocess.run([str(self.binary), *map(str, args)], env=self.env, cwd=self.root,
+                                    stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
         # These CLI errors contain paths/state, never token values or fixture payloads.
         require((result.returncode == 0) == success,
                 f"unexpected exit {result.returncode} for {args}: {result.stderr.decode(errors='replace')[-1600:]}")
         return result.stdout
+
+    def observe_start(self, args):
+        started = time.monotonic()
+        evidence = {"observations": []}
+        self.report.setdefault("service_starts", []).append(evidence)
+        process = subprocess.Popen([str(self.binary), *map(str, args)], env=self.env, cwd=self.root,
+                                   stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        last = None
+        try:
+            while True:
+                observation = startup_observation(self.home)
+                if observation != last:
+                    evidence["observations"].append({"seconds": round(time.monotonic()-started, 3),
+                                                     **observation})
+                    last = observation
+                require(time.monotonic()-started < 180, "service start command exceeded 180 seconds")
+                try:
+                    stdout, stderr = process.communicate(timeout=.25)
+                    evidence["returncode"] = process.returncode
+                    return subprocess.CompletedProcess(process.args, process.returncode, stdout, stderr)
+                except subprocess.TimeoutExpired:
+                    pass
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.communicate(timeout=10)
+            evidence["seconds"] = round(time.monotonic()-started, 3)
 
     def service(self, action, **kwargs):
         return self.command("service", "--home", self.home, action, **kwargs)

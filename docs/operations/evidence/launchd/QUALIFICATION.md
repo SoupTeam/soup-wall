@@ -84,3 +84,36 @@ counted as a pass.
 
 This qualification covers the owned ARM64 user-session fixture. It makes no
 Intel, login-autostart, system-daemon, fleet or live-model efficacy claim.
+
+## Readiness timeout after updating the base
+
+The [2026-10-20 native run](https://github.com/SoupTeam/soup-wall/actions/runs/39425986622/job/118638730668)
+tested head `56a42bbb428c167ea2b43b7d60a0c1cbdbc415a4` as merge candidate
+`2eb36e6ccc21629767f9c3f07525a9b5d1296259`. Lifecycle, self-test and service unit
+tests passed, but the real launchd run stopped after `install_stays_stopped`:
+the first explicit start did not verify authenticated readiness within 35
+seconds. This failed run does not qualify the updated source.
+
+The unchanged [failed report archive](startup-readiness-timeout.zip) has SHA-256
+`a2a35bcde28facd195a442424ba6bbcc7f0a1b78acc145f3fa2d560cc0eed7df`.
+The tested executable digest was
+`170e63b036418f3871b73046740e0cb02726fbe7b15c9cc673f7312a803ecab9`.
+The report contains no daemon startup milestones: failed-start cleanup had
+already removed the job and process record before the driver took its snapshot.
+It cannot distinguish an early launcher refusal from slow startup.
+
+Source inspection identified repeated complete hashes of the large debug
+executable in launcher ownership, managed boot and readiness verification.
+The lifecycle file-digest helper now uses the already-linked native SHA-256
+implementation, preserving full-byte verification and the existing hex identity.
+No metadata-only cache, skipped identity check, extended readiness deadline or
+relaxed restart budget is introduced. Integration tests compare known vectors,
+chunk boundaries, same-length edits and the actual Agent executable against the
+previous implementation. The native job retains both implementations' timings
+in `lifecycle-digest.log`; a performance hypothesis alone is not acceptance.
+
+The driver now retains timestamped admission-count, process-PID and token-file
+presence observations while explicit start is running, before cleanup can erase
+them. It never copies token contents, arbitrary journal fields, environment or
+raw launch logs. The correction requires a new complete native run and current
+source CI; the earlier passing archives remain historical checkpoints.
