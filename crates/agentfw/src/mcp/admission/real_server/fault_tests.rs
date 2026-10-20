@@ -173,7 +173,19 @@ impl Harness {
                 &mut relay_host,
                 &mut BufReader::new(relay_server),
                 &mut relay_child,
-                server_profile::FORMAT,
+                &server_profile::ProfileConfig {
+                    format: server_profile::FORMAT.to_owned(),
+                    workspace: std::path::PathBuf::from("/tmp"),
+                    runtime_path: std::path::PathBuf::from("/tmp/node"),
+                    runtime_sha256: String::new(),
+                    package_root: std::path::PathBuf::from("/tmp"),
+                    package_tree_sha256: String::new(),
+                    bwrap_path: std::path::PathBuf::from("/tmp/bwrap"),
+                    bwrap_sha256: String::new(),
+                    libraries: vec![],
+                    git: None,
+                    git_launcher: None,
+                },
             )
             .await
         });

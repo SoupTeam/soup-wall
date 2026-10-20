@@ -134,6 +134,47 @@ pub(crate) fn prepare(profile: &ProfileConfig) -> anyhow::Result<PreparedServerS
     }
 }
 
+/// Prepare a *fresh* original filesystem server instance against an
+/// already-created owner-private empty staging root, not the user workspace.
+/// Only the new profile may acquire this writable host-backed namespace mount.
+#[allow(dead_code)] // this Linux-only caller has no equivalent on unsupported targets
+pub(crate) fn prepare_create_stage(
+    profile: &ProfileConfig,
+    stage: &Path,
+) -> anyhow::Result<PreparedServerSandbox> {
+    anyhow::ensure!(
+        profile.format == super::server_profile::filesystem_create::FORMAT,
+        "only the selected original-create profile can stage writes"
+    );
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let meta = std::fs::symlink_metadata(stage)?;
+        anyhow::ensure!(
+            meta.file_type().is_dir()
+                && meta.uid() == unsafe { libc::geteuid() }
+                && meta.mode() & 0o777 == 0o700,
+            "original-create staging directory is unsafe"
+        );
+        anyhow::ensure!(stage.is_absolute(), "staging path must be absolute");
+        let mut isolated = profile.clone();
+        isolated.workspace = stage.to_path_buf();
+        prepare_linux_command(
+            &isolated,
+            &[
+                format!("/mcp-server/{SERVER_ENTRYPOINT}"),
+                SANDBOX_WORKSPACE.to_owned(),
+            ],
+            true,
+        )
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (profile, stage);
+        anyhow::bail!("original-create sandbox requires Linux")
+    }
+}
+
 /// Kill and reap the outside owner's process group after attempting its private
 /// cleanup acknowledgement. The trusted PID 1 lease and bubblewrap parent-death
 /// chain stop descendants even if they create their own session/process group.
@@ -279,6 +320,20 @@ fn descriptor_path(file: &File) -> PathBuf {
 /// do not isolate such filesystem sockets. Anonymous socketpair IPC stays usable.
 #[cfg(target_os = "linux")]
 fn filter_instructions(git_landlock: bool) -> anyhow::Result<Vec<(u16, u8, u8, u32)>> {
+    filter_instructions_mode(git_landlock, false)
+}
+
+/// The writable variant is used only for an isolated ephemeral create-stage
+/// mount; it never becomes a fallback for an installed read-only profile.
+#[cfg(target_os = "linux")]
+fn filter_instructions_mode(
+    git_landlock: bool,
+    writable_owned_stage: bool,
+) -> anyhow::Result<Vec<(u16, u8, u8, u32)>> {
+    anyhow::ensure!(
+        !git_landlock || !writable_owned_stage,
+        "invalid isolated stage flags"
+    );
     #[cfg(target_arch = "x86_64")]
     let architecture = 0xc000_003e_u32;
     #[cfg(target_arch = "aarch64")]
@@ -351,7 +406,7 @@ fn filter_instructions(git_landlock: bool) -> anyhow::Result<Vec<(u16, u8, u8, u
     }
     #[cfg(target_arch = "x86_64")]
     {
-        if !git_landlock {
+        if !git_landlock && !writable_owned_stage {
             instructions.push((0x15, 0, 1, libc::SYS_creat as u32));
             instructions.push((0x06, 0, 0, deny));
         }
@@ -394,6 +449,13 @@ fn filter_instructions(git_landlock: bool) -> anyhow::Result<Vec<(u16, u8, u8, u
         instructions.push((0x06, 0, 0, 0x7fff_0000));
         return Ok(instructions);
     }
+    if writable_owned_stage {
+        // Namespace mounts—not path name strings—confine writes: the only
+        // host-backed writable mount is one owner-private, isolated stage.
+        // Network/io_uring/ioctl and cross-ABI syscall denies stay active.
+        instructions.push((0x06, 0, 0, 0x7fff_0000));
+        return Ok(instructions);
+    }
     let write_flags = (libc::O_WRONLY
         | libc::O_RDWR
         | libc::O_CREAT
@@ -420,10 +482,19 @@ fn filter_instructions(git_landlock: bool) -> anyhow::Result<Vec<(u16, u8, u8, u
 
 #[cfg(target_os = "linux")]
 fn network_filter(git_landlock: bool) -> anyhow::Result<File> {
+    network_filter_mode(git_landlock, false)
+}
+
+#[cfg(target_os = "linux")]
+fn network_filter_mode(git_landlock: bool, writable_owned_stage: bool) -> anyhow::Result<File> {
     use std::io::{Seek, SeekFrom, Write};
     use std::os::fd::FromRawFd;
 
-    let instructions = filter_instructions(git_landlock)?;
+    let instructions = if writable_owned_stage {
+        filter_instructions_mode(git_landlock, true)?
+    } else {
+        filter_instructions(git_landlock)?
+    };
     let fd = unsafe {
         libc::memfd_create(
             c"sou62-network-filter".as_ptr(),
@@ -574,6 +645,7 @@ fn prepare_linux(profile: &ProfileConfig) -> anyhow::Result<PreparedServerSandbo
                 SANDBOX_WORKSPACE,
             ]
             .map(str::to_owned),
+            false,
         );
     }
     prepare_linux_command(
@@ -582,6 +654,7 @@ fn prepare_linux(profile: &ProfileConfig) -> anyhow::Result<PreparedServerSandbo
             format!("/mcp-server/{SERVER_ENTRYPOINT}"),
             SANDBOX_WORKSPACE.to_owned(),
         ],
+        false,
     )
 }
 
@@ -589,11 +662,17 @@ fn prepare_linux(profile: &ProfileConfig) -> anyhow::Result<PreparedServerSandbo
 fn prepare_linux_command(
     profile: &ProfileConfig,
     node_args: &[String],
+    writable_owned_stage: bool,
 ) -> anyhow::Result<PreparedServerSandbox> {
     use std::os::fd::AsRawFd;
+    use std::os::unix::process::CommandExt;
 
     let (workspace, workspace_pin) = open_directory(&profile.workspace)?;
     let git_profile = profile.format == super::server_profile::git::FORMAT;
+    anyhow::ensure!(
+        !writable_owned_stage || profile.format == super::server_profile::filesystem_create::FORMAT,
+        "writable staging must use the separately selected original-create profile"
+    );
     if git_profile {
         super::server_profile::git::validate_repository(
             &descriptor_path(&workspace_pin).join("."),
@@ -690,6 +769,16 @@ fn prepare_linux_command(
         "/tmp",
     ]);
     for (index, destination) in mounts {
+        // Only the descriptor-pinned ephemeral staging directory is writable.
+        // Read-only profile, runtime and all library/dependency mounts remain
+        // unchanged. No actual user workspace is ever given a writable mount.
+        if writable_owned_stage && index == 0 {
+            command
+                .arg("--bind-fd")
+                .arg(pins[index].as_raw_fd().to_string())
+                .arg(destination);
+            continue;
+        }
         // --ro-bind-fd consumes and closes the descriptor before exec. Older
         // bwrap versions without this primitive must fail closed: spelling the
         // source as /proc/self/fd/N with --ro-bind would leak host descriptors
@@ -699,7 +788,11 @@ fn prepare_linux_command(
             .arg(pins[index].as_raw_fd().to_string())
             .arg(destination);
     }
-    let seccomp = network_filter(git_profile)?;
+    let seccomp = if writable_owned_stage {
+        network_filter_mode(git_profile, true)?
+    } else {
+        network_filter(git_profile)?
+    };
     command
         .arg("--seccomp")
         .arg(seccomp.as_raw_fd().to_string());
@@ -738,6 +831,16 @@ fn prepare_linux_command(
             ("GIT_CONFIG_VALUE_2", "never"),
         ] {
             command.args(["--setenv", name, value]);
+        }
+    }
+    if writable_owned_stage {
+        // The pinned original Node process defaults to 0666 & umask; make its
+        // isolated-stage output owner-private before reading it back.
+        unsafe {
+            command.as_std_mut().pre_exec(|| {
+                libc::umask(0o077);
+                Ok(())
+            });
         }
     }
     command
@@ -974,7 +1077,7 @@ print(json.dumps(result))
             normal_scheduler = libc::SCHED_OTHER,
         );
         let args = vec!["-I".into(), "-B".into(), "-c".into(), script];
-        let mut prepared = prepare_linux_command(&profile, &args).unwrap();
+        let mut prepared = prepare_linux_command(&profile, &args, false).unwrap();
         // Add an owned FIFO after repository validation to prove that read-only
         // mounts alone are insufficient, and that Landlock still blocks IPC.
         let fifo_path = profile.workspace.join(".sou68-runtime-probe.fifo");
@@ -1369,7 +1472,8 @@ Promise.all([probe({{host:'127.0.0.1',port:{port}}}), probe({{path:'/workspace/e
 "#,
             port = address.port()
         );
-        let mut prepared = prepare_linux_command(&profile, &["-e".to_owned(), script]).unwrap();
+        let mut prepared =
+            prepare_linux_command(&profile, &["-e".to_owned(), script], false).unwrap();
         prepared
             .command
             .env("SOU62_INHERITED_SECRET", "must-not-reach-server");

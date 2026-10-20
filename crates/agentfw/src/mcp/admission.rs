@@ -1128,10 +1128,34 @@ impl<'a> Collector<'a> {
             request = self.bind_liveness_request(request).await?;
         }
         let response = request.send().await.context("MCP admission unavailable")?;
-        ensure!(
-            response.status().is_success(),
-            "MCP admission request rejected"
-        );
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            // Log only the daemon's stable, low-entropy failure code.
+            // Never echo request arguments, tokens or a raw response body.
+            let body = response.bytes().await.unwrap_or_default();
+            let reason = if body.len() <= 1024 {
+                serde_json::from_slice::<Value>(&body)
+                    .ok()
+                    .and_then(|reply| {
+                        reply
+                            .get("error_code")
+                            .and_then(Value::as_str)
+                            .map(str::to_owned)
+                    })
+                    .filter(|code| {
+                        code.len() <= 96
+                            && code
+                                .bytes()
+                                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_')
+                    })
+            } else {
+                None
+            };
+            anyhow::bail!(
+                "MCP admission request rejected: status={status} code={}",
+                reason.as_deref().unwrap_or("unavailable")
+            );
+        }
         let mut bytes = Vec::new();
         let mut chunks = response.bytes_stream();
         while let Some(chunk) = chunks.next().await {

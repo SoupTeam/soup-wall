@@ -14,10 +14,14 @@ use sha2::{Digest, Sha256};
 
 use super::input::InputSchema;
 
+pub mod filesystem_create;
 pub mod git;
 
 pub fn selected(format: Option<&str>) -> bool {
-    matches!(format, Some(FORMAT | git::FORMAT))
+    matches!(
+        format,
+        Some(FORMAT | filesystem_create::FORMAT | git::FORMAT)
+    )
 }
 
 pub const FORMAT: &str = "sw-mcp/filesystem-readonly/1";
@@ -213,7 +217,7 @@ pub fn original_manifest() -> Value {
 
 pub fn original_manifest_for(format: &str) -> anyhow::Result<Value> {
     match format {
-        FORMAT => Ok(original_manifest()),
+        FORMAT | filesystem_create::FORMAT => Ok(original_manifest()),
         git::FORMAT => Ok(git::original_manifest()),
         _ => anyhow::bail!("unsupported MCP profile"),
     }
@@ -221,7 +225,7 @@ pub fn original_manifest_for(format: &str) -> anyhow::Result<Value> {
 
 pub fn validate_initialization_for(format: &str, value: &Value) -> anyhow::Result<()> {
     match format {
-        FORMAT => validate_initialization(value),
+        FORMAT | filesystem_create::FORMAT => validate_initialization(value),
         git::FORMAT => git::validate_initialization(value),
         _ => anyhow::bail!("unsupported MCP profile"),
     }
@@ -233,6 +237,7 @@ pub fn classify_manifest_for(
 ) -> anyhow::Result<BTreeMap<String, ToolProfile>> {
     match format {
         FORMAT => classify_manifest(value),
+        filesystem_create::FORMAT => filesystem_create::classify_manifest(value),
         git::FORMAT => git::classify_manifest(value),
         _ => anyhow::bail!("unsupported MCP profile"),
     }

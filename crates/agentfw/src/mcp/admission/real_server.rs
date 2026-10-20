@@ -14,6 +14,8 @@ use tokio::time::Instant;
 
 use super::{canonical, id, keys, line, not_classified, parse, sha, withheld, write};
 use super::{AdmittedTool, ClassificationAuthority, Collector, ProductionVerdict, Snapshot};
+#[cfg(target_os = "linux")]
+use crate::mcp::original_create::{run_original_upstream, VerifiedOutput};
 use crate::mcp::{server_profile, server_sandbox};
 use crate::native::CONTRACT;
 
@@ -32,6 +34,8 @@ struct Grant {
 
 struct Release {
     raw: Vec<u8>,
+    #[cfg(target_os = "linux")]
+    authorized: bool,
     _boundary: Option<crate::policy_transition::Boundary>,
 }
 
@@ -39,6 +43,10 @@ enum Phase {
     Queued,
     Admitting,
     Running(Grant),
+    #[cfg(target_os = "linux")]
+    Creating(Grant),
+    #[cfg(target_os = "linux")]
+    Staging,
     Inspecting,
     Reclaiming,
 }
@@ -56,6 +64,10 @@ struct Call {
     progress: Option<Value>,
     progress_count: usize,
     last_progress: f64,
+    // Pin the exact operator workspace *before* native admission.
+    // Never reopen a substituted root after native result Allow.
+    #[cfg(target_os = "linux")]
+    pinned_workspace: Option<Arc<crate::sandbox::PinnedWorkspace>>,
 }
 
 enum Decision {
@@ -66,6 +78,16 @@ enum Decision {
 enum WorkEvent {
     Admitted(String, anyhow::Result<Decision>),
     Inspected(String, anyhow::Result<Option<Release>>),
+    #[cfg(target_os = "linux")]
+    Created(String, anyhow::Result<(Vec<u8>, VerifiedOutput)>),
+    #[cfg(target_os = "linux")]
+    CreateInspected(String, anyhow::Result<Option<Release>>, VerifiedOutput),
+    #[cfg(target_os = "linux")]
+    CreateStaged(
+        String,
+        anyhow::Result<crate::mcp::create_file::StagedCreate>,
+        Release,
+    ),
     Reclaimed(String, anyhow::Result<()>),
 }
 
@@ -170,6 +192,15 @@ async fn admit(
     snapshot: Arc<Snapshot>,
     call: &Call,
 ) -> anyhow::Result<Decision> {
+    let creating =
+        call.profile == server_profile::filesystem_create::FORMAT && call.tool == "write_file";
+    if creating && (!cfg!(target_os = "linux") || collector.config.classifier.is_none()) {
+        return Ok(Decision::Refused(withheld(
+            &call.id,
+            "invocation",
+            &json!(["original_create_classifier_or_platform_unavailable"]),
+        )));
+    }
     let installed = collector
         .config
         .native
@@ -187,7 +218,7 @@ async fn admit(
             installed.action_class,
             ClassificationAuthority {
                 egress_declared: false,
-                create_file_profile: None,
+                create_file_profile: creating.then_some(server_profile::filesystem_create::FORMAT),
                 https_get: false,
             },
         )
@@ -246,13 +277,16 @@ async fn inspect(
     let receipt = collector.event("result",json!({"tool":call.tool,"args":call.args,
         "call_id":grant.call_id,"expected_binding_sha256":grant.binding,
         "expected_contract_version":CONTRACT,"result_kind":kind,"delivery":"mcp_host","content":content})).await?;
-    let raw = if receipt["release"] == true {
+    let authorized = receipt["release"] == true;
+    let raw = if authorized {
         raw
     } else {
         withheld(&call.id, "result", &receipt["reason_codes"])
     };
     Ok(Some(Release {
         raw,
+        #[cfg(target_os = "linux")]
+        authorized,
         _boundary: boundary,
     }))
 }
@@ -284,6 +318,8 @@ fn detached(call: &Call) -> Call {
         progress: call.progress.clone(),
         progress_count: 0,
         last_progress: 0.0,
+        #[cfg(target_os = "linux")]
+        pinned_workspace: call.pinned_workspace.clone(),
     }
 }
 
@@ -311,15 +347,22 @@ fn validate_registry(
             "selected server cannot acquire built-in resource authority"
         );
         if profiles[&tool.name].unsupported_reason.is_none() {
+            let required_action = if format == server_profile::filesystem_create::FORMAT
+                && tool.name == "write_file"
+            {
+                soup_wall_agent::ActionClass::SideEffecting
+            } else {
+                soup_wall_agent::ActionClass::ReadOnly
+            };
             ensure!(
-                tool.action_class == soup_wall_agent::ActionClass::ReadOnly
+                tool.action_class == required_action
                     && tool.egress.is_empty()
                     && matches!(
                         tool.result_provenance,
                         crate::native::ResultProvenance::Untrusted
                     )
                     && tool.mcp_result_profile.as_deref() == Some(format),
-                "selected read authority is not explicitly installed"
+                "selected per-tool authority is not explicitly installed"
             );
         }
     }
@@ -333,7 +376,7 @@ fn validate_registry(
                     .tools
                     .iter()
                     .any(|tool| tool.name == *name),
-                "selected read tool is not installed"
+                "selected supported tool is not installed"
             );
         }
     }
@@ -353,7 +396,7 @@ async fn relay<R, W, S, T>(
     host: &mut W,
     server: &mut S,
     child: &mut T,
-    format: &str,
+    profile: &server_profile::ProfileConfig,
 ) -> anyhow::Result<()>
 where
     R: AsyncBufRead + Unpin,
@@ -361,6 +404,7 @@ where
     S: AsyncBufRead + Unpin,
     T: AsyncWrite + Unpin,
 {
+    let format = profile.format.as_str();
     let mut initialized = false;
     let mut notified = false;
     let mut ready = false;
@@ -486,6 +530,17 @@ where
                                     WorkEvent::Reclaimed(worker_key, reclaim(collector, &input, grant).await)
                                 }));
                             }
+                            #[cfg(target_os = "linux")]
+                            Phase::Creating(grant) => {
+                                let input = detached(call);
+                                let worker_key = key.clone();
+                                workers.push(Box::pin(async move {
+                                    WorkEvent::Reclaimed(worker_key,
+                                        reclaim(collector, &input, grant).await)
+                                }));
+                            }
+                            #[cfg(target_os = "linux")]
+                            Phase::Staging => { calls.remove(&key); }
                             Phase::Admitting => call.phase = Phase::Admitting,
                             Phase::Inspecting => call.phase = Phase::Inspecting,
                             Phase::Reclaiming => {}
@@ -612,7 +667,7 @@ where
                             .await?;
                             continue;
                         };
-                        let Some(profile) = profiles.get(name) else {
+                        let Some(tool_profile) = profiles.get(name) else {
                             write(
                                 host,
                                 &error(
@@ -624,7 +679,7 @@ where
                             .await?;
                             continue;
                         };
-                        if profile.unsupported_reason.is_some() {
+                        if tool_profile.unsupported_reason.is_some() {
                             write(
                                 host,
                                 &error(
@@ -641,7 +696,12 @@ where
                             .cloned()
                             .unwrap_or_else(|| json!({}));
                         let progress = match metadata(&params).and_then(|progress| {
-                            profile.validate_arguments(&args)?;
+                            tool_profile.validate_arguments(&args)?;
+                            if format == server_profile::filesystem_create::FORMAT
+                                && name == "write_file"
+                            {
+                                server_profile::filesystem_create::validate_request(&args)?;
+                            }
                             Ok(progress)
                         }) {
                             Ok(progress) => progress,
@@ -658,6 +718,17 @@ where
                                 continue;
                             }
                         };
+                        // One original mutator at a time. Each selected
+                        // create receives a new heavy isolated Node/owner
+                        // process; native read-only calls stay concurrent.
+                        if format == server_profile::filesystem_create::FORMAT
+                            && name == "write_file"
+                            && calls.values().any(|live| live.tool == "write_file")
+                        {
+                            write(host, &error(request_id, -32003,
+                                "An original create operation is already active")).await?;
+                            continue;
+                        }
                         let (active, queued) = counts(&calls);
                         if active >= ACTIVE_LIMIT && queued >= QUEUE_LIMIT {
                             write(
@@ -667,6 +738,21 @@ where
                             .await?;
                             continue;
                         }
+                        #[cfg(target_os = "linux")]
+                        let pinned_workspace = if format == server_profile::filesystem_create::FORMAT
+                            && name == "write_file"
+                        {
+                            match crate::sandbox::PinnedWorkspace::open(&profile.workspace) {
+                                Ok(workspace) => Some(Arc::new(workspace)),
+                                Err(_) => {
+                                    write(host, &error(request_id, -32603,
+                                        "Original create workspace identity unavailable")).await?;
+                                    continue;
+                                }
+                            }
+                        } else {
+                            None
+                        };
                         let call = Call {
                             profile: format.to_owned(),
                             id: request_id.clone(),
@@ -680,6 +766,8 @@ where
                             progress,
                             progress_count: 0,
                             last_progress: 0.0,
+                            #[cfg(target_os = "linux")]
+                            pinned_workspace,
                         };
                         audit(&call, "queued", active, queued + 1);
                         calls.insert(key.clone(), call);
@@ -704,6 +792,12 @@ where
                         let Some(call) = calls.get_mut(&key) else {
                             bail!("unbound native admission completion");
                         };
+                        // A disconnected host cannot authorize new execution.
+                        // Reclaim any late native Allow rather than launching
+                        // an ephemeral writer after the client has disappeared.
+                        if client_closed {
+                            call.cancelled = true;
+                        }
                         match result? {
                             Decision::Refused(raw) => {
                                 if !call.cancelled {
@@ -735,6 +829,24 @@ where
                                         )
                                     }));
                                 } else {
+                                    #[cfg(target_os = "linux")]
+                                    if format == server_profile::filesystem_create::FORMAT
+                                        && call.tool == "write_file"
+                                    {
+                                        // The installed server stays read-only.
+                                        // Only an isolated fresh ORIGINAL server
+                                        // can run the mutating upstream tool.
+                                        let worker_key = key.clone();
+                                        let args = call.args.clone();
+                                        let runner = profile.clone();
+                                        call.phase = Phase::Creating(grant);
+                                        call.dispatched = true;
+                                        workers.push(Box::pin(async move {
+                                            WorkEvent::Created(worker_key,
+                                                run_original_upstream(&runner, &args).await)
+                                        }));
+                                        continue;
+                                    }
                                     write(child, &call.raw).await?;
                                     call.dispatched = true;
                                     drop(grant.boundary.take());
@@ -745,6 +857,145 @@ where
                                 }
                             }
                         }
+                    }
+                    #[cfg(target_os = "linux")]
+                    WorkEvent::Created(key, produced) => {
+                        let Some(call) = calls.get_mut(&key) else { continue; };
+                        if call.cancelled { continue; }
+                        if client_closed {
+                            // A host EOF before native result release must
+                            // spend the admission grant and drop the isolated
+                            // output. No publication occurs and relay can exit.
+                            let phase = std::mem::replace(&mut call.phase, Phase::Reclaiming);
+                            let Phase::Creating(grant) = phase else {
+                                bail!("orphaned original create without native grant");
+                            };
+                            let input = detached(call);
+                            workers.push(Box::pin(async move {
+                                WorkEvent::Reclaimed(key,
+                                    reclaim(collector, &input, grant).await)
+                            }));
+                            continue;
+                        }
+                        let phase = std::mem::replace(&mut call.phase, Phase::Inspecting);
+                        let Phase::Creating(grant) = phase else {
+                            bail!("original create returned without its bound native grant");
+                        };
+                        let input = detached(call);
+                        let worker_key = key.clone();
+                        match produced {
+                            Ok((raw, verified)) => {
+                                // Internal original-server RPC always uses id=3.
+                                // The host must receive its own opaque request ID.
+                                // Only the JSON-RPC transport ID is changed;
+                                // original result/error fields are untouched.
+                                let mut decoded = parse(&raw)?;
+                                ensure!(decoded["id"] == 3,
+                                    "unexpected original-server response correlation");
+                                decoded["id"] = call.id.clone();
+                                let raw = frame(&decoded);
+                                workers.push(Box::pin(async move {
+                                    WorkEvent::CreateInspected(worker_key,
+                                        inspect(collector, &input, grant, raw, "value").await,
+                                        verified)
+                                }));
+                            }
+                            Err(_) => {
+                                let failure = error(&call.id, -32603,
+                                    "Original isolated MCP create failed; workspace unchanged");
+                                workers.push(Box::pin(async move {
+                                    WorkEvent::Inspected(worker_key,
+                                        inspect(collector, &input, grant, failure, "error").await)
+                                }));
+                            }
+                        }
+                    }
+                    #[cfg(target_os = "linux")]
+                    WorkEvent::CreateInspected(key, receipt, output) => {
+                        let Some(call) = calls.get_mut(&key) else { continue; };
+                        if call.cancelled || client_closed {
+                            calls.remove(&key);
+                            continue;
+                        }
+                        let release = receipt?.context("native original-create result missing")?;
+                        if !release.authorized {
+                            write(host, &release.raw).await?;
+                            calls.remove(&key);
+                            continue;
+                        }
+                        if collector.is_uncertain() {
+                            write(host, &error(&call.id, -32603,
+                                "Native collector became uncertain before publication")).await?;
+                            calls.remove(&key);
+                            continue;
+                        }
+                        let prepared = call.pinned_workspace.as_deref()
+                            .context("original create workspace pin not held")
+                            .and_then(|workspace| output.prepare_atomic_publication(workspace));
+                        let prepared = match prepared {
+                            Ok(value) => value,
+                            Err(_) => {
+                                write(host, &error(&call.id, -32603,
+                                    "Unsafe or existing original-create destination; no publication")).await?;
+                                calls.remove(&key);
+                                continue;
+                            }
+                        };
+                        call.phase = Phase::Staging;
+                        workers.push(Box::pin(async move {
+                            let stage = tokio::task::spawn_blocking(move || prepared.stage())
+                                .await.map_err(anyhow::Error::from)
+                                .and_then(|value| value.map_err(anyhow::Error::from));
+                            WorkEvent::CreateStaged(key, stage, release)
+                        }));
+                    }
+                    #[cfg(target_os = "linux")]
+                    WorkEvent::CreateStaged(key, stage, release) => {
+                        let Some(call) = calls.get_mut(&key) else { continue; };
+                        // Cancellation after native result Allow, but before
+                        // linkat, closes only an anonymous stage.
+                        if call.cancelled || client_closed || collector.is_uncertain()
+                            || call.deadline <= Instant::now() {
+                            calls.remove(&key);
+                            continue;
+                        }
+                        // release owns the native result policy boundary until
+                        // this synchronous publication point is finished.
+                        match stage {
+                            Ok(stage) => match stage.publish() {
+                                Ok(result) if result.committed && result.file_synced
+                                    && result.directory_synced => {
+                                    eprintln!("{}", json!({
+                                        "event":"mcp_original_create_commit",
+                                        "committed":true,
+                                        "bytes":result.bytes_written,
+                                        "content_disclosed":false
+                                    }));
+                                    write(host, &release.raw).await?;
+                                }
+                                Ok(_) => bail!("incomplete original-create publication"),
+                                Err(publish_error) => {
+                                    eprintln!("{}", json!({
+                                        "event":"mcp_original_create_commit",
+                                        "committed":publish_error.committed,
+                                        "bytes":publish_error.committed_bytes,
+                                        "reason":publish_error.code,
+                                        "content_disclosed":false
+                                    }));
+                                    write(host, &error(&call.id, -32603,
+                                        if publish_error.committed {
+                                            "Create failed after commit; file effect may remain"
+                                        } else {
+                                            "Create publication refused; no file committed"
+                                        })).await?;
+                                }
+                            },
+                            Err(_) => {
+                                write(host, &error(&call.id, -32603,
+                                    "Original create staging failed; no file committed")).await?;
+                            }
+                        }
+                        calls.remove(&key);
                     }
                     WorkEvent::Inspected(key, result) => {
                         let call = calls
@@ -1047,6 +1298,17 @@ where
                                 WorkEvent::Reclaimed(worker_key, reclaim(collector, &input, grant).await)
                             }));
                         }
+                        #[cfg(target_os = "linux")]
+                        Phase::Creating(grant) => {
+                            let input = detached(call);
+                            let worker_key = key.clone();
+                            workers.push(Box::pin(async move {
+                                WorkEvent::Reclaimed(worker_key,
+                                    reclaim(collector, &input, grant).await)
+                            }));
+                        }
+                        #[cfg(target_os = "linux")]
+                        Phase::Staging => { calls.remove(&key); }
                         Phase::Admitting => call.phase = Phase::Admitting,
                         Phase::Inspecting => call.phase = Phase::Inspecting,
                         Phase::Reclaiming => {}
@@ -1173,7 +1435,7 @@ pub(super) async fn run(
                     &mut host,
                     &mut server,
                     &mut child,
-                    &profile.format,
+                    profile,
                 );
                 tokio::pin!(exchange);
                 tokio::select! {

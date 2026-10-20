@@ -58,6 +58,7 @@ def load(name, filename):
 
 
 INSTALL = load("sou62_install", "install-sou62-filesystem-profile.py")
+SOU83_INSTALL = load("sou83_installer", "install-sou83-filesystem-create-profile.py")
 DEMO = load("sou62_demo", "mcp-admission-demo.py")
 
 
@@ -616,6 +617,129 @@ def host(stack, command, env, report):
         model.close()
 
 
+def protected_original_create(stack, root, bwrap, npm, report):
+    """Independent actual native loader + original-server create/read/replay.
+
+    Uses another explicitly installed profile/registry, separate Agent home
+    and daemon, and an owned one-leaf workspace target. All effects are checked
+    against the real filesystem, not inferred from a preview or a mock result.
+    """
+    create_install = root / "installed-original-create"
+    SOU83_INSTALL.install(create_install, stack.workspace, stack.node, bwrap, npm)
+    metadata = json.loads((create_install / "installation.json").read_text(encoding="utf-8"))
+    require(metadata["format"] == SOU83_INSTALL.INSTALLATION_FORMAT,
+            "opt-in original-create installer did not finish")
+    registry = json.loads((create_install / "registry.json").read_text(encoding="utf-8"))
+    require(registry["registry_id"] == "filesystem-create-only-v1", "create registry identity mismatch")
+    require([t["name"] for t in registry["tools"] if
+             t.get("mcp_result_profile") == SOU83_INSTALL.FORMAT
+             and t["action_class"] == "side_effecting"] == ["write_file"],
+            "create installer selected an unintended mutator")
+
+    home = root / "create-home"
+    home.mkdir(mode=0o700)
+    env = environment(home)
+    subprocess.run([str(stack.binary), "install"], env=env, stdin=subprocess.DEVNULL,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, check=True, timeout=30)
+    port = DEMO.free_port()
+    config = {"port":port, "enforce":True, "max_record_bytes":1048576,
+              "policy":str(create_install / "policy.yaml"),
+              "native":{"registry_path":str(create_install / "registry.json"),
+                        "registry_sha256":sha(create_install / "registry.json")}}
+    write(home / ".agentfw/config.yaml", config)
+    create_env = dict(env, AGENTFW_MCP_SERVER_PROFILE=str(create_install / "profile.json"),
+                      AGENTFW_CLASSIFIER="rule-baseline",
+                      AGENTFW_RULE_BASELINE=str(ROOT / "rule_baseline/rule_baseline.py"),
+                      AGENTFW_CLASSIFIER_PYTHON=sys.executable)
+    entry = create_install / "package/node_modules/@modelcontextprotocol/server-filesystem/dist/index.js"
+    command = [str(stack.binary), "mcp", "--native-admission", "--id",
+               "sou83-protected-original-create", "--", str(stack.node), str(entry), "/workspace"]
+    baseline = snapshot(stack.workspace)
+    expected = "SOU-83 exact original written bytes 🌍"
+    leaf = stack.workspace / "sou83-protected.txt"
+    outside = root / "sou83-outside-sentinel"
+    outside.write_text("outside unchanged", encoding="utf-8")
+    daemon = None
+    client = None
+    with (stack.root / "sou83-create-daemon.log").open("wb") as log, (
+            stack.root / "sou83-create-collector.log").open("wb") as client_log:
+        try:
+            daemon = subprocess.Popen([str(stack.binary), "serve"], env=env,
+                                      stdout=log, stderr=log)
+            require(DEMO.wait_healthy(port, daemon),
+                    "create profile native runtime refused actual installer registry")
+            client = Client(command, create_env, stack.workspace, client_log,
+                            "protected original create")
+            discovered = client.initialize()
+            original = json.loads(
+                (INSTALL.ASSETS / "upstream-tools-list.json").read_text(encoding="utf-8"))
+            require(discovered["result"] == original["result"],
+                    "installed create profile changed ORIGINAL upstream discovery")
+            response, _ = client.exchange(call("sou83-create-1", {
+                "path":"/workspace/sou83-protected.txt", "content":expected}, "write_file"))
+            require(response.get("id") == "sou83-create-1" and not refused(response),
+                    "native protected original write_file was not positively released: "
+                    + json.dumps(response, ensure_ascii=False)[:2000])
+            require(leaf.read_text(encoding="utf-8") == expected,
+                    "actual native protected original create has wrong visible bytes")
+            require(stat.S_IMODE(leaf.stat().st_mode) == 0o600,
+                    "original create leaked file content through public permissions")
+            report["checks"].append({"case":"sou83-actual-native-create-published", "passed":True})
+            read, _ = client.exchange(call("sou83-read-after-create", {
+                "path":"/workspace/sou83-protected.txt"}, "read_text_file"))
+            require(read.get("id") == "sou83-read-after-create"
+                    and result_text(read) == expected,
+                    "native protected original create -> read continuation failed")
+            report["checks"].append({"case":"sou83-create-read-verify-same-session", "passed":True})
+            for index, args in enumerate([
+                {"path":"/workspace/sou83-protected.txt", "content":"overwrite blocked"},
+                {"path":"/workspace/../sou83-outside-sentinel", "content":"bad"},
+                {"path":"/tmp/sou83-outside-sentinel", "content":"bad"},
+                {"path":"/workspace/another.txt","content":"bad","overwrite":True},
+                {"path":"/workspace/another.txt","content":"x"*4097},
+            ]):
+                reply, _ = client.exchange(call(900 + index, args, "write_file"))
+                require(refused(reply), f"original create negative {index} was not refused")
+                require(leaf.read_text(encoding="utf-8") == expected,
+                        "denied original mutation changed approved target")
+                require(outside.read_text(encoding="utf-8") == "outside unchanged",
+                        "denied original mutation changed outside sentinel")
+                require(not (stack.workspace / "another.txt").exists(),
+                        "denied original mutation created another file")
+            report["checks"].append({"case":"sou83-replay-overwrite-traversal-oversize-refused",
+                                     "passed":True})
+            changes = snapshot(stack.workspace)
+            require(set(changes) == set(baseline) | {"sou83-protected.txt"},
+                    "create-only profile introduced extra unexpected artifacts")
+            require(all(changes[key] == value for key, value in baseline.items()),
+                    "original create mutated unrelated workspace objects")
+            require(stack.receiver.bodies == [],
+                    "original protected create reached independent egress receiver")
+            report["sou83_native_protected_create"] = {
+                "status":"pass", "original_upstream":True,
+                "native_registry_sha256":sha(create_install / "registry.json"),
+                "result_correlated_to_host":True,
+                "published_sha256":sha(leaf),
+                "permitted_effects":1, "denied_effects":0,
+                "same_session_read_verified":True,
+                "outside_marker_unchanged":True,
+            }
+        finally:
+            if client is not None:
+                client.close()
+                report["sou83_native_protected_client"] = client.transcript()
+            if daemon is not None:
+                DEMO.stop(daemon)
+    require(daemon is not None and daemon.poll() is not None,
+            "protected create daemon not reaped")
+    require(client is not None and client.process_witness.final["all_stopped"],
+            "protected create server child/owner not reaped")
+    leaf.unlink()
+    outside.unlink()
+    require(snapshot(stack.workspace) == baseline,
+            "native create acceptance did not restore owned workspace")
+
+
 def daemon_loss(stack, command, env, report):
     """A fresh actual session must not dispatch a FIFO read after daemon loss."""
     baseline = snapshot(stack.workspace)
@@ -841,6 +965,34 @@ def run(args):
                     + "; owned probe tail=" + marker[-6000:].decode("utf-8", "replace"))
             report["required_positive_sandbox"] = {"status": "pass", "exit_code": positive.returncode,
                                                     "log_sha256": sha(output / "sandbox-positive.log"), "witnesses": witnesses}
+            # SOU-83: fail-closed, mandatory positive proof that the exact
+            # pinned ORIGINAL filesystem server executes write_file only in
+            # its private staging namespace; real workspace/outside unchanged.
+            # This Rust test is ignored in ordinary unit runs because it needs
+            # the same independently pinned Linux runtime/owner used above.
+            try:
+                original = subprocess.run(
+                    [str(tests), "actual_original_write_file_is_confined_to_unpublished_stage",
+                     "--ignored", "--nocapture"], env=positive_env,
+                    capture_output=True, timeout=90)
+                original_raw = original.stdout + original.stderr
+                original_exit = original.returncode
+            except subprocess.TimeoutExpired as failure:
+                original_raw = (failure.stdout or b"") + (failure.stderr or b"")
+                original_exit = -1
+            (output / "sou83-original-create-positive.log").write_bytes(original_raw[:1024 * 1024])
+            original_positive = original_exit == 0 and re.search(
+                rb"1 passed; 0 failed", original_raw) is not None
+            report["sou83_original_create_positive"] = {
+                "status": "pass" if original_positive else "fail",
+                "exit_code": original_exit,
+                "log_sha256": sha(output / "sou83-original-create-positive.log"),
+                "original_server_executed": original_positive,
+                "real_workspace_unchanged_prepublication": original_positive,
+            }
+            require(original_positive,
+                    "SOU-83 original server staging witness failed: "
+                    + original_raw[-4000:].decode("utf-8", "replace"))
             with (output / "daemon.log").open("wb") as log:
                 daemon = stack.daemon = subprocess.Popen([str(binary), "serve"], env=stack.env, stdout=log, stderr=log)
                 require(DEMO.wait_healthy(port, daemon), "owned enforcing daemon failed to start")
@@ -849,6 +1001,8 @@ def run(args):
                 host(stack, command, env, report)
                 daemon_loss(stack, command, env, report)
             report["daemon_stopped"] = daemon.poll() is not None
+            require(report["daemon_stopped"], "read-only native daemon not terminated")
+            protected_original_create(stack, private, bwrap, args.npm, report)
             report["installed_profile_unchanged"] = (
                 sha(stack.install / "profile.json") == report["installed_profile"]["profile_sha256"]
                 and sha(stack.install / "policy.yaml") == report["installed_profile"]["policy_sha256"]
