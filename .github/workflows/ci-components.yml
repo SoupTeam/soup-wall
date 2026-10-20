@@ -1197,6 +1197,13 @@ jobs:
         run: |
           python3 -B -m unittest discover -s scripts/tests -p test_sou62_real_mcp.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_installed_pilot.py -v
+          cargo test --locked -p agentfw --lib selected_registry_shared_daemon | tee "$RUNNER_TEMP/sou100-registry-regressions.log"
+          python3 -B - <<'REGISTRY_CONTROLS'
+          import os, re
+          from pathlib import Path
+          text = (Path(os.environ['RUNNER_TEMP']) / 'sou100-registry-regressions.log').read_text()
+          assert re.search(r'test result: ok\. 3 passed; 0 failed; 0 ignored;', text), 'three executed registry regressions are required'
+          REGISTRY_CONTROLS
           python3 -B -m unittest discover -s scripts/tests -p test_linux_alert_acceptance.py -v
           python3 -B - <<'PYCONTROLS'
           import unittest
@@ -1324,6 +1331,7 @@ jobs:
           name: sou62-real-filesystem-mcp-evidence
           path: |
             ${{ runner.temp }}/sou100-selection.json
+            ${{ runner.temp }}/sou100-registry-regressions.log
             ${{ runner.temp }}/sou100-pilot.log
             ${{ runner.temp }}/sou100-pilot/**
             ${{ runner.temp }}/sou62-*.txt
