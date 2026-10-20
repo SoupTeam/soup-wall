@@ -32,6 +32,8 @@ def load(name, filename):
 
 BASE = load("sou68_transport", "verify-sou62-real-mcp.py")
 INSTALL = load("sou68_install", "install-sou68-git-profile.py")
+REPLAY = load("sou68_sou97_replay", "sou97_runtime_replay.py")
+DEFAULT_CLASSIFIER = ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py"
 require, sha, write = BASE.require, BASE.sha, BASE.write
 READS = (
     ("git_show", {"revision": "HEAD"}, "SOU-68 synthetic initial commit"),
@@ -319,7 +321,7 @@ def protected(stack, report):
     (stack.workspace / "notes.txt").write_text("synthetic changed text\n")
     before = BASE.snapshot(stack.workspace)
     env.update(AGENTFW_MCP_SERVER_PROFILE=str(stack.install / "profile.json"), AGENTFW_CLASSIFIER="rule-baseline",
-               AGENTFW_RULE_BASELINE=str(ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py"), AGENTFW_CLASSIFIER_PYTHON=sys.executable)
+               AGENTFW_RULE_BASELINE=stack.classifier["path"], AGENTFW_CLASSIFIER_PYTHON=sys.executable)
     command = [str(stack.binary), "mcp", "--native-admission", "--id", "sou68-git", "--", str(python),
                "-I", "-B", "-m", "mcp_server_git", "--repository", "/workspace"]
     log_path = stack.root / "collector.log"
@@ -389,13 +391,82 @@ def protected(stack, report):
     require(not report["read_admission_failures"], "required Git reads remain blocked by classifier; no Ask/unknown override")
 
 
+def candidate_replay(stack, report):
+    """SOU-97 candidate mode only: replay the frozen matrix through the protected original Git chain."""
+    python = stack.install / "package/python/bin/python3.11"
+    env = dict(stack.env, GIT_PYTHON_GIT_EXECUTABLE=str(stack.git), GIT_CONFIG_NOSYSTEM="1",
+               GIT_CONFIG_GLOBAL="/dev/null", GIT_OPTIONAL_LOCKS="0", GIT_TERMINAL_PROMPT="0",
+               AGENTFW_MCP_SERVER_PROFILE=str(stack.install / "profile.json"), AGENTFW_CLASSIFIER="rule-baseline",
+               AGENTFW_RULE_BASELINE=stack.classifier["path"], AGENTFW_CLASSIFIER_PYTHON=sys.executable)
+    command = [str(stack.binary), "mcp", "--native-admission", "--id", "sou68-git", "--", str(python),
+               "-I", "-B", "-m", "mcp_server_git", "--repository", "/workspace"]
+    logs = []
+
+    def open_session(index):
+        log_path = stack.root / f"sou97-replay-collector-{index}.log"
+        log = log_path.open("wb")
+        client = Client(command, env, stack.workspace, log, f"sou97 replay session {index}")
+        logs.append((client, log))
+        client.initialize()
+        return client, log_path
+
+    def continuation(client, identifier):
+        try:
+            return "notes.txt" in text(client.exchange(call(identifier, "git_status", {}))[0])
+        except ValueError:
+            return False  # recorded as a failed continuation, never as success
+
+    try:
+        calibration_client, _ = open_session("calibration")
+        try:
+            calibration = REPLAY.calibrate(stack.workspace, BASE.snapshot, RepositoryWitness,
+                                           lambda: continuation(calibration_client, 2999))
+        finally:
+            calibration_client.close()
+        result, failures = REPLAY.replay("git", open_session=open_session, events=BASE.events, snapshot=BASE.snapshot,
+                                         workspace=stack.workspace, witness_cls=RepositoryWitness, receiver=stack.receiver,
+                                         continuation=continuation, responses_path=stack.root / "sou97-replay-responses.jsonl")
+    finally:
+        for client, log in logs:
+            log.close()
+    require(all(client.process_witness.final is None or client.process_witness.final["all_stopped"] for client, _ in logs),
+            "replay session cleanup incomplete")
+    stack.sou97 = {"result": result, "failures": failures, "calibration": calibration}
+    report["sou97_replay"] = {"cases": len(result["cases"]), "sessions": result["sessions"], "failures": failures,
+                              "calibration": calibration}
+    require(not failures, "candidate matrix replay failed: " + json.dumps(failures)[:1500])
+
+
+def write_sou97_evidence(stack, report, args):
+    if stack.classifier["mode"] != "candidate":
+        return
+    replayed = getattr(stack, "sou97", None) or {"result": None, "failures": [{"case": None, "expected": "replay completed"}],
+                                                 "calibration": {}}
+    profile = report.get("installation", {}).get("profile", {})
+    evidence = REPLAY.evidence(
+        "git", status=report["status"], source=report.get("source_before", {}), classifier=stack.classifier,
+        replay_result=replayed["result"], failures=replayed["failures"], calibration=replayed["calibration"],
+        identities={"agent_binary_sha256": report.get("binary_sha256"), "driver_sha256": report.get("driver_sha256"),
+                    "replay_module_sha256": sha(ROOT / "scripts/sou97_runtime_replay.py"),
+                    "upstream_package": "mcp-server-git@2026.10.10"},
+        runtime={name: digest for name, digest in (
+            ("git", args.git_sha256), ("bwrap", sha(args.bwrap)), ("git_launcher", sha(args.git_launcher)),
+            ("sandbox_test_binary", sha(args.sandbox_test_binary)),
+            ("package_tree", profile.get("packageTreeSha256"))) if digest},
+        witnesses={"daemon_stopped": getattr(stack, "daemon_stopped", False) is True,
+                   "workspace_unchanged": report.get("repository_unchanged") is True,
+                   "egress_bodies": len(stack.receiver.bodies)},
+        error=report.get("error"))
+    write(stack.root / "sou97-runtime-evidence.json", evidence)
+
+
 def startup_refusals(stack, report):
     """Missing isolation and unsupported repository machinery never spawn a server."""
     profile = json.loads((stack.install / "profile.json").read_text())
     command = [str(stack.binary), "mcp", "--native-admission", "--id", "sou68-startup", "--",
                profile["runtimePath"], "-I", "-B", "-m", "mcp_server_git", "--repository", "/workspace"]
     env = dict(stack.env, AGENTFW_MCP_SERVER_PROFILE=str(stack.install / "profile.json"),
-               AGENTFW_CLASSIFIER="rule-baseline", AGENTFW_RULE_BASELINE=str(ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py"),
+               AGENTFW_CLASSIFIER="rule-baseline", AGENTFW_RULE_BASELINE=stack.classifier["path"],
                AGENTFW_CLASSIFIER_PYTHON=sys.executable)
     request = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
         "protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "sou68-refusal", "version": "1"}}}).encode() + b"\n"
@@ -448,9 +519,14 @@ def run(args):
     output = args.output.resolve()
     require(not output.exists() and not output.is_relative_to(ROOT), "new evidence directory outside source required")
     output.mkdir(mode=0o700, parents=True)
+    classifier = (REPLAY.classifier_identity(args.classifier_script, args.classifier_sha256) if args.classifier_script
+                  else {"path": str(DEFAULT_CLASSIFIER), "file": DEFAULT_CLASSIFIER.name, "sha256": sha(DEFAULT_CLASSIFIER),
+                        "revision": None, "mode": "default"})
     report = {"format": "sou68-real-git-acceptance/1", "status": "incomplete", "source_before": before,
-              "binary_sha256": sha(args.agentfw), "driver_sha256": sha(__file__), "classifier_sha256": sha(ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py"), "skipped": 0}
+              "binary_sha256": sha(args.agentfw), "driver_sha256": sha(__file__), "classifier_sha256": classifier["sha256"], "skipped": 0,
+              "classifier": {k: v for k, v in classifier.items() if k != "path"}}
     daemon = None
+    stack = SimpleNamespace(classifier=classifier, receiver=BASE.DEMO.Receiver() if classifier["mode"] == "candidate" else None)
     try:
         with tempfile.TemporaryDirectory(prefix="sou68-owned-") as temporary:
             private = Path(temporary)
@@ -478,9 +554,11 @@ def run(args):
             with (output / "daemon.log").open("wb") as log:
                 daemon = subprocess.Popen([str(args.agentfw), "serve"], env=env, stdout=log, stderr=log)
                 require(BASE.DEMO.wait_healthy(port, daemon), "owned enforcing daemon failed to start")
-                stack = SimpleNamespace(root=output, binary=args.agentfw, git=args.git, workspace=workspace, poison=poison,
-                                        install=install, env=env, daemon=daemon)
+                stack.__dict__.update(root=output, binary=args.agentfw, git=args.git, workspace=workspace, poison=poison,
+                                      install=install, env=env, daemon=daemon)
                 startup_refusals(stack, report)
+                if classifier["mode"] == "candidate":
+                    candidate_replay(stack, report)
                 protected(stack, report)
             require(INSTALL.tree_sha(install / "package") == report["installation"]["profile"]["packageTreeSha256"],
                     "protected package changed")
@@ -492,8 +570,12 @@ def run(args):
     finally:
         if daemon is not None:
             BASE.DEMO.stop(daemon)
+            stack.daemon_stopped = daemon.poll() is not None
         report["protected_diagnostics"] = protected_diagnostics(report, output)
         write(output / "report.json", report)
+        if stack.receiver is not None:
+            stack.receiver.close()
+        write_sou97_evidence(stack, report, args)
     print(json.dumps({"status": report["status"], "error": report.get("error"), "report": str(output / "report.json"),
                       "protected_diagnostics": report["protected_diagnostics"]}))
     return 0 if report["status"] == "pass" else 1
@@ -506,7 +588,11 @@ def main():
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--git-sha256", required=True)
     parser.add_argument("--expected-commit", required=True)
+    parser.add_argument("--classifier-script", type=Path, help="SOU-97 opt-in candidate classifier (default: git_readonly_v1)")
+    parser.add_argument("--classifier-sha256", help="required exact sha256 of --classifier-script")
     args = parser.parse_args()
+    if bool(args.classifier_script) != bool(args.classifier_sha256):
+        parser.error("--classifier-script and --classifier-sha256 must be given together")
     if not args.run:
         print(json.dumps({"status": "plan", "executed": False}))
         return 0

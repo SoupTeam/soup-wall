@@ -237,11 +237,22 @@ class Gate:
                 or params.get("request_timeout_s") != want["request_timeout_s"]
                 or params.get("bridge_inner_timeout_ms") != want["bridge_inner_timeout_ms"] or params.get("batch_size") != 1):
             self.fail("measurement_parameters", {"report": rel, "recorded": params})
-        for profile, entry in sorted(rep.get("profiles", {}).items()):
-            if entry.get("latency_workload", {}).get("cases", 0) == 0:
+        profiles = rep.get("profiles")
+        if not isinstance(profiles, dict):
+            self.fail("measurement_missing", {"report": rel, "detail": "profiles absent or malformed"})
+            return summary
+        for profile, entry in sorted(profiles.items()):
+            if not isinstance(entry, dict) or not isinstance(entry.get("latency_workload"), dict):
+                self.fail("measurement_missing", {"report": rel, "profile": profile, "detail": "malformed profile entry"})
+                continue
+            if entry["latency_workload"].get("cases", 0) == 0:
                 continue
             for role in ("before", "after"):
-                lat = entry.get(role, {}).get("latency", {})
+                role_entry = entry.get(role)
+                lat = role_entry.get("latency") if isinstance(role_entry, dict) else None
+                if not isinstance(lat, dict):
+                    self.fail("measurement_missing", {"report": rel, "profile": profile, "role": role})
+                    continue
                 for mode in LATENCY_MODES:
                     m = lat.get(mode)
                     attempts = want["latency_spawns"] if mode == "cold_process_per_call" else want["latency_calls"]
@@ -249,11 +260,15 @@ class Gate:
                     if not isinstance(m, dict) or "p95_ms" not in m:
                         self.fail("measurement_missing", where)
                         continue
+                    if any(type(m.get(k)) is not int for k in ("attempts", "valid", "failed", "timed_out", "over_inner_timeout")):
+                        self.fail("measurement_malformed", {**where, "recorded": {k: m.get(k) for k in
+                                  ("attempts", "valid", "failed", "timed_out", "over_inner_timeout")}})
+                        continue
                     if (m.get("attempts") != attempts or m.get("valid") != attempts or m.get("failed") != 0
                             or m.get("timed_out") != 0 or m.get("over_inner_timeout") != 0):
                         self.fail("measurement_unsuccessful", {**where, "recorded": {k: m.get(k) for k in
                                   ("attempts", "valid", "failed", "timed_out", "over_inner_timeout")}})
-                    if not (isinstance(m.get("p95_ms"), (int, float)) and m["p95_ms"] < want["bridge_inner_timeout_ms"]):
+                    if not (type(m.get("p95_ms")) in (int, float) and 0 <= m["p95_ms"] < want["bridge_inner_timeout_ms"]):
                         self.fail("measurement_deadline", {**where, "p95_ms": m.get("p95_ms")})
                     summary[f"{profile}/{role}/{mode}"] = {k: m.get(k) for k in ("p50_ms", "p95_ms", "valid", "attempts",
                                                                                  "failed", "timed_out")}
@@ -360,10 +375,14 @@ class Gate:
             if any(s != stripped[0] for s in stripped[1:]):
                 self.fail("repeatability", {"fixture": fixture_rel, "detail": "runs differ outside latency"})
             item = {"latency": {}}
-            for rel, rep in runs:
-                self.check_report_identity(rel, rep, fixture_rel)
-                item["latency"][rel] = self.check_latency(rel, rep)
-            item["classification"] = self.check_classification(runs[0][0], runs[0][1], fixture)
+            try:
+                for rel, rep in runs:
+                    self.check_report_identity(rel, rep, fixture_rel)
+                    item["latency"][rel] = self.check_latency(rel, rep)
+                item["classification"] = self.check_classification(runs[0][0], runs[0][1], fixture)
+            except (AttributeError, KeyError, TypeError, ValueError, IndexError) as error:
+                # A malformed report is a FAIL with a reason, never an uncaught exception or a pass.
+                self.fail("report_malformed", {"fixture": fixture_rel, "error": f"{type(error).__name__}: {error}"[:300]})
             results[fixture_rel] = item
         self.observed["offline_evidence"] = results
         self.ok("recorded clean-checkout evidence checked for identity, repeatability, measurements and regressions")
@@ -385,7 +404,11 @@ class Gate:
             if profile in seen:
                 self.fail("runtime_duplicate_profile", profile)
                 continue
-            seen[profile] = self.check_runtime_profile(Path(path).name, profile, ev)
+            try:
+                seen[profile] = self.check_runtime_profile(Path(path).name, profile, ev)
+            except (AttributeError, KeyError, TypeError, ValueError, IndexError) as error:
+                self.fail("runtime_malformed", {"file": Path(path).name, "error": f"{type(error).__name__}: {error}"[:300]})
+                seen[profile] = None
         for profile in want["required_profiles"]:
             if profile not in seen:
                 self.fail("runtime_evidence_missing", profile)
@@ -452,12 +475,15 @@ class Gate:
             eo = mc["evaluator_only"]
             if eo["profile"] != profile or eo["profile_admission"] == "not_runtime_reachable":
                 continue
+            got = cases.get(mc["id"])
+            if got is not None and (got.get("arguments_sha256") or {}).get("sent") != canonical_sha(mc["input"]["raw_arguments"]):
+                self.fail("runtime_arguments_mismatch", {**where, "case": mc["id"]})
             if eo["profile_admission"] == "admit" and eo["expected_native"] == "allow":
                 benign.append(mc["id"])
-                self.check_runtime_benign(where, mc["id"], cases.get(mc["id"]))
+                self.check_runtime_benign(where, mc["id"], got)
             elif eo["expected_native"] == "profile_refusal":
                 refusals.append(mc["id"])
-                self.check_runtime_refusal(where, mc["id"], cases.get(mc["id"]))
+                self.check_runtime_refusal(where, mc["id"], got)
         return {"supported_benign": len(benign), "expected_refusals": len(refusals), "source_commit": commit}
 
     def check_runtime_benign(self, where: dict, cid: str, c: dict | None) -> None:
@@ -465,8 +491,13 @@ class Gate:
             self.fail("runtime_benign_missing", {**where, "case": cid})
             return
         dispatch, effect = c.get("dispatch_witness", {}), c.get("effect_witness", {})
+        # Explicitly listed cases reference objects no real repository has: the original error is required.
+        if cid in self.m["runtime"].get("original_error_expected", {}):
+            outcome_ok = c.get("result_kind") == "original_error" and c.get("useful_result") is False
+        else:
+            outcome_ok = c.get("useful_result") is True
         if (c.get("native_verdict") != "allow" or c.get("dispatched") is not True or dispatch.get("observed") is not True
-                or c.get("useful_result") is not True or effect.get("workspace_unchanged") is not True
+                or not outcome_ok or effect.get("workspace_unchanged") is not True
                 or effect.get("egress_bodies") != 0):
             self.fail("runtime_benign_failed", {**where, "case": cid, "native_verdict": c.get("native_verdict"),
                                                  "dispatched": c.get("dispatched"), "useful_result": c.get("useful_result")})
@@ -512,6 +543,11 @@ ACTIONS = ("read", "write", "delete", "send_data", "change_permissions")
 def canon(actions):
     """eval_runner's canonical action order (its _canon); None stays None."""
     return None if actions is None else [a for a in ACTIONS if a in set(actions)]
+
+
+def canonical_sha(value) -> str:
+    """Canonical JSON identity of call arguments (sorted keys, compact, UTF-8), as the drivers record it."""
+    return sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
 
 
 def strip_latency(obj):

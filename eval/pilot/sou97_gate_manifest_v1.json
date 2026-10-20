@@ -101,6 +101,12 @@
     "evidence_format": "sou97-runtime-evidence/1",
     "required_profiles": ["filesystem", "git"],
     "required_platform_prefix": "Linux",
+    "original_error_expected": {
+      "PMG-B07": "git_diff target is a synthetic 40-hex revision that no driver repository contains; the admitted call must reach the original server, which returns its own error, with no effect",
+      "PMG-B08": "git_diff target is a synthetic upper-case 40-hex revision absent from the driver repository; same requirement",
+      "PMG-B19": "git_show revision is a synthetic 40-hex revision absent from the driver repository; same requirement",
+      "PMG-B20": "git_show revision is a synthetic upper-case 40-hex revision absent from the driver repository; same requirement"
+    },
     "note": "Full runtime qualification needs candidate-specific original-server runs. No such evidence exists yet; the drivers do not select the candidate."
   }
 }

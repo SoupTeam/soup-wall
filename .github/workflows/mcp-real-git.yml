@@ -2,6 +2,11 @@ name: Real Git MCP profile
 
 on:
   workflow_dispatch:
+    inputs:
+      sou97_candidate:
+        description: Also run the SOU-97 pilot candidate classifier through the original server (opt-in)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -86,6 +91,19 @@ jobs:
             --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou68-acceptance" \
             2>&1 | tee "$RUNNER_TEMP/sou68-acceptance.log"
+      - name: SOU-97 opt-in candidate classifier through the original Git server
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_candidate == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CANDIDATE_SHA256="$(python3 -c 'import json; print(json.load(open("eval/pilot/sou97_gate_manifest_v1.json"))["candidate"]["sha256"])')"
+          python3 -B scripts/verify-sou68-real-mcp.py --run --agentfw "$PWD/target/debug/agentfw" \
+            --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
+            --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --sandbox-test-binary "$SOU68_TEST_BINARY" \
+            --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
+            --expected-commit "$(git rev-parse HEAD)" \
+            --classifier-script "$PWD/rule_baseline/pilot_readonly_v1/rule_baseline.py" --classifier-sha256 "$CANDIDATE_SHA256" \
+            --output "$RUNNER_TEMP/sou97-git-candidate" 2>&1 | tee "$RUNNER_TEMP/sou97-git-candidate.log"
       - name: Retain exact-source synthetic evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -97,5 +115,9 @@ jobs:
             ${{ runner.temp }}/sou68-*.log
             ${{ runner.temp }}/sou68-acceptance/*.json
             ${{ runner.temp }}/sou68-acceptance/*.log
+            ${{ runner.temp }}/sou97-*.log
+            ${{ runner.temp }}/sou97-git-candidate/*.json
+            ${{ runner.temp }}/sou97-git-candidate/*.jsonl
+            ${{ runner.temp }}/sou97-git-candidate/*.log
           if-no-files-found: error
           retention-days: 30

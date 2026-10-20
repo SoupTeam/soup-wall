@@ -65,8 +65,8 @@ values, so identical inputs give byte-identical results.
 
 ## Runtime evidence format `sou97-runtime-evidence/1`
 
-No such evidence exists yet: the real-server drivers do not select the candidate. A future driver run
-must emit one file per profile with these fields:
+No such evidence exists yet. Since Increment 4B the drivers can select the candidate (`--classifier-script` and
+`--classifier-sha256`) and write this file; a real Linux run must emit one file per profile with these fields:
 
 - `format`, `profile` (`filesystem` or `git`), `status: "pass"`, and `platform` starting with
   `Linux`.
@@ -85,10 +85,39 @@ must emit one file per profile with these fields:
   - **Every expected profile refusal** needs a refusal verdict with a `refusal_code`,
     `dispatched: false`, a dispatch witness that observed nothing, an unchanged workspace and no
     egress.
+  - **Every case** carries `arguments_sha256.sent`, the canonical hash of the exact matrix arguments.
+  - **The cases listed in `runtime.original_error_expected`** (synthetic Git revisions no repository contains)
+    instead need `result_kind: "original_error"` and `useful_result: false`. They must still be admitted,
+    dispatched and free of effects.
 
 The gate can check consistency and identities. It cannot cryptographically prove that a file came
 from a real run, so runtime evidence must be produced by the reviewed drivers on the exact commit and
 retained with their artifacts.
+
+## Obtaining runtime evidence (no GitHub CLI needed)
+
+The drivers produce the evidence only on Linux x86-64, through the real collector,
+classifier, native policy and pinned original servers. No evidence exists until those
+runs have completed and their artifacts have been checked.
+
+1. Push the exact commit: `git push -u origin feat/sou97-pilot-classifier`.
+2. Dispatch each existing workflow on that branch with `sou97_candidate` set to `true`.
+   - **GitHub UI:** Actions, then "Real filesystem MCP profile" (and then "Real Git MCP
+     profile"), then Run workflow. Choose the branch, tick `sou97_candidate`, and run.
+   - **REST, for each of `mcp-real-filesystem.yml` and `mcp-real-git.yml`:**
+     `POST https://api.github.com/repos/SoupTeam/soup-wall/actions/workflows/<file>/dispatches`
+     with body `{"ref": "feat/sou97-pilot-classifier", "inputs": {"sou97_candidate": "true"}}`.
+     Use a token that has `actions: write`.
+3. Wait for both runs to finish. Download the artifacts `sou62-real-filesystem-mcp-evidence`
+   and `sou68-real-git-mcp-evidence`. Each contains `sou97-*-candidate/sou97-runtime-evidence.json`
+   with the run's driver report, collector logs and response sidecar.
+4. Confirm that both evidence files record the pushed commit (`source.commit`) and `dirty: false`.
+   Then run, on that commit:
+   `python3 eval/tools/check_pilot_gate.py --mode runtime --runtime-evidence fs/sou97-runtime-evidence.json --runtime-evidence git/sou97-runtime-evidence.json`.
+5. Only a `RUNTIME_QUALIFIED` verdict from step 4 on genuine artifacts supports a runtime
+   claim. Retain the artifacts and the gate output together.
+
+The default steps of both workflows still run and must pass. Candidate mode never replaces them.
 
 ## Reproduce
 

@@ -65,7 +65,7 @@ def codes(result):
 class Throwaway:
     """A git repository from committed bytes, optionally with a broken candidate, plus recorded reports."""
 
-    def __init__(self, base: Path, candidate: bytes | None = None, calls=3, spawns=1, matrix_edit=None):
+    def __init__(self, base: Path, candidate: bytes | None = None, calls=3, spawns=1, matrix_edit=None, report_edit=None):
         self.repo = base / "repo"
         for rel in TREE:
             target = self.repo / rel
@@ -93,7 +93,12 @@ class Throwaway:
         for run in ("run1", "run2"):
             rel = f"eval/evidence/ctl/{run}/pilot_report.json"
             (self.repo / rel).parent.mkdir(parents=True, exist_ok=True)
-            (self.repo / rel).write_bytes((outside / run / "pilot_report.json").read_bytes())
+            data = (outside / run / "pilot_report.json").read_bytes()
+            if report_edit is not None:
+                report = json.loads(data)
+                report_edit(report)
+                data = (json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8")
+            (self.repo / rel).write_bytes(data)
             self.runs[rel] = sha((self.repo / rel).read_bytes())
         if matrix_edit is not None:
             matrix_edit(self.repo / MATRIX)
@@ -261,6 +266,31 @@ class BrokenCandidates(unittest.TestCase):
         self.assertEqual(done.returncode, 1)
         self.assertEqual(codes(result), {"measurement_parameters", "measurement_missing"})
 
+    def test_malformed_measurements_fail_in_a_controlled_way(self):
+        def lat(report):
+            return report["profiles"]["filesystem"]["after"]["latency"]
+        edits = {
+            "measurement_malformed": lambda r: lat(r)["warm_process_round_trip"].update(attempts="3"),
+            "measurement_deadline": lambda r: lat(r)["cold_process_per_call"].update(p95_ms="fast"),
+            "measurement_missing": lambda r: r["profiles"]["git"]["before"].update(latency=["not", "a", "mapping"]),
+            "report_malformed": lambda r: r["profiles"]["filesystem"]["after"].update(cases="not a list"),
+        }
+        for code, edit in edits.items():
+            with self.subTest(code=code):
+                base = self.tmp / code
+                base.mkdir()
+                done, result, _ = Throwaway(base, report_edit=edit).gate()
+                self.assertEqual(done.returncode, 1, done.stderr)
+                self.assertIsNotNone(result, "the gate must write a FAIL result, not crash")
+                self.assertNotIn("Traceback", done.stderr)
+                self.assertEqual(result["verdict"], "FAIL")
+                self.assertIn(code, codes(result))
+        whole = self.tmp / "profiles"
+        whole.mkdir()
+        done, result, _ = Throwaway(whole, report_edit=lambda r: r.update(profiles=[])).gate()
+        self.assertEqual((done.returncode, result["verdict"]), (1, "FAIL"))
+        self.assertNotIn("Traceback", done.stderr)
+
     def test_matrix_changed_after_evidence_is_rejected(self):
         def relabel(path):
             data = json.loads(path.read_bytes())
@@ -283,10 +313,15 @@ def runtime_evidence(profile: str, commit: str, mutate=None) -> dict:
         if eo["profile"] != profile or eo["profile_admission"] == "not_runtime_reachable":
             continue
         allowed = eo["profile_admission"] == "admit" and eo["expected_native"] == "allow"
+        original_error = c["id"] in REAL["runtime"].get("original_error_expected", {})
         if allowed or eo["expected_native"] == "profile_refusal":
             cases.append({"case_id": c["id"], "native_verdict": "allow" if allowed else "refused",
                           "refusal_code": None if allowed else "profile_refusal", "dispatched": allowed,
-                          "dispatch_witness": {"kind": "synthetic", "observed": allowed}, "useful_result": allowed or None,
+                          "arguments_sha256": {"sent": hashlib.sha256(json.dumps(c["input"]["raw_arguments"], sort_keys=True,
+                                               separators=(",", ":"), ensure_ascii=False).encode("utf-8")).hexdigest()},
+                          "result_kind": ("original_error" if original_error else "original_result") if allowed else "native_error",
+                          "dispatch_witness": {"kind": "synthetic", "observed": allowed},
+                          "useful_result": (allowed and not original_error) if allowed else None,
                           "effect_witness": {"kind": "synthetic", "workspace_unchanged": True, "egress_bodies": 0}})
     ev = {"format": "sou97-runtime-evidence/1", "profile": profile, "status": "pass", "platform": "Linux-synthetic",
           "source": {"commit": commit, "dirty": False}, "matrix_sha256": pins[MATRIX],
