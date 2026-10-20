@@ -154,7 +154,7 @@ enum Cmd {
         #[command(subcommand)]
         command: LifecycleCommand,
     },
-    /// Manage an opt-in Linux user service.
+    /// Manage an opt-in Linux systemd or macOS launchd user service.
     Service {
         #[arg(long, global = true)]
         home: Option<PathBuf>,
@@ -457,7 +457,7 @@ fn main() -> anyhow::Result<()> {
         Cmd::Onboard(command) => std::process::exit(agentfw::onboarding::run(command)),
         Cmd::SelfTestFixture(args) => agentfw::self_test::fixture::serve(args),
         Cmd::Serve => {
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
             let _direct_guard =
                 agentfw::lifecycle::Manager::new(Config::home()?).direct_serve_guard()?;
             tracing_subscriber::fmt().json().init();
@@ -491,7 +491,7 @@ fn main() -> anyhow::Result<()> {
                 tracing_subscriber::fmt().json().init();
                 let manager = agentfw::lifecycle::Manager::new(&home);
                 manager.verify_managed_boot(&instance, &std::env::current_exe()?)?;
-                #[cfg(target_os = "linux")]
+                #[cfg(any(target_os = "linux", target_os = "macos"))]
                 if agentfw::service::registered(&home) {
                     agentfw::service::Service::new(&home)?.verify_managed_process(&instance)?;
                 }
@@ -552,7 +552,7 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Cmd::Service { home, command } => {
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
             {
                 // Unlike Config::home(), preview must not create the default profile.
                 let home = match home {
@@ -596,10 +596,10 @@ fn main() -> anyhow::Result<()> {
                 }
                 Ok(())
             }
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(not(any(target_os = "linux", target_os = "macos")))]
             {
                 let _ = (home, command);
-                anyhow::bail!("user service management currently requires Linux and systemd");
+                anyhow::bail!("user service management requires Linux/systemd or macOS/launchd");
             }
         }
         Cmd::Preflight {
