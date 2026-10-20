@@ -149,8 +149,14 @@ struct Declaration {
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 enum Authority {
     ReadOnly,
-    /// Current Linux native root-child create-file executor, exact one output.
+    /// Native root-child create-file executor, exact one output.
     CreateFile {
+        workspace: PathBuf,
+        path: PathBuf,
+        classifier_sha256: String,
+    },
+    /// Native constrained document read executor, exact one input document.
+    ReadDocument {
         workspace: PathBuf,
         path: PathBuf,
         classifier_sha256: String,
@@ -404,8 +410,9 @@ fn policy_for(
             classifier_sha256,
         } => {
             ensure!(
-                cfg!(target_os = "linux"),
-                "create_file profile requires Linux"
+                cfg!(target_os = "linux")
+                    || cfg!(all(target_os = "macos", target_arch = "aarch64")),
+                "create_file profile requires Linux or macOS ARM64"
             );
             ensure!(
                 name == "create_file" && schema == digest(&resource::create_file_schema()),
@@ -426,6 +433,22 @@ fn policy_for(
             ensure!(!path.exists(), "create_file destination already exists");
             let workspace = workspace.canonicalize()?;
             let path = workspace.join(path.file_name().context("destination missing")?);
+            let is_macos = cfg!(all(target_os = "macos", target_arch = "aarch64"));
+            let executor_sha256 = if is_macos {
+                resource::macos_create_executor_sha256()
+            } else {
+                resource::create_file_executor_sha256()
+            };
+            let executor_profile = if is_macos {
+                resource::MACOS_CREATE_EXECUTOR_PROFILE
+            } else {
+                resource::CREATE_FILE_EXECUTOR_PROFILE
+            };
+            let max_content_bytes = if is_macos {
+                resource::MACOS_CREATE_MAX_CONTENT
+            } else {
+                resource::CREATE_FILE_MAX_CONTENT
+            };
             let pol = resource::Policy {
                 profile: ResourceProfile {
                     server_id: server.into(),
@@ -442,7 +465,7 @@ fn policy_for(
                 },
                 workspace: workspace.clone(),
                 cwd: workspace,
-                executor_sha256: resource::create_file_executor_sha256(),
+                executor_sha256,
                 classifier_sha256: classifier_sha256.clone(),
                 allowed_resources: vec![Resource::Path {
                     canonical: path.to_string_lossy().to_string(),
@@ -450,8 +473,8 @@ fn policy_for(
                 execution: Some(resource::ExecutionPolicy {
                     operation: resource::ExecutionOperation::CreateFile,
                     action: resource::ExecutionAction::Write,
-                    max_content_bytes: resource::CREATE_FILE_MAX_CONTENT,
-                    executor_profile: resource::CREATE_FILE_EXECUTOR_PROFILE.into(),
+                    max_content_bytes,
+                    executor_profile: executor_profile.into(),
                     path_selector: None,
                     content_selector: None,
                     response_contract: None,
@@ -459,9 +482,73 @@ fn policy_for(
                 network: None,
                 post: None,
                 windows_read: None,
+                macos_read: None,
                 binding: None,
             };
             Ok(("side_effecting".into(), Some(pol), vec![]))
+        }
+        Authority::ReadDocument {
+            workspace,
+            path,
+            classifier_sha256,
+        } => {
+            ensure!(
+                cfg!(all(target_os = "macos", target_arch = "aarch64")),
+                "read_document profile requires macOS ARM64"
+            );
+            ensure!(
+                name == "read_document" && schema == digest(&resource::macos_read_schema()),
+                "read_document is only supported with its exact native schema"
+            );
+            ensure!(
+                native::is_digest(classifier_sha256),
+                "invalid classifier revision"
+            );
+            safe_path(workspace, true)?;
+            ensure!(workspace.is_dir(), "reviewed workspace must be a directory");
+            safe_path(path, false)?;
+            ensure!(
+                path.is_file(),
+                "read_document target must be an existing regular file"
+            );
+            let workspace = workspace.canonicalize()?;
+            let canonical_path = path.canonicalize()?;
+            ensure!(
+                canonical_path.starts_with(&workspace),
+                "read_document path must reside within reviewed workspace"
+            );
+            let pol = resource::Policy {
+                profile: ResourceProfile {
+                    server_id: server.into(),
+                    tool_name: name.into(),
+                    schema_sha256: schema.into(),
+                    selectors: vec![Selector {
+                        pointer: "/path".into(),
+                        kind: ResourceKind::Path,
+                        aliases: vec![],
+                        optional: false,
+                        default: None,
+                        allow_missing_leaf: false,
+                    }],
+                },
+                workspace: workspace.clone(),
+                cwd: workspace,
+                executor_sha256: resource::macos_read_executor_sha256(),
+                classifier_sha256: classifier_sha256.clone(),
+                allowed_resources: vec![Resource::Path {
+                    canonical: canonical_path.to_string_lossy().to_string(),
+                }],
+                execution: None,
+                network: None,
+                post: None,
+                windows_read: None,
+                macos_read: Some(resource::MacosReadPolicy {
+                    executor_profile: resource::MACOS_READ_EXECUTOR_PROFILE.into(),
+                    max_content_bytes: resource::MACOS_READ_MAX_CONTENT,
+                }),
+                binding: None,
+            };
+            Ok(("read_only".into(), Some(pol), vec![]))
         }
         Authority::HttpsGet {
             workspace,
@@ -535,6 +622,7 @@ fn policy_for(
                 network: Some(net),
                 post: None,
                 windows_read: None,
+                macos_read: None,
                 binding: None,
             };
             Ok((
@@ -1118,6 +1206,51 @@ mod tests {
         for name in ["create_file", "https_get"] {
             assert!(policy_for("owned", name, &"0".repeat(64), &Authority::ReadOnly).is_err());
         }
+    }
+    #[test]
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    fn macos_arm64_profile_authoring_produces_valid_policies() {
+        let temp = tempfile::tempdir().unwrap();
+        let ws = temp.path().canonicalize().unwrap();
+        let file_path = ws.join("test.txt");
+        std::fs::write(&file_path, "sample content").unwrap();
+
+        // 1. ReadDocument authoring
+        let read_auth = Authority::ReadDocument {
+            workspace: ws.clone(),
+            path: file_path.clone(),
+            classifier_sha256: "0".repeat(64),
+        };
+        let read_schema = digest(&resource::macos_read_schema());
+        let (action, policy_opt, _) =
+            policy_for("server-macos", "read_document", &read_schema, &read_auth)
+                .expect("read_document policy authors successfully");
+        assert_eq!(action, "read_only");
+        let read_policy = policy_opt.expect("read policy populated");
+        assert!(read_policy.is_macos_read());
+        assert_eq!(
+            read_policy.executor_sha256,
+            resource::macos_read_executor_sha256()
+        );
+
+        // 2. CreateFile authoring (new destination)
+        let create_dest = ws.join("new_output.txt");
+        let create_auth = Authority::CreateFile {
+            workspace: ws.clone(),
+            path: create_dest.clone(),
+            classifier_sha256: "0".repeat(64),
+        };
+        let create_schema = digest(&resource::create_file_schema());
+        let (create_action, create_policy_opt, _) =
+            policy_for("server-macos", "create_file", &create_schema, &create_auth)
+                .expect("create_file policy authors successfully");
+        assert_eq!(create_action, "side_effecting");
+        let create_policy = create_policy_opt.expect("create policy populated");
+        assert!(create_policy.is_macos_create());
+        assert_eq!(
+            create_policy.executor_sha256,
+            resource::macos_create_executor_sha256()
+        );
     }
     #[test]
     fn run_dispatches_lifecycle_status_and_recover() {
