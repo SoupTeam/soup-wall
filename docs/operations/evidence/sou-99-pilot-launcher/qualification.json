@@ -1,13 +1,14 @@
 {
   "contract_version": "sw-pilot-launcher/1",
   "status": "pass",
-  "evaluated_at": "2026-10-20T16:33:25.262909+00:00",
+  "evaluated_at": "2026-10-20T19:12:04.318758+00:00",
   "real_model_evaluation": false,
   "scripted_owned_provider": true,
   "zero_paid_api_calls_verified": true,
+  "scenario_type": "fixture_server_acceptance",
   "binary_identity": {
     "path": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/debug/agentfw",
-    "sha256": "f8d1cc35a40f9dabab4e0225658ae4ee354529280517d1afecd02f2735506e44"
+    "sha256": "6fe3188e064e6a4a40c150d2703e2c04daaf40d8d00779720dd049bf78b97127"
   },
   "claude_identity": {
     "path": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/claude-code/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
@@ -65,16 +66,19 @@
     "abort_exit_code_propagated",
     "abort_private_dir_cleaned_up",
     "missing_daemon_token_fails_closed",
-    "missing_daemon_token_clear_error_message"
+    "missing_daemon_token_clear_error_message",
+    "descendant_reap_scenario_exit_0",
+    "descendant_pid_witness_recorded",
+    "zero_orphaned_processes_verified"
   ],
-  "checks_total": 42,
+  "checks_total": 45,
   "dry_run_preview": {
     "contract_version": "sw-pilot-launcher/1",
     "status": "preview_ready",
     "host_session": "pilot-acceptance-session-preview-01",
     "claude_path": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/claude-code/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
-    "workspace_path": "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-q75o1cyj/workspace",
-    "private_config_dir": "/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/soup-wall-pilot-d333118b93efc30a0af1db9a20881392",
+    "workspace_path": "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-w9fqkszz/workspace",
+    "private_config_dir": "/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/soup-wall-pilot-b03717a4b08596452223942181e65329",
     "allowed_tools": [
       "directory_tree",
       "get_file_info",
@@ -176,10 +180,10 @@
     "report": {
       "contract_version": "sw-pilot-launcher/1",
       "status": "completed",
-      "host_session": "fc09b8b6-af77-4da2-8e2a-c71926b6a677",
+      "host_session": "8979de7f-f793-4cef-987c-b6da4a9e60ed",
       "claude_path": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/claude-code/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
-      "workspace_path": "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-q75o1cyj/workspace",
-      "private_config_dir": "/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/soup-wall-pilot-5a3d5475623f26f6406fc0793b140d10",
+      "workspace_path": "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-w9fqkszz/workspace",
+      "private_config_dir": "/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/soup-wall-pilot-6d177a0022013557d8b6f4175fcd99e5",
       "allowed_tools": [
         "git_reset",
         "git_status",
@@ -198,11 +202,11 @@
             "filesystem",
             "--native-admission",
             "--host-session",
-            "fc09b8b6-af77-4da2-8e2a-c71926b6a677",
+            "8979de7f-f793-4cef-987c-b6da4a9e60ed",
             "--child-authority",
             "[REDACTED]",
             "--home",
-            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-q75o1cyj/home/.agentfw",
+            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-w9fqkszz/home/.agentfw",
             "--",
             "/opt/homebrew/opt/python@3.14/bin/python3.14",
             "-u",
@@ -210,7 +214,7 @@
             "--role",
             "filesystem",
             "--workspace",
-            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-q75o1cyj/workspace",
+            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-w9fqkszz/workspace",
             "--tools",
             "read_text_file"
           ],
@@ -228,11 +232,11 @@
             "git",
             "--native-admission",
             "--host-session",
-            "fc09b8b6-af77-4da2-8e2a-c71926b6a677",
+            "8979de7f-f793-4cef-987c-b6da4a9e60ed",
             "--child-authority",
             "[REDACTED]",
             "--home",
-            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-q75o1cyj/home/.agentfw",
+            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-w9fqkszz/home/.agentfw",
             "--",
             "/opt/homebrew/opt/python@3.14/bin/python3.14",
             "-u",
@@ -240,7 +244,7 @@
             "--role",
             "git",
             "--workspace",
-            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-q75o1cyj/workspace",
+            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-w9fqkszz/workspace",
             "--tools",
             "git_status,git_reset"
           ],
@@ -266,8 +270,8 @@
     },
     "audit": {
       "host_claude_binary": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/claude-code/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
-      "host_session": "fc09b8b6-af77-4da2-8e2a-c71926b6a677",
-      "private_config_dir": "/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/soup-wall-pilot-5a3d5475623f26f6406fc0793b140d10",
+      "host_session": "8979de7f-f793-4cef-987c-b6da4a9e60ed",
+      "private_config_dir": "/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/soup-wall-pilot-6d177a0022013557d8b6f4175fcd99e5",
       "allowed_tools": [
         "git_reset",
         "git_status",
@@ -285,8 +289,8 @@
       "phase3_destructive_refused": true,
       "phase3_refusal_detail": "Soup Wall withheld MCP invocation (deny-destructive)\n\n<system-reminder>\n<total_tokens>14999890 tokens left</total_tokens>\n</system-reminder>",
       "phase3_zero_effects": true,
-      "git_head_before": "d6c3858150557a1445a038fa829e1fbd60c4bdde",
-      "git_head_after": "d6c3858150557a1445a038fa829e1fbd60c4bdde",
+      "git_head_before": "55d8f1aaca46f5197d8ef63500429c236ed76879",
+      "git_head_after": "55d8f1aaca46f5197d8ef63500429c236ed76879",
       "phase4_continuation": true,
       "model_recorded_steps": 4,
       "zero_paid_api_calls": true
@@ -294,6 +298,11 @@
   },
   "cleanup_witness": {
     "private_config_dir_removed": true,
-    "zero_orphaned_processes": true
+    "zero_orphaned_processes": true,
+    "process_group_reaping_witness": {
+      "descendant_pid": 31259,
+      "all_descendants_terminated": true,
+      "verification_method": "os_kill_probe_after_exit_0"
+    }
   }
 }

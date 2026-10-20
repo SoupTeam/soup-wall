@@ -422,6 +422,7 @@ native:
                     "--fs-profile", str(fs_prof_dir),
                     "--git-profile", str(git_prof_dir),
                     "--home", str(agentfw_dir),
+                    "--policy", str(policy_path),
                     "--host-session", session_id,
                     "--timeout-seconds", "60",
                     "--json",
@@ -564,10 +565,50 @@ sys.exit(137)
             "missing_daemon_token_clear_error_message",
         )
 
+    def test_descendant_reaping_witness(self, workspace: Path, mock_secret: str) -> dict:
+        """Verify that owned process group descendants are reaped on normal host exit (exit 0)."""
+        pid_file = workspace / "descendant.pid"
+        mock_script = workspace / "claude_spawn_descendant.sh"
+        script = f"""#!/bin/sh
+sleep 60 >/dev/null 2>&1 &
+echo $! > "{pid_file}"
+exit 0
+"""
+        make_executable(mock_script, script)
+
+        proc = self.run_pilot_cli([
+            "--claude", str(mock_script),
+            "--workspace", str(workspace),
+            "--fs-profile", str(FS_PROFILE),
+            "--git-profile", str(GIT_PROFILE),
+            "--mock-daemon-token", mock_secret,
+            "--mock-instance-id", "mock-instance-reap-witness",
+            "--json",
+        ])
+        check(proc.returncode == 0, "descendant_reap_scenario_exit_0")
+        check(pid_file.exists(), "descendant_pid_witness_recorded")
+        descendant_pid = int(pid_file.read_text().strip())
+
+        time.sleep(0.1)
+        is_alive = True
+        try:
+            os.kill(descendant_pid, 0)
+        except OSError:
+            is_alive = False
+
+        check(not is_alive, "zero_orphaned_processes_verified")
+
+        return {
+            "descendant_pid": descendant_pid,
+            "all_descendants_terminated": not is_alive,
+            "verification_method": "os_kill_probe_after_exit_0",
+        }
+
     def generate_qualification_report(
         self,
         dry_run_report: dict,
         live_scenario_data: dict,
+        process_witness: dict,
     ) -> dict:
         timestamp = datetime.now(timezone.utc).isoformat()
         qualification = {
@@ -577,6 +618,7 @@ sys.exit(137)
             "real_model_evaluation": False,
             "scripted_owned_provider": True,
             "zero_paid_api_calls_verified": True,
+            "scenario_type": "fixture_server_acceptance",
             "binary_identity": {
                 "path": str(self.binary),
                 "sha256": sha256_file(self.binary),
@@ -604,7 +646,8 @@ sys.exit(137)
             },
             "cleanup_witness": {
                 "private_config_dir_removed": True,
-                "zero_orphaned_processes": True,
+                "zero_orphaned_processes": process_witness["all_descendants_terminated"],
+                "process_group_reaping_witness": process_witness,
             },
         }
 
@@ -666,8 +709,12 @@ def main() -> int:
         harness.test_stale_authority_rejection(ws)
         print("  ✓ Stale / missing authority fails closed.")
 
-    print("\n[Phase 5] Publishing qualification evidence...")
-    evidence = harness.generate_qualification_report(dry_run_report, live_data)
+        print("\n[Phase 5] Testing owned descendant process group reaping on normal host exit...")
+        process_witness = harness.test_descendant_reaping_witness(ws, mock_secret)
+        print(f"  ✓ Process group cleanup verified: descendant PID {process_witness['descendant_pid']} reaped on exit 0.")
+
+    print("\n[Phase 6] Publishing qualification evidence...")
+    evidence = harness.generate_qualification_report(dry_run_report, live_data, process_witness)
     print(f"  ✓ Evidence written to: {harness.evidence_path}")
     print(f"  ✓ Total acceptance checks passed: {evidence['checks_total']}/{evidence['checks_total']}")
     print("\nSUCCESS: All SOU-99 pilot launcher acceptance criteria passed 100%.")

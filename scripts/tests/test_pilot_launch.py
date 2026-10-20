@@ -377,6 +377,195 @@ sys.exit(0)
             self.assertNotEqual(proc.returncode, 0)
             self.assertIn("exceeded declared timeout", proc.stderr)
 
+    def test_descendants_reaped_on_normal_host_exit(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            ws = tmp / "ws"
+            ws.mkdir()
+
+            pid_file = tmp / "descendant.pid"
+            mock_claude = tmp / "claude-with-descendant"
+            script = f"""#!/bin/sh
+sleep 60 >/dev/null 2>&1 &
+echo $! > "{pid_file}"
+exit 0
+"""
+            make_executable(mock_claude, script)
+
+            proc = self.run_pilot([
+                "--claude", str(mock_claude),
+                "--workspace", str(ws),
+                "--fs-profile", str(FS_PROFILE),
+                "--git-profile", str(GIT_PROFILE),
+                "--mock-daemon-token", "token-reap",
+                "--mock-instance-id", "inst-reap",
+                "--json",
+            ])
+            self.assertEqual(proc.returncode, 0, f"pilot-launch failed: {proc.stderr}")
+            self.assertTrue(pid_file.exists(), "mock claude did not write descendant pid")
+            descendant_pid = int(pid_file.read_text().strip())
+
+            import time
+            time.sleep(0.1)
+            is_alive = True
+            try:
+                os.kill(descendant_pid, 0)
+            except OSError:
+                is_alive = False
+            self.assertFalse(is_alive, f"descendant PID {descendant_pid} survived normal host exit")
+
+    def test_invalid_mcp_server_profile_rejected(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            ws = tmp / "ws"
+            ws.mkdir()
+
+            invalid_fs = tmp / "invalid_fs.json"
+            invalid_fs.write_text(json.dumps({
+                "format": "sw-mcp/filesystem-readonly/1",
+                "workspace": "/tmp",
+                "corrupted": True,
+            }), encoding="utf-8")
+
+            claude = tmp / "claude"
+            make_executable(claude)
+
+            proc = self.run_pilot([
+                "--claude", str(claude),
+                "--workspace", str(ws),
+                "--fs-profile", str(invalid_fs),
+                "--git-profile", str(GIT_PROFILE),
+                "--mock-daemon-token", "token-inv",
+                "--mock-instance-id", "inst-inv",
+                "--dry-run",
+            ])
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("failed ProfileConfig validation", proc.stderr)
+
+    def test_daemon_policy_verification_and_negative_control(self):
+        import hashlib, socket, time, urllib.request
+
+        def free_port() -> int:
+            with socket.socket() as s:
+                s.bind(("127.0.0.1", 0))
+                return s.getsockname()[1]
+
+        def sha256_bytes(b: bytes) -> str:
+            return hashlib.sha256(b).hexdigest()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir).resolve()
+            home = tmp / "home"
+            home.mkdir()
+            agentfw_dir = home / ".agentfw"
+            agentfw_dir.mkdir()
+            ws = tmp / "ws"
+            ws.mkdir()
+
+            policy_a = tmp / "policy_allow.yaml"
+            policy_a.write_text("agent_policies: []\ndefault: allow\n", encoding="utf-8")
+
+            policy_b = tmp / "policy_deny.yaml"
+            policy_b.write_text("agent_policies: []\ndefault: deny\n", encoding="utf-8")
+
+            reg_schema = {"type": "object", "additionalProperties": False}
+            reg_bytes = json.dumps({
+                "contract_version": "sw-native/1",
+                "registry_id": "sou99-test-reg",
+                "tools": [
+                    {
+                        "name": "read_text_file",
+                        "schema_sha256": sha256_bytes(json.dumps(reg_schema).encode()),
+                        "action_class": "read_only",
+                        "result_provenance": "untrusted",
+                        "egress": [],
+                    }
+                ],
+            }).encode()
+            reg_path = tmp / "registry.json"
+            reg_path.write_bytes(reg_bytes)
+
+            daemon_port = free_port()
+            (agentfw_dir / "config.yaml").write_text(f"""port: {daemon_port}
+enforce: true
+policy: {policy_a}
+native:
+  registry_path: {reg_path}
+  registry_sha256: {sha256_bytes(reg_bytes)}
+""", encoding="utf-8")
+
+            daemon_env = dict(
+                HOME=str(home),
+                PATH=os.environ.get("PATH", "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin"),
+            )
+            daemon = subprocess.Popen(
+                [str(AGENTFW_BIN), "serve"],
+                env=daemon_env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+            claude = tmp / "claude"
+            make_executable(claude)
+
+            try:
+                deadline = time.monotonic() + 10
+                healthy = False
+                while time.monotonic() < deadline:
+                    if daemon.poll() is not None:
+                        break
+                    try:
+                        with urllib.request.urlopen(f"http://127.0.0.1:{daemon_port}/health", timeout=1) as resp:
+                            if resp.status == 200:
+                                healthy = True
+                                break
+                    except Exception:
+                        time.sleep(0.1)
+
+                self.assertTrue(healthy, "daemon failed to become healthy")
+
+                # 1. Negative control: operator selects policy_b but daemon enforces policy_a
+                proc_mismatch = self.run_pilot([
+                    "--claude", str(claude),
+                    "--workspace", str(ws),
+                    "--fs-profile", str(FS_PROFILE),
+                    "--git-profile", str(GIT_PROFILE),
+                    "--home", str(agentfw_dir),
+                    "--policy", str(policy_b),
+                    "--dry-run",
+                ])
+                self.assertNotEqual(proc_mismatch.returncode, 0)
+                self.assertTrue(
+                    "policy mismatch" in proc_mismatch.stderr or "policy digest mismatch" in proc_mismatch.stderr,
+                    f"expected policy mismatch error, got: {proc_mismatch.stderr}",
+                )
+
+                # 2. Positive control: operator selects policy_a matching daemon
+                proc_match = self.run_pilot([
+                    "--claude", str(claude),
+                    "--workspace", str(ws),
+                    "--fs-profile", str(FS_PROFILE),
+                    "--git-profile", str(GIT_PROFILE),
+                    "--home", str(agentfw_dir),
+                    "--policy", str(policy_a),
+                    "--dry-run",
+                    "--json",
+                ])
+                self.assertEqual(proc_match.returncode, 0, f"matching policy failed: {proc_match.stderr}")
+                report = json.loads(proc_match.stdout)
+                self.assertEqual(report["status"], "preview_ready")
+
+            finally:
+                daemon.terminate()
+                try:
+                    daemon.wait(timeout=3)
+                except Exception:
+                    daemon.kill()
+                if daemon.stdout:
+                    daemon.stdout.close()
+                if daemon.stderr:
+                    daemon.stderr.close()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -18,6 +18,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use anyhow::{bail, ensure, Context, Result};
 use clap::Args;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use crate::native::child_authority;
 use crate::Config;
@@ -420,53 +421,104 @@ pub fn resolve_server_runtime(
     };
 
     if profile_file.is_file() {
-        let content = fs::read_to_string(&profile_file)?;
-        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
-            if let Some(runtime_path) = val.get("runtimePath").and_then(|v| v.as_str()) {
-                if server_id == FILESYSTEM_SERVER_ID {
-                    let package_root = val
-                        .get("packageRoot")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or(".");
-                    let entry = Path::new(package_root)
-                        .join("node_modules/@modelcontextprotocol/server-filesystem/dist/index.js");
-                    return Ok((
-                        vec![
-                            runtime_path.to_string(),
-                            entry.display().to_string(),
-                            workspace.display().to_string(),
-                        ],
-                        profile_file,
-                    ));
-                } else if server_id == GIT_SERVER_ID {
-                    return Ok((
-                        vec![
-                            runtime_path.to_string(),
-                            "-I".to_string(),
-                            "-B".to_string(),
-                            "-m".to_string(),
-                            "mcp_server_git".to_string(),
-                            "--repository".to_string(),
-                            workspace.display().to_string(),
-                        ],
-                        profile_file,
-                    ));
+        let bytes = fs::read(&profile_file)
+            .with_context(|| format!("read profile at {:?}", profile_file))?;
+
+        // 1. Try reading as validated ProfileConfig
+        if let Ok(profile) = crate::mcp::server_profile::ProfileConfig::read(&bytes) {
+            let (cmd, args) = match server_id {
+                FILESYSTEM_SERVER_ID => {
+                    let entry = profile.package_root.join(crate::mcp::server_profile::SERVER_ENTRYPOINT);
+                    let args = vec![
+                        entry.display().to_string(),
+                        "/workspace".to_string(),
+                    ];
+                    (profile.runtime_path.display().to_string(), args)
                 }
-            } else if let Some(cmd) = val.get("command").and_then(|v| v.as_str()) {
-                let mut full = vec![cmd.to_string()];
-                if let Some(args) = val.get("args").and_then(|a| a.as_array()) {
-                    for arg in args {
-                        if let Some(s) = arg.as_str() {
-                            full.push(s.to_string());
-                        }
-                    }
+                GIT_SERVER_ID => {
+                    let args = vec![
+                        "-I".to_string(),
+                        "-B".to_string(),
+                        "-m".to_string(),
+                        "mcp_server_git".to_string(),
+                        "--repository".to_string(),
+                        "/workspace".to_string(),
+                    ];
+                    (profile.runtime_path.display().to_string(), args)
                 }
-                return Ok((full, profile_file));
+                other => bail!("unsupported server_id {:?} for ProfileConfig", other),
+            };
+
+            let canonical_ws = workspace.canonicalize()
+                .with_context(|| format!("canonicalize workspace {:?}", workspace))?;
+            profile.validate_command(&cmd, &args, &canonical_ws)
+                .context("profile validate_command contract check failed")?;
+
+            let mut full_cmd = vec![cmd];
+            full_cmd.extend(args);
+            return Ok((full_cmd, profile_file));
+        }
+
+        // 2. Parse as JSON to support command-based profile fixtures or runtimePath configs
+        let val: serde_json::Value = serde_json::from_slice(&bytes)
+            .with_context(|| format!("profile at {:?} is neither valid ProfileConfig nor valid JSON", profile_file))?;
+
+        // If it declared an installed MCP format, reject the invalid profile
+        if let Some(format) = val.get("format").and_then(|f| f.as_str()) {
+            if format.starts_with("sw-mcp/") {
+                bail!("invalid MCP server profile at {:?}: failed ProfileConfig validation", profile_file);
             }
         }
+
+        if let Some(runtime_path) = val.get("runtimePath").and_then(|v| v.as_str()) {
+            if server_id == FILESYSTEM_SERVER_ID {
+                let package_root = val
+                    .get("packageRoot")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(".");
+                let entry = Path::new(package_root)
+                    .join("node_modules/@modelcontextprotocol/server-filesystem/dist/index.js");
+                return Ok((
+                    vec![
+                        runtime_path.to_string(),
+                        entry.display().to_string(),
+                        "/workspace".to_string(),
+                    ],
+                    profile_file,
+                ));
+            } else if server_id == GIT_SERVER_ID {
+                return Ok((
+                    vec![
+                        runtime_path.to_string(),
+                        "-I".to_string(),
+                        "-B".to_string(),
+                        "-m".to_string(),
+                        "mcp_server_git".to_string(),
+                        "--repository".to_string(),
+                        "/workspace".to_string(),
+                    ],
+                    profile_file,
+                ));
+            }
+        } else if let Some(cmd) = val.get("command").and_then(|v| v.as_str()) {
+            let mut full = vec![cmd.to_string()];
+            if let Some(args) = val.get("args").and_then(|a| a.as_array()) {
+                for arg in args {
+                    if let Some(s) = arg.as_str() {
+                        full.push(s.to_string());
+                    }
+                }
+            }
+            return Ok((full, profile_file));
+        }
+
+        bail!(
+            "invalid MCP server profile at {:?}: expected installed profile, runtimePath, or command",
+            profile_file
+        );
     }
 
-    // Default fallback for minimal unit tests
+    // Default fallback for minimal unit tests when no profile file exists
     Ok((
         vec!["echo".to_string(), server_id.to_string()],
         profile_file,
@@ -616,6 +668,167 @@ async fn probe_daemon_liveness(home_path: &Path, daemon_token: &str) -> Result<S
     Ok(id.to_string())
 }
 
+/// Verify that the operator selected --policy matches the daemon's active, enforcing policy.
+pub fn verify_daemon_policy(config: &ValidatedConfig, _daemon_token: &str) -> Result<()> {
+    let policy_path = match &config.policy_path {
+        Some(p) => p,
+        None => return Ok(()),
+    };
+
+    let policy_bytes = fs::read(policy_path)
+        .with_context(|| format!("read selected policy file at {:?}", policy_path))?;
+    let policy_str = std::str::from_utf8(&policy_bytes)
+        .context("selected policy file is not valid UTF-8")?;
+    let selected_policy_set = soup_wall_agent::AgentPolicySet::from_yaml(policy_str)
+        .context("selected policy file does not parse as valid AgentPolicySet")?;
+    let selected_policy_sha256 = format!(
+        "{:x}",
+        Sha256::digest(serde_json::to_vec(&selected_policy_set).context("serialize policy set")?)
+    );
+
+    let cfg_path = config.home_path.join("config.yaml");
+    if cfg_path.exists() {
+        let cfg_text = fs::read_to_string(&cfg_path)
+            .with_context(|| format!("read daemon config at {:?}", cfg_path))?;
+        let daemon_cfg = Config::from_yaml(&cfg_text)
+            .with_context(|| format!("parse daemon config at {:?}", cfg_path))?;
+
+        ensure!(
+            daemon_cfg.enforce,
+            "daemon at {:?} is running in shadow mode (enforce: false); --policy requires an enforcing daemon",
+            cfg_path
+        );
+
+        let daemon_policy_path = daemon_cfg.policy.as_ref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "launcher specified --policy {:?}, but daemon config at {:?} has no policy configured",
+                policy_path,
+                cfg_path
+            )
+        })?;
+
+        let daemon_policy_abs = if daemon_policy_path.is_absolute() {
+            daemon_policy_path.clone()
+        } else {
+            config.home_path.join(daemon_policy_path)
+        };
+
+        if let Ok(canonical_daemon_policy) = daemon_policy_abs.canonicalize() {
+            ensure!(
+                &canonical_daemon_policy == policy_path,
+                "policy mismatch: launcher selected {:?} but daemon is configured with {:?}",
+                policy_path,
+                canonical_daemon_policy
+            );
+        }
+
+        let daemon_policy_bytes = fs::read(&daemon_policy_abs)
+            .with_context(|| format!("read daemon policy at {:?}", daemon_policy_abs))?;
+        let daemon_policy_str = std::str::from_utf8(&daemon_policy_bytes)
+            .context("daemon policy file is not valid UTF-8")?;
+        let daemon_policy_set = soup_wall_agent::AgentPolicySet::from_yaml(daemon_policy_str)
+            .context("daemon policy does not parse as valid AgentPolicySet")?;
+        let daemon_policy_sha256 = format!(
+            "{:x}",
+            Sha256::digest(serde_json::to_vec(&daemon_policy_set).context("serialize daemon policy set")?)
+        );
+
+        ensure!(
+            selected_policy_sha256 == daemon_policy_sha256,
+            "policy digest mismatch: selected policy SHA-256 {} differs from daemon policy SHA-256 {}",
+            selected_policy_sha256,
+            daemon_policy_sha256
+        );
+
+        // If daemon is live (not mock), query /diagnostics/v1/protection
+        if config.mock_daemon_token.is_none() {
+            let token_path = config.home_path.join("token");
+            ensure!(
+                token_path.exists(),
+                "daemon status token does not exist at {:?}; ensure daemon is initialized",
+                token_path
+            );
+            let status_token = fs::read_to_string(&token_path)
+                .context("read daemon status token")?
+                .trim()
+                .to_string();
+
+            let url = format!(
+                "http://{}/diagnostics/v1/protection",
+                daemon_cfg.socket_address()
+            );
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .context("create runtime for diagnostics verification")?;
+
+            let nonce = crate::token::generate();
+            let (mode, active_policy_sha256) = rt.block_on(async {
+                let client = reqwest::Client::builder()
+                    .no_proxy()
+                    .timeout(Duration::from_secs(5))
+                    .build()?;
+                let res = client
+                    .get(&url)
+                    .header("Authorization", format!("Bearer {}", status_token))
+                    .header(crate::protection_status::NONCE_HEADER, &nonce)
+                    .send()
+                    .await
+                    .context("connect to daemon /diagnostics/v1/protection")?;
+                ensure!(
+                    res.status().is_success(),
+                    "daemon /diagnostics/v1/protection returned status {}",
+                    res.status()
+                );
+                let snapshot: crate::protection_status::Snapshot = res
+                    .json()
+                    .await
+                    .context("parse /diagnostics/v1/protection JSON snapshot")?;
+                Ok::<(crate::protection_status::Mode, String), anyhow::Error>((
+                    snapshot.mode,
+                    snapshot.policy.sha256,
+                ))
+            })?;
+
+            ensure!(
+                mode == crate::protection_status::Mode::Enforcing,
+                "daemon active mode is not enforcing: {:?}",
+                mode
+            );
+
+            ensure!(
+                active_policy_sha256 == selected_policy_sha256,
+                "policy mismatch with live daemon: daemon enforces SHA-256 {} but selected policy has SHA-256 {}",
+                active_policy_sha256,
+                selected_policy_sha256
+            );
+        }
+    } else if config.mock_daemon_token.is_none() {
+        bail!(
+            "launcher specified --policy {:?}, but daemon config does not exist at {:?}",
+            policy_path,
+            cfg_path
+        );
+    }
+
+    Ok(())
+}
+
+#[cfg(unix)]
+async fn terminate_process_group(pgid: u32, grace: Duration) {
+    let target = -(pgid as i32);
+    unsafe {
+        libc::kill(target, libc::SIGTERM);
+    }
+    tokio::time::sleep(grace).await;
+    unsafe {
+        libc::kill(target, libc::SIGKILL);
+    }
+}
+
+#[cfg(not(unix))]
+async fn terminate_process_group(_pgid: u32, _grace: Duration) {}
+
 /// Mint HMAC-signed scoped child authority grants bound to the live daemon instance.
 pub fn mint_grants(
     config: &ValidatedConfig,
@@ -745,7 +958,19 @@ pub fn write_per_process_mcp_config(
                     "AGENTFW_MCP_SERVER_PROFILE".to_string(),
                     serde_json::Value::String(profile_file.display().to_string()),
                 );
+            } else if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                if let Some(format) = val.get("format").and_then(|f| f.as_str()) {
+                    if format.starts_with("sw-mcp/") {
+                        bail!("invalid MCP server profile at {:?}: failed ProfileConfig validation", profile_file);
+                    }
+                }
             }
+        }
+        if let Some(ref policy) = config.policy_path {
+            env_obj.insert(
+                "AGENTFW_POLICY".to_string(),
+                serde_json::Value::String(policy.display().to_string()),
+            );
         }
         env_obj.insert(
             "AGENTFW_HOST_SESSION".to_string(),
@@ -880,6 +1105,9 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
 
     let instance_id = fetch_daemon_instance(&config, &daemon_token)
         .context("authenticate and validate live daemon instance")?;
+
+    verify_daemon_policy(&config, &daemon_token)
+        .context("verify daemon active policy against selected policy")?;
 
     let grants = mint_grants(&config, now_ms, &instance_id)?;
     let (mcp_config_path, server_plans) =
@@ -1022,43 +1250,36 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         loop {
             // Check if child has exited
             match child.try_wait() {
-                Ok(Some(status)) => return Ok(status),
+                Ok(Some(status)) => {
+                    #[cfg(unix)]
+                    terminate_process_group(child_pid, Duration::from_millis(50)).await;
+                    return Ok(status);
+                }
                 Ok(None) => {}
-                Err(e) => return Err(anyhow::anyhow!("error waiting for child: {}", e)),
+                Err(e) => {
+                    #[cfg(unix)]
+                    terminate_process_group(child_pid, Duration::from_millis(50)).await;
+                    return Err(anyhow::anyhow!("error waiting for child: {}", e));
+                }
             }
 
             tokio::select! {
                 _ = tokio::time::sleep_until(deadline) => {
                     #[cfg(unix)]
-                    unsafe {
-                        libc::kill(-(child_pid as i32), libc::SIGTERM);
-                    }
+                    terminate_process_group(child_pid, Duration::from_millis(200)).await;
                     #[cfg(not(unix))]
                     {
                         let _ = child.kill();
-                    }
-                    tokio::time::sleep(Duration::from_millis(300)).await;
-                    #[cfg(unix)]
-                    unsafe {
-                        libc::kill(-(child_pid as i32), libc::SIGKILL);
                     }
                     let _ = child.wait();
                     bail!("pilot host execution exceeded declared timeout of {}s", timeout.as_secs());
                 }
                 _ = tokio::signal::ctrl_c() => {
                     #[cfg(unix)]
-                    unsafe {
-                        libc::kill(-(child_pid as i32), libc::SIGINT);
-                        libc::kill(-(child_pid as i32), libc::SIGTERM);
-                    }
+                    terminate_process_group(child_pid, Duration::from_millis(200)).await;
                     #[cfg(not(unix))]
                     {
                         let _ = child.kill();
-                    }
-                    tokio::time::sleep(Duration::from_millis(200)).await;
-                    #[cfg(unix)]
-                    unsafe {
-                        libc::kill(-(child_pid as i32), libc::SIGKILL);
                     }
                     let _ = child.wait();
                     bail!("pilot host interrupted by SIGINT");
@@ -1074,17 +1295,10 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                     futures_util::future::pending::<()>().await;
                 } => {
                     #[cfg(unix)]
-                    unsafe {
-                        libc::kill(-(child_pid as i32), libc::SIGTERM);
-                    }
+                    terminate_process_group(child_pid, Duration::from_millis(200)).await;
                     #[cfg(not(unix))]
                     {
                         let _ = child.kill();
-                    }
-                    tokio::time::sleep(Duration::from_millis(200)).await;
-                    #[cfg(unix)]
-                    unsafe {
-                        libc::kill(-(child_pid as i32), libc::SIGKILL);
                     }
                     let _ = child.wait();
                     bail!("pilot host terminated by SIGTERM");
@@ -1095,17 +1309,10 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                             Ok(live_id) if live_id == initial_instance => {}
                             _ => {
                                 #[cfg(unix)]
-                                unsafe {
-                                    libc::kill(-(child_pid as i32), libc::SIGTERM);
-                                }
+                                terminate_process_group(child_pid, Duration::from_millis(200)).await;
                                 #[cfg(not(unix))]
                                 {
                                     let _ = child.kill();
-                                }
-                                tokio::time::sleep(Duration::from_millis(200)).await;
-                                #[cfg(unix)]
-                                unsafe {
-                                    libc::kill(-(child_pid as i32), libc::SIGKILL);
                                 }
                                 let _ = child.wait();
                                 bail!("daemon instance lost or restarted during pilot session");
