@@ -1,0 +1,256 @@
+{
+  "agentfw_version": "0.3.0",
+  "checks": [
+    {
+      "action": null,
+      "detail": "Linux local-user profile; service management not requested",
+      "id": "platform",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "executable digest matches; lifecycle, mcp-connection, protection-status and self-test are available",
+      "id": "agent",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "rule_baseline.py digest matches the expected revision",
+      "id": "classifier",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "Python 3 runs in isolated mode",
+      "id": "classifier_python",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "reviewed sw-native/1 registry digest matches",
+      "id": "registry",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "reviewed policy parses (12 rules)",
+      "id": "policy",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "reviewed workspace is an owned directory",
+      "id": "workspace",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "a recorded onboarding of this Agent home can be resumed or undone",
+      "id": "agent_home",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "accepted git read-only profile; digest matches",
+      "id": "server_profile",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "registry tools carry this profile's result contract",
+      "id": "profile_registry",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "runtime, installed package tree, bubblewrap, libraries and workspace match their pins",
+      "id": "profile_runtime",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "user, PID, mount and network namespaces, seccomp and (for Git) Landlock ABI 3 are available",
+      "id": "sandbox_support",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "the selected entry is the wrapper recorded by this onboarding",
+      "id": "server",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "127.0.0.1:57331 is available for the new Agent",
+      "id": "port",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "the profile's original read (list_directory or git_status of /workspace) will verify the connected server",
+      "id": "probe",
+      "status": "ok"
+    }
+  ],
+  "configured": {
+    "checks": {
+      "binary_matches_agent": true,
+      "mode_enforcing": true,
+      "pid_matches_lifecycle": true,
+      "policy_matches": true,
+      "query_answered": true,
+      "registry_matches": true
+    },
+    "note": "daemon identity and configuration; not witnessed protection",
+    "policy": {
+      "digest_format": "agent-policy-json/1",
+      "rule_count": 12,
+      "sha256": "5b333c2d464dbff3cc482af65daf44a3d54bab6193d48df69f8ddee7a6385f53"
+    },
+    "registry": {
+      "id": "git-readonly-v1",
+      "sha256": "5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385",
+      "state": "supported",
+      "tool_count": 12
+    }
+  },
+  "coverage": {
+    "claude_hooks": "unknown",
+    "host_session": "unknown",
+    "model_context": "unknown",
+    "note": "No Claude Code session was observed by onboarding; only the configured entry, the daemon identity, an explicit probe and the isolated self-test are reported.",
+    "other_mcp_servers": "unknown"
+  },
+  "duration_ms": 3559,
+  "exit_code": 0,
+  "explanation": "Configured and verified: the daemon identity matches the plan, and through the connected entry the original server answered a useful read, a change was refused with an unchanged workspace witness and a useful continuation followed; the isolated self-test passed. Unobserved host sessions remain unknown.",
+  "host_probe": {
+    "inspect_status": "configured",
+    "profile": "git",
+    "scope": "one session through the configured entry: original discovery, a useful read, a refused change with an independent workspace witness and a useful continuation; future calls still pass native admission",
+    "status": "verified_profile_witness"
+  },
+  "inputs": {
+    "agent": {
+      "path_digest": "09b3408acad42683",
+      "sha256": "5e1ce027da02b9a839e47b50cc81f6eddaf707ca53f178020aef18659801256f"
+    },
+    "agent_home": {
+      "path_digest": "e13a322dfacd2cd1"
+    },
+    "classifier": {
+      "kind": "rule-baseline",
+      "python_version": "3.13.16",
+      "sha256": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474"
+    },
+    "host_config": {
+      "other_server_entries": 1,
+      "other_settings": 1,
+      "path_digest": "4b0ba3a0dc77375f",
+      "selected_entry_sha256": "9239b5fb7ef87c72719a0d6db7902c8596e7452476dc5dde7bec7a518e53d37c",
+      "sha256_at_preview": "0bc68aedadbc099b0521d56eadeefb8de9d7f6510d2d361094463f2396c8d6a6"
+    },
+    "policy": {
+      "expected_daemon_digest": "5b333c2d464dbff3cc482af65daf44a3d54bab6193d48df69f8ddee7a6385f53",
+      "file_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+      "rule_count": 12,
+      "source": "reviewed"
+    },
+    "port": 57331,
+    "probe": false,
+    "registry": {
+      "registry_id": "git-readonly-v1",
+      "sha256": "5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385"
+    },
+    "server_profile": {
+      "bwrap_sha256": "f56b4f9760efd35d6a5884735aba5c2f578a3473d721d5a0ef710089c356cc62",
+      "classifier_python_sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+      "format": "sw-mcp/git-readonly/1",
+      "git_launcher_sha256": "c6016e5c993c855a0a7e90a0827411ddceea80d851bf00d39a9a07f766a8d4d6",
+      "git_sha256": "aba0506da6f8c5aee0abd3e9f55e1abd95788274812b9f5f33cf69a0a15f8d45",
+      "kind": "git",
+      "library_count": 29,
+      "package_tree_sha256": "886fd05fd1e022b259c1ed551576c2b37305acb967177a83471502f37253006a",
+      "runtime_sha256": "c65a77ee58142beaace1686dc3b0c9cf362c75c36b5eaf7f3fd87013a44d1c8c",
+      "sha256": "89a7095f90ac829addc828eec6ee3cfd1ce916021101d06e9df07d1b5cae7f7d"
+    },
+    "workspace": {
+      "path_digest": "fd091b66e5c1cf9e"
+    }
+  },
+  "journal_steps": {
+    "connect_server": "done",
+    "create_agent_home": "done",
+    "create_token": "done",
+    "lifecycle_install": "done",
+    "lifecycle_start": "done",
+    "self_test": "done",
+    "verify_identity": "done",
+    "verify_server": "done",
+    "write_owned_files": "done"
+  },
+  "next_steps": [
+    "start a new Claude Code session so it loads the updated MCP entry",
+    "to reverse: agentfw onboard undo with the same Agent, Agent home, host config and server"
+  ],
+  "operation": "apply",
+  "plan_sha256": "04203ba3166944bd3c1abf9b610bbcbe8a2d4fcdb75eb89cb9d5c2645b977962",
+  "profile": {
+    "arch": "x86_64",
+    "id": "linux-local-user-mcp-v1",
+    "os": "linux",
+    "supported": true
+  },
+  "profile_witness": {
+    "continuation": {
+      "ok": true,
+      "same_result": true
+    },
+    "original_discovery": true,
+    "original_initialization": true,
+    "refusal": {
+      "error_frame": true,
+      "refused": true,
+      "workspace_entries": 24,
+      "workspace_unchanged": true
+    },
+    "refused_tool": "git_create_branch",
+    "useful": {
+      "ok": true,
+      "result_sha256": "f2c501173b8acd82a70913810d0efc39d0b93869a3afdd014a0262044ad25a0b"
+    },
+    "useful_tool": "git_status",
+    "workspace_witness": "bounded non-following snapshot of the host workspace, taken outside the sandbox"
+  },
+  "result": "verified",
+  "resumed": true,
+  "schema_version": "sw-onboarding/1",
+  "self_test": {
+    "exit_code": 0,
+    "report_sha256": "79762e1a3eec6fe21ad81226934f4c0aa583e47daf168f24074a2c4d703dbcac",
+    "result": "passed",
+    "scope": "isolated temporary workspace and daemon; it does not show that the configured host is protected",
+    "summary": {
+      "failed": 0,
+      "incomplete": 0,
+      "passed": 5,
+      "unavailable": 0,
+      "unsupported": 0
+    }
+  },
+  "started_at_unix_ms": 1792478801971,
+  "steps": {
+    "self_test": {
+      "elapsed_ms": 1023,
+      "outcome": "done"
+    },
+    "verify_identity": {
+      "elapsed_ms": 122,
+      "outcome": "done"
+    },
+    "verify_server": {
+      "elapsed_ms": 1992,
+      "outcome": "done"
+    }
+  }
+}

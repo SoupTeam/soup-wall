@@ -16,6 +16,16 @@ pub struct Options {
     pub probe_tool: Option<String>,
     #[arg(long, requires = "probe_tool")]
     pub probe_args: Option<String>,
+    /// Linux only: start the selected original server under an accepted read-only
+    /// profile (`profile.json` from the filesystem or Git profile installer).
+    #[arg(long, requires_all = ["classifier_script", "classifier_python"])]
+    pub server_profile: Option<PathBuf>,
+    /// Reviewed rule-baseline source the profile collector classifies with.
+    #[arg(long, requires = "server_profile")]
+    pub classifier_script: Option<PathBuf>,
+    /// Absolute Python 3 interpreter for that classifier.
+    #[arg(long, requires = "server_profile")]
+    pub classifier_python: Option<PathBuf>,
     #[cfg(windows)]
     #[arg(long)]
     pub runtime: Option<PathBuf>,
@@ -48,6 +58,16 @@ pub enum Command {
     },
 }
 
+/// The stable collector identity of one selected entry in one host file.
+pub fn server_id(path: &std::path::Path, server: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = format!(
+        "{:x}",
+        Sha256::digest(format!("{}\0{}", path.display(), server).as_bytes())
+    );
+    format!("claude-{}", &digest[..24])
+}
+
 /// Reuse the accepted connection inspector without invoking a tool or
 /// writing/printing host configuration. Return only the allowlisted status.
 pub async fn inspect_read_only(options: &Options) -> anyhow::Result<&'static str> {
@@ -71,6 +91,17 @@ pub fn run(command: Command) -> anyhow::Result<()> {
         Command::Profile { command } => return crate::mcp::profile_upgrade::run(command),
         other => other,
     };
+    #[cfg(not(target_os = "linux"))]
+    if let Command::Preview(o)
+    | Command::Connect(o)
+    | Command::Inspect(o)
+    | Command::Disconnect(o) = &command
+    {
+        anyhow::ensure!(
+            o.server_profile.is_none(),
+            "selected original-server profiles require Linux"
+        );
+    }
     #[cfg(windows)]
     let command = match command {
         Command::Collector {
@@ -719,6 +750,144 @@ pub(crate) mod linux {
         agent_sha256: String,
         registry_sha256: String,
         native_config_sha256: String,
+        /// Reviewed launch settings of a selected original-server profile. Absent for
+        /// the generic collector, so existing ownership records keep their meaning.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        launch: Option<Launch>,
+    }
+
+    /// The only launch settings persisted for a selected profile: exact identities
+    /// of the profile, its workspace and the classifier the collector runs. No other
+    /// environment is inherited and nothing comes from model or server metadata.
+    #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub(crate) struct Launch {
+        pub format: String,
+        pub profile: PathBuf,
+        pub profile_sha256: String,
+        pub workspace: PathBuf,
+        pub classifier_script: PathBuf,
+        pub classifier_sha256: String,
+        pub classifier_python: PathBuf,
+        pub classifier_python_sha256: String,
+    }
+
+    fn launch_path(path: &Path) -> Result<()> {
+        ensure!(
+            path.is_absolute()
+                && path
+                    .to_str()
+                    .is_some_and(|s| { s.len() <= 4096 && !s.chars().any(char::is_control) })
+                && path
+                    .components()
+                    .all(|c| matches!(c, Component::RootDir | Component::Normal(_))),
+            "launch paths must be normalized absolute paths"
+        );
+        Ok(())
+    }
+
+    /// A reviewed input file: link-free path, regular, single link, owned by the
+    /// operator (or root) and not writable by others. Contents are bounded.
+    fn reviewed_file(path: &Path, limit: usize) -> Result<Vec<u8>> {
+        launch_path(path)?;
+        let dir = directory(path.parent().context("missing parent")?)?;
+        let file = open_at(
+            &dir,
+            path.file_name().context("missing filename")?,
+            libc::O_RDONLY,
+        )?;
+        let meta = file.metadata()?;
+        ensure!(
+            meta.is_file()
+                && meta.nlink() == 1
+                && meta.mode() & 0o022 == 0
+                && (meta.uid() == 0 || meta.uid() == unsafe { libc::geteuid() }),
+            "reviewed file must be regular, single-link, owned and not writable by others"
+        );
+        let mut bytes = Vec::new();
+        file.take(limit as u64 + 1).read_to_end(&mut bytes)?;
+        ensure!(bytes.len() <= limit, "reviewed file exceeds its limit");
+        Ok(bytes)
+    }
+
+    /// Validate the explicit profile selection against the original entry and the
+    /// installed runtime. Every pin is opened and verified; nothing is started.
+    pub(crate) fn launch(
+        profile: &Path,
+        classifier_script: &Path,
+        classifier_python: &Path,
+        original: &Value,
+    ) -> Result<Launch> {
+        let bytes = reviewed_file(profile, crate::mcp::server_profile::MAX_PROFILE_BYTES)?;
+        let config = crate::mcp::server_profile::ProfileConfig::read(&bytes)
+            .map_err(|_| anyhow::anyhow!("invalid or unsupported selected server profile"))?;
+        launch_path(&config.workspace)?;
+        let script = reviewed_file(classifier_script, LIMIT)?;
+        let python = executable(classifier_python)?;
+        let command = original["command"].as_str().context("missing command")?;
+        let args: Vec<String> = original["args"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|v| v.as_str().map(str::to_owned).context("non-string argument"))
+            .collect::<Result<_>>()?;
+        config
+            .validate_command(command, &args, &config.workspace)
+            .map_err(|_| {
+                anyhow::anyhow!("selected entry is not the profile's original server command")
+            })?;
+        crate::mcp::server_sandbox::verify(&config).map_err(|_| {
+            anyhow::anyhow!(
+                "selected profile runtime, package, repository or sandbox identity mismatch"
+            )
+        })?;
+        Ok(Launch {
+            format: config.format,
+            profile: profile.to_path_buf(),
+            profile_sha256: sha(&bytes),
+            workspace: config.workspace,
+            classifier_script: classifier_script.to_path_buf(),
+            classifier_sha256: sha(&script),
+            classifier_python: classifier_python.to_path_buf(),
+            classifier_python_sha256: python,
+        })
+    }
+
+    /// A selected profile needs its own registry: every result-profile tool must
+    /// name exactly that profile and no tool may require a resource executor.
+    fn registry_matches(registry: &Path, launch: &Launch) -> Result<()> {
+        let bytes = reviewed_file(registry, LIMIT)?;
+        let value = parse(&bytes)?;
+        let tools = value["tools"]
+            .as_array()
+            .context("registry tools missing")?;
+        let mut selected = 0;
+        for tool in tools {
+            ensure!(
+                tool.get("resource_policy").is_none(),
+                "resource executor registries are unsupported for selected profiles"
+            );
+            match tool.get("mcp_result_profile").and_then(Value::as_str) {
+                Some(format) if format == launch.format => selected += 1,
+                Some(_) => anyhow::bail!("registry belongs to a different server profile"),
+                None => {}
+            }
+        }
+        ensure!(
+            selected > 0,
+            "registry has no tools for the selected profile"
+        );
+        Ok(())
+    }
+
+    /// True when any registry tool carries a selected original-server result contract.
+    fn selects_profile(registry: &Path) -> Result<bool> {
+        let value = parse(&reviewed_file(registry, LIMIT)?)?;
+        Ok(value["tools"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|tool| crate::mcp::server_profile::selected(tool["mcp_result_profile"].as_str())))
     }
 
     #[derive(Serialize)]
@@ -731,6 +900,10 @@ pub(crate) mod linux {
         agent_sha256: Option<String>,
         registry_sha256: Option<String>,
         probe_result_sha256: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        server_profile: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        profile_sha256: Option<String>,
         elapsed_ms: u128,
         detail: &'static str,
     }
@@ -738,6 +911,7 @@ pub(crate) mod linux {
     struct Native {
         binary: String,
         registry: String,
+        registry_path: PathBuf,
         config: String,
         policy: String,
     }
@@ -789,12 +963,13 @@ pub(crate) mod linux {
         Ok(Native {
             binary,
             registry: installed.registry_sha256.clone(),
+            registry_path: installed.registry_path.clone(),
             config: sha(&bytes),
             policy: snapshot.policy.sha256,
         })
     }
 
-    fn wrapped(entry: &Value, o: &Options, id: &str) -> Result<Value> {
+    fn wrapped(entry: &Value, o: &Options, id: &str, launch: Option<&Launch>) -> Result<Value> {
         executable(Path::new(
             entry["command"].as_str().context("missing command")?,
         ))?;
@@ -812,6 +987,34 @@ pub(crate) mod linux {
             json!("PATH=/usr/bin:/bin"),
             json!(format!("HOME={}", profile.display())),
             json!(format!("USERPROFILE={}", profile.display())),
+        ];
+        if let Some(launch) = launch {
+            for path in [
+                &launch.profile,
+                &launch.workspace,
+                &launch.classifier_script,
+                &launch.classifier_python,
+            ] {
+                launch_path(path)?;
+            }
+            args.extend([
+                json!(format!(
+                    "AGENTFW_MCP_SERVER_PROFILE={}",
+                    launch.profile.display()
+                )),
+                json!(format!("AGENTFW_WORKSPACE={}", launch.workspace.display())),
+                json!("AGENTFW_CLASSIFIER=rule-baseline"),
+                json!(format!(
+                    "AGENTFW_RULE_BASELINE={}",
+                    launch.classifier_script.display()
+                )),
+                json!(format!(
+                    "AGENTFW_CLASSIFIER_PYTHON={}",
+                    launch.classifier_python.display()
+                )),
+            ]);
+        }
+        args.extend([
             json!(o.agent),
             json!("mcp"),
             json!("--id"),
@@ -819,14 +1022,14 @@ pub(crate) mod linux {
             json!("--native-admission"),
             json!("--"),
             entry["command"].clone(),
-        ];
+        ]);
         args.extend(entry["args"].as_array().into_iter().flatten().cloned());
         result["args"] = Value::Array(args);
         validate_entry(&result)?;
         Ok(result)
     }
 
-    async fn probe(entry: &Value, tool: &str, args: &str) -> Result<String> {
+    async fn probe(entry: &Value, tool: &str, args: &str, selected: bool) -> Result<String> {
         ensure!(tool.len() <= 128 && !tool.is_empty(), "invalid probe tool");
         let arguments = parse(args.as_bytes())?;
         ensure!(arguments.is_object(), "probe arguments must be an object");
@@ -845,10 +1048,17 @@ pub(crate) mod linux {
                 .stderr(Stdio::null())
                 .kill_on_drop(true)
                 .spawn()?;
-        let outcome = tokio::time::timeout(Duration::from_secs(8), async {
+        // A selected profile starts its pinned runtime inside the sandbox and must
+        // negotiate the protocol version its original initialization was pinned with.
+        let (limit, version) = if selected {
+            (Duration::from_secs(60), "2025-11-25")
+        } else {
+            (Duration::from_secs(8), "2024-11-05")
+        };
+        let outcome = tokio::time::timeout(limit, async {
             let mut input = child.stdin.take().context("missing stdin")?;
             let mut output = BufReader::new(child.stdout.take().context("missing stdout")?);
-            let init = json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"soup-wall-connection","version":"1"}}});
+            let init = json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":version,"capabilities":{},"clientInfo":{"name":"soup-wall-connection","version":"1"}}});
             let frames = [
                 init,
                 json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
@@ -898,10 +1108,26 @@ pub(crate) mod linux {
         }
         let entry = config.entry(&o.server)?;
         let mut owner = config.state(&o.server)?;
-        let id = format!(
-            "claude-{}",
-            &sha(format!("{}\0{}", o.path.display(), o.server).as_bytes())[..24]
-        );
+        // An explicit profile is always checked against the recorded original entry,
+        // never against a wrapper, so a retried connect sees the same command.
+        let original = owner
+            .as_ref()
+            .map(|state| state.original.clone())
+            .unwrap_or_else(|| entry.clone());
+        let requested = match &o.server_profile {
+            Some(profile) if operation != "disconnect" => Some(launch(
+                profile,
+                o.classifier_script
+                    .as_deref()
+                    .context("classifier script required")?,
+                o.classifier_python
+                    .as_deref()
+                    .context("classifier python required")?,
+                &original,
+            )?),
+            _ => None,
+        };
+        let id = super::server_id(&o.path, &o.server);
         let mut report = Report {
             status: "unknown",
             operation: operation.to_owned(),
@@ -911,9 +1137,18 @@ pub(crate) mod linux {
             agent_sha256: None,
             registry_sha256: None,
             probe_result_sha256: None,
+            server_profile: None,
+            profile_sha256: None,
             elapsed_ms: 0,
             detail: "connection identity is unknown",
         };
+        if let Some(launch) = requested
+            .as_ref()
+            .or_else(|| owner.as_ref().and_then(|s| s.launch.as_ref()))
+        {
+            report.server_profile = Some(launch.format.clone());
+            report.profile_sha256 = Some(launch.profile_sha256.clone());
+        }
         if operation == "disconnect" {
             let Some(mut state) = owner.clone() else {
                 ensure!(
@@ -950,9 +1185,13 @@ pub(crate) mod linux {
                     hash(&entry) == state.wrapped_sha256 || hash(&entry) == state.original_sha256,
                     "selected entry changed; conflict preserved"
                 );
+                ensure!(
+                    requested.is_none() || requested == state.launch,
+                    "selected profile or classifier differs from the owned connection"
+                );
                 config.validate_transaction(state)?;
             } else {
-                let next = wrapped(&entry, o, &id)?;
+                let next = wrapped(&entry, o, &id, requested.as_ref())?;
                 config.replacement(&o.server, &next)?;
             }
             report.status = "preview";
@@ -974,6 +1213,14 @@ pub(crate) mod linux {
                 report.agent_sha256 = Some(native.binary.clone());
                 report.registry_sha256 = Some(native.registry.clone());
                 if operation == "connect" {
+                    if let Some(launch) = &requested {
+                        registry_matches(&native.registry_path, launch)?;
+                    } else if owner.as_ref().is_none_or(|state| state.launch.is_none()) {
+                        ensure!(
+                            !selects_profile(&native.registry_path)?,
+                            "this registry belongs to an original-server profile; pass --server-profile so the server starts inside its accepted confinement"
+                        );
+                    }
                     if let Some(state) = &owner {
                         ensure!(
                             state.agent == o.agent
@@ -984,12 +1231,16 @@ pub(crate) mod linux {
                             "selected Agent or native configuration changed"
                         );
                         ensure!(
+                            requested == state.launch,
+                            "selected profile or classifier differs from the owned connection"
+                        );
+                        ensure!(
                             hash(&entry) == state.wrapped_sha256
                                 || hash(&entry) == state.original_sha256,
                             "selected entry changed; conflict preserved"
                         );
                     } else {
-                        let next = wrapped(&entry, o, &id)?;
+                        let next = wrapped(&entry, o, &id, requested.as_ref())?;
                         config.snapshot_unchanged(&o.server, &owner)?;
                         owner = Some(Owner {
                             version: 1,
@@ -1005,6 +1256,7 @@ pub(crate) mod linux {
                             agent_sha256: native.binary,
                             registry_sha256: native.registry,
                             native_config_sha256: native.config,
+                            launch: requested.clone(),
                         });
                     }
                     let state = owner.as_mut().unwrap();
@@ -1019,7 +1271,28 @@ pub(crate) mod linux {
                     report.status = "configured";
                     report.detail = "native wrapper configured; execution is not inferred";
                 } else if let Some(state) = &owner {
+                    // Re-verify a recorded profile from its own pinned paths, so a
+                    // changed profile, runtime or classifier is never reported configured.
+                    let launch_current = match &state.launch {
+                        None => requested.is_none(),
+                        Some(recorded) => {
+                            (requested.is_none() || requested.as_ref() == Some(recorded))
+                                && launch(
+                                    &recorded.profile,
+                                    &recorded.classifier_script,
+                                    &recorded.classifier_python,
+                                    &state.original,
+                                )
+                                .is_ok_and(|current| &current == recorded)
+                                && registry_matches(&native.registry_path, recorded).is_ok()
+                        }
+                    };
+                    if !launch_current {
+                        report.detail =
+                            "selected profile, runtime, classifier or registry changed since connect";
+                    }
                     if state.phase == "connected"
+                        && launch_current
                         && hash(&entry) == state.wrapped_sha256
                         && state.agent == o.agent
                         && state.home == o.home
@@ -1030,7 +1303,13 @@ pub(crate) mod linux {
                         report.status = "configured";
                         report.detail = "owned configuration and Agent identities match";
                         if let Some(tool) = &o.probe_tool {
-                            match probe(&entry, tool, o.probe_args.as_deref().unwrap_or("{}")).await
+                            match probe(
+                                &entry,
+                                tool,
+                                o.probe_args.as_deref().unwrap_or("{}"),
+                                state.launch.is_some(),
+                            )
+                            .await
                             {
                                 Ok(hash) => {
                                     report.status = "verified_for_this_probe";
@@ -1091,6 +1370,7 @@ pub(crate) mod linux {
                 agent_sha256: "a".repeat(64),
                 registry_sha256: "b".repeat(64),
                 native_config_sha256: "c".repeat(64),
+                launch: None,
             }
         }
 
@@ -1106,14 +1386,17 @@ pub(crate) mod linux {
                 agent: executable.clone(),
                 probe_tool: None,
                 probe_args: None,
+                server_profile: None,
+                classifier_script: None,
+                classifier_python: None,
             };
             let entry = json!({"command": executable, "args": vec!["x"; 245]});
-            let next = wrapped(&entry, &options, "test").unwrap();
+            let next = wrapped(&entry, &options, "test", None).unwrap();
             assert_eq!(next["args"].as_array().unwrap().len(), 256);
             assert!(config.replacement("local", &next).is_ok());
             let entry = json!({"command": executable, "args": vec!["x"; 246]});
             assert!(validate_entry(&entry).is_ok());
-            assert!(wrapped(&entry, &options, "test").is_err());
+            assert!(wrapped(&entry, &options, "test", None).is_err());
             assert_eq!(std::fs::read(&path).unwrap(), config.bytes);
             assert!(config.state("local").unwrap().is_none());
         }
@@ -1467,9 +1750,175 @@ pub(crate) mod linux {
                 agent: PathBuf::from("/usr/bin/env"),
                 probe_tool: None,
                 probe_args: None,
+                server_profile: None,
+                classifier_script: None,
+                classifier_python: None,
             };
             let error = preflight(&options).await.err().unwrap();
             assert!(!format!("{error:?}").contains("private-value"));
+        }
+
+        fn sample_launch() -> Launch {
+            Launch {
+                format: crate::mcp::server_profile::FORMAT.into(),
+                profile: PathBuf::from("/opt/fs/profile.json"),
+                profile_sha256: "d".repeat(64),
+                workspace: PathBuf::from("/srv/work"),
+                classifier_script: PathBuf::from("/home/u/.agentfw/onboarding/classifier.py"),
+                classifier_sha256: "e".repeat(64),
+                classifier_python: PathBuf::from("/usr/bin/python3.12"),
+                classifier_python_sha256: "f".repeat(64),
+            }
+        }
+
+        #[test]
+        fn profile_wrapper_persists_only_the_reviewed_launch_settings() {
+            let executable = std::fs::canonicalize("/usr/bin/env").unwrap();
+            let options = Options {
+                path: PathBuf::from("/tmp/mcp.json"),
+                server: "files".into(),
+                home: PathBuf::from("/tmp/.agentfw"),
+                agent: executable.clone(),
+                probe_tool: None,
+                probe_args: None,
+                server_profile: None,
+                classifier_script: None,
+                classifier_python: None,
+            };
+            let entry = json!({"command": executable, "args": ["/opt/fs/index.js", "/workspace"]});
+            let next = wrapped(&entry, &options, "claude-x", Some(&sample_launch())).unwrap();
+            let args: Vec<&str> = next["args"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_str().unwrap())
+                .collect();
+            let separator = args.iter().position(|a| *a == "--").unwrap();
+            let environment: Vec<&str> = args[..separator]
+                .iter()
+                .copied()
+                .filter(|a| a.contains('='))
+                .collect();
+            assert_eq!(
+                environment,
+                [
+                    "PATH=/usr/bin:/bin",
+                    "HOME=/tmp",
+                    "USERPROFILE=/tmp",
+                    "AGENTFW_MCP_SERVER_PROFILE=/opt/fs/profile.json",
+                    "AGENTFW_WORKSPACE=/srv/work",
+                    "AGENTFW_CLASSIFIER=rule-baseline",
+                    "AGENTFW_RULE_BASELINE=/home/u/.agentfw/onboarding/classifier.py",
+                    "AGENTFW_CLASSIFIER_PYTHON=/usr/bin/python3.12",
+                ]
+            );
+            assert_eq!(args[0], "-i");
+            assert_eq!(
+                &args[separator + 1..],
+                ["/usr/bin/env", "/opt/fs/index.js", "/workspace"].map(
+                    |a| if a == "/usr/bin/env" {
+                        executable.to_str().unwrap()
+                    } else {
+                        a
+                    }
+                )
+            );
+            assert!(next.get("env").is_none());
+            // An alias in any persisted path is refused, never normalized.
+            let mut alias = sample_launch();
+            alias.workspace = PathBuf::from("/srv/../etc");
+            assert!(wrapped(&entry, &options, "claude-x", Some(&alias)).is_err());
+            let mut relative = sample_launch();
+            relative.classifier_script = PathBuf::from("classifier.py");
+            assert!(wrapped(&entry, &options, "claude-x", Some(&relative)).is_err());
+        }
+
+        #[test]
+        fn ownership_records_without_launch_settings_still_parse() {
+            let (_dir, path) = fixture();
+            let config = ConfigFile::read(&path).unwrap();
+            let mut owner = ownership(&config);
+            let generic = serde_json::to_value(&owner).unwrap();
+            assert!(generic.get("launch").is_none());
+            assert!(serde_json::from_value::<Owner>(generic)
+                .unwrap()
+                .launch
+                .is_none());
+            owner.launch = Some(sample_launch());
+            let selected = serde_json::to_value(&owner).unwrap();
+            assert_eq!(
+                serde_json::from_value::<Owner>(selected).unwrap().launch,
+                Some(sample_launch())
+            );
+        }
+
+        #[test]
+        fn registry_must_belong_to_the_selected_profile() {
+            let dir = tempfile::tempdir().unwrap();
+            let registry = dir.path().canonicalize().unwrap().join("registry.json");
+            let write = |value: Value| {
+                let _ = std::fs::remove_file(&registry);
+                std::fs::write(&registry, value.to_string()).unwrap();
+                std::fs::set_permissions(&registry, std::fs::Permissions::from_mode(0o600))
+                    .unwrap();
+            };
+            let launch = sample_launch();
+            let tool = |profile: Option<&str>| {
+                let mut t = json!({"name":"t","schema_sha256":"0","action_class":"read_only"});
+                if let Some(p) = profile {
+                    t["mcp_result_profile"] = json!(p);
+                }
+                t
+            };
+            write(json!({"tools":[tool(Some(crate::mcp::server_profile::FORMAT)), tool(None)]}));
+            assert!(registry_matches(&registry, &launch).is_ok());
+            write(json!({"tools":[tool(Some(crate::mcp::server_profile::git::FORMAT))]}));
+            assert!(registry_matches(&registry, &launch).is_err());
+            write(json!({"tools":[tool(None)]}));
+            assert!(registry_matches(&registry, &launch).is_err());
+            let mut executor = tool(Some(crate::mcp::server_profile::FORMAT));
+            executor["resource_policy"] = json!({});
+            write(json!({"tools":[executor]}));
+            assert!(registry_matches(&registry, &launch).is_err());
+            // A generic connection must not silently adopt a profile registry.
+            write(json!({"tools":[tool(Some(crate::mcp::server_profile::git::FORMAT))]}));
+            assert!(selects_profile(&registry).unwrap());
+            write(json!({"tools":[tool(None)]}));
+            assert!(!selects_profile(&registry).unwrap());
+        }
+
+        #[test]
+        fn reviewed_files_refuse_links_and_writable_files() {
+            let dir = tempfile::tempdir().unwrap();
+            let root = dir.path().canonicalize().unwrap();
+            let file = root.join("profile.json");
+            std::fs::write(&file, b"{}").unwrap();
+            std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644)).unwrap();
+            assert!(reviewed_file(&file, 16).is_ok());
+            assert!(reviewed_file(&file, 1).is_err());
+            std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o666)).unwrap();
+            assert!(reviewed_file(&file, 16).is_err());
+            std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600)).unwrap();
+            std::os::unix::fs::symlink(&file, root.join("link.json")).unwrap();
+            assert!(reviewed_file(&root.join("link.json"), 16).is_err());
+            std::fs::hard_link(&file, root.join("hard.json")).unwrap();
+            assert!(reviewed_file(&file, 16).is_err());
+            assert!(reviewed_file(&root.join("x/../profile.json"), 16).is_err());
+        }
+
+        #[test]
+        fn invalid_profiles_are_refused_before_any_pin_is_opened() {
+            let dir = tempfile::tempdir().unwrap();
+            let root = dir.path().canonicalize().unwrap();
+            let profile = root.join("profile.json");
+            std::fs::write(&profile, br#"{"format":"sw-mcp/other/1"}"#).unwrap();
+            std::fs::set_permissions(&profile, std::fs::Permissions::from_mode(0o600)).unwrap();
+            let script = root.join("classifier.py");
+            std::fs::write(&script, b"print(1)").unwrap();
+            let entry = json!({"command": "/usr/bin/env", "args": []});
+            let python = std::fs::canonicalize("/usr/bin/env").unwrap();
+            let error = launch(&profile, &script, &python, &entry).err().unwrap();
+            assert!(format!("{error}").contains("unsupported selected server profile"));
         }
     }
 }

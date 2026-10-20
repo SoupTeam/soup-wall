@@ -1,0 +1,57 @@
+{
+  "agentfw_version": "0.3.0",
+  "exit_code": 0,
+  "explanation": "This onboarding's changes were reversed.",
+  "next_steps": [],
+  "operation": "undo",
+  "profile": {
+    "arch": "x86_64",
+    "id": "linux-local-user-mcp-v1",
+    "os": "linux",
+    "supported": true
+  },
+  "result": "undone",
+  "retained": {
+    "audit_log": false,
+    "connection_recovery_files": "kept beside the host config by mcp-connection by design; remove only after review"
+  },
+  "rollback": [
+    {
+      "detail": "owned Agent stopped and managed binary removed",
+      "outcome": "reversed",
+      "step": "lifecycle"
+    },
+    {
+      "detail": "removed exact owned bytes",
+      "outcome": "reversed",
+      "step": "config"
+    },
+    {
+      "detail": "removed exact owned bytes",
+      "outcome": "reversed",
+      "step": "registry"
+    },
+    {
+      "detail": "removed exact owned bytes",
+      "outcome": "reversed",
+      "step": "policy"
+    },
+    {
+      "detail": "removed exact owned bytes",
+      "outcome": "reversed",
+      "step": "classifier"
+    },
+    {
+      "detail": "removed exact owned bytes",
+      "outcome": "reversed",
+      "step": "token"
+    },
+    {
+      "detail": "the Agent home created by onboarding was removed",
+      "outcome": "reversed",
+      "step": "agent_home"
+    }
+  ],
+  "schema_version": "sw-onboarding/1",
+  "started_at_unix_ms": 1792478811309
+}

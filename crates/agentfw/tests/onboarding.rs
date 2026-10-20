@@ -516,3 +516,172 @@ fn ordinary_undo_keeps_the_audit_log_and_a_changed_runtime_file() {
     assert!(!agent_home.exists());
     assert!(journal(&home).is_none());
 }
+
+/// A syntactically valid filesystem profile whose runtime pins do not exist, plus
+/// its registry. Pins are verified only by the accepted sandbox code at preview.
+fn fake_profile(home: &Home, format: &str) -> (PathBuf, PathBuf) {
+    let package = home.root.join("opt/fs-package");
+    let profile = json!({
+        "format": format,
+        "workspace": home.root.join("user/work"),
+        "runtimePath": home.python,
+        "runtimeSha256": sha(&std::fs::read(&home.python).unwrap()),
+        "packageRoot": package,
+        "packageTreeSha256": "0".repeat(64),
+        "bwrapPath": home.root.join("opt/missing-bwrap"),
+        "bwrapSha256": "0".repeat(64),
+        "libraries": [{"path": "/lib/x86_64-linux-gnu/libc.so.6", "sha256": "0".repeat(64)}],
+    });
+    let path = home.root.join("opt/profile.json");
+    std::fs::write(&path, serde_json::to_vec(&profile).unwrap()).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    let mut registry: Value =
+        serde_json::from_slice(&std::fs::read(home.root.join("opt/registry.json")).unwrap())
+            .unwrap();
+    for tool in registry["tools"].as_array_mut().unwrap() {
+        tool["mcp_result_profile"] = json!("sw-mcp/filesystem-readonly/1");
+    }
+    let registry_path = home.root.join("opt/profile-registry.json");
+    std::fs::write(&registry_path, serde_json::to_vec(&registry).unwrap()).unwrap();
+    // The selected entry is the profile's original server command.
+    let host = home.root.join("user/.claude/mcp.json");
+    let mut config: Value = serde_json::from_slice(&std::fs::read(&host).unwrap()).unwrap();
+    config["mcpServers"]["files"] = json!({"command": home.python, "args": [
+        package.join("node_modules/@modelcontextprotocol/server-filesystem/dist/index.js"), "/workspace"]});
+    std::fs::write(&host, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
+    (path, registry_path)
+}
+
+fn profile_inputs(home: &Home, profile: &Path, registry: &Path) -> Vec<(&'static str, String)> {
+    vec![
+        ("--registry", registry.display().to_string()),
+        ("--registry-sha256", sha(&std::fs::read(registry).unwrap())),
+        ("--server-profile", profile.display().to_string()),
+        (
+            "--server-profile-sha256",
+            sha(&std::fs::read(profile).unwrap()),
+        ),
+        ("--server", "files".into()),
+        ("--classifier-python", home.python.display().to_string()),
+    ]
+}
+
+#[test]
+fn a_profile_registry_without_its_profile_is_refused() {
+    let Some(home) = Home::new() else { return };
+    let (_, registry) = fake_profile(&home, "sw-mcp/filesystem-readonly/1");
+    let (code, report, _) = home.onboard(
+        "preview",
+        home.inputs(&[
+            ("--registry", registry.display().to_string()),
+            ("--registry-sha256", sha(&std::fs::read(&registry).unwrap())),
+        ]),
+        "p.json",
+    );
+    let report = report.unwrap();
+    assert_eq!(code, Some(4));
+    let check = check(&report, "registry");
+    assert_eq!(check["status"], "refused");
+    assert!(check["action"]
+        .as_str()
+        .unwrap()
+        .contains("--server-profile"));
+    assert!(home.untouched());
+}
+
+#[test]
+fn selected_profile_identities_and_sandbox_are_verified_before_any_change() {
+    let Some(home) = Home::new() else { return };
+    let (profile, registry) = fake_profile(&home, "sw-mcp/filesystem-readonly/1");
+    let host_before = std::fs::read(home.root.join("user/.claude/mcp.json")).unwrap();
+    let overrides = profile_inputs(&home, &profile, &registry);
+    let (code, report, stdout) = home.onboard("preview", home.inputs(&overrides), "p.json");
+    let report = report.unwrap();
+    assert_eq!(code, Some(4), "{stdout}");
+    assert_eq!(check(&report, "server_profile")["status"], "ok");
+    assert_eq!(check(&report, "profile_registry")["status"], "ok");
+    assert_eq!(check(&report, "server")["status"], "ok");
+    // Missing runtime pins and a missing bubblewrap are explicit refusals.
+    assert_eq!(check(&report, "profile_runtime")["status"], "refused");
+    assert_eq!(check(&report, "sandbox_support")["status"], "refused");
+    assert_eq!(report["inputs"]["server_profile"]["kind"], "filesystem");
+    assert!(!std::fs::read_to_string(home.root.join("p.json"))
+        .unwrap()
+        .contains(home.root.to_str().unwrap()));
+    assert_eq!(
+        std::fs::read(home.root.join("user/.claude/mcp.json")).unwrap(),
+        host_before
+    );
+    assert!(home.untouched());
+    // Apply revalidates the same refusals and changes nothing.
+    let mut apply = home.inputs(&overrides);
+    apply.extend(["--plan-sha256".into(), "0".repeat(64)]);
+    let (code, report, _) = home.onboard("apply", apply, "a.json");
+    assert_eq!(
+        (code, report.unwrap()["result"].as_str()),
+        (Some(4), Some("refused"))
+    );
+    assert!(home.untouched());
+}
+
+#[test]
+fn changed_unsupported_or_mismatched_profile_selections_are_refused() {
+    let Some(home) = Home::new() else { return };
+    let (profile, registry) = fake_profile(&home, "sw-mcp/filesystem-readonly/1");
+    let base = profile_inputs(&home, &profile, &registry);
+    let preview = |extra: &[(&'static str, String)], name: &str| {
+        let mut overrides = base.clone();
+        for (key, value) in extra {
+            overrides.retain(|(k, _)| k != key);
+            overrides.push((*key, value.clone()));
+        }
+        let (code, report, _) = home.onboard("preview", home.inputs(&overrides), name);
+        assert_eq!(code, Some(4));
+        report.unwrap()
+    };
+    // Changed after review: the digest no longer matches.
+    let report = preview(&[("--server-profile-sha256", "a".repeat(64))], "1.json");
+    assert_eq!(check(&report, "server_profile")["status"], "refused");
+    // Another workspace than the one the profile was installed for.
+    let other = home.root.join("user");
+    let report = preview(&[("--workspace", other.display().to_string())], "2.json");
+    assert_eq!(check(&report, "server_profile")["status"], "refused");
+    // A registry of another profile.
+    let mut git: Value = serde_json::from_slice(&std::fs::read(&registry).unwrap()).unwrap();
+    for tool in git["tools"].as_array_mut().unwrap() {
+        tool["mcp_result_profile"] = json!("sw-mcp/git-readonly/1");
+    }
+    let git_registry = home.root.join("opt/git-registry.json");
+    std::fs::write(&git_registry, serde_json::to_vec(&git).unwrap()).unwrap();
+    let report = preview(
+        &[
+            ("--registry", git_registry.display().to_string()),
+            (
+                "--registry-sha256",
+                sha(&std::fs::read(&git_registry).unwrap()),
+            ),
+        ],
+        "3.json",
+    );
+    assert_eq!(check(&report, "profile_registry")["status"], "refused");
+    // An entry that is not the profile's original server command.
+    let report = preview(&[("--server", "notes".into())], "4.json");
+    assert_eq!(check(&report, "server")["status"], "refused");
+    // An unsupported executor profile.
+    let unsupported = home.root.join("opt/unsupported.json");
+    let mut value: Value = serde_json::from_slice(&std::fs::read(&profile).unwrap()).unwrap();
+    value["format"] = json!("sw-mcp/https-get/1");
+    std::fs::write(&unsupported, serde_json::to_vec(&value).unwrap()).unwrap();
+    let report = preview(
+        &[
+            ("--server-profile", unsupported.display().to_string()),
+            (
+                "--server-profile-sha256",
+                sha(&std::fs::read(&unsupported).unwrap()),
+            ),
+        ],
+        "5.json",
+    );
+    assert_eq!(check(&report, "server_profile")["status"], "refused");
+    assert!(home.untouched());
+}

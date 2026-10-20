@@ -1,0 +1,158 @@
+{
+  "agentfw_version": "0.3.0",
+  "checks": [
+    {
+      "action": null,
+      "detail": "Linux local-user profile; service management not requested",
+      "id": "platform",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "executable digest matches; lifecycle, mcp-connection, protection-status and self-test are available",
+      "id": "agent",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "rule_baseline.py digest matches the expected revision",
+      "id": "classifier",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "Python 3 runs in isolated mode",
+      "id": "classifier_python",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "reviewed sw-native/1 registry digest matches",
+      "id": "registry",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "reviewed policy parses (5 rules)",
+      "id": "policy",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "reviewed workspace is an owned directory",
+      "id": "workspace",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "new Agent home will be created",
+      "id": "agent_home",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "accepted filesystem read-only profile; digest matches",
+      "id": "server_profile",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "registry tools carry this profile's result contract",
+      "id": "profile_registry",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "runtime, installed package tree, bubblewrap, libraries and workspace match their pins",
+      "id": "profile_runtime",
+      "status": "ok"
+    },
+    {
+      "action": "run on a Linux host that permits unprivileged user namespaces; no unconfined fallback exists",
+      "detail": "missing Linux sandbox support: unprivileged user, PID, mount or network namespaces are unavailable",
+      "id": "sandbox_support",
+      "status": "refused"
+    },
+    {
+      "action": null,
+      "detail": "reviewed stdio entry found; 1 other server entries and 1 other settings will be preserved",
+      "id": "server",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "127.0.0.1:55411 is available for the new Agent",
+      "id": "port",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "the profile's original read (list_directory or git_status of /workspace) will verify the connected server",
+      "id": "probe",
+      "status": "ok"
+    }
+  ],
+  "exit_code": 4,
+  "explanation": "The plan cannot be applied; resolve the refused or conflicting checks.",
+  "inputs": {
+    "agent": {
+      "path_digest": "5b1ecbd5e32ded02",
+      "sha256": "5e1ce027da02b9a839e47b50cc81f6eddaf707ca53f178020aef18659801256f"
+    },
+    "agent_home": {
+      "path_digest": "2e4d6ba83627cd71"
+    },
+    "classifier": {
+      "kind": "rule-baseline",
+      "python_version": "3.13.16",
+      "sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+    },
+    "host_config": {
+      "other_server_entries": 1,
+      "other_settings": 1,
+      "path_digest": "b0fad0a3259cc560",
+      "selected_entry_sha256": "05e2046d49dd59760cbb1a3a0054331f332bc0197eef3dea0d05c16e251e35b5",
+      "sha256_at_preview": "e8de1543a655655c4f6915b98907ec5e6d76c00703d860a4c52c94880dbe61f9"
+    },
+    "policy": {
+      "expected_daemon_digest": "188635c6cff1e2bc63934bacae9f5741edf2ec636197b86c6c68f7f8bf124e40",
+      "file_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+      "rule_count": 5,
+      "source": "reviewed"
+    },
+    "port": 55411,
+    "probe": false,
+    "registry": {
+      "registry_id": "filesystem-readonly-v1",
+      "sha256": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7"
+    },
+    "server_profile": {
+      "bwrap_sha256": "f56b4f9760efd35d6a5884735aba5c2f578a3473d721d5a0ef710089c356cc62",
+      "classifier_python_sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+      "format": "sw-mcp/filesystem-readonly/1",
+      "git_launcher_sha256": null,
+      "git_sha256": null,
+      "kind": "filesystem",
+      "library_count": 7,
+      "package_tree_sha256": "da0df010dc8f5c78792f37b82e605919e34886a15edcda78e04d824743775043",
+      "runtime_sha256": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+      "sha256": "7078b3333f0bad695130c5840317673007e66cb298669c53b77a119fb0fb04be"
+    },
+    "workspace": {
+      "path_digest": "2309d74fd7e27cb5"
+    }
+  },
+  "next_steps": [
+    "run on a Linux host that permits unprivileged user namespaces; no unconfined fallback exists"
+  ],
+  "operation": "preview",
+  "profile": {
+    "arch": "x86_64",
+    "id": "linux-local-user-mcp-v1",
+    "os": "linux",
+    "supported": true
+  },
+  "result": "refused",
+  "schema_version": "sw-onboarding/1",
+  "started_at_unix_ms": 1792478660694
+}

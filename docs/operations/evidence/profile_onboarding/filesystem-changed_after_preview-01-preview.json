@@ -1,0 +1,168 @@
+{
+  "agentfw_version": "0.3.0",
+  "checks": [
+    {
+      "action": null,
+      "detail": "Linux local-user profile; service management not requested",
+      "id": "platform",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "executable digest matches; lifecycle, mcp-connection, protection-status and self-test are available",
+      "id": "agent",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "rule_baseline.py digest matches the expected revision",
+      "id": "classifier",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "Python 3 runs in isolated mode",
+      "id": "classifier_python",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "reviewed sw-native/1 registry digest matches",
+      "id": "registry",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "reviewed policy parses (5 rules)",
+      "id": "policy",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "reviewed workspace is an owned directory",
+      "id": "workspace",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "new Agent home will be created",
+      "id": "agent_home",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "accepted filesystem read-only profile; digest matches",
+      "id": "server_profile",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "registry tools carry this profile's result contract",
+      "id": "profile_registry",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "runtime, installed package tree, bubblewrap, libraries and workspace match their pins",
+      "id": "profile_runtime",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "user, PID, mount and network namespaces, seccomp and (for Git) Landlock ABI 3 are available",
+      "id": "sandbox_support",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "reviewed stdio entry found; 1 other server entries and 1 other settings will be preserved",
+      "id": "server",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "127.0.0.1:50117 is available for the new Agent",
+      "id": "port",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "the profile's original read (list_directory or git_status of /workspace) will verify the connected server",
+      "id": "probe",
+      "status": "ok"
+    }
+  ],
+  "exit_code": 0,
+  "explanation": "Review the planned changes; nothing has been changed.",
+  "inputs": {
+    "agent": {
+      "path_digest": "f6fb5578107b7692",
+      "sha256": "5e1ce027da02b9a839e47b50cc81f6eddaf707ca53f178020aef18659801256f"
+    },
+    "agent_home": {
+      "path_digest": "43fd9356c7c49a22"
+    },
+    "classifier": {
+      "kind": "rule-baseline",
+      "python_version": "3.13.16",
+      "sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+    },
+    "host_config": {
+      "other_server_entries": 1,
+      "other_settings": 1,
+      "path_digest": "66d2fc8f2864b22e",
+      "selected_entry_sha256": "e8a08ce9ae84cf9d9a00510eee8036969e5a1213ffa451b7822b212eb00a7148",
+      "sha256_at_preview": "fd41c55d84a7545014e17ceffc452eeafa169eddc01c32e59cf24eea1d047fed"
+    },
+    "policy": {
+      "expected_daemon_digest": "188635c6cff1e2bc63934bacae9f5741edf2ec636197b86c6c68f7f8bf124e40",
+      "file_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+      "rule_count": 5,
+      "source": "reviewed"
+    },
+    "port": 50117,
+    "probe": false,
+    "registry": {
+      "registry_id": "filesystem-readonly-v1",
+      "sha256": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7"
+    },
+    "server_profile": {
+      "bwrap_sha256": "f56b4f9760efd35d6a5884735aba5c2f578a3473d721d5a0ef710089c356cc62",
+      "classifier_python_sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+      "format": "sw-mcp/filesystem-readonly/1",
+      "git_launcher_sha256": null,
+      "git_sha256": null,
+      "kind": "filesystem",
+      "library_count": 7,
+      "package_tree_sha256": "da0df010dc8f5c78792f37b82e605919e34886a15edcda78e04d824743775043",
+      "runtime_sha256": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+      "sha256": "fae5f132016593a825a742f098cf713547bf8b5d7e2cc3093a85162edd750f79"
+    },
+    "workspace": {
+      "path_digest": "8b8fe0a13c6a03d6"
+    }
+  },
+  "next_steps": [
+    "apply exactly this plan with: agentfw onboard apply <same inputs> --plan-sha256 9ce154886feed9d4ce94c1cc2633c58be6566188804d932375621074303a76cb"
+  ],
+  "operation": "preview",
+  "plan_sha256": "9ce154886feed9d4ce94c1cc2633c58be6566188804d932375621074303a76cb",
+  "planned_changes": [
+    "agent_home",
+    "owned_files",
+    "owned_files",
+    "token",
+    "lifecycle",
+    "connection",
+    "verification"
+  ],
+  "profile": {
+    "arch": "x86_64",
+    "id": "linux-local-user-mcp-v1",
+    "os": "linux",
+    "supported": true
+  },
+  "result": "plan_ready",
+  "schema_version": "sw-onboarding/1",
+  "started_at_unix_ms": 1792478656959
+}

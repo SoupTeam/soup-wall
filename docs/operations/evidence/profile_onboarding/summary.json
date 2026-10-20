@@ -1,0 +1,745 @@
+{
+  "schema": "sw-onboarding-profile-acceptance/1",
+  "source": {
+    "commit": "b8e6080581c69d830a2fb29d1d7576d37300994f",
+    "tree_clean": true,
+    "files": {
+      "crates/agentfw/src/onboarding/linux.rs": "e52d8657d2004aed5dead3421e019a1950df11e1f61f783e31790a94e72b2469",
+      "crates/agentfw/src/onboarding/mod.rs": "e872d44cdb4be7666107774a87d04bc774dcb2695d8d1f9e66215402adc504d2",
+      "crates/agentfw/src/mcp/connection.rs": "1d9f6a0c305e4424246ec114bcf8638cb4057819c112b5470a3be25858ee8270",
+      "crates/agentfw/src/mcp/server_sandbox.rs": "ff6c9e304affe9d17d1490107a45f113c15446f4ec64c580fc095931a654dd7f",
+      "scripts/onboarding-profile-acceptance.py": "bf3529390066cb99872c8d6de479f42350a29b1553cb22ee92ec884e27d63549"
+    }
+  },
+  "agentfw_sha256": "5e1ce027da02b9a839e47b50cc81f6eddaf707ca53f178020aef18659801256f",
+  "bwrap_sha256": "f56b4f9760efd35d6a5884735aba5c2f578a3473d721d5a0ef710089c356cc62",
+  "outside_source_checkout": true,
+  "uid_is_root": false,
+  "profiles": [
+    {
+      "profile": "filesystem",
+      "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+      "scenarios": [
+        {
+          "scenario": "full_cycle",
+          "passed": true,
+          "checks": [
+            {
+              "check": "calibration_original_server_reads_and_changes_unprotected",
+              "passed": true,
+              "discovery": true,
+              "useful": true,
+              "useful_text_sha256": "b18e7efdabe32af093bd6835519ad5cd7e0f679a2a34130438e0ea85f1cfe92c",
+              "change_executed": true
+            },
+            {
+              "check": "preview_ready_and_read_only",
+              "passed": true,
+              "profile": {
+                "bwrap_sha256": "f56b4f9760efd35d6a5884735aba5c2f578a3473d721d5a0ef710089c356cc62",
+                "classifier_python_sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+                "format": "sw-mcp/filesystem-readonly/1",
+                "git_launcher_sha256": null,
+                "git_sha256": null,
+                "kind": "filesystem",
+                "library_count": 7,
+                "package_tree_sha256": "da0df010dc8f5c78792f37b82e605919e34886a15edcda78e04d824743775043",
+                "runtime_sha256": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+                "sha256": "8d69ada9c4dbfa00b2fe52c7ca8a0d4bc075041d1171f93d365b24a454634e98"
+              }
+            },
+            {
+              "check": "preview_checks_profile_identities",
+              "passed": true
+            },
+            {
+              "check": "apply_verified_through_selected_profile",
+              "passed": true,
+              "result": "verified",
+              "witness": {
+                "continuation": {
+                  "ok": true,
+                  "same_result": true
+                },
+                "original_discovery": true,
+                "original_initialization": true,
+                "refusal": {
+                  "error_frame": true,
+                  "refused": true,
+                  "workspace_entries": 3,
+                  "workspace_unchanged": true
+                },
+                "refused_tool": "write_file",
+                "useful": {
+                  "ok": true,
+                  "result_sha256": "946aa33ed47ce30bd06e73d27ac478c4096ba200557f8a9c1b585de00112cf9e"
+                },
+                "useful_tool": "list_directory",
+                "workspace_witness": "bounded non-following snapshot of the host workspace, taken outside the sandbox"
+              },
+              "steps": {
+                "connect_server": {
+                  "elapsed_ms": 422,
+                  "outcome": "done"
+                },
+                "create_agent_home": {
+                  "elapsed_ms": 0,
+                  "outcome": "done"
+                },
+                "create_token": {
+                  "elapsed_ms": 50,
+                  "outcome": "done"
+                },
+                "lifecycle_install": {
+                  "elapsed_ms": 151,
+                  "outcome": "done"
+                },
+                "lifecycle_start": {
+                  "elapsed_ms": 272,
+                  "outcome": "done"
+                },
+                "self_test": {
+                  "elapsed_ms": 1027,
+                  "outcome": "done"
+                },
+                "verify_identity": {
+                  "elapsed_ms": 124,
+                  "outcome": "done"
+                },
+                "verify_server": {
+                  "elapsed_ms": 863,
+                  "outcome": "done"
+                },
+                "write_owned_files": {
+                  "elapsed_ms": 1,
+                  "outcome": "done"
+                }
+              }
+            },
+            {
+              "check": "configured_identity_separate",
+              "passed": true
+            },
+            {
+              "check": "agent_witness_original_discovery_refusal_continuation",
+              "passed": true
+            },
+            {
+              "check": "persisted_launch_settings_are_structured_and_narrow",
+              "passed": true,
+              "variables": [
+                "PATH",
+                "HOME",
+                "USERPROFILE",
+                "AGENTFW_MCP_SERVER_PROFILE",
+                "AGENTFW_WORKSPACE",
+                "AGENTFW_CLASSIFIER",
+                "AGENTFW_RULE_BASELINE",
+                "AGENTFW_CLASSIFIER_PYTHON"
+              ]
+            },
+            {
+              "check": "independent_useful_original_result",
+              "passed": true,
+              "result_sha256": "b18e7efdabe32af093bd6835519ad5cd7e0f679a2a34130438e0ea85f1cfe92c"
+            },
+            {
+              "check": "independent_refusal_witnessed",
+              "passed": true
+            },
+            {
+              "check": "independent_useful_continuation",
+              "passed": true
+            },
+            {
+              "check": "safe_retry_reverifies",
+              "passed": true
+            },
+            {
+              "check": "undo_restores_original_entry",
+              "passed": true,
+              "result": "undone"
+            },
+            {
+              "check": "purge_and_cleanup",
+              "passed": true,
+              "processes": 0
+            },
+            {
+              "check": "workspace_and_sentinels_unchanged",
+              "passed": true
+            },
+            {
+              "check": "reports_contain_no_raw_paths",
+              "passed": true
+            }
+          ],
+          "reports": [
+            "01-preview.json",
+            "02-apply.json",
+            "03-apply-retry.json",
+            "04-undo.json",
+            "05-undo-purge.json"
+          ],
+          "duration_s": 9.9
+        },
+        {
+          "scenario": "changed_after_preview",
+          "passed": true,
+          "checks": [
+            {
+              "check": "changed_runtime_refused_before_change",
+              "passed": true
+            },
+            {
+              "check": "changed_profile_refused_before_change",
+              "passed": true
+            },
+            {
+              "check": "changed_entry_refused",
+              "passed": true
+            },
+            {
+              "check": "nothing_changed",
+              "passed": true
+            },
+            {
+              "check": "reports_contain_no_raw_paths",
+              "passed": true
+            }
+          ],
+          "reports": [
+            "01-preview.json",
+            "02-apply-changed-runtime.json",
+            "03-apply-changed-profile.json",
+            "04-apply-changed-entry.json"
+          ],
+          "duration_s": 3.7
+        },
+        {
+          "scenario": "missing_sandbox_support",
+          "passed": true,
+          "checks": [
+            {
+              "check": "unshare_available",
+              "passed": true
+            },
+            {
+              "check": "missing_sandbox_support_refused",
+              "passed": true,
+              "result": "refused"
+            },
+            {
+              "check": "nothing_changed",
+              "passed": true
+            },
+            {
+              "check": "reports_contain_no_raw_paths",
+              "passed": true
+            }
+          ],
+          "reports": [
+            "01-preview-no-userns.json"
+          ],
+          "duration_s": 3.1
+        },
+        {
+          "scenario": "occupied_foreign_port",
+          "passed": true,
+          "checks": [
+            {
+              "check": "occupied_port_conflict",
+              "passed": true
+            },
+            {
+              "check": "listener_after_preview_refused",
+              "passed": true
+            },
+            {
+              "check": "nothing_changed",
+              "passed": true
+            },
+            {
+              "check": "reports_contain_no_raw_paths",
+              "passed": true
+            }
+          ],
+          "reports": [
+            "01-preview-port.json",
+            "02-preview.json",
+            "03-apply-after-listener.json"
+          ],
+          "duration_s": 4.5
+        },
+        {
+          "scenario": "operator_edits",
+          "passed": true,
+          "checks": [
+            {
+              "check": "apply_verified",
+              "passed": true
+            },
+            {
+              "check": "changed_runtime_not_configured_and_fails_closed",
+              "passed": true,
+              "inspect": "unknown"
+            },
+            {
+              "check": "changed_profile_not_configured",
+              "passed": true,
+              "inspect": "unknown"
+            },
+            {
+              "check": "restored_installation_configured",
+              "passed": true
+            },
+            {
+              "check": "edited_entry_blocks_undo",
+              "passed": true
+            },
+            {
+              "check": "undo_after_resolution_preserves_operator_edits",
+              "passed": true
+            },
+            {
+              "check": "cleanup",
+              "passed": true
+            },
+            {
+              "check": "reports_contain_no_raw_paths",
+              "passed": true
+            }
+          ],
+          "reports": [
+            "01-preview.json",
+            "02-apply.json",
+            "03-undo-conflict.json",
+            "04-undo-purge.json"
+          ],
+          "duration_s": 7.6
+        },
+        {
+          "scenario": "interrupted_and_retry",
+          "passed": true,
+          "checks": [
+            {
+              "check": "interrupt_after_publication_keeps_profile_launch",
+              "passed": true,
+              "inspect": "configured"
+            },
+            {
+              "check": "rerun_resumes_to_verified",
+              "passed": true
+            },
+            {
+              "check": "rerun_after_sigkill_verified",
+              "passed": true
+            },
+            {
+              "check": "undo_after_recovery_clean",
+              "passed": true
+            },
+            {
+              "check": "partial_setup_undone",
+              "passed": true
+            },
+            {
+              "check": "workspace_unchanged",
+              "passed": true
+            },
+            {
+              "check": "reports_contain_no_raw_paths",
+              "passed": true
+            }
+          ],
+          "reports": [
+            "01-preview.json",
+            "02-apply-interrupted.json",
+            "03-apply-resume.json",
+            "04-apply-killed.json",
+            "05-apply-after-kill.json",
+            "06-undo-purge.json",
+            "07-preview-2.json",
+            "08-apply-interrupted-early.json",
+            "09-undo-partial.json"
+          ],
+          "duration_s": 12.5
+        }
+      ],
+      "installation": {
+        "profile_sha256": "8d69ada9c4dbfa00b2fe52c7ca8a0d4bc075041d1171f93d365b24a454634e98",
+        "registry_sha256": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7",
+        "policy_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+        "git_version": null,
+        "bwrap_version": "bubblewrap 0.13.1",
+        "runtime_sha256": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+        "package_tree_sha256": "da0df010dc8f5c78792f37b82e605919e34886a15edcda78e04d824743775043"
+      }
+    },
+    {
+      "profile": "git",
+      "classifier_sha256": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+      "scenarios": [
+        {
+          "scenario": "full_cycle",
+          "passed": true,
+          "checks": [
+            {
+              "check": "calibration_original_server_reads_and_changes_unprotected",
+              "passed": true,
+              "discovery": true,
+              "useful": true,
+              "useful_text_sha256": "cd102eb9513907d847ef5d127bb455437b0bd8264059f87f298efc70c81b3415",
+              "change_executed": true
+            },
+            {
+              "check": "preview_ready_and_read_only",
+              "passed": true,
+              "profile": {
+                "bwrap_sha256": "f56b4f9760efd35d6a5884735aba5c2f578a3473d721d5a0ef710089c356cc62",
+                "classifier_python_sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+                "format": "sw-mcp/git-readonly/1",
+                "git_launcher_sha256": "c6016e5c993c855a0a7e90a0827411ddceea80d851bf00d39a9a07f766a8d4d6",
+                "git_sha256": "aba0506da6f8c5aee0abd3e9f55e1abd95788274812b9f5f33cf69a0a15f8d45",
+                "kind": "git",
+                "library_count": 29,
+                "package_tree_sha256": "552dd921d804a308512956b7ebe457df7558bed349fd3a3217735319014f5fd1",
+                "runtime_sha256": "c65a77ee58142beaace1686dc3b0c9cf362c75c36b5eaf7f3fd87013a44d1c8c",
+                "sha256": "f6f263251d3090cead79cbb07a769fa904169abe4e943d927fe9635894d97e4f"
+              }
+            },
+            {
+              "check": "preview_checks_profile_identities",
+              "passed": true
+            },
+            {
+              "check": "apply_verified_through_selected_profile",
+              "passed": true,
+              "result": "verified",
+              "witness": {
+                "continuation": {
+                  "ok": true,
+                  "same_result": true
+                },
+                "original_discovery": true,
+                "original_initialization": true,
+                "refusal": {
+                  "error_frame": true,
+                  "refused": true,
+                  "workspace_entries": 24,
+                  "workspace_unchanged": true
+                },
+                "refused_tool": "git_create_branch",
+                "useful": {
+                  "ok": true,
+                  "result_sha256": "f2c501173b8acd82a70913810d0efc39d0b93869a3afdd014a0262044ad25a0b"
+                },
+                "useful_tool": "git_status",
+                "workspace_witness": "bounded non-following snapshot of the host workspace, taken outside the sandbox"
+              },
+              "steps": {
+                "connect_server": {
+                  "elapsed_ms": 375,
+                  "outcome": "done"
+                },
+                "create_agent_home": {
+                  "elapsed_ms": 0,
+                  "outcome": "done"
+                },
+                "create_token": {
+                  "elapsed_ms": 50,
+                  "outcome": "done"
+                },
+                "lifecycle_install": {
+                  "elapsed_ms": 151,
+                  "outcome": "done"
+                },
+                "lifecycle_start": {
+                  "elapsed_ms": 272,
+                  "outcome": "done"
+                },
+                "self_test": {
+                  "elapsed_ms": 1074,
+                  "outcome": "done"
+                },
+                "verify_identity": {
+                  "elapsed_ms": 121,
+                  "outcome": "done"
+                },
+                "verify_server": {
+                  "elapsed_ms": 2012,
+                  "outcome": "done"
+                },
+                "write_owned_files": {
+                  "elapsed_ms": 1,
+                  "outcome": "done"
+                }
+              }
+            },
+            {
+              "check": "configured_identity_separate",
+              "passed": true
+            },
+            {
+              "check": "agent_witness_original_discovery_refusal_continuation",
+              "passed": true
+            },
+            {
+              "check": "persisted_launch_settings_are_structured_and_narrow",
+              "passed": true,
+              "variables": [
+                "PATH",
+                "HOME",
+                "USERPROFILE",
+                "AGENTFW_MCP_SERVER_PROFILE",
+                "AGENTFW_WORKSPACE",
+                "AGENTFW_CLASSIFIER",
+                "AGENTFW_RULE_BASELINE",
+                "AGENTFW_CLASSIFIER_PYTHON"
+              ]
+            },
+            {
+              "check": "independent_useful_original_result",
+              "passed": true,
+              "result_sha256": "cd102eb9513907d847ef5d127bb455437b0bd8264059f87f298efc70c81b3415"
+            },
+            {
+              "check": "independent_refusal_witnessed",
+              "passed": true
+            },
+            {
+              "check": "independent_useful_continuation",
+              "passed": true
+            },
+            {
+              "check": "safe_retry_reverifies",
+              "passed": true
+            },
+            {
+              "check": "undo_restores_original_entry",
+              "passed": true,
+              "result": "undone"
+            },
+            {
+              "check": "purge_and_cleanup",
+              "passed": true,
+              "processes": 0
+            },
+            {
+              "check": "workspace_and_sentinels_unchanged",
+              "passed": true
+            },
+            {
+              "check": "reports_contain_no_raw_paths",
+              "passed": true
+            }
+          ],
+          "reports": [
+            "01-preview.json",
+            "02-apply.json",
+            "03-apply-retry.json",
+            "04-undo.json",
+            "05-undo-purge.json"
+          ],
+          "duration_s": 33.0
+        },
+        {
+          "scenario": "changed_after_preview",
+          "passed": true,
+          "checks": [
+            {
+              "check": "changed_runtime_refused_before_change",
+              "passed": true
+            },
+            {
+              "check": "changed_profile_refused_before_change",
+              "passed": true
+            },
+            {
+              "check": "changed_entry_refused",
+              "passed": true
+            },
+            {
+              "check": "nothing_changed",
+              "passed": true
+            },
+            {
+              "check": "reports_contain_no_raw_paths",
+              "passed": true
+            }
+          ],
+          "reports": [
+            "01-preview.json",
+            "02-apply-changed-runtime.json",
+            "03-apply-changed-profile.json",
+            "04-apply-changed-entry.json"
+          ],
+          "duration_s": 16.3
+        },
+        {
+          "scenario": "missing_sandbox_support",
+          "passed": true,
+          "checks": [
+            {
+              "check": "unshare_available",
+              "passed": true
+            },
+            {
+              "check": "missing_sandbox_support_refused",
+              "passed": true,
+              "result": "refused"
+            },
+            {
+              "check": "nothing_changed",
+              "passed": true
+            },
+            {
+              "check": "reports_contain_no_raw_paths",
+              "passed": true
+            }
+          ],
+          "reports": [
+            "01-preview-no-userns.json"
+          ],
+          "duration_s": 11.3
+        },
+        {
+          "scenario": "occupied_foreign_port",
+          "passed": true,
+          "checks": [
+            {
+              "check": "occupied_port_conflict",
+              "passed": true
+            },
+            {
+              "check": "listener_after_preview_refused",
+              "passed": true
+            },
+            {
+              "check": "nothing_changed",
+              "passed": true
+            },
+            {
+              "check": "reports_contain_no_raw_paths",
+              "passed": true
+            }
+          ],
+          "reports": [
+            "01-preview-port.json",
+            "02-preview.json",
+            "03-apply-after-listener.json"
+          ],
+          "duration_s": 12.6
+        },
+        {
+          "scenario": "operator_edits",
+          "passed": true,
+          "checks": [
+            {
+              "check": "apply_verified",
+              "passed": true
+            },
+            {
+              "check": "changed_runtime_not_configured_and_fails_closed",
+              "passed": true,
+              "inspect": "unknown"
+            },
+            {
+              "check": "changed_profile_not_configured",
+              "passed": true,
+              "inspect": "unknown"
+            },
+            {
+              "check": "restored_installation_configured",
+              "passed": true
+            },
+            {
+              "check": "edited_entry_blocks_undo",
+              "passed": true
+            },
+            {
+              "check": "undo_after_resolution_preserves_operator_edits",
+              "passed": true
+            },
+            {
+              "check": "cleanup",
+              "passed": true
+            },
+            {
+              "check": "reports_contain_no_raw_paths",
+              "passed": true
+            }
+          ],
+          "reports": [
+            "01-preview.json",
+            "02-apply.json",
+            "03-undo-conflict.json",
+            "04-undo-purge.json"
+          ],
+          "duration_s": 28.1
+        },
+        {
+          "scenario": "interrupted_and_retry",
+          "passed": true,
+          "checks": [
+            {
+              "check": "interrupt_after_publication_keeps_profile_launch",
+              "passed": true,
+              "inspect": "configured"
+            },
+            {
+              "check": "rerun_resumes_to_verified",
+              "passed": true
+            },
+            {
+              "check": "rerun_after_sigkill_verified",
+              "passed": true
+            },
+            {
+              "check": "undo_after_recovery_clean",
+              "passed": true
+            },
+            {
+              "check": "partial_setup_undone",
+              "passed": true
+            },
+            {
+              "check": "workspace_unchanged",
+              "passed": true
+            },
+            {
+              "check": "reports_contain_no_raw_paths",
+              "passed": true
+            }
+          ],
+          "reports": [
+            "01-preview.json",
+            "02-apply-interrupted.json",
+            "03-apply-resume.json",
+            "04-apply-killed.json",
+            "05-apply-after-kill.json",
+            "06-undo-purge.json",
+            "07-preview-2.json",
+            "08-apply-interrupted-early.json",
+            "09-undo-partial.json"
+          ],
+          "duration_s": 24.6
+        }
+      ],
+      "installation": {
+        "profile_sha256": "f6f263251d3090cead79cbb07a769fa904169abe4e943d927fe9635894d97e4f",
+        "registry_sha256": "5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385",
+        "policy_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+        "git_version": "git version 2.51.2",
+        "bwrap_version": "bubblewrap 0.13.1",
+        "runtime_sha256": "c65a77ee58142beaace1686dc3b0c9cf362c75c36b5eaf7f3fd87013a44d1c8c",
+        "package_tree_sha256": "552dd921d804a308512956b7ebe457df7558bed349fd3a3217735319014f5fd1"
+      }
+    }
+  ],
+  "cleanup": {
+    "owned_roots_removed": true
+  },
+  "passed": true,
+  "duration_s": 174.4
+}
