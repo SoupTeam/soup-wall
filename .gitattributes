@@ -41,3 +41,9 @@ profiles/mcp/filesystem-readonly-v1/upstream-notices/** -text whitespace=-space-
 profiles/mcp/git-readonly-v1/** -text whitespace=cr-at-eol
 profiles/mcp/git-readonly-v1/upstream-notices/** -text whitespace=-space-before-tab
 rule_baseline/runtime/** text eol=lf
+
+# SOU-81: the classifier sources are packaged by raw-byte SHA-256; a Windows checkout with
+# core.autocrlf must not turn them into CRLF. The stored blobs are already LF, so this only
+# pins the working-tree bytes and changes no committed byte.
+rule_baseline/rule_baseline.py text eol=lf
+rule_baseline/rev2/rule_baseline.py text eol=lf
