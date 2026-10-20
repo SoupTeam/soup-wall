@@ -30,7 +30,32 @@ MANIFEST = ROOT / "eval/pilot/sou97_gate_manifest_v1.json"
 PROFILE_DIRS = {"filesystem": "filesystem-readonly-v1", "git": "git-readonly-v1"}
 ID_BASE = 3000
 WITHHELD = re.compile(r"^Soup Wall withheld MCP (invocation|result) \(([^)]*)\)$")
-SEED_TEXT = "SOU-97 synthetic public fixture content.\n"
+# Tiny per-case content keeps every original benign result inside the profile's 16 KiB output bound.
+SEED_TEXT = "SOU-97\n"
+# Every fixed JSON-RPC error message of the native real-server path (crates/agentfw/src/mcp/admission/real_server.rs).
+# A response carrying one of these is native, never an original-server error; a test keeps this list in sync.
+NATIVE_ERROR_MESSAGES = frozenset((
+    "MCP request cancelled or incomplete; dispatched execution may have occurred",
+    "MCP request cancelled; dispatched execution may have occurred",
+    "MCP manifest differs from the installed selected-server profile",
+    "Unsupported MCP result withheld by the selected output profile",
+    "MCP arguments violate the selected input profile",
+    "MCP params must be an object",
+    "MCP tool name is required",
+    "Unsupported MCP call parameters",
+    "Unsupported MCP discovery parameters",
+    "MCP method is unsupported by the selected profile",
+    "MCP tool is explicitly unsupported in the read-only profile",
+    "MCP tool is not installed in this profile",
+    "Server callbacks are unsupported by this operator profile",
+    "MCP pending-call limit reached",
+    "MCP physical pending-call limit reached",
+    "MCP control request is busy or not initialized",
+    "Operator-pinned MCP discovery is required",
+    "MCP call timed out; dispatched execution may have occurred",
+))
+NOT_CLASSIFIED_PREFIX = "Soup Wall could not classify the MCP invocation ("
+OUTPUT_PROFILE_WITHHELD = "Unsupported MCP result withheld by the selected output profile"
 
 
 class ReplayError(ValueError):
@@ -82,33 +107,62 @@ def matrix_cases(profile: str) -> tuple[str, list[dict]]:
     return sha_bytes(raw), cases
 
 
-# Every benign filesystem path of the frozen matrix, created as owned synthetic content.
-SEED_FILES = (["docs/guide/intro.md", "données/привет.txt", ".env.example", "delete_me.txt", "scripts/upload.py",
-               "/".join(["a"] * 40) + "/deep.txt", "bin/rm.sh", "bin/send_report.py", "write.lock"]
-              + [f"src/file_{i:03d}.txt" for i in range(256)])
-SEED_DIRECTORIES = ("remove",)
+# Per-case seeding: only the benign case's own read targets exist while it runs, then they are removed.
+# Seeding the whole matrix at once made original directory_tree results exceed the profile's 16 KiB
+# output bound, which native validation correctly withheld (SOU-97 first Linux run, request id 38).
+DIRECTORY_TOOLS = frozenset(("list_directory", "list_directory_with_sizes", "directory_tree", "search_files"))
+DIRECTORY_TARGETS = frozenset(("docs", "docs/guide", "remove"))  # also named by get_file_info in the matrix
 
 
-def seed_filesystem_workspace(workspace: Path) -> list[str]:
-    """Create the matrix's benign read targets; verify every benign path exists before any call."""
-    for rel in SEED_DIRECTORIES:
-        (workspace / rel).mkdir(mode=0o700, parents=True, exist_ok=True)
-    for rel in SEED_FILES:
-        target = workspace / rel
-        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        target.write_text(SEED_TEXT, encoding="utf-8")
-    _, cases = matrix_cases("filesystem")
-    missing = []
-    for case in cases:
-        if case["expectation"] != "benign" or not isinstance(case["arguments"], dict):
+def case_targets(case: dict) -> list[tuple[str, str]]:
+    """(relative path, 'file' | 'directory') that a benign filesystem case needs; refusals need nothing."""
+    if case["expectation"] != "benign" or not isinstance(case["arguments"], dict):
+        return []
+    args = case["arguments"]
+    values = args["paths"] if isinstance(args.get("paths"), list) else [args.get("path")]
+    targets = []
+    for value in values:
+        if not isinstance(value, str) or not (value == "/workspace" or value.startswith("/workspace/")):
             continue
-        values = case["arguments"].get("paths") or [case["arguments"].get("path")]
-        for value in values:
-            if isinstance(value, str) and value.startswith("/workspace") and not (workspace / value[len("/workspace"):].lstrip("/")).exists():
-                missing.append(f"{case['id']}:{value}")
-    if missing:
-        raise ReplayError("matrix benign targets missing from the seeded workspace: " + ", ".join(missing[:5]))
-    return sorted(SEED_FILES) + sorted(d + "/" for d in SEED_DIRECTORIES)
+        rel = value[len("/workspace"):].lstrip("/")
+        if not rel:
+            continue
+        kind = "directory" if case["tool"] in DIRECTORY_TOOLS or rel in DIRECTORY_TARGETS else "file"
+        targets.append((rel, kind))
+    return targets
+
+
+def seed_case(workspace: Path, case: dict) -> list[Path]:
+    """Create exactly the missing targets of one case; return what was created, in creation order."""
+    created = []
+    for rel, kind in case_targets(case):
+        target = workspace / rel
+        missing_parents = [parent for parent in reversed(target.relative_to(workspace).parents) if str(parent) != "."]
+        for parent in missing_parents:
+            path = workspace / parent
+            if not path.exists():
+                path.mkdir(mode=0o700)
+                created.append(path)
+        if target.exists():
+            continue  # pre-existing driver fixtures (notes.txt, the FIFOs) are never replaced or removed
+        if kind == "directory":
+            target.mkdir(mode=0o700)
+        else:
+            target.write_text(SEED_TEXT, encoding="utf-8")
+        created.append(target)
+    for rel, _ in case_targets(case):
+        if not (workspace / rel).exists():
+            raise ReplayError(f"{case['id']}: seeded target {rel} is missing")
+    return created
+
+
+def unseed_case(created: list[Path]) -> None:
+    """Remove exactly what seed_case created, deepest first; nothing else is touched."""
+    for path in reversed(created):
+        if path.is_dir() and not path.is_symlink():
+            path.rmdir()  # fails loudly if anything unexpected appeared inside
+        else:
+            path.unlink()
 
 
 def classify_response(response, dispatched: bool) -> dict:
@@ -117,10 +171,18 @@ def classify_response(response, dispatched: bool) -> dict:
         return {"result_kind": "no_response", "native_verdict": "refused", "refusal_code": "session_closed_without_response"}
     if "error" in response:
         error = response["error"]
-        code = f"jsonrpc:{error.get('code')}:{error.get('message')}"
+        message = error.get("message") if isinstance(error, dict) else None
+        code = f"jsonrpc:{error.get('code') if isinstance(error, dict) else None}:{message}"
+        native = isinstance(message, str) and (message in NATIVE_ERROR_MESSAGES or message.startswith(NOT_CLASSIFIED_PREFIX))
+        if dispatched and native:
+            # Executed, then the native layer replaced the result (output profile, timeout, cancellation).
+            # Never an original-server error and never a successful allow; never proof an effect was undone.
+            kind = "native_withheld_result" if message == OUTPUT_PROFILE_WITHHELD else "native_error_after_dispatch"
+            return {"result_kind": kind, "native_verdict": "allow_result_withheld", "refusal_code": code}
         if dispatched:
             return {"result_kind": "original_error_jsonrpc", "native_verdict": "allow", "refusal_code": None, "detail": code}
-        return {"result_kind": "native_error", "native_verdict": "refused", "refusal_code": code}
+        return {"result_kind": "native_error", "native_verdict": "refused", "refusal_code": code,
+                **({} if native else {"unrecognised_native_message": True})}
     result = response.get("result", {})
     content = result.get("content") if isinstance(result, dict) else None
     text = content[0].get("text") if isinstance(content, list) and len(content) == 1 and isinstance(content[0], dict) else None
@@ -143,18 +205,28 @@ def frame(identifier: int, case: dict) -> dict:
             "params": {"name": case["tool"], "arguments": case["arguments"]}}
 
 
-def replay(profile, *, open_session, events, snapshot, workspace, witness_cls, receiver, continuation, responses_path):
-    """Send every runtime-reachable matrix case; return (case records, failures). Never raises on an outcome."""
+def replay(profile, *, open_session, events, snapshot, workspace, witness_cls, receiver, continuation, responses_path,
+           prepare=None, restore=None):
+    """Send every runtime-reachable matrix case; return (case records, failures). Never raises on an outcome.
+
+    With prepare/restore (filesystem), each case runs in its own seeded workspace: targets are created first,
+    a fresh file-open witness is installed afterwards so new directories are watched, and after the exchange
+    exactly the created entries are removed and the workspace must equal its pre-replay snapshot.
+    """
     matrix_sha, cases = matrix_cases(profile)
     allowed_errors = original_error_expected()
     records, failures = [], []
     session, log_path = open_session(0)
     sessions = 1
-    witness = witness_cls(workspace)
+    base = snapshot(workspace)
+    witness = None if prepare else witness_cls(workspace)
     try:
         with open(responses_path, "wb") as sidecar:
             for index, case in enumerate(cases):
                 identifier = ID_BASE + index
+                created = prepare(case) if prepare else []
+                if prepare:
+                    witness = witness_cls(workspace)  # installed after seeding: every seeded directory is watched
                 before, egress_before = snapshot(workspace), len(receiver.bodies)
                 witness.drain()
                 response, raw, terminated = None, b"", False
@@ -191,10 +263,17 @@ def replay(profile, *, open_session, events, snapshot, workspace, witness_cls, r
                     sessions += 1
                 if record["result_kind"] != "original_result":
                     record["continuation_ok"] = continuation(session, identifier + 1000)
+                if prepare:
+                    witness.close()
+                    witness = None
+                    restore(created)
+                    record["seeded"] = len(created)
+                    record["workspace_restored"] = snapshot(workspace) == base
                 records.append(record)
                 failures += expectation_failures(record, allowed_errors)
     finally:
-        witness.close()
+        if witness is not None:
+            witness.close()
         session.close()
     return {"matrix_sha256": matrix_sha, "cases": records, "sessions": sessions}, failures
 
@@ -217,6 +296,8 @@ def expectation_failures(record: dict, allowed_errors: dict) -> list[dict]:
                              "inotify_opens": record["dispatch_witness"]["inotify_opens"]})
     if record.get("continuation_ok") is False:
         problems.append({"case": record["case_id"], "expected": "useful continuation after refusal"})
+    if record.get("workspace_restored") is False:
+        problems.append({"case": record["case_id"], "expected": "workspace restored after per-case seeding"})
     return problems
 
 

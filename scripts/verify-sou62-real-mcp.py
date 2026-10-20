@@ -749,7 +749,8 @@ def candidate_replay(stack, command, env, report):
         calibration_client.close()
     result, failures = REPLAY.replay("filesystem", open_session=open_session, events=events, snapshot=snapshot,
                                      workspace=stack.workspace, witness_cls=stack.witness_cls, receiver=stack.receiver,
-                                     continuation=continuation, responses_path=stack.root / "sou97-replay-responses.jsonl")
+                                     continuation=continuation, responses_path=stack.root / "sou97-replay-responses.jsonl",
+                                     prepare=lambda case: REPLAY.seed_case(stack.workspace, case), restore=REPLAY.unseed_case)
     for client, log in stack.replay_logs:
         log.close()
         require(client.process_witness.final is None or client.process_witness.final["all_stopped"],
@@ -889,8 +890,6 @@ def run(args):
             stack.workspace = private / "workspace"
             stack.workspace.mkdir(mode=0o700)
             (stack.workspace / "notes.txt").write_text(TEXT, encoding="utf-8")
-            if stack.classifier["mode"] == "candidate":
-                report["sou97_seeded"] = REPLAY.seed_filesystem_workspace(stack.workspace)
             for index in range(8):
                 os.mkfifo(stack.workspace / f"pending-{index}.fifo", 0o600)
             stack.install = private / "installed-profile"

@@ -2,6 +2,7 @@
 import hashlib
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -67,17 +68,172 @@ class MatrixAndSeed(unittest.TestCase):
         ids = {c["id"] for c in REPLAY.matrix_cases("filesystem")[1] if c["expectation"] == "refusal"}
         self.assertIn("PMF-A01", ids)  # undeclared field: must be refused before dispatch
 
-    def test_seed_creates_every_benign_target(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            workspace = Path(tmp)
-            (workspace / "notes.txt").write_text("x", encoding="utf-8")
-            seeded = REPLAY.seed_filesystem_workspace(workspace)
-            self.assertIn("remove/", seeded)
-            self.assertEqual(len(list((workspace / "src").iterdir())), 256)
+    def test_every_benign_case_has_targets_and_refusals_have_none(self):
+        _, cases = REPLAY.matrix_cases("filesystem")
+        for case in cases:
+            with self.subTest(case=case["id"]):
+                targets = REPLAY.case_targets(case)
+                self.assertEqual(targets == [], case["expectation"] == "refusal" or case["id"] in NO_TARGET_CASES)
 
     def test_original_error_list_is_the_manifest_list(self):
         self.assertEqual(REPLAY.original_error_expected(), MANIFEST["runtime"]["original_error_expected"])
         self.assertEqual(sorted(REPLAY.original_error_expected()), ["PMG-B07", "PMG-B08", "PMG-B19", "PMG-B20"])
+
+
+NO_TARGET_CASES = {"PMF-B21", "PMF-B24", "PMF-B25", "PMF-B26", "PMF-B27", "PMF-B29", "PMF-B30", "PMF-B31", "PMF-B32",
+                   "PMF-B33", "PMF-B34", "PMF-B35", "PMF-B36", "PMF-B37", "PMF-B38", "PMF-B39", "PMF-B40", "PMF-B41",
+                   "PMF-B42", "PMF-B46"}  # /workspace itself or no path: nothing to seed
+BASE_FILES = ["notes.txt"] + [f"pending-{i}.fifo" for i in range(8)]  # the SOU-62 driver's own layout (FIFOs as names)
+OUTPUT_BOUND = 16 * 1024  # input.rs DEFAULT_STRING_BYTES applies to the {content: string} output schema
+
+
+def base_workspace(root: Path) -> Path:
+    for name in BASE_FILES:
+        (root / name).write_text("synthetic original text\n", encoding="utf-8")
+    return root
+
+
+def tree_snapshot(root: Path) -> dict:
+    return {str(p.relative_to(root)): (p.is_dir(), p.read_bytes() if p.is_file() else None) for p in sorted(root.rglob("*"))}
+
+
+def upstream_tree(path: Path) -> str:
+    """JSON.stringify(buildTree(path), null, 2) of @modelcontextprotocol/server-filesystem 2026.8.31 (dist/index.js)."""
+    def build(directory):
+        out = []
+        for entry in sorted(directory.iterdir()):
+            item = {"name": entry.name, "type": "directory" if entry.is_dir() else "file"}
+            if entry.is_dir():
+                item["children"] = build(entry)
+            out.append(item)
+        return out
+    return json.dumps(build(path), indent=2, ensure_ascii=False)
+
+
+def upstream_multiple(paths: list, root: Path) -> str:
+    """read_multiple_files: `${filePath}:\\n${content}\\n` joined by `\\n---\\n` (dist/index.js)."""
+    return "\n---\n".join(f"{p}:\n{(root / p[len('/workspace/'):]).read_text(encoding='utf-8')}\n" for p in paths)
+
+
+def upper_bound_listing(directory: Path) -> int:
+    """Generous bound for list/list_with_sizes/search/info: every entry name plus 96 bytes of formatting."""
+    return sum(len(p.name.encode()) + 96 for p in directory.rglob("*")) + 512
+
+
+def original_output_size(case: dict, root: Path) -> int:
+    tool, args = case["tool"], case["arguments"]
+    if tool == "directory_tree":
+        return len(upstream_tree(root / args["path"][len("/workspace"):].lstrip("/")).encode())
+    if tool == "read_multiple_files":
+        return len(upstream_multiple(args["paths"], root).encode())
+    if tool in ("read_file", "read_text_file"):
+        return len((root / args["path"][len("/workspace/"):]).read_bytes())
+    return upper_bound_listing(root)
+
+
+class PerCaseSeeding(unittest.TestCase):
+    def test_each_case_is_seeded_exactly_and_the_workspace_is_restored(self):
+        _, cases = REPLAY.matrix_cases("filesystem")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = base_workspace(Path(tmp))
+            initial = tree_snapshot(root)
+            for case in cases:
+                with self.subTest(case=case["id"]):
+                    created = REPLAY.seed_case(root, case)
+                    for rel, kind in REPLAY.case_targets(case):
+                        self.assertEqual((root / rel).is_dir(), kind == "directory", rel)
+                    self.assertEqual((root / "notes.txt").read_text(encoding="utf-8"), "synthetic original text\n")
+                    REPLAY.unseed_case(created)
+                    self.assertEqual(tree_snapshot(root), initial)
+
+    def test_preexisting_fixtures_are_never_created_replaced_or_removed(self):
+        case = next(c for c in REPLAY.matrix_cases("filesystem")[1] if c["id"] == "PMF-B01")  # read_file notes.txt
+        with tempfile.TemporaryDirectory() as tmp:
+            root = base_workspace(Path(tmp))
+            self.assertEqual(REPLAY.seed_case(root, case), [])
+            REPLAY.unseed_case([])
+            self.assertTrue((root / "notes.txt").exists())
+
+    def test_unseed_refuses_to_remove_unexpected_content(self):
+        case = next(c for c in REPLAY.matrix_cases("filesystem")[1] if c["id"] == "PMF-B22")  # docs/guide
+        with tempfile.TemporaryDirectory() as tmp:
+            root = base_workspace(Path(tmp))
+            created = REPLAY.seed_case(root, case)
+            (root / "docs/guide/unexpected.txt").write_text("x", encoding="utf-8")
+            with self.assertRaises(OSError):
+                REPLAY.unseed_case(created)
+
+
+class OutputBound(unittest.TestCase):
+    """Every benign filesystem original result must fit the selected output profile, or native validation withholds it."""
+
+    def test_every_benign_case_fits_with_per_case_seeding(self):
+        _, cases = REPLAY.matrix_cases("filesystem")
+        sizes = {}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = base_workspace(Path(tmp))
+            for case in cases:
+                if case["expectation"] != "benign":
+                    continue
+                created = REPLAY.seed_case(root, case)
+                try:
+                    sizes[case["id"]] = original_output_size(case, root)
+                finally:
+                    REPLAY.unseed_case(created)
+        self.assertEqual(len(sizes), 46)
+        too_large = {cid: size for cid, size in sizes.items() if size > OUTPUT_BOUND}
+        self.assertEqual(too_large, {})
+        self.assertLess(sizes["PMF-B19"], OUTPUT_BOUND)  # 256 seeded files
+        self.assertLess(sizes["PMF-B27"], 1024)  # /workspace tree of the driver's own layout
+
+    def test_the_first_runs_global_seeding_exceeded_the_bound(self):
+        # Regression record: seeding every target at once produced the withheld id 38 tree.
+        _, cases = REPLAY.matrix_cases("filesystem")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = base_workspace(Path(tmp))
+            for case in cases:
+                REPLAY.seed_case(root, case)
+            self.assertGreater(len(upstream_tree(root).encode()), OUTPUT_BOUND)
+
+
+class WitnessCoverage(unittest.TestCase):
+    def test_witness_is_installed_after_seeding_and_watches_every_seeded_directory(self):
+        _, cases = REPLAY.matrix_cases("filesystem")
+        expected = {c["id"]: c for c in cases}
+        installs = []
+
+        class RecordingWitness:
+            def __init__(self, root):
+                installs.append({p.relative_to(root).as_posix() for p in [root, *root.rglob("*")] if p.is_dir()})
+
+            def drain(self):
+                return 0
+
+            def close(self):
+                pass
+
+        log = []
+
+        def outcome(frame):
+            return {"jsonrpc": "2.0", "id": frame["id"], "result": {"content": [{"type": "text", "text": "x"}]}}, True
+
+        receiver = type("Receiver", (), {"bodies": []})()
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as out:
+            root = base_workspace(Path(tmp))
+            initial = tree_snapshot(root)
+            result, _ = REPLAY.replay("filesystem", open_session=lambda i: (FakeSession(log, outcome), "log"),
+                                      events=lambda _: log, snapshot=tree_snapshot, workspace=root, witness_cls=RecordingWitness,
+                                      receiver=receiver, continuation=lambda session, identifier: True,
+                                      responses_path=Path(out, "responses.jsonl"),
+                                      prepare=lambda case: REPLAY.seed_case(root, case), restore=REPLAY.unseed_case)
+            self.assertEqual(tree_snapshot(root), initial)
+        self.assertEqual(len(installs), len(result["cases"]))
+        for watched, record in zip(installs, result["cases"]):
+            with self.subTest(case=record["case_id"]):
+                self.assertTrue(record["workspace_restored"])
+                for rel, kind in REPLAY.case_targets(expected[record["case_id"]]):
+                    directory = rel if kind == "directory" else str(Path(rel).parent.as_posix())
+                    self.assertIn("." if directory in ("", ".") else directory, watched)
 
 
 class ResponseClassification(unittest.TestCase):
@@ -96,6 +252,34 @@ class ResponseClassification(unittest.TestCase):
             with self.subTest(kind=kind):
                 got = REPLAY.classify_response(response, dispatched)
                 self.assertEqual((got["result_kind"], got["native_verdict"]), (kind, verdict))
+
+    def test_native_output_profile_withholding_is_never_an_original_error_or_allow(self):
+        withheld_output = {"jsonrpc": "2.0", "id": 38, "error": {"code": -32603,
+                           "message": "Unsupported MCP result withheld by the selected output profile"}}
+        got = REPLAY.classify_response(withheld_output, True)
+        self.assertEqual((got["result_kind"], got["native_verdict"]), ("native_withheld_result", "allow_result_withheld"))
+        self.assertNotEqual(got["native_verdict"], "allow")
+        timeout = {"jsonrpc": "2.0", "id": 1, "error": {"code": -32001,
+                   "message": "MCP call timed out; dispatched execution may have occurred"}}
+        self.assertEqual(REPLAY.classify_response(timeout, True)["result_kind"], "native_error_after_dispatch")
+        original = {"jsonrpc": "2.0", "id": 1, "error": {"code": -32000, "message": "upstream failure text"}}
+        self.assertEqual(REPLAY.classify_response(original, True)["result_kind"], "original_error_jsonrpc")
+        unknown = REPLAY.classify_response(original, False)
+        self.assertEqual((unknown["native_verdict"], unknown.get("unrecognised_native_message")), ("refused", True))
+        allowed = REPLAY.original_error_expected()
+        for expectation, cid in (("benign", "PMF-B27"), ("refusal", "PMF-A01")):
+            record = {"case_id": cid, "expectation": expectation, **got, "dispatched": True,
+                      "dispatch_witness": {"observed": True, "inotify_opens": 1},
+                      "effect_witness": {"workspace_unchanged": True, "egress_bodies": 0}}
+            with self.subTest(expectation=expectation):
+                self.assertTrue(REPLAY.expectation_failures(record, allowed))
+
+    def test_native_message_list_matches_the_rust_source(self):
+        source = (ROOT / "crates/agentfw/src/mcp/admission/real_server.rs").read_text(encoding="utf-8")
+        found = set(re.findall(r'error\(\s*&?[\w.]+,\s*-?\d+,\s*"([^"]+)"\s*,?\s*\)', source))
+        self.assertEqual(found, set(REPLAY.NATIVE_ERROR_MESSAGES))
+        admission = (ROOT / "crates/agentfw/src/mcp/admission.rs").read_text(encoding="utf-8")
+        self.assertIn('"Soup Wall could not classify the MCP invocation ({failure}); policy not reached"', admission)
 
     def record(self, **changes):
         base = {"case_id": "PMF-B01", "expectation": "benign", "result_kind": "original_result", "native_verdict": "allow",

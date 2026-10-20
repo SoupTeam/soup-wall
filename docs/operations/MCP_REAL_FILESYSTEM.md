@@ -307,8 +307,11 @@ the preserved `directory_tree` Ask, is unchanged.
 
 In candidate mode only:
 - `directory_tree` must return the admitted original tree.
-- The driver seeds the [frozen matrix](../../eval/fixtures/soup_pilot_readonly_matrix_v0.1.json)'s
-  synthetic read targets in the workspace.
+- The driver seeds each benign [frozen matrix](../../eval/fixtures/soup_pilot_readonly_matrix_v0.1.json)
+  case's own synthetic read targets just before that case and removes exactly those
+  entries afterwards. The workspace must then match its pre-replay snapshot. Seeding
+  every target at once would push original `directory_tree` results past the profile's
+  16 KiB output bound.
 - It replays every runtime-reachable filesystem matrix case through fresh protected
   sessions with [`scripts/sou97_runtime_replay.py`](../../scripts/sou97_runtime_replay.py).
   Each case is checked by the collector's `execution_dispatched` audit, kernel
