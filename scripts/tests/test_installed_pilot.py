@@ -193,6 +193,28 @@ class RuntimeBoundaryControls(unittest.TestCase):
             with self.assertRaises(ValueError):
                 PILOT.host_text(value, "filesystem")
 
+    def test_injection_refusal_needs_exact_native_result_scope_and_delivery(self):
+        row = {"event": "native_result", "host_session": "owned-host", "agent_id": "owned-agent",
+               "tool": "git_show", "verdict": "deny", "released": False, "shadow": False,
+               "findings": [{"detector": "injection", "severity": "high"}], "rule": "selected-versioned-injection-rule"}
+        response = {"jsonrpc": "2.0", "id": 46, "error": {"code": -32003, "message": row["rule"]}}
+        actual = PILOT.result_injection_refusal(response, [row], "owned-host", "owned-agent")
+        self.assertEqual(actual["rule"], row["rule"])
+        for field, value in (("event", "native_call"), ("host_session", "other-host"), ("agent_id", "other-agent"),
+                             ("tool", "git_status"), ("verdict", "ask"), ("released", True), ("shadow", True),
+                             ("findings", []), ("rule", "")):
+            changed = {**row, field: value}
+            with self.assertRaises(CONTRACT.Failure):
+                PILOT.result_injection_refusal(response, [changed], "owned-host", "owned-agent")
+        for rows in ([], [row, row]):
+            with self.assertRaises(CONTRACT.Failure):
+                PILOT.result_injection_refusal(response, rows, "owned-host", "owned-agent")
+        for bad in ({"jsonrpc": "2.0", "id": 46, "result": {"content": []}},
+                    {"jsonrpc": "2.0", "id": 46, "error": {"code": -32003, "message": "technical failure"}},
+                    {"jsonrpc": "2.0", "id": 46, "error": {"code": -32003, "message": row["rule"] + PILOT.GIT.INJECTION}}):
+            with self.assertRaises(CONTRACT.Failure):
+                PILOT.result_injection_refusal(bad, [row], "owned-host", "owned-agent")
+
     def test_actual_host_git_text_blocks_preserve_bytes_and_reject_other_content(self):
         original = "commit " + "e" * 40 + "\n--- /dev/null\n+++ notes.txt\n+café\n"
         self.assertEqual(PILOT.host_text({"is_error": False, "content": [{"type": "text", "text": original}]}, "git"), original)

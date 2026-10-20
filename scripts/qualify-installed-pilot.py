@@ -122,6 +122,20 @@ def validate_selection(selection, expected):
     return before, paths
 
 
+def result_injection_refusal(response, rows, host, agent):
+    refusals = [row for row in rows if row.get("event") == "native_result"
+                and row.get("host_session") == host and row.get("agent_id") == agent
+                and row.get("tool") == "git_show" and row.get("verdict") == "deny"
+                and row.get("released") is False and row.get("shadow") is False
+                and any(finding.get("detector") == "injection" for finding in row.get("findings", []))]
+    require(len(refusals) == 1 and isinstance(refusals[0].get("rule"), str)
+            and re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", refusals[0]["rule"]), "native_injection_refusal_missing")
+    require(BASE.refused(response) and refusals[0]["rule"] in json.dumps(response)
+            and GIT.INJECTION not in json.dumps(response), "git_injection_result_released")
+    return {"verdict": "deny", "rule": refusals[0]["rule"], "released": False,
+            "native_audit_sha256": digest(refusals[0])}
+
+
 class BoundedStream:
     """Drain continuously; retain bounded owned output, never block the child."""
     def __init__(self, stream):
@@ -544,8 +558,7 @@ class Pilot:
                 git_opens = watch.drain()
                 require(git_opens > 0, "git_open_witness_not_calibrated")
                 response, _ = client.exchange(frame(46, "git", "git_show", {"revision": self.git_injection_revision}))
-                require(BASE.refused(response) and "combined-deny-result-injection" in json.dumps(response)
-                        and GIT.INJECTION not in json.dumps(response), "git_injection_result_released")
+                injection_refusal = result_injection_refusal(response, self.audit(), client.host_session, client.agent_id)
         finally:
             watch.close()
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -558,6 +571,7 @@ class Pilot:
         return {"original_results": {"/".join(key): hashlib.sha256(value.encode()).hexdigest() for key, value in self.controls.items()},
                 "fifo": calibrations, "git_original_opens": git_opens,
                 "git_history_with_object_id_useful": True, "original_injection_result_withheld": True,
+                "injection_refusal": injection_refusal,
                 "original_write_observed": True, "receiver_positive_observed": True,
                 "original_evidence": original_evidence, **self.preserve()}
 

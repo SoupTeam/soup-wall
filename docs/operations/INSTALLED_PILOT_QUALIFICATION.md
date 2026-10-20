@@ -128,8 +128,13 @@ The original denominator is **12 cases**, retained even after a failed setup:
 
 Original server output and actual provider-returned useful bytes must agree.
 Git text block arrays are decoded without dropping non-text or extra fields;
-filesystem structured text keeps its separate exact shape. Replayed authority
-must receive an explicit native HTTP 409 instance-mismatch response for the same
+filesystem structured text keeps its separate exact shape.
+The withheld original Git injection result requires one actual non-shadow native
+result Deny with an injection finding for the exact host, agent and tool, plus
+the same rule in the correlated error and no delivered injection bytes. The
+rule identifier is observed from the selected policy, not fixed to the initial
+proof policy's name. An unrelated refusal or technical failure cannot substitute.
+Replayed authority must receive an explicit native HTTP 409 instance-mismatch response for the same
 old grant. The collector's intentionally generic rejected-request stderr and
 an EOF alone are insufficient; diagnostic response bodies stay out of its log.
 Parser errors, absent tool results, host retries, missing hooks, lost responses
