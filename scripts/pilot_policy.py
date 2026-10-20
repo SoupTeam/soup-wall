@@ -83,6 +83,9 @@ def prepare(kind, installation, destination, port, python=None):
         raise ValueError("registry differs from accepted tool/resource authority")
     if profile != installed["profile"]:
         raise ValueError("profile differs from installation receipt")
+    workspace = Path(profile["workspace"]).resolve(strict=True)
+    if not workspace.is_dir() or workspace == Path(workspace.anchor):
+        raise ValueError("reviewed non-root workspace directory required")
     python = Path(python or sys.executable).resolve(strict=True)
     destination.mkdir(mode=0o700, parents=True)
     policy = destination / "policy.yaml"
@@ -99,6 +102,7 @@ def prepare(kind, installation, destination, port, python=None):
         "AGENTFW_CLASSIFIER": "rule-baseline",
         "AGENTFW_RULE_BASELINE": str(ROOT / classifier),
         "AGENTFW_CLASSIFIER_PYTHON": str(python),
+        "AGENTFW_WORKSPACE": str(workspace),
     }
     receipt = {
         "format": "sw-pilot-selection/1", "status": "prepared-not-active",

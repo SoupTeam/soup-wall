@@ -22,7 +22,9 @@ class SelectionTests(unittest.TestCase):
         self.install = self.root / "installation"
         self.install.mkdir()
         self.destination = self.root / "selection"
-        self.profile = {"format": "sw-mcp/filesystem-readonly/1"}
+        workspace = self.root / "workspace"
+        workspace.mkdir()
+        self.profile = {"format": "sw-mcp/filesystem-readonly/1", "workspace": str(workspace)}
         (self.install / "profile.json").write_text(json.dumps(self.profile))
         upstream = PILOT.read(ROOT / "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json")
         spec = importlib.util.spec_from_file_location("install", ROOT / "scripts/install-sou62-filesystem-profile.py")
@@ -92,6 +94,14 @@ class SelectionTests(unittest.TestCase):
         with patch.object(PILOT.platform, "system", return_value="Windows"):
             with self.assertRaisesRegex(ValueError, "Linux"):
                 PILOT.prepare("filesystem", self.install, self.destination, 48001)
+        self.assertFalse(self.destination.exists())
+
+    def test_missing_workspace_never_produces_selection(self):
+        profile = dict(self.profile, workspace=str(self.root / "absent"))
+        (self.install / "profile.json").write_text(json.dumps(profile))
+        self.receipt()
+        with self.assertRaises(OSError):
+            self.prepare()
         self.assertFalse(self.destination.exists())
 
 

@@ -97,9 +97,16 @@ controls, forbidden attempts, useful follow-ups, outage, process and independent
 file/receiver witnesses run with the selected pilot policy throughout:
 
 ```sh
-# Supply the same required runtime paths documented in the linked profile guides.
-python3 -B scripts/verify-sou62-real-mcp.py --help
-python3 -B scripts/verify-sou68-real-mcp.py --help
+# These variables point to the pinned prerequisites built by the linked guides.
+python3 -B scripts/verify-sou62-real-mcp.py --run --pilot-preset \
+  --agentfw "$AGENTFW" --node "$NODE" --npm "$NPM" --bwrap "$BWRAP" \
+  --claude "$CLAUDE" --sandbox-test-binary "$AGENTFW_TEST_BINARY" \
+  --expected-commit "$(git rev-parse HEAD)" --output "$NEW_FILESYSTEM_EVIDENCE"
+python3 -B scripts/verify-sou68-real-mcp.py --run --pilot-preset \
+  --agentfw "$AGENTFW" --git "$GIT" --git-sha256 "$GIT_SHA256" \
+  --bwrap "$BWRAP" --git-launcher "$GIT_LAUNCHER" \
+  --sandbox-test-binary "$AGENTFW_TEST_BINARY" \
+  --expected-commit "$(git rev-parse HEAD)" --output "$NEW_GIT_EVIDENCE"
 python3 -B -m unittest discover -s scripts/tests -p test_pilot_policy.py -v
 cargo test --locked -p soup-wall-agent --test pilot_policy
 python3 -B scripts/pilot_decision_matrix.py --output /absolute/new-development-report.json
