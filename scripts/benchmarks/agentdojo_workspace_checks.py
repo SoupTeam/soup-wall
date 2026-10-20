@@ -211,9 +211,15 @@ def run(checkout, binary, repo, output):
             value = invoke(runtime, executor, env, "get_current_day", {}, "next-call")
             require("benign-continuation", value[3][-1]["error"] is None and not daemon.client.withheld)
             nested = upstream.runtime.FunctionCall(function="get_current_day",args={})
+            start = len(daemon.client.receipts)
+            counts.clear()
             invoke(runtime, executor, env, "get_day_calendar_events", {"day":nested}, "nested-call")
             require("original-nested-call-and-parent-return",
-                    any(r["event"] == "result" and r["release"] for r in daemon.client.receipts))
+                    counts == {"get_current_day":1, "get_day_calendar_events":1} and
+                    [(r["event"], r["tool"], r["release"]) for r in daemon.client.receipts[start:]] == [
+                        ("call", "get_current_day", True), ("result", "get_current_day", True),
+                        ("call", "get_day_calendar_events", True), ("result", "get_day_calendar_events", True),
+                        ("context", "get_day_calendar_events", True)])
         with adapter.DisposableAgent(binary, policy, repo / "target", native_registry=registry) as daemon:
             env = fresh()
             identifier = "workspace-distinctive-delete-target-2026"
