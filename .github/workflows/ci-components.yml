@@ -1310,6 +1310,16 @@ jobs:
             --claude "$RUNNER_TEMP/sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --sandbox-test-binary "$SOU62_SANDBOX_TEST_BINARY" --expected-commit "$(git rev-parse HEAD)" \
             --output "$RUNNER_TEMP/sou62-acceptance" 2>&1 | tee "$RUNNER_TEMP/sou62-acceptance.log"
+      - name: SOU-98 same-preset original-server acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/verify-sou62-real-mcp.py --run --pilot-preset --agentfw "$PWD/target/debug/agentfw" \
+            --node "$RUNNER_TEMP/sou62-runtime/bin/node" --npm "$RUNNER_TEMP/sou62-runtime/bin/npm" \
+            --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" \
+            --claude "$RUNNER_TEMP/sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --sandbox-test-binary "$SOU62_SANDBOX_TEST_BINARY" --expected-commit "$(git rev-parse HEAD)" \
+            --output "$RUNNER_TEMP/sou98-filesystem" 2>&1 | tee "$RUNNER_TEMP/sou98-filesystem.log"
       - name: Required combined original-server, shared-session, hooks and actual Claude Code smoke
         shell: bash
         run: |
@@ -1438,6 +1448,8 @@ jobs:
             ${{ runner.temp }}/sou105-approval/report.json
             ${{ runner.temp }}/sou105-approval/**/*.log
             ${{ runner.temp }}/sou105-approval/**/*.witness.json
+            ${{ runner.temp }}/sou98-filesystem/**
+            ${{ runner.temp }}/sou98-filesystem.log
             ${{ runner.temp }}/sou100-selection.json
             ${{ runner.temp }}/sou100-selected-policy.yaml
             ${{ runner.temp }}/sou100-registry-regressions.log
@@ -1503,6 +1515,11 @@ jobs:
           with open(os.environ['GITHUB_ENV'], 'a') as stream:
               stream.write('SOU68_TEST_BINARY=' + binaries[0] + '\n')
           PY
+      - name: Pilot selection and policy controls
+        run: |
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_policy.py -v
+          cargo test --locked -p soup-wall-agent --test pilot_policy
+          python3 -B scripts/pilot_decision_matrix.py --output "$RUNNER_TEMP/sou98-development.json"
       - name: Git and existing filesystem regressions
         run: |
           cargo test --locked -p agentfw server_profile --lib
@@ -1524,12 +1541,25 @@ jobs:
             --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou68-acceptance" \
             2>&1 | tee "$RUNNER_TEMP/sou68-acceptance.log"
+      - name: SOU-98 same-preset original-server acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/verify-sou68-real-mcp.py --run --pilot-preset --agentfw "$PWD/target/debug/agentfw" \
+            --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
+            --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --sandbox-test-binary "$SOU68_TEST_BINARY" \
+            --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
+            --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou98-git" \
+            2>&1 | tee "$RUNNER_TEMP/sou98-git.log"
       - name: Retain exact-source synthetic evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: sou68-real-git-mcp-evidence
           path: |
+            ${{ runner.temp }}/sou98-git/**
+            ${{ runner.temp }}/sou98-git.log
+            ${{ runner.temp }}/sou98-development.json
             ${{ runner.temp }}/sou68-*.txt
             ${{ runner.temp }}/sou68-*.jsonl
             ${{ runner.temp }}/sou68-*.log
