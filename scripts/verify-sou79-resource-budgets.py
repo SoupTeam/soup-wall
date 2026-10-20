@@ -190,6 +190,26 @@ def prepare_delegation(unit):
                       'capabilities': delegation_capabilities(selected)}
 
 
+MEMBERSHIP_PHASES = frozenset({
+    'current_task_count', 'member_count', 'leader_identity_read', 'leader_identity_changed',
+    'leader_absent_from_snapshot', 'members_utf8', 'member_pid_parse', 'member_zero_pid',
+    'members_capacity', 'member_open', 'member_utf8', 'member_root',
+    'member_exit_identity_read', 'member_outside_leaf',
+})
+
+
+def safe_membership_failure(value):
+    if not isinstance(value, dict) or set(value) != {'phase', 'pid', 'errno'}:
+        return None
+    if not isinstance(value['phase'], str) or value['phase'] not in MEMBERSHIP_PHASES:
+        return None
+    if value['pid'] is not None and not (type(value['pid']) is int and 0 < value['pid'] < 2**32):
+        return None
+    if value['errno'] is not None and not (type(value['errno']) is int and 0 < value['errno'] < 4096):
+        return None
+    return {key: value[key] for key in ('phase', 'pid', 'errno')}
+
+
 def safe_budget(value):
     if not isinstance(value, dict) or value.get('format') != BUDGET_FORMAT:
         return None
@@ -205,6 +225,11 @@ def safe_budget(value):
     for key in ('failed', 'cleanup_verified'):
         if type(value.get(key)) is bool:
             result[key] = value[key]
+    if 'membership_failure' in value:
+        if value['membership_failure'] is None:
+            result['membership_failure'] = None
+        elif (diagnostic := safe_membership_failure(value['membership_failure'])) is not None:
+            result['membership_failure'] = diagnostic
     for section, names in (
         ('limits', ('memory_max_bytes', 'memory_swap_max_bytes', 'pids_max', 'cpu_quota_micros', 'cpu_period_micros',
                     'cpu_burst_micros', 'wall_millis', 'idle_enforced', 'poll_millis', 'cleanup_millis')),

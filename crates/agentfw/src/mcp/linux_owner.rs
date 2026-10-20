@@ -71,6 +71,7 @@ mod linux {
     use std::os::unix::fs::MetadataExt;
     use std::os::unix::net::UnixStream;
     use std::os::unix::process::CommandExt;
+    use std::os::unix::process::ExitStatusExt;
     use std::process::{Command, Stdio};
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
@@ -149,6 +150,32 @@ mod linux {
         owned_resources_removed: bool,
         runtime_failure: bool,
         reason: String,
+        #[serde(default)]
+        sandbox_exit: Option<SandboxExit>,
+    }
+
+    /// Fixed status from the owned wrapper, observed before cleanup can kill it.
+    /// This does not identify the original server's exception or attest effects.
+    #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct SandboxExit {
+        code: Option<u8>,
+        signal: Option<u8>,
+        before_quiesce: bool,
+    }
+
+    impl SandboxExit {
+        fn valid(&self) -> bool {
+            self.code.is_some() != self.signal.is_some()
+                && self.signal.is_none_or(|signal| (1..=64).contains(&signal))
+        }
+        fn observed(status: std::process::ExitStatus, expected: bool) -> Self {
+            Self {
+                code: status.code().and_then(|code| u8::try_from(code).ok()),
+                signal: status.signal().and_then(|signal| u8::try_from(signal).ok()),
+                before_quiesce: !expected,
+            }
+        }
     }
 
     #[derive(Serialize, Deserialize)]
@@ -165,6 +192,8 @@ mod linux {
         format: String,
         instance: String,
         reason: String,
+        #[serde(default)]
+        sandbox_exit: Option<SandboxExit>,
     }
 
     #[derive(Deserialize)]
@@ -189,6 +218,7 @@ mod linux {
         report: Option<CleanupReport>,
         finishing: bool,
         quiesced: bool,
+        sandbox_exit: Option<SandboxExit>,
     }
 
     pub(crate) struct OwnerProcess {
@@ -544,6 +574,7 @@ mod linux {
             report: None,
             finishing: false,
             quiesced: false,
+            sandbox_exit: None,
         }));
         let changed = Arc::new(tokio::sync::Notify::new());
         let monitor = tokio::spawn(parent_monitor(
@@ -624,7 +655,9 @@ mod linux {
                     bytes.drain(..length + 4);
                     match event {
                         Ok(OwnerEvent::Cleanup(report))
-                            if report.format == FORMAT && report.instance == instance =>
+                            if report.format == FORMAT
+                                && report.instance == instance
+                                && report.sandbox_exit.as_ref().is_none_or(SandboxExit::valid) =>
                         {
                             let success = report.process_reaped
                                 && report.namespace_terminated
@@ -641,6 +674,9 @@ mod linux {
                                 };
                             }
                             let runtime_failure = report.runtime_failure;
+                            if value.sandbox_exit.is_none() {
+                                value.sandbox_exit = report.sandbox_exit.clone();
+                            }
                             value.report = Some(report);
                             complete.store(true, Ordering::Release);
                             if !success || runtime_failure {
@@ -660,7 +696,9 @@ mod linux {
                             lease_deadline = lease_deadline.max(heartbeat.deadline_millis);
                         }
                         Ok(OwnerEvent::Failure(event))
-                            if event.format == FORMAT && event.instance == instance =>
+                            if event.format == FORMAT
+                                && event.instance == instance
+                                && event.sandbox_exit.as_ref().is_none_or(SandboxExit::valid) =>
                         {
                             let Some(reason) = failure_code(&event.reason) else {
                                 break 'monitor "mcp_owner_control_invalid";
@@ -668,6 +706,9 @@ mod linux {
                             let mut value = state.lock().unwrap_or_else(|error| error.into_inner());
                             if !failed.load(Ordering::Acquire) {
                                 value.reason = reason;
+                            }
+                            if value.sandbox_exit.is_none() {
+                                value.sandbox_exit = event.sandbox_exit;
                             }
                             failed.store(true, Ordering::Release);
                             drop(value);
@@ -820,7 +861,8 @@ mod linux {
                 "pid1_pid":self.ready.pid1_pid,"pid1_start_ticks":self.ready.pid1_start_ticks,
                 "startup_bound_ms":STARTUP_MILLIS,"poll_ms":POLL_MILLIS,"cleanup_bound_ms":CLEANUP_MILLIS,
                 "heartbeat_ms":HEARTBEAT_MILLIS,"lease_ms":LEASE_MILLIS,
-                "reason":state.reason,"failed":self.failed.load(Ordering::Acquire),"cleanup":state.report})
+                "reason":state.reason,"sandbox_exit":state.sandbox_exit,
+                "failed":self.failed.load(Ordering::Acquire),"cleanup":state.report})
         }
     }
 
@@ -951,11 +993,13 @@ mod linux {
         control: &mut UnixStream,
         instance: &str,
         expected: bool,
+        first_exit: &mut Option<SandboxExit>,
     ) -> anyhow::Result<Option<bool>> {
         let Some(status) = child.try_wait()? else {
             return Ok(None);
         };
         let failed = !status.success() && !expected;
+        first_exit.get_or_insert_with(|| SandboxExit::observed(status, expected));
         if failed {
             send(
                 control,
@@ -963,6 +1007,7 @@ mod linux {
                     format: FORMAT.to_owned(),
                     instance: instance.to_owned(),
                     reason: "mcp_owner_sandbox_failed".to_owned(),
+                    sandbox_exit: first_exit.clone(),
                 },
             )?;
         }
@@ -1171,6 +1216,7 @@ mod linux {
             "mcp_owner_startup_failed"
         };
         let mut reaped = false;
+        let mut first_exit = None;
         let mut first_failure = if setup.is_err() {
             Some("mcp_owner_startup_failed")
         } else {
@@ -1187,9 +1233,13 @@ mod linux {
                 let mut quiescing = false;
                 'owner: loop {
                     if !reaped {
-                        if let Some(failed) =
-                            observe_wrapper_exit(&mut child, &mut control, &instance, quiescing)?
-                        {
+                        if let Some(failed) = observe_wrapper_exit(
+                            &mut child,
+                            &mut control,
+                            &instance,
+                            quiescing,
+                            &mut first_exit,
+                        )? {
                             reaped = true;
                             if failed {
                                 first_failure.get_or_insert("mcp_owner_sandbox_failed");
@@ -1279,6 +1329,7 @@ mod linux {
                                         &mut control,
                                         &instance,
                                         quiescing,
+                                        &mut first_exit,
                                     )? {
                                         reaped = true;
                                         if failed {
@@ -1354,6 +1405,7 @@ mod linux {
             owned_resources_removed: resources.is_ok(),
             runtime_failure: first_failure.is_some(),
             reason: first_failure.unwrap_or(reason).to_owned(),
+            sandbox_exit: first_exit,
         };
         let _ = send(&mut control, &report);
         ensure!(
@@ -1781,6 +1833,7 @@ mod linux {
                     report: None,
                     finishing: true,
                     quiesced: false,
+                    sandbox_exit: None,
                 }));
                 let changed = Arc::new(tokio::sync::Notify::new());
                 let instance = "b".repeat(32);
@@ -1800,6 +1853,11 @@ mod linux {
                                 format: FORMAT.to_owned(),
                                 instance: instance.clone(),
                                 reason: "mcp_owner_sandbox_failed".to_owned(),
+                                sandbox_exit: Some(SandboxExit {
+                                    code: Some(7),
+                                    signal: None,
+                                    before_quiesce: true,
+                                }),
                             })
                             .unwrap(),
                         )
@@ -1815,6 +1873,11 @@ mod linux {
                             owned_resources_removed: true,
                             runtime_failure: true,
                             reason: "mcp_owner_sandbox_failed".to_owned(),
+                            sandbox_exit: Some(SandboxExit {
+                                code: Some(9),
+                                signal: None,
+                                before_quiesce: false,
+                            }),
                         })
                         .unwrap(),
                     )
@@ -1828,6 +1891,44 @@ mod linux {
                 let state = state.lock().unwrap();
                 assert_eq!(state.reason, "mcp_owner_sandbox_failed");
                 assert!(state.report.as_ref().unwrap().owned_resources_removed);
+                assert_eq!(
+                    state.sandbox_exit.as_ref().unwrap().code,
+                    Some(if prior_event { 7 } else { 9 })
+                );
+            }
+        }
+
+        #[test]
+        fn wrapper_exit_records_real_code_and_signal_without_accepting_malformed_status() {
+            for (raw, code, signal) in [(7 << 8, Some(7), None), (libc::SIGKILL, None, Some(9))] {
+                let status = SandboxExit::observed(std::process::ExitStatus::from_raw(raw), false);
+                assert!(status.valid());
+                assert_eq!((status.code, status.signal), (code, signal));
+                assert!(status.before_quiesce);
+            }
+            for status in [
+                SandboxExit {
+                    code: None,
+                    signal: None,
+                    before_quiesce: true,
+                },
+                SandboxExit {
+                    code: Some(1),
+                    signal: Some(9),
+                    before_quiesce: true,
+                },
+                SandboxExit {
+                    code: None,
+                    signal: Some(0),
+                    before_quiesce: true,
+                },
+                SandboxExit {
+                    code: None,
+                    signal: Some(65),
+                    before_quiesce: true,
+                },
+            ] {
+                assert!(!status.valid());
             }
         }
     }

@@ -3115,6 +3115,7 @@ where
 struct DiagnosticOutput<W> {
     inner: W,
     failed: Arc<AtomicBool>,
+    budget: Option<super::windows_budget::Guard>,
     liveness: Option<Arc<crate::native::liveness::CollectorLivenessClient>>,
 }
 
@@ -3133,6 +3134,26 @@ impl<W> DiagnosticOutput<W> {
         };
         Some(std::io::Error::new(std::io::ErrorKind::BrokenPipe, code))
     }
+
+    fn guarded_io<T>(
+        &mut self,
+        output: impl FnOnce(&mut W) -> Poll<std::io::Result<T>>,
+    ) -> Poll<std::io::Result<T>> {
+        if let Some(error) = self.boundary_error() {
+            return Poll::Ready(Err(error));
+        }
+        if let Some(guard) = &self.budget {
+            match guard.with_output(|| output(&mut self.inner)) {
+                Ok(result) => result,
+                Err(reason) => Poll::Ready(Err(std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    reason,
+                ))),
+            }
+        } else {
+            output(&mut self.inner)
+        }
+    }
 }
 
 impl<W: AsyncWrite + Unpin> AsyncWrite for DiagnosticOutput<W> {
@@ -3141,27 +3162,18 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for DiagnosticOutput<W> {
         cx: &mut TaskContext<'_>,
         bytes: &[u8],
     ) -> Poll<std::io::Result<usize>> {
-        let this = self.get_mut();
-        if let Some(error) = this.boundary_error() {
-            return Poll::Ready(Err(error));
-        }
-        Pin::new(&mut this.inner).poll_write(cx, bytes)
+        self.get_mut()
+            .guarded_io(|inner| Pin::new(inner).poll_write(cx, bytes))
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<std::io::Result<()>> {
-        let this = self.get_mut();
-        if let Some(error) = this.boundary_error() {
-            return Poll::Ready(Err(error));
-        }
-        Pin::new(&mut this.inner).poll_flush(cx)
+        self.get_mut()
+            .guarded_io(|inner| Pin::new(inner).poll_flush(cx))
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<std::io::Result<()>> {
-        let this = self.get_mut();
-        if let Some(error) = this.boundary_error() {
-            return Poll::Ready(Err(error));
-        }
-        Pin::new(&mut this.inner).poll_shutdown(cx)
+        self.get_mut()
+            .guarded_io(|inner| Pin::new(inner).poll_shutdown(cx))
     }
 }
 
@@ -3233,6 +3245,8 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
             .map(std::path::PathBuf::from)
             .unwrap_or(cwd);
         if let Some(profile) = super::server_profile::ProfileConfig::load_from_env()? {
+            ensure!(std::env::var_os(super::windows_budget::ENVIRONMENT).is_none(),
+                "Windows MCP resource budgets do not enable original-server sandbox profiles");
             return real_server::run(&collector, &profile, &workspace).await;
         }
         ensure!(
@@ -3310,6 +3324,7 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
             .env_remove("AGENTFW_HOST_SESSION")
             .env_remove("AGENTFW_TEST_CLASSIFIER_READ")
             .env_remove("AGENTFW_TEST_CLASSIFIER")
+            .env_remove(super::windows_budget::ENVIRONMENT)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -3321,6 +3336,7 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
         drop(windows_spawn_pins);
         let server_pid = process.child_mut().id();
         let ownership = process.ownership();
+        let budget = process.budget_guard();
         let mut stderr_drain = None;
         // Every pipe extraction and relay error still reaches owned cleanup.
         let operation = async {
@@ -3359,6 +3375,7 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
             let mut host = DiagnosticOutput {
                 inner: host,
                 failed,
+                budget: budget.clone(),
                 liveness: collector.liveness.clone(),
             };
             let result = {
@@ -3370,6 +3387,14 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
                         // Once diagnostic uncertainty is observed, a pending
                         // relay cannot win over that failure on the next poll.
                         biased;
+                        _ = async {
+                            if let Some(guard) = &budget {
+                                loop {
+                                    if guard.check().is_err() { return; }
+                                    tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                                }
+                            } else { std::future::pending::<()>().await; }
+                        } => break Err(anyhow::anyhow!("windows_budget_terminal")),
                         _ = async {
                             if let Some(liveness) = &collector.liveness {
                                 loop {
@@ -3401,6 +3426,11 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
             drop(server);
             result
         }.await;
+        // Capture terminal pressure even when normal relay EOF wins the race.
+        let operation = operation.and_then(|()| {
+            if let Some(guard) = &budget { guard.check().map_err(anyhow::Error::msg)?; }
+            Ok(())
+        });
         let clean_exit_required = config.native.registry.tools.iter().any(|tool| {
             tool.resource_policy.as_ref().is_some_and(|policy| {
                 policy.is_create_file()
@@ -3419,6 +3449,14 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
             })
         });
         let cleanup = process.cleanup(operation.is_ok() || graceful_profile).await;
+        let operation = operation.and_then(|()| {
+            if let Some(guard) = &budget { guard.check().map_err(anyhow::Error::msg)?; }
+            Ok(())
+        });
+        if let Some(report) = process.budget_report() {
+            eprintln!("{}",json!({"event":"mcp_windows_budget_end","budget":report,
+                "cleanup_verified":cleanup.cleaned&&cleanup.reaped,"effects_rolled_back":false}));
+        }
         let stderr_report = match stderr_drain {
             Some(drain) => Some(drain.finish().await),
             None => None,
@@ -4143,6 +4181,7 @@ mod diagnostic_output_tests {
             DiagnosticOutput {
                 inner,
                 failed: Arc::new(AtomicBool::new(false)),
+                budget: None,
                 liveness: Some(liveness.clone()),
             },
             liveness,
@@ -4198,6 +4237,7 @@ mod diagnostic_output_tests {
         let mut guarded = DiagnosticOutput {
             inner: output,
             failed: failed.clone(),
+            budget: None,
             liveness: None,
         };
         guarded.write_all(b"useful\n").await.unwrap();
@@ -4222,6 +4262,7 @@ mod diagnostic_output_tests {
         let mut guarded = DiagnosticOutput {
             inner: output,
             failed: failed.clone(),
+            budget: None,
             liveness: None,
         };
         {
@@ -4237,6 +4278,45 @@ mod diagnostic_output_tests {
         assert!(
             received == b"x",
             "bytes committed before failure are not retracted or extended"
+        );
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_budget_stops_a_pending_partial_host_write() {
+        use std::os::windows::io::{FromRawHandle, OwnedHandle};
+        let raw = unsafe {
+            windows_sys::Win32::System::JobObjects::CreateJobObjectW(
+                std::ptr::null(),
+                std::ptr::null(),
+            )
+        };
+        assert!(!raw.is_null());
+        let job = Arc::new(unsafe { OwnedHandle::from_raw_handle(raw.cast()) });
+        let config = super::super::windows_budget::Config::read(br#"{"format":"sw-mcp/windows-job-budget/1","memoryMaxBytes":134217728,"memoryPressureBytes":100663296,"activeProcessMax":8,"cpuUserMillis":2000,"wallMillis":1000}"#).unwrap();
+        let mut budget = super::super::windows_budget::Budget::install(job, config).unwrap();
+        let (mut observer, output) = tokio::io::duplex(1);
+        let mut guarded = DiagnosticOutput {
+            inner: output,
+            failed: Arc::new(AtomicBool::new(false)),
+            budget: Some(budget.guard()),
+            liveness: None,
+        };
+        {
+            let writing = guarded.write_all(b"xy");
+            tokio::pin!(writing);
+            assert!(futures_util::poll!(writing.as_mut()).is_pending());
+            tokio::time::sleep(tokio::time::Duration::from_millis(1100)).await;
+            assert!(writing.await.is_err());
+        }
+        drop(guarded);
+        let mut received = Vec::new();
+        observer.read_to_end(&mut received).await.unwrap();
+        assert_eq!(received, b"x");
+        budget.finish(true);
+        assert_eq!(
+            budget.guard().report()["observed"]["reason"],
+            "windows_budget_wall_deadline"
         );
     }
 }
