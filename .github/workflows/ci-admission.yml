@@ -5,8 +5,8 @@ on:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
 
   workflow_run:
-    # Default-setup CodeQL uses a dynamic "PR #<number>" workflow name.
-    workflows: [ci, 'PR #*']
+    # The default-setup workflow is CodeQL; PR #<number> is a run title.
+    workflows: [ci, CodeQL, 'PR #*']
     types: [completed]
 
 permissions:
