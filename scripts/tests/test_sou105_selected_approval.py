@@ -16,17 +16,23 @@ class Witness(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "syscalls"
             path.write_text(text)
-            return M.trace_effects(path, kind)
+            return M.trace_effects(path, kind, git_revision="a" * 40 if kind == "git" else None)
 
     def test_git_failed_attempts_and_unrelated_peer_do_not_count(self):
-        trace = '12 execve("/mcp-runtime/git", ["git", "show", "HEAD"], 0x1) = -1 EACCES (Permission denied)\n'
+        argv = '["git", "diff-tree", "' + "a" * 40 + '", "--root", "-p"]'
+        trace = '12 execve("/mcp-runtime/git", ' + argv + ', 0x1) = -1 EACCES (Permission denied)\n'
         trace += '13 execve("/mcp-runtime/git", ["git", "status"], 0x1) = 0\n'
-        trace += '14 execve("/mcp-runtime/git", ["git", "show", "HEAD"], 0x1) = 0\n'
+        trace += '13 execve("/mcp-runtime/git", ["git", "show", "HEAD"], 0x1) = 0\n'
+        trace += '13 execve("/mcp-runtime/git", ["git", "diff-tree", "' + "b" * 40 + '", "--root", "-p"], 0x1) = 0\n'
+        trace += '13 execve("/usr/bin/git", ' + argv + ', 0x1) = 0\n'
+        trace += '13 execve("/mcp-runtime/git", ["git", "diff-tree", "' + "a" * 40 + '", "--root"], 0x1) = 0\n'
+        self.assertEqual(self.count(trace, "git"), 0)
+        trace += '14 execve("/mcp-runtime/git", ' + argv + ', 0x1) = 0\n'
         self.assertEqual(self.count(trace, "git"), 1)
         self.assertEqual(self.count(trace + trace, "git"), 2, "duplicate execution must be visible")
 
     def test_unfinished_syscalls_are_joined_by_process_not_order(self):
-        trace = '12 execve("/mcp-runtime/git", ["git", "show", "HEAD"], 0x1 <unfinished ...>\n'
+        trace = '12 execve("/mcp-runtime/git", ["git", "diff-tree", "' + "a" * 40 + '", "--root", "-p"], 0x1 <unfinished ...>\n'
         trace += '13 openat(AT_FDCWD, "/workspace/notes.txt", O_RDONLY|O_CLOEXEC <unfinished ...>\n'
         self.assertEqual(self.count(trace, "git"), 0)
         trace += '13 <... openat resumed>) = 7\n12 <... execve resumed>) = 0\n'

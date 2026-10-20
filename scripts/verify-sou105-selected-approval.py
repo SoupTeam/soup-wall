@@ -38,11 +38,12 @@ CASES = ("approve", "reject", "expire", "timeout", "cancel", "wrong_binding", "c
          "disconnect", "collector_death", "restart", "default", "deny")
 
 
-def trace_effects(path, kind, git_path=None, target="/workspace/notes.txt", evidence=None):
+def trace_effects(path, kind, git_path=None, target="/workspace/notes.txt", evidence=None, git_revision=None):
     """Kernel syscall witness, independent of daemon/collector verdict logging.
 
-    Successful original Git executable invocations only (not launcher attempts,
-    failed PATH searches, returned payloads or collector audit statements).
+    The pinned git_show implementation uses GitPython's diff-tree for a root
+    commit, not the Git CLI's show subcommand. Count its exact successful patch
+    execution (not launcher attempts, failed searches or returned payloads).
     FS counts successful read-only opens of the exact synthetic target.
     """
     raw = path.read_bytes() if path.exists() else b""
@@ -57,16 +58,31 @@ def trace_effects(path, kind, git_path=None, target="/workspace/notes.txt", evid
             rows.append(unfinished.pop(prefix) + rest.split("resumed>", 1)[1])
         else:
             rows.append(line)
+    git_commands = []
     if kind == "git":
         executable = str(git_path or "/mcp-runtime/git")
-        pattern = re.compile(r'execve\(' + re.escape(json.dumps(executable)) + r', .*"show".*"HEAD".*\) += 0$')
+        require(git_revision is not None and re.fullmatch(r"[0-9a-f]{40}", git_revision), "exact synthetic Git revision required")
+        pattern = re.compile(r'execve\(' + re.escape(json.dumps(executable)) + r', (\[.*\]), .*\) += 0$')
+        matched = []
+        for row in rows:
+            match = pattern.search(row)
+            if not match:
+                continue
+            argv = json.loads(match.group(1))
+            require(isinstance(argv, list) and len(argv) <= 64 and all(isinstance(a, str) for a in argv), "invalid pinned Git argv witness")
+            git_commands.append(argv)
+            if all(argument in argv for argument in ("diff-tree", git_revision, "--root", "-p")):
+                matched.append(row)
     else:
         pattern = re.compile(r'openat\([^,]+, ' + re.escape(json.dumps(target)) + r', O_RDONLY(?:\|[^)]*)?\) += [0-9]+$')
-    matched = [row for row in rows if pattern.search(row)]
+        matched = [row for row in rows if pattern.search(row)]
     if evidence is not None:
         write(evidence, {"kind": kind, "trace_sha256": BASE.hashlib.sha256(raw).hexdigest(),
                          "successful_target_syscalls": matched, "effects": len(matched),
-                         "raw_trace_exported": False})
+                         "raw_trace_exported": False, "git_revision": git_revision,
+                         # Only the exact pinned Git executable's synthetic
+                         # argv is retained, never collector authority argv.
+                         "pinned_git_commands": git_commands[-64:]})
     return len(matched)
 
 
@@ -133,6 +149,8 @@ class Rig:
         self.classifier = root / "classifier" / ("git_readonly_v1/rule_baseline.py" if kind == "git" else "rule_baseline.py")
         if kind == "git":
             GIT.prepare_repo(self.workspace, args.git, self.env)
+            self.git_revision = subprocess.check_output([str(args.git), "rev-parse", "HEAD"], cwd=self.workspace,
+                                                       env=self.env, text=True, timeout=5).strip()
             GIT.INSTALL.install(self.installed, self.workspace, args.git, sha(args.git), args.bwrap, args.git_launcher)
         else:
             self.workspace.mkdir(mode=0o700)
@@ -234,7 +252,7 @@ class Rig:
     def effects(self, trace, direct=False):
         return trace_effects(trace, self.kind, self.args.git if direct else None,
                              str(self.workspace / self.target) if direct else "/workspace/" + self.target,
-                             self.root / (trace.stem + ".witness.json"))
+                             self.root / (trace.stem + ".witness.json"), getattr(self, "git_revision", None))
 
     def close(self):
         cleanup = []
@@ -259,7 +277,8 @@ def qualify(rig, report):
     require(rig.effects(trace, True) == 1, "kernel execution witness did not calibrate to one useful original call")
     original.close()
     report["calibration"] = {"effects": 1, "result_sha256": BASE.hashlib.sha256(original_raw).hexdigest(),
-                             "syscall_trace_sha256": sha(trace), "raw_trace_exported": False}
+                             "syscall_trace_sha256": sha(trace), "raw_trace_exported": False,
+                             "git_revision": getattr(rig, "git_revision", None)}
     for case in CASES:
         if case in ("expire", "timeout"):
             # Separate the real broker TTL from a shorter collector wait. A
