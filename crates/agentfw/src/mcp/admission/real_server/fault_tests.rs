@@ -44,10 +44,13 @@ async fn selected_approval_never_rescues_empty_partial_unknown_or_failed_classif
             })
         }
     }
-    for (actions, unknown, fail) in [
-        (vec![], false, false),
-        (vec!["read".into()], true, false),
-        (vec![], false, true),
+    for (actions, unknown, fail, approval) in [
+        (vec![], false, false, true),
+        (vec!["read".into()], true, false, true),
+        (vec![], false, true, true),
+        (vec![], false, false, false),
+        (vec!["read".into()], true, false, false),
+        (vec![], false, true, false),
     ] {
         let mut config =
             installed_registry_config(installed_registry_entries(server_profile::FORMAT)).unwrap();
@@ -56,7 +59,7 @@ async fn selected_approval_never_rescues_empty_partial_unknown_or_failed_classif
             unknown,
             fail,
         }));
-        config.approval = Some(super::super::ApprovalWait {
+        config.approval = approval.then(|| super::super::ApprovalWait {
             url: "http://127.0.0.1:1/never-reached".into(),
             wait: Duration::from_secs(1),
         });
@@ -121,8 +124,10 @@ async fn selected_approval_never_rescues_empty_partial_unknown_or_failed_classif
         assert!(
             text.contains(if fail {
                 "classifier_error"
-            } else {
+            } else if approval {
                 "classifier_unknown_approval_unsupported"
+            } else {
+                "classifier_ask"
             }),
             "{text}"
         );

@@ -207,7 +207,11 @@ async fn admit(
         return Ok(refusal("classifier_deny"));
     }
     if !assessment.known_read_only {
-        return Ok(refusal("classifier_unknown_approval_unsupported"));
+        return Ok(refusal(if collector.config.approval.is_some() {
+            "classifier_unknown_approval_unsupported"
+        } else {
+            "classifier_ask"
+        }));
     }
     let mut boundary = collector.policy_boundary().await?;
     let mut fields = json!({"tool":call.tool,"args":call.args,
@@ -311,18 +315,21 @@ async fn admit(
                 !*call.cancel.borrow() && Instant::now() < call.deadline,
                 "selected approval cancelled before dispatch"
             );
-            fields["approval_id"] = json!(approval_id);
-            fields["selected_invocation"] = json!(context);
-            collector.event("call", fields).await
+            Ok::<_, anyhow::Error>(())
         }
         .await;
-        // Idempotent cancellation also removes an approved but unused grant.
-        // Successful redemption is already terminal; this cannot undo effects.
+        if resumed.is_err() {
+            collector.cancel_approval(&approval_id).await?;
+            return Ok(refusal("native_approval_revalidation_refused"));
+        }
+        fields["approval_id"] = json!(approval_id);
+        fields["selected_invocation"] = json!(context);
+        let admitted = collector.event("call", fields).await;
+        // Idempotent cancellation removes approved but unused state. A lost or
+        // malformed native receipt is session-fatal, as on the ordinary path:
+        // retire the session rather than orphaning an unseen reserved call.
         collector.cancel_approval(&approval_id).await?;
-        receipt = Some(match resumed {
-            Ok(receipt) => receipt,
-            Err(_) => return Ok(refusal("native_approval_revalidation_refused")),
-        });
+        receipt = Some(admitted?);
     }
     let receipt = receipt.context("selected admission receipt absent")?;
     if receipt["release"] != true {
