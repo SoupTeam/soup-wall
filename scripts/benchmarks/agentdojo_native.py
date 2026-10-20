@@ -56,7 +56,12 @@ class Registry:
                 raise ValueError("Invalid registry")
             tools = {}
             for tool in value["tools"]:
-                if (set(tool) != {"name", "schema_sha256", "action_class", "result_provenance", "egress"}
+                keys = {"name", "schema_sha256", "action_class", "result_provenance", "egress"}
+                if "workspace_profile" in tool:
+                    import agentdojo_workspace
+                    agentdojo_workspace.validate_declaration(tool)
+                    keys.add("workspace_profile")
+                if (set(tool) != keys
                         or not isinstance(tool["name"], str) or not tool["name"] or tool["name"] in tools
                         or not is_hash(tool["schema_sha256"])
                         or tool["action_class"] not in {"read_only", "side_effecting", "network", "privilege_changing", "destructive"}
@@ -70,6 +75,13 @@ class Registry:
                             or type(selector["optional"]) is not bool):
                         raise ValueError("Invalid destination selector")
                 tools[tool["name"]] = tool
+            if value["registry_id"] == "agentdojo-workspace/1" or any("workspace_profile" in t for t in tools.values()):
+                import agentdojo_workspace
+                profile, _ = agentdojo_workspace.snapshot()
+                if (value["registry_id"] != agentdojo_workspace.PROFILE
+                        or set(tools) != {r["name"] for r in profile["tools"]}
+                        or any(t.get("workspace_profile") != agentdojo_workspace.PROFILE for t in tools.values())):
+                    raise ValueError("Workspace profile must cover the complete original suite")
         except (ValueError, TypeError, KeyError):
             raise adapter.AdapterError("Invalid explicit native registry") from None
         self.raw = bytes(raw)

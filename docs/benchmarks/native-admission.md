@@ -12,6 +12,96 @@ collector, the operator-installed registry and its accurate semantic declaration
 are trust boundaries. A compromised process running as the operator can read
 the private keys or change the registry before startup.
 
+## Original AgentDojo workspace profile
+
+The additive `workspace_profile: "agentdojo-workspace/1"` field selects the
+[reviewed inventory](../../crates/agentfw/profiles/agentdojo-workspace-v1.json).
+Its registry ID is `agentdojo-workspace/1`; all 24 original functions must be
+present, including explicit unsupported entries. Registries without this opt-in
+retain schema-1 behavior. Model descriptions never declare authority.
+
+The inventory retains original Pydantic schemas and canonical hashes, upstream
+revision, semantic sources, action classes, untrusted result provenance and
+typed resource selectors. The daemon independently checks these declarations
+at startup and extracts resources from validated arguments at admission.
+Original defaults, nested calls, callable bodies, errors and evaluator inputs
+remain unchanged. Unknown functions, schema drift, incomplete profiles and
+false trusted provenance cannot silently execute.
+
+| Family | Reviewed semantics |
+|---|---|
+| Drive read/search/list | Logical file ID or explicit dynamic collection |
+| Create/append | Side-effecting logical filename/ID, not a host path |
+| Delete file/email | Destructive; email deletion moves its object to trash |
+| Unread emails | Side-effecting: original code marks messages read |
+| Other mailbox/contact reads | Read original mailbox/contact collection |
+| Send email | Network; every recipient, cc, bcc and nested file reference |
+| Share file | Privilege-changing; file ID, permission and destination |
+| Add participants | Privilege-changing; event ID and all participants; original code does not send the email claimed by its docstring |
+| Calendar reads/current day | Read calendar collection; result remains untrusted |
+
+Collection `*` is an explicit query scope, never an empty unrestricted grant.
+Logical resources are not filesystem/executor authority. Optional arguments
+are materialized by the original Pydantic runtime. Null/empty optional recipient
+lists add no destination; an empty required list refuses. Attachments are
+logical references: the original email code does not fetch their file contents.
+The daemon retains an extraction hash in its native audit without raw resources.
+
+Unsupported paths refuse before the original callable:
+
+- `create_calendar_event` adds an implicit owner recipient from environment state.
+- `cancel_calendar_event` and `reschedule_calendar_event` obtain recipients from
+  the existing event.
+- Event/ambiguous attachment dictionaries refuse. Original `send_email` treats
+  any `file_id` as a file attachment even when `type` says event; this profile
+  does not silently reinterpret that ambiguity.
+
+The other suite functions remain available. There is no coding-tool fallback.
+The shipped policy is unchanged: unknown destinations may Ask, tainted
+destructive effects Deny. Withholding a result never undoes an earlier effect.
+The original guarded runner stops a withheld/failed trajectory; no evaluator
+result or fabricated prevention/utility score is reported for it.
+
+### Offline reproduction
+
+On Linux with Git, Python and Cargo:
+
+```sh
+bash scripts/agentdojo-workspace-acceptance.sh
+```
+
+This requires fresh `target/sou85-upstream`, `target/sou85-driver` and
+`target/sou85-offline` directories. It obtains pinned public source and the
+existing dependency lock, builds the actual Agent, then invokes the existing
+runner. No provider/model call or credential access is performed. With prepared
+inputs the acceptance command is:
+
+```sh
+python -B scripts/agentdojo-live.py --mode workspace-fixture \
+  --upstream-checkout <pinned-checkout> --agent-binary <agentfw> \
+  --report-out <fresh-output-directory>
+```
+
+Outputs are `registry.json`, `development-proposal.json` and `report.json`
+(or `failure.json`). Reports bind original source inventory, binary, adapter
+sources, dependency lock, registry, profile and shipped policy. Python call
+tracing counts actual original-function executions; independent environment
+checks calibrate allowed effects and refused dispatch. Original user/attack
+evaluators run on known positive/negative controls. These scripted controls are
+not model effectiveness measurements. Failed controls fail the command;
+hidden skips do not satisfy acceptance.
+
+The proposal uses the existing SOU-36 plan schema and machinery. Model access,
+cost and thresholds remain unapproved; this command does not freeze a plan.
+Later separately authorized adoption uses `freeze-plan`, `plan-check` and
+`report` from the [matched protocol](agentdojo-matched-protocol.md). Historical
+fallback plans and negative baselines remain unchanged. Phase 4 stays open.
+
+CI reuses the existing manual `ci.yml` smoke job with `smoke_only=true` and
+`workspace_acceptance=true`, with no new automatic per-push job. Its artifact
+retains reports and formatting diagnostics; formatting is restored before
+execution so it cannot change the tested source.
+
 ## Immutable registry
 
 The operator configures an absolute registry path and its exact SHA-256 in the

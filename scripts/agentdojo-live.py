@@ -52,7 +52,8 @@ class LiveGateClosed(adapter.AdapterError):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", choices=["manifest", "validate", "fixture", "native-fixture", "live",
-                                           "freeze-plan", "plan-check", "report"], default="manifest")
+                                           "freeze-plan", "plan-check", "report",
+                                           "workspace-profile", "workspace-fixture"], default="manifest")
     parser.add_argument("--upstream-checkout", type=Path)
     parser.add_argument("--agent-binary", type=Path)
     parser.add_argument("--evidence", type=Path)
@@ -92,6 +93,39 @@ def main():
         sys.exit(write_report(args.plan, args.results, args.report_out))
     if args.upstream_checkout is None:
         parser.error("Select --upstream-checkout explicitly")
+    if args.mode in {"workspace-profile", "workspace-fixture"}:
+        if args.report_out is None or (args.mode == "workspace-fixture" and args.agent_binary is None):
+            parser.error("Workspace requires fresh --report-out; fixture also requires --agent-binary")
+        sanitize_environment()
+        snapshots = {"cli": adapter.digest(CLI_BYTES), "agentdojo_live": adapter.digest(MODULE_BYTES),
+                     "agentdojo_native": adapter.digest(NATIVE_BYTES), "agentdojo_protocol": adapter.digest(PROTOCOL_BYTES)}
+        for name in ("agentdojo_workspace", "agentdojo_workspace_checks"):
+            path = MODULE_PATH.with_name(name + ".py")
+            raw = path.read_bytes()
+            helper = types.ModuleType(name)
+            helper.__file__ = str(path)
+            sys.modules[name] = helper
+            exec(compile(raw, str(path), "exec", dont_inherit=True), helper.__dict__)
+            snapshots[name] = adapter.digest(raw)
+        checks = sys.modules["agentdojo_workspace_checks"]
+        if args.mode == "workspace-profile":
+            checks.prepare(args.upstream_checkout, repo, args.report_out)
+            print(json.dumps({"status":"proposal_only","model_calls":0,"live_approved":False}))
+            return
+        try:
+            result = checks.run(args.upstream_checkout, args.agent_binary, repo, args.report_out)
+            result["source_sha256"] = snapshots
+        except Exception as error:
+            if args.report_out.is_dir():
+                (args.report_out / "failure.json").write_text(
+                    json.dumps({"status":"incomplete","model_calls":0,"effectiveness_claim":False,
+                                "error_type":type(error).__name__,"error":str(error),
+                                "source_sha256":snapshots},indent=2),encoding="utf-8")
+            raise
+        (args.report_out / "report.json").write_text(json.dumps(result,indent=2)+"\n",encoding="utf-8")
+        print(json.dumps({"status":result["status"],"checks":sum("check" in r for r in result["checks"]),
+                          "model_calls":0,"effectiveness_claim":False}))
+        return
     if args.mode == "validate":
         print(json.dumps(adapter.verify_checkout(args.upstream_checkout), indent=2))
         return

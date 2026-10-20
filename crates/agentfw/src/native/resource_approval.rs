@@ -369,6 +369,7 @@ mod tests {
             egress: Vec::new(),
             resource_policy: Some(policy),
             mcp_result_profile: None,
+            workspace_profile: None,
         }
     }
 
@@ -478,6 +479,7 @@ mod tests {
             egress: Vec::new(),
             resource_policy: None,
             mcp_result_profile: None,
+            workspace_profile: None,
         };
         assert!(!is_supported_linux_resource_tool_profile(&plain_tool));
         assert!(!is_supported_linux_resource_tool(&plain_tool));
