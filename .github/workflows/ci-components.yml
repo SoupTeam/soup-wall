@@ -1331,6 +1331,8 @@ jobs:
           pilot = importlib.util.module_from_spec(spec)
           spec.loader.exec_module(pilot)
           temporary = Path(os.environ['RUNNER_TEMP'])
+          selected_policy = temporary / 'sou100-selected-policy.yaml'
+          pilot.owned_bytes(selected_policy, pilot.PILOT_POLICY.encode('utf-8'))
           files = {
               'agentfw': Path('target/debug/agentfw'),
               'git_launcher': Path('target/debug/agentfw-git-sandbox'),
@@ -1341,9 +1343,13 @@ jobs:
               'git': temporary / 'sou100-git-source/git',
               'claude': temporary / 'sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude',
               'python': Path(sys.executable),
+              'filesystem_classifier': Path('rule_baseline/rule_baseline.py'),
+              'git_classifier': Path('rule_baseline/git_readonly_v1/rule_baseline.py'),
+              'policy': selected_policy,
           }
           pilot.private_json(temporary / 'sou100-selection.json', {
-              'format': 'sw-installed-pilot-selection/1', 'source': pilot.source(),
+              'format': 'sw-installed-pilot-selection/2', 'source': pilot.source(),
+              'expected_refusal': {'verdict': 'ask', 'rule': pilot.SHARED.RULE},
               'files': {role: {'path': str(path.resolve(strict=True)), 'sha256': pilot.sha(path)} for role, path in files.items()},
           })
           PILOT_SELECTION
@@ -1418,6 +1424,7 @@ jobs:
           name: sou62-real-filesystem-mcp-evidence
           path: |
             ${{ runner.temp }}/sou100-selection.json
+            ${{ runner.temp }}/sou100-selected-policy.yaml
             ${{ runner.temp }}/sou100-registry-regressions.log
             ${{ runner.temp }}/sou100-pilot.log
             ${{ runner.temp }}/sou100-pilot/**

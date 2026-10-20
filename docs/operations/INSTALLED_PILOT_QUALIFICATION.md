@@ -29,7 +29,7 @@ bubblewrap, Git, Claude Code and library-test selection, are in the existing
 [Linux workflow](../../.github/workflows/mcp-real-filesystem.yml). No sysctl,
 AppArmor, seccomp or host permission relaxation is part of this procedure.
 
-After the normal build, record `sw-installed-pilot-selection/1` in a private
+After the normal build, record `sw-installed-pilot-selection/2` in a private
 JSON file outside the checkout. The workflow's `PILOT_SELECTION` step is the
 executable example. It records `source()` from the driver (commit, tree, clean
 state and digest of every tracked file), plus absolute paths and SHA-256 for:
@@ -42,6 +42,21 @@ state and digest of every tracked file), plus absolute paths and SHA-256 for:
 | `bwrap`, `git` | The accepted bubblewrap and Git builds |
 | `claude` | The existing locked actual Claude Code host package |
 | `python` | The explicit Python interpreter for the classifiers and witnesses |
+| `filesystem_classifier`, `git_classifier` | Explicit selected single-file rule classifiers; never substituted with checkout defaults |
+| `policy` | Explicit selected YAML policy, copied byte-for-byte |
+
+Each data asset has its own absolute path and SHA-256 and a 1 MiB bound; it need
+not be executable. The sidecar also declares `expected_refusal` with `verdict`
+(`ask` or `deny`, never `allow`) and an exact `rule` identifier for the forbidden
+derived read. Both the actual host error and native audit must match it, with no
+FIFO reader; an independent conversation must still perform that same read.
+The workflow explicitly selects the accepted baseline files and materializes
+the stated proof policy. A later accepted versioned classifier/policy can be
+selected by changing these sidecar inputs and the expected refusal, without
+editing the driver or modifying another owner's pinned artifacts. Unsupported
+single-file interfaces or changed policy behavior fail qualification; there is
+no fallback to the old baseline. This does not implement installed-worker
+preparation/readiness (SOU-102) or certify a future combined candidate.
 
 The sidecar is caller-attested build evidence, not a signed binary provenance
 certificate. Retain Cargo build JSON, runtime archive hashes and the selection
@@ -61,7 +76,7 @@ For a later accepted combined candidate, repeat the existing build, record its
 new exact selection, and use the same command with a new output directory.
 An older report cannot qualify that later candidate.
 
-Agent, Git launcher and the two unchanged classifier files are staged in a new
+Agent, Git launcher and the two exact selected classifier files are staged in a new
 private temporary directory. Both original profile installers prepare their
 locked packages there. The merged native registry retains every original tool
 schema and profile declaration. The host project, Agent home, policy and server
@@ -89,7 +104,7 @@ The original denominator is **12 cases**, retained even after a failed setup:
 4. Actual Claude reads a guide and original Git history in one parallel proposal.
 5. Actual Claude reads the working file and original Git diff in another proposal.
 6. Actual Claude encounters an untrusted path, proposes the resulting FIFO read,
-   receives native Ask without a FIFO reader, proposes an unsupported Git reset,
+   receives the selected native Ask/Deny without a FIFO reader, proposes an unsupported Git reset,
    then continues useful reads on both servers. The reset refusal belongs to the
    selected read-only profile before native admission; it is not a policy Deny.
 7. A genuinely independent Claude conversation successfully reads that same
@@ -171,6 +186,7 @@ Keep these owner boundaries explicit when converging on the final candidate:
 | P0 | Classifier / SOU-97 | Re-run with the accepted classifier increment; report any unsupported benign tool with exact tool/schema/arguments and current classification, rather than changing classifier behavior here |
 | P1 | Kit / SOU-87 | Reuse the accepted archive's exact assets when available; archive composition and kit-negative controls stay with that owner |
 | P1 | Persistent onboarding / SOU-101 and host launcher owner | Hand over a minimal reproduction for setup/host-launch defects; this temporary stage is not persistent onboarding or a new launcher |
+| P1 | Installed classifier readiness / SOU-102 | Adopt and qualify its accepted explicit startup/readiness interface; this single-file baseline run does not measure prepared installed workers |
 | P1 | Support report / SOU-80; CI scheduling / SOU-91 | Supply exact run identities/results; do not invent report validation support or alter scheduling policy in this driver |
 
 These are convergence requirements, not fabricated discoveries or reasons to

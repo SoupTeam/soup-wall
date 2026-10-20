@@ -94,8 +94,13 @@ class OutcomeControls(unittest.TestCase):
 class RuntimeBoundaryControls(unittest.TestCase):
     def selection(self, executable):
         before = {"commit": "a" * 40, "tree": "b" * 40, "dirty": False, "files_sha256": "c" * 64}
-        return {"format": "sw-installed-pilot-selection/1", "source": before,
-                "files": {role: {"path": str(executable), "sha256": CONTRACT.sha(executable)} for role in PILOT.ROLES}}
+        paths = {role: executable for role in PILOT.EXECUTABLE_ROLES}
+        paths.update(filesystem_classifier=ROOT / "rule_baseline/rule_baseline.py",
+                     git_classifier=ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py",
+                     policy=ROOT / "profiles/mcp/git-readonly-v1/policy.yaml")
+        return {"format": "sw-installed-pilot-selection/2", "source": before,
+                "expected_refusal": {"verdict": "ask", "rule": PILOT.SHARED.RULE},
+                "files": {role: {"path": str(path), "sha256": CONTRACT.sha(path)} for role, path in paths.items()}}
 
     def test_changed_binary_wrong_candidate_and_missing_sandbox_are_actual_input_failures(self):
         selection = self.selection(Path(sys.executable).resolve())
@@ -111,6 +116,72 @@ class RuntimeBoundaryControls(unittest.TestCase):
                 mutation(item)
                 with self.assertRaisesRegex(CONTRACT.Failure, "^" + reason + "$"):
                     PILOT.validate_selection(item, "a" * 40)
+
+    def test_selected_data_assets_and_refusal_cannot_fall_back_silently(self):
+        selection = self.selection(Path(sys.executable).resolve())
+        with patch.object(PILOT, "source", return_value=selection["source"]):
+            for role in PILOT.ARTIFACT_ROLES:
+                item = copy.deepcopy(selection)
+                item["files"][role]["sha256"] = "0" * 64
+                with self.assertRaisesRegex(CONTRACT.Failure, "^selected_artifact_changed$"):
+                    PILOT.validate_selection(item, "a" * 40)
+                item["files"].pop(role)
+                with self.assertRaisesRegex(CONTRACT.Failure, "^selection_roles_mismatch$"):
+                    PILOT.validate_selection(item, "a" * 40)
+            for expectation in ({}, {"verdict": "allow", "rule": "pretend-pass"},
+                                {"verdict": "ask", "rule": ""}):
+                item = copy.deepcopy(selection)
+                item["expected_refusal"] = expectation
+                with self.assertRaisesRegex(CONTRACT.Failure, "^forbidden_action_expectation_required$"):
+                    PILOT.validate_selection(item, "a" * 40)
+
+    def test_exact_selected_classifier_and_policy_are_staged_without_replacing_them(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            private, output = root / "private", root / "output"
+            private.mkdir()
+            output.mkdir()
+            paths = {role: Path(sys.executable).resolve() for role in PILOT.ROLES}
+            paths["git"] = Path(shutil.which("git")).resolve()
+            selected = {"filesystem_classifier": b"# selected versioned filesystem candidate\n",
+                        "git_classifier": b"# selected versioned Git candidate\n", "policy": b"default: deny\n"}
+            for role, raw in selected.items():
+                paths[role] = root / role
+                paths[role].write_bytes(raw)
+                paths[role].chmod(0o600)
+            pilot = PILOT.Pilot(private, output, paths, CONTRACT.new_report())
+            try:
+                with patch.object(PILOT.BASE.INSTALL, "install", side_effect=CONTRACT.Failure("owned_before_install")):
+                    with self.assertRaisesRegex(CONTRACT.Failure, "^owned_before_install$"):
+                        pilot.prepare()
+                for role, target in (("filesystem_classifier", "filesystem-classifier.py"),
+                                     ("git_classifier", "git-classifier.py"), ("policy", "policy.yaml")):
+                    self.assertEqual((private / "installed" / target).read_bytes(), selected[role])
+                    self.assertEqual((private / "installed" / target).stat().st_mode & 0o777, 0o600)
+            finally:
+                pilot.cleanup()
+
+    def test_data_asset_changed_after_selection_cannot_rebind_its_expected_hash(self):
+        for role in PILOT.ARTIFACT_ROLES:
+            with self.subTest(role=role), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                private, output = root / "private", root / "output"
+                private.mkdir()
+                output.mkdir()
+                paths = {key: Path(sys.executable).resolve() for key in PILOT.ROLES}
+                for key in PILOT.ARTIFACT_ROLES:
+                    paths[key] = root / key
+                    paths[key].write_bytes(b"# original selected input\n")
+                report = CONTRACT.new_report()
+                report["selected_sha256"] = {key: CONTRACT.sha(path) for key, path in paths.items()}
+                paths[role].write_bytes(b"# changed after exact selection\n")
+                pilot = PILOT.Pilot(private, output, paths, report)
+                try:
+                    reason = "staged_policy_changed" if role == "policy" else "staged_classifier_changed"
+                    with self.assertRaisesRegex(CONTRACT.Failure, "^" + reason + "$"):
+                        pilot.prepare()
+                finally:
+                    pilot.cleanup()
 
     def test_structured_useful_content_requires_exact_shape_and_no_duplicate_keys(self):
         self.assertEqual(PILOT.host_text({"is_error": False, "content": '{"content":"useful"}'}, "filesystem"), "useful")

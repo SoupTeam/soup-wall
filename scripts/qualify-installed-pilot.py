@@ -51,7 +51,9 @@ BASE = load("pilot_filesystem", "verify-sou62-real-mcp.py")
 GIT = load("pilot_git", "verify-sou68-real-mcp.py")
 SHARED = load("pilot_shared", "verify-sou62-sou63-combined.py")
 RESOURCE = load("pilot_bounded_capture", "verify-sou79-resource-budgets.py")
-ROLES = ("agentfw", "git_launcher", "sandbox_tests", "node", "npm", "bwrap", "git", "claude", "python")
+EXECUTABLE_ROLES = ("agentfw", "git_launcher", "sandbox_tests", "node", "npm", "bwrap", "git", "claude", "python")
+ARTIFACT_ROLES = ("filesystem_classifier", "git_classifier", "policy")
+ROLES = EXECUTABLE_ROLES + ARTIFACT_ROLES
 TOOLS = {"filesystem": ("read_text_file", "list_directory", "write_file"),
          "git": ("git_show", "git_status", "git_diff", "git_reset")}
 POINTER = "/workspace/forbidden.fifo\n"
@@ -95,20 +97,27 @@ def source():
 
 
 def validate_selection(selection, expected):
-    require(selection.get("format") == "sw-installed-pilot-selection/1", "selection_version")
+    require(selection.get("format") == "sw-installed-pilot-selection/2", "selection_version")
     before = source()
     require(not before["dirty"] and before["commit"] == expected
             and selection["source"] == before, "candidate_source_mismatch")
     require(set(selection["files"]) == set(ROLES), "selection_roles_mismatch")
+    expectation = selection.get("expected_refusal", {})
+    require(set(expectation) == {"verdict", "rule"} and expectation["verdict"] in ("ask", "deny")
+            and isinstance(expectation["rule"], str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", expectation["rule"]),
+            "forbidden_action_expectation_required")
     paths = {}
     for role in ROLES:
         item = selection["files"][role]
         require(Path(item["path"]).is_absolute(), "absolute_selected_path_required")
-        require(Path(item["path"]).is_file(), "selected_executable_unavailable")
+        unavailable = "selected_executable_unavailable" if role in EXECUTABLE_ROLES else "selected_artifact_unavailable"
+        changed = "selected_executable_changed" if role in EXECUTABLE_ROLES else "selected_artifact_changed"
+        require(Path(item["path"]).is_file(), unavailable)
         path = Path(item["path"]).resolve(strict=True)
-        require(path.is_file() and os.access(path, os.X_OK), "selected_executable_unavailable")
+        require(path.is_file() and (os.access(path, os.X_OK) if role in EXECUTABLE_ROLES
+                else path.stat().st_size <= 1024 * 1024), unavailable)
         require(re.fullmatch(r"[0-9a-f]{64}", item["sha256"]) and sha(path) == item["sha256"],
-                "selected_executable_changed")
+                changed)
         paths[role] = path
     return before, paths
 
@@ -252,11 +261,13 @@ def host_text(value, kind):
 
 
 class Pilot:
-    def __init__(self, private, output, paths, report):
+    def __init__(self, private, output, paths, report, expected_refusal=None):
         self.private, self.output, self.paths, self.report = private, output, paths, report
+        self.selected_sha256 = report.get("selected_sha256") or {role: sha(path) for role, path in paths.items()}
         self.clients, self.logs, self.hosts, self.secrets, self.bindings = [], [], [], [], []
         self.daemon = self.daemon_witness = self.unrelated = None
         self.installed, self.baseline, self.controls = {}, None, {}
+        self.expected_refusal = expected_refusal or {"verdict": "ask", "rule": SHARED.RULE}
         self.home = private / "home"
         self.home.mkdir(mode=0o700)
         self.receiver = BASE.DEMO.Receiver()
@@ -334,18 +345,23 @@ class Pilot:
         for role, target in (("agentfw", self.binary), ("git_launcher", self.launcher)):
             shutil.copyfile(self.paths[role], target)
             target.chmod(0o700)
-            require(sha(target) == sha(self.paths[role]), "staged_binary_changed")
+            require(sha(target) == self.selected_sha256[role], "staged_binary_changed")
         self.classifiers = {}
-        for kind, relative in (("filesystem", "rule_baseline/rule_baseline.py"),
-                               ("git", "rule_baseline/git_readonly_v1/rule_baseline.py")):
+        for kind in TOOLS:
+            selected = self.paths[kind + "_classifier"]
             target = installed / (kind + "-classifier.py")
-            shutil.copyfile(ROOT / relative, target)
+            shutil.copyfile(selected, target)
             target.chmod(0o600)
             if fault == "changed-asset" and kind == "filesystem":
                 with target.open("ab") as stream:
                     stream.write(b"\n# controlled invalid asset\n")
-            require(sha(target) == sha(ROOT / relative), "staged_classifier_changed")
+            require(sha(target) == self.selected_sha256[kind + "_classifier"], "staged_classifier_changed")
             self.classifiers[kind] = target
+        policy = installed / "policy.yaml"
+        shutil.copyfile(self.paths["policy"], policy)
+        policy.chmod(0o600)
+        self.policy_sha256 = sha(policy)
+        require(self.policy_sha256 == self.selected_sha256["policy"], "staged_policy_changed")
         self.prepare_workspaces()
         self.installs = {kind: self.private / (kind + "-profile") for kind in TOOLS}
         BASE.INSTALL.install(self.installs["filesystem"], self.workspace, self.paths["node"],
@@ -363,10 +379,6 @@ class Pilot:
         registry = installed / "registry.json"
         private_json(registry, {"contract_version": "sw-native/1", "registry_id": "installed-development-pilot-v1", "tools": tools})
         self.registry_sha256 = sha(registry)
-        policy = installed / "policy.yaml"
-        policy.write_text(PILOT_POLICY, encoding="utf-8")
-        policy.chmod(0o600)
-        self.policy_sha256 = sha(policy)
         subprocess.run([str(self.binary), "install"], env=self.env, cwd=self.workspace,
                        capture_output=True, stdin=subprocess.DEVNULL, timeout=30, check=True)
         self.port = BASE.DEMO.free_port()
@@ -385,8 +397,9 @@ class Pilot:
         return {"source_independent_runtime": True, "agentfw_sha256": sha(self.binary),
                 "profiles": self.installed, "policy_sha256": self.policy_sha256,
                 "registry_sha256": self.registry_sha256, "config_sha256": self.config_sha256,
-                "instance_id": instance, "policy_scope": "combined-proof-with-medium-result-injection-threshold",
-                "classifier_scope": "existing-per-server-rule-baselines"}
+                "instance_id": instance, "policy_scope": "explicit-selected-policy",
+                "expected_refusal": self.expected_refusal,
+                "classifier_scope": "explicit-selected-single-file-rule-baselines"}
 
     def prepare_workspaces(self):
         # The accepted Git profile refuses special files anywhere in its tree.
@@ -722,7 +735,8 @@ class Pilot:
             require(host_text(results["toolu_pilot_0"], "filesystem") == POINTER, "untrusted_source_not_encountered")
             blocked = results["toolu_pilot_1"]
             require(blocked["is_error"] is True and isinstance(blocked["content"], str)
-                    and SHARED.RULE in blocked["content"] and BASE.FIFO_TEXT not in blocked["content"], "actual_host_ask_not_preserved")
+                    and self.expected_refusal["rule"] in blocked["content"] and BASE.FIFO_TEXT not in blocked["content"],
+                    "actual_host_refusal_not_preserved")
             git_refusal = results["toolu_pilot_2"]
             require(git_refusal["is_error"] is True and isinstance(git_refusal["content"], str)
                     and "explicitly unsupported in the read-only profile" in git_refusal["content"],
@@ -731,8 +745,9 @@ class Pilot:
                     and host_text(results["toolu_pilot_4"], "git") == self.controls[("git", "git_show", "default")],
                     "refusal_broke_useful_continuation")
             rows = [r for r in self.audit() if r.get("event") == "native_call" and r.get("host_session") == evidence["host_session"]]
-            asks = [r for r in rows if r.get("rule") == SHARED.RULE and r.get("released") is False and r.get("verdict") == "ask"]
-            require(len(asks) == 1 and asks[0].get("taint", {}).get("source_name") == "filesystem", "shared_untrusted_risk_witness_missing")
+            refusals = [r for r in rows if r.get("rule") == self.expected_refusal["rule"] and r.get("released") is False
+                        and r.get("verdict") == self.expected_refusal["verdict"]]
+            require(len(refusals) == 1 and refusals[0].get("taint", {}).get("source_name") == "filesystem", "shared_untrusted_risk_witness_missing")
             # Selected read-only profiles refuse mutators before native call
             # admission. Do not invent a policy Deny record for that boundary.
             require(not any(r.get("tool") == "git_reset" for r in rows), "unsupported_git_mutator_reached_native_call")
@@ -741,7 +756,7 @@ class Pilot:
             watch.close()
         require(not record["reader_seen"] and record["bytes_written"] == 0, "refused_call_executed")
         self.refused_host = evidence["host_session"]
-        return {"host": evidence, "fifo": record, "native_ask_count": 1,
+        return {"host": evidence, "fifo": record, "native_refusal_count": 1, "expected_refusal": self.expected_refusal,
                 "git_refusal_boundary": "selected-profile-before-native-admission", **git_observations, **self.preserve()}
 
     def independent(self):
@@ -1025,11 +1040,12 @@ def run(args):
         before, paths = validate_selection(selection, args.expected_commit)
         selected = paths
         report["source_before"] = before
-        report["selected_sha256"] = {key: sha(path) for key, path in paths.items()}
+        report["selection_format"] = selection["format"]
+        report["selected_sha256"] = {key: selection["files"][key]["sha256"] for key in paths}
         require(platform.system() == "Linux" and platform.machine() == "x86_64", "linux_x86_64_required")
         # Prerequisite validation happens before profile downloads or execution.
         private = tempfile.TemporaryDirectory(prefix="installed-pilot-")
-        pilot = Pilot(Path(private.name), args.output, paths, report)
+        pilot = Pilot(Path(private.name), args.output, paths, report, selection["expected_refusal"])
         version = subprocess.check_output([str(paths["claude"]), "--version"], env=pilot.env, cwd=pilot.private,
                                           timeout=15, text=True).strip()
         host_package = json.loads((ROOT / "profiles/mcp/filesystem-readonly-v1/claude-host/package.json").read_text())
