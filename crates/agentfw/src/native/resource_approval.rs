@@ -48,15 +48,14 @@ pub fn is_supported_linux_resource_tool_profile(tool: &Tool) -> bool {
         return false;
     };
 
-    // Windows policies are explicitly unsupported for Linux resource approval
-    if policy.windows_read.is_some() {
+    // Windows and macOS policies are explicitly unsupported for Linux resource approval
+    if policy.windows_read.is_some() || policy.macos_read.is_some() {
         return false;
     }
-    if policy
-        .execution
-        .as_ref()
-        .is_some_and(|exec| exec.executor_profile == resource::WINDOWS_CREATE_EXECUTOR_PROFILE)
-    {
+    if policy.execution.as_ref().is_some_and(|exec| {
+        exec.executor_profile == resource::WINDOWS_CREATE_EXECUTOR_PROFILE
+            || exec.executor_profile == resource::MACOS_CREATE_EXECUTOR_PROFILE
+    }) {
         return false;
     }
 
@@ -353,6 +352,7 @@ mod tests {
                 None
             },
             windows_read: None,
+            macos_read: None,
         };
 
         Tool {
@@ -537,5 +537,35 @@ mod tests {
         );
 
         assert!(revalidate_resource_execution(&create_tool, &args, None).is_ok());
+    }
+
+    #[test]
+    fn macos_policies_are_rejected_by_linux_resource_approval() {
+        let mut read_tool = sample_tool(
+            "read_document",
+            resource::MACOS_READ_EXECUTOR_PROFILE,
+            "read_document",
+        );
+        read_tool.resource_policy.as_mut().unwrap().macos_read = Some(resource::MacosReadPolicy {
+            executor_profile: resource::MACOS_READ_EXECUTOR_PROFILE.into(),
+            max_content_bytes: resource::MACOS_READ_MAX_CONTENT,
+        });
+        assert!(!is_supported_linux_resource_tool_profile(&read_tool));
+
+        let mut create_tool = sample_tool(
+            "create_file",
+            resource::MACOS_CREATE_EXECUTOR_PROFILE,
+            "create_file",
+        );
+        create_tool.resource_policy.as_mut().unwrap().execution = Some(resource::ExecutionPolicy {
+            operation: resource::ExecutionOperation::CreateFile,
+            action: resource::ExecutionAction::Write,
+            max_content_bytes: resource::MACOS_CREATE_MAX_CONTENT,
+            executor_profile: resource::MACOS_CREATE_EXECUTOR_PROFILE.into(),
+            path_selector: None,
+            content_selector: None,
+            response_contract: None,
+        });
+        assert!(!is_supported_linux_resource_tool_profile(&create_tool));
     }
 }

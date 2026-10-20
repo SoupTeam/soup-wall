@@ -354,6 +354,7 @@ impl WitnessFixture {
             network: None,
             post: None,
             windows_read: None,
+            macos_read: None,
         };
 
         let mut body = json!({
@@ -400,6 +401,7 @@ impl WitnessFixture {
             network: None,
             post: None,
             windows_read: None,
+            macos_read: None,
         };
 
         let mut body = json!({
@@ -442,6 +444,7 @@ impl WitnessFixture {
             network: Some(binding),
             post: None,
             windows_read: None,
+            macos_read: None,
         };
 
         let mut body = json!({

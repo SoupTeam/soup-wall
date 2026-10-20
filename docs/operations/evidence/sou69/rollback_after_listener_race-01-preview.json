@@ -1,0 +1,131 @@
+{
+  "agentfw_version": "0.3.0",
+  "checks": [
+    {
+      "action": null,
+      "detail": "Linux local-user profile; service management not requested",
+      "id": "platform",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "executable digest matches; lifecycle, mcp-connection, protection-status and self-test are available",
+      "id": "agent",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "rule_baseline.py digest matches the expected revision",
+      "id": "classifier",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "Python 3 runs in isolated mode",
+      "id": "classifier_python",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "reviewed sw-native/1 registry digest matches",
+      "id": "registry",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "shipped_default policy parses (12 rules)",
+      "id": "policy",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "reviewed workspace is an owned directory",
+      "id": "workspace",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "new Agent home will be created",
+      "id": "agent_home",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "reviewed stdio entry found; 1 other server entries and 1 other settings will be preserved",
+      "id": "server",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "127.0.0.1:33721 is available for the new Agent",
+      "id": "port",
+      "status": "ok"
+    },
+    {
+      "action": null,
+      "detail": "an explicit harmless probe call will verify the connected server",
+      "id": "probe",
+      "status": "ok"
+    }
+  ],
+  "exit_code": 0,
+  "explanation": "Review the planned changes; nothing has been changed.",
+  "inputs": {
+    "agent": {
+      "path_digest": "87a0a6df5808c4da",
+      "sha256": "0e3705ca8b4a07e7b113211da460d642cbd513f60b8b898359a8f727544799c2"
+    },
+    "agent_home": {
+      "path_digest": "a8dc62bffda4a7ea"
+    },
+    "classifier": {
+      "kind": "rule-baseline",
+      "python_version": "3.13.16",
+      "sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+    },
+    "host_config": {
+      "other_server_entries": 1,
+      "other_settings": 1,
+      "path_digest": "01e6d82d3b944728",
+      "selected_entry_sha256": "aef0d13e9ab0c67ea15ec88515d72708587f268dad73e6cfc2ed97460253e4ee",
+      "sha256_at_preview": "f393084a020f7d8f17fbbd9ae9b460edccdd047d5d062901edce6c5d23585a5f"
+    },
+    "policy": {
+      "expected_daemon_digest": "239f0d0dd71853fd710f3037b5adfc035cdd3ead53e49b652468e74473c066ee",
+      "file_sha256": "8b2bfb66b14a988a29cf2698c482bc7cd91ba550fea14ccfa63540e815eb3c57",
+      "rule_count": 12,
+      "source": "shipped_default"
+    },
+    "port": 33721,
+    "probe": true,
+    "registry": {
+      "registry_id": "notes-fixture-v1",
+      "sha256": "84ca20089de9b412d9b60d1213c78a7fddedeede6fa50cac5313228d2c7e44be"
+    },
+    "workspace": {
+      "path_digest": "86cdd00a91267cab"
+    }
+  },
+  "next_steps": [
+    "apply exactly this plan with: agentfw onboard apply <same inputs> --plan-sha256 4154c20c7fa282eaee9510184eb33b6e74b96d1f91533c65780cf0db269d97ca"
+  ],
+  "operation": "preview",
+  "plan_sha256": "4154c20c7fa282eaee9510184eb33b6e74b96d1f91533c65780cf0db269d97ca",
+  "planned_changes": [
+    "agent_home",
+    "owned_files",
+    "token",
+    "lifecycle",
+    "connection",
+    "verification"
+  ],
+  "profile": {
+    "arch": "x86_64",
+    "id": "linux-local-user-mcp-v1",
+    "os": "linux",
+    "supported": true
+  },
+  "result": "plan_ready",
+  "schema_version": "sw-onboarding/1",
+  "started_at_unix_ms": 1792432428835
+}

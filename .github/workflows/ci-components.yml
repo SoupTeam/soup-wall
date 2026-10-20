@@ -124,6 +124,93 @@ jobs:
           path: ${{ runner.temp }}/self-test-results/
           if-no-files-found: error
 
+  classifier-runtime-windows--native-windows-classifier-runtime:
+    name: "classifier-runtime-windows / native-windows-classifier-runtime"
+    if: contains(fromJSON(inputs.plan).workflows['classifier-runtime-windows.yml'], 'native-windows-classifier-runtime')
+    runs-on: windows-2022
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Prerequisites and pinned classifier bytes (a missing prerequisite fails the job)
+        id: prerequisites
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $IsWindows) { throw 'Native Windows is required' }
+          if ([Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne 'X64') { throw 'x86_64 is required' }
+          $python = (& python -I -c 'import sys; print(sys.executable)').Trim()
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $python)) { throw 'A local CPython is required' }
+          if ($python -match 'WindowsApps') { throw 'A Microsoft Store alias is not a supported interpreter' }
+          "AGENTFW_TEST_PYTHON=$python" | Add-Content $env:GITHUB_ENV
+          $drive = (Get-Item -LiteralPath $env:GITHUB_WORKSPACE).PSDrive.Name
+          $fs = (Get-Volume -DriveLetter $drive).FileSystem
+          if ($fs -ne 'NTFS') { throw "Local NTFS is required, found $fs" }
+          $pins = @{
+            'rule_baseline/rule_baseline.py' = 'd2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd'
+            'rule_baseline/rev2/rule_baseline.py' = 'd0b4fc02720ee5ff38dec73d5992c6bdee9eda8595282e33015e60d07ce33ea5'
+          }
+          foreach ($path in $pins.Keys) {
+            $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actual -ne $pins[$path]) { throw "$path does not match its pinned digest ($actual)" }
+          }
+          @{ commit = (& git rev-parse HEAD).Trim(); rustc = (& rustc --version); python = $python
+             python_version = (& python -I -c 'import sys; print(sys.version.split()[0])').Trim()
+             python_sha256 = (Get-FileHash -LiteralPath $python -Algorithm SHA256).Hash.ToLowerInvariant()
+             os = [Environment]::OSVersion.VersionString; filesystem = $fs } |
+            ConvertTo-Json | Set-Content "$env:RUNNER_TEMP/sou81-identities.json"
+      - name: Native Windows package lifecycle, ACL, junction, tamper and worker tests
+        shell: pwsh
+        run: |
+          & cargo test --locked -p agentfw --test classifier_runtime_windows -- --test-threads=1 2>&1 |
+              Tee-Object -FilePath "$env:RUNNER_TEMP/sou81-native.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Native Windows classifier runtime tests failed' }
+          $log = Get-Content "$env:RUNNER_TEMP/sou81-native.log" -Raw
+          if ($log -notmatch 'test result: ok\. 20 passed; 0 failed; 1 ignored;') {
+              throw 'All 20 positive native tests must run and pass (only the latency measurement is opt-in)'
+          }
+      - name: Real collector with the installed package on Windows
+        shell: pwsh
+        run: |
+          & cargo test --locked -p agentfw --test mcp_admission sou64 -- --test-threads=1 2>&1 |
+              Tee-Object -FilePath "$env:RUNNER_TEMP/sou81-collector.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Collector tests failed' }
+          $log = Get-Content "$env:RUNNER_TEMP/sou81-collector.log" -Raw
+          if ($log -notmatch 'test result: ok\. 2 passed; 0 failed; 0 ignored;') {
+              throw 'Both installed-package collector tests must run and pass'
+          }
+      - name: Cold and warm latency distribution (deadlines and retries unchanged)
+        shell: pwsh
+        run: |
+          & cargo test --locked -p agentfw --test classifier_runtime_windows -- --ignored --nocapture latency 2>&1 |
+              Tee-Object -FilePath "$env:RUNNER_TEMP/sou81-latency.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Latency measurement failed: a cold start exceeded its unchanged deadline or a call failed' }
+      - name: Production collector from a clean installed directory
+        shell: pwsh
+        run: |
+          & cargo build --locked -p agentfw --bin agentfw
+          if ($LASTEXITCODE -ne 0) { throw 'Agent build failed' }
+          & python -I scripts/classifier-runtime-windows-acceptance.py --require-windows `
+              --python $env:AGENTFW_TEST_PYTHON --agentfw target/debug/agentfw.exe `
+              --out "$env:RUNNER_TEMP/sou81-acceptance.json" 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/sou81-acceptance.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Clean-directory acceptance failed' }
+      - name: Retain identities, logs and measurements
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou81-native-windows-classifier-runtime-evidence
+          path: |
+            ${{ runner.temp }}/sou81-*.json
+            ${{ runner.temp }}/sou81-*.log
+          if-no-files-found: warn
+          retention-days: 30
+
   benchmark--agent-scorecard:
     if: contains(fromJSON(inputs.plan).workflows['benchmark.yml'], 'agent-scorecard')
     name: "benchmark / Agent security scorecard"
@@ -376,6 +463,46 @@ jobs:
           if ../scripts/validate_candidate.sh rec_good.json man_missing_attempt.json "v0.3.0" "dummy_sha" api_good.json full 2>/dev/null; then exit 1; fi
 
           echo "All SOU-26 validator matrix tests passed successfully!"
+
+  gateway-sdk--official-sdk:
+    name: "gateway-sdk / official-sdk"
+    if: contains(fromJSON(inputs.plan).workflows['gateway-sdk.yml'], 'official-sdk')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install hash-pinned official SDKs
+        run: python -m pip install --require-hashes -r scripts/requirements-sou92.txt
+      - name: Build exact candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD > "$RUNNER_TEMP/sou92-source.txt"
+          rustc --version > "$RUNNER_TEMP/sou92-rust.txt"
+          cargo build --locked -p llm-firewall --bin llm-firewall --message-format=json > "$RUNNER_TEMP/sou92-build.jsonl"
+          sha256sum target/debug/llm-firewall > "$RUNNER_TEMP/sou92-binary.txt"
+      - name: Evidence grading controls
+        run: python -B -m unittest discover -s scripts/tests -p test_sou92_sdk.py -v
+      - name: Actual SDKs through Gateway with independent effects
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -B scripts/verify-sou92-sdk.py --run --gateway "$PWD/target/debug/llm-firewall" \
+            --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou92-results.json" \
+            2>&1 | tee "$RUNNER_TEMP/sou92-driver.log"
+      - name: Retain complete and interrupted evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou92-sdk-evidence
+          path: ${{ runner.temp }}/sou92-*
+          if-no-files-found: error
+          retention-days: 30
 
   identity-sandbox--vendor-driver-safety:
     if: contains(fromJSON(inputs.plan).workflows['identity-sandbox.yml'], 'vendor-driver-safety')
@@ -1104,7 +1231,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends meson ninja-build libcap-dev pkg-config ripgrep
+          sudo apt-get install -y --no-install-recommends meson ninja-build libcap-dev pkg-config ripgrep zlib1g-dev
           mkdir -p "$RUNNER_TEMP/sou62-runtime" "$RUNNER_TEMP/sou62-bwrap-source"
           curl --fail --location --retry 3 https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz --output "$RUNNER_TEMP/sou62-node.tar.xz"
           printf '%s  %s\n' 9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37 "$RUNNER_TEMP/sou62-node.tar.xz" | sha256sum --check
@@ -1114,6 +1241,12 @@ jobs:
           tar --extract --xz --file "$RUNNER_TEMP/sou62-bwrap.tar.xz" --directory "$RUNNER_TEMP/sou62-bwrap-source" --strip-components=1 --no-same-owner --no-same-permissions
           meson setup "$RUNNER_TEMP/sou62-bwrap-build" "$RUNNER_TEMP/sou62-bwrap-source" -Dtests=false -Dman=disabled -Dselinux=disabled -Dbash_completion=disabled -Dzsh_completion=disabled
           meson compile -C "$RUNNER_TEMP/sou62-bwrap-build"
+          # Reuse the accepted Git profile's exact runtime, without a kit builder.
+          mkdir "$RUNNER_TEMP/sou100-git-source"
+          curl --fail --location --retry 3 https://www.kernel.org/pub/software/scm/git/git-2.51.2.tar.xz --output "$RUNNER_TEMP/sou100-git.tar.xz"
+          printf '%s  %s\n' 233d7143a2d58e60755eee9b76f559ec73ea2b3c297f5b503162ace95966b4e3 "$RUNNER_TEMP/sou100-git.tar.xz" | sha256sum --check
+          tar -xJf "$RUNNER_TEMP/sou100-git.tar.xz" -C "$RUNNER_TEMP/sou100-git-source" --strip-components=1 --no-same-owner --no-same-permissions
+          make -C "$RUNNER_TEMP/sou100-git-source" -j2 NO_CURL=YesPlease NO_EXPAT=YesPlease NO_TCLTK=YesPlease NO_GETTEXT=YesPlease NO_OPENSSL=YesPlease git
           "$RUNNER_TEMP/sou62-bwrap-build/bwrap" --help | rg -- '--ro-bind-fd'
           printf '%s\n' "$RUNNER_TEMP/sou62-runtime/bin" >> "$GITHUB_PATH"
           rustc --version > "$RUNNER_TEMP/sou62-rust.txt"
@@ -1135,7 +1268,7 @@ jobs:
         run: |
           set -euo pipefail
           git rev-parse HEAD > "$RUNNER_TEMP/sou62-source.txt"
-          cargo build --locked -p agentfw --bin agentfw --message-format=json > "$RUNNER_TEMP/sou62-build.jsonl"
+          cargo build --locked -p agentfw --bins --message-format=json > "$RUNNER_TEMP/sou62-build.jsonl"
           cargo test --locked -p agentfw --lib --no-run --message-format=json > "$RUNNER_TEMP/sou62-test-build.jsonl"
           python3 - <<'PY'
           import json, os
@@ -1150,6 +1283,14 @@ jobs:
       - name: Profile and evidence controls, safe archive runtime compatibility
         run: |
           python3 -B -m unittest discover -s scripts/tests -p test_sou62_real_mcp.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_installed_pilot.py -v
+          cargo test --locked -p agentfw --lib selected_registry_shared_daemon | tee "$RUNNER_TEMP/sou100-registry-regressions.log"
+          python3 -B - <<'REGISTRY_CONTROLS'
+          import os, re
+          from pathlib import Path
+          text = (Path(os.environ['RUNNER_TEMP']) / 'sou100-registry-regressions.log').read_text()
+          assert re.search(r'test result: ok\. 3 passed; 0 failed; 0 ignored;', text), 'three executed registry regressions are required'
+          REGISTRY_CONTROLS
           python3 -B -m unittest discover -s scripts/tests -p test_linux_alert_acceptance.py -v
           python3 -B - <<'PYCONTROLS'
           import unittest
@@ -1179,6 +1320,56 @@ jobs:
             --claude "$RUNNER_TEMP/sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --sandbox-test-binary "$SOU62_SANDBOX_TEST_BINARY" --expected-commit "$(git rev-parse HEAD)" \
             --output "$RUNNER_TEMP/sou62-sou63-combined" 2>&1 | tee "$RUNNER_TEMP/sou62-sou63-combined.log"
+      - name: Required installed filesystem and Git pilot through actual Claude Code
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PILOT_SELECTION'
+          import importlib.util, os, sys
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location('pilot_selection', 'scripts/qualify-installed-pilot.py')
+          pilot = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(pilot)
+          temporary = Path(os.environ['RUNNER_TEMP'])
+          selected_policy = temporary / 'sou100-selected-policy.yaml'
+          pilot.owned_bytes(selected_policy, pilot.PILOT_POLICY.encode('utf-8'))
+          files = {
+              'agentfw': Path('target/debug/agentfw'),
+              'git_launcher': Path('target/debug/agentfw-git-sandbox'),
+              'sandbox_tests': Path(os.environ['SOU62_SANDBOX_TEST_BINARY']),
+              'node': temporary / 'sou62-runtime/bin/node',
+              'npm': temporary / 'sou62-runtime/bin/npm',
+              'bwrap': temporary / 'sou62-bwrap-build/bwrap',
+              'git': temporary / 'sou100-git-source/git',
+              'claude': temporary / 'sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude',
+              'python': Path(sys.executable),
+              'filesystem_classifier': Path('rule_baseline/rule_baseline.py'),
+              'git_classifier': Path('rule_baseline/git_readonly_v1/rule_baseline.py'),
+              'policy': selected_policy,
+          }
+          pilot.private_json(temporary / 'sou100-selection.json', {
+              'format': 'sw-installed-pilot-selection/2', 'source': pilot.source(),
+              'expected_refusal': {'verdict': 'ask', 'rule': pilot.SHARED.RULE},
+              'files': {role: {'path': str(path.resolve(strict=True)), 'sha256': pilot.sha(path)} for role, path in files.items()},
+          })
+          PILOT_SELECTION
+          python3 -B scripts/qualify-installed-pilot.py --run \
+            --selection "$RUNNER_TEMP/sou100-selection.json" --expected-commit "$(git rev-parse HEAD)" \
+            --output "$RUNNER_TEMP/sou100-pilot" 2>&1 | tee "$RUNNER_TEMP/sou100-pilot.log"
+      - name: Publish bounded installed-pilot outcome
+        if: always()
+        shell: bash
+        run: |
+          python3 -B - <<'PILOT_OUTCOME'
+          import json, os
+          from pathlib import Path
+          path = Path(os.environ['RUNNER_TEMP']) / 'sou100-pilot/report.json'
+          result = json.loads(path.read_text()) if path.exists() else {'status': 'incomplete', 'reason': 'installed_pilot_not_executed'}
+          selected = {key: result.get(key) for key in ('format', 'status', 'source_before', 'source_after', 'required', 'counts', 'benign_workflows', 'remaining_blockers')}
+          print(json.dumps(selected, indent=2))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+              stream.write('```json\n' + json.dumps(selected, indent=2) + '\n```\n')
+          PILOT_OUTCOME
       - name: Publish bounded outcome
         if: always()
         shell: bash
@@ -1232,6 +1423,11 @@ jobs:
         with:
           name: sou62-real-filesystem-mcp-evidence
           path: |
+            ${{ runner.temp }}/sou100-selection.json
+            ${{ runner.temp }}/sou100-selected-policy.yaml
+            ${{ runner.temp }}/sou100-registry-regressions.log
+            ${{ runner.temp }}/sou100-pilot.log
+            ${{ runner.temp }}/sou100-pilot/**
             ${{ runner.temp }}/sou62-*.txt
             ${{ runner.temp }}/sou62-*.jsonl
             ${{ runner.temp }}/sou62-*.log

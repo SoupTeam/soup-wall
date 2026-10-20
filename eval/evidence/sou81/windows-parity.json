@@ -1,0 +1,27 @@
+{
+  "schema": "sou81-windows-parity/1",
+  "measured": "2026-10-19",
+  "platform": "native Windows x86_64, developer machine (Sundetali7), debug build, CPython 3.14.5",
+  "command": "cargo test -p agentfw --test classifier_runtime_windows public_fixture -- --nocapture",
+  "scope": "The 66 permitted public development/regression cases (eval/fixtures: evaluation v0.5 26, challenge v0.2 35, urtisto mixed 4, urtisto benign 1). Only each case's `input` is sent; labels are not read. Persistent worker output compared byte for byte with the single-shot adapter (python -I -u -X utf8 script, one process per call) on the same classifier bytes; one worker process served all 66 calls.",
+  "results": [
+    {
+      "revision": "Frozen",
+      "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+      "cases": 66,
+      "identical": 66,
+      "output_sha256": "acbca3892633df8446252e5bb6c58f0364e1b0dc5e5a3fd14676282a33c2b106"
+    },
+    {
+      "revision": "Rev2",
+      "classifier_sha256": "d0b4fc02720ee5ff38dec73d5992c6bdee9eda8595282e33015e60d07ce33ea5",
+      "cases": 66,
+      "identical": 66,
+      "output_sha256": "6aaffb3746372472e986957a6fc9cf4d3bd2edc364e4ee6df7ee027aad6624d7"
+    }
+  ],
+  "limits": [
+    "Transport parity only: this shows the worker returns exactly what the single-shot adapter returns, not that either classification is correct.",
+    "No held-out or sealed data was used; no generalization claim."
+  ]
+}

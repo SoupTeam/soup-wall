@@ -297,10 +297,31 @@ fn validate_registry(
         collector.config.resource_profiles.is_empty(),
         "selected server cannot mix brokered resource profiles"
     );
+    // One daemon may explicitly install both accepted original server families.
+    // Validate peer entries against their own pinned manifest without adding
+    // them to this relay's callable profiles or advertised discovery result.
+    // Arbitrary unadvertised registry entries remain a startup refusal.
+    let peer_format = match format {
+        server_profile::FORMAT => server_profile::git::FORMAT,
+        server_profile::git::FORMAT => server_profile::FORMAT,
+        _ => bail!("unsupported selected registry profile"),
+    };
+    let peer_manifest = server_profile::original_manifest_for(peer_format)?;
+    let peer_profiles = server_profile::classify_manifest_for(peer_format, &peer_manifest)?;
+    let peer_tools = peer_manifest["tools"]
+        .as_array()
+        .context("peer selected manifest tools missing")?;
     for tool in &collector.config.native.registry.tools {
-        let definition = tools
+        let (definition, profile, expected_format) = tools
             .iter()
             .find(|value| value["name"] == tool.name)
+            .map(|definition| (definition, &profiles[&tool.name], format))
+            .or_else(|| {
+                peer_tools
+                    .iter()
+                    .find(|value| value["name"] == tool.name)
+                    .map(|definition| (definition, &peer_profiles[&tool.name], peer_format))
+            })
             .context("selected registry contains an unadvertised tool")?;
         ensure!(
             tool.schema_sha256 == sha(canonical(&definition["inputSchema"]).to_string().as_bytes()),
@@ -310,7 +331,7 @@ fn validate_registry(
             tool.resource_policy.is_none(),
             "selected server cannot acquire built-in resource authority"
         );
-        if profiles[&tool.name].unsupported_reason.is_none() {
+        if profile.unsupported_reason.is_none() {
             ensure!(
                 tool.action_class == soup_wall_agent::ActionClass::ReadOnly
                     && tool.egress.is_empty()
@@ -318,7 +339,7 @@ fn validate_registry(
                         tool.result_provenance,
                         crate::native::ResultProvenance::Untrusted
                     )
-                    && tool.mcp_result_profile.as_deref() == Some(format),
+                    && tool.mcp_result_profile.as_deref() == Some(expected_format),
                 "selected read authority is not explicitly installed"
             );
         }

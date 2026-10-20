@@ -33,6 +33,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Guarded execution](operations/SANDBOX.md) | Supported process, file and retrieval boundaries |
 | [Windows Agent acceptance](operations/WINDOWS_AGENT_ACCEPTANCE.md) | Native installation, ACLs, hook posture and loopback configuration |
 | [Claude HTTP-hook acceptance](operations/CLAUDE_HOST_ACCEPTANCE.md) | Actual host behavior with deterministic local model fixtures |
+| [First-use onboarding](operations/ONBOARDING.md) | Read-only preview, explicit journaled apply, truthful configured/verified result and undo (Linux) |
 | [Agent self-test](operations/SELF_TEST.md) | One Linux command: witnessed useful reads, a refused synthetic send, daemon loss and a versioned report |
 | [Offline Agent audit explorer](operations/AGENT_AUDIT_EXPLORER.md) | Private Linux JSONL report generation, decision timeline, filters and evidence limits |
 | [Bounded Agent audit retention](operations/AGENT_AUDIT_RETENTION.md) | Opt-in Linux segments, crash recovery, private verified export and loss-aware browsing |
@@ -42,6 +43,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Managed policy transitions in active MCP sessions](operations/MANAGED_NATIVE_TRANSITIONS.md) | Dispatch/result boundaries, stale approvals, signed rollback and independent runtime evidence |
 | [Native MCP diagnostic output](operations/NATIVE_MCP_STDERR.md) | Bounded discarded child stderr, safe metadata, owned cleanup and required Linux evidence |
 | [Sandboxed real filesystem MCP](operations/MCP_REAL_FILESYSTEM.md) | Explicit pinned Linux read-only server, bounded overlap/cancellation and required actual-host acceptance |
+| [Installed two-server pilot qualification](operations/INSTALLED_PILOT_QUALIFICATION.md) | Actual Claude Code, installed filesystem/Git MCP, independent refusal witnesses and bounded recovery |
 | [Linux MCP resource budgets](operations/MCP_LINUX_RESOURCE_BUDGETS.md) | Opt-in delegated aggregate memory, CPU and task limits, wall expiry and independent Linux witnesses |
 | [Linux MCP crash supervision](operations/MCP_LINUX_CRASH_SUPERVISION.md) | Owned collector-loss cleanup, private PID 1 supervision, restart isolation and independent native witnesses |
 | [Claude Code MCP connection](operations/CLAUDE_MCP_CONNECTION.md) | Selected-server preview, transactional setup, controlled verification and safe disconnect |
@@ -52,6 +54,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Constrained MCP HTTPS POST](operations/MCP_HTTPS_POST.md) | Exact recipient and UTF-8 payload authority, single-use dispatch and conservative effect accounting |
 | [Constrained Windows MCP reads](operations/MCP_WINDOWS_READ.md) | Handle-bound local document reads, explicit v4 authority and native standard-user verification |
 | [Constrained Windows MCP file creation](operations/MCP_WINDOWS_CREATE.md) | Exact v5 create authority, retained parent handles, atomic no-overwrite publication and native verification |
+| [Constrained macOS MCP file executors](operations/MCP_MACOS_FILE_EXECUTORS.md) | Native macOS ARM64 constrained APFS read/create executors, anonymous staging, atomic publication and acceptance |
 | [Identity interoperability](operations/IDENTITY_INTEROPERABILITY.md) | Local identity fixtures, external metadata probes and pilot gates |
 | [Keycloak SAML acceptance](operations/KEYCLOAK_SAML_ACCEPTANCE.md) | Pinned vendor-runtime setup and signed SAML checks |
 | [Linux SAML lifecycle](operations/KEYCLOAK_SAML_LINUX.md) | Genuine browser login, PostgreSQL sessions and explicit signing-key rotation |
