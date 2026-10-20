@@ -224,6 +224,38 @@ for raw in sys.stdin:
   print('{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}', flush=True)
 "#;
 
+/// The CPython the installed-classifier fixtures run: `/usr/bin/python3` on Unix; on
+/// Windows `AGENTFW_TEST_PYTHON`, else the real `sys.executable` of `python` on PATH.
+#[cfg(not(windows))]
+fn classifier_test_python() -> std::path::PathBuf {
+    std::path::PathBuf::from("/usr/bin/python3")
+}
+
+#[cfg(windows)]
+fn classifier_test_python() -> std::path::PathBuf {
+    if let Some(explicit) = std::env::var_os("AGENTFW_TEST_PYTHON") {
+        return std::path::PathBuf::from(explicit);
+    }
+    let output = std::process::Command::new("python")
+        .args(["-I", "-c", "import sys;print(sys.executable)"])
+        .output()
+        .expect("python must be on PATH or AGENTFW_TEST_PYTHON must name it");
+    assert!(output.status.success(), "python could not report its path");
+    std::path::PathBuf::from(String::from_utf8(output.stdout).unwrap().trim())
+}
+
+/// Hosted Windows runners spell TEMP with an 8.3 short name (`RUNNER~1`). The classifier
+/// store refuses alias spellings, so its tests use the real long path without `\\?\`.
+#[cfg(windows)]
+fn windows_long_path(path: &Path) -> std::path::PathBuf {
+    let canonical = path.canonicalize().unwrap();
+    let text = canonical.to_string_lossy().into_owned();
+    match text.strip_prefix(r"\\?\") {
+        Some(plain) if !plain.starts_with("UNC\\") => std::path::PathBuf::from(plain),
+        _ => canonical,
+    }
+}
+
 fn sha(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
@@ -620,7 +652,7 @@ fn spawn_gateway_named(
             )
             .unwrap();
             agentfw::classifier_runtime::package::Store::new(&profile)
-                .install(&archive, Path::new("/usr/bin/python3"))
+                .install(&archive, &classifier_test_python())
                 .unwrap();
             command.env("AGENTFW_CLASSIFIER", "rule-package");
         }
@@ -811,6 +843,12 @@ impl Fixture {
         let root = std::env::temp_dir();
         #[cfg(unix)]
         let root = root.canonicalize().unwrap();
+        #[cfg(windows)]
+        let root = if classifier == Some("rule-package") {
+            windows_long_path(&root)
+        } else {
+            root
+        };
         let dir = tempfile::tempdir_in(root).unwrap();
         let home = dir.path().join(".agentfw");
         let stderr = dir.path().join("gateway-stderr.log");
@@ -5501,7 +5539,7 @@ async fn sou67_read_policy_server_id_mismatch_refused() {
     assert_eq!(executed(&fixture.ledger).len(), 0);
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 #[tokio::test]
 async fn sou64_installed_package_classifies_in_the_real_collector_like_the_script() {
     let calls = [
@@ -5541,13 +5579,17 @@ async fn sou64_installed_package_classifies_in_the_real_collector_like_the_scrip
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 #[test]
 fn sou64_missing_package_is_a_selection_error_with_no_fallback() {
-    let directory = tempfile::tempdir().unwrap();
+    let root = std::env::temp_dir();
+    #[cfg(windows)]
+    let root = windows_long_path(&root);
+    let directory = tempfile::tempdir_in(root).unwrap();
     assert!(
         agentfw::classifier_runtime::worker::PackagedClassifier::from_home(directory.path())
-            .is_err()
+            .is_err(),
+        "a missing package must be a selection error"
     );
 }
 

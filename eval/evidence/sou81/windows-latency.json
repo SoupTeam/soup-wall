@@ -1,0 +1,74 @@
+{
+  "schema": "sou81-windows-latency/1",
+  "measured": "2026-10-19",
+  "platform": "native Windows x86_64, developer machine (Sundetali7), debug build of agentfw",
+  "base_commit": "215b99e (origin/main) plus the uncommitted SOU-81 working tree",
+  "command": "cargo test -p agentfw --test classifier_runtime_windows -- --ignored --nocapture latency",
+  "scope": "PackagedClassifier directly (no collector, no daemon): 15 cold starts (fresh worker, first call includes spawn, Job Object assignment, bootstrap hash checks and classifier import), 300 warm calls on one worker, 20 single-shot subprocess calls (python -I -u -X utf8 script) on the same input shape. Deadlines (1.4 s start, 1.4 s request) and retries unchanged: there are none.",
+  "frozen": {
+    "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+    "package": "318201921779ff6e0b2c2089fcaa45c0c8d472678e25d0cbe0309e3443f97b7e",
+    "python": {
+      "path": "C:\\Users\\User\\AppData\\Local\\Programs\\Python\\Python314\\python.exe",
+      "sha256": "3adbbf2af609e206e3ca18cd55fc7c4b52f5c8bb8218dd99fd5a9e50d7a193cd",
+      "version": "3.14.5"
+    },
+    "single_shot_ms": {
+      "n": 20,
+      "p50": 213.494,
+      "p95": 229.833,
+      "max": 235.436
+    },
+    "worker_first_call_ms": {
+      "n": 15,
+      "p50": 274.492,
+      "p95": 315.288,
+      "max": 329.127
+    },
+    "worker_warm_ms": {
+      "n": 300,
+      "p50": 0.801,
+      "p95": 1.065,
+      "max": 2.034
+    }
+  },
+  "rev2": {
+    "classifier_sha256": "d0b4fc02720ee5ff38dec73d5992c6bdee9eda8595282e33015e60d07ce33ea5",
+    "package": "f1a8e5b0a4a67fbd3db909c923b7aed1615ba46317d5268e6561f99404df6bd6",
+    "python": {
+      "path": "C:\\Users\\User\\AppData\\Local\\Programs\\Python\\Python314\\python.exe",
+      "sha256": "3adbbf2af609e206e3ca18cd55fc7c4b52f5c8bb8218dd99fd5a9e50d7a193cd",
+      "version": "3.14.5"
+    },
+    "single_shot_ms": {
+      "n": 20,
+      "p50": 219.269,
+      "p95": 232.725,
+      "max": 233.858
+    },
+    "worker_first_call_ms": {
+      "n": 15,
+      "p50": 273.056,
+      "p95": 326.703,
+      "max": 342.742
+    },
+    "worker_warm_ms": {
+      "n": 300,
+      "p50": 0.788,
+      "p95": 1.065,
+      "max": 1.545
+    }
+  },
+  "cold_start_deadline": {
+    "start_deadline_ms": 1400,
+    "slowest_observed_cold_ms": 342.742,
+    "headroom_ms": 1057.258,
+    "failures": 0,
+    "finding": "On this machine the slowest cold start used about a quarter of the unchanged 1400 ms start deadline. No failure was observed, so no deadline was relaxed and no retry was added. A slower machine or heavy antivirus scanning of a first python.exe launch could consume more; the CI run records the same distribution on a hosted runner."
+  },
+  "limits": [
+    "One developer machine, one run; the distribution is evidence, not a guarantee.",
+    "Debug build; release timing was not measured.",
+    "Not a generalization or accuracy claim: latency only."
+  ]
+}
