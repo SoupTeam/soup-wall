@@ -24,6 +24,11 @@ The inventory retains original Pydantic schemas and canonical hashes, upstream
 revision, semantic sources, action classes, untrusted result provenance and
 typed resource selectors. The daemon independently checks these declarations
 at startup and extracts resources from validated arguments at admission.
+The schemas originate from AgentDojo revision
+`089ed468cf3ed0322acc66b0211f26d9d90dbf60`; its
+[MIT copyright and permission notice](../../crates/agentfw/profiles/upstream-notices/agentdojo-LICENSE)
+is retained with the profile. The original callable/evaluator sources remain
+in the separately verified upstream checkout.
 Original defaults, nested calls, callable bodies, errors and evaluator inputs
 remain unchanged. Unknown functions, schema drift, incomplete profiles and
 false trusted provenance cannot silently execute.
@@ -89,13 +94,17 @@ python -B scripts/agentdojo-live.py --mode workspace-fixture \
 ```
 
 Outputs are `registry.json`, `development-proposal.json` and `report.json`
-(or `failure.json`). Reports bind original source inventory, binary, adapter
+(or `failure.json`). The shell procedure also runs the existing schema-1 native
+fixture and retains `legacy-native.json`. Reports bind original source inventory, binary, adapter
 sources, dependency lock, registry, profile and shipped policy. Python call
 tracing counts actual original-function executions; independent environment
 checks calibrate allowed effects and refused dispatch. Original user/attack
 evaluators run on known positive/negative controls. These scripted controls are
 not model effectiveness measurements. Failed controls fail the command;
 hidden skips do not satisfy acceptance.
+Original timestamps and random admission identifiers are retained, so evidence
+hashes vary across runs; deterministic assertions compare effects and boundaries,
+not a fabricated fixed upstream clock.
 
 The proposal uses the existing SOU-36 plan schema and machinery. Model access,
 cost and thresholds remain unapproved; this command does not freeze a plan.

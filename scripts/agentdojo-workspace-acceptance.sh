@@ -18,3 +18,6 @@ target/sou85-driver/bin/python -B -m unittest discover -s scripts/benchmarks -p 
 target/sou85-driver/bin/python -B scripts/agentdojo-live.py --mode workspace-fixture \
   --upstream-checkout target/sou85-upstream --agent-binary target/debug/agentfw \
   --report-out target/sou85-offline
+target/sou85-driver/bin/python -B scripts/agentdojo-live.py --mode native-fixture \
+  --upstream-checkout target/sou85-upstream --agent-binary target/debug/agentfw \
+  --evidence target/sou85-offline/legacy-native.json
