@@ -222,8 +222,10 @@ class Workflow(unittest.TestCase):
                 self.assertIn("if: ${{ always() && " + gate + " }}", upload)
                 self.assertIn("name: sou97-git-cancellation-diagnostic", upload)
                 self.assertNotIn("continue-on-error", upload)
-                # Only the diagnostic step may continue on error; acceptance steps keep failing the job.
-                self.assertEqual(text.count("continue-on-error"), 1)
+                # Only diagnostic steps may continue on error; acceptance steps keep failing the job.
+                for name, block in re.findall(r"(?ms)^      - name: ([^\n]+)\n(.*?)(?=^      - name: |\Z)", text):
+                    if "continue-on-error" in block:
+                        self.assertTrue(name.startswith("SOU-97 diagnostic only"), name)
                 acceptance = self.step(text, "Retain exact-source synthetic evidence")
                 for pattern in re.findall(r"\$\{\{ runner\.temp \}\}/(\S+)", acceptance):
                     self.assertFalse(Path("diagnostic-sou97-git.log").match(pattern), pattern)
