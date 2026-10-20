@@ -1076,10 +1076,15 @@ def run(args):
                 if pilot is not None:
                     cleanup_evidence.update(pilot.cleanup())
             finally:
-                if private is not None:
-                    private.cleanup()
-                    require(not Path(private.name).exists(), "private_installation_remains")
-            report["source_after"] = source()
+                try:
+                    if private is not None:
+                        private.cleanup()
+                        require(not Path(private.name).exists(), "private_installation_remains")
+                finally:
+                    # Failed cleanup is still evidence on an exact candidate.
+                    # Preserve the closing source identity even when the
+                    # runtime outcome itself must remain failed.
+                    report["source_after"] = source()
             require(report.get("source_before") == report["source_after"], "candidate_changed_during_run")
             require(all(sha(path) == report["selected_sha256"][key] for key, path in selected.items()), "selected_runtime_changed_during_run")
             require(pilot is not None, "runtime_not_started")

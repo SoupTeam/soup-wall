@@ -10,6 +10,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 import urllib.error
 from unittest.mock import patch
@@ -198,6 +199,37 @@ class RuntimeBoundaryControls(unittest.TestCase):
             again = subprocess.run(result.args, capture_output=True, timeout=10)
             self.assertNotEqual(again.returncode, 0)
             self.assertEqual(json.loads((root / "run/report.json").read_text()), report)
+
+    def test_failed_setup_and_cleanup_still_retain_closing_source_identity(self):
+        class FailedRuntime:
+            def __init__(self, private, *_):
+                self.private, self.env, self.secrets = private, {}, []
+                self.bindings, self.hosts = [], []
+            def prepare(self, _):
+                raise CONTRACT.Failure("owned_setup_control")
+            def cleanup(self):
+                raise CONTRACT.Failure("owned_cleanup_control")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            selection = self.selection(Path(sys.executable).resolve())
+            path = root / "selection.json"
+            path.write_text(json.dumps(selection))
+            before = selection["source"]
+            paths = {role: Path(sys.executable).resolve() for role in PILOT.ROLES}
+            with patch.object(PILOT, "validate_selection", return_value=(before, paths)), \
+                 patch.object(PILOT, "source", return_value=before), \
+                 patch.object(PILOT.platform, "system", return_value="Linux"), \
+                 patch.object(PILOT.platform, "machine", return_value="x86_64"), \
+                 patch.object(PILOT.subprocess, "check_output", return_value="2.1.251 (Claude Code)"), \
+                 patch.object(PILOT, "Pilot", FailedRuntime):
+                status = PILOT.run(SimpleNamespace(output=root / "run", selection=path,
+                    expected_commit=before["commit"], fault=None))
+            result = json.loads((root / "run/report.json").read_text())
+            self.assertEqual(status, 1)
+            self.assertEqual(result["source_before"], result["source_after"])
+            self.assertEqual(result["cases"][0]["reason"], "owned_setup_control")
+            self.assertEqual(result["cases"][-1]["reason"], "owned_cleanup_control")
+            self.assertEqual(result["counts"], dict(passed=0, failed=2, incomplete=10, unsupported=0))
 
     def test_changed_staged_classifier_hits_production_check_before_any_server(self):
         with tempfile.TemporaryDirectory() as temporary:
