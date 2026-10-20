@@ -1128,10 +1128,7 @@ impl<'a> Collector<'a> {
             request = self.bind_liveness_request(request).await?;
         }
         let response = request.send().await.context("MCP admission unavailable")?;
-        ensure!(
-            response.status().is_success(),
-            "MCP admission request rejected"
-        );
+        let status = response.status();
         let mut bytes = Vec::new();
         let mut chunks = response.bytes_stream();
         while let Some(chunk) = chunks.next().await {
@@ -1142,6 +1139,12 @@ impl<'a> Collector<'a> {
             );
             bytes.extend_from_slice(&chunk);
         }
+        ensure!(
+            status.is_success(),
+            "MCP admission request rejected: status {}, body: {}",
+            status,
+            String::from_utf8_lossy(&bytes)
+        );
         let Strict(reply) =
             serde_json::from_slice(&bytes).context("malformed MCP admission receipt")?;
         Ok(reply)
@@ -1586,15 +1589,15 @@ fn manifest(
     value: &Value,
     native: &NativeState,
     server_info: &Value,
+    granted_tools: Option<&[String]>,
 ) -> anyhow::Result<(BTreeMap<String, InputSchema>, Snapshot)> {
     keys(value, &["tools"])?;
     let tools = value["tools"]
         .as_array()
         .context("MCP manifest tools absent")?;
-    ensure!(
-        tools.len() == native.registry.tools.len(),
-        "MCP manifest coverage mismatch"
-    );
+    let coverage_ok = tools.len() == native.registry.tools.len()
+        || granted_tools.is_some_and(|granted| tools.len() == granted.len());
+    ensure!(coverage_ok, "MCP manifest coverage mismatch");
     let mut seen = BTreeSet::new();
     let mut schemas: BTreeMap<String, InputSchema> = BTreeMap::new();
     let mut admitted = BTreeMap::new();
@@ -1608,6 +1611,14 @@ fn manifest(
             !name.is_empty() && name.len() <= 128 && !name.chars().any(char::is_control),
             "invalid MCP tool name"
         );
+        if let Some(granted) = granted_tools {
+            if tools.len() == granted.len() {
+                ensure!(
+                    granted.iter().any(|g| g == name),
+                    "MCP manifest tool not in granted tools"
+                );
+            }
+        }
         if let Some(annotations) = tool.get("annotations") {
             keys(
                 annotations,
@@ -1878,6 +1889,21 @@ where
                         // Hosts may probe inventory even though initialization advertises
                         // tools only. No request or resource content reaches the server.
                         write(host, &unsupported_resource_inventory(request_id)).await?;
+                        continue;
+                    }
+                    "server/discover" => {
+                        let mut raw = json!({
+                            "jsonrpc": "2.0",
+                            "id": request_id,
+                            "error": {
+                                "code": -32601,
+                                "message": "Method not found"
+                            }
+                        })
+                        .to_string()
+                        .into_bytes();
+                        raw.push(b'\n');
+                        write(host, &raw).await?;
                         continue;
                     }
                     "ping" => { keys(&params, &[])?; Pending::Ping(request_id.clone()) }
@@ -3049,7 +3075,7 @@ where
                             contract_version,
                         }
                     }
-                    _ => bail!("unsupported MCP method"),
+                    _ => bail!("unsupported MCP method: {:?}", method),
                 };
                 pending = Some(next);
                 deadline = tokio::time::Instant::now() + IO_TIMEOUT;
@@ -3083,7 +3109,15 @@ where
                     }
                     Pending::Manifest(_) => {
                         ensure!(value.get("error").is_none(), "MCP tools/list failed");
-                        let (validated_schemas, snapshot) = manifest(&value["result"], &collector.config.native, &server_info)?;
+                        let granted_tools = collector.child_authority.as_deref().and_then(|tok| {
+                            crate::native::child_authority::decode_token(tok).ok().map(|g| g.granted_tools)
+                        });
+                        let (validated_schemas, snapshot) = manifest(
+                            &value["result"],
+                            &collector.config.native,
+                            &server_info,
+                            granted_tools.as_deref(),
+                        )?;
                         collector.inspect_manifest(&value["result"]).await?;
                         schemas = validated_schemas;
                         admitted_snapshot = Some(snapshot);
@@ -3544,7 +3578,7 @@ mod input_identity_tests {
     #[test]
     fn original_discovery_schema_and_annotations_are_retained() {
         let (native, result, info) = discovered("fixture description");
-        let (_, snapshot) = manifest(&result, &native, &info).unwrap();
+        let (_, snapshot) = manifest(&result, &native, &info, None).unwrap();
         let tool = &snapshot.tools["inventory_lookup"];
         assert_eq!(tool.definition, result["tools"][0]);
         assert_eq!(tool.schema, result["tools"][0]["inputSchema"]);
@@ -3591,7 +3625,7 @@ mod input_identity_tests {
     #[test]
     fn prediction_identity_binds_server_arguments_metadata_and_classifier_revision() {
         let (native, result, info) = discovered("first");
-        let (_, snapshot) = manifest(&result, &native, &info).unwrap();
+        let (_, snapshot) = manifest(&result, &native, &info, None).unwrap();
         let args = json!({"query":{"names":["alpha"],"limit":1}});
         let identity =
             |server: &str, snap: &Snapshot, args: &Value, source: &str, rev: Option<&str>| {
@@ -3657,7 +3691,7 @@ mod input_identity_tests {
         }
         let mut updated = result.clone();
         updated["tools"][0]["annotations"]["readOnlyHint"] = json!(false);
-        let (_, metadata_changed) = manifest(&updated, &native, &info).unwrap();
+        let (_, metadata_changed) = manifest(&updated, &native, &info, None).unwrap();
         assert_ne!(
             original,
             identity(
@@ -3668,8 +3702,13 @@ mod input_identity_tests {
                 Some("rev1")
             )
         );
-        let (_, server_changed) =
-            manifest(&result, &native, &json!({"name":"fixture","version":"2"})).unwrap();
+        let (_, server_changed) = manifest(
+            &result,
+            &native,
+            &json!({"name":"fixture","version":"2"}),
+            None,
+        )
+        .unwrap();
         assert_ne!(
             original,
             identity(
@@ -3687,13 +3726,13 @@ mod input_identity_tests {
         let (native, result, info) = discovered("first");
         let mut changed = result.clone();
         changed["tools"][0]["inputSchema"]["properties"]["new"] = json!({"type":"string"});
-        assert!(manifest(&changed, &native, &info).is_err());
+        assert!(manifest(&changed, &native, &info, None).is_err());
         changed = result.clone();
         changed["tools"] = json!([]);
-        assert!(manifest(&changed, &native, &info).is_err());
+        assert!(manifest(&changed, &native, &info, None).is_err());
         changed = result;
         changed["tools"][0]["annotations"]["customPermission"] = json!("allow");
-        assert!(manifest(&changed, &native, &info).is_err());
+        assert!(manifest(&changed, &native, &info, None).is_err());
     }
 
     #[test]

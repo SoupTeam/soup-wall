@@ -302,6 +302,7 @@ sys.exit(0)
                 "--fs-profile", str(FS_PROFILE),
                 "--git-profile", str(GIT_PROFILE),
                 "--mock-daemon-token", "token-123",
+                "--mock-instance-id", "mock-instance-test",
                 "--json",
             ])
             self.assertNotEqual(proc.returncode, 0)
@@ -309,6 +310,74 @@ sys.exit(0)
             self.assertEqual(report["status"], "failed")
             self.assertEqual(report["exit_code"], 42)
 
+    def test_collector_command_and_env_construction(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            ws = tmp / "ws"
+            ws.mkdir()
+
+            fs_prof = tmp / "profile.json"
+            fs_prof.write_text(json.dumps({
+                "runtimePath": "/usr/bin/node",
+                "packageRoot": "/pkg/fs",
+                "tools": [{"name": "read_text_file"}]
+            }))
+
+            git_prof = tmp / "git-profile.json"
+            git_prof.write_text(json.dumps({
+                "runtimePath": "/usr/bin/python3",
+                "tools": [{"name": "git_status"}]
+            }))
+
+            claude = tmp / "claude"
+            make_executable(claude)
+
+            proc = self.run_pilot([
+                "--claude", str(claude),
+                "--workspace", str(ws),
+                "--fs-profile", str(fs_prof),
+                "--git-profile", str(git_prof),
+                "--mock-daemon-token", "test-token",
+                "--mock-instance-id", "inst-42",
+                "--dry-run",
+                "--json",
+            ])
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            report = json.loads(proc.stdout)
+            fs_server = report["servers"]["filesystem"]
+            self.assertIn("--", fs_server["args"])
+            idx = fs_server["args"].index("--")
+            self.assertEqual(fs_server["args"][idx + 1], "/usr/bin/node")
+
+            git_server = report["servers"]["git"]
+            self.assertIn("--", git_server["args"])
+            g_idx = git_server["args"].index("--")
+            self.assertEqual(git_server["args"][g_idx + 1], "/usr/bin/python3")
+
+    def test_timeout_enforcement_and_process_cleanup(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            ws = tmp / "ws"
+            ws.mkdir()
+
+            # Host script sleeps longer than declared timeout
+            sleep_script = tmp / "sleep-claude"
+            make_executable(sleep_script, "#!/bin/sh\nsleep 30\n")
+
+            proc = self.run_pilot([
+                "--claude", str(sleep_script),
+                "--workspace", str(ws),
+                "--fs-profile", str(FS_PROFILE),
+                "--git-profile", str(GIT_PROFILE),
+                "--mock-daemon-token", "token-timeout",
+                "--mock-instance-id", "inst-timeout",
+                "--timeout-seconds", "2",
+                "--json",
+            ])
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("exceeded declared timeout", proc.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
+

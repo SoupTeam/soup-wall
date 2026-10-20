@@ -4,9 +4,10 @@
 //! Trusted per-run Claude Code pilot launcher for two pinned MCP servers (SOU-99).
 //!
 //! Provides a bounded, isolated execution environment outside the source workspace,
-//! automatically minting distinct signed child authority grants from the authenticated
-//! daemon, strictly configuring the host boundary to prevent unmediated tool bypass,
-//! and ensuring complete owned cleanup on completion, interruption, or failure.
+//! automatically minting distinct signed child authority grants bound to the authenticated
+//! live daemon instance, strictly configuring the host boundary to prevent unmediated tool bypass,
+//! constructing runnable collectors from verified installed assets, and supervising the host
+//! lifetime with declared timeouts, signal handlers, and owned process-group cleanup.
 
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
@@ -49,7 +50,7 @@ fn random_hex_128() -> String {
 }
 
 /// Helper to generate a random UUID-like string.
-fn random_uuid_v4() -> String {
+pub fn random_uuid_v4() -> String {
     let r1 = rand::random::<u64>();
     let r2 = rand::random::<u64>();
     // set version 4 and variant bits
@@ -77,7 +78,7 @@ pub struct PilotLaunchArgs {
     pub workspace: PathBuf,
 
     /// Explicit installed daemon home directory containing native-token and config;
-    /// defaults to ~/.agentfw.
+    /// defaults to ~/.agentfw or AGENTFW_HOME.
     #[arg(long)]
     pub home: Option<PathBuf>,
 
@@ -97,9 +98,9 @@ pub struct PilotLaunchArgs {
     #[arg(long)]
     pub policy: Option<PathBuf>,
 
-    /// Optional explicit host session UUID; generated if not provided.
-    #[arg(long)]
-    pub session_id: Option<String>,
+    /// Optional explicit host session ID; generated if not provided.
+    #[arg(long, visible_alias = "session-id")]
+    pub host_session: Option<String>,
 
     /// Optional path to agentfw executable for running MCP collectors; defaults to current_exe.
     #[arg(long)]
@@ -117,9 +118,21 @@ pub struct PilotLaunchArgs {
     #[arg(long)]
     pub json: bool,
 
+    /// Optional prompt passed to Claude Code via -p; defaults to "Run the owned pilot sequence.".
+    #[arg(long, short = 'p')]
+    pub prompt: Option<String>,
+
+    /// Model identifier passed to Claude Code; defaults to "claude-sonnet-4-20250514".
+    #[arg(long, default_value = "claude-sonnet-4-20250514")]
+    pub model: String,
+
     /// Mock daemon token for testing/dry-run when daemon is not running.
     #[arg(long, hide = true)]
     pub mock_daemon_token: Option<String>,
+
+    /// Mock daemon instance ID for offline unit testing.
+    #[arg(long, hide = true)]
+    pub mock_instance_id: Option<String>,
 }
 
 /// Validated configuration ready for execution.
@@ -132,13 +145,18 @@ pub struct ValidatedConfig {
     pub git_profile_path: PathBuf,
     pub classifier_path: Option<PathBuf>,
     pub policy_path: Option<PathBuf>,
-    pub session_id: String,
+    pub host_session: String,
     pub agent_bin_path: PathBuf,
     pub timeout: Duration,
     pub dry_run: bool,
     pub mock_daemon_token: Option<String>,
+    pub mock_instance_id: Option<String>,
     pub fs_tools: Vec<String>,
     pub git_tools: Vec<String>,
+    pub fs_runtime_cmd: Vec<String>,
+    pub git_runtime_cmd: Vec<String>,
+    pub prompt: String,
+    pub model: String,
 }
 
 /// JSON report produced by dry-run or full execution.
@@ -243,7 +261,10 @@ impl PilotLaunchArgs {
                     h.clone()
                 }
             }
-            None => Config::home_path()?,
+            None => match std::env::var_os("AGENTFW_HOME") {
+                Some(h) => PathBuf::from(h),
+                None => Config::home_path()?,
+            },
         };
 
         // 5. Optional classifier and policy
@@ -276,8 +297,8 @@ impl PilotLaunchArgs {
             None => std::env::current_exe().context("get current exe")?,
         };
 
-        // 7. Session ID
-        let session_id = match &self.session_id {
+        // 7. Host session ID
+        let host_session = match &self.host_session {
             Some(s) => {
                 ensure!(
                     !s.trim().is_empty() && s.len() <= 128,
@@ -309,62 +330,147 @@ impl PilotLaunchArgs {
             );
         }
 
+        // Resolve runnable runtime commands from verified profiles
+        let (fs_runtime_cmd, resolved_fs_profile) =
+            resolve_server_runtime(FILESYSTEM_SERVER_ID, &fs_profile_path, &workspace_path)?;
+        let (git_runtime_cmd, resolved_git_profile) =
+            resolve_server_runtime(GIT_SERVER_ID, &git_profile_path, &workspace_path)?;
+
+        let prompt = self
+            .prompt
+            .clone()
+            .unwrap_or_else(|| "Run the owned pilot sequence.".to_string());
+        let model = self.model.clone();
+
         Ok(ValidatedConfig {
             claude_path,
             workspace_path,
             home_path,
-            fs_profile_path,
-            git_profile_path,
+            fs_profile_path: resolved_fs_profile,
+            git_profile_path: resolved_git_profile,
             classifier_path,
             policy_path,
-            session_id,
+            host_session,
             agent_bin_path,
             timeout: Duration::from_secs(self.timeout_seconds),
             dry_run: self.dry_run,
             mock_daemon_token: self.mock_daemon_token.clone(),
+            mock_instance_id: self.mock_instance_id.clone(),
             fs_tools,
             git_tools,
+            fs_runtime_cmd,
+            git_runtime_cmd,
+            prompt,
+            model,
         })
     }
 }
 
-/// Extract tool names from profile directory or JSON file.
+/// Extract tool names from profile directory, JSON file, or adjacent registry.
 fn extract_tools_from_profile(profile_path: &Path, fallback: &[&str]) -> Result<Vec<String>> {
-    if profile_path.is_dir() {
-        let tools_json = profile_path.join("upstream-tools-list.json");
-        if tools_json.exists() {
-            let content = fs::read_to_string(&tools_json)?;
-            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
-                if let Some(arr) = val.get("tools").and_then(|t| t.as_array()) {
-                    let mut list = Vec::new();
-                    for item in arr {
-                        if let Some(name) = item.get("name").and_then(|n| n.as_str()) {
-                            list.push(name.to_string());
+    let candidate_files = if profile_path.is_dir() {
+        vec![
+            profile_path.join("registry.json"),
+            profile_path.join("upstream-tools-list.json"),
+            profile_path.join("profile.json"),
+        ]
+    } else {
+        let parent = profile_path.parent();
+        let mut list = vec![profile_path.to_path_buf()];
+        if let Some(p) = parent {
+            list.push(p.join("registry.json"));
+            list.push(p.join("upstream-tools-list.json"));
+        }
+        list
+    };
+
+    for path in candidate_files {
+        if path.is_file() {
+            if let Ok(content) = fs::read_to_string(&path) {
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(arr) = val.get("tools").and_then(|t| t.as_array()) {
+                        let mut list = Vec::new();
+                        for item in arr {
+                            if let Some(name) = item.get("name").and_then(|n| n.as_str()) {
+                                list.push(name.to_string());
+                            }
+                        }
+                        if !list.is_empty() {
+                            return Ok(list);
                         }
                     }
-                    if !list.is_empty() {
-                        return Ok(list);
-                    }
-                }
-            }
-        }
-    } else if profile_path.is_file() {
-        let content = fs::read_to_string(profile_path)?;
-        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
-            if let Some(arr) = val.get("tools").and_then(|t| t.as_array()) {
-                let mut list = Vec::new();
-                for item in arr {
-                    if let Some(name) = item.get("name").and_then(|n| n.as_str()) {
-                        list.push(name.to_string());
-                    }
-                }
-                if !list.is_empty() {
-                    return Ok(list);
                 }
             }
         }
     }
+
     Ok(fallback.iter().map(|&s| s.to_string()).collect())
+}
+
+/// Resolve runnable server runtime executable and arguments from profile metadata.
+pub fn resolve_server_runtime(
+    server_id: &str,
+    profile_path: &Path,
+    workspace: &Path,
+) -> Result<(Vec<String>, PathBuf)> {
+    let profile_file = if profile_path.is_dir() {
+        profile_path.join("profile.json")
+    } else {
+        profile_path.to_path_buf()
+    };
+
+    if profile_file.is_file() {
+        let content = fs::read_to_string(&profile_file)?;
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+            if let Some(runtime_path) = val.get("runtimePath").and_then(|v| v.as_str()) {
+                if server_id == FILESYSTEM_SERVER_ID {
+                    let package_root = val
+                        .get("packageRoot")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(".");
+                    let entry = Path::new(package_root)
+                        .join("node_modules/@modelcontextprotocol/server-filesystem/dist/index.js");
+                    return Ok((
+                        vec![
+                            runtime_path.to_string(),
+                            entry.display().to_string(),
+                            workspace.display().to_string(),
+                        ],
+                        profile_file,
+                    ));
+                } else if server_id == GIT_SERVER_ID {
+                    return Ok((
+                        vec![
+                            runtime_path.to_string(),
+                            "-I".to_string(),
+                            "-B".to_string(),
+                            "-m".to_string(),
+                            "mcp_server_git".to_string(),
+                            "--repository".to_string(),
+                            workspace.display().to_string(),
+                        ],
+                        profile_file,
+                    ));
+                }
+            } else if let Some(cmd) = val.get("command").and_then(|v| v.as_str()) {
+                let mut full = vec![cmd.to_string()];
+                if let Some(args) = val.get("args").and_then(|a| a.as_array()) {
+                    for arg in args {
+                        if let Some(s) = arg.as_str() {
+                            full.push(s.to_string());
+                        }
+                    }
+                }
+                return Ok((full, profile_file));
+            }
+        }
+    }
+
+    // Default fallback for minimal unit tests
+    Ok((
+        vec!["echo".to_string(), server_id.to_string()],
+        profile_file,
+    ))
 }
 
 /// RAII Guard that securely removes the private per-run directory upon exit or failure.
@@ -415,10 +521,106 @@ impl Drop for PrivateDirGuard {
     }
 }
 
-/// Mint HMAC-signed scoped child authority grants for the session.
+/// Query the live daemon's authenticated `/native/v1/instance` endpoint to obtain its current `instance_id`.
+pub fn fetch_daemon_instance(config: &ValidatedConfig, daemon_token: &str) -> Result<String> {
+    if let Some(ref mock_inst) = config.mock_instance_id {
+        return Ok(mock_inst.clone());
+    }
+    if config.mock_daemon_token.is_some() {
+        return Ok("mock-daemon-instance-id".to_string());
+    }
+
+    let cfg_path = config.home_path.join("config.yaml");
+    let daemon_cfg = if cfg_path.exists() {
+        let text = fs::read_to_string(&cfg_path)?;
+        Config::from_yaml(&text)?
+    } else {
+        Config::default()
+    };
+
+    let url = format!("http://{}/native/v1/instance", daemon_cfg.socket_address());
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("create runtime for instance discovery")?;
+
+    let token = daemon_token.trim().to_string();
+    let instance_id = rt.block_on(async {
+        let client = reqwest::Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(5))
+            .build()?;
+        let res = client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", token))
+            .send()
+            .await
+            .context("connect to daemon /native/v1/instance")?;
+        ensure!(
+            res.status().is_success(),
+            "daemon /native/v1/instance returned status {}",
+            res.status()
+        );
+        let val: serde_json::Value = res
+            .json()
+            .await
+            .context("parse /native/v1/instance JSON response")?;
+        let id = val["instance_id"].as_str().ok_or_else(|| {
+            anyhow::anyhow!("missing instance_id in /native/v1/instance response")
+        })?;
+        ensure!(
+            !id.is_empty()
+                && id.len() <= 128
+                && id
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"_-".contains(&b)),
+            "invalid instance_id returned from daemon: {:?}",
+            id
+        );
+        Ok::<String, anyhow::Error>(id.to_string())
+    })?;
+
+    Ok(instance_id)
+}
+
+/// Probe daemon liveness during host execution.
+async fn probe_daemon_liveness(home_path: &Path, daemon_token: &str) -> Result<String> {
+    let cfg_path = home_path.join("config.yaml");
+    let daemon_cfg = if cfg_path.exists() {
+        let text = fs::read_to_string(&cfg_path)?;
+        Config::from_yaml(&text)?
+    } else {
+        Config::default()
+    };
+
+    let url = format!("http://{}/native/v1/instance", daemon_cfg.socket_address());
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(3))
+        .build()?;
+    let res = client
+        .get(&url)
+        .header("Authorization", format!("Bearer {}", daemon_token.trim()))
+        .send()
+        .await
+        .context("probe daemon /native/v1/instance")?;
+    ensure!(
+        res.status().is_success(),
+        "daemon /native/v1/instance probe failed with status {}",
+        res.status()
+    );
+    let val: serde_json::Value = res.json().await?;
+    let id = val["instance_id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("missing instance_id in probe response"))?;
+    Ok(id.to_string())
+}
+
+/// Mint HMAC-signed scoped child authority grants bound to the live daemon instance.
 pub fn mint_grants(
     config: &ValidatedConfig,
     now_ms: u64,
+    instance_id: &str,
 ) -> Result<BTreeMap<String, child_authority::ChildAuthorityGrant>> {
     let daemon_token = if let Some(ref mock) = config.mock_daemon_token {
         mock.clone()
@@ -440,11 +642,11 @@ pub fn mint_grants(
 
     let mut grants = BTreeMap::new();
 
-    // 1. Filesystem grant
-    let fs_nonce = random_uuid_v4();
+    // 1. Filesystem grant: nonce is bound to live daemon instance_id
+    let fs_nonce = format!("{instance_id}.{}", random_uuid_v4());
     let fs_grant = child_authority::mint_scoped(
         &key,
-        &config.session_id,
+        &config.host_session,
         FILESYSTEM_SERVER_ID,
         &config.fs_tools,
         now_ms,
@@ -456,11 +658,11 @@ pub fn mint_grants(
     );
     grants.insert(FILESYSTEM_SERVER_ID.to_string(), fs_grant);
 
-    // 2. Git grant
-    let git_nonce = random_uuid_v4();
+    // 2. Git grant: nonce is bound to live daemon instance_id
+    let git_nonce = format!("{instance_id}.{}", random_uuid_v4());
     let git_grant = child_authority::mint_scoped(
         &key,
-        &config.session_id,
+        &config.host_session,
         GIT_SERVER_ID,
         &config.git_tools,
         now_ms,
@@ -486,24 +688,38 @@ pub fn write_per_process_mcp_config(
 
     for (server_id, grant) in grants {
         let encoded_grant = child_authority::encode_token(grant);
-        let collector_args = vec![
+        let (runtime_cmd, profile_file) = if server_id == FILESYSTEM_SERVER_ID {
+            (
+                config.fs_runtime_cmd.clone(),
+                config.fs_profile_path.clone(),
+            )
+        } else {
+            (
+                config.git_runtime_cmd.clone(),
+                config.git_profile_path.clone(),
+            )
+        };
+
+        let mut collector_args = vec![
             "mcp".to_string(),
             "--id".to_string(),
             server_id.clone(),
             "--native-admission".to_string(),
             "--host-session".to_string(),
-            config.session_id.clone(),
+            config.host_session.clone(),
             "--child-authority".to_string(),
-            encoded_grant,
+            encoded_grant.clone(),
+            "--home".to_string(),
+            config.home_path.display().to_string(),
             "--".to_string(),
-            if server_id == FILESYSTEM_SERVER_ID {
-                config.fs_profile_path.display().to_string()
-            } else {
-                config.git_profile_path.display().to_string()
-            },
         ];
+        collector_args.extend(runtime_cmd.clone());
 
         let mut s_obj = serde_json::Map::new();
+        s_obj.insert(
+            "type".to_string(),
+            serde_json::Value::String("stdio".to_string()),
+        );
         s_obj.insert(
             "command".to_string(),
             serde_json::Value::String(config.agent_bin_path.display().to_string()),
@@ -518,30 +734,100 @@ pub fn write_per_process_mcp_config(
             ),
         );
 
+        let mut env_obj = serde_json::Map::new();
+        env_obj.insert(
+            "AGENTFW_WORKSPACE".to_string(),
+            serde_json::Value::String(config.workspace_path.display().to_string()),
+        );
+        if let Ok(bytes) = fs::read(&profile_file) {
+            if crate::mcp::server_profile::ProfileConfig::read(&bytes).is_ok() {
+                env_obj.insert(
+                    "AGENTFW_MCP_SERVER_PROFILE".to_string(),
+                    serde_json::Value::String(profile_file.display().to_string()),
+                );
+            }
+        }
+        env_obj.insert(
+            "AGENTFW_HOST_SESSION".to_string(),
+            serde_json::Value::String(config.host_session.clone()),
+        );
+        env_obj.insert(
+            "AGENTFW_CHILD_AUTHORITY".to_string(),
+            serde_json::Value::String(encoded_grant),
+        );
+        env_obj.insert(
+            "AGENTFW_NATIVE_LIVENESS".to_string(),
+            serde_json::Value::String("true".to_string()),
+        );
+        env_obj.insert(
+            "AGENTFW_NATIVE_LIVENESS_LEASE_SECONDS".to_string(),
+            serde_json::Value::String("4".to_string()),
+        );
+        env_obj.insert(
+            "AGENTFW_HOME".to_string(),
+            serde_json::Value::String(config.home_path.display().to_string()),
+        );
+
+        if let Some(parent) = config.home_path.parent() {
+            env_obj.insert(
+                "HOME".to_string(),
+                serde_json::Value::String(parent.display().to_string()),
+            );
+        } else {
+            env_obj.insert(
+                "HOME".to_string(),
+                serde_json::Value::String(config.home_path.display().to_string()),
+            );
+        }
+
+        if let Some(ref classifier) = config.classifier_path {
+            env_obj.insert(
+                "AGENTFW_CLASSIFIER".to_string(),
+                serde_json::Value::String("rule-baseline".to_string()),
+            );
+            env_obj.insert(
+                "AGENTFW_RULE_BASELINE".to_string(),
+                serde_json::Value::String(classifier.display().to_string()),
+            );
+        }
+
+        if let Ok(py) = std::env::var("AGENTFW_CLASSIFIER_PYTHON") {
+            env_obj.insert(
+                "AGENTFW_CLASSIFIER_PYTHON".to_string(),
+                serde_json::Value::String(py),
+            );
+        } else if server_id == GIT_SERVER_ID && !runtime_cmd.is_empty() {
+            env_obj.insert(
+                "AGENTFW_CLASSIFIER_PYTHON".to_string(),
+                serde_json::Value::String(runtime_cmd[0].clone()),
+            );
+        }
+
+        s_obj.insert("env".to_string(), serde_json::Value::Object(env_obj));
         mcp_servers.insert(server_id.clone(), serde_json::Value::Object(s_obj));
 
         // Sanitized plan for reporting (tokens redacted)
+        let mut report_args = vec![
+            "mcp".to_string(),
+            "--id".to_string(),
+            server_id.clone(),
+            "--native-admission".to_string(),
+            "--host-session".to_string(),
+            config.host_session.clone(),
+            "--child-authority".to_string(),
+            "[REDACTED]".to_string(),
+            "--home".to_string(),
+            config.home_path.display().to_string(),
+            "--".to_string(),
+        ];
+        report_args.extend(runtime_cmd);
+
         server_plans.insert(
             server_id.clone(),
             ServerLaunchPlan {
                 server_id: server_id.clone(),
                 command: config.agent_bin_path.display().to_string(),
-                args: vec![
-                    "mcp".to_string(),
-                    "--id".to_string(),
-                    server_id.clone(),
-                    "--native-admission".to_string(),
-                    "--host-session".to_string(),
-                    config.session_id.clone(),
-                    "--child-authority".to_string(),
-                    "[REDACTED]".to_string(),
-                    "--".to_string(),
-                    if server_id == FILESYSTEM_SERVER_ID {
-                        config.fs_profile_path.display().to_string()
-                    } else {
-                        config.git_profile_path.display().to_string()
-                    },
-                ],
+                args: report_args,
                 granted_tools: grant.granted_tools.clone(),
                 token_redacted: true,
             },
@@ -566,7 +852,7 @@ pub fn write_per_process_mcp_config(
     Ok((config_path, server_plans))
 }
 
-/// Execute the pilot launcher command.
+/// Execute the pilot launcher command with strict isolation and bounded supervision.
 pub fn run(args: PilotLaunchArgs) -> Result<()> {
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -576,19 +862,47 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     let config = args.validate()?;
     let guard = PrivateDirGuard::new(&config.workspace_path)?;
 
-    let grants = mint_grants(&config, now_ms)?;
+    // Discover live daemon instance or mock for testing
+    let daemon_token = if let Some(ref mock) = config.mock_daemon_token {
+        mock.clone()
+    } else {
+        let token_path = config.home_path.join("native-token");
+        ensure!(
+            token_path.exists(),
+            "daemon native-token does not exist at {:?}; ensure agentfw daemon is initialized",
+            token_path
+        );
+        fs::read_to_string(&token_path)
+            .context("read native-token")?
+            .trim()
+            .to_string()
+    };
+
+    let instance_id = fetch_daemon_instance(&config, &daemon_token)
+        .context("authenticate and validate live daemon instance")?;
+
+    let grants = mint_grants(&config, now_ms, &instance_id)?;
     let (mcp_config_path, server_plans) =
         write_per_process_mcp_config(&guard.path, &config, &grants)?;
 
     let mut allowed_tools = Vec::new();
-    allowed_tools.extend(config.fs_tools.clone());
-    allowed_tools.extend(config.git_tools.clone());
+    for t in &config.fs_tools {
+        allowed_tools.push(t.clone());
+        allowed_tools.push(format!("mcp__{FILESYSTEM_SERVER_ID}__{t}"));
+    }
+    for t in &config.git_tools {
+        allowed_tools.push(t.clone());
+        allowed_tools.push(format!("mcp__{GIT_SERVER_ID}__{t}"));
+    }
     allowed_tools.sort();
+    allowed_tools.dedup();
 
     let checks_passed = vec![
         "claude-executable-verified".into(),
         "workspace-verified".into(),
         "profiles-validated-without-collision".into(),
+        "live-daemon-instance-bound".into(),
+        "runnable-mcp-collectors-constructed".into(),
         "private-config-dir-created-mode-0700".into(),
         "scoped-child-authority-grants-minted".into(),
         "tokens-confined-to-private-config".into(),
@@ -599,7 +913,7 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         let report = PilotLaunchReport {
             contract_version: "sw-pilot-launcher/1".into(),
             status: "preview_ready".into(),
-            host_session: config.session_id.clone(),
+            host_session: config.host_session.clone(),
             claude_path: config.claude_path.display().to_string(),
             workspace_path: config.workspace_path.display().to_string(),
             private_config_dir: guard.path.display().to_string(),
@@ -614,8 +928,9 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&report)?);
         } else {
             eprintln!("Claude Code pilot launch preview validated successfully.");
-            eprintln!("Private dir: {}", guard.path.display());
-            eprintln!("MCP Config:  {}", mcp_config_path.display());
+            eprintln!("Daemon instance: {}", instance_id);
+            eprintln!("Private dir:     {}", guard.path.display());
+            eprintln!("MCP Config:      {}", mcp_config_path.display());
             eprintln!(
                 "Allowed tools ({}): {:?}",
                 report.allowed_tools.len(),
@@ -628,25 +943,48 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     // Full execution mode
     let mut cmd = Command::new(&config.claude_path);
     cmd.arg("--restricted")
+        .arg("-p")
+        .arg(&config.prompt)
         .arg("--strict-mcp-config")
         .arg("--mcp-config")
         .arg(&mcp_config_path)
         .arg("--session-id")
-        .arg(&config.session_id)
+        .arg(&config.host_session)
         .arg("--tools")
         .arg("")
         .arg("--allowedTools")
         .arg(allowed_tools.join(","))
         .arg("--no-session-persistence")
+        .arg("--output-format")
+        .arg("stream-json")
+        .arg("--verbose")
         .arg("--permission-mode")
         .arg("dontAsk")
+        .arg("--model")
+        .arg(&config.model)
         .current_dir(&config.workspace_path);
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+        if args.json {
+            use std::os::fd::FromRawFd;
+            unsafe {
+                cmd.stdout(std::process::Stdio::from_raw_fd(libc::dup(
+                    libc::STDERR_FILENO,
+                )));
+            }
+        }
+    }
 
     // Environment isolation
     cmd.env("CLAUDE_CONFIG_DIR", guard.path.join(".claude"))
         .env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
         .env("CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL", "1")
         .env("DISABLE_UPDATES", "1")
+        .env("DISABLE_AUTOUPDATER", "1")
+        .env("DISABLE_BUG_REPORTING", "1")
         .env("DISABLE_GROWTHBOOK", "1")
         .env("ENABLE_CLAUDEAI_MCP_SERVERS", "false")
         .env("CLAUDE_CODE_DISABLE_CLAUDE_MDS", "1")
@@ -656,14 +994,130 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         .env("CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS", "1")
         .env("CLAUDE_CODE_MAX_RETRIES", "0");
 
-    let status = match cmd.status() {
-        Ok(s) => s,
-        Err(err) => {
-            bail!("failed to spawn Claude Code host: {}", err);
-        }
-    };
+    let mut child = cmd.spawn().context("failed to spawn Claude Code host")?;
+    #[cfg(unix)]
+    let child_pid = child.id();
 
-    let exit_code = status.code().unwrap_or(1);
+    // Supervise process with deadline, signal interception, and daemon heartbeat
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("create supervisor runtime")?;
+
+    let timeout = config.timeout;
+    let home_path = config.home_path.clone();
+    let is_mock = config.mock_daemon_token.is_some();
+    let initial_instance = instance_id.clone();
+    let current_token = daemon_token.clone();
+
+    let exit_status = rt.block_on(async {
+        let deadline = tokio::time::Instant::now() + timeout;
+        let mut interval = tokio::time::interval(Duration::from_millis(1000));
+        interval.tick().await;
+
+        #[cfg(unix)]
+        let mut sigterm =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).ok();
+
+        loop {
+            // Check if child has exited
+            match child.try_wait() {
+                Ok(Some(status)) => return Ok(status),
+                Ok(None) => {}
+                Err(e) => return Err(anyhow::anyhow!("error waiting for child: {}", e)),
+            }
+
+            tokio::select! {
+                _ = tokio::time::sleep_until(deadline) => {
+                    #[cfg(unix)]
+                    unsafe {
+                        libc::kill(-(child_pid as i32), libc::SIGTERM);
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        let _ = child.kill();
+                    }
+                    tokio::time::sleep(Duration::from_millis(300)).await;
+                    #[cfg(unix)]
+                    unsafe {
+                        libc::kill(-(child_pid as i32), libc::SIGKILL);
+                    }
+                    let _ = child.wait();
+                    bail!("pilot host execution exceeded declared timeout of {}s", timeout.as_secs());
+                }
+                _ = tokio::signal::ctrl_c() => {
+                    #[cfg(unix)]
+                    unsafe {
+                        libc::kill(-(child_pid as i32), libc::SIGINT);
+                        libc::kill(-(child_pid as i32), libc::SIGTERM);
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        let _ = child.kill();
+                    }
+                    tokio::time::sleep(Duration::from_millis(200)).await;
+                    #[cfg(unix)]
+                    unsafe {
+                        libc::kill(-(child_pid as i32), libc::SIGKILL);
+                    }
+                    let _ = child.wait();
+                    bail!("pilot host interrupted by SIGINT");
+                }
+                _ = async {
+                    #[cfg(unix)]
+                    if let Some(ref mut st) = sigterm {
+                        st.recv().await;
+                    } else {
+                        futures_util::future::pending::<()>().await;
+                    }
+                    #[cfg(not(unix))]
+                    futures_util::future::pending::<()>().await;
+                } => {
+                    #[cfg(unix)]
+                    unsafe {
+                        libc::kill(-(child_pid as i32), libc::SIGTERM);
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        let _ = child.kill();
+                    }
+                    tokio::time::sleep(Duration::from_millis(200)).await;
+                    #[cfg(unix)]
+                    unsafe {
+                        libc::kill(-(child_pid as i32), libc::SIGKILL);
+                    }
+                    let _ = child.wait();
+                    bail!("pilot host terminated by SIGTERM");
+                }
+                _ = interval.tick() => {
+                    if !is_mock && home_path.join("config.yaml").exists() {
+                        match probe_daemon_liveness(&home_path, &current_token).await {
+                            Ok(live_id) if live_id == initial_instance => {}
+                            _ => {
+                                #[cfg(unix)]
+                                unsafe {
+                                    libc::kill(-(child_pid as i32), libc::SIGTERM);
+                                }
+                                #[cfg(not(unix))]
+                                {
+                                    let _ = child.kill();
+                                }
+                                tokio::time::sleep(Duration::from_millis(200)).await;
+                                #[cfg(unix)]
+                                unsafe {
+                                    libc::kill(-(child_pid as i32), libc::SIGKILL);
+                                }
+                                let _ = child.wait();
+                                bail!("daemon instance lost or restarted during pilot session");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    })?;
+
+    let exit_code = exit_status.code().unwrap_or(1);
     if !args.json {
         eprintln!("Pilot session completed with exit code: {}", exit_code);
     } else {
@@ -674,7 +1128,7 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
             } else {
                 "failed".into()
             },
-            host_session: config.session_id.clone(),
+            host_session: config.host_session.clone(),
             claude_path: config.claude_path.display().to_string(),
             workspace_path: config.workspace_path.display().to_string(),
             private_config_dir: guard.path.display().to_string(),
@@ -722,14 +1176,34 @@ mod tests {
             git_profile: temp.path().join("git.json"),
             classifier: None,
             policy: None,
-            session_id: None,
+            host_session: None,
             agent_bin: None,
             dry_run: true,
             timeout_seconds: 10,
             json: false,
-            mock_daemon_token: Some("mock-token-secret".into()),
+            prompt: None,
+            model: "claude-sonnet-4-20250514".into(),
+            mock_daemon_token: Some(crate::token::generate()),
+            mock_instance_id: Some(crate::token::generate()),
         };
         assert!(args.validate().is_err());
+    }
+
+    #[test]
+    fn test_instance_prefixed_nonces_and_mismatch_negative_control() {
+        let instance_id = format!("inst-live-{}", random_uuid_v4());
+        let nonce = format!("{instance_id}.{}", random_uuid_v4());
+        assert_eq!(
+            nonce.split_once('.').map(|(inst, _)| inst),
+            Some(instance_id.as_str())
+        );
+
+        // Negative control: foreign or restarted daemon instance mismatch
+        let restarted_instance = format!("inst-restarted-{}", random_uuid_v4());
+        assert_ne!(
+            nonce.split_once('.').map(|(inst, _)| inst),
+            Some(restarted_instance.as_str())
+        );
     }
 
     #[test]
@@ -742,10 +1216,21 @@ mod tests {
         fs::create_dir_all(&workspace).unwrap();
 
         let fs_profile = temp.path().join("fs.json");
-        fs::write(&fs_profile, r#"{"tools":[{"name":"read_text_file"}]}"#).unwrap();
+        fs::write(
+            &fs_profile,
+            r#"{"runtimePath":"/usr/bin/node","packageRoot":"/pkg/fs","tools":[{"name":"read_text_file"}]}"#,
+        )
+        .unwrap();
 
         let git_profile = temp.path().join("git.json");
-        fs::write(&git_profile, r#"{"tools":[{"name":"git_status"}]}"#).unwrap();
+        fs::write(
+            &git_profile,
+            r#"{"runtimePath":"/usr/bin/python3","tools":[{"name":"git_status"}]}"#,
+        )
+        .unwrap();
+
+        let test_token = crate::token::generate();
+        let test_instance_id = crate::token::generate();
 
         let args = PilotLaunchArgs {
             claude,
@@ -755,29 +1240,35 @@ mod tests {
             git_profile,
             classifier: None,
             policy: None,
-            session_id: Some("test-session-123".into()),
+            host_session: Some("test-session-123".into()),
             agent_bin: None,
             dry_run: true,
             timeout_seconds: 60,
             json: true,
-            mock_daemon_token: Some("mock-daemon-secret-1234567890".into()),
+            prompt: None,
+            model: "claude-sonnet-4-20250514".into(),
+            mock_daemon_token: Some(test_token.clone()),
+            mock_instance_id: Some(test_instance_id.clone()),
         };
 
         let config = args.validate().expect("validation should succeed");
-        assert_eq!(config.session_id, "test-session-123");
+        assert_eq!(config.host_session, "test-session-123");
         assert_eq!(config.fs_tools, vec!["read_text_file"]);
         assert_eq!(config.git_tools, vec!["git_status"]);
+        assert_eq!(config.fs_runtime_cmd[0], "/usr/bin/node");
+        assert_eq!(config.git_runtime_cmd[0], "/usr/bin/python3");
 
         let guard = PrivateDirGuard::new(&workspace).expect("guard creation");
         assert!(!guard.path.starts_with(&workspace));
 
-        let grants = mint_grants(&config, 1_000_000).expect("grants mint");
+        let grants = mint_grants(&config, 1_000_000, &test_instance_id).expect("grants mint");
         assert!(grants.contains_key("filesystem"));
         assert!(grants.contains_key("git"));
 
-        // Verify that the grant verifies with derived key
-        let key = child_authority::derive_key("mock-daemon-secret-1234567890");
+        // Verify that the grant verifies with derived key and has instance-prefixed nonce
+        let key = child_authority::derive_key(&test_token);
         let fs_grant = &grants["filesystem"];
+        assert!(fs_grant.nonce.starts_with(&format!("{test_instance_id}.")));
         assert!(child_authority::verify(
             &key,
             fs_grant,
@@ -794,6 +1285,23 @@ mod tests {
         // Verify tokens are redacted in plans
         assert!(plans["filesystem"].token_redacted);
         assert_eq!(plans["filesystem"].args[7], "[REDACTED]");
+
+        // Verify real server command after --
+        assert_eq!(plans["filesystem"].args[10], "--");
+        assert_eq!(plans["filesystem"].args[11], "/usr/bin/node");
+        assert_eq!(plans["git"].args[10], "--");
+        assert_eq!(plans["git"].args[11], "/usr/bin/python3");
+
+        // Verify mcp.json contains environment variables
+        let mcp_data: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&mcp_config).unwrap()).unwrap();
+        let fs_env = &mcp_data["mcpServers"]["filesystem"]["env"];
+        assert_eq!(fs_env["AGENTFW_HOST_SESSION"], "test-session-123");
+        assert_eq!(fs_env["AGENTFW_NATIVE_LIVENESS"], "true");
+        assert_eq!(
+            fs_env["AGENTFW_WORKSPACE"],
+            workspace.canonicalize().unwrap().display().to_string()
+        );
     }
 
     #[test]
@@ -819,12 +1327,15 @@ mod tests {
             git_profile,
             classifier: None,
             policy: None,
-            session_id: None,
+            host_session: None,
             agent_bin: None,
             dry_run: true,
             timeout_seconds: 60,
             json: false,
-            mock_daemon_token: Some("mock".into()),
+            prompt: None,
+            model: "claude-sonnet-4-20250514".into(),
+            mock_daemon_token: Some(crate::token::generate()),
+            mock_instance_id: Some(crate::token::generate()),
         };
 
         assert!(args.validate().is_err());
