@@ -31,6 +31,11 @@ class Witness(unittest.TestCase):
         trace += '13 <... openat resumed>) = 7\n12 <... execve resumed>) = 0\n'
         self.assertEqual(self.count(trace, "git"), 1)
         self.assertEqual(self.count(trace, "filesystem"), 1)
+        # Padding must not collapse distinct process/thread IDs into one empty
+        # key and attribute a sibling's completion to the target syscall.
+        padded = "\n".join("    " + row for row in trace.splitlines()) + "\n"
+        self.assertEqual(self.count(padded, "git"), 1)
+        self.assertEqual(self.count(padded, "filesystem"), 1)
 
     def test_only_successful_exact_read_counts(self):
         trace = '15 openat(AT_FDCWD, "/workspace/other.txt", O_RDONLY) = 4\n'

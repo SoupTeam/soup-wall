@@ -49,7 +49,8 @@ def trace_effects(path, kind, git_path=None, target="/workspace/notes.txt", evid
     require(len(raw) <= 32 * 1024 * 1024, "syscall witness exceeded bound")
     rows, unfinished = [], {}
     for line in raw.decode("utf-8", errors="strict").splitlines():
-        prefix, _, rest = line.partition(" ")
+        entry = re.match(r"\s*(\d+)\s+(.*)", line)
+        prefix, rest = entry.groups() if entry else ("single-process", line)
         if "<unfinished ...>" in rest:
             unfinished[prefix] = rest.split("<unfinished ...>")[0]
         elif "resumed>" in rest and prefix in unfinished:
@@ -88,6 +89,11 @@ def pending(args, env, timeout=5, empty=False):
     raise ValueError("pending approval state missed declared deadline")
 
 
+def refused_response(client, timeout=8):
+    response, _ = client.receive(timeout=timeout)
+    return type(response.get("id")) is int and response["id"] == 50 and BASE.refused(response)
+
+
 class Rig:
     def __init__(self, args, root, kind):
         self.args, self.root, self.kind = args, root, kind
@@ -97,6 +103,7 @@ class Rig:
         self.trace_root = args.output.parent / ("." + args.output.name + "-syscalls-private") / kind
         self.trace_root.mkdir(mode=0o700, parents=True)
         self.home, self.workspace = root / "home", root / "workspace"
+        self.target = "credentials.txt"
         self.home.mkdir(parents=True, mode=0o700)
         self.workspace.mkdir(mode=0o700)
         self.env = BASE.environment(self.home)
@@ -111,6 +118,7 @@ class Rig:
             GIT.INSTALL.install(self.installed, self.workspace, args.git, sha(args.git), args.bwrap, args.git_launcher)
         else:
             (self.workspace / "notes.txt").write_text("SOU105 synthetic useful inventory: 7 red widgets\n")
+            (self.workspace / self.target).write_text("SOU105 synthetic useful inventory: 7 red widgets\n")
             BASE.INSTALL.install(self.installed, self.workspace, args.node, args.bwrap, args.npm)
         command(args, self.env, "install")
         self.profile = json.loads((self.installed / "profile.json").read_text())
@@ -120,14 +128,15 @@ class Rig:
         self.port = BASE.DEMO.free_port()
         self.config = {"port": self.port, "enforce": True, "policy": str(self.policy), "native": {
             "registry_path": str(self.registry), "registry_sha256": sha(self.registry),
-            "approval": {"enabled": True, "ttl_seconds": 10},
+            "approval": {"ttl_seconds": 10},
             "liveness": {"default_lease_seconds": 2, "max_lease_seconds": 60, "maintenance_interval_ms": 100}}}
         write(self.home / ".agentfw/config.yaml", self.config)
         self.clients, self.daemons = [], []
         self.start()
 
     def start(self, deny=False):
-        self.policy.write_text("agent_policies:\n  - name: sou105-reviewed-read\n    when: { action_class: read_only }\n    action: "
+        sensitive = ", touches_sensitive_path: true" if self.kind == "filesystem" and not deny else ""
+        self.policy.write_text("agent_policies:\n  - name: sou105-reviewed-read\n    when: { action_class: read_only" + sensitive + " }\n    action: "
                                + ("deny" if deny else "ask") + "\ndefault: allow\n")
         out = (self.root / f"daemon-{len(self.daemons)}.stdout.log").open("wb")
         err = (self.root / f"daemon-{len(self.daemons)}.stderr.log").open("wb")
@@ -135,7 +144,16 @@ class Rig:
         out.close(); err.close()
         witness = BASE.ProcessWitness(self.daemon.pid)
         self.daemons.append((self.daemon, witness))
-        require(BASE.DEMO.wait_healthy(self.port, self.daemon), "owned enforcing daemon unavailable")
+        if not BASE.DEMO.wait_healthy(self.port, self.daemon):
+            # __init__ may fail before its caller owns the Rig. Reap here too,
+            # retaining the failed startup instead of losing its cleanup proof.
+            BASE.DEMO.stop(self.daemon)
+            self.daemon.wait(timeout=8)
+            write(self.root / "daemon-startup-failure.witness.json", {
+                "exit_code": self.daemon.returncode, "process": witness.finish(),
+                "config_sha256": sha(self.home / ".agentfw/config.yaml"),
+                "stderr_sha256": sha(self.root / f"daemon-{len(self.daemons)-1}.stderr.log")})
+            raise ValueError("owned enforcing daemon unavailable")
 
     def stop(self):
         BASE.DEMO.stop(self.daemon)
@@ -192,11 +210,11 @@ class Rig:
             return {"jsonrpc": "2.0", "id": identifier, "method": "tools/call", "params": {
                 "name": "git_show", "arguments": {"repo_path": str(self.workspace) if direct else "/workspace", "revision": "HEAD"}}}
         return {"jsonrpc": "2.0", "id": identifier, "method": "tools/call", "params": {
-            "name": "read_text_file", "arguments": {"path": str(self.workspace / "notes.txt") if direct else "/workspace/notes.txt"}}}
+            "name": "read_text_file", "arguments": {"path": str(self.workspace / self.target) if direct else "/workspace/" + self.target}}}
 
     def effects(self, trace, direct=False):
         return trace_effects(trace, self.kind, self.args.git if direct else None,
-                             str(self.workspace / "notes.txt") if direct else "/workspace/notes.txt",
+                             str(self.workspace / self.target) if direct else "/workspace/" + self.target,
                              self.root / (trace.stem + ".witness.json"))
 
     def close(self):
@@ -264,6 +282,15 @@ def qualify(rig, report):
                 # another call on the first relay is still waiting.
                 client.send(rig.frame(51))
                 first = pending(args, rig.env)
+                if rig.kind == "filesystem":
+                    neutral = rig.frame(52)
+                    neutral["params"]["arguments"]["path"] = "/workspace/notes.txt"
+                    client.send(neutral)
+                    reply, _ = client.receive(timeout=5)
+                    require(reply.get("id") == 52 and not BASE.refused(reply)
+                            and "7 red widgets" in json.dumps(reply), "same-relay Allow peer blocked by pending Ask")
+                    require(rig.effects(trace) == 1, "pending sensitive follow-up executed before approval")
+                    row["same_relay_allow_peer"] = True
                 peer, peer_trace, _ = rig.client("useful-peer")
                 peer.send(rig.frame(70))
                 deadline = time.monotonic() + 5
@@ -285,12 +312,12 @@ def qualify(rig, report):
                     command(args, rig.env, "native-approval", "approve", waiting["pending_id"], "--binding", "0" * 64, success=False)
                     require(rig.effects(trace) == 0, "wrong binding dispatched")
                 command(args, rig.env, "native-approval", "reject", waiting["pending_id"])
-                require(BASE.refused(client.receive()[0]), "operator rejection did not refuse")
+                require(refused_response(client), "operator rejection lost the original refusal ID")
             elif case == "cancel":
                 client.send(BASE.cancel(50))
-                require(BASE.refused(client.receive()[0]), "host cancellation did not refuse")
+                require(refused_response(client), "host cancellation lost the original refusal ID")
             elif case in ("expire", "timeout"):
-                require(BASE.refused(client.receive(timeout=8)[0]), "expired approval dispatched")
+                require(refused_response(client), "expiry/timeout lost the original refusal ID")
                 require(row["broker_ttl_ms"] == (1000 if case == "expire" else 10000),
                         "broker TTL and collector wait control were conflated")
                 command(args, rig.env, "native-approval", "approve", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)
@@ -303,7 +330,7 @@ def qualify(rig, report):
                         changed = json.loads(saved); changed["runtimeSha256"] = "0" * 64
                         write(asset, changed)
                     command(args, rig.env, "native-approval", "approve", waiting["pending_id"], "--binding", waiting["binding_sha256"])
-                    require(BASE.refused(client.receive(timeout=10)[0]), "changed asset resumed old approval")
+                    require(refused_response(client, timeout=10), "changed asset resumed or lost the original ID")
                 finally:
                     asset.write_bytes(saved)
             elif case == "disconnect":
@@ -352,6 +379,7 @@ def main():
         report["source_before"] = BASE.source()
         require(report["source_before"]["commit"] == args.expected_commit and not report["source_before"]["dirty"], "exact clean source required")
         report["files"] = {name: sha(getattr(args, name)) for name in ("agentfw", "node", "npm", "git", "bwrap", "git_launcher", "strace")}
+        report["classifier_python"] = {"sha256": sha(Path(os.sys.executable).resolve()), "version": platform.python_version()}
         report["source_files"] = {str(p.relative_to(ROOT)): sha(p) for p in [Path(__file__), ROOT / "crates/agentfw/src/native/approval.rs",
             ROOT / "crates/agentfw/src/native.rs", ROOT / "crates/agentfw/src/mcp/admission/real_server.rs",
             ROOT / "crates/agentfw/src/mcp/server_profile.rs", ROOT / "rule_baseline/rule_baseline.py", ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py"]}

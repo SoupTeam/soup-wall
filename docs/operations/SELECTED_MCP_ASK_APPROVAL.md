@@ -10,7 +10,6 @@ Enable the daemon's existing opt-in settings, retaining the installed registry:
 ```yaml
 native:
   approval:
-    enabled: true
     ttl_seconds: 120
   liveness:
     default_lease_seconds: 10
