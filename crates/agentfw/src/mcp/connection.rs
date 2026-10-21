@@ -1959,7 +1959,10 @@ pub(crate) mod linux {
 
         #[test]
         fn profile_wrapper_persists_only_the_reviewed_launch_settings() {
-            let executable = std::fs::canonicalize("/usr/bin/env").unwrap();
+            // A private single-link copy: the host /usr/bin/env may be a multi-call
+            // binary with many hard links, which the executable rule refuses.
+            let fixture_dir = tempfile::tempdir().unwrap();
+            let executable = trusted_fixture_executable(fixture_dir.path());
             let options = Options {
                 path: PathBuf::from("/tmp/mcp.json"),
                 server: "files".into(),
