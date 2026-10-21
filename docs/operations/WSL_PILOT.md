@@ -70,7 +70,10 @@ refusal witnesses and owned-cleanup requirements remain in force.
 Follow each failed check's `next_step`; rerun using a new output directory
 after correcting the selected environment. Do not enable privileged host
 settings or accept an unconstrained server to turn a failure green.
-No cgroup delegation or resource budget is claimed by this preflight.
+The optional `resource_budgets` observation reports the current cgroup v2
+membership's CPU, memory and PID controllers and writable delegation. Missing
+delegation stays `unavailable`; even available prerequisites do not establish
+enforcement, and `advertised` remains false. This preflight configures no limits.
 Real recovery, signal handling, foreign-process refusal and cleanup still need
 the actual installed run; this increment does not certify those behaviors.
 

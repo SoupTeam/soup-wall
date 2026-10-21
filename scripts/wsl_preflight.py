@@ -60,6 +60,28 @@ def probe(command):
         return "unavailable"
 
 
+def resource_budget_prerequisites():
+    """Observe optional cgroup delegation; never configure or claim active limits."""
+    result = {"status": "unavailable", "advertised": False, "enforcement": "not_measured",
+              "reason": "cgroup_v2_not_observable", "controllers": [], "delegation_writable": False}
+    try:
+        rows = Path("/proc/self/cgroup").read_text().splitlines()
+        membership = next(row[3:] for row in rows if row.startswith("0::"))
+        relative = PurePosixPath(membership)
+        if not relative.is_absolute() or ".." in relative.parts:
+            return result
+        group = Path("/sys/fs/cgroup").joinpath(*relative.parts[1:])
+        controllers = set((group / "cgroup.controllers").read_text().split())
+        result["controllers"] = sorted(controllers & {"cpu", "memory", "pids"})
+        result["delegation_writable"] = os.access(group / "cgroup.subtree_control", os.W_OK)
+        available = {"cpu", "memory", "pids"} <= controllers and result["delegation_writable"]
+        result.update(status="ready" if available else "unavailable",
+                      reason="delegation_observed_limits_unmeasured" if available else "required_delegation_unavailable")
+    except (OSError, StopIteration, ValueError):
+        pass
+    return result
+
+
 def inspect(root, paths=None, *, output=None):
     """paths must already have passed the existing exact-selection validator."""
     report = {
@@ -87,6 +109,7 @@ def inspect(root, paths=None, *, output=None):
         kernel=release[:256], machine=platform.machine())
     if kind != "wsl2":
         return finish()
+    report["resource_budgets"] = resource_budget_prerequisites()
     add("architecture", "ready" if platform.machine() == "x86_64" else "unsupported",
         "linux_x86_64" if platform.machine() == "x86_64" else "architecture_outside_scope",
         "Use the x86-64 runtime covered by the existing installed-pilot harness.")
@@ -158,9 +181,4 @@ def inspect(root, paths=None, *, output=None):
                     "--proc", "/proc", "--dev", "/dev", "/usr/bin/true"])
     add("bubblewrap", status, "bubblewrap_probe_" + status,
         "Use the selected supported bubblewrap executable and an environment permitting its namespaces.")
-    report["resource_budgets"] = {
-        "status": "not_measured",
-        "advertised": False,
-        "reason": "This pilot preflight does not establish cgroup delegation or active resource limits.",
-    }
     return finish()

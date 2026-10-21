@@ -100,6 +100,24 @@ class WslPreflightControls(unittest.TestCase):
                 self.assertNotIn("PRIVATE_VALUE", result.stdout)
                 self.assertNotIn("private-operator-selection", result.stdout)
 
+    def test_optional_budget_observations_never_advertise_enforcement(self):
+        for writable, controllers, expected in (
+            (False, "cpu memory pids", "unavailable"),
+            (True, "cpu pids", "unavailable"),
+            (True, "cpu memory pids", "ready"),
+        ):
+            with patch.object(WSL.Path, "read_text", side_effect=["0::/user.slice\n", controllers]), \
+                 patch.object(WSL.os, "access", return_value=writable):
+                report = WSL.resource_budget_prerequisites()
+            self.assertEqual(report["status"], expected)
+            self.assertFalse(report["advertised"])
+            self.assertEqual(report["enforcement"], "not_measured")
+        for content in ("1:cpu:/legacy\n", "0::/../outside\n"):
+            with patch.object(WSL.Path, "read_text", return_value=content):
+                self.assertEqual(WSL.resource_budget_prerequisites()["status"], "unavailable")
+        with patch.object(WSL.Path, "read_text", side_effect=PermissionError):
+            self.assertEqual(WSL.resource_budget_prerequisites()["status"], "unavailable")
+
 
 if __name__ == "__main__":
     unittest.main()
