@@ -213,6 +213,7 @@ def qualify(args, private, report):
                 "--host-session", session, "--timeout-seconds", "120", "--json"]
             process = subprocess.Popen(command, cwd=private, env=run_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                        start_new_session=True)
+            report["real_host_executed"] = True
             witness = BASE.ProcessWitness(process.pid)
             stdout, stderr = process.communicate(timeout=150)
             # Raw private diagnostics are not promoted (may contain authority).
@@ -241,12 +242,18 @@ def qualify(args, private, report):
             require("tracked.txt" in json.dumps(model.results["toolu_launcher_1"]), "useful_git_status_missing")
             require("INJECTION" in json.dumps(model.results["toolu_launcher_2"]), "untrusted_bytes_missing")
             refusal = model.results["toolu_launcher_3"]
-            require(refusal["is_error"] and "deny-destructive" in json.dumps(refusal), "correlated_policy_refusal_missing")
+            require(refusal["is_error"] and "unsupported in the read-only profile" in json.dumps(refusal),
+                    "correlated_readonly_profile_refusal_missing")
             rows = [json.loads(line) for line in (home / "audit.jsonl").read_bytes().splitlines() if line]
             scoped = [row for row in rows if row.get("host_session") == session]
             denial = [row for row in scoped if row.get("event") == "native_call" and row.get("tool") == "git_reset"]
-            require(len(denial) == 1 and denial[0].get("released") is False
-                    and denial[0].get("verdict") == "deny" and denial[0].get("rule") == "deny-destructive", "native_deny_missing")
+            # The original read-only profile rejects mutations before native
+            # call admission. Preserve that stronger existing boundary; do not
+            # relabel its refusal as a daemon policy evaluation.
+            require(not denial, "unsupported_git_operation_reached_native_call")
+            useful_git = [row for row in scoped if row.get("event") == "native_call"
+                          and row.get("tool") == "git_status" and row.get("released") is True]
+            require(len(useful_git) == 1, "authenticated_useful_git_admission_missing")
             report["dispatch_witness"] = dispatch_witness((private / "dispatch.trace").read_text(), binary)
             require(before == BASE.snapshot(workspace) and head_before == git("rev-parse", "HEAD")
                     and index_before == sha(workspace / ".git/index") and status_before == git("status", "--porcelain=v1"),
@@ -254,7 +261,8 @@ def qualify(args, private, report):
             cleanup = witness.finish()
             require(cleanup["all_stopped"] and cleanup["descendant_count"] >= 4, "owned_descendants_remain")
             report.update(status="pass", real_host_executed=True, host_session=session,
-                model_results=model.results, native_refusal=denial[0], process_cleanup=cleanup,
+                model_results=model.results, native_useful_git_call=useful_git[0], process_cleanup=cleanup,
+                refusal_layer="original read-only profile, before native call admission",
                 observed_host_tools=initializations[0]["tools"],
                 workspace_unchanged=True, index_sha256=index_before, head=head_before,
                 private_config_removed=True, source_after=BASE.source())
@@ -313,6 +321,22 @@ def main():
                                     text = text.replace(secret, "[REDACTED]")
                             text = re.sub(r"[A-Za-z0-9_/-]{80,}={0,2}", "[REDACTED_LONG_VALUE]", text)
                             diagnostics[name] = text
+                    trace = private / "dispatch.trace"
+                    if trace.is_file():
+                        errors = []
+                        for line in trace.read_text(errors="replace").splitlines():
+                            match = re.match(r'^(\d+)\s+write\(2,\s*("(?:[^"\\]|\\.)*")', line)
+                            if match:
+                                try:
+                                    text = ast.literal_eval("b" + match[2]).decode("utf-8", errors="replace")
+                                except (ValueError, SyntaxError):
+                                    continue
+                                for secret in secrets:
+                                    if secret:
+                                        text = text.replace(secret, "[REDACTED]")
+                                text = re.sub(r"[A-Za-z0-9_/-]{80,}={0,2}", "[REDACTED_LONG_VALUE]", text)
+                                errors.append({"pid": int(match[1]), "stderr": text[:4000]})
+                        diagnostics["child_stderr_writes"] = errors[-25:]
                     report["failure_diagnostics"] = diagnostics
     except Exception as error:
         report.update(status="failed", error_type=type(error).__name__)
