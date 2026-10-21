@@ -32,13 +32,95 @@ All inputs are explicit, absolute and link-free. Nothing is discovered.
 | `--host-config`, `--server` | Claude Code JSON file (`0600`) and the existing reviewed `mcpServers` entry |
 | `--port` | Loopback port for the new daemon (default 8787) |
 | `--probe-tool`, `--probe-args` | Optional harmless call that verifies the connected server |
+| `--server-profile`, `--server-profile-sha256` | Optional accepted original-server profile (`profile.json` from the filesystem or Git profile installer); see [below](#original-filesystem-and-git-profiles) |
 | `--report` | New JSON report file; an existing file is never replaced |
 
 The selected server entry must be a stdio command with an absolute, link-free
 executable (use `readlink -f`), string arguments and no environment values.
-Registries that need a server profile or resource executor (for example the
-[filesystem profile](MCP_REAL_FILESYSTEM.md), which uses its own documented
-launch) are refused, because the accepted connection does not configure them.
+A registry that belongs to an original-server profile is refused unless that
+profile is selected with `--server-profile`. Registries that need a resource
+executor remain refused.
+
+## Original filesystem and Git profiles
+
+Two accepted read-only Linux profiles can be onboarded as a persistent connection:
+the original [filesystem server](MCP_REAL_FILESYSTEM.md) (`filesystem-readonly-v1`)
+and the original [Git server](GIT_MCP_PROFILE.md) (`git-readonly-v1`). Install the
+profile first with its accepted installer; onboarding never downloads, builds or
+installs anything. Then select it explicitly. One profile and one selected server
+entry per onboarding; each profile is qualified separately.
+
+| Input | Filesystem profile | Git profile |
+|---|---|---|
+| `--server-profile` | `<install>/profile.json` | `<install>/profile.json` |
+| `--registry`, `--policy` | `<install>/registry.json`, `<install>/policy.yaml` | same |
+| `--classifier-script` | `rule_baseline/rule_baseline.py` | `rule_baseline/git_readonly_v1/rule_baseline.py` |
+| `--workspace` | the workspace the profile was installed for | the synthetic repository the profile was installed for |
+| Selected entry | `command`: the pinned Node runtime; `args`: the installed `server-filesystem` entry point and `/workspace` | `command`: `<install>/package/python/bin/python3.11`; `args`: `-I -B -m mcp_server_git --repository /workspace` |
+
+`--classifier-python` must be the real interpreter path (for example
+`readlink -f /usr/bin/python3`): a regular, single-link executable owned by you or
+root and not writable by group or others, because the connected entry persists it.
+Preview refuses any other interpreter (hosted tool caches are often group-writable);
+onboarding never changes its permissions. Example:
+
+```sh
+agentfw onboard preview <inputs> \
+  --registry /srv/git-profile/registry.json --registry-sha256 <sha256> \
+  --policy /srv/git-profile/policy.yaml --policy-sha256 <sha256> \
+  --server-profile /srv/git-profile/profile.json --server-profile-sha256 <sha256> \
+  --classifier-script /opt/soup-wall/git_readonly_v1/rule_baseline.py --classifier-sha256 <sha256> \
+  --workspace /home/me/synthetic-repo --server git --report ./onboard-preview.json
+```
+
+**Preview** additionally checks, and binds into the plan digest:
+
+| Check | Refused when |
+|---|---|
+| `server_profile` | `profile.json` changed after review, is not an accepted read-only profile, or names another workspace |
+| `profile_registry` | a registry tool carries another profile's result contract, or none carries this one |
+| `profile_runtime` | the pinned runtime, the complete installed package/dependency tree, bubblewrap, Git binaries, ELF libraries or the repository rules differ from the profile (verified with the same code the collector runs at startup) |
+| `sandbox_support` | bubblewrap lacks `--ro-bind-fd`, unprivileged user/PID/mount/network namespaces or seccomp filters are unavailable, or (Git) Landlock ABI 3 is missing |
+| `server` | the selected entry is not the profile's original command and arguments |
+
+The plan digest covers the profile bytes, every runtime pin, the classifier source
+and interpreter digests and every destination. Any change after preview refuses
+apply before anything is changed.
+
+**Apply** adds one owned file, `<home>/onboarding/classifier.py`: a private copy of
+the reviewed classifier, so a later edit of the source cannot change the running
+classifier. `mcp-connection connect` then persists only these launch settings in
+the selected entry, as structured arguments of `/usr/bin/env -i`:
+`AGENTFW_MCP_SERVER_PROFILE`, `AGENTFW_WORKSPACE`, `AGENTFW_CLASSIFIER=rule-baseline`,
+`AGENTFW_RULE_BASELINE` (the owned copy) and `AGENTFW_CLASSIFIER_PYTHON`, besides the
+existing `PATH`, `HOME` and `USERPROFILE`. No other environment is inherited, and no
+setting comes from model or server metadata. The collector starts the original
+server inside its accepted sandbox with that classifier and the daemon policy.
+
+**Verification** keeps configured identity (`protection-status`) separate from
+behavior. After `mcp-connection inspect` attributes the entry and its launch
+settings to this onboarding, onboarding starts the connected entry itself and, in
+one session, requires:
+
+1. the original initialization and discovery, unchanged;
+2. a useful original read: `list_directory` of `/workspace` (filesystem) or
+   `git_status` (Git), or the explicit `--probe-tool` call;
+3. a refused change: `write_file` of a new file, or `git_create_branch`, with an
+   independent witness taken on the host, outside the sandbox: a bounded snapshot
+   of the workspace (including `.git`) is unchanged and the target does not exist;
+4. a useful continuation in the same session.
+
+Only then is the result `verified` (`host_probe.status: verified_profile_witness`,
+details in `profile_witness`, as digests). The isolated self-test still runs; it
+never verifies the selected server by itself, nor do process existence or HTTP
+readiness.
+
+**Recovery and undo** use the same journal. An interrupted apply resumes; the
+published entry always carries the profile launch settings, so a partial
+publication never runs the server outside its profile. If the profile, its
+runtime or the classifier copy changes after apply, `mcp-connection inspect` no
+longer reports the entry `configured`, and the collector refuses to start the
+server. Undo removes the owned classifier copy only with its recorded bytes.
 
 ## 1. Preview (read-only)
 
@@ -166,6 +248,7 @@ Undo reverses the recorded onboarding:
 | Non-empty `audit.jsonl` | kept (`retained`) | removed |
 | File or directory not recorded (for example `grants/operator-notes.txt`) | kept, `conflict` | kept, `conflict` |
 | Recorded file changed since its step | kept, `conflict` | kept, `conflict` |
+| The manifest record of the connection onboarding created (`manifests/<its server id>-<digest>.json`), still a manifest record | removed | removed |
 
 On a conflict undo returns `incomplete` (exit 4), keeps the journal
 (`rollback_conflict`) and reports only a count and the top-level directory names,
@@ -228,14 +311,42 @@ per-step known outputs, audit retention without purge, and an inventory that doe
 
 See the [SOU-69 evidence](evidence/SOU69_ONBOARDING_2026-10-18.md).
 
+### Profile acceptance
+
+`scripts/onboarding-profile-acceptance.py` installs each profile with its accepted
+installer into owned roots outside the checkout and drives the installed Agent:
+
+```sh
+cargo build --locked --release -p agentfw --bins
+python3 scripts/onboarding-profile-acceptance.py --agentfw target/release/agentfw \
+  --node /abs/node-v22.22.0/bin/node --npm /abs/node-v22.22.0/bin/npm \
+  --bwrap /abs/bubblewrap-0.13.1/bwrap --git /abs/git-2.51.2/git --git-sha256 <sha256> \
+  --git-launcher target/release/agentfw-git-sandbox --out target/profile-onboarding-evidence
+```
+
+| Scenario (per profile) | What it shows |
+|---|---|
+| `full_cycle` | calibration: the same original server, unprotected on a scratch copy, reads and performs the change; preview read-only with profile checks; apply `verified`; persisted launch settings are exactly the narrow structured set; the acceptance client independently reads the original result through the entry, sees the change refused with an unchanged workspace and continues; retry re-verifies; undo restores the entry; purge leaves nothing |
+| `changed_after_preview` | a changed dependency file, changed `profile.json` or changed entry after preview refuses apply before any change |
+| `missing_sandbox_support` | in a user namespace that forbids further namespaces, preview refuses `sandbox_support` |
+| `occupied_foreign_port` | an occupied port is a conflict; a listener after preview refuses apply |
+| `operator_edits` | a changed runtime after apply is not `configured` and the entry fails closed; a changed `profile.json` is not `configured`; an edited wrapped entry blocks undo; unrelated operator edits survive undo |
+| `interrupted_and_retry` | SIGINT after publication keeps the profile launch (`configured`) and rerun resumes to `verified`; SIGKILL during the witness recovers; an early interruption is undone without touching the entry |
+
+See the [profile onboarding evidence](evidence/PROFILE_ONBOARDING_2026-10-20.md).
+
 ## Limits
 
 - Linux, local user, no service. Other identity modes and platforms are refused or unsupported.
-- One selected plain native-admission server per onboarding. Profile-launched
-  servers keep their own documented setup.
-- The accepted connection wrapper does not pass classifier settings to the host
-  collector; host calls are admitted by the daemon policy and registry. The
-  classifier is exercised by the isolated self-test.
+- One selected server per onboarding: a plain native-admission server, or the
+  original filesystem or Git server under its accepted read-only profile. No
+  arbitrary server, resource executor, multi-server transaction or shared-host
+  delegation is configured; a scoped two-server host session is a separate launcher.
+- Without a profile, the connection wrapper does not pass classifier settings to
+  the host collector; host calls are admitted by the daemon policy and registry.
+  With a profile, the collector classifies with the owned classifier copy. The
+  rule baselines have known gaps (for example `directory_tree` stays unknown/Ask);
+  they are reported, not relabelled.
 - Undo removes only entries recorded during apply. Runtime files the Agent writes
   later, while you use it, are preserved and reported as a conflict; review and
   remove them, then run undo again.
