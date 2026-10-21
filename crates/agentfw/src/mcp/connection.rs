@@ -1096,9 +1096,13 @@ pub(crate) mod linux {
 
         #[test]
         fn wrapped_argument_limit_is_checked_before_writing() {
-            let (_dir, path) = fixture();
+            let (dir, path) = fixture();
             let config = ConfigFile::read(&path).unwrap();
-            let executable = std::fs::canonicalize("/usr/bin/env").unwrap();
+            // System utilities may be hard-linked (for example by coreutils).
+            // This test needs a private, single-link executable, not host metadata.
+            let executable = dir.path().join("executable");
+            std::fs::copy("/usr/bin/env", &executable).unwrap();
+            std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
             let options = Options {
                 path: path.clone(),
                 server: "local".into(),
@@ -1116,6 +1120,22 @@ pub(crate) mod linux {
             assert!(wrapped(&entry, &options, "test").is_err());
             assert_eq!(std::fs::read(&path).unwrap(), config.bytes);
             assert!(config.state("local").unwrap().is_none());
+        }
+
+        #[test]
+        fn executable_rejects_hard_links_and_writable_permissions() {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("executable");
+            std::fs::copy("/usr/bin/env", &path).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+            assert!(executable(&path).is_ok());
+            let alias = dir.path().join("alias");
+            std::fs::hard_link(&path, &alias).unwrap();
+            assert!(executable(&path).is_err());
+            std::fs::remove_file(alias).unwrap();
+            assert!(executable(&path).is_ok());
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o720)).unwrap();
+            assert!(executable(&path).is_err());
         }
 
         #[test]
