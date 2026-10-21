@@ -81,7 +81,7 @@
     },
     {
       "action": null,
-      "detail": "127.0.0.1:42233 is available for the new Agent",
+      "detail": "127.0.0.1:45867 is available for the new Agent",
       "id": "port",
       "status": "ok"
     },
@@ -121,7 +121,7 @@
     "note": "No Claude Code session was observed by onboarding; only the configured entry, the daemon identity, an explicit probe and the isolated self-test are reported.",
     "other_mcp_servers": "unknown"
   },
-  "duration_ms": 3458,
+  "duration_ms": 3288,
   "exit_code": 0,
   "explanation": "Configured and verified: the daemon identity matches the plan, and through the connected entry the original server answered a useful read, a change was refused with an unchanged workspace witness and a useful continuation followed; the isolated self-test passed. Unobserved host sessions remain unknown.",
   "host_probe": {
@@ -132,11 +132,11 @@
   },
   "inputs": {
     "agent": {
-      "path_digest": "7805acdc8d418f49",
-      "sha256": "5e1ce027da02b9a839e47b50cc81f6eddaf707ca53f178020aef18659801256f"
+      "path_digest": "dc4bb147030672de",
+      "sha256": "089063aecbcfcb5544c2b3072b8b1021a9694196a2808addf702379f54e9e674"
     },
     "agent_home": {
-      "path_digest": "70da2c3a2941a66c"
+      "path_digest": "671861f7c13b4914"
     },
     "classifier": {
       "kind": "rule-baseline",
@@ -146,9 +146,9 @@
     "host_config": {
       "other_server_entries": 1,
       "other_settings": 1,
-      "path_digest": "33f631e6b270b3b8",
-      "selected_entry_sha256": "4ae6648a84ee9937ace273c69f878f3e40cbd70e28eadcaee7461eb8e6d2b3ce",
-      "sha256_at_preview": "49cd0d9b86e052dc31e9e969097890d5f9c78b7b3c364cbe3e527f91e9013d74"
+      "path_digest": "44d6d320c5a9bc94",
+      "selected_entry_sha256": "0dca4378c314f8d6aa6b8180a2082385470624d506a05f22193d818f1d00b285",
+      "sha256_at_preview": "a0a7679c43cd7c8f13fec9b7e95fe00edea5e6cde63749c12e95ed27d89cf796"
     },
     "policy": {
       "expected_daemon_digest": "5b333c2d464dbff3cc482af65daf44a3d54bab6193d48df69f8ddee7a6385f53",
@@ -156,7 +156,7 @@
       "rule_count": 12,
       "source": "reviewed"
     },
-    "port": 42233,
+    "port": 45867,
     "probe": false,
     "registry": {
       "registry_id": "git-readonly-v1",
@@ -170,12 +170,12 @@
       "git_sha256": "aba0506da6f8c5aee0abd3e9f55e1abd95788274812b9f5f33cf69a0a15f8d45",
       "kind": "git",
       "library_count": 29,
-      "package_tree_sha256": "552dd921d804a308512956b7ebe457df7558bed349fd3a3217735319014f5fd1",
+      "package_tree_sha256": "8893d295b1e43517ee9fc733ab6ce8f5473bfe3937a6b19f2f1bb6ffc30c04e6",
       "runtime_sha256": "c65a77ee58142beaace1686dc3b0c9cf362c75c36b5eaf7f3fd87013a44d1c8c",
-      "sha256": "f6f263251d3090cead79cbb07a769fa904169abe4e943d927fe9635894d97e4f"
+      "sha256": "bd721ecec05e44eddfe254f316f7c6323efc329b91370cfd62b3cd223b9683c0"
     },
     "workspace": {
-      "path_digest": "d7eb59bd55b4b1e3"
+      "path_digest": "b1271303754126d0"
     }
   },
   "journal_steps": {
@@ -194,7 +194,7 @@
     "to reverse: agentfw onboard undo with the same Agent, Agent home, host config and server"
   ],
   "operation": "apply",
-  "plan_sha256": "9d87a79b95bc5a0e6a991d08c89238e8f7045fa7391ebd071dfa27261d668a27",
+  "plan_sha256": "3e4913a984a72f9791df21e1efe3123c47ed7205e7b77e14706d810fa7af0bf9",
   "profile": {
     "arch": "x86_64",
     "id": "linux-local-user-mcp-v1",
@@ -227,7 +227,7 @@
   "schema_version": "sw-onboarding/1",
   "self_test": {
     "exit_code": 0,
-    "report_sha256": "08e34d791071835b3cd8e3688b0f95a879812410d1b6f7d26d37bc7846813968",
+    "report_sha256": "03a7c385f83178bdab7a54734ecb3ce442dc6304b85f8c76cacda0b02bd5f3bc",
     "result": "passed",
     "scope": "isolated temporary workspace and daemon; it does not show that the configured host is protected",
     "summary": {
@@ -238,18 +238,18 @@
       "unsupported": 0
     }
   },
-  "started_at_unix_ms": 1792478714873,
+  "started_at_unix_ms": 1792565092647,
   "steps": {
     "self_test": {
-      "elapsed_ms": 1025,
+      "elapsed_ms": 1024,
       "outcome": "done"
     },
     "verify_identity": {
-      "elapsed_ms": 122,
+      "elapsed_ms": 118,
       "outcome": "done"
     },
     "verify_server": {
-      "elapsed_ms": 1859,
+      "elapsed_ms": 1678,
       "outcome": "done"
     }
   }

@@ -74,6 +74,12 @@
       "status": "refused"
     },
     {
+      "action": "pass a system interpreter such as readlink -f /usr/bin/python3, or fix its permissions yourself",
+      "detail": "with a server profile, --classifier-python must be a regular, single-link executable owned by you or root and not writable by group or others (it is persisted in the connected entry)",
+      "id": "classifier_python",
+      "status": "refused"
+    },
+    {
       "action": null,
       "detail": "reviewed stdio entry found; 1 other server entries and 1 other settings will be preserved",
       "id": "server",
@@ -81,7 +87,7 @@
     },
     {
       "action": null,
-      "detail": "127.0.0.1:36651 is available for the new Agent",
+      "detail": "127.0.0.1:43893 is available for the new Agent",
       "id": "port",
       "status": "ok"
     },
@@ -96,11 +102,11 @@
   "explanation": "The plan cannot be applied; resolve the refused or conflicting checks.",
   "inputs": {
     "agent": {
-      "path_digest": "6144a7bb0df9d509",
-      "sha256": "5e1ce027da02b9a839e47b50cc81f6eddaf707ca53f178020aef18659801256f"
+      "path_digest": "9159abc9977bd59a",
+      "sha256": "089063aecbcfcb5544c2b3072b8b1021a9694196a2808addf702379f54e9e674"
     },
     "agent_home": {
-      "path_digest": "5ff4ff3b9ecd773d"
+      "path_digest": "45f264a54c117c5e"
     },
     "classifier": {
       "kind": "rule-baseline",
@@ -110,9 +116,9 @@
     "host_config": {
       "other_server_entries": 1,
       "other_settings": 1,
-      "path_digest": "486233e71c2bfec9",
-      "selected_entry_sha256": "aba18905d21f01d1cb618f4d0265cd69495345eeac00897ef73a6f96cb2c9a7b",
-      "sha256_at_preview": "126996267789728a3b7cc7217b1717ffeea385d83274ec9f6bb1bf5d584ed41d"
+      "path_digest": "25511c876d752d7c",
+      "selected_entry_sha256": "7460eeacc180b2582b4c68fe138abd8bbe0e16563201c21261096c28a958707d",
+      "sha256_at_preview": "1e63b08e05399cf083e58c0f3e738f1ae0377875d65c0f9b15cf4890d9ec4f83"
     },
     "policy": {
       "expected_daemon_digest": "5b333c2d464dbff3cc482af65daf44a3d54bab6193d48df69f8ddee7a6385f53",
@@ -120,7 +126,7 @@
       "rule_count": 12,
       "source": "reviewed"
     },
-    "port": 36651,
+    "port": 43893,
     "probe": false,
     "registry": {
       "registry_id": "git-readonly-v1",
@@ -128,22 +134,23 @@
     },
     "server_profile": {
       "bwrap_sha256": "f56b4f9760efd35d6a5884735aba5c2f578a3473d721d5a0ef710089c356cc62",
-      "classifier_python_sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+      "classifier_python_sha256": "",
       "format": "sw-mcp/git-readonly/1",
       "git_launcher_sha256": "c6016e5c993c855a0a7e90a0827411ddceea80d851bf00d39a9a07f766a8d4d6",
       "git_sha256": "aba0506da6f8c5aee0abd3e9f55e1abd95788274812b9f5f33cf69a0a15f8d45",
       "kind": "git",
       "library_count": 29,
-      "package_tree_sha256": "50f24c97fbf15ddb5a5b7c23e51a13acb85161ff554c49fc9eab2bbf93ee0adc",
+      "package_tree_sha256": "1ed6b342f568518a5f1c0a716047e6f74be996f59115ca3d6b8e7d1feea17f00",
       "runtime_sha256": "c65a77ee58142beaace1686dc3b0c9cf362c75c36b5eaf7f3fd87013a44d1c8c",
-      "sha256": "0bf0063945a1b9e1e710150691ffb6cae79db413945433e2dc51dcddfd75774c"
+      "sha256": "09dc292004d2c7224f951131ccd57f11e73ebd4c6110fccf93feb3868c15acca"
     },
     "workspace": {
-      "path_digest": "b792027fecaa7f4d"
+      "path_digest": "38b1d33afa362281"
     }
   },
   "next_steps": [
-    "run on a Linux host that permits unprivileged user namespaces; no unconfined fallback exists"
+    "run on a Linux host that permits unprivileged user namespaces; no unconfined fallback exists",
+    "pass a system interpreter such as readlink -f /usr/bin/python3, or fix its permissions yourself"
   ],
   "operation": "preview",
   "profile": {
@@ -154,5 +161,5 @@
   },
   "result": "refused",
   "schema_version": "sw-onboarding/1",
-  "started_at_unix_ms": 1792478745696
+  "started_at_unix_ms": 1792565196140
 }

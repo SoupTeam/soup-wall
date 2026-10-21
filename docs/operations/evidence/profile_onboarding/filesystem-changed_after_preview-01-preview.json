@@ -81,7 +81,7 @@
     },
     {
       "action": null,
-      "detail": "127.0.0.1:50117 is available for the new Agent",
+      "detail": "127.0.0.1:39209 is available for the new Agent",
       "id": "port",
       "status": "ok"
     },
@@ -96,11 +96,11 @@
   "explanation": "Review the planned changes; nothing has been changed.",
   "inputs": {
     "agent": {
-      "path_digest": "f6fb5578107b7692",
-      "sha256": "5e1ce027da02b9a839e47b50cc81f6eddaf707ca53f178020aef18659801256f"
+      "path_digest": "47130726ac5423f1",
+      "sha256": "089063aecbcfcb5544c2b3072b8b1021a9694196a2808addf702379f54e9e674"
     },
     "agent_home": {
-      "path_digest": "43fd9356c7c49a22"
+      "path_digest": "b631d8300ad57c3b"
     },
     "classifier": {
       "kind": "rule-baseline",
@@ -110,9 +110,9 @@
     "host_config": {
       "other_server_entries": 1,
       "other_settings": 1,
-      "path_digest": "66d2fc8f2864b22e",
-      "selected_entry_sha256": "e8a08ce9ae84cf9d9a00510eee8036969e5a1213ffa451b7822b212eb00a7148",
-      "sha256_at_preview": "fd41c55d84a7545014e17ceffc452eeafa169eddc01c32e59cf24eea1d047fed"
+      "path_digest": "e4c71b56febb31bf",
+      "selected_entry_sha256": "338698d7dd0bfbae12bc5e98b1b14a87e9fbb44970e7b029eb473c40b981176c",
+      "sha256_at_preview": "7c2be5fd5f64e2194b723970b0bb0b0fff388d9ec5d042d0d7fe5e43cffc8696"
     },
     "policy": {
       "expected_daemon_digest": "188635c6cff1e2bc63934bacae9f5741edf2ec636197b86c6c68f7f8bf124e40",
@@ -120,7 +120,7 @@
       "rule_count": 5,
       "source": "reviewed"
     },
-    "port": 50117,
+    "port": 39209,
     "probe": false,
     "registry": {
       "registry_id": "filesystem-readonly-v1",
@@ -136,17 +136,17 @@
       "library_count": 7,
       "package_tree_sha256": "da0df010dc8f5c78792f37b82e605919e34886a15edcda78e04d824743775043",
       "runtime_sha256": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
-      "sha256": "fae5f132016593a825a742f098cf713547bf8b5d7e2cc3093a85162edd750f79"
+      "sha256": "12c777ab19e6d66d4ae1f1d78a1fd87068f2a0b71f72e0fc4194c709e9486fd6"
     },
     "workspace": {
-      "path_digest": "8b8fe0a13c6a03d6"
+      "path_digest": "69ce222f335ac881"
     }
   },
   "next_steps": [
-    "apply exactly this plan with: agentfw onboard apply <same inputs> --plan-sha256 9ce154886feed9d4ce94c1cc2633c58be6566188804d932375621074303a76cb"
+    "apply exactly this plan with: agentfw onboard apply <same inputs> --plan-sha256 3793852f1d6acbd7cf137881a04ce08bda3de5aa67fdadbdd377ab53498f4f1c"
   ],
   "operation": "preview",
-  "plan_sha256": "9ce154886feed9d4ce94c1cc2633c58be6566188804d932375621074303a76cb",
+  "plan_sha256": "3793852f1d6acbd7cf137881a04ce08bda3de5aa67fdadbdd377ab53498f4f1c",
   "planned_changes": [
     "agent_home",
     "owned_files",
@@ -164,5 +164,5 @@
   },
   "result": "plan_ready",
   "schema_version": "sw-onboarding/1",
-  "started_at_unix_ms": 1792478656959
+  "started_at_unix_ms": 1792565033723
 }

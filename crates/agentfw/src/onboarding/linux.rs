@@ -175,6 +175,7 @@ fn write_journal_file(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 pub(crate) struct Output {
     pub code: Option<i32>,
     pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
     pub timed_out: bool,
 }
 
@@ -184,6 +185,18 @@ impl Output {
     }
     fn json(&self) -> Option<Value> {
         serde_json::from_slice(&self.stdout).ok()
+    }
+    /// The command's own one-line error, only when it carries no path or value:
+    /// a fixed diagnostic is safe to report, anything else is withheld.
+    fn safe_error(&self) -> Option<String> {
+        let text = String::from_utf8_lossy(&self.stderr);
+        let line = text.lines().rev().find(|l| l.starts_with("Error: "))?;
+        let message = line.trim_start_matches("Error: ").trim();
+        (message.len() <= 200
+            && message
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || " ;:,.'()-_".contains(c)))
+        .then(|| message.to_owned())
     }
 }
 
@@ -203,7 +216,7 @@ pub(crate) fn run_agent(
         .env("RUST_BACKTRACE", "0")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .process_group(0);
     if let Some(profile) = profile {
         command.env("HOME", profile).env("USERPROFILE", profile);
@@ -212,6 +225,7 @@ pub(crate) fn run_agent(
         return Output {
             code: None,
             stdout: Vec::new(),
+            stderr: Vec::new(),
             timed_out: false,
         };
     };
@@ -219,6 +233,14 @@ pub(crate) fn run_agent(
     let reader = std::thread::spawn(move || {
         let mut bytes = Vec::new();
         let _ = (&mut stdout).take(4 * 1024 * 1024).read_to_end(&mut bytes);
+        bytes
+    });
+    let mut stderr = child.stderr.take().expect("piped stderr");
+    let errors = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        let _ = (&mut stderr).take(64 * 1024).read_to_end(&mut bytes);
+        // Keep draining so a verbose child never blocks on a full pipe.
+        let _ = std::io::copy(&mut stderr, &mut std::io::sink());
         bytes
     });
     let deadline = Instant::now() + limit;
@@ -241,6 +263,7 @@ pub(crate) fn run_agent(
     Output {
         code: status.and_then(|s| s.code()),
         stdout: reader.join().unwrap_or_default(),
+        stderr: errors.join().unwrap_or_default(),
         timed_out,
     }
 }
@@ -765,8 +788,20 @@ fn check_profile(inputs: &Inputs, checks: &mut Vec<Check>, facts: &mut Facts) {
         Err(reason) => checks.push(refused("sandbox_support", format!("missing Linux sandbox support: {reason}"),
             "run on a Linux host that permits unprivileged user namespaces; no unconfined fallback exists")),
     }
-    match plain_path(&inputs.classifier_python).map(|_| sha256_file(&inputs.classifier_python)) {
-        Ok(Ok(digest)) => facts.classifier_python_sha256 = digest,
+    // The connection persists this interpreter in the selected entry, so it must meet
+    // the same executable rules `mcp-connection` enforces before it writes anything.
+    let python = &inputs.classifier_python;
+    let trusted = std::fs::symlink_metadata(python).is_ok_and(|m| {
+        m.is_file()
+            && m.nlink() == 1
+            && m.mode() & 0o022 == 0
+            && m.mode() & 0o111 != 0
+            && (m.uid() == 0 || m.uid() == euid())
+    });
+    match plain_path(python).map(|_| sha256_file(python)) {
+        Ok(Ok(digest)) if trusted => facts.classifier_python_sha256 = digest,
+        Ok(Ok(_)) => checks.push(refused("classifier_python", "with a server profile, --classifier-python must be a regular, single-link executable owned by you or root and not writable by group or others (it is persisted in the connected entry)",
+            "pass a system interpreter such as readlink -f /usr/bin/python3, or fix its permissions yourself")),
         _ => checks.push(refused("classifier_python", "with a server profile, --classifier-python must be the real interpreter path (no links)",
             "pass the result of readlink -f for the interpreter")),
     }
@@ -1851,8 +1886,11 @@ impl Session<'_> {
             .json()
             .map(|v| v["status"].clone())
             .unwrap_or(Value::Null);
-        self.evidence
-            .insert("connection".into(), json!({"status": status}));
+        self.evidence.insert(
+            "connection".into(),
+            json!({"status": status, "exit_code": output.code, "timed_out": output.timed_out,
+                   "error": output.safe_error()}),
+        );
         if output.ok() && status == "configured" {
             Ok(())
         } else {
@@ -3155,6 +3193,27 @@ mod tests {
         std::fs::remove_file(home.join("manifests").join(&name)).unwrap();
         let (outcome, _) = home_outcome(&run_rollback(&mut journal, &paths, true));
         assert_eq!(outcome, "reversed");
+    }
+
+    #[test]
+    fn only_fixed_command_errors_are_reported() {
+        let output = |stderr: &[u8]| Output {
+            code: Some(1),
+            stdout: Vec::new(),
+            stderr: stderr.to_vec(),
+            timed_out: false,
+        };
+        assert_eq!(
+            output(b"warning\nError: unsafe or unavailable executable\n").safe_error(),
+            Some("unsafe or unavailable executable".into())
+        );
+        // Paths, values and anything unusual are withheld.
+        assert_eq!(
+            output(b"Error: cannot open /home/me/secret\n").safe_error(),
+            None
+        );
+        assert_eq!(output(b"Error: token=abc\n").safe_error(), None);
+        assert_eq!(output(b"no error line").safe_error(), None);
     }
 
     #[test]

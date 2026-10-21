@@ -176,6 +176,30 @@ def text(response):
     return "".join(item.get("text", "") for item in response["result"]["content"])
 
 
+def trusted_interpreter():
+    """A Python the connection may persist: regular, single-link, owned by root or us and
+    not group/other-writable. Hosted tool caches are often group-writable, so prefer the
+    system interpreter and never relax the Agent's rule."""
+    for candidate in ("/usr/bin/python3", sys.executable):
+        path = Path(os.path.realpath(candidate))
+        try:
+            meta = path.lstat()
+        except OSError:
+            continue
+        if (path.is_file() and meta.st_nlink == 1 and meta.st_mode & 0o022 == 0 and meta.st_mode & 0o111
+                and meta.st_uid in (0, os.geteuid())):
+            return path
+    raise RuntimeError("no trusted Python interpreter (regular, single-link, not group/other-writable) is available")
+
+
+def wrapper_environment(entry):
+    """Variable names the wrapper sets before `--`, or None when the entry is not wrapped."""
+    args = entry.get("args", [])
+    if entry.get("command") != "/usr/bin/env" or "--" not in args:
+        return None
+    return [a.split("=", 1)[0] for a in args[:args.index("--")] if "=" in a]
+
+
 def check(results, name, passed, **observed):
     results.append({"check": name, "passed": bool(passed), **observed})
     print(f"  {'PASS' if passed else 'FAIL'}  {name}")
@@ -199,7 +223,7 @@ class Root:
         os.chmod(self.agent, 0o755)
         self.classifier = self.opt / "classifier/rule_baseline.py"
         shutil.copyfile(CLASSIFIERS[kind], self.classifier)
-        self.python = Path(os.path.realpath(sys.executable))
+        self.python = trusted_interpreter()
         self.git_env = {"PATH": "/usr/bin:/bin", "HOME": str(self.root), "GIT_CONFIG_GLOBAL": "/dev/null",
                         "GIT_CONFIG_NOSYSTEM": "1", "GIT_TERMINAL_PROMPT": "0", "LANG": "C.UTF-8"}
         self.options = options
@@ -371,6 +395,8 @@ class Root:
 
     def protected_session(self, nonce):
         entry = self.host_value()["mcpServers"]["selected"]
+        if wrapper_environment(entry) is None:
+            raise RuntimeError("refusing to drive an unwrapped entry (the original server would run unprotected)")
         client = Mcp(entry["command"], entry["args"])
         tool, args = self.useful_call()
         name, mutate, effect = self.refused_call(nonce)
@@ -406,19 +432,25 @@ def scenario_full_cycle(root: Root):
     witness = (report or {}).get("profile_witness", {})
     check(out, "apply_verified_through_selected_profile", code == 0 and report["result"] == "verified"
           and report["host_probe"]["status"] == "verified_profile_witness", result=report and report["result"],
-          witness=witness, steps=report and report.get("steps"))
+          exit_code=code, connection=report and report.get("connection"), witness=witness,
+          steps=report and report.get("steps"))
     check(out, "configured_identity_separate", report and all(report["configured"]["checks"].values()))
     check(out, "agent_witness_original_discovery_refusal_continuation", witness.get("original_discovery") is True
           and witness.get("refusal", {}).get("refused") is True and witness.get("refusal", {}).get("workspace_unchanged") is True
           and witness.get("continuation", {}).get("ok") is True)
     entry = root.host_value()["mcpServers"]["selected"]
-    environment = [a for a in entry["args"][:entry["args"].index("--")] if "=" in a]
-    check(out, "persisted_launch_settings_are_structured_and_narrow", entry["command"] == "/usr/bin/env"
-          and "env" not in entry and [e.split("=", 1)[0] for e in environment] == [
+    variables = wrapper_environment(entry)
+    check(out, "persisted_launch_settings_are_structured_and_narrow", variables == [
               "PATH", "HOME", "USERPROFILE", "AGENTFW_MCP_SERVER_PROFILE", "AGENTFW_WORKSPACE",
               "AGENTFW_CLASSIFIER", "AGENTFW_RULE_BASELINE", "AGENTFW_CLASSIFIER_PYTHON"]
-          and entry["args"][entry["args"].index("--") + 1:] == [root.command, *root.args],
-          variables=[e.split("=", 1)[0] for e in environment])
+          and "env" not in entry and entry["args"][entry["args"].index("--") + 1:] == [root.command, *root.args],
+          variables=variables)
+    if variables is None:
+        # Never drive an unwrapped entry: it would run the original server unprotected.
+        for name in ("independent_useful_original_result", "independent_refusal_witnessed",
+                     "independent_useful_continuation"):
+            check(out, name, False, reason="the selected entry is not wrapped; not driven")
+        return out
     session = root.protected_session("protected")
     first, second = session["first"], session["second"]
     check(out, "independent_useful_original_result", not refused(first) and original_text is not None
@@ -466,6 +498,14 @@ def scenario_changed_after_preview(root: Root):
     check(out, "changed_entry_refused", code == 4 and report["result"] == "refused" and not root.home.exists())
     value["mcpServers"]["selected"] = root.entry
     root.write_host(value)
+    # An interpreter writable by group (as in hosted tool caches) is refused at preview,
+    # before it could be persisted in the connected entry.
+    writable = root.opt / "bin/python3-group-writable"
+    shutil.copyfile(root.python, writable)
+    os.chmod(writable, 0o775)
+    code, report, _ = root.preview("preview-writable-python", **{"--classifier-python": str(writable)})
+    check(out, "group_writable_interpreter_refused", code == 4 and any(
+        c["id"] == "classifier_python" and c["status"] == "refused" for c in report["checks"]))
     check(out, "nothing_changed", root.clean())
     return out
 

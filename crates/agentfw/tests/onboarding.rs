@@ -685,3 +685,30 @@ fn changed_unsupported_or_mismatched_profile_selections_are_refused() {
     assert_eq!(check(&report, "server_profile")["status"], "refused");
     assert!(home.untouched());
 }
+
+#[test]
+fn a_group_writable_interpreter_is_refused_before_it_is_persisted() {
+    let Some(home) = Home::new() else { return };
+    let (profile, registry) = fake_profile(&home, "sw-mcp/filesystem-readonly/1");
+    // Hosted tool caches often install interpreters group-writable.
+    let python = home.root.join("opt/python3");
+    std::fs::copy(&home.python, &python).unwrap();
+    std::fs::set_permissions(&python, std::fs::Permissions::from_mode(0o775)).unwrap();
+    let mut overrides = profile_inputs(&home, &profile, &registry);
+    overrides.retain(|(k, _)| *k != "--classifier-python");
+    overrides.push(("--classifier-python", python.display().to_string()));
+    let (code, report, _) = home.onboard("preview", home.inputs(&overrides), "p.json");
+    let report = report.unwrap();
+    assert_eq!(code, Some(4));
+    assert!(report["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|c| c["id"] == "classifier_python"
+            && c["status"] == "refused"
+            && c["detail"]
+                .as_str()
+                .unwrap()
+                .contains("not writable by group or others")));
+    assert!(home.untouched());
+}

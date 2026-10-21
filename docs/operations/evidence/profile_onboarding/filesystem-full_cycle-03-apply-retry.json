@@ -81,7 +81,7 @@
     },
     {
       "action": null,
-      "detail": "127.0.0.1:53337 is available for the new Agent",
+      "detail": "127.0.0.1:34429 is available for the new Agent",
       "id": "port",
       "status": "ok"
     },
@@ -121,7 +121,7 @@
     "note": "No Claude Code session was observed by onboarding; only the configured entry, the daemon identity, an explicit probe and the isolated self-test are reported.",
     "other_mcp_servers": "unknown"
   },
-  "duration_ms": 2307,
+  "duration_ms": 2253,
   "exit_code": 0,
   "explanation": "Configured and verified: the daemon identity matches the plan, and through the connected entry the original server answered a useful read, a change was refused with an unchanged workspace witness and a useful continuation followed; the isolated self-test passed. Unobserved host sessions remain unknown.",
   "host_probe": {
@@ -132,11 +132,11 @@
   },
   "inputs": {
     "agent": {
-      "path_digest": "8014a5dc7e88bdbd",
-      "sha256": "5e1ce027da02b9a839e47b50cc81f6eddaf707ca53f178020aef18659801256f"
+      "path_digest": "daf6e364d1bdd7b8",
+      "sha256": "089063aecbcfcb5544c2b3072b8b1021a9694196a2808addf702379f54e9e674"
     },
     "agent_home": {
-      "path_digest": "5ee60b119f9be332"
+      "path_digest": "dbb36f993208a5ab"
     },
     "classifier": {
       "kind": "rule-baseline",
@@ -146,9 +146,9 @@
     "host_config": {
       "other_server_entries": 1,
       "other_settings": 1,
-      "path_digest": "891a03ce9d6b8a17",
-      "selected_entry_sha256": "ddf6efe68d945994082d01b4d454374a2104c42ab309c230d63760534daa0143",
-      "sha256_at_preview": "1ebea02b92c380ffc01b6db45b1218b12cadfc1a9a8355d90704ca586903ea49"
+      "path_digest": "f563fe794318332c",
+      "selected_entry_sha256": "565b05180bf86ee86306fc856462200e5ec8793ab215b81676f3202bee0056ce",
+      "sha256_at_preview": "46b77f1ebe7ba16f115539acf2523743732c6ef8fdfcb9f9facfe8033530abb2"
     },
     "policy": {
       "expected_daemon_digest": "188635c6cff1e2bc63934bacae9f5741edf2ec636197b86c6c68f7f8bf124e40",
@@ -156,7 +156,7 @@
       "rule_count": 5,
       "source": "reviewed"
     },
-    "port": 53337,
+    "port": 34429,
     "probe": false,
     "registry": {
       "registry_id": "filesystem-readonly-v1",
@@ -172,10 +172,10 @@
       "library_count": 7,
       "package_tree_sha256": "da0df010dc8f5c78792f37b82e605919e34886a15edcda78e04d824743775043",
       "runtime_sha256": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
-      "sha256": "8d69ada9c4dbfa00b2fe52c7ca8a0d4bc075041d1171f93d365b24a454634e98"
+      "sha256": "46366f7a9508144fbd761215d7b1027dc6354b5c17fa533582c759e4b7f651f2"
     },
     "workspace": {
-      "path_digest": "c44ee316083687a9"
+      "path_digest": "9e9fd9174f09d194"
     }
   },
   "journal_steps": {
@@ -194,7 +194,7 @@
     "to reverse: agentfw onboard undo with the same Agent, Agent home, host config and server"
   ],
   "operation": "apply",
-  "plan_sha256": "ecb906a362809cd84007f5ae672db6878e8bbafab48aeb022e6a71215b0b36c1",
+  "plan_sha256": "734910f7e45c7d84f810f35c19e6af193222248d992b4419e34cff5790ca7654",
   "profile": {
     "arch": "x86_64",
     "id": "linux-local-user-mcp-v1",
@@ -227,7 +227,7 @@
   "schema_version": "sw-onboarding/1",
   "self_test": {
     "exit_code": 0,
-    "report_sha256": "47f7dce001063139379a9994bdfd591ce88c48ef91f2177ae943b5fcd87ab6a4",
+    "report_sha256": "ebce3c772eda960bdc70b767cd49a8aaa66b9e173e641a12debe332b552729ec",
     "result": "passed",
     "scope": "isolated temporary workspace and daemon; it does not show that the configured host is protected",
     "summary": {
@@ -238,18 +238,18 @@
       "unsupported": 0
     }
   },
-  "started_at_unix_ms": 1792478651683,
+  "started_at_unix_ms": 1792565027954,
   "steps": {
     "self_test": {
-      "elapsed_ms": 1026,
+      "elapsed_ms": 1023,
       "outcome": "done"
     },
     "verify_identity": {
-      "elapsed_ms": 123,
+      "elapsed_ms": 121,
       "outcome": "done"
     },
     "verify_server": {
-      "elapsed_ms": 812,
+      "elapsed_ms": 764,
       "outcome": "done"
     }
   }

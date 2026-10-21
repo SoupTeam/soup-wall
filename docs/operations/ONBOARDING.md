@@ -59,7 +59,10 @@ entry per onboarding; each profile is qualified separately.
 | Selected entry | `command`: the pinned Node runtime; `args`: the installed `server-filesystem` entry point and `/workspace` | `command`: `<install>/package/python/bin/python3.11`; `args`: `-I -B -m mcp_server_git --repository /workspace` |
 
 `--classifier-python` must be the real interpreter path (for example
-`readlink -f /usr/bin/python3`). Example:
+`readlink -f /usr/bin/python3`): a regular, single-link executable owned by you or
+root and not writable by group or others, because the connected entry persists it.
+Preview refuses any other interpreter (hosted tool caches are often group-writable);
+onboarding never changes its permissions. Example:
 
 ```sh
 agentfw onboard preview <inputs> \

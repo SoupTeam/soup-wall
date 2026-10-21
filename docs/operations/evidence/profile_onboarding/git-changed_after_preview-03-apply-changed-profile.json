@@ -63,7 +63,7 @@
     },
     {
       "action": null,
-      "detail": "127.0.0.1:55465 is available for the new Agent",
+      "detail": "127.0.0.1:55689 is available for the new Agent",
       "id": "port",
       "status": "ok"
     },
@@ -85,11 +85,11 @@
   "explanation": "Revalidation refused the plan; nothing was changed.",
   "inputs": {
     "agent": {
-      "path_digest": "ce79d650992ad104",
-      "sha256": "5e1ce027da02b9a839e47b50cc81f6eddaf707ca53f178020aef18659801256f"
+      "path_digest": "f1aa88ae6d675f95",
+      "sha256": "089063aecbcfcb5544c2b3072b8b1021a9694196a2808addf702379f54e9e674"
     },
     "agent_home": {
-      "path_digest": "92b39d5b48da0188"
+      "path_digest": "9131e6983eb2f088"
     },
     "classifier": {
       "kind": "rule-baseline",
@@ -99,9 +99,9 @@
     "host_config": {
       "other_server_entries": 1,
       "other_settings": 1,
-      "path_digest": "d58d092518247f27",
-      "selected_entry_sha256": "83f3b4281c51cf411b8298a837a82212e1f549ade0cc467eeb0d30bbaaafb2ed",
-      "sha256_at_preview": "9e01f22ae702ee324c824da3d94b56952382d8f3f50269b10bd39cb1ee316dc9"
+      "path_digest": "c3a556ed39526aaf",
+      "selected_entry_sha256": "fa5699990fd7a9b5f16aba49d63a13b36817c44fd316514081b8942f32427450",
+      "sha256_at_preview": "ccc66ab1ed951e3a46cbc7a6a761b26530aef4c7fc88123c27bfcc758e76458d"
     },
     "policy": {
       "expected_daemon_digest": "5b333c2d464dbff3cc482af65daf44a3d54bab6193d48df69f8ddee7a6385f53",
@@ -109,7 +109,7 @@
       "rule_count": 12,
       "source": "reviewed"
     },
-    "port": 55465,
+    "port": 55689,
     "probe": false,
     "registry": {
       "registry_id": "git-readonly-v1",
@@ -117,7 +117,7 @@
     },
     "server_profile": null,
     "workspace": {
-      "path_digest": "30f76a5817ac4672"
+      "path_digest": "0f9de14bf05f22b2"
     }
   },
   "next_steps": [
@@ -132,5 +132,5 @@
   },
   "result": "refused",
   "schema_version": "sw-onboarding/1",
-  "started_at_unix_ms": 1792478734267
+  "started_at_unix_ms": 1792565173507
 }

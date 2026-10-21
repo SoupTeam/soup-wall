@@ -81,7 +81,7 @@
     },
     {
       "action": "stop that listener, or choose another --port",
-      "detail": "127.0.0.1:32879 already has a listener that this onboarding does not own",
+      "detail": "127.0.0.1:42349 already has a listener that this onboarding does not own",
       "id": "port",
       "status": "conflict"
     },
@@ -103,11 +103,11 @@
   "explanation": "Revalidation refused the plan; nothing was changed.",
   "inputs": {
     "agent": {
-      "path_digest": "fdce0f9c71492833",
-      "sha256": "5e1ce027da02b9a839e47b50cc81f6eddaf707ca53f178020aef18659801256f"
+      "path_digest": "dee446eea0320a6a",
+      "sha256": "089063aecbcfcb5544c2b3072b8b1021a9694196a2808addf702379f54e9e674"
     },
     "agent_home": {
-      "path_digest": "978e359037fd85b1"
+      "path_digest": "a5ee03cf9f572ab5"
     },
     "classifier": {
       "kind": "rule-baseline",
@@ -117,9 +117,9 @@
     "host_config": {
       "other_server_entries": 1,
       "other_settings": 1,
-      "path_digest": "f1ed33c73975e702",
-      "selected_entry_sha256": "70be1331002b0ab8b10341b8728ff7e0d62917ac42aa8a60ef5a61adc257fe8a",
-      "sha256_at_preview": "67a092c9466b0ecfddd49c5112520abe7a2b705b58a20eb36dbaa4cfad6a549b"
+      "path_digest": "9b4f908c216d5003",
+      "selected_entry_sha256": "d749bada9f2c2235bbae186c6878bead27dc25b03512d6687261dbe1cf6e1a95",
+      "sha256_at_preview": "773206b0e9770415a51c6571449322543a90e51edda992a83fa63cd683f7a1ee"
     },
     "policy": {
       "expected_daemon_digest": "5b333c2d464dbff3cc482af65daf44a3d54bab6193d48df69f8ddee7a6385f53",
@@ -127,7 +127,7 @@
       "rule_count": 12,
       "source": "reviewed"
     },
-    "port": 32879,
+    "port": 42349,
     "probe": false,
     "registry": {
       "registry_id": "git-readonly-v1",
@@ -141,12 +141,12 @@
       "git_sha256": "aba0506da6f8c5aee0abd3e9f55e1abd95788274812b9f5f33cf69a0a15f8d45",
       "kind": "git",
       "library_count": 29,
-      "package_tree_sha256": "519d1cd3bdd9eafbfad818a2148157b4593fb786804b999ad65b146c86c6d130",
+      "package_tree_sha256": "e38f539e3c934e25b48b0db13120ef5ebe24294b89874278cda4b25f0ddc691d",
       "runtime_sha256": "c65a77ee58142beaace1686dc3b0c9cf362c75c36b5eaf7f3fd87013a44d1c8c",
-      "sha256": "0afbd869b8429cdf62dae27c32153ad12bfe6e231381bf1d795f405edc85d25b"
+      "sha256": "2924eec24bebc8e4b3b530047691d950277e8c47fb63c218ac34b12368cca00f"
     },
     "workspace": {
-      "path_digest": "5faf5fb13c5cc636"
+      "path_digest": "a8362dc2a9bf77c1"
     }
   },
   "next_steps": [
@@ -161,5 +161,5 @@
   },
   "result": "refused",
   "schema_version": "sw-onboarding/1",
-  "started_at_unix_ms": 1792478758178
+  "started_at_unix_ms": 1792565209189
 }

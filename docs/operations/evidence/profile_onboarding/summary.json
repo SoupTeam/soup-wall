@@ -1,17 +1,17 @@
 {
   "schema": "sw-onboarding-profile-acceptance/1",
   "source": {
-    "commit": "b8e6080581c69d830a2fb29d1d7576d37300994f",
+    "commit": "4a28be0b47a69c658c3e388484d442794165ca01",
     "tree_clean": true,
     "files": {
-      "crates/agentfw/src/onboarding/linux.rs": "e52d8657d2004aed5dead3421e019a1950df11e1f61f783e31790a94e72b2469",
+      "crates/agentfw/src/onboarding/linux.rs": "296354104e6aee3265a1f1ce5752c37c757bdd4f05c29030805a28aaa891e4c7",
       "crates/agentfw/src/onboarding/mod.rs": "e872d44cdb4be7666107774a87d04bc774dcb2695d8d1f9e66215402adc504d2",
-      "crates/agentfw/src/mcp/connection.rs": "1d9f6a0c305e4424246ec114bcf8638cb4057819c112b5470a3be25858ee8270",
+      "crates/agentfw/src/mcp/connection.rs": "7318896b307e8812ad6a075f1bf65e5da8c82a9eb3af5e0d2002bbf01e036b2b",
       "crates/agentfw/src/mcp/server_sandbox.rs": "ff6c9e304affe9d17d1490107a45f113c15446f4ec64c580fc095931a654dd7f",
-      "scripts/onboarding-profile-acceptance.py": "bf3529390066cb99872c8d6de479f42350a29b1553cb22ee92ec884e27d63549"
+      "scripts/onboarding-profile-acceptance.py": "993a7762179a1e9f6c198c7c0a6b7141e64256b54015ead95436df6638c3167e"
     }
   },
-  "agentfw_sha256": "5e1ce027da02b9a839e47b50cc81f6eddaf707ca53f178020aef18659801256f",
+  "agentfw_sha256": "089063aecbcfcb5544c2b3072b8b1021a9694196a2808addf702379f54e9e674",
   "bwrap_sha256": "f56b4f9760efd35d6a5884735aba5c2f578a3473d721d5a0ef710089c356cc62",
   "outside_source_checkout": true,
   "uid_is_root": false,
@@ -45,7 +45,7 @@
                 "library_count": 7,
                 "package_tree_sha256": "da0df010dc8f5c78792f37b82e605919e34886a15edcda78e04d824743775043",
                 "runtime_sha256": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
-                "sha256": "8d69ada9c4dbfa00b2fe52c7ca8a0d4bc075041d1171f93d365b24a454634e98"
+                "sha256": "46366f7a9508144fbd761215d7b1027dc6354b5c17fa533582c759e4b7f651f2"
               }
             },
             {
@@ -56,6 +56,13 @@
               "check": "apply_verified_through_selected_profile",
               "passed": true,
               "result": "verified",
+              "exit_code": 0,
+              "connection": {
+                "error": null,
+                "exit_code": 0,
+                "status": "configured",
+                "timed_out": false
+              },
               "witness": {
                 "continuation": {
                   "ok": true,
@@ -79,7 +86,7 @@
               },
               "steps": {
                 "connect_server": {
-                  "elapsed_ms": 422,
+                  "elapsed_ms": 327,
                   "outcome": "done"
                 },
                 "create_agent_home": {
@@ -87,7 +94,7 @@
                   "outcome": "done"
                 },
                 "create_token": {
-                  "elapsed_ms": 50,
+                  "elapsed_ms": 3,
                   "outcome": "done"
                 },
                 "lifecycle_install": {
@@ -95,23 +102,23 @@
                   "outcome": "done"
                 },
                 "lifecycle_start": {
-                  "elapsed_ms": 272,
+                  "elapsed_ms": 267,
                   "outcome": "done"
                 },
                 "self_test": {
-                  "elapsed_ms": 1027,
+                  "elapsed_ms": 972,
                   "outcome": "done"
                 },
                 "verify_identity": {
-                  "elapsed_ms": 124,
+                  "elapsed_ms": 120,
                   "outcome": "done"
                 },
                 "verify_server": {
-                  "elapsed_ms": 863,
+                  "elapsed_ms": 681,
                   "outcome": "done"
                 },
                 "write_owned_files": {
-                  "elapsed_ms": 1,
+                  "elapsed_ms": 2,
                   "outcome": "done"
                 }
               }
@@ -181,7 +188,7 @@
             "04-undo.json",
             "05-undo-purge.json"
           ],
-          "duration_s": 9.9
+          "duration_s": 9.6
         },
         {
           "scenario": "changed_after_preview",
@@ -200,6 +207,10 @@
               "passed": true
             },
             {
+              "check": "group_writable_interpreter_refused",
+              "passed": true
+            },
+            {
               "check": "nothing_changed",
               "passed": true
             },
@@ -212,9 +223,10 @@
             "01-preview.json",
             "02-apply-changed-runtime.json",
             "03-apply-changed-profile.json",
-            "04-apply-changed-entry.json"
+            "04-apply-changed-entry.json",
+            "05-preview-writable-python.json"
           ],
-          "duration_s": 3.7
+          "duration_s": 4.6
         },
         {
           "scenario": "missing_sandbox_support",
@@ -241,7 +253,7 @@
           "reports": [
             "01-preview-no-userns.json"
           ],
-          "duration_s": 3.1
+          "duration_s": 3.6
         },
         {
           "scenario": "occupied_foreign_port",
@@ -363,11 +375,11 @@
             "08-apply-interrupted-early.json",
             "09-undo-partial.json"
           ],
-          "duration_s": 12.5
+          "duration_s": 12.8
         }
       ],
       "installation": {
-        "profile_sha256": "8d69ada9c4dbfa00b2fe52c7ca8a0d4bc075041d1171f93d365b24a454634e98",
+        "profile_sha256": "46366f7a9508144fbd761215d7b1027dc6354b5c17fa533582c759e4b7f651f2",
         "registry_sha256": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7",
         "policy_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
         "git_version": null,
@@ -403,9 +415,9 @@
                 "git_sha256": "aba0506da6f8c5aee0abd3e9f55e1abd95788274812b9f5f33cf69a0a15f8d45",
                 "kind": "git",
                 "library_count": 29,
-                "package_tree_sha256": "552dd921d804a308512956b7ebe457df7558bed349fd3a3217735319014f5fd1",
+                "package_tree_sha256": "8893d295b1e43517ee9fc733ab6ce8f5473bfe3937a6b19f2f1bb6ffc30c04e6",
                 "runtime_sha256": "c65a77ee58142beaace1686dc3b0c9cf362c75c36b5eaf7f3fd87013a44d1c8c",
-                "sha256": "f6f263251d3090cead79cbb07a769fa904169abe4e943d927fe9635894d97e4f"
+                "sha256": "bd721ecec05e44eddfe254f316f7c6323efc329b91370cfd62b3cd223b9683c0"
               }
             },
             {
@@ -416,6 +428,13 @@
               "check": "apply_verified_through_selected_profile",
               "passed": true,
               "result": "verified",
+              "exit_code": 0,
+              "connection": {
+                "error": null,
+                "exit_code": 0,
+                "status": "configured",
+                "timed_out": false
+              },
               "witness": {
                 "continuation": {
                   "ok": true,
@@ -439,7 +458,7 @@
               },
               "steps": {
                 "connect_server": {
-                  "elapsed_ms": 375,
+                  "elapsed_ms": 373,
                   "outcome": "done"
                 },
                 "create_agent_home": {
@@ -447,31 +466,31 @@
                   "outcome": "done"
                 },
                 "create_token": {
-                  "elapsed_ms": 50,
+                  "elapsed_ms": 51,
                   "outcome": "done"
                 },
                 "lifecycle_install": {
-                  "elapsed_ms": 151,
+                  "elapsed_ms": 152,
                   "outcome": "done"
                 },
                 "lifecycle_start": {
-                  "elapsed_ms": 272,
+                  "elapsed_ms": 277,
                   "outcome": "done"
                 },
                 "self_test": {
-                  "elapsed_ms": 1074,
+                  "elapsed_ms": 1075,
                   "outcome": "done"
                 },
                 "verify_identity": {
-                  "elapsed_ms": 121,
+                  "elapsed_ms": 125,
                   "outcome": "done"
                 },
                 "verify_server": {
-                  "elapsed_ms": 2012,
+                  "elapsed_ms": 2057,
                   "outcome": "done"
                 },
                 "write_owned_files": {
-                  "elapsed_ms": 1,
+                  "elapsed_ms": 3,
                   "outcome": "done"
                 }
               }
@@ -541,7 +560,7 @@
             "04-undo.json",
             "05-undo-purge.json"
           ],
-          "duration_s": 33.0
+          "duration_s": 32.7
         },
         {
           "scenario": "changed_after_preview",
@@ -560,6 +579,10 @@
               "passed": true
             },
             {
+              "check": "group_writable_interpreter_refused",
+              "passed": true
+            },
+            {
               "check": "nothing_changed",
               "passed": true
             },
@@ -572,9 +595,10 @@
             "01-preview.json",
             "02-apply-changed-runtime.json",
             "03-apply-changed-profile.json",
-            "04-apply-changed-entry.json"
+            "04-apply-changed-entry.json",
+            "05-preview-writable-python.json"
           ],
-          "duration_s": 16.3
+          "duration_s": 78.2
         },
         {
           "scenario": "missing_sandbox_support",
@@ -601,7 +625,7 @@
           "reports": [
             "01-preview-no-userns.json"
           ],
-          "duration_s": 11.3
+          "duration_s": 22.1
         },
         {
           "scenario": "occupied_foreign_port",
@@ -629,7 +653,7 @@
             "02-preview.json",
             "03-apply-after-listener.json"
           ],
-          "duration_s": 12.6
+          "duration_s": 13.3
         },
         {
           "scenario": "operator_edits",
@@ -676,7 +700,7 @@
             "03-undo-conflict.json",
             "04-undo-purge.json"
           ],
-          "duration_s": 28.1
+          "duration_s": 86.1
         },
         {
           "scenario": "interrupted_and_retry",
@@ -723,17 +747,17 @@
             "08-apply-interrupted-early.json",
             "09-undo-partial.json"
           ],
-          "duration_s": 24.6
+          "duration_s": 25.7
         }
       ],
       "installation": {
-        "profile_sha256": "f6f263251d3090cead79cbb07a769fa904169abe4e943d927fe9635894d97e4f",
+        "profile_sha256": "bd721ecec05e44eddfe254f316f7c6323efc329b91370cfd62b3cd223b9683c0",
         "registry_sha256": "5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385",
         "policy_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
         "git_version": "git version 2.51.2",
         "bwrap_version": "bubblewrap 0.13.1",
         "runtime_sha256": "c65a77ee58142beaace1686dc3b0c9cf362c75c36b5eaf7f3fd87013a44d1c8c",
-        "package_tree_sha256": "552dd921d804a308512956b7ebe457df7558bed349fd3a3217735319014f5fd1"
+        "package_tree_sha256": "8893d295b1e43517ee9fc733ab6ce8f5473bfe3937a6b19f2f1bb6ffc30c04e6"
       }
     }
   ],
@@ -741,5 +765,5 @@
     "owned_roots_removed": true
   },
   "passed": true,
-  "duration_s": 174.4
+  "duration_s": 309.5
 }

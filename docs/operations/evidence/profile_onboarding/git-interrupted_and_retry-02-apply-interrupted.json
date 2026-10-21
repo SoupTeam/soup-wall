@@ -81,7 +81,7 @@
     },
     {
       "action": null,
-      "detail": "127.0.0.1:57331 is available for the new Agent",
+      "detail": "127.0.0.1:37273 is available for the new Agent",
       "id": "port",
       "status": "ok"
     },
@@ -115,7 +115,10 @@
     }
   },
   "connection": {
-    "status": "configured"
+    "error": null,
+    "exit_code": 0,
+    "status": "configured",
+    "timed_out": false
   },
   "coverage": {
     "claude_hooks": "unknown",
@@ -124,7 +127,7 @@
     "note": "No Claude Code session was observed by onboarding; only the configured entry, the daemon identity, an explicit probe and the isolated self-test are reported.",
     "other_mcp_servers": "unknown"
   },
-  "duration_ms": 3497,
+  "duration_ms": 3240,
   "exit_code": 4,
   "explanation": "Interrupted before self_test; completed steps are journaled and nothing was rolled back.",
   "host_probe": {
@@ -135,11 +138,11 @@
   },
   "inputs": {
     "agent": {
-      "path_digest": "09b3408acad42683",
-      "sha256": "5e1ce027da02b9a839e47b50cc81f6eddaf707ca53f178020aef18659801256f"
+      "path_digest": "4174663e4df2a199",
+      "sha256": "089063aecbcfcb5544c2b3072b8b1021a9694196a2808addf702379f54e9e674"
     },
     "agent_home": {
-      "path_digest": "e13a322dfacd2cd1"
+      "path_digest": "e1c57e7f41891a7e"
     },
     "classifier": {
       "kind": "rule-baseline",
@@ -149,9 +152,9 @@
     "host_config": {
       "other_server_entries": 1,
       "other_settings": 1,
-      "path_digest": "4b0ba3a0dc77375f",
-      "selected_entry_sha256": "f70181e59b87e203bd3cdbf78c01a82e1b8eaf8f9526f8de683f9e4a80cf12ef",
-      "sha256_at_preview": "8d59eaea9f1753e66a9aad254eaad03e277e5569c44822fb53b69c23efb47866"
+      "path_digest": "9d07294ad634fe81",
+      "selected_entry_sha256": "8ceb6e938073547819deaad5cb70f4397b571df741e4860d60f20f709f02b34a",
+      "sha256_at_preview": "8818b1d76a7531734005f95a72952b2fbb06eea778c611ac57858d8508dac2bf"
     },
     "policy": {
       "expected_daemon_digest": "5b333c2d464dbff3cc482af65daf44a3d54bab6193d48df69f8ddee7a6385f53",
@@ -159,7 +162,7 @@
       "rule_count": 12,
       "source": "reviewed"
     },
-    "port": 57331,
+    "port": 37273,
     "probe": false,
     "registry": {
       "registry_id": "git-readonly-v1",
@@ -173,12 +176,12 @@
       "git_sha256": "aba0506da6f8c5aee0abd3e9f55e1abd95788274812b9f5f33cf69a0a15f8d45",
       "kind": "git",
       "library_count": 29,
-      "package_tree_sha256": "886fd05fd1e022b259c1ed551576c2b37305acb967177a83471502f37253006a",
+      "package_tree_sha256": "e5fa7a6eb7d68ef525063a8011ad4137cacde3ea98d02b5f780f7c4fb30906f2",
       "runtime_sha256": "c65a77ee58142beaace1686dc3b0c9cf362c75c36b5eaf7f3fd87013a44d1c8c",
-      "sha256": "89a7095f90ac829addc828eec6ee3cfd1ce916021101d06e9df07d1b5cae7f7d"
+      "sha256": "b3b7b12222bc36ddc6da060edf3536b060f3538ff1c60eaf91cd07d3048deea9"
     },
     "workspace": {
-      "path_digest": "fd091b66e5c1cf9e"
+      "path_digest": "778f75e8e1a3f93e"
     }
   },
   "journal_steps": {
@@ -196,7 +199,7 @@
     "or run `agentfw onboard undo` to reverse the recorded changes"
   ],
   "operation": "apply",
-  "plan_sha256": "04203ba3166944bd3c1abf9b610bbcbe8a2d4fcdb75eb89cb9d5c2645b977962",
+  "plan_sha256": "68b20d519bf7632e4aa5cbf39be25718725691f32f3096bb62c43ad18c672db1",
   "profile": {
     "arch": "x86_64",
     "id": "linux-local-user-mcp-v1",
@@ -227,10 +230,10 @@
   "result": "incomplete",
   "resumed": false,
   "schema_version": "sw-onboarding/1",
-  "started_at_unix_ms": 1792478798132,
+  "started_at_unix_ms": 1792565309284,
   "steps": {
     "connect_server": {
-      "elapsed_ms": 325,
+      "elapsed_ms": 373,
       "outcome": "done"
     },
     "create_agent_home": {
@@ -246,15 +249,15 @@
       "outcome": "done"
     },
     "lifecycle_start": {
-      "elapsed_ms": 272,
+      "elapsed_ms": 273,
       "outcome": "done"
     },
     "verify_identity": {
-      "elapsed_ms": 122,
+      "elapsed_ms": 116,
       "outcome": "done"
     },
     "verify_server": {
-      "elapsed_ms": 2056,
+      "elapsed_ms": 1816,
       "outcome": "done"
     },
     "write_owned_files": {

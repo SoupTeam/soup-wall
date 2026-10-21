@@ -63,7 +63,7 @@
     },
     {
       "action": null,
-      "detail": "127.0.0.1:50117 is available for the new Agent",
+      "detail": "127.0.0.1:39209 is available for the new Agent",
       "id": "port",
       "status": "ok"
     },
@@ -85,11 +85,11 @@
   "explanation": "Revalidation refused the plan; nothing was changed.",
   "inputs": {
     "agent": {
-      "path_digest": "f6fb5578107b7692",
-      "sha256": "5e1ce027da02b9a839e47b50cc81f6eddaf707ca53f178020aef18659801256f"
+      "path_digest": "47130726ac5423f1",
+      "sha256": "089063aecbcfcb5544c2b3072b8b1021a9694196a2808addf702379f54e9e674"
     },
     "agent_home": {
-      "path_digest": "43fd9356c7c49a22"
+      "path_digest": "b631d8300ad57c3b"
     },
     "classifier": {
       "kind": "rule-baseline",
@@ -99,9 +99,9 @@
     "host_config": {
       "other_server_entries": 1,
       "other_settings": 1,
-      "path_digest": "66d2fc8f2864b22e",
-      "selected_entry_sha256": "e8a08ce9ae84cf9d9a00510eee8036969e5a1213ffa451b7822b212eb00a7148",
-      "sha256_at_preview": "fd41c55d84a7545014e17ceffc452eeafa169eddc01c32e59cf24eea1d047fed"
+      "path_digest": "e4c71b56febb31bf",
+      "selected_entry_sha256": "338698d7dd0bfbae12bc5e98b1b14a87e9fbb44970e7b029eb473c40b981176c",
+      "sha256_at_preview": "7c2be5fd5f64e2194b723970b0bb0b0fff388d9ec5d042d0d7fe5e43cffc8696"
     },
     "policy": {
       "expected_daemon_digest": "188635c6cff1e2bc63934bacae9f5741edf2ec636197b86c6c68f7f8bf124e40",
@@ -109,7 +109,7 @@
       "rule_count": 5,
       "source": "reviewed"
     },
-    "port": 50117,
+    "port": 39209,
     "probe": false,
     "registry": {
       "registry_id": "filesystem-readonly-v1",
@@ -117,7 +117,7 @@
     },
     "server_profile": null,
     "workspace": {
-      "path_digest": "8b8fe0a13c6a03d6"
+      "path_digest": "69ce222f335ac881"
     }
   },
   "next_steps": [
@@ -132,5 +132,5 @@
   },
   "result": "refused",
   "schema_version": "sw-onboarding/1",
-  "started_at_unix_ms": 1792478657499
+  "started_at_unix_ms": 1792565034268
 }
