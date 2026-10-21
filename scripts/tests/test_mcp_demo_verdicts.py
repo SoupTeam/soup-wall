@@ -34,6 +34,71 @@ class DemoVerdicts(unittest.TestCase):
                 self.assertFalse(DEMO.wait_healthy(12345, process))
                 opener.return_value.open.assert_not_called()
 
+    def test_startup_wait_does_not_accept_another_listeners_health(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "daemon.log"
+            log.write_text(json.dumps({"target": "agentfw", "fields": {
+                "message": "agentfw listening (ENFORCING)", "addr": "127.0.0.1:54321"}}) + "\n")
+            with patch.object(DEMO.urllib.request, "build_opener") as opener, \
+                    patch.object(DEMO.time, "monotonic", side_effect=[0, 0, 1]), \
+                    patch.object(DEMO.time, "sleep"):
+                self.assertFalse(DEMO.wait_healthy(12345, Mock(poll=lambda: None),
+                                                   timeout=1, startup_log=log))
+            opener.return_value.open.assert_not_called()
+
+    def test_startup_wait_accepts_health_after_owned_bind(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "daemon.log"
+            log.write_text(json.dumps({"target": "agentfw", "fields": {
+                "message": "agentfw listening (ENFORCING)", "addr": "127.0.0.1:12345"}}) + "\n")
+            with patch.object(DEMO.urllib.request, "build_opener") as opener, \
+                    patch.object(DEMO.time, "monotonic", side_effect=[0, 0]):
+                self.assertTrue(DEMO.wait_healthy(12345, Mock(poll=lambda: None),
+                                                  startup_log=log))
+            opener.return_value.open.assert_called_once()
+
+    def test_bind_retry_refuses_non_bind_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            (workspace / "daemon.log").write_bytes(b"Error: invalid registry\n")
+            self.assertFalse(DEMO.bind_collision(workspace, Mock(poll=lambda: 1)))
+            (workspace / "daemon.log").write_bytes(b"Error: Address already in use (os error 98)\n")
+            self.assertFalse(DEMO.bind_collision(workspace, Mock(poll=lambda: None)))
+
+    def test_owned_bind_collision_reallocates_port_before_yielding_stack(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory) / "workspace"
+            failed = Mock(poll=Mock(return_value=1))
+            owned = Mock(poll=Mock(return_value=None))
+            processes = iter((failed, owned))
+
+            def install(*_args, **_kwargs):
+                (workspace / ".agentfw").mkdir()
+
+            def spawn(*_args, **kwargs):
+                process = next(processes)
+                kwargs["stdout"].write(b"Error: Address already in use (os error 98)\n"
+                                       if process is failed else
+                                       b"agentfw listening addr=127.0.0.1:12346\n")
+                kwargs["stdout"].flush()
+                return process
+
+            receiver = Mock(url="http://127.0.0.1:23456")
+            with patch.object(DEMO, "load_fixture", return_value=Mock(TOOLS=[])), \
+                    patch.object(DEMO.subprocess, "run", side_effect=install), \
+                    patch.object(DEMO.subprocess, "Popen", side_effect=spawn) as popen, \
+                    patch.object(DEMO, "free_port", side_effect=[12345, 12346]), \
+                    patch.object(DEMO, "wait_healthy", side_effect=[False, True]), \
+                    patch.object(DEMO, "Receiver", return_value=receiver), \
+                    patch.object(DEMO, "stop") as stop:
+                with DEMO.agent_stack(Path("agentfw"), workspace) as stack:
+                    self.assertIs(stack.daemon, owned)
+                    self.assertEqual(json.loads((workspace / ".agentfw" / "config.yaml").read_text())
+                                     ["port"], 12346)
+            self.assertEqual(popen.call_count, 2)
+            self.assertEqual([call.args[0] for call in stop.call_args_list], [failed, owned])
+            receiver.close.assert_called_once()
+
     def test_startup_failure_retains_bounded_escaped_redacted_diagnostics(self):
         with tempfile.TemporaryDirectory() as directory:
             workspace = Path(directory)

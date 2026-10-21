@@ -234,7 +234,23 @@ class Harness:
             return None
 
 
-def wait_healthy(port, daemon, timeout=60):
+def owned_listener_logged(startup_log, port):
+    for line in startup_log.read_bytes()[-8192:].splitlines():
+        try:
+            event = json.loads(line)
+        except (ValueError, UnicodeError):
+            continue
+        if not isinstance(event, dict) or event.get("target") != "agentfw":
+            continue
+        fields = event.get("fields")
+        if (isinstance(fields, dict)
+                and fields.get("message") == "agentfw listening (ENFORCING)"
+                and fields.get("addr") == f"127.0.0.1:{port}"):
+            return True
+    return False
+
+
+def wait_healthy(port, daemon, timeout=60, startup_log=None):
     # Debug/all-features executables are large and the daemon hashes its own
     # binary before binding. Parallel integration fixtures need a startup-only
     # budget; this does not change any call/admission/execution deadline.
@@ -243,9 +259,15 @@ def wait_healthy(port, daemon, timeout=60):
     while time.monotonic() < deadline:
         if daemon.poll() is not None:
             return False
+        # A released ephemeral port can be taken by another process before
+        # this daemon binds it. Never accept that process's /health response.
+        if startup_log is not None:
+            if not owned_listener_logged(startup_log, port):
+                time.sleep(0.1)
+                continue
         try:
             with opener.open(f"http://127.0.0.1:{port}/health", timeout=1):
-                return True
+                return daemon.poll() is None
         except OSError:
             time.sleep(0.1)
     return False
@@ -279,6 +301,17 @@ def startup_failure(workspace, daemon):
     })
 
 
+def bind_collision(workspace, daemon):
+    """Only a failed owned daemon with the exact bind error may get a new port."""
+    if daemon.poll() is None:
+        return False
+    tail = (workspace / "daemon.log").read_bytes()[-8192:].rstrip()
+    return any(tail.endswith(error) for error in (
+        b"Error: Address already in use (os error 98)",
+        b"Error: Only one usage of each socket address (protocol/network address/port) is normally permitted. (os error 10048)",
+    ))
+
+
 @contextmanager
 def agent_stack(agentfw: Path, workspace: Path):
     """Enforcing daemon with the demonstration registry and policy, notes and the loopback receiver."""
@@ -296,28 +329,37 @@ def agent_stack(agentfw: Path, workspace: Path):
     registry_bytes = registry(fixture.TOOLS)
     (workspace / "registry.json").write_bytes(registry_bytes)
     (workspace / "policy.yaml").write_text(POLICY, encoding="utf-8")
-    port = free_port()
-    config = {"port": port, "enforce": True, "policy": str(workspace / "policy.yaml"),
+    config = {"enforce": True, "policy": str(workspace / "policy.yaml"),
               "native": {"registry_path": str(workspace / "registry.json"), "registry_sha256": sha(registry_bytes)}}
-    (workspace / ".agentfw" / "config.yaml").write_text(json.dumps(config), encoding="utf-8")
     receiver = Receiver()
     ledger = workspace / "executed.jsonl"
-    with (workspace / "daemon.log").open("wb") as daemon_log:
-        daemon = subprocess.Popen([str(agentfw), "serve"], env=env, stdout=daemon_log, stderr=daemon_log,
-                                  creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        try:
-            if not wait_healthy(port, daemon):
-                raise RuntimeError(startup_failure(workspace, daemon))
-            yield SimpleNamespace(
-                workspace=workspace, env=dict(env, **classifier_environment()), tools=fixture.TOOLS,
-                notes=notes, ledger=ledger, responses=ledger.with_suffix(".responses"), receiver=receiver,
-                daemon=daemon, classifications=workspace / "collector.log", registry_sha256=sha(registry_bytes),
-                collector=[str(agentfw), "mcp", "--native-admission", "--id", "demo", "--", sys.executable, "-I",
-                           "-u", str(FIXTURE), "--notes", str(notes), "--ledger", str(ledger),
-                           "--recipient", receiver.url])
-        finally:
-            stop(daemon)
-            receiver.close()
+    try:
+        for attempt in range(3):
+            port = free_port()
+            config["port"] = port
+            (workspace / ".agentfw" / "config.yaml").write_text(json.dumps(config), encoding="utf-8")
+            startup_log = workspace / "daemon.log"
+            with startup_log.open("wb") as daemon_log:
+                daemon = subprocess.Popen([str(agentfw), "serve"], env=env, stdout=daemon_log,
+                                          stderr=daemon_log,
+                                          creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                try:
+                    if not wait_healthy(port, daemon, startup_log=startup_log):
+                        if attempt < 2 and bind_collision(workspace, daemon):
+                            continue
+                        raise RuntimeError(startup_failure(workspace, daemon))
+                    yield SimpleNamespace(
+                        workspace=workspace, env=dict(env, **classifier_environment()), tools=fixture.TOOLS,
+                        notes=notes, ledger=ledger, responses=ledger.with_suffix(".responses"), receiver=receiver,
+                        daemon=daemon, classifications=workspace / "collector.log", registry_sha256=sha(registry_bytes),
+                        collector=[str(agentfw), "mcp", "--native-admission", "--id", "demo", "--", sys.executable, "-I",
+                                   "-u", str(FIXTURE), "--notes", str(notes), "--ledger", str(ledger),
+                                   "--recipient", receiver.url])
+                    return
+                finally:
+                    stop(daemon)
+    finally:
+        receiver.close()
 
 
 def classification_evidence(path: Path):
