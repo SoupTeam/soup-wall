@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import shutil
 import struct
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -50,6 +51,8 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "prepared-not-active")
         self.assertEqual(before, {p.name: p.read_bytes() for p in self.install.iterdir()})
         self.assertEqual(receipt["environment"]["AGENTFW_CLASSIFIER"], "rule-baseline")
+        self.assertEqual(receipt["python_sha256"], PROFILE.sha(receipt["environment"]["AGENTFW_CLASSIFIER_PYTHON"]))
+        self.assertEqual(receipt["identity_sha256"], PROFILE.sha(ROOT / "profiles/mcp/git-local-clone-readonly-v1/identity.json"))
         with self.assertRaises(ValueError):
             self.prepare()
 
@@ -121,6 +124,38 @@ class SelectionTests(unittest.TestCase):
         path.write_bytes(header + table[:20])
         with self.assertRaisesRegex(ValueError, "truncated"):
             PROFILE.require_static_git(path)
+
+
+@unittest.skipUnless(sys.platform == "linux", "independent inotify witness requires Linux")
+class ContinuousWitnessTests(unittest.TestCase):
+    def test_real_open_burst_empty_interval_and_latched_failure(self):
+        spec = importlib.util.spec_from_file_location("sou107_verify", ROOT / "scripts/verify-sou107-real-git.py")
+        verify = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(verify)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            paths = [root / "one", root / "two"]
+            for path in paths:
+                path.write_bytes(b"owned control")
+            witness = verify.ContinuousRepositoryWitness(root)
+            try:
+                for n in range(1024):
+                    paths[n % 2].read_bytes()
+                self.assertEqual(witness.drain(), 1024)
+                self.assertEqual(witness.drain(), 0)
+                with witness._lock:
+                    witness._failure = ValueError("injected queue overflow")
+                for _ in range(2):
+                    with self.assertRaisesRegex(ValueError, "witness failed"):
+                        witness.drain()
+            finally:
+                if witness._failure is None:
+                    witness.close()
+                else:
+                    with self.assertRaisesRegex(ValueError, "witness failed"):
+                        witness.close()
+            self.assertEqual(witness.fd, -1)
+            self.assertFalse(witness._thread.is_alive())
 
 
 if __name__ == "__main__":

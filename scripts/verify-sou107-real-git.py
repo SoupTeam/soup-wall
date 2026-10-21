@@ -8,6 +8,8 @@ import importlib.util
 import json
 import hashlib
 import platform
+import select
+import threading
 from pathlib import Path
 import subprocess
 import sys
@@ -29,6 +31,54 @@ V1 = load("sou107_transport", "verify-sou68-real-mcp.py")
 INSTALL = load("sou107_install", "install-sou107-git-profile.py")
 BASE = V1.BASE
 require, sha, write = BASE.require, BASE.sha, BASE.write
+
+
+class ContinuousRepositoryWitness(V1.RepositoryWitness):
+    """Consume real kernel events during calls; never clear an overflow/error."""
+    def __init__(self, root):
+        self._lock = threading.Lock()
+        self._stop = threading.Event()
+        self._thread = None
+        self._count = 0
+        self._failure = None
+        super().__init__(root)
+        self._thread = threading.Thread(target=self._collect, daemon=True)
+        self._thread.start()
+
+    def _collect(self):
+        try:
+            while not self._stop.is_set():
+                ready, _, _ = select.select([self.fd], [], [], 0.01)
+                if ready:
+                    with self._lock:
+                        self._count += super().drain()
+        except Exception as error:
+            with self._lock:
+                self._failure = error
+            self._stop.set()
+
+    def drain(self):
+        with self._lock:
+            if self._failure is not None:
+                raise ValueError("continuous repository witness failed") from self._failure
+            try:
+                self._count += super().drain()
+            except Exception as error:
+                self._failure = error
+                raise
+            count, self._count = self._count, 0
+            return count
+
+    def close(self):
+        self._stop.set()
+        try:
+            if self._thread is not None:
+                self._thread.join(timeout=2)
+                require(not self._thread.is_alive(), "continuous repository witness did not stop")
+        finally:
+            super().close()
+        if self._failure is not None:
+            raise ValueError("continuous repository witness failed") from self._failure
 
 
 def fixture(root, git, env):
@@ -194,7 +244,7 @@ def run(args):
                 stack = SimpleNamespace(root=output, binary=args.agentfw, git=args.git, workspace=workspace,
                                         poison=poison, install=install, env=env, daemon=daemon)
                 late_changes(stack, report)
-                V1.protected(stack, report)
+                V1.protected(stack, report, witness_type=ContinuousRepositoryWitness)
             require(INSTALL.V1.tree_sha(install / "package") == report["installation"]["profile"]["packageTreeSha256"], "package changed")
             require(sha(config["policy"]) == report["pilot_selection"]["policy_sha256"], "policy changed")
         report["source_after"] = BASE.source()

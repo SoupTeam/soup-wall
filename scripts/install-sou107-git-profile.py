@@ -122,11 +122,14 @@ def prepare(installation, destination, port, python=None):
               "policy": str(destination / "policy.yaml"), "native": {
                   "registry_path": str(installation / "registry.json"), "registry_sha256": sha(installation / "registry.json")}}
     import sys
+    classifier_python = Path(python or sys.executable).resolve(strict=True)
     selection = {"status": "prepared-not-active", "format": FORMAT, "workspace": str(workspace),
                  "profile_sha256": sha(installation / "profile.json"), "registry_sha256": sha(installation / "registry.json"),
-                 "policy_sha256": sha(policy), "classifier_sha256": sha(classifier), "environment": {
+                 "policy_sha256": sha(policy), "classifier_sha256": sha(classifier),
+                 "python_sha256": sha(classifier_python),
+                 "identity_sha256": sha(ROOT / "profiles/mcp/git-local-clone-readonly-v1/identity.json"), "environment": {
                      "AGENTFW_MCP_SERVER_PROFILE": str(installation / "profile.json"),
-                     "AGENTFW_CLASSIFIER_PYTHON": str(Path(python or sys.executable).resolve(strict=True)),
+                     "AGENTFW_CLASSIFIER_PYTHON": str(classifier_python),
                      "AGENTFW_CLASSIFIER": "rule-baseline",
                      "AGENTFW_RULE_BASELINE": str(classifier),
                      "AGENTFW_WORKSPACE": str(workspace)}}
