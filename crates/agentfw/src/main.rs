@@ -217,6 +217,10 @@ enum Cmd {
         /// config). 0 or absent keeps the default correlated refusal.
         #[arg(long, default_value_t = 0)]
         native_approval_wait_seconds: u64,
+        /// Explicit installed daemon home directory containing native-token and config;
+        /// defaults to ~/.agentfw or AGENTFW_HOME.
+        #[arg(long)]
+        home: Option<PathBuf>,
         /// The real server command and its args, after `--`.
         #[arg(last = true, required = true)]
         command: Vec<String>,
@@ -263,6 +267,8 @@ enum Cmd {
         #[command(subcommand)]
         command: agentfw::mcp::connection::Command,
     },
+    /// Trusted per-run Claude Code pilot launcher for two pinned MCP servers (SOU-99).
+    PilotLaunch(agentfw::pilot_launcher::PilotLaunchArgs),
     /// Run one high-risk command inside the Linux bubblewrap sandbox.
     Sandbox {
         /// Writable directory exposed as `/workspace`.
@@ -728,6 +734,7 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Cmd::McpConnection { command } => agentfw::mcp::connection::run(command),
+        Cmd::PilotLaunch(args) => agentfw::pilot_launcher::run(args),
         Cmd::McpProfile { home, command } => {
             let home = match home {
                 Some(h) => h,
@@ -826,6 +833,7 @@ fn main() -> anyhow::Result<()> {
             child_authority,
             native_admission,
             native_approval_wait_seconds,
+            home,
             command,
         } => {
             let host_session = host_session.or_else(|| std::env::var("AGENTFW_HOST_SESSION").ok());
@@ -842,7 +850,10 @@ fn main() -> anyhow::Result<()> {
             let (cmd, args) = command
                 .split_first()
                 .ok_or_else(|| anyhow::anyhow!("no server command given after --"))?;
-            let home = Config::home()?;
+            let home = match home.or_else(|| std::env::var_os("AGENTFW_HOME").map(PathBuf::from)) {
+                Some(h) => h,
+                None => Config::home()?,
+            };
             let cfg = match std::fs::read_to_string(home.join("config.yaml")) {
                 Ok(s) => Config::from_yaml(&s)?,
                 Err(_) => Config::default(),
