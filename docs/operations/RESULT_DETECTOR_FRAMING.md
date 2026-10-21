@@ -31,6 +31,11 @@ Filesystem PMF-B16-B19 are 50/200/201/256 reads of
 `d12827e5a56294995798e2cfd016c3b887c1f28c`.
 The retained failed runtime run is `39557437555`, artifact `12326915042`.
 Its replay file records withheld responses, not the withheld original text.
+The newer exact-head artifact `12330512159` at
+`f9afeaf235554a21cb5b3587757ca0db95b22631` was also verified (archive SHA-256
+`932510584c0f7387fc0d8fb572b1455f0f9dd8b5bc67e40ec4bb6dcc5e722822`).
+`filesystem-before.json` retains its six relevant cases and original identity
+hashes, including the distinct zero-dispatch B20/B38 outcomes.
 The local text fixtures reconstruct that documented shape; they are not labeled
 as captured responses. The extended existing filesystem acceptance driver
 executes both the original unwrapped server and protected server for all four
@@ -56,3 +61,8 @@ exercise real original servers. Unit/policy results alone do not qualify runtime
 execution or result delivery. Attack regressions place override, exfiltration,
 role impersonation, chat-template and stacked-imperative content in the same
 headers, bodies and suffixes as benign data.
+
+As a local before/after control, replacing only `heuristics.rs` with accepted
+main `7af550291782cf3c11cffc8d7b30bb071f4bf5e9` makes all three benign regression
+tests fail with Deny while the attack test passes. Restoring this correction
+makes all four pass. This control does not claim an original-server execution.
