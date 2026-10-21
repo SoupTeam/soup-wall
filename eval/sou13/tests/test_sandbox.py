@@ -37,6 +37,10 @@ class Guard(unittest.TestCase):
     def test_blocks_import(self):
         self.assert_blocked(lambda fx, a: __import__('urllib.request'))
 
+    def test_blocks_import_of_preloaded_parser_dependency(self):
+        self.assertIn('collections', sys.modules)
+        self.assert_blocked(lambda fx, a: __import__('collections'))
+
     def test_violation_recorded_even_if_swallowed(self):
         def sneaky(fx, a):
             try:

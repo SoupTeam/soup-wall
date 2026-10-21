@@ -277,6 +277,12 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - name: Select the frozen evaluation's Python runtime
+        uses: actions/setup-python@v7
+        with:
+          # CP1 source hashes are frozen. Python 3.14's shlex constructor imports
+          # collections inside the fixture guard; preserve both the freeze and guard.
+          python-version: '3.12'
       - name: Optional classifier adapter regressions (offline)
         run: python3 -m unittest experiments.classification.test_jev experiments.classification.test_shadow -v
       - name: Task 1 classification evaluation runner units
