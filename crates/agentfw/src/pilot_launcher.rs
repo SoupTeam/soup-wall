@@ -1238,7 +1238,6 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         .env("CLAUDE_CODE_MAX_RETRIES", "0");
 
     let mut child = cmd.spawn().context("failed to spawn Claude Code host")?;
-    #[cfg(unix)]
     let child_pid = child.id();
 
     // Supervise process with deadline, signal interception, and daemon heartbeat
