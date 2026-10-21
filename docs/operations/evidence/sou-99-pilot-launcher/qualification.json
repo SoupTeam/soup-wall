@@ -5,7 +5,7 @@
   "real_model_evaluation": false,
   "scripted_owned_provider": true,
   "zero_paid_api_calls_verified": true,
-  "scenario_type": "fixture_and_preview_controls",
+  "scenario_type": "composite_pilot_acceptance",
   "binary_identity": {
     "path": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/debug/agentfw",
     "sha256": "d0406dea543cc24990bd7fe45adc1a8c7510f2558bb777d165dbc4c598773a9e"
@@ -317,7 +317,7 @@
       "verification_method": "os_kill_probe_after_exit_0"
     }
   },
-  "original_server_full_launch_qualified": false,
+  "original_server_full_launch_qualified": true,
   "profile_validation_preview": {
     "scenario_type": "profile_validation_preview",
     "report": {
@@ -450,5 +450,20 @@
     },
     "host_executed": false,
     "uses_stub_executables": true
+  },
+  "checks_scope": "checks_passed/checks_total cover historical fixture and preview controls; installed original-server full launch is independently recorded below",
+  "installed_original_server_full_launch": {
+    "status": "pass",
+    "report_file": "installed-original-qualification.json",
+    "sha256": "59b061cd42e13ab5058c0ee1167a8fc61f77200824aa15e3b3ef867ff6029576",
+    "source_commit": "de30646058cbfece63561b8fb67dbe183fca39e9",
+    "ci_run": 39572797593,
+    "ci_job": 119131523926,
+    "real_host_executed": true,
+    "correlated_tool_results": 5,
+    "forbidden_dispatches": 0,
+    "workspace_and_index_preserved": true,
+    "owned_descendants_stopped": 27,
+    "refusal_layer": "original read-only profile, before native call admission"
   }
 }
