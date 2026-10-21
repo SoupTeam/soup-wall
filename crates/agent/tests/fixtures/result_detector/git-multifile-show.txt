@@ -1,0 +1,30 @@
+commit 0615864b0dc0154198609e7546c6d23c5b7665dc
+Author: SOU68 Synthetic <sou68@example.invalid>
+Date:   2026-10-21 12:59:04 +0000
+
+    SOU-68 synthetic initial commit
+
+--- /dev/null
++++ .gitattributes
+@@ -0,0 +1,2 @@
++*.txt text eol=lf
++*.bin binary
+
+--- /dev/null
++++ nested/.gitattributes
+@@ -0,0 +1 @@
++*.txt text=auto
+
+--- /dev/null
++++ nested/example.txt
+@@ -0,0 +1 @@
++owned nested text
+
+--- /dev/null
++++ notes.txt
+@@ -0,0 +1 @@
++synthetic original text
+
+--- /dev/null
++++ owned.bin
+Binary files /dev/null and b/owned.bin differ

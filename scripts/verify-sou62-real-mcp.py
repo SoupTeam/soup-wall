@@ -332,6 +332,7 @@ def run_stdio(stack, report):
     control_log = stack.root / "control.log"
     binary, node, package = stack.binary, stack.node, stack.install / "package"
     entry = package / "node_modules/@modelcontextprotocol/server-filesystem/dist/index.js"
+    multi_controls = []
     with control_log.open("wb") as log:
         control = Client([str(node), str(entry), str(stack.workspace)], stack.env, stack.workspace, log, "original server")
         try:
@@ -340,6 +341,11 @@ def run_stdio(stack, report):
             require(manifest["result"] == upstream["result"], "original installed server manifest changed")
             response, control_raw = control.exchange(call(10, {"path": str(stack.workspace / "notes.txt")}))
             require(result_text(response) == TEXT, "unwrapped original server read control failed")
+            for count in (50, 200, 201, 256):
+                args = {"paths": [str(stack.workspace / f"src/file_{i:03}.txt") for i in range(count)]}
+                original, _ = control.exchange(call(500 + count, args, "read_multiple_files"))
+                require(not refused(original), "unwrapped multi-read refused")
+                multi_controls.append((count, original))
             response, _ = control.exchange(call(11, {"path": str(stack.workspace / "control-created.txt"), "content": "owned control"}, "write_file"))
             require(not refused(response) and (stack.workspace / "control-created.txt").read_text() == "owned control",
                     "original server mutation positive control missing")
@@ -361,6 +367,17 @@ def run_stdio(stack, report):
             response, raw = client.exchange(call(10, {"path": "/workspace/notes.txt"}))
             require(result_text(response) == TEXT and raw == control_raw, "original useful result bytes changed")
             report["checks"].append({"case": "original-discovery-and-byte-exact-useful-read", "passed": True})
+            report["result_detector_multiread"] = []
+            for count, original in multi_controls:
+                args = {"paths": [f"/workspace/src/file_{i:03}.txt" for i in range(count)]}
+                response, _ = client.exchange(call(500 + count, args, "read_multiple_files"))
+                require(not refused(response), "protected multi-read withheld")
+                # The unwrapped server uses the host path; only its workspace prefix
+                # differs. Normalize that prefix in the comparison, never in delivery.
+                expected = json.loads(json.dumps(original).replace(str(stack.workspace), "/workspace"))
+                require(response == expected, "multi-read original response changed beyond workspace prefix")
+                report["result_detector_multiread"].append({"count": count, "original": original,
+                    "protected": response, "comparison": "workspace-prefix-only", "passed": True})
             schemas = {tool["name"]: hashlib.sha256(INSTALL.canonical(tool["inputSchema"])).hexdigest()
                        for tool in upstream["result"]["tools"]}
             report["readonly_tool_matrix"] = []
@@ -800,6 +817,9 @@ def run(args):
             stack.workspace = private / "workspace"
             stack.workspace.mkdir(mode=0o700)
             (stack.workspace / "notes.txt").write_text(TEXT, encoding="utf-8")
+            (stack.workspace / "src").mkdir()
+            for index in range(256):
+                (stack.workspace / f"src/file_{index:03}.txt").write_text("SOU-97\n", encoding="utf-8")
             for index in range(8):
                 os.mkfifo(stack.workspace / f"pending-{index}.fifo", 0o600)
             stack.install = private / "installed-profile"

@@ -21,19 +21,50 @@ static LONG_B64: LazyLock<Regex> =
 fn delimiter_hits(text: &str) -> usize {
     text.matches("```").count()
         + text.matches("###").count()
-        + text.matches("---").count()
+        + text
+            .lines()
+            .zip(text.lines().skip(1).map(Some).chain(std::iter::once(None)))
+            .map(|(line, next)| dash_hits(line, next))
+            .sum::<usize>()
         + text.matches("<|").count()
+}
+
+// A filesystem multi-read separator or unified-diff old-file header is ordinary
+// framing, not an additional injection signal. This only discounts the framing
+// punctuation: signatures and imperative detection still inspect every byte,
+// including filenames and text on these lines. No tool name grants trust.
+fn dash_hits(line: &str, next: Option<&str>) -> usize {
+    if line.trim() == "---" {
+        return 0;
+    }
+    let line = if line.starts_with("--- ") && next.is_some_and(|s| s.starts_with("+++ ")) {
+        &line[3..]
+    } else {
+        line
+    };
+    line.matches("---").count()
 }
 
 /// Compute a heuristic score in `[0.0, 1.0]`. Pure function so it is trivially testable.
 pub(crate) fn score_text(text: &str) -> f32 {
     let mut score = 0.0f32;
 
-    score += 0.30 * IMPERATIVE.find_iter(text).count().min(3) as f32;
+    let imperatives = IMPERATIVE.find_iter(text).count().min(3);
+    score += 0.30 * imperatives as f32;
     if LONG_B64.is_match(text) {
         score += 0.30;
     }
-    score += 0.10 * delimiter_hits(text).min(3) as f32;
+    // Preserve the previous reinforcement when instruction-like language is
+    // present, even if it is wrapped in otherwise ordinary data framing.
+    let delimiters = if imperatives > 0 {
+        text.matches("```").count()
+            + text.matches("###").count()
+            + text.matches("---").count()
+            + text.matches("<|").count()
+    } else {
+        delimiter_hits(text)
+    };
+    score += 0.10 * delimiters.min(3) as f32;
 
     score.min(1.0)
 }
@@ -62,6 +93,19 @@ pub(crate) fn scan(text: &str) -> Vec<Finding> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn data_framing_is_not_an_extra_signal_but_embedded_markers_are() {
+        assert_eq!(delimiter_hits("---\n---\r\n---\n"), 0);
+        assert_eq!(
+            delimiter_hits("--- notes.txt\n+++ notes.txt\n@@ -1 +1 @@\n+ordinary"),
+            0
+        );
+        assert_eq!(delimiter_hits("--- notes.txt"), 1);
+        assert_eq!(delimiter_hits("--- a/---suspicious\n+++ b/file"), 1);
+        assert_eq!(delimiter_hits("prefix---suffix\n```\n###\n<|"), 4);
+        assert!(score_text("--- ignore\n+++ disregard\noverride") >= 0.75);
+    }
 
     #[test]
     fn benign_scores_low_and_emits_nothing() {

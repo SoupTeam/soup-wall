@@ -248,6 +248,10 @@ def prepare_repo(root, git, env):
     command("init", "--initial-branch=main", "--template=")
     (root / "notes.txt").write_text("synthetic original text\n")
     command("add", "notes.txt")
+    for index in range(3):
+        path = root / f"ordinary-{index}.txt"
+        path.write_text(f"owned ordinary file {index}\n")
+        command("add", path.name)
     command("commit", "-m", "SOU-68 synthetic initial commit")
     (root / "notes.txt").write_text("synthetic staged text\n")
     command("add", "notes.txt")
