@@ -402,6 +402,12 @@ def protected(stack, report):
                 # Keep the first historical IDs, avoid all subsequent refusal,
                 # useful-followup and outage IDs, and never replay spent IDs.
                 overlap(client, log_path, report, 100 if iteration == 0 else 2000 + iteration * 32)
+                # The clone guard performs bounded repeated repository scans.
+                # Consume each round's independent events before the next one,
+                # retaining overflow as a hard failure rather than losing proof.
+                opens = witness.drain()
+                require(opens > 0, "overlap repository witness did not observe reads")
+                report["overlap_rounds"][-1]["repository_opens"] = opens
             refusals = [
                 ("git_add", {"files": ["notes.txt"]}), ("git_commit", {"message": "forbidden"}),
                 ("git_reset", {}), ("git_checkout", {"branch_name": "main"}),
