@@ -21,6 +21,11 @@
       "bytes": 128133,
       "sha256": "278a39a4833b1f7b35e8d0886dc663ba00885ad33a50424419c5b03a5c24bcd4",
       "files": 68
+    },
+    "installed-wsl2-cb74d94.zip": {
+      "bytes": 128294,
+      "sha256": "c4b649fec07d828ae42e1306a5c45eabd3d81e9eb526f1c9980abbf493ef67b0",
+      "files": 68
     }
   }
 }

@@ -1,5 +1,9 @@
 # WSL qualification after the latest runtime integration
 
+[A newer run after profile onboarding integration](ONBOARDING_REFRESH.md)
+qualifies source `cb74d9458ccb4c15ddd732d3276ea9664825a216`. The evidence
+below remains the preceding main-integration checkpoint.
+
 [installed-wsl2-97729f0.zip](installed-wsl2-97729f0.zip) preserves a fresh actual
 WSL2 run on clean source `97729f0602516e6d6478e5498de444f4cce2546f`, after
 integrating main `731d8c4c3cd921117cdb1934587d5aa97c80d6a7`. Both Agent
