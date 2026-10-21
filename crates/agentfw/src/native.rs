@@ -926,6 +926,7 @@ struct Request {
     delivery: Option<String>,
     resource_admission: Option<resource::Admission>,
     approval_id: Option<String>,
+    selected_invocation: Option<approval::SelectedInvocation>,
     pub host_session: Option<String>,
     pub child_authority: Option<String>,
     pub server_id: Option<String>,
@@ -975,6 +976,12 @@ fn parse(body: &str) -> Result<Request, &'static str> {
             }
             if object.contains_key("approval_id") {
                 keys.insert("approval_id");
+            }
+            if object.contains_key("selected_invocation") {
+                keys.insert("selected_invocation");
+                if request.selected_invocation.is_none() || request.approval_id.is_none() {
+                    return Err("native_invalid_fields");
+                }
             }
             if matches!(
                 request.contract_version.as_str(),
@@ -2380,6 +2387,48 @@ fn inspect_bound(
             // Exact single-use operator approval, rechecked against the policy
             // verdict computed just now. A hard Deny can never be rescued.
             let approval = native.approval.as_ref().ok_or("native_approval_disabled")?;
+            let approval_bound = if selected_result {
+                if identity.is_none() {
+                    approval.invalidate(
+                        approval_id,
+                        &request.session_id,
+                        "native_approval_bound_owner_required",
+                    );
+                    return Err("native_approval_bound_owner_required");
+                }
+                let Some(context) = request.selected_invocation.as_ref() else {
+                    approval.invalidate(
+                        approval_id,
+                        &request.session_id,
+                        "native_approval_selected_context_required",
+                    );
+                    return Err("native_approval_selected_context_required");
+                };
+                let valid = context.validate(tool, args).and_then(|()| {
+                    if request.mcp_host_call_id.as_ref() != Some(&context.host_call_id)
+                        || session.server_id.as_deref() != Some(&context.server_id)
+                    {
+                        Err("native_approval_selected_binding_mismatch")
+                    } else {
+                        Ok(())
+                    }
+                });
+                if let Err(code) = valid {
+                    approval.invalidate(approval_id, &request.session_id, code);
+                    return Err(code);
+                }
+                context.binding(&bound)
+            } else {
+                if request.selected_invocation.is_some() {
+                    approval.invalidate(
+                        approval_id,
+                        &request.session_id,
+                        "native_approval_selected_unsupported",
+                    );
+                    return Err("native_approval_selected_unsupported");
+                }
+                bound.clone()
+            };
             if verdict == Verdict::Deny {
                 // An explicit hard Deny (including egress denial or lineage floor failure)
                 // can never be approved or redeemed. Terminally invalidate the presented approval.
@@ -2411,7 +2460,7 @@ fn inspect_bound(
                             &session.epoch,
                             name,
                             &tool.schema_sha256,
-                            &bound,
+                            &approval_bound,
                             verdict,
                         ) {
                             Ok(()) => {
