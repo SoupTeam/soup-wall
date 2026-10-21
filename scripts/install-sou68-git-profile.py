@@ -50,12 +50,22 @@ def extract_python(archive, destination):
         bundle.extractall(destination, members=members, filter="data")
 
 
+class RuntimeLibrariesUnavailable(ValueError):
+    """Bounded library identities suitable for prerequisite diagnostics."""
+    def __init__(self, names):
+        self.missing_libraries = sorted(set(names))[:32]
+        super().__init__("unresolved runtime ELF dependency: " + ", ".join(self.missing_libraries))
+
+
 def dependencies(executables, package):
     """Pin explicit system ELF files; packaged Python libraries stay in its tree."""
     paths = set()
     for executable in executables:
         result = subprocess.run(["ldd", str(executable)], capture_output=True, text=True, check=True, timeout=15)
         if "not found" in result.stdout:
+            names = re.findall(r"^\s*([A-Za-z0-9_.+-]{1,128})\s+=>\s+not found\s*$", result.stdout, re.M)
+            if names:
+                raise RuntimeLibrariesUnavailable(names)
             raise ValueError("unresolved runtime ELF dependency")
         for raw in re.findall(r"(?:=>\s*)?(/[^\s()]+)", result.stdout):
             path = Path(raw)

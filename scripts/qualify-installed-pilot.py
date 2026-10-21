@@ -1078,7 +1078,7 @@ def run(args):
         def observed():
             try:
                 return action()
-            except Exception:
+            except Exception as error:
                 raw = traceback.format_exc().encode("utf-8")
                 for secret in pilot.secrets if pilot else []:
                     raw = raw.replace(secret.encode(), b"[REDACTED]")
@@ -1086,6 +1086,11 @@ def run(args):
                 path.write_bytes(raw[:65536])
                 path.chmod(0o600)
                 next(row for row in report["cases"] if row["id"] == name)["evidence"]["diagnostic_sha256"] = sha(path)
+                if isinstance(error, GIT.INSTALL.RuntimeLibrariesUnavailable):
+                    evidence = next(row for row in report["cases"] if row["id"] == name)["evidence"]
+                    evidence["missing_runtime_libraries"] = error.missing_libraries
+                    evidence["next_step"] = "Install the Ubuntu runtime packages providing these SONAMEs, then retry in a new output directory."
+                    raise Failure("git_runtime_libraries_unavailable") from error
                 raise
         return measure(report, name, observed, timeout=timeout)
     ready = step("exact-installed-inputs", prepare, timeout=LIMITS["setup_seconds"])

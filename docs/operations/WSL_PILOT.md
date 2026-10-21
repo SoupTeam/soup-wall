@@ -33,6 +33,14 @@ are eligible for the bubblewrap probe. The namespace probes have a five-second
 deadline each and discard child output. No sysctl, security policy, privilege
 or runner setting is modified.
 
+The pinned Git profile checks every ELF extension in its original Python
+distribution, including Tkinter. A minimal Ubuntu 24.04 installation may lack
+`libtcl8.6.so` and `libtk8.6.so`; install their runtime packages explicitly
+during preparation with `sudo apt-get install libtcl8.6 libtk8.6`. The installer
+continues to refuse unresolved libraries. `git_runtime_libraries_unavailable`
+records bounded SONAMEs and an operator next step in the failed report; keep
+that report and retry using a new output directory. Startup downloads nothing.
+
 The result distinguishes:
 
 - `ready`: observed prerequisite checks passed; runtime protection is unmeasured.
