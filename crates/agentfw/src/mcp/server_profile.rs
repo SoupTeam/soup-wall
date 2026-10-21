@@ -8,7 +8,7 @@ use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
 use anyhow::{ensure, Context};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
@@ -43,19 +43,37 @@ pub const MAX_PROFILE_BYTES: usize = 65_536;
 const MAX_TREE_FILES: usize = 32_768;
 const MAX_TREE_BYTES: u64 = 512 * 1024 * 1024;
 
+fn open_regular(path: impl AsRef<Path>) -> anyhow::Result<fs::File> {
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        // A file swapped for a FIFO during approval must refuse, not occupy
+        // an admission worker forever. Regular-file reads ignore this flag.
+        options.custom_flags(libc::O_NONBLOCK);
+    }
+    let file = options.open(path)?;
+    ensure!(
+        file.metadata()?.is_file(),
+        "selected asset is not a regular file"
+    );
+    Ok(file)
+}
+
 const ORIGINAL_MANIFEST: &str =
     include_str!("../../../../profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json");
 const ORIGINAL_INITIALIZATION: &str =
     include_str!("../../../../profiles/mcp/filesystem-readonly-v1/upstream-initialize.json");
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Library {
     pub path: PathBuf,
     pub sha256: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProfileConfig {
     pub format: String,
@@ -74,11 +92,52 @@ pub struct ProfileConfig {
 }
 
 impl ProfileConfig {
+    /// Recheck immutable installed assets after an operator wait. This only
+    /// observes files; it creates no sandbox, budget, process or authority.
+    pub(crate) fn revalidate_assets(&self) -> anyhow::Result<()> {
+        let current = Self::load_from_env()?.context("selected profile disappeared")?;
+        ensure!(
+            serde_json::to_value(&current)? == serde_json::to_value(self)?,
+            "selected profile changed during approval"
+        );
+        ensure!(
+            package_tree_sha256(&self.package_root)? == self.package_tree_sha256,
+            "selected package changed during approval"
+        );
+        let mut total = 0u64;
+        for (path, digest) in [
+            (&self.runtime_path, &self.runtime_sha256),
+            (&self.bwrap_path, &self.bwrap_sha256),
+        ]
+        .into_iter()
+        .chain(self.libraries.iter().map(|pin| (&pin.path, &pin.sha256)))
+        .chain(
+            self.git
+                .iter()
+                .chain(self.git_launcher.iter())
+                .map(|pin| (&pin.path, &pin.sha256)),
+        ) {
+            let mut hash = Sha256::new();
+            let file = open_regular(path)?;
+            let size = file.metadata()?.len();
+            total = total
+                .checked_add(size)
+                .context("selected asset size overflow")?;
+            ensure!(total <= MAX_TREE_BYTES, "selected asset byte limit");
+            let read = std::io::copy(&mut file.take(size + 1), &mut hash)?;
+            ensure!(
+                read == size && format!("{:x}", hash.finalize()) == *digest,
+                "selected executable or library changed during approval"
+            );
+        }
+        Ok(())
+    }
+
     pub fn load_from_env() -> anyhow::Result<Option<Self>> {
         std::env::var_os(ENVIRONMENT)
             .map(|path| {
                 let mut bytes = Vec::new();
-                fs::File::open(path)?
+                open_regular(PathBuf::from(path))?
                     .take(MAX_PROFILE_BYTES as u64 + 1)
                     .read_to_end(&mut bytes)?;
                 Self::read(&bytes)
@@ -519,7 +578,7 @@ pub fn package_tree_sha256(root: &Path) -> anyhow::Result<String> {
                     .checked_add(metadata.len())
                     .context("MCP package size overflow")?;
                 ensure!(*bytes <= MAX_TREE_BYTES, "MCP package byte limit");
-                let mut file = fs::File::open(entry.path())?;
+                let mut file = open_regular(entry.path())?;
                 let mut hash = Sha256::new();
                 let mut buffer = [0u8; 65_536];
                 let mut read_bytes = 0u64;

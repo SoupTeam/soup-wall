@@ -299,29 +299,29 @@ impl PackagedClassifier {
             #[cfg(windows)]
             unclean: self.unclean.clone(),
         };
-        // Same deadline and same fail-closed result as before; only the message now says
-        // which of the two failures happened (no frame in time, or the worker's output
-        // closed) and what the process was doing, so a hosted-runner failure is diagnosable.
         let waiting = Instant::now();
         let frame = match worker.from_worker.recv_timeout(START_DEADLINE) {
-            Ok(Ok(frame)) => frame,
-            Ok(Err(e)) => bail!("worker start failed: {e}"),
+            Ok(frame) => frame.map_err(|e| anyhow::anyhow!("worker start failed: {e}"))?,
             Err(RecvTimeoutError::Timeout) => {
+                // The worker is still owned by its job and Drop retires it. Distinguish a
+                // slow bootstrap from an early exit without changing the admission bound.
                 let state = process_state(&mut worker.child, Duration::ZERO);
                 bail!(
-                    "classifier worker did not become ready: no ready frame within {} ms ({state})",
-                    START_DEADLINE.as_millis()
-                )
+                    "classifier worker did not become ready within {:?} ({state})",
+                    START_DEADLINE
+                );
             }
             Err(RecvTimeoutError::Disconnected) => {
+                // The output closes when the process exits, but its status may not be
+                // collectable yet: wait briefly, never past the start deadline.
                 let grace = START_DEADLINE
                     .saturating_sub(waiting.elapsed())
                     .min(START_EXIT_GRACE);
                 let state = process_state(&mut worker.child, grace);
                 bail!(
-                    "classifier worker did not become ready: its output closed after {} ms ({state})",
+                    "classifier worker exited before ready after {} ms ({state})",
                     waiting.elapsed().as_millis()
-                )
+                );
             }
         };
         let ready: Ready = serde_json::from_slice(&frame).context("invalid ready frame")?;

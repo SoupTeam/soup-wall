@@ -1,0 +1,14 @@
+{
+  "scope": "Restore the approved CI qualification platform; no test or product guard changed",
+  "approved_source": "84b4836",
+  "approved_ci_run": 39574349114,
+  "approved_python_job": 119136642799,
+  "approved_image": "ubuntu-24.04 (24.04.5, image 20261012.334.1)",
+  "failed_merge_ci_run": 39628989479,
+  "unexpected_image": "ubuntu-26.04 (26.04.1, image 20261018.168.1)",
+  "observed_failures": [
+    "SOU-13 synthetic shell model: deferred shlex import collections rejected by existing import guard",
+    "Linux connection boundary test: system /usr/bin/env no longer satisfies existing executable safety assumptions"
+  ],
+  "resolution": "Pin test, all-features and python-classifier jobs to ubuntu-24.04, the last approved platform. Preserve all assertions, frozen fixtures, executable checks, skipped-test counts and required jobs."
+}
