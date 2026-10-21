@@ -162,6 +162,9 @@ fn options(state: &State, agent: PathBuf) -> Options {
         probe_tool: None,
         probe_args: None,
         runtime: Some(state.selection.home.join("runtime.json")),
+        server_profile: None,
+        classifier_script: None,
+        classifier_python: None,
     }
 }
 

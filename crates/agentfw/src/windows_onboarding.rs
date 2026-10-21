@@ -216,6 +216,9 @@ async fn preview_selected(selection: &Selection) -> Result<Preview> {
         probe_tool: None,
         probe_args: None,
         runtime: None,
+        server_profile: None,
+        classifier_script: None,
+        classifier_python: None,
     };
     let connection_report = connection::run("preview", &options).await?;
     ensure!(
@@ -548,6 +551,9 @@ mod tests {
             runtime: None,
             probe_tool: None,
             probe_args: None,
+            server_profile: None,
+            classifier_script: None,
+            classifier_python: None,
         };
         let error =
             connection::run_confirmed("connect", &options, Some(&"0".repeat(64)), None, None)
