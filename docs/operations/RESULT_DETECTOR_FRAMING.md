@@ -36,6 +36,11 @@ as captured responses. The extended existing filesystem acceptance driver
 executes both the original unwrapped server and protected server for all four
 counts and retains both responses. Comparison normalizes only the host workspace
 prefix to `/workspace`; production responses are never changed.
+Both original and protected JSON-RPC byte frames are retained separately. Kernel
+OPEN observations independently witness each bulk read. Matched original-server
+attacks put instruction override in the same 50-file response, including a
+whitespace-split variation supported by the existing signatures. Those results
+must be withheld after observed execution; this does not undo server reads.
 
 The existing Git acceptance fixture now has four files in its initial commit.
 Its existing six-read original/protected comparison therefore exercises a real

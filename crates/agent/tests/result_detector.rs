@@ -53,6 +53,10 @@ fn filesystem_multiread_framing_does_not_compound_with_long_paths() {
             Verdict::Deny
         );
     }
+}
+
+#[test]
+fn pmf_bulk_sizes_pass_the_unchanged_filesystem_policy() {
     let fs_policy = include_str!("../../../profiles/mcp/filesystem-readonly-v1/policy.yaml");
     for count in [50, 200, 201, 256] {
         let text = (0..count)
