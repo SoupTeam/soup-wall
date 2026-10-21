@@ -3,12 +3,14 @@
 //! Git unconditionally opens /dev/null O_RDWR. Landlock permits that device
 //! alone while denying all filesystem mutations before original Python starts.
 
+#[path = "mcp/server_profile/git_local_clone.rs"]
+pub mod git_local_clone;
+
 #[cfg(target_os = "linux")]
-fn run() -> std::io::Result<()> {
+fn restrict(execution: bool) -> std::io::Result<()> {
     use std::fs::File;
     use std::os::fd::{AsRawFd, FromRawFd};
     use std::os::unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt};
-    use std::os::unix::process::CommandExt;
 
     const WRITE: u64 = 1 << 1;
     // ABI 3: every mutation right, including cross-directory rename and truncation.
@@ -39,7 +41,7 @@ fn run() -> std::io::Result<()> {
         ));
     }
     let attributes = Ruleset {
-        handled_access_fs: MUTATIONS,
+        handled_access_fs: MUTATIONS | u64::from(execution),
     };
     let raw = unsafe {
         libc::syscall(
@@ -53,6 +55,32 @@ fn run() -> std::io::Result<()> {
         return Err(error());
     }
     let ruleset = unsafe { File::from_raw_fd(raw as i32) };
+    if execution {
+        let git = std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_PATH | libc::O_CLOEXEC | libc::O_NOFOLLOW)
+            .open("/mcp-runtime/git")?;
+        if !git.metadata()?.is_file() {
+            return Err(std::io::Error::other("git_clone_executable_type"));
+        }
+        let rule = PathRule {
+            allowed_access: 1,
+            parent_fd: git.as_raw_fd(),
+            padding: 0,
+        };
+        if unsafe {
+            libc::syscall(
+                libc::SYS_landlock_add_rule,
+                ruleset.as_raw_fd(),
+                1,
+                &rule as *const PathRule,
+                0,
+            )
+        } != 0
+        {
+            return Err(error());
+        }
+    }
     let null = std::fs::OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_PATH | libc::O_CLOEXEC | libc::O_NOFOLLOW)
@@ -89,12 +117,68 @@ fn run() -> std::io::Result<()> {
     // No pre-restriction writable descriptor or mount descriptor is inherited.
     drop(null);
     drop(ruleset);
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn inspect_git(args: &[&str], limit: usize) -> anyhow::Result<Vec<u8>> {
+    use std::io::Read;
+    use std::process::{Command, Stdio};
+    let mut child = Command::new("/mcp-runtime/git")
+        .args(args)
+        .current_dir("/workspace")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()?;
+    let mut output = Vec::new();
+    let result = child
+        .stdout
+        .take()
+        .expect("piped Git output")
+        .take(limit as u64 + 1)
+        .read_to_end(&mut output);
+    if result.is_err() || output.len() > limit {
+        let _ = child.kill();
+        let _ = child.wait();
+        anyhow::bail!("git_clone_inspection_bounds");
+    }
+    anyhow::ensure!(child.wait()?.success(), "git_clone_index_inspection_failed");
+    Ok(output)
+}
+
+#[cfg(target_os = "linux")]
+fn run() -> anyhow::Result<()> {
+    use std::os::unix::process::CommandExt;
+    let guarded = std::env::args_os().next().as_deref()
+        == Some(std::ffi::OsStr::new(git_local_clone::EXECUTABLE));
+    restrict(guarded)?;
+    if guarded {
+        // This is the same mounted workspace the original server sees. Every
+        // Git invocation rechecks it, including GitPython's startup probes.
+        git_local_clone::validate_repository(std::path::Path::new("/workspace"))?;
+        let index = inspect_git(&["ls-files", "--stage", "-z"], 4 * 1024 * 1024)?;
+        let mut bytes = 0;
+        for oid in git_local_clone::attribute_objects(&index)? {
+            let blob = inspect_git(&["cat-file", "blob", &oid], 8192)?;
+            bytes += blob.len();
+            anyhow::ensure!(bytes <= 262144, "git_clone_attributes_bounds");
+            git_local_clone::validate_attributes(&blob)?;
+        }
+        // Detect sequential substitutions during the index/blob inspection.
+        // Landlock exec restrictions and seccomp remain authoritative if an
+        // external writer races the subsequent unmodified Git execution.
+        git_local_clone::validate_repository(std::path::Path::new("/workspace"))?;
+    }
     let args: Vec<_> = std::env::args_os().skip(1).collect();
-    Err(
-        std::process::Command::new("/mcp-server/python/bin/python3.11")
-            .args(args)
-            .exec(),
-    )
+    Err(std::process::Command::new(if guarded {
+        "/mcp-runtime/git"
+    } else {
+        "/mcp-server/python/bin/python3.11"
+    })
+    .args(args)
+    .exec()
+    .into())
 }
 
 fn main() {

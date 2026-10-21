@@ -15,9 +15,16 @@ use sha2::{Digest, Sha256};
 use super::input::InputSchema;
 
 pub mod git;
+pub mod git_local_clone;
+#[cfg(test)]
+mod git_local_clone_tests;
+
+pub fn git_selected(format: &str) -> bool {
+    matches!(format, git::FORMAT | git_local_clone::FORMAT)
+}
 
 pub fn selected(format: Option<&str>) -> bool {
-    matches!(format, Some(FORMAT | git::FORMAT))
+    matches!(format, Some(FORMAT | git::FORMAT | git_local_clone::FORMAT))
 }
 
 pub const FORMAT: &str = "sw-mcp/filesystem-readonly/1";
@@ -100,8 +107,8 @@ impl ProfileConfig {
             "unsupported MCP server profile"
         );
         ensure!(
-            (config.format == git::FORMAT) == config.git.is_some()
-                && (config.format == git::FORMAT) == config.git_launcher.is_some(),
+            git_selected(&config.format) == config.git.is_some()
+                && git_selected(&config.format) == config.git_launcher.is_some(),
             "Git runtime/profile mismatch"
         );
         for git in [&config.git, &config.git_launcher].into_iter().flatten() {
@@ -160,7 +167,7 @@ impl ProfileConfig {
             Path::new(command) == self.runtime_path,
             "MCP command differs from selected runtime"
         );
-        if self.format == git::FORMAT {
+        if git_selected(&self.format) {
             ensure!(
                 args == [
                     "-I",
@@ -214,7 +221,7 @@ pub fn original_manifest() -> Value {
 pub fn original_manifest_for(format: &str) -> anyhow::Result<Value> {
     match format {
         FORMAT => Ok(original_manifest()),
-        git::FORMAT => Ok(git::original_manifest()),
+        git::FORMAT | git_local_clone::FORMAT => Ok(git::original_manifest()),
         _ => anyhow::bail!("unsupported MCP profile"),
     }
 }
@@ -222,7 +229,7 @@ pub fn original_manifest_for(format: &str) -> anyhow::Result<Value> {
 pub fn validate_initialization_for(format: &str, value: &Value) -> anyhow::Result<()> {
     match format {
         FORMAT => validate_initialization(value),
-        git::FORMAT => git::validate_initialization(value),
+        git::FORMAT | git_local_clone::FORMAT => git::validate_initialization(value),
         _ => anyhow::bail!("unsupported MCP profile"),
     }
 }
@@ -233,7 +240,7 @@ pub fn classify_manifest_for(
 ) -> anyhow::Result<BTreeMap<String, ToolProfile>> {
     match format {
         FORMAT => classify_manifest(value),
-        git::FORMAT => git::classify_manifest(value),
+        git::FORMAT | git_local_clone::FORMAT => git::classify_manifest(value),
         _ => anyhow::bail!("unsupported MCP profile"),
     }
 }
