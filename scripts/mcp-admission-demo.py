@@ -305,11 +305,11 @@ def bind_collision(workspace, daemon):
     """Only a failed owned daemon with the exact bind error may get a new port."""
     if daemon.poll() is None:
         return False
-    tail = (workspace / "daemon.log").read_bytes()[-8192:].rstrip()
-    return any(tail.endswith(error) for error in (
-        b"Error: Address already in use (os error 98)",
-        b"Error: Only one usage of each socket address (protocol/network address/port) is normally permitted. (os error 10048)",
-    ))
+    lines = (workspace / "daemon.log").read_bytes()[-8192:].splitlines()
+    if not lines:
+        return False
+    error = lines[-1].strip()
+    return error.startswith(b"Error: ") and error.endswith((b"(os error 98)", b"(os error 10048)"))
 
 
 @contextmanager

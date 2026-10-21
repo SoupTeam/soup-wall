@@ -64,6 +64,9 @@ class DemoVerdicts(unittest.TestCase):
             self.assertFalse(DEMO.bind_collision(workspace, Mock(poll=lambda: 1)))
             (workspace / "daemon.log").write_bytes(b"Error: Address already in use (os error 98)\n")
             self.assertFalse(DEMO.bind_collision(workspace, Mock(poll=lambda: None)))
+            (workspace / "daemon.log").write_bytes(
+                "Error: Адрес сокета уже занят. (os error 10048)\n".encode())
+            self.assertTrue(DEMO.bind_collision(workspace, Mock(poll=lambda: 1)))
 
     def test_owned_bind_collision_reallocates_port_before_yielding_stack(self):
         with tempfile.TemporaryDirectory() as directory:
