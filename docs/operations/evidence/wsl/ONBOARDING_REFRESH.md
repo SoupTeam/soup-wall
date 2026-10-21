@@ -37,6 +37,10 @@ unzip -p docs/operations/evidence/wsl/installed-wsl2-cb74d94.zip report.json
 
 The publication adds only documentation/evidence after the tested runtime
 commit. It does not claim execution on its later publication commit.
+Main subsequently advanced to `e2fa19ce3162aea6a39c821882e369f64dc40e02` with
+changes only to `docs/operations/CLASSIFIER_RUNTIME.md` and
+`eval/evidence/sou81/README.md`. Integrating that documentation update does not
+change the tested runtime, driver, selected profiles or build inputs.
 [Earlier main-integration evidence](MAIN_REFRESH.md) and
 [historical archives](QUALIFICATION.md) remain intact.
 See [reproduction instructions](../../WSL_PILOT.md) for later runtime changes.
