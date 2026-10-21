@@ -51,3 +51,7 @@ rule_baseline/runtime/** text eol=lf
 # pins the working-tree bytes and changes no committed byte.
 rule_baseline/rule_baseline.py text eol=lf
 rule_baseline/rev2/rule_baseline.py text eol=lf
+
+# SOU-98 explicit preset and selected Git snapshot use committed byte identities.
+profiles/pilot/linux-readonly-v1/** text eol=lf
+rule_baseline/git_readonly_v1/rule_baseline.py text eol=lf

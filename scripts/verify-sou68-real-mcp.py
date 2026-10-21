@@ -531,9 +531,14 @@ def run(args):
             report["sandbox_positive"] = True
             subprocess.run([str(args.agentfw), "install"], env=env, stdin=subprocess.DEVNULL, capture_output=True, check=True, timeout=30)
             port = BASE.DEMO.free_port()
-            write(home / ".agentfw/config.yaml", {"port": port, "enforce": True, "max_record_bytes": 1048576,
+            config = {"port": port, "enforce": True, "max_record_bytes": 1048576,
                 "policy": str(install / "policy.yaml"), "native": {"registry_path": str(install / "registry.json"),
-                "registry_sha256": sha(install / "registry.json")}})
+                "registry_sha256": sha(install / "registry.json")}}
+            if getattr(args, "pilot_preset", False):
+                pilot = load("sou98_pilot", "pilot_policy.py")
+                config, report["pilot_selection"] = pilot.prepare(
+                    "git", install, output / "pilot-selection", port)
+            write(home / ".agentfw/config.yaml", config)
             with (output / "daemon.log").open("wb") as log:
                 daemon = subprocess.Popen([str(args.agentfw), "serve"], env=env, stdout=log, stderr=log)
                 require(BASE.DEMO.wait_healthy(port, daemon), "owned enforcing daemon failed to start")
@@ -543,6 +548,9 @@ def run(args):
                 protected(stack, report)
             require(INSTALL.tree_sha(install / "package") == report["installation"]["profile"]["packageTreeSha256"],
                     "protected package changed")
+            if "pilot_selection" in report:
+                require(sha(config["policy"]) == report["pilot_selection"]["policy_sha256"],
+                        "selected pilot policy changed during acceptance")
         report["source_after"] = BASE.source()
         require(report["source_after"] == before, "candidate changed during acceptance")
         report["status"] = "pass"
@@ -561,6 +569,8 @@ def run(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true")
+    parser.add_argument("--pilot-preset", action="store_true",
+                        help="explicitly select shipped linux-readonly-v1 policy for this entire run")
     for name in ("agentfw", "git", "bwrap", "git-launcher", "sandbox-test-binary", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--git-sha256", required=True)
