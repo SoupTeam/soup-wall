@@ -130,8 +130,7 @@ jobs:
     name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'Deferred - test' || 'test' }}
     needs: impact
     if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'test')
-    # Keep the accepted qualification environment; ubuntu-latest moved to 26.04.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
@@ -272,13 +271,15 @@ jobs:
     name: Python classifier and evaluation
     needs: impact
     if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'python-classifier')
-    # Keep the accepted qualification environment; ubuntu-latest moved to 26.04.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
       - name: Optional classifier adapter regressions (offline)
         run: python3 -m unittest experiments.classification.test_jev experiments.classification.test_shadow -v
       - name: Task 1 classification evaluation runner units
@@ -288,6 +289,7 @@ jobs:
       - name: SOU-13 public data-free suite and source privacy gate
         # Private-artifact skips are pinned by count; the private full validation is owner-only.
         run: |
+          python3 --version
           python3 -m venv target/sou13-venv
           target/sou13-venv/bin/python -m pip install --disable-pip-version-check -r eval/sou13/requirements-cp2.txt
           target/sou13-venv/bin/python eval/sou13/run_tests.py --expect-skipped 150
@@ -468,8 +470,7 @@ jobs:
     name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'Deferred - all-features' || 'all-features' }}
     needs: impact
     if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'all-features')
-    # Match the frozen qualification platform used by the default test lane.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
