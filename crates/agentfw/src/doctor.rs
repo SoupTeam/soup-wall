@@ -579,6 +579,9 @@ async fn diagnose(args: &DoctorArgs) -> Report {
             agent: agent.clone(),
             probe_tool: None,
             probe_args: None,
+            server_profile: None,
+            classifier_script: None,
+            classifier_python: None,
             #[cfg(windows)]
             runtime: None,
         };
