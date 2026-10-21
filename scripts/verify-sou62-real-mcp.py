@@ -1144,6 +1144,10 @@ def run(args):
             port = stack.port = DEMO.free_port()
             config = {"port": port, "enforce": True, "max_record_bytes": 1048576, "policy": str(stack.install / "policy.yaml"),
                       "native": {"registry_path": str(stack.install / "registry.json"), "registry_sha256": sha(stack.install / "registry.json")}}
+            if getattr(args, "pilot_preset", False):
+                pilot = load("sou98_pilot", "pilot_policy.py")
+                config, report["pilot_selection"] = pilot.prepare(
+                    "filesystem", stack.install, output / "pilot-selection", port)
             write(stack.home / ".agentfw/config.yaml", config)
             positive_env = dict(stack.env, SOU62_SANDBOX_TEST_PROFILE=str(stack.install / "profile.json"),
                                 SOU86_TEST_AGENTFW=str(binary))
@@ -1231,6 +1235,9 @@ def run(args):
                 and sha(bwrap) == report["installed_profile"]["profile"]["bwrapSha256"]
                 and sha(claude) == report["claude_sha256"] and sha(tests) == report["sandbox_test_binary_sha256"])
             require(report["installed_profile_unchanged"] and report["runtime_unchanged"], "installed package/profile/policy/runtime identity drifted")
+            if "pilot_selection" in report:
+                require(sha(config["policy"]) == report["pilot_selection"]["policy_sha256"],
+                        "selected pilot policy changed during acceptance")
         report["private_profile_removed"] = not private.exists()
         report["source_after"] = source()
         require(report["source_after"] == before and sha(binary) == report["binary_sha256"], "candidate changed during acceptance")
@@ -1257,6 +1264,8 @@ def run(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true")
+    parser.add_argument("--pilot-preset", action="store_true",
+                        help="explicitly select shipped linux-readonly-v1 policy for this entire run")
     parser.add_argument("--agentfw", type=Path, required=True)
     parser.add_argument("--node", type=Path, required=True)
     parser.add_argument("--bwrap", type=Path, required=True)
