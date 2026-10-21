@@ -643,7 +643,14 @@ fn prepare_linux_command(
     ];
     if let Some(git) = &profile.git {
         let pin = open_verified_file(&git.path, &git.sha256, true)?;
-        mounts.push((pins.len(), PathBuf::from("/mcp-runtime/git")));
+        mounts.push((
+            pins.len(),
+            PathBuf::from(if clone_profile {
+                super::server_profile::git_local_clone::ORIGINAL_GIT
+            } else {
+                "/mcp-runtime/git"
+            }),
+        ));
         pins.push(pin);
     }
     if git_profile {
@@ -757,13 +764,6 @@ fn prepare_linux_command(
             ("GIT_CONFIG_VALUE_2", "never"),
         ] {
             command.args(["--setenv", name, value]);
-        }
-        if clone_profile {
-            command.args([
-                "--setenv",
-                "GIT_PYTHON_GIT_EXECUTABLE",
-                super::server_profile::git_local_clone::EXECUTABLE,
-            ]);
         }
     }
     command

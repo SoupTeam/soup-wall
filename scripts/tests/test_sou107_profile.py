@@ -87,6 +87,19 @@ class SelectionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "dependency mismatch"):
                 self.prepare()
 
+    def test_fresh_v1_installation_is_converted_without_exclusive_write_collision(self):
+        destination = self.root / "fresh"
+        def upstream(target, *_args):
+            target.mkdir()
+            for source in self.install.iterdir():
+                shutil.copyfile(source, target / source.name)
+        with patch.object(PROFILE.V1, "install", side_effect=upstream):
+            result = PROFILE.install(destination, self.profile["workspace"], "git", "a" * 64, "bwrap", "launcher")
+        self.assertEqual(result["status"], "prepared-not-active")
+        self.assertEqual(json.loads((destination / "profile.json").read_text())["format"], PROFILE.FORMAT)
+        self.assertFalse(list(destination.glob("*.sou107-new")))
+        self.assertEqual(json.loads((destination / "installation.json").read_text())["profile_sha256"], PROFILE.sha(destination / "profile.json"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -59,7 +59,7 @@ fn restrict(execution: bool) -> std::io::Result<()> {
         let git = std::fs::OpenOptions::new()
             .read(true)
             .custom_flags(libc::O_PATH | libc::O_CLOEXEC | libc::O_NOFOLLOW)
-            .open("/mcp-runtime/git")?;
+            .open(git_local_clone::ORIGINAL_GIT)?;
         if !git.metadata()?.is_file() {
             return Err(std::io::Error::other("git_clone_executable_type"));
         }
@@ -124,7 +124,7 @@ fn restrict(execution: bool) -> std::io::Result<()> {
 fn inspect_git(args: &[&str], limit: usize) -> anyhow::Result<Vec<u8>> {
     use std::io::Read;
     use std::process::{Command, Stdio};
-    let mut child = Command::new("/mcp-runtime/git")
+    let mut child = Command::new(git_local_clone::ORIGINAL_GIT)
         .args(args)
         .current_dir("/workspace")
         .stdin(Stdio::null())
@@ -172,7 +172,7 @@ fn run() -> anyhow::Result<()> {
     }
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     Err(std::process::Command::new(if guarded {
-        "/mcp-runtime/git"
+        git_local_clone::ORIGINAL_GIT
     } else {
         "/mcp-server/python/bin/python3.11"
     })

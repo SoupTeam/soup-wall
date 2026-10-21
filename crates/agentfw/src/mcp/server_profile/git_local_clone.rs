@@ -7,7 +7,8 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 pub const FORMAT: &str = "sw-mcp/git-local-clone-readonly/1";
-pub const EXECUTABLE: &str = "/mcp-runtime/git-local-clone-exec";
+pub const EXECUTABLE: &str = "/mcp-runtime/git";
+pub const ORIGINAL_GIT: &str = "/mcp-runtime/original/git";
 
 fn reference(value: &str) -> bool {
     !value.is_empty()

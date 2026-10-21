@@ -18,12 +18,14 @@ async fn selected_local_clone_denies_actual_helper_execution_and_network() {
     );
     let marker = profile.workspace.join("helper-read-marker");
     let helper = profile.workspace.join("owned-helper.py");
+    let other = profile.workspace.join("owned-helper-other.py");
     std::fs::write(&marker, b"owned execution witness").unwrap();
     let receiver = TcpListener::bind("127.0.0.1:0").unwrap();
     receiver.set_nonblocking(true).unwrap();
     let address = receiver.local_addr().unwrap();
     let code = format!("import pathlib,socket\npathlib.Path(__file__).with_name('helper-read-marker').read_bytes()\nsocket.create_connection(('127.0.0.1',{}),timeout=1).close()\nprint('owned helper executed')\n", address.port());
     std::fs::write(&helper, code).unwrap();
+    std::fs::write(&other, b"# different owned fixture\n").unwrap();
     let fd = unsafe { libc::inotify_init1(libc::IN_NONBLOCK | libc::IN_CLOEXEC) };
     assert!(fd >= 0);
     let mut watcher = unsafe { File::from_raw_fd(fd) };
@@ -31,12 +33,13 @@ async fn selected_local_clone_denies_actual_helper_execution_and_network() {
     assert!(
         unsafe { libc::inotify_add_watch(watcher.as_raw_fd(), path.as_ptr(), libc::IN_OPEN) } >= 0
     );
-    let calibrated = std::process::Command::new(&profile.runtime_path)
-        .arg("-I")
+    let calibrated = std::process::Command::new(&profile.git.as_ref().unwrap().path)
+        .env("GIT_EXTERNAL_DIFF", &profile.runtime_path)
+        .args(["diff", "--no-index", "--ext-diff"])
         .arg(&helper)
+        .arg(&other)
         .output()
         .unwrap();
-    assert!(calibrated.status.success());
     assert!(String::from_utf8_lossy(&calibrated.stdout).contains("owned helper executed"));
     let mut buffer = [0; 4096];
     assert!(watcher.read(&mut buffer).unwrap() > 0);
@@ -47,8 +50,8 @@ async fn selected_local_clone_denies_actual_helper_execution_and_network() {
     let script = format!(
         r#"
 import json,os,pathlib,socket,subprocess
-env=dict(os.environ,GIT_CONFIG_COUNT='4',GIT_CONFIG_KEY_3='diff.external',GIT_CONFIG_VALUE_3='/mcp-server/python/bin/python3.11 /workspace/owned-helper.py')
-p=subprocess.run(['/mcp-runtime/git-local-clone-exec','diff','HEAD'],cwd='/workspace',env=env,capture_output=True,timeout=20)
+env=dict(os.environ,GIT_CONFIG_COUNT='4',GIT_CONFIG_KEY_3='diff.external',GIT_CONFIG_VALUE_3='/mcp-server/python/bin/python3.11')
+p=subprocess.run(['/mcp-runtime/git','diff','--no-index','--ext-diff','/workspace/owned-helper.py','/workspace/owned-helper-other.py'],cwd='/workspace',env=env,capture_output=True,timeout=20)
 assert p.returncode != 0 and b'Permission denied' in p.stderr, (p.returncode,p.stdout,p.stderr)
 def denied(fn):
     try: fn(); return False
@@ -98,6 +101,7 @@ print(json.dumps({{'helper_exec_denied':True,'network_denied':True,'write_denied
     );
     assert!(!profile.workspace.join("forbidden-write").exists());
     std::fs::remove_file(helper).unwrap();
+    std::fs::remove_file(other).unwrap();
     std::fs::remove_file(marker).unwrap();
     println!("SOU107_HELPER_NETWORK_WITNESSES_PASSED");
 }

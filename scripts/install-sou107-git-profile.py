@@ -21,6 +21,13 @@ spec.loader.exec_module(V1)
 sha, write = V1.sha, V1.private_json
 
 
+def replace_owned_json(path, value):
+    """Replace only a file in the fresh installation created by this invocation."""
+    temporary = path.with_name(path.name + ".sou107-new")
+    write(temporary, value)
+    os.replace(temporary, path)
+
+
 def identity():
     data = json.loads((ROOT / "profiles/mcp/git-local-clone-readonly-v1/identity.json").read_text())
     if data["format"] != FORMAT:
@@ -47,16 +54,16 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher):
     destination = Path(destination).absolute()
     profile = json.loads((destination / "profile.json").read_text())
     profile["format"] = FORMAT
-    write(destination / "profile.json", profile)
+    replace_owned_json(destination / "profile.json", profile)
     manifest = json.loads((V1.ASSETS / "upstream-tools-list.json").read_text())
-    write(destination / "registry.json", registry(manifest))
+    replace_owned_json(destination / "registry.json", registry(manifest))
     shutil.copyfile(ROOT / "profiles/pilot/linux-readonly-v1/policy.yaml", destination / "policy.yaml")
     os.chmod(destination / "policy.yaml", 0o600)
     receipt = json.loads((destination / "installation.json").read_text())
     receipt.update(format="sou107-profile-installation/1", profile=profile,
                    selection_identity=selected, profile_sha256=sha(destination / "profile.json"),
                    registry_sha256=sha(destination / "registry.json"), policy_sha256=sha(destination / "policy.yaml"))
-    write(destination / "installation.json", receipt)
+    replace_owned_json(destination / "installation.json", receipt)
     return {"status": "prepared-not-active", "profile": str(destination / "profile.json"), "format": FORMAT}
 
 
