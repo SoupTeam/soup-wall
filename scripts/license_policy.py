@@ -283,7 +283,7 @@ def inventory_rust(metadata: dict, lock: dict, policy: dict, root: pathlib.Path)
                                 or (choice == "CDLA-Permissive-2.0"
                                     and license_expr == choice
                                     and name == "webpki-roots"
-                                    and version == "1.0.9"))
+                                    and version == "1.0.10"))
                 if (isinstance(e.get("license"), str) and e["license"].strip()
                         and e["license"] == license_expr
                         and isinstance(reason, str) and len(reason) >= 30
