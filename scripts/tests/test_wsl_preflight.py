@@ -75,6 +75,31 @@ class WslPreflightControls(unittest.TestCase):
             with patch.object(WSL.subprocess, "run", side_effect=error):
                 self.assertEqual(WSL.probe(["/selected/bwrap"]), "unavailable")
 
+    def test_selection_failures_are_actionable_without_leaking_input(self):
+        import tempfile
+        driver = Path(__file__).resolve().parents[1] / "qualify-installed-pilot.py"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            selection = root / "private-operator-selection.json"
+            for content, status, reason in (
+                (None, "unavailable", "selection_unreadable"),
+                ('{"secret": "PRIVATE_VALUE",', "incompatible", "selection_invalid"),
+                ('{"format": "wrong", "secret": "PRIVATE_VALUE"}', "incompatible", "selection_version"),
+            ):
+                if content is not None:
+                    selection.write_text(content)
+                result = subprocess.run([sys.executable, "-B", str(driver), "--wsl-preflight",
+                    "--wsl-root", str(root), "--selection", str(selection),
+                    "--expected-commit", "0" * 40], capture_output=True, text=True, timeout=20)
+                self.assertEqual(result.returncode, 1)
+                report = json.loads(result.stdout)
+                self.assertEqual(report["status"], status)
+                self.assertEqual(report["checks"][0]["reason"], reason)
+                self.assertEqual(report["runtime_qualification"], "not_executed")
+                self.assertEqual(result.stderr, "")
+                self.assertNotIn("PRIVATE_VALUE", result.stdout)
+                self.assertNotIn("private-operator-selection", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

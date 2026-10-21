@@ -1158,10 +1158,23 @@ def main():
         if bool(args.selection) != bool(args.expected_commit):
             parser.error("Supply --selection and --expected-commit together")
         paths = None
-        if args.selection:
-            require(args.selection.stat().st_size <= 65536, "selection_byte_limit")
-            _, paths = validate_selection(strict_json(args.selection.read_bytes()), args.expected_commit)
-        report = wsl_preflight.inspect(args.wsl_root, paths, output=args.output)
+        try:
+            if args.selection:
+                require(args.selection.stat().st_size <= 65536, "selection_byte_limit")
+                _, paths = validate_selection(strict_json(args.selection.read_bytes()), args.expected_commit)
+            report = wsl_preflight.inspect(args.wsl_root, paths, output=args.output)
+        except (Failure, OSError, ValueError, KeyError, TypeError) as error:
+            # Selection paths and parser messages may contain private operator data.
+            # Preserve a static actionable reason, never a traceback or raw input.
+            status = "unavailable" if isinstance(error, OSError) else "incompatible"
+            reason = error.code if isinstance(error, Failure) else (
+                "selection_unreadable" if isinstance(error, OSError) else "selection_invalid")
+            report = {"format": "sw-wsl-preflight/1", "scope": "prerequisites_only",
+                      "status": status, "active_protection": "not_measured",
+                      "runtime_qualification": "not_executed", "checks": [
+                          {"id": "runtime_selection", "status": status, "reason": reason,
+                           "next_step": "Supply a readable exact pilot selection for the clean expected commit.",
+                           "evidence": {}}]}
         print(json.dumps(report, indent=2))
         return 0 if report["status"] == "ready" else 1
     if not args.run:
