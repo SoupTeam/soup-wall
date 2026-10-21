@@ -59,7 +59,9 @@ def fixture(root, git, env):
 def late_changes(stack, report):
     """Mutate only our fixture after original-server initialization and a read."""
     profile = json.loads((stack.install / "profile.json").read_text())
-    command = [str(stack.binary), "mcp", "--native-admission", "--id", "sou107-late", "--",
+    # One logical pinned server across both phases; a second ID would correctly
+    # trigger the shared policy's duplicate-tool/server-shadow protection.
+    command = [str(stack.binary), "mcp", "--native-admission", "--id", "sou68-git", "--",
                profile["runtimePath"], "-I", "-B", "-m", "mcp_server_git", "--repository", "/workspace"]
     env = dict(stack.env, AGENTFW_MCP_SERVER_PROFILE=str(stack.install / "profile.json"),
                AGENTFW_CLASSIFIER="rule-baseline", AGENTFW_RULE_BASELINE=str(ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py"),
@@ -70,21 +72,34 @@ def late_changes(stack, report):
     outside = stack.root / "owned-config-copy"
     outside.write_bytes(originals[config])
     report["late_changes"] = []
+    original_env = dict(stack.env, GIT_PYTHON_GIT_EXECUTABLE=str(stack.git),
+                        GIT_OPTIONAL_LOCKS="0", GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL="/dev/null")
+    with (stack.root / "multifile-unwrapped.log").open("wb") as log:
+        source = V1.Client([profile["runtimePath"], "-I", "-B", "-m", "mcp_server_git",
+                            "--repository", str(stack.workspace)], original_env, stack.workspace, log,
+                           "unwrapped multi-file original Git")
+        try:
+            source.initialize()
+            original_response, original = source.exchange(V1.call(10, repo=stack.workspace))
+            original_text = V1.text(original_response)
+        finally:
+            source.close()
+            report["multifile_original_client"] = source.transcript()
+    require(source.process_witness.final["all_stopped"], "multi-file baseline process cleanup incomplete")
+    (stack.root / "multifile-original-response.json").write_bytes(original)
+    (stack.root / "multifile-original-show.txt").write_text(original_text)
     with (stack.root / "late-changes.log").open("wb") as log:
         client = V1.Client(command, env, stack.workspace, log, "local clone late changes")
         try:
             client.initialize()
             # Retain the ordinary multi-file result-policy false positive. Do
             # not weaken policy, strip result bytes or silently discard this case.
-            original = subprocess.check_output([str(stack.git), "show", "HEAD"], cwd=stack.workspace,
-                                               env=stack.env, timeout=10)
-            (stack.root / "multifile-original-show.txt").write_bytes(original)
-            result, _ = client.exchange(V1.call(10))
+            result, raw = client.exchange(V1.call(10))
             refused = BASE.refused(result)
             if refused:
                 require("git-profile-refuse-result-injection" in json.dumps(result), "unexpected multi-file read refusal")
             else:
-                require(original.decode() in V1.text(result), "multi-file original output changed")
+                require(raw == original, "multi-file original output changed")
             report["multifile_result_policy"] = {
                 "known_false_block": refused, "original_sha256": hashlib.sha256(original).hexdigest(),
                 "response": result, "policy_unchanged": True,
