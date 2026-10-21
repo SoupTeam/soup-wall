@@ -50,6 +50,7 @@ OUTCOMES = {
     "one owned original Git server PID required": "server_pid_not_unique",
     "eight real calls did not enter flight": "inflight_not_reached",
     "queued cancellation target absent": "queued_target_absent",
+    "inflight cancellation target was not dispatched": "inflight_target_not_dispatched",
     "inflight/queued cancellation not correlated": "cancellation_not_correlated",
     "late, cross-call or missing concurrent result": "concurrent_result_mismatch",
     "unsafe original result escaped inspection": "result_injection_escaped",
@@ -93,35 +94,43 @@ def outcome_code(error: BaseException) -> str:
     return "other:" + type(error).__name__
 
 
-def overlap_without_cancel(sou68, client, log, report):
+def overlap_without_cancel(sou68, client, log, report, base=100):
     """Control: sou68.overlap() with only its two cancellations and their reply check removed."""
-    base, require = sou68.BASE, sou68.require
+    transport, require = sou68.BASE, sou68.require
     client.process_witness.sample()
     candidates = []
     for pid, start in client.process_witness.observed:
         try:
             argv = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")
-            if base.ProcessWitness.identity(pid) == start and argv[0] == b"/mcp-server/python/bin/python3.11" and b"mcp_server_git" in argv:
+            if transport.ProcessWitness.identity(pid) == start and argv[0] == b"/mcp-server/python/bin/python3.11" and b"mcp_server_git" in argv:
                 candidates.append((pid, start))
         except OSError:
             pass
     require(len(candidates) == 1, "one owned original Git server PID required")
     pid, start = candidates[0]
+    record = {"owned_server_pid": pid, "request_base": base, "cancelled": [], "replies": [], "passed": False}
+    report.setdefault("overlap_rounds", []).append(record)
+    report["overlap"] = record
     os.kill(pid, signal.SIGSTOP)
     try:
-        client.send(*[sou68.call(i) for i in range(100, 108)])
-        base.wait_event(log, lambda rows: max((r.get("active", 0) for r in rows), default=0) == 8,
+        client.send(*[sou68.call(i) for i in range(base, base + 8)])
+        transport.wait_event(log, lambda rows: any(r.get("host_call_id") in range(base, base + 8) and r.get("active") == 8 for r in rows),
                         "eight real calls did not enter flight")
-        client.send(*[sou68.call(i) for i in range(108, 116)])
-        base.wait_event(log, lambda rows: any(r.get("host_call_id") == 115 and r.get("state") == "queued" for r in rows),
+        # A global active-count row can describe admission work. Require the
+        # actual target to reach the original-server wire before cancelling it.
+        transport.wait_event(log, lambda rows: any(r.get("host_call_id") == base and r.get("state") == "inflight" for r in rows),
+                        "inflight cancellation target was not dispatched")
+        client.send(*[sou68.call(i) for i in range(base + 8, base + 16)])
+        transport.wait_event(log, lambda rows: any(r.get("host_call_id") == base + 15 and r.get("state") == "queued" for r in rows),
                         "queued cancellation target absent")
     finally:
-        if base.ProcessWitness.identity(pid) == start:
+        if transport.ProcessWitness.identity(pid) == start:
             os.kill(pid, signal.SIGCONT)
-    replies = [client.receive()[0] for _ in range(16)]
-    require({r["id"] for r in replies} == set(range(100, 116)) and all("SOU-68 synthetic" in sou68.text(r) for r in replies),
+    for _ in range(16):
+        record["replies"].append(client.receive()[0])
+    require({r["id"] for r in record["replies"]} == set(range(base, base + 16)) and all("SOU-68 synthetic" in sou68.text(r) for r in record["replies"]),
             "late, cross-call or missing concurrent result")
-    report["overlap"] = {"owned_server_pid": pid, "cancelled": [], "replies": replies, "passed": True}
+    record["passed"] = True
 
 
 def session_prefix(sou68, client, stack, witness):

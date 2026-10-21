@@ -38,26 +38,27 @@ def body(function):
 
 class Fidelity(unittest.TestCase):
     def test_control_is_overlap_without_only_its_cancellations(self):
-        production = [line.replace("BASE.", "base.").replace("call(i)", "sou68.call(i)").replace("text(r)", "sou68.text(r)")
+        production = [line.replace("BASE.", "transport.").replace("call(i)", "sou68.call(i)").replace("text(r)", "sou68.text(r)")
                       for line in body(SOU68.overlap)]
-        removed = ["client.send(base.cancel(100), base.cancel(115))",
-                   "cancelled = [client.receive()[0] for _ in range(2)]",
-                   'require({r["id"] for r in cancelled} == {100, 115} and all(r.get("error", {}).get("code") == -32800 for r in cancelled),',
+        removed = ["client.send(transport.cancel(base), transport.cancel(base + 15))",
+                   "for _ in range(2):",
+                   'record["cancelled"].append(client.receive()[0])',
+                   'require({r["id"] for r in record["cancelled"]} == {base, base + 15} and all(r.get("error", {}).get("code") == -32800 for r in record["cancelled"]),',
                    '"inflight/queued cancellation not correlated")']
         for line in removed:
             self.assertIn(line, production)  # the production overlap still cancels exactly this way
         expected = [line for line in production if line not in removed]
-        changes = {"replies = [client.receive()[0] for _ in range(14)]": "replies = [client.receive()[0] for _ in range(16)]",
-                   'require({r["id"] for r in replies} == set(range(101, 115)) and all("SOU-68 synthetic" in sou68.text(r) for r in replies),':
-                   'require({r["id"] for r in replies} == set(range(100, 116)) and all("SOU-68 synthetic" in sou68.text(r) for r in replies),',
-                   'report["overlap"] = {"owned_server_pid": pid, "cancelled": cancelled, "replies": replies, "passed": True}':
-                   'report["overlap"] = {"owned_server_pid": pid, "cancelled": [], "replies": replies, "passed": True}'}
+        changes = {"for _ in range(14):": "for _ in range(16):",
+                   'require({r["id"] for r in record["replies"]} == set(range(base + 1, base + 15)) and all("SOU-68 synthetic" in sou68.text(r) for r in record["replies"]),':
+                   'require({r["id"] for r in record["replies"]} == set(range(base, base + 16)) and all("SOU-68 synthetic" in sou68.text(r) for r in record["replies"]),'}
         for old in changes:
             self.assertIn(old, expected)
         expected = [changes.get(line, line) for line in expected]
         control = body(DIAG.overlap_without_cancel)
-        self.assertEqual(control[0], "base, require = sou68.BASE, sou68.require")
+        self.assertEqual(control[0], "transport, require = sou68.BASE, sou68.require")
         self.assertEqual(control[1:], expected)
+        self.assertEqual(inspect.signature(DIAG.overlap_without_cancel).parameters["base"].default,
+                         inspect.signature(SOU68.overlap).parameters["base"].default)
 
     def test_session_prefix_and_command_are_protected_s_own(self):
         protected = "\n".join(line.replace("BASE.", "base.").replace("INJECTION", "sou68.INJECTION")

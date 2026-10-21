@@ -127,8 +127,9 @@ class Records(unittest.TestCase):
         driver = (ROOT / "scripts/verify-sou68-real-mcp.py").read_text(encoding="utf-8")
         self.assertIn('def call(identifier, tool="git_show", extra=None, repo="/workspace"):', driver)
         self.assertIn('extra if extra is not None else {"revision": "HEAD"}', driver)  # overlap()'s call(i)
-        self.assertIn("client.send(*[call(i) for i in range(100, 108)])", driver)
-        self.assertIn("client.send(BASE.cancel(100), BASE.cancel(115))", driver)
+        self.assertIn("client.send(*[call(i) for i in range(base, base + 8)])", driver)
+        self.assertIn("client.send(BASE.cancel(base), BASE.cancel(base + 15))", driver)
+        self.assertIn("def overlap(client, log, report, base=100):", driver)
 
     def test_report_format_is_never_runtime_evidence(self):
         replay = (ROOT / "scripts/sou97_runtime_replay.py").read_text(encoding="utf-8")
