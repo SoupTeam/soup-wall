@@ -51,7 +51,7 @@ Cargo.lock checksum**, preserve a real upstream license notice whose SHA-256
 matches policy, and preserve any supplemental copyright or derived-code notices.
 The 19 legacy slash-form packages are specifically documented at
 [`policy/third-party-notices/README.md`](../policy/third-party-notices/README.md);
-no general translation of `/` to `OR` is permitted. `webpki-roots 1.0.9` is
+no general translation of `/` to `OR` is permitted. `webpki-roots 1.0.10` is
 separately limited to its source CDLA-Permissive-2.0 license and pinned archive.
 Final release packaging and notices for CCADB-derived trust data require an
 explicit maintainer review; a green Rust check is not release approval. The
