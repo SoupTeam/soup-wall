@@ -49,8 +49,10 @@ struct Call {
     tool: String,
     args: Value,
     raw: Vec<u8>,
+    request_sha256: String,
     phase: Phase,
     cancelled: bool,
+    cancel: tokio::sync::watch::Sender<bool>,
     dispatched: bool,
     deadline: Instant,
     progress: Option<Value>,
@@ -169,6 +171,7 @@ async fn admit(
     collector: &Collector<'_>,
     snapshot: Arc<Snapshot>,
     call: &Call,
+    profile: &server_profile::ProfileConfig,
 ) -> anyhow::Result<Decision> {
     let installed = collector
         .config
@@ -178,7 +181,7 @@ async fn admit(
         .iter()
         .find(|tool| tool.name == call.tool)
         .context("selected MCP registry tool missing")?;
-    match collector
+    let assessment = match collector
         .classify(
             &snapshot,
             &call.id,
@@ -194,32 +197,141 @@ async fn admit(
         .await?
     {
         Err(code) => return Ok(Decision::Refused(not_classified(&call.id, code))),
-        Ok(assessment) => match assessment.verdict {
-            ProductionVerdict::Ask => {
-                return Ok(Decision::Refused(withheld(
-                    &call.id,
-                    "invocation",
-                    &json!(["classifier_ask"]),
-                )))
-            }
-            ProductionVerdict::Deny => {
-                return Ok(Decision::Refused(withheld(
-                    &call.id,
-                    "invocation",
-                    &json!(["classifier_deny"]),
-                )))
-            }
-            ProductionVerdict::Allow => {}
-        },
+        Ok(assessment) => assessment,
+    };
+    let refusal = |code: &str| Decision::Refused(withheld(&call.id, "invocation", &json!([code])));
+    if *call.cancel.borrow() || Instant::now() >= call.deadline {
+        return Ok(refusal("native_approval_cancelled"));
     }
-    let boundary = collector.policy_boundary().await?;
-    let receipt = collector
-        .event(
-            "call",
-            json!({"tool":call.tool,"args":call.args,
-        "schema_sha256":installed.schema_sha256,"mcp_host_call_id":call.id}),
-        )
-        .await?;
+    if assessment.verdict == ProductionVerdict::Deny {
+        return Ok(refusal("classifier_deny"));
+    }
+    if !assessment.known_read_only {
+        return Ok(refusal(if collector.config.approval.is_some() {
+            "classifier_unknown_approval_unsupported"
+        } else {
+            "classifier_ask"
+        }));
+    }
+    let mut boundary = collector.policy_boundary().await?;
+    let mut fields = json!({"tool":call.tool,"args":call.args,
+        "schema_sha256":installed.schema_sha256,"mcp_host_call_id":call.id});
+    let mut receipt = if assessment.verdict == ProductionVerdict::Ask {
+        None
+    } else {
+        Some(collector.event("call", fields.clone()).await?)
+    };
+    let source = if assessment.verdict == ProductionVerdict::Ask {
+        Some("classifier")
+    } else if receipt
+        .as_ref()
+        .is_some_and(|reply| reply["verdict"] == "ask")
+    {
+        Some("daemon")
+    } else {
+        None
+    };
+    if let Some(source) = source {
+        // No transition gate is held across a human wait. Acquire a fresh
+        // boundary, rerun classification and redeem under the current policy.
+        drop(boundary.take());
+        if collector.config.approval.is_none() {
+            return Ok(if let Some(reply) = receipt {
+                Decision::Refused(withheld(&call.id, "invocation", &reply["reason_codes"]))
+            } else {
+                refusal("classifier_ask")
+            });
+        }
+        let Some(classifier) = &collector.config.classifier else {
+            return Ok(refusal("native_approval_classifier_identity_required"));
+        };
+        let Some(classifier_digest) = classifier
+            .revision()
+            .filter(|digest| crate::native::is_digest(digest))
+        else {
+            return Ok(refusal("native_approval_classifier_identity_required"));
+        };
+        // This increment requires the accepted host/agent capability and live
+        // collector owner. Plain legacy sessions keep their correlated refusal.
+        if collector.host_session.is_none() || collector.liveness.is_none() {
+            return Ok(refusal("native_approval_bound_owner_required"));
+        }
+        let definition = snapshot
+            .tools
+            .get(&call.tool)
+            .context("selected definition missing")?;
+        let context = crate::native::approval::SelectedInvocation {
+            host_call_id: call.id.clone(),
+            request_sha256: call.request_sha256.clone(),
+            server_id: collector.config.server_id.clone(),
+            profile: call.profile.clone(),
+            profile_sha256: sha(canonical(&serde_json::to_value(profile)?)
+                .to_string()
+                .as_bytes()),
+            classifier_sha256: classifier_digest.to_owned(),
+            snapshot_sha256: snapshot.sha256.clone(),
+            definition_sha256: definition.definition_sha256.clone(),
+            input_sha256: super::prediction_identity(
+                &collector.config.server_id,
+                &snapshot,
+                definition,
+                &call.tool,
+                &call.args,
+                classifier.source(),
+                classifier.revision(),
+            ),
+        };
+        let approval_id =
+            match wait_approval(collector, call, source, &installed.schema_sha256, &context).await?
+            {
+                Ok(id) => id,
+                Err(code) => return Ok(refusal(&code)),
+            };
+        let resumed = async {
+            let frozen = profile.clone();
+            tokio::task::spawn_blocking(move || frozen.revalidate_assets()).await??;
+            boundary = collector.policy_boundary().await?;
+            let reassessed = collector
+                .classify(
+                    &snapshot,
+                    &call.id,
+                    &call.tool,
+                    &call.args,
+                    installed.action_class,
+                    ClassificationAuthority {
+                        egress_declared: false,
+                        create_file_profile: None,
+                        https_get: false,
+                    },
+                )
+                .await?;
+            ensure!(
+                reassessed.is_ok_and(
+                    |value| value.known_read_only && value.verdict != ProductionVerdict::Deny
+                ),
+                "selected approval reclassification refused"
+            );
+            ensure!(
+                !*call.cancel.borrow() && Instant::now() < call.deadline,
+                "selected approval cancelled before dispatch"
+            );
+            Ok::<_, anyhow::Error>(())
+        }
+        .await;
+        if resumed.is_err() {
+            collector.cancel_approval(&approval_id).await?;
+            return Ok(refusal("native_approval_revalidation_refused"));
+        }
+        fields["approval_id"] = json!(approval_id);
+        fields["selected_invocation"] = json!(context);
+        let admitted = collector.event("call", fields).await;
+        // Idempotent cancellation removes approved but unused state. A lost or
+        // malformed native receipt is session-fatal, as on the ordinary path:
+        // retire the session rather than orphaning an unseen reserved call.
+        collector.cancel_approval(&approval_id).await?;
+        receipt = Some(admitted?);
+    }
+    let receipt = receipt.context("selected admission receipt absent")?;
     if receipt["release"] != true {
         return Ok(Decision::Refused(withheld(
             &call.id,
@@ -232,6 +344,85 @@ async fn admit(
         binding: receipt["binding_sha256"].clone(),
         boundary,
     }))
+}
+
+/// One bounded admission worker, independent of host input and useful peers.
+/// Always finish opening before observing cancellation so the returned pending
+/// id can be cancelled. Fatal relay exit closes the entire native session.
+async fn wait_approval(
+    collector: &Collector<'_>,
+    call: &Call,
+    source: &str,
+    schema: &str,
+    context: &crate::native::approval::SelectedInvocation,
+) -> anyhow::Result<Result<String, String>> {
+    let base = |action| {
+        json!({"contract_version":CONTRACT,
+        "registry_sha256":collector.config.native.registry_sha256,
+        "session_id":collector.session,"action":action})
+    };
+    if *call.cancel.borrow() {
+        return Ok(Err("native_approval_cancelled".into()));
+    }
+    let mut body = base("request");
+    body["source"] = json!(source);
+    body["tool"] = json!(call.tool);
+    body["args"] = call.args.clone();
+    body["schema_sha256"] = json!(schema);
+    body["selected_invocation"] = json!(context);
+    let reply = match collector.approval_post(&body).await? {
+        Ok(reply) => reply,
+        Err(code) => return Ok(Err(code)),
+    };
+    ensure!(
+        reply["action"] == "request",
+        "selected approval action mismatch"
+    );
+    let id = reply["pending_id"]
+        .as_str()
+        .context("pending id")?
+        .to_owned();
+    eprintln!(
+        "{}",
+        json!({"event":"mcp_native_approval_pending","pending_id":id,
+        "tool":call.tool,"host_call_id":call.id,"binding_sha256":reply["binding_sha256"],
+        "expires_in_ms":reply["expires_in_ms"],"source":source})
+    );
+    let limit = call.deadline.min(
+        Instant::now()
+            + collector.config.approval.as_ref().unwrap().wait.min(
+                std::time::Duration::from_millis(reply["expires_in_ms"].as_u64().unwrap_or(0)),
+            ),
+    );
+    let mut cancel = call.cancel.subscribe();
+    let outcome = async {
+        loop {
+            if *cancel.borrow() { return Ok(Err("native_approval_cancelled".into())); }
+            tokio::select! {
+                biased;
+                _ = cancel.changed() => return Ok(Err("native_approval_cancelled".into())),
+                _ = tokio::time::sleep_until(limit) => return Ok(Err("native_approval_timeout".into())),
+                _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {}
+            }
+            let mut status = base("status"); status["pending_id"] = json!(id);
+            let reply = match collector.approval_post(&status).await? {
+                Ok(reply) => reply, Err(code) => return Ok(Err(code)),
+            };
+            ensure!(reply["action"] == "status" && reply["pending_id"] == id,
+                "selected approval status identity mismatch");
+            match reply["state"].as_str() {
+                Some("approved") => return Ok(Ok(id.clone())),
+                Some("pending") => {},
+                Some("rejected") => return Ok(Err("native_approval_rejected".into())),
+                Some("expired") => return Ok(Err("native_approval_expired".into())),
+                _ => return Ok(Err("native_approval_closed".into())),
+            }
+        }
+    }.await;
+    if !matches!(&outcome, Ok(Ok(_))) {
+        collector.cancel_approval(&id).await?;
+    }
+    outcome
 }
 
 async fn inspect(
@@ -277,8 +468,10 @@ fn detached(call: &Call) -> Call {
         tool: call.tool.clone(),
         args: call.args.clone(),
         raw: Vec::new(),
+        request_sha256: call.request_sha256.clone(),
         phase: Phase::Admitting,
         cancelled: call.cancelled,
+        cancel: call.cancel.clone(),
         dispatched: call.dispatched,
         deadline: call.deadline,
         progress: call.progress.clone(),
@@ -386,7 +579,7 @@ async fn relay<R, W, S, T>(
     host: &mut W,
     server: &mut S,
     child: &mut T,
-    format: &str,
+    profile: &server_profile::ProfileConfig,
 ) -> anyhow::Result<()>
 where
     R: AsyncBufRead + Unpin,
@@ -394,6 +587,7 @@ where
     S: AsyncBufRead + Unpin,
     T: AsyncWrite + Unpin,
 {
+    let format = profile.format.as_str();
     let mut initialized = false;
     let mut notified = false;
     let mut ready = false;
@@ -430,7 +624,7 @@ where
                 .clone()
                 .context("selected discovery snapshot unavailable")?;
             workers.push(Box::pin(async move {
-                WorkEvent::Admitted(key, admit(collector, current, &input).await)
+                WorkEvent::Admitted(key, admit(collector, current, &input, profile).await)
             }));
         }
         if client_closed && calls.is_empty() && control.is_none() && workers.is_empty() {
@@ -453,6 +647,14 @@ where
             raw=line(client,&mut client_partial),if !client_closed=>{
                 let Some(raw) = raw? else {
                     client_closed = true;
+                    for call in calls.values_mut() {
+                        if matches!(call.phase, Phase::Admitting | Phase::Queued) {
+                            call.cancel.send_replace(true);
+                            call.cancelled = true;
+                        }
+                    }
+                    calls.retain(|_, call| !matches!(call.phase, Phase::Queued));
+                    queue.clear();
                     continue;
                 };
                 let value = parse(&raw)?;
@@ -492,6 +694,7 @@ where
                             continue;
                         }
                         call.cancelled = true;
+                        call.cancel.send_replace(true);
                         write(
                             host,
                             &error(
@@ -706,9 +909,11 @@ where
                             id: request_id.clone(),
                             tool: name.into(),
                             args,
+                            request_sha256: sha(&raw),
                             raw,
                             phase: Phase::Queued,
                             cancelled: false,
+                            cancel: tokio::sync::watch::channel(false).0,
                             dispatched: false,
                             deadline: Instant::now() + super::IO_TIMEOUT,
                             progress,
@@ -1053,6 +1258,7 @@ where
                 for key in expired {
                     let call = calls.get_mut(&key).expect("expired call");
                     call.cancelled = true;
+                    call.cancel.send_replace(true);
                     write(
                         host,
                         &error(
@@ -1312,7 +1518,7 @@ pub(super) async fn run(
                     &mut host,
                     &mut server,
                     &mut child,
-                    &profile.format,
+                    profile,
                 );
                 tokio::pin!(exchange);
                 tokio::select! {
