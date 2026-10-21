@@ -277,8 +277,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      # The public guarded fixtures are qualified on this interpreter; runner
-      # image upgrades must not silently replace it with a newer Python.
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -291,6 +289,7 @@ jobs:
       - name: SOU-13 public data-free suite and source privacy gate
         # Private-artifact skips are pinned by count; the private full validation is owner-only.
         run: |
+          python3 --version
           python3 -m venv target/sou13-venv
           target/sou13-venv/bin/python -m pip install --disable-pip-version-check -r eval/sou13/requirements-cp2.txt
           target/sou13-venv/bin/python eval/sou13/run_tests.py --expect-skipped 150
