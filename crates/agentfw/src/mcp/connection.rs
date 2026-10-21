@@ -1536,11 +1536,27 @@ pub(crate) mod linux {
             }
         }
 
+        fn trusted_fixture_executable(dir: &Path) -> PathBuf {
+            // The host's /usr/bin/env may be a coreutils multi-call binary with
+            // many hard links. Use a private, single-link copy as the test agent.
+            let path = dir.join("env");
+            std::fs::copy("/usr/bin/env", &path).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+            assert!(executable(&path).is_ok());
+            assert!(std::process::Command::new(&path)
+                .arg("-i")
+                .arg("/usr/bin/true")
+                .status()
+                .unwrap()
+                .success());
+            path
+        }
+
         #[test]
         fn wrapped_argument_limit_is_checked_before_writing() {
-            let (_dir, path) = fixture();
+            let (dir, path) = fixture();
             let config = ConfigFile::read(&path).unwrap();
-            let executable = std::fs::canonicalize("/usr/bin/env").unwrap();
+            let executable = trusted_fixture_executable(dir.path());
             let options = Options {
                 path: path.clone(),
                 server: "local".into(),
@@ -1561,6 +1577,14 @@ pub(crate) mod linux {
             assert!(wrapped(&entry, &options, "test", None).is_err());
             assert_eq!(std::fs::read(&path).unwrap(), config.bytes);
             assert!(config.state("local").unwrap().is_none());
+        }
+
+        #[test]
+        fn wrapped_argument_fixture_keeps_hardlink_guard() {
+            let dir = tempfile::tempdir().unwrap();
+            let path = trusted_fixture_executable(dir.path());
+            std::fs::hard_link(&path, dir.path().join("env-hardlink")).unwrap();
+            assert!(executable(&path).is_err());
         }
 
         #[test]

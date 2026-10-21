@@ -7,6 +7,12 @@ authorization ([acceptance status](ACCEPTANCE.md)). Passing every check here con
 
 Run from the repository root with Python 3.12 (validated with 3.12.10; 3.10 and 3.11 untested):
 
+Python 3.14 is unsupported for the frozen CP1 evaluation: its `shlex.shlex` constructor
+defers `collections.deque` import into the guarded fixture call. The guard correctly
+records `import:collections`, and changing the frozen `sou13/sandbox.py` would break
+the owner-pinned CP1 source identity. CI selects Python 3.12 explicitly; `run_tests.py`
+fails before executing suites on Python 3.14+ instead of reporting a misleading skip.
+
 ```sh
 python -m pip install -r eval/sou13/requirements-cp2.txt
 python eval/sou13/run_tests.py --expect-skipped 150
