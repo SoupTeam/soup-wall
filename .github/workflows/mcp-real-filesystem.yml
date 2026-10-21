@@ -20,7 +20,7 @@ jobs:
     if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'required-linux-sandbox-and-real-host')
     # This selected runtime is Linux x86-64. No host sysctl/AppArmor relaxation.
     runs-on: ubuntu-22.04
-    timeout-minutes: 40
+    timeout-minutes: 60
     env:
       RUSTUP_TOOLCHAIN: '1.94.1'
     steps:
@@ -210,6 +210,16 @@ jobs:
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
               stream.write('```json\n' + json.dumps(selected, indent=2) + '\n```\n')
           PILOT_OUTCOME
+      - name: Required persistent onboarding of the installed filesystem profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/onboarding-profile-acceptance.py --profiles filesystem \
+            --agentfw "$PWD/target/debug/agentfw" \
+            --node "$RUNNER_TEMP/sou62-runtime/bin/node" --npm "$RUNNER_TEMP/sou62-runtime/bin/npm" \
+            --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" \
+            --out "$RUNNER_TEMP/profile-onboarding-filesystem" --work-parent "$RUNNER_TEMP" \
+            2>&1 | tee "$RUNNER_TEMP/sou62-profile-onboarding.log"
       - name: Publish bounded outcome
         if: always()
         shell: bash
@@ -282,5 +292,6 @@ jobs:
             ${{ runner.temp }}/sou62-acceptance/*.log
             ${{ runner.temp }}/sou62-sou63-combined/*.json
             ${{ runner.temp }}/sou62-sou63-combined/*.log
+            ${{ runner.temp }}/profile-onboarding-filesystem/*.json
           if-no-files-found: error
           retention-days: 30

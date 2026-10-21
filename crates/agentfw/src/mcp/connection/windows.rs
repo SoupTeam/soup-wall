@@ -370,6 +370,9 @@ pub(super) fn collector(
         agent: current.clone(),
         probe_tool: None,
         probe_args: None,
+        server_profile: None,
+        classifier_script: None,
+        classifier_python: None,
         runtime: runtime.map(Path::to_path_buf),
     };
     let executor = tokio::runtime::Builder::new_current_thread()

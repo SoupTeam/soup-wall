@@ -175,6 +175,7 @@ fn write_journal_file(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 pub(crate) struct Output {
     pub code: Option<i32>,
     pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
     pub timed_out: bool,
 }
 
@@ -184,6 +185,18 @@ impl Output {
     }
     fn json(&self) -> Option<Value> {
         serde_json::from_slice(&self.stdout).ok()
+    }
+    /// The command's own one-line error, only when it carries no path or value:
+    /// a fixed diagnostic is safe to report, anything else is withheld.
+    fn safe_error(&self) -> Option<String> {
+        let text = String::from_utf8_lossy(&self.stderr);
+        let line = text.lines().rev().find(|l| l.starts_with("Error: "))?;
+        let message = line.trim_start_matches("Error: ").trim();
+        (message.len() <= 200
+            && message
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || " ;:,.'()-_".contains(c)))
+        .then(|| message.to_owned())
     }
 }
 
@@ -203,7 +216,7 @@ pub(crate) fn run_agent(
         .env("RUST_BACKTRACE", "0")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .process_group(0);
     if let Some(profile) = profile {
         command.env("HOME", profile).env("USERPROFILE", profile);
@@ -212,6 +225,7 @@ pub(crate) fn run_agent(
         return Output {
             code: None,
             stdout: Vec::new(),
+            stderr: Vec::new(),
             timed_out: false,
         };
     };
@@ -219,6 +233,14 @@ pub(crate) fn run_agent(
     let reader = std::thread::spawn(move || {
         let mut bytes = Vec::new();
         let _ = (&mut stdout).take(4 * 1024 * 1024).read_to_end(&mut bytes);
+        bytes
+    });
+    let mut stderr = child.stderr.take().expect("piped stderr");
+    let errors = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        let _ = (&mut stderr).take(64 * 1024).read_to_end(&mut bytes);
+        // Keep draining so a verbose child never blocks on a full pipe.
+        let _ = std::io::copy(&mut stderr, &mut std::io::sink());
         bytes
     });
     let deadline = Instant::now() + limit;
@@ -241,6 +263,7 @@ pub(crate) fn run_agent(
     Output {
         code: status.and_then(|s| s.code()),
         stdout: reader.join().unwrap_or_default(),
+        stderr: errors.join().unwrap_or_default(),
         timed_out,
     }
 }
@@ -310,7 +333,41 @@ pub(crate) struct Facts {
     other_settings: usize,
     python_version: String,
     resume: bool,
+    /// The explicitly selected original-server profile, verified against its pins.
+    server_profile: Option<SelectedProfile>,
+    classifier_python_sha256: String,
+    classifier_bytes: Vec<u8>,
 }
+
+#[derive(Clone)]
+pub(crate) struct SelectedProfile {
+    config: crate::mcp::server_profile::ProfileConfig,
+    sha256: String,
+    kind: &'static str,
+}
+
+impl SelectedProfile {
+    /// Exact identities bound into the plan digest: every runtime pin of the profile.
+    fn identity(&self, path: &Path) -> Value {
+        let c = &self.config;
+        let pin = |l: &Option<crate::mcp::server_profile::Library>| {
+            l.as_ref()
+                .map(|l| json!({"path": l.path, "sha256": l.sha256}))
+        };
+        json!({
+            "path": path, "sha256": self.sha256, "format": c.format, "kind": self.kind,
+            "workspace": c.workspace,
+            "runtime": {"path": c.runtime_path, "sha256": c.runtime_sha256},
+            "package": {"root": c.package_root, "tree_sha256": c.package_tree_sha256},
+            "bwrap": {"path": c.bwrap_path, "sha256": c.bwrap_sha256},
+            "git": pin(&c.git), "git_launcher": pin(&c.git_launcher),
+            "libraries_sha256": sha256(canonical(&json!(c.libraries.iter()
+                .map(|l| json!([l.path, l.sha256])).collect::<Vec<_>>())).as_bytes()),
+        })
+    }
+}
+
+const PROFILE_CLASSIFIER: &str = "classifier.py";
 
 struct Paths {
     profile: PathBuf,
@@ -407,10 +464,13 @@ pub(crate) fn check_inputs(inputs: &Inputs) -> (Vec<Check>, Facts) {
     // Classifier assets for the isolated self-test.
     let expected = inputs.classifier_sha256.trim();
     match read_limited(&inputs.classifier_script, 1024 * 1024) {
-        Ok(bytes) if hex64(expected) && sha256(&bytes) == expected => checks.push(ok(
-            "classifier",
-            "rule_baseline.py digest matches the expected revision",
-        )),
+        Ok(bytes) if hex64(expected) && sha256(&bytes) == expected => {
+            facts.classifier_bytes = bytes;
+            checks.push(ok(
+                "classifier",
+                "rule_baseline.py digest matches the expected revision",
+            ))
+        }
         Ok(_) => checks.push(refused(
             "classifier",
             "classifier source does not match --classifier-sha256 (wrong revision)",
@@ -452,9 +512,17 @@ pub(crate) fn check_inputs(inputs: &Inputs) -> (Vec<Check>, Facts) {
                             .registry
                             .parent()
                             .is_some_and(|d| d.join("profile.json").exists());
-                    if needs_profile {
-                        checks.push(refused("registry", "this profile needs a server profile or resource executor that the accepted connection interface does not configure",
-                        "use the profile's own documented launch, or a plain native-admission registry"));
+                    let executor = value["tools"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .any(|t| t.get("resource_policy").is_some());
+                    if executor {
+                        checks.push(refused("registry", "this registry needs a resource executor profile, which onboarding does not configure",
+                        "use that profile's own documented launch, or a plain native-admission registry"));
+                    } else if needs_profile && inputs.server_profile.is_none() {
+                        checks.push(refused("registry", "this registry belongs to an original-server profile; without --server-profile the server would not start inside its accepted confinement",
+                        "pass the installed profile with --server-profile and --server-profile-sha256"));
                     } else {
                         facts.registry_id =
                             value["registry_id"].as_str().unwrap_or_default().to_owned();
@@ -567,6 +635,9 @@ pub(crate) fn check_inputs(inputs: &Inputs) -> (Vec<Check>, Facts) {
             "pass <private directory>/.agentfw")),
     }
 
+    // Selected original-server profile, before the host entry is matched against it.
+    check_profile(inputs, &mut checks, &mut facts);
+
     // Host configuration and the selected reviewed entry.
     check_host(inputs, &mut checks, &mut facts, journal.as_ref());
 
@@ -608,6 +679,11 @@ pub(crate) fn check_inputs(inputs: &Inputs) -> (Vec<Check>, Facts) {
                 "fix --probe-tool/--probe-args",
             )
         });
+    } else if inputs.server_profile.is_some() {
+        checks.push(ok(
+            "probe",
+            "the profile's original read (list_directory or git_status of /workspace) will verify the connected server",
+        ));
     } else {
         checks.push(ok(
             "probe",
@@ -625,6 +701,184 @@ pub(crate) fn check_inputs(inputs: &Inputs) -> (Vec<Check>, Facts) {
         ));
     }
     (checks, facts)
+}
+
+/// Verify an explicitly selected profile: its exact bytes, a compatible registry, the
+/// workspace, every installed runtime pin and the Linux sandbox prerequisites.
+/// Nothing is started except bounded prerequisite probes of the pinned bubblewrap.
+fn check_profile(inputs: &Inputs, checks: &mut Vec<Check>, facts: &mut Facts) {
+    let (Some(path), Some(digest)) = (&inputs.server_profile, &inputs.server_profile_sha256) else {
+        return;
+    };
+    use crate::mcp::server_profile::{git, ProfileConfig, FORMAT, MAX_PROFILE_BYTES};
+    let bytes = match plain_path(path).map(|_| read_limited(path, MAX_PROFILE_BYTES as u64)) {
+        Ok(Ok(bytes)) if sha256(&bytes) == *digest => bytes,
+        Ok(Ok(_)) => {
+            checks.push(refused(
+                "server_profile",
+                "profile.json differs from --server-profile-sha256 (changed after review)",
+                "review the installed profile again and pass its digest",
+            ));
+            return;
+        }
+        _ => {
+            checks.push(refused(
+                "server_profile",
+                "profile.json is missing, unreadable, too large or not an absolute link-free path",
+                "pass profile.json written by the filesystem or Git profile installer",
+            ));
+            return;
+        }
+    };
+    let config = match ProfileConfig::read(&bytes) {
+        Ok(config) => config,
+        Err(_) => {
+            checks.push(refused("server_profile", "unsupported or invalid server profile; only filesystem-readonly-v1 and git-readonly-v1 are accepted",
+                "install one of the accepted read-only profiles"));
+            return;
+        }
+    };
+    let kind = if config.format == git::FORMAT {
+        "git"
+    } else if config.format == FORMAT {
+        "filesystem"
+    } else {
+        "unknown"
+    };
+    if config.workspace != inputs.workspace {
+        checks.push(refused(
+            "server_profile",
+            "--workspace differs from the workspace the profile was installed for",
+            "pass the profile's reviewed workspace",
+        ));
+        return;
+    }
+    checks.push(ok(
+        "server_profile",
+        format!("accepted {kind} read-only profile; digest matches"),
+    ));
+    // The registry must carry exactly this profile's result contract.
+    let compatible = serde_json::from_slice::<Value>(&facts.registry_bytes)
+        .ok()
+        .is_some_and(|v| {
+            let tools = v["tools"].as_array().cloned().unwrap_or_default();
+            let selected = tools
+                .iter()
+                .filter(|t| t["mcp_result_profile"] == json!(config.format))
+                .count();
+            selected > 0
+                && tools.iter().all(|t| {
+                    t.get("mcp_result_profile")
+                        .is_none_or(|p| p == &json!(config.format))
+                })
+        });
+    checks.push(if compatible {
+        ok("profile_registry", "registry tools carry this profile's result contract")
+    } else {
+        refused("profile_registry", "the registry does not belong to the selected profile (incompatible registry/profile combination)",
+            "pass the registry.json installed with this profile")
+    });
+    match crate::mcp::server_sandbox::verify(&config) {
+        Ok(()) => checks.push(ok("profile_runtime", "runtime, installed package tree, bubblewrap, libraries and workspace match their pins")),
+        Err(_) => checks.push(refused("profile_runtime", "an installed runtime, package, dependency, bubblewrap, library or workspace identity differs from the profile (or the repository is unsupported)",
+            "reinstall the profile into a new destination and review it again; nothing is downloaded or rebuilt here")),
+    }
+    match sandbox_support(&config) {
+        Ok(()) => checks.push(ok("sandbox_support", "user, PID, mount and network namespaces, seccomp and (for Git) Landlock ABI 3 are available")),
+        Err(reason) => checks.push(refused("sandbox_support", format!("missing Linux sandbox support: {reason}"),
+            "run on a Linux host that permits unprivileged user namespaces; no unconfined fallback exists")),
+    }
+    // The connection persists this interpreter in the selected entry, so it must meet
+    // the same executable rules `mcp-connection` enforces before it writes anything.
+    let python = &inputs.classifier_python;
+    let trusted = std::fs::symlink_metadata(python).is_ok_and(|m| {
+        m.is_file()
+            && m.nlink() == 1
+            && m.mode() & 0o022 == 0
+            && m.mode() & 0o111 != 0
+            && (m.uid() == 0 || m.uid() == euid())
+    });
+    match plain_path(python).map(|_| sha256_file(python)) {
+        Ok(Ok(digest)) if trusted => facts.classifier_python_sha256 = digest,
+        Ok(Ok(_)) => checks.push(refused("classifier_python", "with a server profile, --classifier-python must be a regular, single-link executable owned by you or root and not writable by group or others (it is persisted in the connected entry)",
+            "pass a system interpreter such as readlink -f /usr/bin/python3, or fix its permissions yourself")),
+        _ => checks.push(refused("classifier_python", "with a server profile, --classifier-python must be the real interpreter path (no links)",
+            "pass the result of readlink -f for the interpreter")),
+    }
+    facts.server_profile = Some(SelectedProfile {
+        config,
+        sha256: digest.clone(),
+        kind,
+    });
+}
+
+/// Bounded probes of the kernel features the accepted profile sandbox requires.
+fn sandbox_support(config: &crate::mcp::server_profile::ProfileConfig) -> Result<(), &'static str> {
+    let help = Process::new(&config.bwrap_path)
+        .arg("--help")
+        .env_clear()
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .map_err(|_| "bubblewrap cannot run")?;
+    if !String::from_utf8_lossy(&help.stdout).contains("--ro-bind-fd") {
+        return Err("bubblewrap lacks --ro-bind-fd");
+    }
+    let mut probe = Process::new(&config.bwrap_path);
+    probe
+        .args([
+            "--unshare-all",
+            "--unshare-user",
+            "--disable-userns",
+            "--assert-userns-disabled",
+            "--cap-drop",
+            "ALL",
+            "--die-with-parent",
+            "--dev",
+            "/dev",
+            "--proc",
+            "/proc",
+            "--ro-bind",
+            "/usr",
+            "/usr",
+            "--ro-bind-try",
+            "/lib",
+            "/lib",
+            "--ro-bind-try",
+            "/lib64",
+            "/lib64",
+            "--ro-bind-try",
+            "/bin",
+            "/bin",
+            "--",
+            "/usr/bin/true",
+        ])
+        .env_clear()
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    if !probe.status().is_ok_and(|s| s.success()) {
+        return Err("unprivileged user, PID, mount or network namespaces are unavailable");
+    }
+    let status = std::fs::read_to_string("/proc/self/status").unwrap_or_default();
+    if !status.lines().any(|l| l.starts_with("Seccomp_filters:")) {
+        return Err("seccomp filters are unavailable");
+    }
+    if config.format == crate::mcp::server_profile::git::FORMAT {
+        // SAFETY: the version query passes no pointers and has no side effects.
+        let abi = unsafe {
+            libc::syscall(
+                libc::SYS_landlock_create_ruleset,
+                std::ptr::null::<libc::c_void>(),
+                0usize,
+                1u32,
+            )
+        };
+        if abi < 3 {
+            return Err("Landlock ABI 3 is unavailable");
+        }
+    }
+    Ok(())
 }
 
 fn run_python_version(python: &Path) -> Option<String> {
@@ -740,6 +994,24 @@ fn check_host(
             "use the real executable path (for example from readlink -f) and move credentials out of env"));
         return;
     }
+    if let Some(selected) = &facts.server_profile {
+        let args: Vec<String> = entry["args"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|v| v.as_str().map(str::to_owned))
+            .collect();
+        let command = entry["command"].as_str().unwrap_or_default();
+        if selected
+            .config
+            .validate_command(command, &args, &selected.config.workspace)
+            .is_err()
+        {
+            checks.push(refused("server", "the selected entry is not this profile's original server command and arguments",
+                "point the entry at the profile's pinned runtime with the installer's exact arguments"));
+            return;
+        }
+    }
     checks.push(ok("server", format!("reviewed stdio entry found; {} other server entries and {} other settings will be preserved",
         facts.other_servers, facts.other_settings)));
 }
@@ -762,6 +1034,12 @@ pub(crate) fn plan(inputs: &Inputs, facts: &Facts) -> (Value, String, String) {
         "probe": inputs.probe_tool.as_ref().map(|t| json!({"tool": t, "args_sha256": sha256(inputs.probe_args.clone().unwrap_or_default().as_bytes())})),
         "version_label": version_label(&facts.agent_sha256),
     });
+    let mut identity = identity;
+    if let (Some(selected), Some(path)) = (&facts.server_profile, &inputs.server_profile) {
+        identity["server_profile"] = selected.identity(path);
+        identity["classifier"]["python_sha256"] = json!(facts.classifier_python_sha256);
+        identity["classifier"]["owned_copy"] = json!(home.join(OWNED_DIR).join(PROFILE_CLASSIFIER));
+    }
     let digest = sha256(canonical(&identity).as_bytes());
     let mut core = identity.clone();
     core["host_config"]["sha256"] = Value::Null;
@@ -777,7 +1055,7 @@ fn version_label(agent_sha: &str) -> String {
 /// Concrete changes shown to the operator (exact paths are printed, never stored in reports).
 fn changes(inputs: &Inputs, facts: &Facts) -> Vec<(String, &'static str)> {
     let home = inputs.agent_home.display();
-    vec![
+    let mut out = vec![
         (format!("create directory {home} (mode 0700)"), "agent_home"),
         (format!("write {home}/{OWNED_DIR}/registry.json and policy.yaml, and {home}/config.yaml (enforce, 127.0.0.1:{}, pinned registry)", inputs.port), "owned_files"),
         (format!("run `agentfw install` for {home} (creates its token)"), "token"),
@@ -785,7 +1063,18 @@ fn changes(inputs: &Inputs, facts: &Facts) -> Vec<(String, &'static str)> {
         (format!("run `agentfw mcp-connection connect` for server `{}` in {} (only that entry is rewritten; its recovery files stay beside the config)",
                  inputs.server, inputs.host_config.display()), "connection"),
         ("verify with protection-status, mcp-connection inspect (explicit probe only) and the isolated self-test".into(), "verification"),
-    ]
+    ];
+    if let Some(selected) = &facts.server_profile {
+        out.insert(2, (format!("copy the reviewed classifier to {home}/{OWNED_DIR}/{PROFILE_CLASSIFIER} for the profile collector"), "owned_files"));
+        let last = out.len() - 1;
+        out[last] = (format!("verify with protection-status, then through the connected entry: an original {} read, a refused change with an independent workspace witness, a useful continuation, and the isolated self-test",
+            selected.kind), "verification");
+        out[last - 1].0.push_str(&format!(
+            " with the {} profile's pinned launch settings (profile, workspace, classifier)",
+            selected.kind
+        ));
+    }
+    out
 }
 
 // ------------------------------------------------------------------ journal
@@ -860,6 +1149,7 @@ pub(crate) fn step_outputs(step: &str, version: &str) -> Vec<String> {
             "onboarding",
             "onboarding/registry.json",
             "onboarding/policy.yaml",
+            "onboarding/classifier.py",
         ],
         // `agentfw install`
         "create_token" => &["token"],
@@ -1153,6 +1443,14 @@ fn labels(inputs: &Inputs, facts: &Facts) -> Value {
                         "other_settings": facts.other_settings},
         "port": inputs.port,
         "probe": inputs.probe_tool.is_some(),
+        "server_profile": facts.server_profile.as_ref().map(|p| json!({
+            "kind": p.kind, "format": p.config.format, "sha256": p.sha256,
+            "runtime_sha256": p.config.runtime_sha256, "package_tree_sha256": p.config.package_tree_sha256,
+            "bwrap_sha256": p.config.bwrap_sha256,
+            "git_sha256": p.config.git.as_ref().map(|g| g.sha256.clone()),
+            "git_launcher_sha256": p.config.git_launcher.as_ref().map(|g| g.sha256.clone()),
+            "library_count": p.config.libraries.len(),
+            "classifier_python_sha256": facts.classifier_python_sha256})),
     })
 }
 
@@ -1190,6 +1488,17 @@ fn print_plan(inputs: &Inputs, checks: &[Check], facts: &Facts, digest: Option<&
             .unwrap_or_else(|| "shipped default".into())
     );
     println!("  Workspace      {}", inputs.workspace.display());
+    if let Some(profile) = &inputs.server_profile {
+        println!(
+            "  Server profile {} ({})",
+            profile.display(),
+            facts
+                .server_profile
+                .as_ref()
+                .map(|p| p.kind)
+                .unwrap_or("unverified")
+        );
+    }
     println!(
         "  Classifier     {} (Python {})",
         inputs.classifier_script.display(),
@@ -1303,7 +1612,7 @@ impl Session<'_> {
         let policy = owned.join("policy.yaml");
         let config = json!({"bind": "127.0.0.1", "port": self.inputs.port, "enforce": true, "policy": policy,
             "native": {"registry_path": registry, "registry_sha256": self.inputs.registry_sha256}});
-        vec![
+        let mut files = vec![
             (
                 "registry".into(),
                 registry,
@@ -1315,7 +1624,17 @@ impl Session<'_> {
                 self.home().join("config.yaml"),
                 config.to_string().into_bytes(),
             ),
-        ]
+        ];
+        if self.facts.server_profile.is_some() {
+            // The profile collector classifies with this private, reviewed copy, so a
+            // later edit of the operator's source cannot change the running classifier.
+            files.push((
+                "classifier".into(),
+                owned.join(PROFILE_CLASSIFIER),
+                self.facts.classifier_bytes.clone(),
+            ));
+        }
+        files
     }
 
     fn step(&mut self, name: &'static str) -> Result<(), StepError> {
@@ -1545,13 +1864,33 @@ impl Session<'_> {
     }
 
     fn connect(&mut self) -> Result<(), StepError> {
-        let output = self.agent(self.connection_args("connect"), false);
+        let mut args = self.connection_args("connect");
+        if self.facts.server_profile.is_some() {
+            let profile = self
+                .inputs
+                .server_profile
+                .clone()
+                .expect("selected profile");
+            let classifier = self.home().join(OWNED_DIR).join(PROFILE_CLASSIFIER);
+            args = with_paths(
+                args,
+                &[
+                    ("--server-profile", &profile),
+                    ("--classifier-script", &classifier),
+                    ("--classifier-python", &self.inputs.classifier_python),
+                ],
+            );
+        }
+        let output = self.agent(args, false);
         let status = output
             .json()
             .map(|v| v["status"].clone())
             .unwrap_or(Value::Null);
-        self.evidence
-            .insert("connection".into(), json!({"status": status}));
+        self.evidence.insert(
+            "connection".into(),
+            json!({"status": status, "exit_code": output.code, "timed_out": output.timed_out,
+                   "error": output.safe_error()}),
+        );
         if output.ok() && status == "configured" {
             Ok(())
         } else {
@@ -1560,6 +1899,9 @@ impl Session<'_> {
     }
 
     fn verify_server(&mut self) -> Result<(), StepError> {
+        if self.facts.server_profile.is_some() {
+            return self.verify_profile_server();
+        }
         let mut args = self.connection_args("inspect");
         if let (Some(tool), Some(probe)) = (&self.inputs.probe_tool, &self.inputs.probe_args) {
             args.extend(os(&["--probe-tool", tool, "--probe-args", probe]));
@@ -1576,6 +1918,50 @@ impl Session<'_> {
             _ => Err(StepError::Failed(format!(
                 "the connected server did not verify ({status})"
             ))),
+        }
+    }
+
+    /// Witness the selected original server through the connected entry itself, after
+    /// `mcp-connection inspect` attributes that entry and its launch settings to us.
+    fn verify_profile_server(&mut self) -> Result<(), StepError> {
+        let selected = self.facts.server_profile.clone().expect("selected profile");
+        let inspect = self.agent(self.connection_args("inspect"), false);
+        let inspected = inspect
+            .json()
+            .map(|v| v["status"].clone())
+            .unwrap_or(Value::Null);
+        let entry = read_limited(&self.inputs.host_config, MAX_HOST_CONFIG)
+            .ok()
+            .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+            .map(|v| v["mcpServers"][&self.inputs.server].clone())
+            .unwrap_or(Value::Null);
+        let (status, witness) = if inspected != "configured" {
+            (
+                "unavailable",
+                json!({"reason": "the connected entry or its pinned launch settings are not attributed to this onboarding"}),
+            )
+        } else {
+            let limit = Duration::from_secs(120).min(
+                self.deadline
+                    .saturating_duration_since(Instant::now())
+                    .max(Duration::from_secs(30)),
+            );
+            match profile_witness(&entry, &selected, self.inputs, limit) {
+                Ok(details) => ("verified_profile_witness", details),
+                Err(details) => ("failed", details),
+            }
+        };
+        self.evidence.insert("host_probe".into(), json!({
+            "status": status, "inspect_status": inspected, "profile": selected.kind,
+            "scope": "one session through the configured entry: original discovery, a useful read, a refused change with an independent workspace witness and a useful continuation; future calls still pass native admission"}));
+        self.evidence.insert("profile_witness".into(), witness);
+        if status == "verified_profile_witness" {
+            Ok(())
+        } else {
+            Err(StepError::Failed(format!(
+                "the selected {} server did not verify through the connected entry ({status})",
+                selected.kind
+            )))
         }
     }
 
@@ -1623,6 +2009,211 @@ impl Session<'_> {
                 "the installed self-test did not complete".into(),
             )),
         }
+    }
+}
+
+/// One line-delimited JSON-RPC session with the configured entry, bounded in time,
+/// line size and process lifetime. The entry runs with a cleared environment.
+struct WitnessSession {
+    child: std::process::Child,
+    input: std::process::ChildStdin,
+    lines: std::sync::mpsc::Receiver<Vec<u8>>,
+    deadline: Instant,
+}
+
+impl WitnessSession {
+    fn start(entry: &Value, limit: Duration) -> Option<Self> {
+        let command = entry["command"].as_str()?;
+        let args: Vec<&str> = entry["args"]
+            .as_array()?
+            .iter()
+            .filter_map(Value::as_str)
+            .collect();
+        let mut child = Process::new(command)
+            .args(args)
+            .env_clear()
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .process_group(0)
+            .spawn()
+            .ok()?;
+        let input = child.stdin.take()?;
+        let output = child.stdout.take()?;
+        let (send, lines) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            use std::io::BufRead;
+            let mut reader = std::io::BufReader::new(output);
+            loop {
+                let mut line = Vec::new();
+                match (&mut reader)
+                    .take(4 * 1024 * 1024)
+                    .read_until(b'\n', &mut line)
+                {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => {
+                        if send.send(line).is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+        Some(Self {
+            child,
+            input,
+            lines,
+            deadline: Instant::now() + limit,
+        })
+    }
+
+    fn send(&mut self, frame: &Value) -> bool {
+        self.input
+            .write_all(format!("{frame}\n").as_bytes())
+            .is_ok()
+            && self.input.flush().is_ok()
+    }
+
+    fn call(&mut self, id: u64, method: &str, params: Value) -> Option<Value> {
+        if !self.send(&json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params})) {
+            return None;
+        }
+        loop {
+            let wait = self.deadline.checked_duration_since(Instant::now())?;
+            let line = self.lines.recv_timeout(wait).ok()?;
+            let value: Value = serde_json::from_slice(&line).ok()?;
+            if value["id"] == json!(id) {
+                return Some(value);
+            }
+        }
+    }
+}
+
+impl Drop for WitnessSession {
+    fn drop(&mut self) {
+        // SAFETY: signalling the process group this session created.
+        unsafe {
+            libc::kill(-(self.child.id() as i32), libc::SIGKILL);
+        }
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+fn mcp_refused(response: &Value) -> bool {
+    response.get("error").is_some() || response["result"]["isError"] == true
+}
+
+/// Original discovery, a useful read, a refused change whose effect is witnessed
+/// independently on the host workspace, and a useful continuation, in one session.
+/// Results are reported as digests only; paths and contents never enter reports.
+fn profile_witness(
+    entry: &Value,
+    selected: &SelectedProfile,
+    inputs: &Inputs,
+    limit: Duration,
+) -> Result<Value, Value> {
+    use crate::mcp::server_profile::{original_manifest_for, validate_initialization_for};
+    let format = selected.config.format.as_str();
+    let workspace = selected.config.workspace.clone();
+    let nonce = format!(
+        "{:x}{:x}",
+        crate::self_test::now_unix_ms(),
+        std::process::id()
+    );
+    let (useful_tool, useful_args) = match (&inputs.probe_tool, &inputs.probe_args) {
+        (Some(tool), Some(args)) => (
+            tool.clone(),
+            serde_json::from_str(args).unwrap_or(json!({})),
+        ),
+        _ if selected.kind == "git" => {
+            ("git_status".to_owned(), json!({"repo_path": "/workspace"}))
+        }
+        _ => ("list_directory".to_owned(), json!({"path": "/workspace"})),
+    };
+    let (refused_tool, refused_args, effect) = if selected.kind == "git" {
+        let branch = format!("soup-wall-witness-{nonce}");
+        (
+            "git_create_branch",
+            json!({"repo_path": "/workspace", "branch_name": branch}),
+            workspace.join(".git/refs/heads").join(&branch),
+        )
+    } else {
+        let name = format!(".soup-wall-witness-{nonce}.txt");
+        (
+            "write_file",
+            json!({"path": format!("/workspace/{name}"), "content": "onboarding refusal witness"}),
+            workspace.join(&name),
+        )
+    };
+    let mut details = json!({"useful_tool": useful_tool, "refused_tool": refused_tool,
+        "workspace_witness": "bounded non-following snapshot of the host workspace, taken outside the sandbox"});
+    let Some(mut session) = WitnessSession::start(entry, limit) else {
+        details["reason"] = json!("the configured entry did not start");
+        return Err(details);
+    };
+    let init = session.call(
+        1,
+        "initialize",
+        json!({"protocolVersion": "2025-11-25", "capabilities": {},
+        "clientInfo": {"name": "soup-wall-onboarding", "version": "1"}}),
+    );
+    let initialized = init.as_ref().is_some_and(|r| {
+        r.get("result")
+            .is_some_and(|v| validate_initialization_for(format, v).is_ok())
+    });
+    details["original_initialization"] = json!(initialized);
+    if !initialized
+        || !session.send(&json!({"jsonrpc": "2.0", "method": "notifications/initialized"}))
+    {
+        details["reason"] = json!("initialization failed or differs from the original server");
+        return Err(details);
+    }
+    let listed = session.call(2, "tools/list", json!({}));
+    let original = original_manifest_for(format).ok();
+    let discovery = listed
+        .as_ref()
+        .is_some_and(|r| original.as_ref() == r.get("result"));
+    details["original_discovery"] = json!(discovery);
+    let call = |session: &mut WitnessSession, id: u64, tool: &str, args: &Value| {
+        session.call(id, "tools/call", json!({"name": tool, "arguments": args}))
+    };
+    let first = call(&mut session, 3, &useful_tool, &useful_args);
+    let useful = first.as_ref().is_some_and(|r| !mcp_refused(r));
+    let first_digest = first
+        .as_ref()
+        .map(|r| sha256(canonical(&r["result"]).as_bytes()));
+    details["useful"] = json!({"ok": useful, "result_sha256": first_digest});
+    let before = inventory(&workspace);
+    let denied = call(&mut session, 4, refused_tool, &refused_args);
+    let after = inventory(&workspace);
+    let refused = denied.as_ref().is_some_and(mcp_refused);
+    let unchanged = before == after && std::fs::symlink_metadata(&effect).is_err();
+    details["refusal"] = json!({"refused": refused, "error_frame": denied.as_ref().is_some_and(|r| r.get("error").is_some()),
+        "workspace_unchanged": unchanged, "workspace_entries": before.len()});
+    let second = call(&mut session, 5, &useful_tool, &useful_args);
+    let continued = second.as_ref().is_some_and(|r| !mcp_refused(r));
+    let second_digest = second
+        .as_ref()
+        .map(|r| sha256(canonical(&r["result"]).as_bytes()));
+    details["continuation"] =
+        json!({"ok": continued, "same_result": continued && second_digest == first_digest});
+    drop(session);
+    if discovery && useful && refused && unchanged && continued {
+        Ok(details)
+    } else {
+        details["reason"] = json!(if !discovery {
+            "discovery differs from the original server"
+        } else if !useful {
+            "the useful original read was refused or failed"
+        } else if !refused {
+            "the change was not refused"
+        } else if !unchanged {
+            "the host workspace changed during the refused call"
+        } else {
+            "the useful continuation failed"
+        });
+        Err(details)
     }
 }
 
@@ -1793,7 +2384,12 @@ fn apply(args: ApplyArgs) -> i32 {
                 session.journal.phase = "applied".into();
                 let _ = save_journal(&session.state, &session.journal);
                 let probe = body["host_probe"]["status"] == "verified_for_this_probe";
-                if probe {
+                let witnessed = body["host_probe"]["status"] == "verified_profile_witness";
+                if witnessed {
+                    ("verified", EXIT_OK, "Configured and verified: the daemon identity matches the plan, and through the connected entry the original server answered a useful read, a change was refused with an unchanged workspace witness and a useful continuation followed; the isolated self-test passed. Unobserved host sessions remain unknown.".to_string(),
+                     vec!["start a new Claude Code session so it loads the updated MCP entry".into(),
+                          "to reverse: agentfw onboard undo with the same Agent, Agent home, host config and server".into()])
+                } else if probe {
                     ("verified", EXIT_OK, "Configured and verified: the daemon identity matches the plan, the explicit probe returned an admitted result and the isolated self-test passed. Unobserved host sessions remain unknown.".to_string(),
                      vec!["start a new Claude Code session so it loads the updated MCP entry".into(),
                           "to reverse: agentfw onboard undo with the same Agent, Agent home, host config and server".into()])
@@ -1943,6 +2539,7 @@ fn rollback(
         ("config", home.join("config.yaml")),
         ("registry", home.join(OWNED_DIR).join("registry.json")),
         ("policy", home.join(OWNED_DIR).join("policy.yaml")),
+        ("classifier", home.join(OWNED_DIR).join(PROFILE_CLASSIFIER)),
         ("token", home.join("token")),
     ];
     for (label, path) in owned {
@@ -1965,6 +2562,29 @@ fn rollback(
         }
     }
     if journal.created_home {
+        // Accepted component cleanup: the manifest store keeps exactly one record for
+        // the connection this onboarding created, rewritten whenever that server is
+        // used. Its exact name is derived from the recorded host file and server, and
+        // it must still be a manifest record; every other manifest stays foreign.
+        let rel = format!(
+            "manifests/{}",
+            crate::mcp::store::ManifestStore::record_name(&crate::mcp::connection::server_id(
+                &host,
+                &journal.server
+            ))
+        );
+        let manifest = home.join(&rel);
+        let is_record = std::fs::symlink_metadata(&manifest).is_ok_and(|m| m.is_file())
+            && read_limited(&manifest, 4 * 1024 * 1024)
+                .ok()
+                .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+                .and_then(|v| v.as_object().cloned())
+                .is_some_and(|o| o.keys().all(|k| k == "current" || k == "history"));
+        if is_record && journal.inventory.contains_key("manifests") {
+            if let Some(entry) = entry_of(&manifest) {
+                journal.inventory.insert(rel, entry);
+            }
+        }
         // Only entries recorded by this operation are removed; nothing is removed recursively.
         let (preserved, audit_kept) = clean_recorded(&home, &journal.inventory, purge);
         if !preserved.is_empty() {
@@ -2289,6 +2909,8 @@ mod tests {
             registry_sha256: String::new(),
             policy: None,
             policy_sha256: None,
+            server_profile: None,
+            server_profile_sha256: None,
             workspace: PathBuf::new(),
             agent_home: home.clone(),
             host_config: PathBuf::new(),
@@ -2360,6 +2982,8 @@ mod tests {
             registry_sha256: String::new(),
             policy: None,
             policy_sha256: None,
+            server_profile: None,
+            server_profile_sha256: None,
             workspace: PathBuf::new(),
             agent_home: home.clone(),
             host_config: PathBuf::new(),
@@ -2502,6 +3126,118 @@ mod tests {
         let same = BTreeMap::from([("x".to_string(), entry("operator"))]);
         adopt_step_changes(&mut recorded, &same, &same, &all);
         assert_eq!(recorded["x"], entry("a"));
+    }
+
+    #[test]
+    fn the_owned_profile_classifier_is_removed_only_with_its_recorded_bytes() {
+        let (_dir, paths, mut journal) = recorded_home();
+        let home = PathBuf::from(&journal.agent_home);
+        let classifier = home.join(OWNED_DIR).join(PROFILE_CLASSIFIER);
+        // write_owned_files records the copy it created, by digest and in the inventory.
+        let before = inventory(&home);
+        std::fs::write(&classifier, b"print('reviewed')").unwrap();
+        let after = inventory(&home);
+        let outputs = step_outputs("write_owned_files", "onboard-x");
+        adopt_step_changes(&mut journal.inventory, &before, &after, &outputs);
+        journal
+            .files
+            .insert("classifier".into(), sha256(b"print('reviewed')"));
+        std::fs::write(&classifier, b"print('operator edit')").unwrap();
+        let results = run_rollback(&mut journal, &paths, false);
+        assert!(results
+            .iter()
+            .any(|r| r["step"] == "classifier" && r["outcome"] == "conflict"));
+        assert_eq!(
+            std::fs::read(&classifier).unwrap(),
+            b"print('operator edit')"
+        );
+        std::fs::write(&classifier, b"print('reviewed')").unwrap();
+        let results = run_rollback(&mut journal, &paths, true);
+        assert!(results
+            .iter()
+            .any(|r| r["step"] == "classifier" && r["outcome"] == "reversed"));
+        assert!(!classifier.exists());
+    }
+
+    #[test]
+    fn only_this_connections_manifest_record_is_cleaned_after_use() {
+        let (_dir, paths, mut journal) = recorded_home();
+        let home = PathBuf::from(&journal.agent_home);
+        let host = paths.profile.join(".claude/mcp.json");
+        journal.host_config = host.to_string_lossy().into_owned();
+        journal.server = "selected".into();
+        std::fs::create_dir(home.join("manifests")).unwrap();
+        journal.inventory = inventory(&home);
+        let name = crate::mcp::store::ManifestStore::record_name(
+            &crate::mcp::connection::server_id(&host, "selected"),
+        );
+        // Written by the Agent while the connected server was used after apply.
+        std::fs::write(
+            home.join("manifests").join(&name),
+            br#"{"current":null,"history":[]}"#,
+        )
+        .unwrap();
+        let foreign = home.join("manifests/claude-other-0000.json");
+        std::fs::write(&foreign, br#"{"current":null,"history":[]}"#).unwrap();
+        let (outcome, detail) = home_outcome(&run_rollback(&mut journal, &paths, true));
+        assert_eq!(outcome, "conflict");
+        assert!(detail.starts_with("1 untracked"), "{detail}");
+        assert!(!home.join("manifests").join(&name).exists());
+        assert!(foreign.exists());
+        // A file with this name that is not a manifest record is preserved.
+        std::fs::remove_file(&foreign).unwrap();
+        std::fs::write(home.join("manifests").join(&name), b"operator notes").unwrap();
+        let (outcome, _) = home_outcome(&run_rollback(&mut journal, &paths, true));
+        assert_eq!(outcome, "conflict");
+        assert!(home.join("manifests").join(&name).exists());
+        std::fs::remove_file(home.join("manifests").join(&name)).unwrap();
+        let (outcome, _) = home_outcome(&run_rollback(&mut journal, &paths, true));
+        assert_eq!(outcome, "reversed");
+    }
+
+    #[test]
+    fn only_fixed_command_errors_are_reported() {
+        let output = |stderr: &[u8]| Output {
+            code: Some(1),
+            stdout: Vec::new(),
+            stderr: stderr.to_vec(),
+            timed_out: false,
+        };
+        assert_eq!(
+            output(b"warning\nError: unsafe or unavailable executable\n").safe_error(),
+            Some("unsafe or unavailable executable".into())
+        );
+        // Paths, values and anything unusual are withheld.
+        assert_eq!(
+            output(b"Error: cannot open /home/me/secret\n").safe_error(),
+            None
+        );
+        assert_eq!(output(b"Error: token=abc\n").safe_error(), None);
+        assert_eq!(output(b"no error line").safe_error(), None);
+    }
+
+    #[test]
+    fn sandbox_support_refuses_an_unusable_bubblewrap() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let config = crate::mcp::server_profile::ProfileConfig::read(
+            json!({"format": crate::mcp::server_profile::FORMAT, "workspace": root,
+                   "runtimePath": "/usr/bin/true", "runtimeSha256": "0".repeat(64),
+                   "packageRoot": root, "packageTreeSha256": "0".repeat(64),
+                   "bwrapPath": root.join("missing-bwrap"), "bwrapSha256": "0".repeat(64),
+                   "libraries": []})
+            .to_string()
+            .as_bytes(),
+        )
+        .unwrap();
+        assert!(sandbox_support(&config).is_err());
+        // A program without --ro-bind-fd is not an accepted bubblewrap.
+        let mut fake = config.clone();
+        fake.bwrap_path = PathBuf::from("/usr/bin/true");
+        assert_eq!(
+            sandbox_support(&fake).err(),
+            Some("bubblewrap lacks --ro-bind-fd")
+        );
     }
 
     #[test]
