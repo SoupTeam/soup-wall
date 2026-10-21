@@ -524,12 +524,65 @@ native:
 
                 self.assertTrue(healthy, "daemon failed to become healthy")
 
+                # Prepare valid installed ProfileConfig profiles for real pilot execution
+                fs_installed = tmp / "fs_installed"
+                fs_installed.mkdir()
+                pkg_fs = tmp / "pkg_fs"
+                pkg_fs.mkdir()
+                (pkg_fs / "node_modules/@modelcontextprotocol/server-filesystem/dist").mkdir(parents=True)
+                (pkg_fs / "node_modules/@modelcontextprotocol/server-filesystem/dist/index.js").write_text("// entrypoint")
+                node_dummy = tmp / "node"
+                make_executable(node_dummy)
+                bwrap_dummy = tmp / "bwrap"
+                make_executable(bwrap_dummy)
+
+                d64 = "0" * 64
+                canonical_ws = str(ws.resolve())
+                fs_prof = {
+                    "format": "sw-mcp/filesystem-readonly/1",
+                    "workspace": canonical_ws,
+                    "runtimePath": str(node_dummy),
+                    "runtimeSha256": d64,
+                    "packageRoot": str(pkg_fs),
+                    "packageTreeSha256": d64,
+                    "bwrapPath": str(bwrap_dummy),
+                    "bwrapSha256": d64,
+                    "libraries": [],
+                }
+                (fs_installed / "profile.json").write_text(json.dumps(fs_prof), encoding="utf-8")
+
+                git_installed = tmp / "git_installed"
+                git_installed.mkdir()
+                pkg_git = tmp / "pkg_git"
+                pkg_git.mkdir()
+                py_dummy = tmp / "python3"
+                make_executable(py_dummy)
+                git_dummy = tmp / "git"
+                make_executable(git_dummy)
+                launcher_dummy = tmp / "launcher"
+                make_executable(launcher_dummy)
+
+                git_prof = {
+                    "format": "sw-mcp/git-readonly/1",
+                    "workspace": canonical_ws,
+                    "runtimePath": str(py_dummy),
+                    "runtimeSha256": d64,
+                    "packageRoot": str(pkg_git),
+                    "packageTreeSha256": d64,
+                    "bwrapPath": str(bwrap_dummy),
+                    "bwrapSha256": d64,
+                    "libraries": [],
+                    "git": {"path": str(git_dummy), "sha256": d64},
+                    "gitLauncher": {"path": str(launcher_dummy), "sha256": d64},
+                }
+                (git_installed / "profile.json").write_text(json.dumps(git_prof), encoding="utf-8")
+
                 # 1. Negative control: operator selects policy_b but daemon enforces policy_a
                 proc_mismatch = self.run_pilot([
                     "--claude", str(claude),
                     "--workspace", str(ws),
-                    "--fs-profile", str(FS_PROFILE),
-                    "--git-profile", str(GIT_PROFILE),
+                    "--fs-profile", str(fs_installed),
+                    "--git-profile", str(git_installed),
                     "--home", str(agentfw_dir),
                     "--policy", str(policy_b),
                     "--dry-run",
@@ -544,8 +597,8 @@ native:
                 proc_match = self.run_pilot([
                     "--claude", str(claude),
                     "--workspace", str(ws),
-                    "--fs-profile", str(FS_PROFILE),
-                    "--git-profile", str(GIT_PROFILE),
+                    "--fs-profile", str(fs_installed),
+                    "--git-profile", str(git_installed),
                     "--home", str(agentfw_dir),
                     "--policy", str(policy_a),
                     "--dry-run",
@@ -566,7 +619,65 @@ native:
                 if daemon.stderr:
                     daemon.stderr.close()
 
+    def test_unverified_command_json_rejected_outside_mock_mode(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            claude = tmp / "claude"
+            make_executable(claude)
+            ws = tmp / "ws"
+            ws.mkdir()
+
+            fs_prof = tmp / "fs.json"
+            fs_prof.write_text(json.dumps({"command": "/bin/echo", "args": ["hello"]}))
+            git_prof = tmp / "git.json"
+            git_prof.write_text(json.dumps({"command": "/bin/echo", "args": ["world"]}))
+
+            # 1. Outside mock mode: rejected with failure
+            proc = self.run_pilot([
+                "--claude", str(claude),
+                "--workspace", str(ws),
+                "--fs-profile", str(fs_prof),
+                "--git-profile", str(git_prof),
+                "--dry-run",
+            ])
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("real pilot requires validated ProfileConfig", proc.stderr)
+
+            # 2. Inside mock mode: command fixtures accepted
+            proc_mock = self.run_pilot([
+                "--claude", str(claude),
+                "--workspace", str(ws),
+                "--fs-profile", str(fs_prof),
+                "--git-profile", str(git_prof),
+                "--mock-daemon-token", "test-token",
+                "--dry-run",
+            ])
+            self.assertEqual(proc_mock.returncode, 0)
+
+    def test_missing_profile_rejected_outside_mock_mode(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            claude = tmp / "claude"
+            make_executable(claude)
+            ws = tmp / "ws"
+            ws.mkdir()
+            fs_empty = tmp / "fs_empty"
+            fs_empty.mkdir()
+            git_empty = tmp / "git_empty"
+            git_empty.mkdir()
+
+            proc = self.run_pilot([
+                "--claude", str(claude),
+                "--workspace", str(ws),
+                "--fs-profile", str(fs_empty),
+                "--git-profile", str(git_empty),
+                "--dry-run",
+            ])
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("installed MCP server profile not found", proc.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

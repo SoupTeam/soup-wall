@@ -415,6 +415,9 @@ native:
                 ANTHROPIC_API_KEY="owned-fixture-key",
             )
 
+            token_path = agentfw_dir / "native-token"
+            daemon_secret = token_path.read_text(encoding="utf-8").strip() if token_path.exists() else ""
+
             proc = self.run_pilot_cli(
                 [
                     "--claude", str(self.claude),
@@ -424,6 +427,7 @@ native:
                     "--home", str(agentfw_dir),
                     "--policy", str(policy_path),
                     "--host-session", session_id,
+                    "--allow-command-fixtures",
                     "--timeout-seconds", "60",
                     "--json",
                 ],
@@ -519,6 +523,253 @@ native:
             except Exception:
                 daemon.kill()
 
+    def test_installed_profile_scenario(
+        self,
+        workspace: Path,
+        base_dir: Path,
+    ) -> dict:
+        """Qualify the full launcher with installed, validated original profiles and selected daemon policy."""
+        workspace = workspace.resolve()
+        base_dir = base_dir.resolve()
+        installed_base = base_dir / "installed_qual"
+        installed_base.mkdir(parents=True, exist_ok=True)
+
+        home = installed_base / "home"
+        home.mkdir(parents=True, exist_ok=True)
+        agentfw_dir = home / ".agentfw"
+        agentfw_dir.mkdir(parents=True, exist_ok=True)
+
+        policy_path = installed_base / "policy.yaml"
+        policy_path.write_text("""agent_policies:
+  - name: deny-destructive
+    when: { action_class: destructive }
+    action: deny
+    message: "Blocked: destructive action forbidden"
+default: allow
+""", encoding="utf-8")
+
+        mismatch_policy_path = installed_base / "policy_mismatch.yaml"
+        mismatch_policy_path.write_text("""agent_policies:
+  - name: deny-all
+    when: { action_class: read_only }
+    action: deny
+    message: "Blocked all"
+default: deny
+""", encoding="utf-8")
+
+        fs_schema = {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": False}
+        git_schema = {"type": "object", "properties": {"repo_path": {"type": "string"}}, "required": ["repo_path"], "additionalProperties": False}
+        reg_tools = [
+            {"name": "read_text_file", "schema_sha256": sha256_bytes(canonical_json_bytes(fs_schema)), "action_class": "read_only", "result_provenance": "untrusted", "egress": []},
+            {"name": "git_status", "schema_sha256": sha256_bytes(canonical_json_bytes(git_schema)), "action_class": "read_only", "result_provenance": "local_system", "egress": []},
+            {"name": "git_reset", "schema_sha256": sha256_bytes(canonical_json_bytes(git_schema)), "action_class": "destructive", "result_provenance": "local_system", "egress": []},
+        ]
+        reg_obj = {"contract_version": "sw-native/1", "registry_id": "sou99-installed-reg", "tools": reg_tools}
+        reg_bytes = json.dumps(reg_obj).encode("utf-8")
+        reg_path = installed_base / "registry.json"
+        reg_path.write_bytes(reg_bytes)
+
+        daemon_port = free_port()
+        config_yaml = f"""port: {daemon_port}
+enforce: true
+policy: {policy_path}
+native:
+  registry_path: {reg_path}
+  registry_sha256: {sha256_bytes(reg_bytes)}
+"""
+        (agentfw_dir / "config.yaml").write_text(config_yaml, encoding="utf-8")
+
+        # Spawn live authenticated daemon
+        daemon_env = dict(
+            HOME=str(home),
+            PATH=os.environ.get("PATH", "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin"),
+        )
+        daemon = subprocess.Popen([str(self.binary), "serve"], env=daemon_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        deadline = time.monotonic() + 10
+        healthy = False
+        while time.monotonic() < deadline:
+            if daemon.poll() is not None:
+                break
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{daemon_port}/health", timeout=1) as resp:
+                    if resp.status == 200:
+                        healthy = True
+                        break
+            except Exception:
+                time.sleep(0.1)
+
+        if not healthy:
+            err = daemon.stderr.read().decode("utf-8", errors="replace") if daemon.stderr else ""
+            out = daemon.stdout.read().decode("utf-8", errors="replace") if daemon.stdout else ""
+            daemon.kill()
+            raise AcceptanceError(f"live daemon failed to reach healthy state: stderr={err} stdout={out}")
+
+        try:
+            # 1. Negative control: unverified command JSON is rejected outside mock mode
+            unverified_fs = installed_base / "unverified_fs"
+            unverified_fs.mkdir(parents=True, exist_ok=True)
+            (unverified_fs / "profile.json").write_text(json.dumps({
+                "command": "/bin/echo",
+                "args": ["unverified"]
+            }), encoding="utf-8")
+
+            proc_unverified = self.run_pilot_cli([
+                "--claude", str(self.claude),
+                "--workspace", str(workspace),
+                "--fs-profile", str(unverified_fs),
+                "--git-profile", str(unverified_fs),
+                "--home", str(agentfw_dir),
+                "--policy", str(policy_path),
+                "--dry-run",
+            ])
+            check(proc_unverified.returncode != 0, "installed_profile_unverified_command_rejected")
+            check(
+                "real pilot requires validated ProfileConfig" in proc_unverified.stderr
+                or "failed ProfileConfig validation" in proc_unverified.stderr,
+                "installed_profile_unverified_command_clear_error",
+            )
+
+            # 2. Negative control: missing profile is rejected outside mock mode
+            empty_fs = installed_base / "empty_fs"
+            empty_fs.mkdir(parents=True, exist_ok=True)
+            proc_missing = self.run_pilot_cli([
+                "--claude", str(self.claude),
+                "--workspace", str(workspace),
+                "--fs-profile", str(empty_fs),
+                "--git-profile", str(empty_fs),
+                "--home", str(agentfw_dir),
+                "--policy", str(policy_path),
+                "--dry-run",
+            ])
+            check(proc_missing.returncode != 0, "installed_profile_missing_profile_rejected")
+            check(
+                "installed MCP server profile not found" in proc_missing.stderr,
+                "installed_profile_missing_profile_clear_error",
+            )
+
+            # 3. Negative control: policy mismatch against live enforcing daemon rejected
+            fs_dir = installed_base / "fs_profile"
+            fs_dir.mkdir(parents=True, exist_ok=True)
+            pkg_fs = installed_base / "pkg_fs"
+            pkg_fs.mkdir(parents=True, exist_ok=True)
+            (pkg_fs / "node_modules/@modelcontextprotocol/server-filesystem/dist").mkdir(parents=True, exist_ok=True)
+            entrypoint = pkg_fs / "node_modules/@modelcontextprotocol/server-filesystem/dist/index.js"
+            entrypoint.write_text("// entrypoint\n", encoding="utf-8")
+
+            dummy_node = installed_base / "node"
+            make_executable(dummy_node, "#!/bin/sh\nexit 0\n")
+            dummy_bwrap = installed_base / "bwrap"
+            make_executable(dummy_bwrap, "#!/bin/sh\nexit 0\n")
+            dummy_git = installed_base / "git_bin"
+            make_executable(dummy_git, "#!/bin/sh\nexit 0\n")
+            dummy_launcher = installed_base / "git_launcher"
+            make_executable(dummy_launcher, "#!/bin/sh\nexit 0\n")
+            dummy_py = installed_base / "python_bin"
+            make_executable(dummy_py, "#!/bin/sh\nexit 0\n")
+
+            d64 = "0" * 64
+            canonical_ws = str(workspace.resolve())
+            fs_prof = {
+                "format": "sw-mcp/filesystem-readonly/1",
+                "workspace": canonical_ws,
+                "runtimePath": str(dummy_node),
+                "runtimeSha256": d64,
+                "packageRoot": str(pkg_fs),
+                "packageTreeSha256": d64,
+                "bwrapPath": str(dummy_bwrap),
+                "bwrapSha256": d64,
+                "libraries": [],
+            }
+            (fs_dir / "profile.json").write_text(json.dumps(fs_prof), encoding="utf-8")
+
+            git_dir = installed_base / "git_profile"
+            git_dir.mkdir(parents=True, exist_ok=True)
+            pkg_git = installed_base / "pkg_git"
+            pkg_git.mkdir(parents=True, exist_ok=True)
+            git_prof = {
+                "format": "sw-mcp/git-readonly/1",
+                "workspace": canonical_ws,
+                "runtimePath": str(dummy_py),
+                "runtimeSha256": d64,
+                "packageRoot": str(pkg_git),
+                "packageTreeSha256": d64,
+                "bwrapPath": str(dummy_bwrap),
+                "bwrapSha256": d64,
+                "libraries": [],
+                "git": {"path": str(dummy_git), "sha256": d64},
+                "gitLauncher": {"path": str(dummy_launcher), "sha256": d64},
+            }
+            (git_dir / "profile.json").write_text(json.dumps(git_prof), encoding="utf-8")
+
+            proc_mismatch = self.run_pilot_cli([
+                "--claude", str(self.claude),
+                "--workspace", str(workspace),
+                "--fs-profile", str(fs_dir),
+                "--git-profile", str(git_dir),
+                "--home", str(agentfw_dir),
+                "--policy", str(mismatch_policy_path),
+                "--dry-run",
+            ])
+            check(proc_mismatch.returncode != 0, "installed_profile_policy_mismatch_rejected")
+            check(
+                "policy mismatch" in proc_mismatch.stderr or "policy digest mismatch" in proc_mismatch.stderr,
+                "installed_profile_policy_mismatch_clear_error",
+            )
+
+            # 4. Positive control: valid installed ProfileConfig + matching daemon policy in enforcing mode
+            session_id = str(uuid.uuid4())
+            proc_valid = self.run_pilot_cli([
+                "--claude", str(self.claude),
+                "--workspace", str(workspace),
+                "--fs-profile", str(fs_dir),
+                "--git-profile", str(git_dir),
+                "--home", str(agentfw_dir),
+                "--policy", str(policy_path),
+                "--host-session", session_id,
+                "--dry-run",
+                "--json",
+            ])
+            check(proc_valid.returncode == 0, "installed_profile_positive_exit_0")
+            report = json.loads(proc_valid.stdout)
+            check(report["status"] == "preview_ready", "installed_profile_status_preview_ready")
+            check(report["host_session"] == session_id, "installed_profile_host_session_matches")
+
+            fs_args = report["servers"]["filesystem"]["args"]
+            git_args = report["servers"]["git"]["args"]
+            check("/workspace" in fs_args, "installed_profile_fs_workspace_argv_enforced")
+            check("/workspace" in git_args, "installed_profile_git_workspace_argv_enforced")
+
+            audit = {
+                "scenario_type": "installed_profile_acceptance",
+                "validated_profiles": {
+                    "filesystem": str(fs_dir / "profile.json"),
+                    "git": str(git_dir / "profile.json"),
+                },
+                "policy_enforced": str(policy_path),
+                "host_session": session_id,
+                "workspace": canonical_ws,
+                "checks": [
+                    "unverified_command_rejected_outside_mock",
+                    "missing_profile_rejected_outside_mock",
+                    "daemon_policy_mismatch_rejected",
+                    "profile_config_validated",
+                    "workspace_argv_contract_enforced",
+                    "live_daemon_enforcing_verified",
+                ],
+            }
+
+            return {
+                "report": report,
+                "audit": audit,
+            }
+        finally:
+            daemon.terminate()
+            try:
+                daemon.wait(timeout=3)
+            except Exception:
+                daemon.kill()
+
     def test_interruption_cleanup(self, workspace: Path, mock_secret: str) -> None:
         """Verify that private directory is cleaned up when Claude Code host aborts or fails."""
         mock_abort = workspace / "mock_abort_claude.py"
@@ -557,6 +808,7 @@ sys.exit(137)
             "--fs-profile", str(FS_PROFILE),
             "--git-profile", str(GIT_PROFILE),
             "--home", str(fake_home),
+            "--allow-command-fixtures",
             "--dry-run",
         ])
         check(proc.returncode != 0, "missing_daemon_token_fails_closed")
@@ -607,7 +859,8 @@ exit 0
     def generate_qualification_report(
         self,
         dry_run_report: dict,
-        live_scenario_data: dict,
+        fixture_data: dict,
+        installed_data: dict,
         process_witness: dict,
     ) -> dict:
         timestamp = datetime.now(timezone.utc).isoformat()
@@ -618,7 +871,7 @@ exit 0
             "real_model_evaluation": False,
             "scripted_owned_provider": True,
             "zero_paid_api_calls_verified": True,
-            "scenario_type": "fixture_server_acceptance",
+            "scenario_type": "composite_pilot_acceptance",
             "binary_identity": {
                 "path": str(self.binary),
                 "sha256": sha256_file(self.binary),
@@ -640,9 +893,15 @@ exit 0
             "checks_passed": CHECKS,
             "checks_total": len(CHECKS),
             "dry_run_preview": dry_run_report,
-            "live_scenario": {
-                "report": live_scenario_data["report"],
-                "audit": live_scenario_data["audit"],
+            "fixture_server_acceptance": {
+                "scenario_type": "fixture_server_acceptance",
+                "report": fixture_data["report"],
+                "audit": fixture_data["audit"],
+            },
+            "installed_profile_acceptance": {
+                "scenario_type": "installed_profile_acceptance",
+                "report": installed_data["report"],
+                "audit": installed_data["audit"],
             },
             "cleanup_witness": {
                 "private_config_dir_removed": True,
@@ -697,24 +956,28 @@ def main() -> int:
         dry_run_report = harness.test_dry_run_preview(ws, mock_secret)
         print("  ✓ Dry-run produced valid JSON plan without token leakage.")
 
-        print("\n[Phase 2] Testing genuine live 4-step sequence with real Claude Code & MCP servers...")
-        live_data = harness.test_end_to_end_four_step_scenario(ws, base)
+        print("\n[Phase 2] Testing genuine live 4-step sequence with real Claude Code & fixture MCP servers...")
+        fixture_data = harness.test_end_to_end_four_step_scenario(ws, base)
         print("  ✓ Genuine 4-step sequence completed with verified refusal and zero side-effects.")
 
-        print("\n[Phase 3] Testing abort and interruption cleanup...")
+        print("\n[Phase 3] Testing installed, validated ProfileConfig launch with live daemon policy...")
+        installed_data = harness.test_installed_profile_scenario(ws, base)
+        print("  ✓ Installed profile path validated: commands outside mock mode strictly validated.")
+
+        print("\n[Phase 4] Testing abort and interruption cleanup...")
         harness.test_interruption_cleanup(ws, mock_secret)
         print("  ✓ Abort cleanup verified: private per-run directory removed.")
 
-        print("\n[Phase 4] Testing stale authority and foreign daemon rejection...")
+        print("\n[Phase 5] Testing stale authority and foreign daemon rejection...")
         harness.test_stale_authority_rejection(ws)
         print("  ✓ Stale / missing authority fails closed.")
 
-        print("\n[Phase 5] Testing owned descendant process group reaping on normal host exit...")
+        print("\n[Phase 6] Testing owned descendant process group reaping on normal host exit...")
         process_witness = harness.test_descendant_reaping_witness(ws, mock_secret)
         print(f"  ✓ Process group cleanup verified: descendant PID {process_witness['descendant_pid']} reaped on exit 0.")
 
-    print("\n[Phase 6] Publishing qualification evidence...")
-    evidence = harness.generate_qualification_report(dry_run_report, live_data, process_witness)
+    print("\n[Phase 7] Publishing qualification evidence...")
+    evidence = harness.generate_qualification_report(dry_run_report, fixture_data, installed_data, process_witness)
     print(f"  ✓ Evidence written to: {harness.evidence_path}")
     print(f"  ✓ Total acceptance checks passed: {evidence['checks_total']}/{evidence['checks_total']}")
     print("\nSUCCESS: All SOU-99 pilot launcher acceptance criteria passed 100%.")
@@ -723,3 +986,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+

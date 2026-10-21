@@ -1,14 +1,14 @@
 {
   "contract_version": "sw-pilot-launcher/1",
   "status": "pass",
-  "evaluated_at": "2026-10-21T00:06:24.248149+00:00",
+  "evaluated_at": "2026-10-21T06:50:59.045092+00:00",
   "real_model_evaluation": false,
   "scripted_owned_provider": true,
   "zero_paid_api_calls_verified": true,
-  "scenario_type": "fixture_server_acceptance",
+  "scenario_type": "composite_pilot_acceptance",
   "binary_identity": {
     "path": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/debug/agentfw",
-    "sha256": "33d2bdc685d02ad2866c07a778ddb03e1bd0110cbf28605c29d76da55c5e5db5"
+    "sha256": "d0406dea543cc24990bd7fe45adc1a8c7510f2558bb777d165dbc4c598773a9e"
   },
   "claude_identity": {
     "path": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/claude-code/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
@@ -61,6 +61,17 @@
     "phase3_zero_git_side_effects",
     "phase4_benign_continuation_successful",
     "live_private_dir_cleaned_up",
+    "installed_profile_unverified_command_rejected",
+    "installed_profile_unverified_command_clear_error",
+    "installed_profile_missing_profile_rejected",
+    "installed_profile_missing_profile_clear_error",
+    "installed_profile_policy_mismatch_rejected",
+    "installed_profile_policy_mismatch_clear_error",
+    "installed_profile_positive_exit_0",
+    "installed_profile_status_preview_ready",
+    "installed_profile_host_session_matches",
+    "installed_profile_fs_workspace_argv_enforced",
+    "installed_profile_git_workspace_argv_enforced",
     "abort_scenario_non_zero_exit",
     "abort_status_failed",
     "abort_exit_code_propagated",
@@ -71,14 +82,14 @@
     "descendant_pid_witness_recorded",
     "zero_orphaned_processes_verified"
   ],
-  "checks_total": 45,
+  "checks_total": 56,
   "dry_run_preview": {
     "contract_version": "sw-pilot-launcher/1",
     "status": "preview_ready",
     "host_session": "pilot-acceptance-session-preview-01",
     "claude_path": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/claude-code/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
-    "workspace_path": "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-3lgkf5n3/workspace",
-    "private_config_dir": "/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/soup-wall-pilot-a7befa7f4f82708d9a5636ead888deaf",
+    "workspace_path": "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-82m3_k6e/workspace",
+    "private_config_dir": "/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/soup-wall-pilot-095e82cb2327ee73662e5b0f12d6966b",
     "allowed_tools": [
       "directory_tree",
       "get_file_info",
@@ -176,14 +187,15 @@
       "strict-mcp-boundary-enforced"
     ]
   },
-  "live_scenario": {
+  "fixture_server_acceptance": {
+    "scenario_type": "fixture_server_acceptance",
     "report": {
       "contract_version": "sw-pilot-launcher/1",
       "status": "completed",
-      "host_session": "f48ed343-18a8-494a-a139-8d0ee0845973",
+      "host_session": "b554786e-5c31-45b9-90b6-74a574e9828f",
       "claude_path": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/claude-code/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
-      "workspace_path": "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-3lgkf5n3/workspace",
-      "private_config_dir": "/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/soup-wall-pilot-2ecd1e015155a040a741f9f5d89e6653",
+      "workspace_path": "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-82m3_k6e/workspace",
+      "private_config_dir": "/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/soup-wall-pilot-9a81d353790cf428e8e7fe17ae9a1233",
       "allowed_tools": [
         "git_reset",
         "git_status",
@@ -202,11 +214,11 @@
             "filesystem",
             "--native-admission",
             "--host-session",
-            "f48ed343-18a8-494a-a139-8d0ee0845973",
+            "b554786e-5c31-45b9-90b6-74a574e9828f",
             "--child-authority",
             "[REDACTED]",
             "--home",
-            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-3lgkf5n3/home/.agentfw",
+            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-82m3_k6e/home/.agentfw",
             "--",
             "/opt/homebrew/opt/python@3.14/bin/python3.14",
             "-u",
@@ -214,7 +226,7 @@
             "--role",
             "filesystem",
             "--workspace",
-            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-3lgkf5n3/workspace",
+            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-82m3_k6e/workspace",
             "--tools",
             "read_text_file"
           ],
@@ -232,11 +244,11 @@
             "git",
             "--native-admission",
             "--host-session",
-            "f48ed343-18a8-494a-a139-8d0ee0845973",
+            "b554786e-5c31-45b9-90b6-74a574e9828f",
             "--child-authority",
             "[REDACTED]",
             "--home",
-            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-3lgkf5n3/home/.agentfw",
+            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-82m3_k6e/home/.agentfw",
             "--",
             "/opt/homebrew/opt/python@3.14/bin/python3.14",
             "-u",
@@ -244,7 +256,7 @@
             "--role",
             "git",
             "--workspace",
-            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-3lgkf5n3/workspace",
+            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-82m3_k6e/workspace",
             "--tools",
             "git_status,git_reset"
           ],
@@ -270,8 +282,8 @@
     },
     "audit": {
       "host_claude_binary": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/claude-code/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
-      "host_session": "f48ed343-18a8-494a-a139-8d0ee0845973",
-      "private_config_dir": "/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/soup-wall-pilot-2ecd1e015155a040a741f9f5d89e6653",
+      "host_session": "b554786e-5c31-45b9-90b6-74a574e9828f",
+      "private_config_dir": "/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/soup-wall-pilot-9a81d353790cf428e8e7fe17ae9a1233",
       "allowed_tools": [
         "git_reset",
         "git_status",
@@ -289,18 +301,149 @@
       "phase3_destructive_refused": true,
       "phase3_refusal_detail": "Soup Wall withheld MCP invocation (deny-destructive)\n\n<system-reminder>\n<total_tokens>14999890 tokens left</total_tokens>\n</system-reminder>",
       "phase3_zero_effects": true,
-      "git_head_before": "ffc4853d4865589b33c3455332095000e40b598a",
-      "git_head_after": "ffc4853d4865589b33c3455332095000e40b598a",
+      "git_head_before": "a4e7dfc7e59b0a2639230fe548aef52f51ef17aa",
+      "git_head_after": "a4e7dfc7e59b0a2639230fe548aef52f51ef17aa",
       "phase4_continuation": true,
       "model_recorded_steps": 4,
       "zero_paid_api_calls": true
+    }
+  },
+  "installed_profile_acceptance": {
+    "scenario_type": "installed_profile_acceptance",
+    "report": {
+      "contract_version": "sw-pilot-launcher/1",
+      "status": "preview_ready",
+      "host_session": "0caa7eb2-153a-4d8e-b87b-efa23777f1e9",
+      "claude_path": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/claude-code/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
+      "workspace_path": "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-82m3_k6e/workspace",
+      "private_config_dir": "/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/soup-wall-pilot-044f1d9859d81feb5a4d599c8a00b9d0",
+      "allowed_tools": [
+        "directory_tree",
+        "get_file_info",
+        "git_diff",
+        "git_diff_staged",
+        "git_diff_untracked",
+        "git_log",
+        "git_show",
+        "git_status",
+        "list_allowed_directories",
+        "list_directory",
+        "mcp__filesystem__directory_tree",
+        "mcp__filesystem__get_file_info",
+        "mcp__filesystem__list_allowed_directories",
+        "mcp__filesystem__list_directory",
+        "mcp__filesystem__read_text_file",
+        "mcp__filesystem__search_files",
+        "mcp__git__git_diff",
+        "mcp__git__git_diff_staged",
+        "mcp__git__git_diff_untracked",
+        "mcp__git__git_log",
+        "mcp__git__git_show",
+        "mcp__git__git_status",
+        "read_text_file",
+        "search_files"
+      ],
+      "servers": {
+        "filesystem": {
+          "server_id": "filesystem",
+          "command": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/debug/agentfw",
+          "args": [
+            "mcp",
+            "--id",
+            "filesystem",
+            "--native-admission",
+            "--host-session",
+            "0caa7eb2-153a-4d8e-b87b-efa23777f1e9",
+            "--child-authority",
+            "[REDACTED]",
+            "--home",
+            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-82m3_k6e/installed_qual/home/.agentfw",
+            "--",
+            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-82m3_k6e/installed_qual/node",
+            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-82m3_k6e/installed_qual/pkg_fs/node_modules/@modelcontextprotocol/server-filesystem/dist/index.js",
+            "/workspace"
+          ],
+          "granted_tools": [
+            "read_text_file",
+            "list_directory",
+            "directory_tree",
+            "search_files",
+            "get_file_info",
+            "list_allowed_directories"
+          ],
+          "token_redacted": true
+        },
+        "git": {
+          "server_id": "git",
+          "command": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/debug/agentfw",
+          "args": [
+            "mcp",
+            "--id",
+            "git",
+            "--native-admission",
+            "--host-session",
+            "0caa7eb2-153a-4d8e-b87b-efa23777f1e9",
+            "--child-authority",
+            "[REDACTED]",
+            "--home",
+            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-82m3_k6e/installed_qual/home/.agentfw",
+            "--",
+            "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-82m3_k6e/installed_qual/python_bin",
+            "-I",
+            "-B",
+            "-m",
+            "mcp_server_git",
+            "--repository",
+            "/workspace"
+          ],
+          "granted_tools": [
+            "git_status",
+            "git_diff",
+            "git_diff_untracked",
+            "git_diff_staged",
+            "git_log",
+            "git_show"
+          ],
+          "token_redacted": true
+        }
+      },
+      "exit_code": 0,
+      "checks_passed": [
+        "claude-executable-verified",
+        "workspace-verified",
+        "profiles-validated-without-collision",
+        "live-daemon-instance-bound",
+        "runnable-mcp-collectors-constructed",
+        "private-config-dir-created-mode-0700",
+        "scoped-child-authority-grants-minted",
+        "tokens-confined-to-private-config",
+        "strict-mcp-boundary-enforced"
+      ]
+    },
+    "audit": {
+      "scenario_type": "installed_profile_acceptance",
+      "validated_profiles": {
+        "filesystem": "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-82m3_k6e/installed_qual/fs_profile/profile.json",
+        "git": "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-82m3_k6e/installed_qual/git_profile/profile.json"
+      },
+      "policy_enforced": "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-82m3_k6e/installed_qual/policy.yaml",
+      "host_session": "0caa7eb2-153a-4d8e-b87b-efa23777f1e9",
+      "workspace": "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-82m3_k6e/workspace",
+      "checks": [
+        "unverified_command_rejected_outside_mock",
+        "missing_profile_rejected_outside_mock",
+        "daemon_policy_mismatch_rejected",
+        "profile_config_validated",
+        "workspace_argv_contract_enforced",
+        "live_daemon_enforcing_verified"
+      ]
     }
   },
   "cleanup_witness": {
     "private_config_dir_removed": true,
     "zero_orphaned_processes": true,
     "process_group_reaping_witness": {
-      "descendant_pid": 40640,
+      "descendant_pid": 46372,
       "all_descendants_terminated": true,
       "verification_method": "os_kill_probe_after_exit_0"
     }

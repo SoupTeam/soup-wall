@@ -134,6 +134,10 @@ pub struct PilotLaunchArgs {
     /// Mock daemon instance ID for offline unit testing.
     #[arg(long, hide = true)]
     pub mock_instance_id: Option<String>,
+
+    /// Allow unverified command-based JSON profile fixtures for acceptance testing.
+    #[arg(long, hide = true)]
+    pub allow_command_fixtures: bool,
 }
 
 /// Validated configuration ready for execution.
@@ -152,6 +156,7 @@ pub struct ValidatedConfig {
     pub dry_run: bool,
     pub mock_daemon_token: Option<String>,
     pub mock_instance_id: Option<String>,
+    pub allow_command_fixtures: bool,
     pub fs_tools: Vec<String>,
     pub git_tools: Vec<String>,
     pub fs_runtime_cmd: Vec<String>,
@@ -332,10 +337,15 @@ impl PilotLaunchArgs {
         }
 
         // Resolve runnable runtime commands from verified profiles
-        let (fs_runtime_cmd, resolved_fs_profile) =
-            resolve_server_runtime(FILESYSTEM_SERVER_ID, &fs_profile_path, &workspace_path)?;
+        let is_mock = self.mock_daemon_token.is_some() || self.allow_command_fixtures;
+        let (fs_runtime_cmd, resolved_fs_profile) = resolve_server_runtime(
+            FILESYSTEM_SERVER_ID,
+            &fs_profile_path,
+            &workspace_path,
+            is_mock,
+        )?;
         let (git_runtime_cmd, resolved_git_profile) =
-            resolve_server_runtime(GIT_SERVER_ID, &git_profile_path, &workspace_path)?;
+            resolve_server_runtime(GIT_SERVER_ID, &git_profile_path, &workspace_path, is_mock)?;
 
         let prompt = self
             .prompt
@@ -357,6 +367,7 @@ impl PilotLaunchArgs {
             dry_run: self.dry_run,
             mock_daemon_token: self.mock_daemon_token.clone(),
             mock_instance_id: self.mock_instance_id.clone(),
+            allow_command_fixtures: self.allow_command_fixtures,
             fs_tools,
             git_tools,
             fs_runtime_cmd,
@@ -413,6 +424,7 @@ pub fn resolve_server_runtime(
     server_id: &str,
     profile_path: &Path,
     workspace: &Path,
+    is_mock: bool,
 ) -> Result<(Vec<String>, PathBuf)> {
     let profile_file = if profile_path.is_dir() {
         profile_path.join("profile.json")
@@ -420,6 +432,57 @@ pub fn resolve_server_runtime(
         profile_path.to_path_buf()
     };
 
+    if !is_mock {
+        ensure!(
+            profile_file.is_file(),
+            "installed MCP server profile not found at {:?}",
+            profile_file
+        );
+        let bytes = fs::read(&profile_file)
+            .with_context(|| format!("read profile at {:?}", profile_file))?;
+        let profile = crate::mcp::server_profile::ProfileConfig::read(&bytes).map_err(|e| {
+            anyhow::anyhow!(
+                "invalid MCP server profile at {:?}: real pilot requires validated ProfileConfig: {}",
+                profile_file,
+                e
+            )
+        })?;
+
+        let (cmd, args) = match server_id {
+            FILESYSTEM_SERVER_ID => {
+                let entry = profile
+                    .package_root
+                    .join(crate::mcp::server_profile::SERVER_ENTRYPOINT);
+                let args = vec![entry.display().to_string(), "/workspace".to_string()];
+                (profile.runtime_path.display().to_string(), args)
+            }
+            GIT_SERVER_ID => {
+                let args = vec![
+                    "-I".to_string(),
+                    "-B".to_string(),
+                    "-m".to_string(),
+                    "mcp_server_git".to_string(),
+                    "--repository".to_string(),
+                    "/workspace".to_string(),
+                ];
+                (profile.runtime_path.display().to_string(), args)
+            }
+            other => bail!("unsupported server_id {:?} for ProfileConfig", other),
+        };
+
+        let canonical_ws = workspace
+            .canonicalize()
+            .with_context(|| format!("canonicalize workspace {:?}", workspace))?;
+        profile
+            .validate_command(&cmd, &args, &canonical_ws)
+            .context("profile validate_command contract check failed")?;
+
+        let mut full_cmd = vec![cmd];
+        full_cmd.extend(args);
+        return Ok((full_cmd, profile_file));
+    }
+
+    // Explicit test/mock path (is_mock == true)
     if profile_file.is_file() {
         let bytes = fs::read(&profile_file)
             .with_context(|| format!("read profile at {:?}", profile_file))?;
@@ -460,7 +523,7 @@ pub fn resolve_server_runtime(
             return Ok((full_cmd, profile_file));
         }
 
-        // 2. Parse as JSON to support command-based profile fixtures or runtimePath configs
+        // 2. Parse as JSON to support command-based profile fixtures or runtimePath configs in test/mock mode
         let val: serde_json::Value = serde_json::from_slice(&bytes).with_context(|| {
             format!(
                 "profile at {:?} is neither valid ProfileConfig nor valid JSON",
@@ -526,7 +589,7 @@ pub fn resolve_server_runtime(
         );
     }
 
-    // Default fallback for minimal unit tests when no profile file exists
+    // Default fallback for minimal unit tests when no profile file exists in mock mode
     Ok((
         vec!["echo".to_string(), server_id.to_string()],
         profile_file,
@@ -964,7 +1027,26 @@ pub fn write_per_process_mcp_config(
             "AGENTFW_WORKSPACE".to_string(),
             serde_json::Value::String(config.workspace_path.display().to_string()),
         );
-        if let Ok(bytes) = fs::read(&profile_file) {
+        if !config.allow_command_fixtures && config.mock_daemon_token.is_none() {
+            ensure!(
+                profile_file.is_file(),
+                "installed MCP server profile not found at {:?}",
+                profile_file
+            );
+            let bytes = fs::read(&profile_file)
+                .with_context(|| format!("read profile at {:?}", profile_file))?;
+            crate::mcp::server_profile::ProfileConfig::read(&bytes).map_err(|e| {
+                anyhow::anyhow!(
+                    "installed profile at {:?} failed ProfileConfig validation: {}",
+                    profile_file,
+                    e
+                )
+            })?;
+            env_obj.insert(
+                "AGENTFW_MCP_SERVER_PROFILE".to_string(),
+                serde_json::Value::String(profile_file.display().to_string()),
+            );
+        } else if let Ok(bytes) = fs::read(&profile_file) {
             if crate::mcp::server_profile::ProfileConfig::read(&bytes).is_ok() {
                 env_obj.insert(
                     "AGENTFW_MCP_SERVER_PROFILE".to_string(),
@@ -1400,6 +1482,7 @@ mod tests {
             model: "claude-sonnet-4-20250514".into(),
             mock_daemon_token: Some(crate::token::generate()),
             mock_instance_id: Some(crate::token::generate()),
+            allow_command_fixtures: false,
         };
         assert!(args.validate().is_err());
     }
@@ -1464,6 +1547,7 @@ mod tests {
             model: "claude-sonnet-4-20250514".into(),
             mock_daemon_token: Some(test_token.clone()),
             mock_instance_id: Some(test_instance_id.clone()),
+            allow_command_fixtures: false,
         };
 
         let config = args.validate().expect("validation should succeed");
@@ -1551,8 +1635,133 @@ mod tests {
             model: "claude-sonnet-4-20250514".into(),
             mock_daemon_token: Some(crate::token::generate()),
             mock_instance_id: Some(crate::token::generate()),
+            allow_command_fixtures: false,
         };
 
         assert!(args.validate().is_err());
+    }
+
+    #[test]
+    fn test_unverified_command_json_rejected_outside_mock_mode() {
+        let temp = tempfile::tempdir().unwrap();
+        let claude = temp.path().join("claude");
+        dummy_script(&claude);
+
+        let workspace = temp.path().join("workspace");
+        fs::create_dir_all(&workspace).unwrap();
+
+        let fs_profile = temp.path().join("fs.json");
+        fs::write(&fs_profile, r#"{"command":"/bin/echo","args":["hello"]}"#).unwrap();
+
+        let git_profile = temp.path().join("git.json");
+        fs::write(&git_profile, r#"{"command":"/bin/echo","args":["world"]}"#).unwrap();
+
+        let args = PilotLaunchArgs {
+            claude,
+            workspace,
+            home: None,
+            fs_profile,
+            git_profile,
+            classifier: None,
+            policy: None,
+            host_session: None,
+            agent_bin: None,
+            dry_run: true,
+            timeout_seconds: 60,
+            json: false,
+            prompt: None,
+            model: "claude-sonnet-4-20250514".into(),
+            mock_daemon_token: None,
+            mock_instance_id: None,
+            allow_command_fixtures: false,
+        };
+
+        let err = args.validate().unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("real pilot requires validated ProfileConfig"));
+    }
+
+    #[test]
+    fn test_missing_profile_rejected_outside_mock_mode() {
+        let temp = tempfile::tempdir().unwrap();
+        let claude = temp.path().join("claude");
+        dummy_script(&claude);
+
+        let workspace = temp.path().join("workspace");
+        fs::create_dir_all(&workspace).unwrap();
+
+        let fs_dir = temp.path().join("fs_empty");
+        fs::create_dir_all(&fs_dir).unwrap();
+
+        let git_dir = temp.path().join("git_empty");
+        fs::create_dir_all(&git_dir).unwrap();
+
+        let args = PilotLaunchArgs {
+            claude,
+            workspace,
+            home: None,
+            fs_profile: fs_dir,
+            git_profile: git_dir,
+            classifier: None,
+            policy: None,
+            host_session: None,
+            agent_bin: None,
+            dry_run: true,
+            timeout_seconds: 60,
+            json: false,
+            prompt: None,
+            model: "claude-sonnet-4-20250514".into(),
+            mock_daemon_token: None,
+            mock_instance_id: None,
+            allow_command_fixtures: false,
+        };
+
+        let err = args.validate().unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("installed MCP server profile not found"));
+    }
+
+    #[test]
+    fn test_command_fixtures_allowed_with_flag() {
+        let temp = tempfile::tempdir().unwrap();
+        let claude = temp.path().join("claude");
+        dummy_script(&claude);
+
+        let workspace = temp.path().join("workspace");
+        fs::create_dir_all(&workspace).unwrap();
+
+        let fs_profile = temp.path().join("fs.json");
+        fs::write(&fs_profile, r#"{"command":"/bin/echo","args":["hello"]}"#).unwrap();
+
+        let git_profile = temp.path().join("git.json");
+        fs::write(&git_profile, r#"{"command":"/bin/echo","args":["world"]}"#).unwrap();
+
+        let args = PilotLaunchArgs {
+            claude,
+            workspace,
+            home: None,
+            fs_profile,
+            git_profile,
+            classifier: None,
+            policy: None,
+            host_session: None,
+            agent_bin: None,
+            dry_run: true,
+            timeout_seconds: 60,
+            json: false,
+            prompt: None,
+            model: "claude-sonnet-4-20250514".into(),
+            mock_daemon_token: None,
+            mock_instance_id: None,
+            allow_command_fixtures: true,
+        };
+
+        let cfg = args
+            .validate()
+            .expect("should succeed with allow_command_fixtures");
+        assert_eq!(cfg.fs_runtime_cmd, vec!["/bin/echo", "hello"]);
+        assert_eq!(cfg.git_runtime_cmd, vec!["/bin/echo", "world"]);
     }
 }
