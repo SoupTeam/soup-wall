@@ -277,6 +277,11 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      # The public guarded fixtures are qualified on this interpreter; runner
+      # image upgrades must not silently replace it with a newer Python.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
       - name: Optional classifier adapter regressions (offline)
         run: python3 -m unittest experiments.classification.test_jev experiments.classification.test_shadow -v
       - name: Task 1 classification evaluation runner units
