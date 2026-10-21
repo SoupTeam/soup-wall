@@ -1,5 +1,9 @@
 # Installed WSL2 pilot qualification
 
+See [the refreshed run after main integration](CURRENT_RUN.md) for the actual
+WSL2 qualification on source `d4aa63f297c7b1189c062577c712a093533b8b2e`.
+The archives below remain the original historical evidence.
+
 ## Actual environment and source
 
 On October 21, 2026, an ordinary UID 1000 user ran the installed pilot in Ubuntu
