@@ -154,3 +154,12 @@ late-change refusals with useful continuation, six byte-faithful original reads,
 result inspection, daemon-outage refusal, unchanged repository and owned-process
 cleanup. Failed attempts retain logs and partial reports in the workflow artifact.
 Windows unit tests and a parser refusal do not establish Linux containment.
+
+The shipped result policy has a known false positive on an ordinary multi-file
+`git_show HEAD`: a commit hash and several diff `---` lines can reach the generic
+injection heuristic's Medium band. The acceptance driver retains that original
+output, its digest and the actual policy outcome as `multifile_result_policy`.
+It then advances only its owned fixture to a conventional single-file HEAD,
+keeping the same config, attributes and staged/unstaged notes for the six-read
+qualification. No result bytes or policy rules are rewritten. General multi-file
+Git usability is not claimed; the detector issue requires separate coordination.

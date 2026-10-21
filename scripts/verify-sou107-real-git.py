@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import hashlib
 import platform
 from pathlib import Path
 import subprocess
@@ -73,7 +74,32 @@ def late_changes(stack, report):
         client = V1.Client(command, env, stack.workspace, log, "local clone late changes")
         try:
             client.initialize()
+            # Retain the ordinary multi-file result-policy false positive. Do
+            # not weaken policy, strip result bytes or silently discard this case.
+            original = subprocess.check_output([str(stack.git), "show", "HEAD"], cwd=stack.workspace,
+                                               env=stack.env, timeout=10)
+            (stack.root / "multifile-original-show.txt").write_bytes(original)
             result, _ = client.exchange(V1.call(10))
+            refused = BASE.refused(result)
+            if refused:
+                require("git-profile-refuse-result-injection" in json.dumps(result), "unexpected multi-file read refusal")
+            else:
+                require(original.decode() in V1.text(result), "multi-file original output changed")
+            report["multifile_result_policy"] = {
+                "known_false_block": refused, "original_sha256": hashlib.sha256(original).hexdigest(),
+                "response": result, "policy_unchanged": True,
+                "scope": "benign multi-file HEAD; retained separately from supported six-read qualification"}
+            # Advance only the owned fixture to a conventional one-file HEAD.
+            # Keep all attributes, origin/tracking metadata and staged/unstaged
+            # notes. This is not a transformation applied to operator repositories.
+            (stack.workspace / "checkpoint.txt").write_text("owned local clone checkpoint\n")
+            for args in (("add", "checkpoint.txt"),
+                         ("commit", "--only", "-m", "SOU-68 synthetic initial commit follow-up", "checkpoint.txt"),
+                         ("update-ref", "refs/remotes/origin/main", "HEAD")):
+                subprocess.run([str(stack.git), "-c", "user.name=SOU107 Synthetic", "-c",
+                                "user.email=sou107@example.invalid", *args], cwd=stack.workspace,
+                               env=stack.env, capture_output=True, check=True, timeout=20)
+            result, _ = client.exchange(V1.call(11))
             require("SOU-68 synthetic" in V1.text(result), "initial useful read required")
             for n, case in enumerate(("include", "external-helper", "attributes", "config-symlink", "metadata", "index-attributes")):
                 try:
