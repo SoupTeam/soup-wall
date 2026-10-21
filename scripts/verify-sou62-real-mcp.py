@@ -349,7 +349,7 @@ def run_stdio(stack, report):
                 args = {"paths": [str(stack.workspace / f"src/file_{i:03}.txt") for i in range(count)]}
                 original, raw = control.exchange(call(500 + count, args, "read_multiple_files"))
                 require(not refused(original), "unwrapped multi-read refused")
-                (stack.root / f"multiread-{count}-original.jsonl").write_bytes(raw)
+                (stack.root / f"multiread-{count}-original.json").write_bytes(raw)
                 multi_controls.append((count, original))
             for index, attack in enumerate(attacks):
                 path = stack.workspace / "src/file_049.txt"
@@ -358,7 +358,7 @@ def run_stdio(stack, report):
                     args = {"paths": [str(stack.workspace / f"src/file_{i:03}.txt") for i in range(50)]}
                     original, raw = control.exchange(call(800 + index, args, "read_multiple_files"))
                     require(attack in result_text(original), "original attack calibration missing")
-                    (stack.root / f"multiread-attack-{index}-original.jsonl").write_bytes(raw)
+                    (stack.root / f"multiread-attack-{index}-original.json").write_bytes(raw)
                     attack_controls.append((index, attack, original))
                 finally:
                     path.write_text("SOU-97\n", encoding="utf-8")
@@ -392,7 +392,7 @@ def run_stdio(stack, report):
                     opens = witness.drain()
                 finally:
                     witness.close()
-                (stack.root / f"multiread-{count}-protected.jsonl").write_bytes(raw)
+                (stack.root / f"multiread-{count}-protected.json").write_bytes(raw)
                 if count > 200:
                     require(refused(response) and "classifier_ask" in json.dumps(response) and opens == 0,
                             "accepted classifier array limit or zero-dispatch boundary changed")
@@ -424,7 +424,7 @@ def run_stdio(stack, report):
                     require(opens >= 50, "attack result was not independently witnessed after execution")
                     require(refused(response) and "filesystem-profile-refuse-result-injection" in json.dumps(response)
                             and attack not in json.dumps(response), "matched attack escaped result inspection")
-                    (stack.root / f"multiread-attack-{index}-protected.jsonl").write_bytes(raw)
+                    (stack.root / f"multiread-attack-{index}-protected.json").write_bytes(raw)
                     report["result_detector_matched_attacks"].append({"index": index, "original": original,
                         "protected": response, "repository_opens": opens, "passed": True})
                 finally:
