@@ -34,6 +34,15 @@ overtake the held create boundary. Their synthetic stage producer and mock
 native receipts are compile-time test seams; they do not qualify actual
 upstream containment or a complete managed policy-epoch transition.
 
+A separate actual native-router regression now changes the selected original
+write policy from Allow to Ask/Deny between call and result, checks refusal
+and single-use spending, restores Allow, proves old authority stays spent,
+and completes a fresh exact-host call/result. This narrows the native epoch
+verification gap; live signed managed deployment combined with the original
+worker remains separate. The complete local native endpoint suite is now
+151/151. Completion events that observe an expired/uncertain authority also
+return a correlated no-commit error rather than silently removing the call.
+
 Current continuation qualification is pending its own hosted Linux run.
 Do not transfer `6a8bc718` or `2b7c7e28` evidence to the changed source.
 Ask continuation, separately retained typed-resource evidence, full managed

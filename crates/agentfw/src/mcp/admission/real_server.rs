@@ -1021,7 +1021,13 @@ where
                     #[cfg(target_os = "linux")]
                     WorkEvent::CreateInspected(key, receipt, output) => {
                         let Some(call) = calls.get_mut(&key) else { continue; };
-                        if call.cancelled || client_closed || call.deadline <= Instant::now() {
+                        if call.cancelled || client_closed {
+                            calls.remove(&key);
+                            continue;
+                        }
+                        if call.deadline <= Instant::now() {
+                            write(host, &error(&call.id, -32001,
+                                "Original create timed out before publication; no file committed")).await?;
                             calls.remove(&key);
                             continue;
                         }
@@ -1068,8 +1074,14 @@ where
                         let Some(call) = calls.get_mut(&key) else { continue; };
                         // Cancellation after native result Allow, but before
                         // linkat, closes only an anonymous stage.
-                        if call.cancelled || client_closed || collector.is_uncertain()
-                            || call.deadline <= Instant::now() {
+                        if call.cancelled || client_closed {
+                            calls.remove(&key);
+                            continue;
+                        }
+                        if collector.is_uncertain() || call.deadline <= Instant::now() {
+                            write(host, &error(&call.id,
+                                if collector.is_uncertain() { -32603 } else { -32001 },
+                                "Original create authority expired or became uncertain; no file committed")).await?;
                             calls.remove(&key);
                             continue;
                         }

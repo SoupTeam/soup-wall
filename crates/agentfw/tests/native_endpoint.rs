@@ -3078,8 +3078,7 @@ fn https_get_result(
     body
 }
 
-#[tokio::test]
-async fn sou83_original_write_reused_native_result_authority_is_spent_and_peer_continues() {
+fn sou83_original_write_fixture() -> (Fixture, Value) {
     let pinned: Value = serde_json::from_str(include_str!(
         "../../../profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json"
     ))
@@ -3117,6 +3116,97 @@ async fn sou83_original_write_reused_native_result_authority_is_spent_and_peer_c
         &bytes,
         &fixture.registry_sha256,
     );
+    (fixture, registry)
+}
+
+#[tokio::test]
+async fn sou83_original_write_policy_transition_spends_old_authority_and_recovers() {
+    for verdict in ["deny", "ask"] {
+        let (fixture, registry) = sou83_original_write_fixture();
+        let activate = |sequence, text: &str| {
+            fixture
+                .state
+                .firewall
+                .lock()
+                .unwrap()
+                .activate_managed_policy(
+                    AgentPolicySet::from_yaml(text).unwrap(),
+                    format!("sou83-revision-{sequence}"),
+                    sequence,
+                    sha(text.as_bytes()),
+                );
+        };
+        activate(1, ALLOW);
+        let mut start = fixture.event("sou83-policy", "session_start");
+        start["policy_transition"] = json!(agentfw::policy_transition::CONTRACT);
+        let (status, started) = fixture.post(&start).await;
+        assert_allow(status, &started);
+        let args = json!({"path":"/workspace/epoch.txt","content":"exact epoch bytes"});
+        let mut call = fixture.call("sou83-policy", "write_file", &args);
+        call["schema_sha256"] = registry["tools"][0]["schema_sha256"].clone();
+        call["mcp_host_call_id"] = json!("epoch-before");
+        let (status, old) = fixture.post(&call).await;
+        assert_allow(status, &old);
+        let original = |id: &str| {
+            json!({"jsonrpc":"2.0","id":id,"result":{
+            "content":[{"type":"text","text":"Successfully wrote"}],
+            "structuredContent":{"content":"Successfully wrote"}}})
+            .to_string()
+        };
+        let mut result = fixture.result(
+            "sou83-policy",
+            &old,
+            "write_file",
+            &args,
+            "value",
+            &original("epoch-before"),
+        );
+        result["delivery"] = json!("mcp_host");
+        let changed = format!("default: allow\nagent_policies:\n  - name: changed-create\n    when: {{min_action_class: side_effecting}}\n    action: {verdict}\n");
+        activate(2, &changed);
+        let (status, refused) = fixture.post(&result).await;
+        assert_eq!(status, StatusCode::OK, "{refused}");
+        assert_eq!(refused["release"], false, "{refused}");
+        assert_eq!(refused["verdict"], verdict);
+        assert!(refused["reason_codes"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("native_policy_transition_result_refused")));
+        let (_, spent) = fixture.post(&result).await;
+        assert_eq!(spent["error_code"], "native_call_unknown_or_spent");
+        call["mcp_host_call_id"] = json!("epoch-denied");
+        let (_, blocked) = fixture.post(&call).await;
+        assert_eq!(blocked["release"], false, "{blocked}");
+        activate(3, ALLOW);
+        // Restoring policy must not resurrect an already-spent grant.
+        let (_, still_spent) = fixture.post(&result).await;
+        assert_eq!(still_spent["error_code"], "native_call_unknown_or_spent");
+        call["mcp_host_call_id"] = json!("epoch-after");
+        let (status, fresh) = fixture.post(&call).await;
+        assert_allow(status, &fresh);
+        assert_ne!(fresh["call_id"], old["call_id"]);
+        let mut continued = fixture.result(
+            "sou83-policy",
+            &fresh,
+            "write_file",
+            &args,
+            "value",
+            &original("epoch-after"),
+        );
+        continued["delivery"] = json!("mcp_host");
+        let (status, released) = fixture.post(&continued).await;
+        assert_eq!(status, StatusCode::OK, "{released}");
+        assert_eq!(released["release"], true, "{released}");
+        assert!(
+            !fixture.dir.path().join("epoch.txt").exists(),
+            "native admission alone must never publish original-create bytes"
+        );
+    }
+}
+
+#[tokio::test]
+async fn sou83_original_write_reused_native_result_authority_is_spent_and_peer_continues() {
+    let (fixture, registry) = sou83_original_write_fixture();
     fixture.start("sou83-spent-native").await;
 
     let args = json!({"path":"/workspace/approved.txt","content":"known approved bytes"});
