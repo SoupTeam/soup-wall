@@ -265,7 +265,7 @@ impl PackagedClassifier {
                 }
             }
         });
-        let worker = Worker {
+        let mut worker = Worker {
             child,
             to_worker,
             from_worker,
@@ -275,11 +275,26 @@ impl PackagedClassifier {
             #[cfg(windows)]
             unclean: self.unclean.clone(),
         };
-        let frame = worker
-            .from_worker
-            .recv_timeout(START_DEADLINE)
-            .map_err(|_| anyhow::anyhow!("classifier worker did not become ready"))?
-            .map_err(|e| anyhow::anyhow!("worker start failed: {e}"))?;
+        let frame = match worker.from_worker.recv_timeout(START_DEADLINE) {
+            Ok(frame) => frame.map_err(|e| anyhow::anyhow!("worker start failed: {e}"))?,
+            Err(RecvTimeoutError::Timeout) => {
+                // The worker is still owned by its job and Drop retires it. Distinguish a
+                // slow bootstrap from an early exit without changing the admission bound.
+                let status = worker.child.try_wait().ok().flatten();
+                bail!(
+                    "classifier worker did not become ready within {:?} (child status: {:?})",
+                    START_DEADLINE,
+                    status
+                );
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                let status = worker.child.try_wait().ok().flatten();
+                bail!(
+                    "classifier worker exited before ready (child status: {:?})",
+                    status
+                );
+            }
+        };
         let ready: Ready = serde_json::from_slice(&frame).context("invalid ready frame")?;
         ensure!(
             ready.v == WORKER_PROTOCOL
