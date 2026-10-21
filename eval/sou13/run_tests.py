@@ -34,6 +34,11 @@ def run_suite(name, verbosity):
 
 
 def main(argv=None):
+    if sys.version_info >= (3, 14):
+        print('SOU-13 frozen CP1 evaluation does not support Python 3.14+: '
+              'stdlib shlex defers a collections import inside the guarded fixture. '
+              'Use the reviewed Python 3.12 environment; do not bypass the import guard.', file=sys.stderr)
+        return 2
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('--require-private', action='store_true')
     ap.add_argument('--expect-skipped', type=int)

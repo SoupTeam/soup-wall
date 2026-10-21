@@ -1,0 +1,24 @@
+{
+  "scope": "SOU-99 exact-source qualification after main advanced again during synchronization",
+  "previous_head": "c25aeb72792318a2a536e2e444a909ccbb3fc7ba",
+  "merged_main": "df5809167c34edc0866fb406f59f8ac7e4f79a5b",
+  "accepted_main_prs": [
+    216,
+    210
+  ],
+  "resolution": "Clean merge preserving upstream SOU-105 runtime, tests and original-server CI acceptance. Keep SOU-99 full launcher qualification and upstream SOU-108 fixes. ci.yml matches main; no temporary Ubuntu pins.",
+  "superseded_ci_run": 39648107322,
+  "superseded_admission_run": 39648101731,
+  "superseded_failure": "Merge candidate parents contained newer main df58091 while event/API base was 2bcab6b; planner and admission correctly failed closed before tests.",
+  "local_macos_workspace_tests": {
+    "passed": 1613,
+    "failed": 0,
+    "ignored": 12
+  },
+  "clippy_workspace_all_targets_D_warnings": "PASS",
+  "fmt": "PASS",
+  "ci_admission_controls": 50,
+  "sou105_witness_controls": 4,
+  "generated_workflows": "PASS",
+  "hosted_status": "Fresh candidate CI and SOU-91 admission required after this synchronization; no inherited green claim."
+}
