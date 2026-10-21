@@ -1,0 +1,17 @@
+{
+  "scope": "SOU-99 synchronization with accepted SOU-108 / PR #216",
+  "previous_head": "ed0c4c373fa5086e2bd3d3387cae0b1e194e11e8",
+  "merged_main": "2bcab6b1bb5cbd1bf5a8ab2c225ab346690329fd",
+  "resolution": "Clean merge. Adopt upstream Python 3.12 selection and single-link Linux executable fixture including hardlink refusal. Remove three temporary Ubuntu 24.04 pins; ci.yml matches main exactly. No SOU-99 production runtime or security assertion changes.",
+  "local_macos_workspace_tests": {
+    "passed": 1603,
+    "failed": 0,
+    "ignored": 12
+  },
+  "clippy_workspace_all_targets_D_warnings": "PASS",
+  "fmt": "PASS",
+  "ci_admission_and_workflow_unit_controls": 50,
+  "generated_workflows": "PASS",
+  "environment": "Read-only source in isolated scratch; write-restricted build outputs and loopback-only network. Linux-specific fixture and original-server qualification remain required in fresh hosted CI.",
+  "hosted_status": "Pending fresh current-head qualification and trusted SOU-91 admission; old-head results are not used as proof."
+}
