@@ -83,7 +83,22 @@ struct Reply {
     result_json: String,
 }
 
+/// What "ready" means for one prepared classifier: this exact verified package and
+/// interpreter, and this exact owned worker process that answered the ready handshake.
+/// It says nothing about the host, the policy or the collector as a whole.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Readiness {
+    pub package_id: String,
+    pub classifier_sha256: String,
+    pub interpreter_sha256: String,
+    pub interpreter_version: String,
+    pub worker_pid: u32,
+    /// 1 for the first worker this collector started, 2 for its replacement, and so on.
+    pub start_sequence: u64,
+}
+
 struct Worker {
+    readiness: Readiness,
     child: Child,
     to_worker: SyncSender<Vec<u8>>,
     from_worker: Receiver<Result<Vec<u8>, String>>,
@@ -149,6 +164,9 @@ pub struct PackagedClassifier {
     classifier_sha256: String,
     state: Mutex<Option<Worker>>,
     deadline: Duration,
+    /// Pilot mode: a worker is prepared before protected calls and `classify` never starts
+    /// one. Off by default so the existing `rule-package` path is unchanged.
+    prepared: bool,
     /// Number of worker processes started (identity/latency evidence and tests).
     starts: std::sync::atomic::AtomicU64,
     /// Retired workers whose process tree could not be proven empty (always 0 when sound).
@@ -166,6 +184,7 @@ impl PackagedClassifier {
             store,
             state: Mutex::new(None),
             deadline: REQUEST_DEADLINE,
+            prepared: false,
             starts: Default::default(),
             #[cfg(windows)]
             unclean: Default::default(),
@@ -175,6 +194,62 @@ impl PackagedClassifier {
     pub fn with_deadline(mut self, deadline: Duration) -> Self {
         self.deadline = deadline;
         self
+    }
+
+    /// Opt in to prepared mode (see `prepare_worker`).
+    pub fn prepared(mut self) -> Self {
+        self.prepared = true;
+        self
+    }
+
+    /// Whether a worker still belongs to the current selection: the process is alive and
+    /// the selected package and interpreter are the ones it was verified for.
+    fn is_current(&self, worker: &mut Worker) -> bool {
+        let alive = matches!(worker.child.try_wait(), Ok(None));
+        let selected = self.store.selected_identity();
+        alive
+            && matches!(selected, Ok((ref id, ref python))
+                if *id == worker.readiness.package_id
+                    && python.sha256 == worker.readiness.interpreter_sha256
+                    && python.version == worker.readiness.interpreter_version)
+    }
+
+    /// Prepare the classifier for protected calls: verify the selected package and
+    /// interpreter, start the owned worker and wait for the existing ready handshake
+    /// within the unchanged start deadline. The same process serves the first call.
+    /// An already prepared worker that is still current is kept; a lost or outdated one
+    /// is retired (killed and reaped) and replaced. Nothing is classified and no tool is
+    /// called here.
+    pub fn prepare_worker(&self) -> anyhow::Result<Readiness> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| anyhow::anyhow!("classifier worker state poisoned"))?;
+        if let Some(mut worker) = state.take() {
+            if self.is_current(&mut worker) {
+                let readiness = worker.readiness.clone();
+                *state = Some(worker);
+                return Ok(readiness);
+            }
+            // Dropped here: killed and reaped. Its readiness can never satisfy a call.
+        }
+        let worker = self.start()?;
+        let readiness = worker.readiness.clone();
+        *state = Some(worker);
+        Ok(readiness)
+    }
+
+    /// Readiness of the live worker, if it is still current (tests and evidence).
+    pub fn readiness(&self) -> Option<Readiness> {
+        let mut state = self.state.lock().ok()?;
+        let mut worker = state.take()?;
+        if self.is_current(&mut worker) {
+            let readiness = worker.readiness.clone();
+            *state = Some(worker);
+            Some(readiness)
+        } else {
+            None
+        }
     }
 
     /// Identity of the installed package (manifest digest), distinct from `revision()`.
@@ -235,8 +310,10 @@ impl PackagedClassifier {
             let _ = child.wait();
             return Err(error.context("classifier worker could not be started inside its job"));
         }
-        self.starts
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let start_sequence = self
+            .starts
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+            + 1;
         let mut stdin = child.stdin.take().context("worker stdin missing")?;
         let stdout = child.stdout.take().context("worker stdout missing")?;
         let (to_worker, input) = sync_channel::<Vec<u8>>(1);
@@ -266,6 +343,14 @@ impl PackagedClassifier {
             }
         });
         let mut worker = Worker {
+            readiness: Readiness {
+                package_id: verified.id.clone(),
+                classifier_sha256: verified.classifier_sha256.clone(),
+                interpreter_sha256: verified.python.sha256.clone(),
+                interpreter_version: verified.python.version.clone(),
+                worker_pid: child.id(),
+                start_sequence,
+            },
             child,
             to_worker,
             from_worker,
@@ -348,7 +433,15 @@ impl PackagedClassifier {
             .lock()
             .map_err(|_| anyhow::anyhow!("classifier worker state poisoned"))?;
         let mut worker = match state.take() {
+            Some(mut worker) if self.prepared => {
+                ensure!(
+                    self.is_current(&mut worker),
+                    "the prepared classifier worker is no longer current; prepare it again"
+                );
+                worker
+            }
             Some(worker) => worker,
+            None if self.prepared => bail!("the classifier worker is not prepared"),
             None => self.start()?,
         };
         // On error `worker` is dropped here: killed and reaped, never reused.
@@ -371,6 +464,12 @@ impl InvocationClassifier for PackagedClassifier {
     /// and real-server profiles pin. Package identity is exposed separately.
     fn revision(&self) -> Option<&str> {
         Some(&self.classifier_sha256)
+    }
+    fn requires_preparation(&self) -> bool {
+        self.prepared
+    }
+    fn prepare(&self) -> anyhow::Result<()> {
+        self.prepare_worker().map(|_| ())
     }
     fn classify(&self, invocation: &Invocation) -> anyhow::Result<Classification> {
         let input = serde_json::to_string(&invocation.semantic_input())?;

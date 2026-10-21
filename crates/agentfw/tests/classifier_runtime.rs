@@ -557,3 +557,216 @@ fn cleanup_refuses_a_linked_ancestor_without_deleting_redirected_files() {
         "cleanup must refuse ancestor redirection and preserve foreign bytes: {outcomes:?}"
     );
 }
+
+// ---------------------------------------------------------------- SOU-102 preparation
+
+fn process_gone(pid: u32) -> bool {
+    // SAFETY: signal 0 only checks that the process exists.
+    unsafe { libc::kill(pid as i32, 0) != 0 }
+}
+
+#[test]
+fn a_prepared_worker_is_ready_before_the_first_call_and_serves_it() {
+    let (dir, _store) = installed(Which::Frozen);
+    let worker = PackagedClassifier::from_home(dir.path())
+        .unwrap()
+        .prepared();
+    let line = &inputs()[0];
+    let want = single_shot(Which::Frozen, std::slice::from_ref(line))[0].clone();
+
+    // Not prepared: refused, and a call never starts a worker on its own.
+    assert!(worker.classify_raw(line).is_err());
+    assert_eq!(worker.starts(), 0);
+    assert!(worker.worker_pid().is_none() && worker.readiness().is_none());
+
+    let ready = worker.prepare_worker().unwrap();
+    assert_eq!(ready.start_sequence, 1);
+    assert_eq!(ready.classifier_sha256, Which::Frozen.pinned_sha256());
+    assert_eq!(worker.worker_pid(), Some(ready.worker_pid));
+    assert_eq!(worker.starts(), 1);
+    // Preparing again keeps the same owned process.
+    assert_eq!(worker.prepare_worker().unwrap(), ready);
+    assert_eq!(worker.starts(), 1);
+
+    // The first call is served by that already ready process, no second start.
+    assert_eq!(&worker.classify_raw(line).unwrap(), &want);
+    assert_eq!(worker.worker_pid(), Some(ready.worker_pid));
+    assert_eq!(worker.starts(), 1);
+    assert_eq!(worker.readiness(), Some(ready));
+}
+
+#[test]
+fn a_lost_worker_invalidates_readiness_and_only_preparation_replaces_it() {
+    let (dir, _store) = installed(Which::Frozen);
+    let worker = PackagedClassifier::from_home(dir.path())
+        .unwrap()
+        .prepared();
+    let line = &inputs()[0];
+    let want = single_shot(Which::Frozen, std::slice::from_ref(line))[0].clone();
+    let first = worker.prepare_worker().unwrap();
+    assert_eq!(&worker.classify_raw(line).unwrap(), &want);
+
+    unsafe { libc::kill(first.worker_pid as i32, libc::SIGKILL) };
+    std::thread::sleep(Duration::from_millis(100));
+    assert!(worker.readiness().is_none(), "a dead worker is not ready");
+    assert!(worker.classify_raw(line).is_err());
+    assert_eq!(
+        worker.starts(),
+        1,
+        "the call path must not restart a worker"
+    );
+
+    let second = worker.prepare_worker().unwrap();
+    assert_eq!(second.start_sequence, 2);
+    assert_ne!(second.worker_pid, first.worker_pid);
+    assert_ne!(
+        second, first,
+        "the old readiness can not describe the new worker"
+    );
+    assert_eq!(&worker.classify_raw(line).unwrap(), &want);
+    assert_eq!(worker.starts(), 2);
+    assert!(process_gone(first.worker_pid));
+}
+
+#[test]
+fn a_hung_prepared_worker_is_retired_by_the_deadline_and_replaced_by_preparation() {
+    let (dir, _store) = installed(Which::Frozen);
+    let worker = PackagedClassifier::from_home(dir.path())
+        .unwrap()
+        .prepared()
+        .with_deadline(Duration::from_millis(600));
+    let line = &inputs()[0];
+    let want = single_shot(Which::Frozen, std::slice::from_ref(line))[0].clone();
+    let first = worker.prepare_worker().unwrap();
+    unsafe { libc::kill(first.worker_pid as i32, libc::SIGSTOP) };
+    let started = std::time::Instant::now();
+    assert!(worker.classify_raw(line).is_err());
+    assert!(started.elapsed() < Duration::from_millis(1500));
+    assert!(worker.worker_pid().is_none() && worker.readiness().is_none());
+    assert!(process_gone(first.worker_pid), "the hung worker is reaped");
+    assert!(
+        worker.classify_raw(line).is_err(),
+        "no call restarts a worker"
+    );
+    let second = worker.prepare_worker().unwrap();
+    assert_eq!(second.start_sequence, 2);
+    assert_eq!(&worker.classify_raw(line).unwrap(), &want);
+}
+
+#[test]
+fn a_changed_selection_invalidates_readiness_and_is_refused_until_restart() {
+    let (dir, store) = installed(Which::Frozen);
+    let worker = PackagedClassifier::from_home(dir.path())
+        .unwrap()
+        .prepared();
+    let line = &inputs()[0];
+    let ready = worker.prepare_worker().unwrap();
+    worker.classify_raw(line).unwrap();
+
+    store.install(&archive(Which::Rev2), &python()).unwrap();
+    assert_ne!(store.current().unwrap().id, ready.package_id);
+    assert!(worker.readiness().is_none());
+    assert!(worker.classify_raw(line).is_err());
+    assert!(
+        worker.prepare_worker().is_err(),
+        "a collector prepared for another package must be restarted"
+    );
+    assert!(process_gone(ready.worker_pid));
+    assert_eq!(worker.starts(), 1);
+}
+
+#[test]
+fn altered_assets_are_refused_at_preparation_and_start_no_worker() {
+    use std::os::unix::fs::PermissionsExt;
+    let (dir, store) = installed(Which::Frozen);
+    let worker = PackagedClassifier::from_home(dir.path())
+        .unwrap()
+        .prepared();
+    let ready = worker.prepare_worker().unwrap();
+    let id = store.verify().unwrap()["package"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let file = store
+        .root()
+        .join("packages")
+        .join(id)
+        .join("rule_baseline.py");
+    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600)).unwrap();
+    let mut edited = std::fs::read(&file).unwrap();
+    edited.extend_from_slice(b"# altered\n");
+    std::fs::write(&file, edited).unwrap();
+
+    unsafe { libc::kill(ready.worker_pid as i32, libc::SIGKILL) };
+    std::thread::sleep(Duration::from_millis(100));
+    assert!(worker.prepare_worker().is_err());
+    assert_eq!(
+        worker.starts(),
+        1,
+        "no worker is started from altered files"
+    );
+    assert!(worker.classify_raw(&inputs()[0]).is_err());
+}
+
+#[test]
+fn a_prepared_worker_is_reaped_when_the_collector_never_makes_a_call() {
+    let (dir, _store) = installed(Which::Frozen);
+    let pid = {
+        let worker = PackagedClassifier::from_home(dir.path())
+            .unwrap()
+            .prepared();
+        let ready = worker.prepare_worker().unwrap();
+        assert!(!process_gone(ready.worker_pid));
+        ready.worker_pid
+    };
+    assert!(
+        process_gone(pid),
+        "dropping the collector kills and reaps it"
+    );
+}
+
+/// Evidence run, not an assertion: cold preparation and warm request latency, separately.
+/// `cargo test -p agentfw --test classifier_runtime prepared_latency_evidence -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn prepared_latency_evidence() {
+    let (dir, _store) = installed(Which::Frozen);
+    let line = &inputs()[0];
+    let mut prepare_ms = Vec::new();
+    let mut first_call_ms = Vec::new();
+    let mut warm_ms = Vec::new();
+    let mut failures = 0u32;
+    for _ in 0..15 {
+        let worker = PackagedClassifier::from_home(dir.path())
+            .unwrap()
+            .prepared();
+        let started = std::time::Instant::now();
+        match worker.prepare_worker() {
+            Ok(_) => prepare_ms.push(started.elapsed().as_secs_f64() * 1000.0),
+            Err(_) => {
+                failures += 1;
+                continue;
+            }
+        }
+        let started = std::time::Instant::now();
+        worker.classify_raw(line).unwrap();
+        first_call_ms.push(started.elapsed().as_secs_f64() * 1000.0);
+        for _ in 0..20 {
+            let started = std::time::Instant::now();
+            worker.classify_raw(line).unwrap();
+            warm_ms.push(started.elapsed().as_secs_f64() * 1000.0);
+        }
+    }
+    let stats = |values: &mut Vec<f64>| {
+        values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let at = |q: f64| values[((values.len() - 1) as f64 * q).round() as usize];
+        json!({"n":values.len(),"p50_ms":at(0.5),"p95_ms":at(0.95),"max_ms":at(1.0)})
+    };
+    println!(
+        "{}",
+        json!({"preparation_failures":failures,
+            "cold_prepare":stats(&mut prepare_ms),
+            "first_call_after_prepare":stats(&mut first_call_ms),
+            "warm_request":stats(&mut warm_ms)})
+    );
+}

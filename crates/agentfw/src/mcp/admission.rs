@@ -92,6 +92,15 @@ pub trait InvocationClassifier: Send + Sync {
     fn revision(&self) -> Option<&str> {
         None
     }
+    /// Whether protected calls must be preceded by `prepare` (pilot mode). Off by default.
+    fn requires_preparation(&self) -> bool {
+        false
+    }
+    /// Make the classifier ready before a protected call; no tool is called and nothing
+    /// is classified. Failure means the call must not reach the original server.
+    fn prepare(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
     fn classify(&self, invocation: &Invocation) -> anyhow::Result<Classification>;
 }
 
@@ -200,6 +209,12 @@ pub(crate) fn parse_classifier_reply(bytes: &[u8]) -> anyhow::Result<Classificat
     Ok(reply.classification)
 }
 
+/// `AGENTFW_CLASSIFIER_PREPARE=1` selects the prepared pilot path explicitly; anything
+/// else (including unset) keeps the existing lazy-start behavior.
+fn prepare_requested() -> bool {
+    std::env::var("AGENTFW_CLASSIFIER_PREPARE").is_ok_and(|value| value.trim() == "1")
+}
+
 /// Select a real classifier explicitly; test doubles remain debug-only.
 pub fn classifier_from_env() -> anyhow::Result<Option<Arc<dyn InvocationClassifier>>> {
     match std::env::var("AGENTFW_CLASSIFIER") {
@@ -246,9 +261,22 @@ pub fn classifier_from_env() -> anyhow::Result<Option<Arc<dyn InvocationClassifi
             );
             // Only the verified installed package; no path, no PATH lookup, no fallback.
             let home = crate::config::Config::home()?;
-            Ok(Some(Arc::new(
-                crate::classifier_runtime::worker::PackagedClassifier::from_home(&home)?,
-            )))
+            let classifier =
+                crate::classifier_runtime::worker::PackagedClassifier::from_home(&home)?;
+            // Explicit pilot opt-in: prepare the worker now, before any protected call is
+            // accepted. A failure ends startup with an actionable error and dispatches nothing.
+            if prepare_requested() {
+                let classifier = classifier.prepared();
+                let readiness = classifier.prepare_worker().context(
+                    "the classifier is not ready: its verified worker could not be prepared",
+                )?;
+                eprintln!(
+                    "{}",
+                    json!({"event":"mcp_classifier_ready","readiness":readiness})
+                );
+                return Ok(Some(Arc::new(classifier)));
+            }
+            Ok(Some(Arc::new(classifier)))
         }
         _ => bail!("unsupported classifier setting"),
     }
@@ -1005,6 +1033,24 @@ impl<'a> Collector<'a> {
         let Some(classifier) = self.config.classifier.clone() else {
             return Ok(Ok(ClassifiedAssessment::allow()));
         };
+        // Pilot path: a lost or outdated worker is replaced before this call is classified,
+        // within the same outer deadline. Not prepared means refused, never dispatched.
+        if classifier.requires_preparation() {
+            let preparing = classifier.clone();
+            let outcome = tokio::time::timeout(
+                CLASSIFIER_TIMEOUT,
+                tokio::task::spawn_blocking(move || preparing.prepare()),
+            )
+            .await;
+            if !matches!(outcome, Ok(Ok(Ok(())))) {
+                eprintln!(
+                    "{}",
+                    json!({"event":"mcp_classifier_not_ready","host_call_id":host_call_id,
+                    "server_id":self.config.server_id,"tool":name})
+                );
+                return Ok(Err("classifier_not_ready"));
+            }
+        }
         let tool = snapshot
             .tools
             .get(name)
