@@ -37,6 +37,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from pilot_qualification import CASES, LIMITS, Failure, canonical, digest, measure, new_report, require, sha, write_report
 import wsl_preflight
+import wsl_qualification
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -408,6 +409,9 @@ class Pilot:
         self.unrelated = subprocess.Popen([str(self.paths["python"]), "-I", "-c", "import time; time.sleep(1800)"],
                                          env=self.env, cwd=self.private, start_new_session=True)
         self.unrelated_start = BASE.ProcessWitness.identity(self.unrelated.pid)
+        if getattr(self, "wsl_qualification", False):
+            self.report["wsl_foreign_port"] = wsl_qualification.foreign_port(
+                self.binary, self.paths["python"], self.env, self.private, self.port)
         instance = self.start_daemon()
         return {"source_independent_runtime": True, "agentfw_sha256": sha(self.binary),
                 "profiles": self.installed, "policy_sha256": self.policy_sha256,
@@ -1068,6 +1072,9 @@ def run(args):
             require(report["wsl_preflight"]["status"] == "ready", "wsl_prerequisites_not_ready")
         private = tempfile.TemporaryDirectory(prefix="installed-pilot-", dir=wsl_root)
         pilot = Pilot(Path(private.name), args.output, paths, report, selection["expected_refusal"])
+        pilot.wsl_qualification = wsl_root is not None
+        if wsl_root is not None:
+            report["wsl_host_settings_before"] = wsl_qualification.host_settings()
         version = subprocess.check_output([str(paths["claude"]), "--version"], env=pilot.env, cwd=pilot.private,
                                           timeout=15, text=True).strip()
         host_package = json.loads((ROOT / "profiles/mcp/filesystem-readonly-v1/claude-host/package.json").read_text())
@@ -1131,6 +1138,10 @@ def run(args):
             require(report.get("source_before") == report["source_after"], "candidate_changed_during_run")
             require(all(sha(path) == report["selected_sha256"][key] for key, path in selected.items()), "selected_runtime_changed_during_run")
             require(pilot is not None, "runtime_not_started")
+            if getattr(args, "wsl_root", None) is not None:
+                report["wsl_host_settings_after"] = wsl_qualification.host_settings()
+                require(report.get("wsl_host_settings_before") == report["wsl_host_settings_after"],
+                        "wsl_host_settings_changed")
             return {**cleanup_evidence, "private_installation_removed": True, "source_and_inputs_unchanged": True}
         if pilot is not None:
             step("final-cleanup", cleanup)

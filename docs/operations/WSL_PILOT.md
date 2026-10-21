@@ -72,6 +72,11 @@ python3 -B scripts/qualify-installed-pilot.py --run \
 The private installation is staged below the explicit root. Child negative
 controls inherit this WSL requirement. A failed prerequisite prevents profile
 preparation and host execution, and its diagnostic stays in `report.json`.
+Before starting its daemon, the WSL path calibrates an independent process on
+the selected port, requires the Agent's native address-in-use refusal, and
+checks that the listener still serves its marker. It then removes only that
+owned fixture and starts the useful session. The final report also compares
+digests of fixed WSL and namespace settings before and after execution.
 The existing denominator, source checks, original sandbox positives, independent
 refusal witnesses and owned-cleanup requirements remain in force.
 
