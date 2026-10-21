@@ -279,24 +279,24 @@ def refused(response):
     return "error" in response or response.get("result", {}).get("isError") is True
 
 
-def events(path):
+def events(path, event="mcp_real_call"):
     result = []
     if not path.exists():
         return result
     for line in path.read_bytes().splitlines():
         try:
             record = json.loads(line)
-            if record.get("event") == "mcp_real_call":
+            if record.get("event") == event:
                 result.append(record)
         except (ValueError, UnicodeError):
             continue
     return result
 
 
-def wait_event(path, predicate, reason, timeout=15):
+def wait_event(path, predicate, reason, timeout=15, event="mcp_real_call"):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        values = events(path)
+        values = events(path, event)
         if predicate(values):
             return values
         time.sleep(0.02)
@@ -918,14 +918,14 @@ def protected_original_create(stack, root, bwrap, npm, report):
             # Kill a real ephemeral worker after native Allow. Only a newly
             # observed worker marker may identify the target, and a pidfd pins
             # it to the independently sampled owned process identity.
-            offset = len(events(collector_log))
+            offset = len(events(collector_log, "mcp_original_create_worker"))
             worker_target = stack.workspace / "sou83-worker-loss-unpublished.txt"
             client.send(call("sou83-worker-loss", {"path":"/workspace/" + worker_target.name,
                              "content":"worker death must not publish"}, "write_file"))
             wait_create_dispatch(collector_log, "sou83-worker-loss")
             observed = wait_event(collector_log, lambda rows: any(
                 row.get("event") == "mcp_original_create_worker" for row in rows[offset:]),
-                "original create worker did not start")
+                "original create worker did not start", event="mcp_original_create_worker")
             worker_pid = next(row["sandbox_pid"] for row in reversed(observed[offset:])
                               if row.get("event") == "mcp_original_create_worker")
             report["sou83_worker_fault"] = signal_owned_create_process(client, worker_pid)

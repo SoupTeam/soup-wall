@@ -70,6 +70,22 @@ def complete_report():
 
 
 class ProfileIdentities(unittest.TestCase):
+    def test_worker_fault_reader_selects_new_worker_events_without_changing_call_reader(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            log = Path(temporary) / "collector.log"
+            log.write_text('\n'.join(json.dumps(row) for row in [
+                {"event":"mcp_real_call", "state":"finished"},
+                {"event":"mcp_original_create_worker", "sandbox_pid":123},
+            ]) + '\n', encoding="utf-8")
+            self.assertEqual(VERIFY.events(log), [{"event":"mcp_real_call", "state":"finished"}])
+            event = "mcp_original_create_worker"
+            offset = len(VERIFY.events(log, event))
+            with log.open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps({"event":event, "sandbox_pid":456}) + '\n')
+            rows = VERIFY.wait_event(log, lambda rows: len(rows) > offset,
+                                     "missing new worker", timeout=0.1, event=event)
+            self.assertEqual([row["sandbox_pid"] for row in rows[offset:]], [456])
+
     def test_original_lock_manifest_and_schema_identities_match_shipped_pin(self):
         identity = json.loads((INSTALL.ASSETS / "upstream-identity.json").read_text())
         manifest = json.loads((INSTALL.ASSETS / "upstream-tools-list.json").read_text())

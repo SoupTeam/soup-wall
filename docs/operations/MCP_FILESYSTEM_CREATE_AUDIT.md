@@ -45,6 +45,16 @@ return a correlated no-commit error rather than silently removing the call.
 
 Current continuation qualification is pending its own hosted Linux run.
 Do not transfer `6a8bc718` or `2b7c7e28` evidence to the changed source.
+The required filesystem job on `92fa8762` failed at the new worker-fault
+witness: its event reader only selected `mcp_real_call`, hiding the emitted
+`mcp_original_create_worker` event. Artifact `12339759936` was downloaded;
+ZIP SHA-256 `b5f22e2ff8b8f6e38c8f8a4b535c7d400dedd32f5ec95bde0318443c3ddf98e6`
+matches GitHub, and the retained collector log contains the actual new worker
+marker. The reader now explicitly selects worker events while preserving the
+default call-event filter. A mixed/stale/new-event regression passes. Signal,
+timeout and no-effect assertions are unchanged. This is a source correction
+requiring fresh qualification, not an unchanged-source retry or a production
+containment bug claim.
 Ask continuation, separately retained typed-resource evidence, full managed
 epoch transitions, broader crash/race/adversarial-upstream injection and
 actual upstream error injection remain full-task limitations. Private staging
