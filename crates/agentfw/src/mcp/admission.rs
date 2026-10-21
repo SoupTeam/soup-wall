@@ -1396,6 +1396,8 @@ impl<'a> Collector<'a> {
                     | crate::native::resource::NETWORK_CONTRACT
                     | crate::native::resource::WINDOWS_READ_CONTRACT
                     | crate::native::resource::WINDOWS_CREATE_CONTRACT
+                    | crate::native::resource::MACOS_READ_CONTRACT
+                    | crate::native::resource::MACOS_CREATE_CONTRACT
             ),
             "unsupported native receipt contract"
         );
@@ -1914,7 +1916,9 @@ where
                         schemas.get(name).context("MCP tool schema not installed")?.validate(&args)?;
                         #[cfg(windows)]
                         let mut prepared_windows_read = None;
-                        #[cfg(any(target_os = "linux", windows))]
+                        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+                        let mut prepared_macos_read = None;
+                        #[cfg(any(target_os = "linux", windows, all(target_os = "macos", target_arch = "aarch64")))]
                         let mut prepared_create = None;
                         let resource_admission = if let Some(policy) = &installed.resource_policy {
                             #[cfg(windows)]
@@ -1972,10 +1976,60 @@ where
                                     prepared_windows_read = Some(prepared);
                                 }
                             }
+                            #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+                            if policy.is_macos_descriptors() {
+                                let actual = std::env::var_os("AGENTFW_WORKSPACE")
+                                    .map(std::path::PathBuf::from)
+                                    .or_else(|| std::env::current_dir().ok());
+                                if actual.as_deref() != Some(&policy.workspace) {
+                                    write_resource_reply(client, host, true,
+                                        &withheld(request_id, "invocation", &json!(["resource_workspace_mismatch"]))).await?;
+                                    continue;
+                                }
+                                let [super::resources::Resource::Path { canonical }] = policy.allowed_resources.as_slice() else {
+                                    bail!("validated macOS descriptor authority missing");
+                                };
+                                let path_ptr = policy.path_selector();
+                                let original = crate::mcp::resources::selected(&args, path_ptr)
+                                    .ok()
+                                    .flatten()
+                                    .and_then(|v| v.as_str())
+                                    .context("validated macOS path missing")?;
+                                if policy.is_macos_create() {
+                                    let content_ptr = policy.content_selector();
+                                    let content = crate::mcp::resources::selected(&args, content_ptr)
+                                        .ok()
+                                        .flatten()
+                                        .and_then(|v| v.as_str())
+                                        .context("validated create content missing")?;
+                                    let prepared = match crate::macos_create::PreparedCreate::prepare(
+                                        &policy.workspace, &policy.cwd, original, canonical, content) {
+                                        Ok(prepared) => prepared,
+                                        Err(error) => {
+                                            write_resource_reply(client, host, true,
+                                                &withheld(request_id, "invocation", &json!([error.code]))).await?;
+                                            continue;
+                                        }
+                                    };
+                                    prepared_create = Some(prepared);
+                                } else {
+                                    let prepared = match crate::macos_read::PreparedRead::prepare(
+                                        &policy.workspace, &policy.cwd, original, canonical) {
+                                        Ok(prepared) => prepared,
+                                        Err(_) => {
+                                            write_resource_reply(client, host, true,
+                                                &withheld(request_id, "invocation", &json!(["resource_macos_read_prepare_failed"]))).await?;
+                                            continue;
+                                        }
+                                    };
+                                    prepared_macos_read = Some(prepared);
+                                }
+                            }
                             if (policy.is_create_file()
                                 || policy.is_https_get()
                                 || policy.is_https_post()
                                 || policy.is_windows_handles()
+                                || policy.is_macos_descriptors()
                                 || policy.binding.is_some())
                                 && collector.config.server_id != policy.profile.server_id
                             {
@@ -1983,8 +2037,8 @@ where
                                     &withheld(request_id, "invocation", &json!(["resource_server_identity_mismatch"]))).await?;
                                 continue;
                             }
-                            if policy.is_create_file() || policy.is_https_get() || policy.is_https_post() || policy.is_windows_handles() {
-                                if !policy.is_windows_handles() {
+                            if policy.is_create_file() || policy.is_https_get() || policy.is_https_post() || policy.is_windows_handles() || policy.is_macos_descriptors() {
+                                if !policy.is_windows_handles() && !policy.is_macos_descriptors() {
                                     // Match run()'s actual operator-selected session root,
                                     // including its cwd fallback when no override exists.
                                     // Handle profiles checked exact spelling without DOS I/O.
@@ -2016,7 +2070,7 @@ where
                                     continue;
                                 }
                             }
-                            if (policy.is_create_file() || policy.is_https_get() || policy.is_https_post() || policy.is_windows_handles())
+                            if (policy.is_create_file() || policy.is_https_get() || policy.is_https_post() || policy.is_windows_handles() || policy.is_macos_descriptors())
                                 && collector.config.classifier.as_ref()
                                     .and_then(|classifier| classifier.revision())
                                     != Some(policy.classifier_sha256.as_str())
@@ -2108,7 +2162,36 @@ where
                             } else {
                                 super::resources::extract(&input, &policy.profile, &context)
                             };
-                            #[cfg(not(windows))]
+                            #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+                            let derived = if policy.is_macos_descriptors() {
+                                let resources = if policy.is_macos_create() {
+                                    let prepared = prepared_create.as_ref()
+                                        .context("macOS create stage not pinned before extraction")?;
+                                    crate::native::resource::macos_create_evidence(
+                                        policy, &args, prepared.identity()).map_err(anyhow::Error::msg)?
+                                } else {
+                                    let prepared = prepared_macos_read.as_ref()
+                                        .context("macOS read metadata not pinned before extraction")?;
+                                    crate::native::resource::macos_read_evidence(
+                                        policy, &args, prepared.identity()).map_err(anyhow::Error::msg)?
+                                };
+                                super::resources::Extraction {
+                                    server_id: input.server_id.clone(),
+                                    tool_name: input.tool.clone(),
+                                    schema_sha256: input.schema_sha256.clone(),
+                                    args_sha256: crate::native::canonical_digest(&args),
+                                    profile_sha256: crate::native::canonical_digest(
+                                        &serde_json::to_value(&policy.profile).context("profile serializes")?),
+                                    snapshot_sha256: input.snapshot_sha256.clone(),
+                                    executor_sha256: policy.executor_sha256.clone(),
+                                    resources,
+                                    issues: vec![],
+                                    omitted_optional: vec![],
+                                }
+                            } else {
+                                super::resources::extract(&input, &policy.profile, &context)
+                            };
+                            #[cfg(not(any(windows, all(target_os = "macos", target_arch = "aarch64"))))]
                             let derived = super::resources::extract(&input, &policy.profile, &context);
                             if !derived.complete() {
                                 let reasons = if !derived.issues.is_empty() {
@@ -2137,7 +2220,16 @@ where
                                 } else {
                                     crate::native::resource::create_file_binding(policy, &args)
                                 };
-                                #[cfg(not(windows))]
+                                #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+                                let create_binding = if policy.is_macos_create() {
+                                    let prepared = prepared_create.as_ref()
+                                        .context("macOS create stage not pinned before binding")?;
+                                    crate::native::resource::macos_create_binding_with_identity(
+                                        policy, &args, prepared.identity())
+                                } else {
+                                    crate::native::resource::create_file_binding(policy, &args)
+                                };
+                                #[cfg(not(any(windows, all(target_os = "macos", target_arch = "aarch64"))))]
                                 let create_binding = crate::native::resource::create_file_binding(policy, &args);
                                 match create_binding {
                                     Ok(binding) => Some(binding),
@@ -2162,6 +2254,7 @@ where
                                 resources: derived.resources.clone(),
                                 execution,
                                 windows_read: None,
+                                macos_read: None,
                                 network: if policy.is_https_get() {
                                     match crate::native::resource::https_get_binding(policy, &args) {
                                         Ok(binding) => Some(binding),
@@ -2310,7 +2403,7 @@ where
                                 }
                             }
                         }
-                        #[cfg(windows)]
+                        #[cfg(any(windows, all(target_os = "macos", target_arch = "aarch64")))]
                         let mut resource_admission = resource_admission;
                         let https_get = installed.resource_policy.as_ref().is_some_and(|policy| policy.is_https_get());
                         let https_post = installed.resource_policy.as_ref().is_some_and(|policy| policy.is_https_post());
@@ -2344,23 +2437,40 @@ where
                                     &withheld(request_id, "invocation", &json!([reason]))).await?;
                                 continue;
                             }
-                            let creating = policy.is_create_bound_or_named(name);
-                            if creating && !cfg!(target_os = "linux") {
-                                let reasons = json!(["resource_create_platform_unsupported"]);
-                                write_resource_reply(client, host, resource_reply,
-                                    &withheld(request_id, "invocation", &reasons)).await?;
-                                continue;
-                            }
-                            if !((installed.action_class == ActionClass::ReadOnly
-                                && policy.is_read_bound_or_named(name))
-                                || (installed.action_class == ActionClass::SideEffecting
-                                    && creating))
-                            {
-                                let reasons = json!(["resource_executor_unsupported"]);
-                                write_resource_reply(client, host, resource_reply, &withheld(request_id, "invocation", &reasons)).await?;
-                                continue;
-                            }
-                            let first_res = derived.resources.first().map(|r| &r.resource);
+                            if policy.is_macos_descriptors() {
+                                #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+                                {
+                                    let reason = if policy.is_macos_create() {
+                                        "resource_macos_create_platform_unsupported"
+                                    } else {
+                                        "resource_macos_read_platform_unsupported"
+                                    };
+                                    write_resource_reply(client, host, resource_reply,
+                                        &withheld(request_id, "invocation", &json!([reason]))).await?;
+                                    continue;
+                                }
+                                #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+                                {
+                                    // Handled below by macOS descriptor admission
+                                }
+                            } else {
+                                let creating = policy.is_create_bound_or_named(name);
+                                if creating && !cfg!(target_os = "linux") {
+                                    let reasons = json!(["resource_create_platform_unsupported"]);
+                                    write_resource_reply(client, host, resource_reply,
+                                        &withheld(request_id, "invocation", &reasons)).await?;
+                                    continue;
+                                }
+                                if !((installed.action_class == ActionClass::ReadOnly
+                                    && policy.is_read_bound_or_named(name))
+                                    || (installed.action_class == ActionClass::SideEffecting
+                                        && creating))
+                                {
+                                    let reasons = json!(["resource_executor_unsupported"]);
+                                    write_resource_reply(client, host, resource_reply, &withheld(request_id, "invocation", &reasons)).await?;
+                                    continue;
+                                }
+                                let first_res = derived.resources.first().map(|r| &r.resource);
                                 let Some(super::resources::Resource::Path { canonical }) = first_res
                                 else {
                                     let reasons = json!(["resource_destination_invalid"]);
@@ -2406,6 +2516,7 @@ where
                                     pinned_resource_ws = Some((pinned, target_path.to_path_buf()));
                                 }
                             }
+                        }
                         #[cfg(windows)]
                         if let Some((ref mut admission, ref derived)) = resource_admission.as_mut() {
                             let policy = installed.resource_policy.as_ref().expect("resource policy installed");
@@ -2432,6 +2543,29 @@ where
                                 let prepared = prepared_windows_read.as_ref().context("Windows metadata not pinned before extraction")?;
                                 admission.windows_read = Some(crate::native::resource::windows_read_binding_with_identity(
                                     policy, &args, prepared.identity()).map_err(anyhow::Error::msg)?);
+                            }
+                        }
+                        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+                        if let Some((ref mut admission, ref derived)) = resource_admission.as_mut() {
+                            let policy = installed.resource_policy.as_ref().expect("resource policy installed");
+                            if policy.is_macos_descriptors() {
+                                let Some(super::resources::Resource::Path { .. }) = derived.resources.first().map(|r| &r.resource) else {
+                                    write_resource_reply(client, host, true,
+                                        &withheld(request_id, "invocation", &json!(["resource_destination_invalid"]))).await?;
+                                    continue;
+                                };
+                                if policy.is_macos_create() {
+                                    ensure!(installed.action_class == ActionClass::SideEffecting && policy.profile.tool_name == name,
+                                        "macOS create tool semantics changed");
+                                    let prepared = prepared_create.as_ref().context("macOS create stage not pinned before admission")?;
+                                    let bound = crate::native::resource::macos_create_binding_with_identity(
+                                        policy, &args, prepared.identity()).map_err(anyhow::Error::msg)?;
+                                    ensure!(admission.execution.as_ref() == Some(&bound), "macOS create binding changed");
+                                } else {
+                                    let prepared = prepared_macos_read.as_ref().context("macOS metadata not pinned before extraction")?;
+                                    admission.macos_read = Some(crate::native::resource::macos_read_binding_with_identity(
+                                        policy, &args, prepared.identity()).map_err(anyhow::Error::msg)?);
+                                }
                             }
                         }
                         // A composed refusal must not reserve native capacity.
@@ -2665,7 +2799,7 @@ where
                             }
                             continue;
                         }
-                        #[cfg(any(target_os = "linux", windows))]
+                        #[cfg(any(target_os = "linux", windows, all(target_os = "macos", target_arch = "aarch64")))]
                         if let Some(prepared) = prepared_create {
                             let policy = installed.resource_policy.as_ref().expect("create policy selected");
                             #[cfg(windows)]
@@ -2675,6 +2809,14 @@ where
                                 ensure!(&crate::native::resource::windows_create_binding_with_identity(
                                     policy, &args, prepared.identity()).map_err(anyhow::Error::msg)? == bound,
                                     "Windows create authority changed before staging");
+                            }
+                            #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+                            if policy.is_macos_create() {
+                                let bound = resource_admission.as_ref().and_then(|(admission, _)| admission.execution.as_ref())
+                                    .context("macOS create authority missing")?;
+                                ensure!(&crate::native::resource::macos_create_binding_with_identity(
+                                    policy, &args, prepared.identity()).map_err(anyhow::Error::msg)? == bound,
+                                    "macOS create authority changed before staging");
                             }
                             let path_ptr = policy.path_selector();
                             let content_ptr = policy.content_selector();
@@ -2760,10 +2902,37 @@ where
                         if resource_admission.is_some() {
                             #[cfg(any(unix, windows))]
                             {
-                                #[cfg(unix)]
+                                #[cfg(target_os = "linux")]
+                                let (pinned, target_path) = pinned_resource_ws
+                                    .expect("pinned workspace initialized on linux");
+                                #[cfg(target_os = "linux")]
+                                let read = without_resource_overlap(client, true, async {
+                                    Ok(pinned.read_file(&target_path))
+                                })
+                                .await?;
+                                #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+                                let read = if let Some(prepared) = prepared_macos_read.take() {
+                                    let policy = installed.resource_policy.as_ref().expect("macOS read policy installed");
+                                    let bound = resource_admission.as_ref().and_then(|(admission, _)| admission.macos_read.as_ref())
+                                        .context("macOS read authority missing")?;
+                                    let same = crate::native::resource::macos_read_binding_with_identity(policy, &args, prepared.identity())
+                                        .map_err(anyhow::Error::msg)? == *bound;
+                                    without_resource_overlap(client, true, async {
+                                        if !same { return Ok(Err(anyhow::anyhow!("macOS read authority changed"))); }
+                                        Ok(prepared.read_bounded(crate::native::resource::MACOS_READ_MAX_CONTENT).await)
+                                    }).await?
+                                } else {
+                                    let (pinned, target_path) = pinned_resource_ws
+                                        .expect("pinned workspace initialized on unix");
+                                    without_resource_overlap(client, true, async {
+                                        Ok(pinned.read_file(&target_path))
+                                    })
+                                    .await?
+                                };
+                                #[cfg(all(unix, not(target_os = "linux"), not(all(target_os = "macos", target_arch = "aarch64"))))]
                                 let (pinned, target_path) = pinned_resource_ws
                                     .expect("pinned workspace initialized on unix");
-                                #[cfg(unix)]
+                                #[cfg(all(unix, not(target_os = "linux"), not(all(target_os = "macos", target_arch = "aarch64"))))]
                                 let read = without_resource_overlap(client, true, async {
                                     Ok(pinned.read_file(&target_path))
                                 })
@@ -2946,6 +3115,7 @@ where
 struct DiagnosticOutput<W> {
     inner: W,
     failed: Arc<AtomicBool>,
+    budget: Option<super::windows_budget::Guard>,
     liveness: Option<Arc<crate::native::liveness::CollectorLivenessClient>>,
 }
 
@@ -2964,6 +3134,26 @@ impl<W> DiagnosticOutput<W> {
         };
         Some(std::io::Error::new(std::io::ErrorKind::BrokenPipe, code))
     }
+
+    fn guarded_io<T>(
+        &mut self,
+        output: impl FnOnce(&mut W) -> Poll<std::io::Result<T>>,
+    ) -> Poll<std::io::Result<T>> {
+        if let Some(error) = self.boundary_error() {
+            return Poll::Ready(Err(error));
+        }
+        if let Some(guard) = &self.budget {
+            match guard.with_output(|| output(&mut self.inner)) {
+                Ok(result) => result,
+                Err(reason) => Poll::Ready(Err(std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    reason,
+                ))),
+            }
+        } else {
+            output(&mut self.inner)
+        }
+    }
 }
 
 impl<W: AsyncWrite + Unpin> AsyncWrite for DiagnosticOutput<W> {
@@ -2972,27 +3162,18 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for DiagnosticOutput<W> {
         cx: &mut TaskContext<'_>,
         bytes: &[u8],
     ) -> Poll<std::io::Result<usize>> {
-        let this = self.get_mut();
-        if let Some(error) = this.boundary_error() {
-            return Poll::Ready(Err(error));
-        }
-        Pin::new(&mut this.inner).poll_write(cx, bytes)
+        self.get_mut()
+            .guarded_io(|inner| Pin::new(inner).poll_write(cx, bytes))
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<std::io::Result<()>> {
-        let this = self.get_mut();
-        if let Some(error) = this.boundary_error() {
-            return Poll::Ready(Err(error));
-        }
-        Pin::new(&mut this.inner).poll_flush(cx)
+        self.get_mut()
+            .guarded_io(|inner| Pin::new(inner).poll_flush(cx))
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<std::io::Result<()>> {
-        let this = self.get_mut();
-        if let Some(error) = this.boundary_error() {
-            return Poll::Ready(Err(error));
-        }
-        Pin::new(&mut this.inner).poll_shutdown(cx)
+        self.get_mut()
+            .guarded_io(|inner| Pin::new(inner).poll_shutdown(cx))
     }
 }
 
@@ -3064,6 +3245,8 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
             .map(std::path::PathBuf::from)
             .unwrap_or(cwd);
         if let Some(profile) = super::server_profile::ProfileConfig::load_from_env()? {
+            ensure!(std::env::var_os(super::windows_budget::ENVIRONMENT).is_none(),
+                "Windows MCP resource budgets do not enable original-server sandbox profiles");
             return real_server::run(&collector, &profile, &workspace).await;
         }
         ensure!(
@@ -3141,6 +3324,7 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
             .env_remove("AGENTFW_HOST_SESSION")
             .env_remove("AGENTFW_TEST_CLASSIFIER_READ")
             .env_remove("AGENTFW_TEST_CLASSIFIER")
+            .env_remove(super::windows_budget::ENVIRONMENT)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -3152,6 +3336,7 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
         drop(windows_spawn_pins);
         let server_pid = process.child_mut().id();
         let ownership = process.ownership();
+        let budget = process.budget_guard();
         let mut stderr_drain = None;
         // Every pipe extraction and relay error still reaches owned cleanup.
         let operation = async {
@@ -3190,6 +3375,7 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
             let mut host = DiagnosticOutput {
                 inner: host,
                 failed,
+                budget: budget.clone(),
                 liveness: collector.liveness.clone(),
             };
             let result = {
@@ -3201,6 +3387,14 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
                         // Once diagnostic uncertainty is observed, a pending
                         // relay cannot win over that failure on the next poll.
                         biased;
+                        _ = async {
+                            if let Some(guard) = &budget {
+                                loop {
+                                    if guard.check().is_err() { return; }
+                                    tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                                }
+                            } else { std::future::pending::<()>().await; }
+                        } => break Err(anyhow::anyhow!("windows_budget_terminal")),
                         _ = async {
                             if let Some(liveness) = &collector.liveness {
                                 loop {
@@ -3232,18 +3426,37 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
             drop(server);
             result
         }.await;
+        // Capture terminal pressure even when normal relay EOF wins the race.
+        let operation = operation.and_then(|()| {
+            if let Some(guard) = &budget { guard.check().map_err(anyhow::Error::msg)?; }
+            Ok(())
+        });
         let clean_exit_required = config.native.registry.tools.iter().any(|tool| {
             tool.resource_policy.as_ref().is_some_and(|policy| {
-                policy.is_create_file() || policy.is_https_get() || policy.is_https_post() || policy.is_windows_handles()
+                policy.is_create_file()
+                    || policy.is_https_get()
+                    || policy.is_https_post()
+                    || policy.is_windows_handles()
+                    || policy.is_macos_descriptors()
             })
         });
-        // Windows handle profiles finalize their independent refusal ledgers
+        // Windows handle and macOS descriptor profiles finalize their independent refusal ledgers
         // after EOF even when the relay refused an operation. Preserve that
         // accepted bounded grace; no result forwarding resumes during cleanup.
-        let windows_handles_profile = config.native.registry.tools.iter().any(|tool| {
-            tool.resource_policy.as_ref().is_some_and(|policy| policy.is_windows_handles())
+        let graceful_profile = config.native.registry.tools.iter().any(|tool| {
+            tool.resource_policy.as_ref().is_some_and(|policy| {
+                policy.is_windows_handles() || policy.is_macos_descriptors()
+            })
         });
-        let cleanup = process.cleanup(operation.is_ok() || windows_handles_profile).await;
+        let cleanup = process.cleanup(operation.is_ok() || graceful_profile).await;
+        let operation = operation.and_then(|()| {
+            if let Some(guard) = &budget { guard.check().map_err(anyhow::Error::msg)?; }
+            Ok(())
+        });
+        if let Some(report) = process.budget_report() {
+            eprintln!("{}",json!({"event":"mcp_windows_budget_end","budget":report,
+                "cleanup_verified":cleanup.cleaned&&cleanup.reaped,"effects_rolled_back":false}));
+        }
         let stderr_report = match stderr_drain {
             Some(drain) => Some(drain.finish().await),
             None => None,
@@ -3968,6 +4181,7 @@ mod diagnostic_output_tests {
             DiagnosticOutput {
                 inner,
                 failed: Arc::new(AtomicBool::new(false)),
+                budget: None,
                 liveness: Some(liveness.clone()),
             },
             liveness,
@@ -4023,6 +4237,7 @@ mod diagnostic_output_tests {
         let mut guarded = DiagnosticOutput {
             inner: output,
             failed: failed.clone(),
+            budget: None,
             liveness: None,
         };
         guarded.write_all(b"useful\n").await.unwrap();
@@ -4047,6 +4262,7 @@ mod diagnostic_output_tests {
         let mut guarded = DiagnosticOutput {
             inner: output,
             failed: failed.clone(),
+            budget: None,
             liveness: None,
         };
         {
@@ -4062,6 +4278,45 @@ mod diagnostic_output_tests {
         assert!(
             received == b"x",
             "bytes committed before failure are not retracted or extended"
+        );
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_budget_stops_a_pending_partial_host_write() {
+        use std::os::windows::io::{FromRawHandle, OwnedHandle};
+        let raw = unsafe {
+            windows_sys::Win32::System::JobObjects::CreateJobObjectW(
+                std::ptr::null(),
+                std::ptr::null(),
+            )
+        };
+        assert!(!raw.is_null());
+        let job = Arc::new(unsafe { OwnedHandle::from_raw_handle(raw.cast()) });
+        let config = super::super::windows_budget::Config::read(br#"{"format":"sw-mcp/windows-job-budget/1","memoryMaxBytes":134217728,"memoryPressureBytes":100663296,"activeProcessMax":8,"cpuUserMillis":2000,"wallMillis":1000}"#).unwrap();
+        let mut budget = super::super::windows_budget::Budget::install(job, config).unwrap();
+        let (mut observer, output) = tokio::io::duplex(1);
+        let mut guarded = DiagnosticOutput {
+            inner: output,
+            failed: Arc::new(AtomicBool::new(false)),
+            budget: Some(budget.guard()),
+            liveness: None,
+        };
+        {
+            let writing = guarded.write_all(b"xy");
+            tokio::pin!(writing);
+            assert!(futures_util::poll!(writing.as_mut()).is_pending());
+            tokio::time::sleep(tokio::time::Duration::from_millis(1100)).await;
+            assert!(writing.await.is_err());
+        }
+        drop(guarded);
+        let mut received = Vec::new();
+        observer.read_to_end(&mut received).await.unwrap();
+        assert_eq!(received, b"x");
+        budget.finish(true);
+        assert_eq!(
+            budget.guard().report()["observed"]["reason"],
+            "windows_budget_wall_deadline"
         );
     }
 }

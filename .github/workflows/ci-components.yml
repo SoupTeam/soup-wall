@@ -1231,7 +1231,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends meson ninja-build libcap-dev pkg-config ripgrep
+          sudo apt-get install -y --no-install-recommends meson ninja-build libcap-dev pkg-config ripgrep zlib1g-dev
           mkdir -p "$RUNNER_TEMP/sou62-runtime" "$RUNNER_TEMP/sou62-bwrap-source"
           curl --fail --location --retry 3 https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz --output "$RUNNER_TEMP/sou62-node.tar.xz"
           printf '%s  %s\n' 9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37 "$RUNNER_TEMP/sou62-node.tar.xz" | sha256sum --check
@@ -1241,6 +1241,12 @@ jobs:
           tar --extract --xz --file "$RUNNER_TEMP/sou62-bwrap.tar.xz" --directory "$RUNNER_TEMP/sou62-bwrap-source" --strip-components=1 --no-same-owner --no-same-permissions
           meson setup "$RUNNER_TEMP/sou62-bwrap-build" "$RUNNER_TEMP/sou62-bwrap-source" -Dtests=false -Dman=disabled -Dselinux=disabled -Dbash_completion=disabled -Dzsh_completion=disabled
           meson compile -C "$RUNNER_TEMP/sou62-bwrap-build"
+          # Reuse the accepted Git profile's exact runtime, without a kit builder.
+          mkdir "$RUNNER_TEMP/sou100-git-source"
+          curl --fail --location --retry 3 https://www.kernel.org/pub/software/scm/git/git-2.51.2.tar.xz --output "$RUNNER_TEMP/sou100-git.tar.xz"
+          printf '%s  %s\n' 233d7143a2d58e60755eee9b76f559ec73ea2b3c297f5b503162ace95966b4e3 "$RUNNER_TEMP/sou100-git.tar.xz" | sha256sum --check
+          tar -xJf "$RUNNER_TEMP/sou100-git.tar.xz" -C "$RUNNER_TEMP/sou100-git-source" --strip-components=1 --no-same-owner --no-same-permissions
+          make -C "$RUNNER_TEMP/sou100-git-source" -j2 NO_CURL=YesPlease NO_EXPAT=YesPlease NO_TCLTK=YesPlease NO_GETTEXT=YesPlease NO_OPENSSL=YesPlease git
           "$RUNNER_TEMP/sou62-bwrap-build/bwrap" --help | rg -- '--ro-bind-fd'
           printf '%s\n' "$RUNNER_TEMP/sou62-runtime/bin" >> "$GITHUB_PATH"
           rustc --version > "$RUNNER_TEMP/sou62-rust.txt"
@@ -1262,7 +1268,7 @@ jobs:
         run: |
           set -euo pipefail
           git rev-parse HEAD > "$RUNNER_TEMP/sou62-source.txt"
-          cargo build --locked -p agentfw --bin agentfw --message-format=json > "$RUNNER_TEMP/sou62-build.jsonl"
+          cargo build --locked -p agentfw --bins --message-format=json > "$RUNNER_TEMP/sou62-build.jsonl"
           cargo test --locked -p agentfw --lib --no-run --message-format=json > "$RUNNER_TEMP/sou62-test-build.jsonl"
           python3 - <<'PY'
           import json, os
@@ -1277,6 +1283,14 @@ jobs:
       - name: Profile and evidence controls, safe archive runtime compatibility
         run: |
           python3 -B -m unittest discover -s scripts/tests -p test_sou62_real_mcp.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_installed_pilot.py -v
+          cargo test --locked -p agentfw --lib selected_registry_shared_daemon | tee "$RUNNER_TEMP/sou100-registry-regressions.log"
+          python3 -B - <<'REGISTRY_CONTROLS'
+          import os, re
+          from pathlib import Path
+          text = (Path(os.environ['RUNNER_TEMP']) / 'sou100-registry-regressions.log').read_text()
+          assert re.search(r'test result: ok\. 3 passed; 0 failed; 0 ignored;', text), 'three executed registry regressions are required'
+          REGISTRY_CONTROLS
           python3 -B -m unittest discover -s scripts/tests -p test_linux_alert_acceptance.py -v
           python3 -B - <<'PYCONTROLS'
           import unittest
@@ -1296,6 +1310,16 @@ jobs:
             --claude "$RUNNER_TEMP/sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --sandbox-test-binary "$SOU62_SANDBOX_TEST_BINARY" --expected-commit "$(git rev-parse HEAD)" \
             --output "$RUNNER_TEMP/sou62-acceptance" 2>&1 | tee "$RUNNER_TEMP/sou62-acceptance.log"
+      - name: SOU-98 same-preset original-server acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/verify-sou62-real-mcp.py --run --pilot-preset --agentfw "$PWD/target/debug/agentfw" \
+            --node "$RUNNER_TEMP/sou62-runtime/bin/node" --npm "$RUNNER_TEMP/sou62-runtime/bin/npm" \
+            --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" \
+            --claude "$RUNNER_TEMP/sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --sandbox-test-binary "$SOU62_SANDBOX_TEST_BINARY" --expected-commit "$(git rev-parse HEAD)" \
+            --output "$RUNNER_TEMP/sou98-filesystem" 2>&1 | tee "$RUNNER_TEMP/sou98-filesystem.log"
       - name: Required combined original-server, shared-session, hooks and actual Claude Code smoke
         shell: bash
         run: |
@@ -1306,6 +1330,56 @@ jobs:
             --claude "$RUNNER_TEMP/sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --sandbox-test-binary "$SOU62_SANDBOX_TEST_BINARY" --expected-commit "$(git rev-parse HEAD)" \
             --output "$RUNNER_TEMP/sou62-sou63-combined" 2>&1 | tee "$RUNNER_TEMP/sou62-sou63-combined.log"
+      - name: Required installed filesystem and Git pilot through actual Claude Code
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PILOT_SELECTION'
+          import importlib.util, os, sys
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location('pilot_selection', 'scripts/qualify-installed-pilot.py')
+          pilot = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(pilot)
+          temporary = Path(os.environ['RUNNER_TEMP'])
+          selected_policy = temporary / 'sou100-selected-policy.yaml'
+          pilot.owned_bytes(selected_policy, pilot.PILOT_POLICY.encode('utf-8'))
+          files = {
+              'agentfw': Path('target/debug/agentfw'),
+              'git_launcher': Path('target/debug/agentfw-git-sandbox'),
+              'sandbox_tests': Path(os.environ['SOU62_SANDBOX_TEST_BINARY']),
+              'node': temporary / 'sou62-runtime/bin/node',
+              'npm': temporary / 'sou62-runtime/bin/npm',
+              'bwrap': temporary / 'sou62-bwrap-build/bwrap',
+              'git': temporary / 'sou100-git-source/git',
+              'claude': temporary / 'sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude',
+              'python': Path(sys.executable),
+              'filesystem_classifier': Path('rule_baseline/rule_baseline.py'),
+              'git_classifier': Path('rule_baseline/git_readonly_v1/rule_baseline.py'),
+              'policy': selected_policy,
+          }
+          pilot.private_json(temporary / 'sou100-selection.json', {
+              'format': 'sw-installed-pilot-selection/2', 'source': pilot.source(),
+              'expected_refusal': {'verdict': 'ask', 'rule': pilot.SHARED.RULE},
+              'files': {role: {'path': str(path.resolve(strict=True)), 'sha256': pilot.sha(path)} for role, path in files.items()},
+          })
+          PILOT_SELECTION
+          python3 -B scripts/qualify-installed-pilot.py --run \
+            --selection "$RUNNER_TEMP/sou100-selection.json" --expected-commit "$(git rev-parse HEAD)" \
+            --output "$RUNNER_TEMP/sou100-pilot" 2>&1 | tee "$RUNNER_TEMP/sou100-pilot.log"
+      - name: Publish bounded installed-pilot outcome
+        if: always()
+        shell: bash
+        run: |
+          python3 -B - <<'PILOT_OUTCOME'
+          import json, os
+          from pathlib import Path
+          path = Path(os.environ['RUNNER_TEMP']) / 'sou100-pilot/report.json'
+          result = json.loads(path.read_text()) if path.exists() else {'status': 'incomplete', 'reason': 'installed_pilot_not_executed'}
+          selected = {key: result.get(key) for key in ('format', 'status', 'source_before', 'source_after', 'required', 'counts', 'benign_workflows', 'remaining_blockers')}
+          print(json.dumps(selected, indent=2))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+              stream.write('```json\n' + json.dumps(selected, indent=2) + '\n```\n')
+          PILOT_OUTCOME
       - name: SOU-97 opt-in candidate classifier through the original filesystem server
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_candidate == 'true' }}
         shell: bash
@@ -1372,6 +1446,13 @@ jobs:
         with:
           name: sou62-real-filesystem-mcp-evidence
           path: |
+            ${{ runner.temp }}/sou98-filesystem/**
+            ${{ runner.temp }}/sou98-filesystem.log
+            ${{ runner.temp }}/sou100-selection.json
+            ${{ runner.temp }}/sou100-selected-policy.yaml
+            ${{ runner.temp }}/sou100-registry-regressions.log
+            ${{ runner.temp }}/sou100-pilot.log
+            ${{ runner.temp }}/sou100-pilot/**
             ${{ runner.temp }}/sou62-*.txt
             ${{ runner.temp }}/sou62-*.jsonl
             ${{ runner.temp }}/sou62-*.log
@@ -1436,6 +1517,11 @@ jobs:
           with open(os.environ['GITHUB_ENV'], 'a') as stream:
               stream.write('SOU68_TEST_BINARY=' + binaries[0] + '\n')
           PY
+      - name: Pilot selection and policy controls
+        run: |
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_policy.py -v
+          cargo test --locked -p soup-wall-agent --test pilot_policy
+          python3 -B scripts/pilot_decision_matrix.py --output "$RUNNER_TEMP/sou98-development.json"
       - name: Git and existing filesystem regressions
         run: |
           cargo test --locked -p agentfw server_profile --lib
@@ -1457,6 +1543,16 @@ jobs:
             --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou68-acceptance" \
             2>&1 | tee "$RUNNER_TEMP/sou68-acceptance.log"
+      - name: SOU-98 same-preset original-server acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/verify-sou68-real-mcp.py --run --pilot-preset --agentfw "$PWD/target/debug/agentfw" \
+            --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
+            --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --sandbox-test-binary "$SOU68_TEST_BINARY" \
+            --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
+            --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou98-git" \
+            2>&1 | tee "$RUNNER_TEMP/sou98-git.log"
       - name: SOU-97 opt-in candidate classifier through the original Git server
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_candidate == 'true' }}
         shell: bash
@@ -1545,6 +1641,9 @@ jobs:
         with:
           name: sou68-real-git-mcp-evidence
           path: |
+            ${{ runner.temp }}/sou98-git/**
+            ${{ runner.temp }}/sou98-git.log
+            ${{ runner.temp }}/sou98-development.json
             ${{ runner.temp }}/sou68-*.txt
             ${{ runner.temp }}/sou68-*.jsonl
             ${{ runner.temp }}/sou68-*.log

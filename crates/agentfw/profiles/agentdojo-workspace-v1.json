@@ -1,0 +1,941 @@
+{
+  "profile": "agentdojo-workspace/1",
+  "upstream_revision": "089ed468cf3ed0322acc66b0211f26d9d90dbf60",
+  "benchmark_version": "v1.2.2",
+  "tools": [
+    {
+      "name": "send_email",
+      "schema": {
+        "properties": {
+          "recipients": {
+            "description": "The list with the email addresses of the recipients.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Recipients",
+            "type": "array"
+          },
+          "subject": {
+            "description": "The subject of the email.",
+            "title": "Subject",
+            "type": "string"
+          },
+          "body": {
+            "description": "The body of the email.",
+            "title": "Body",
+            "type": "string"
+          },
+          "attachments": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The list of attachments to include in the email. If `null`, no attachments are included.\nIf the attachment has as \"type\" \"file\", then it is expected to have a field \"file_id\", with the ID of the file in the\ncloud drive. If the attachment has as \"type\" \"event\", then it is expected to be a calendar event in the field \"event_details\".\nA calendar event has the following fields: `title`, `description`, `start_time` (in ISO format), `end_time`\n(in ISO format), `location`, and participants (a list of emails).",
+            "title": "Attachments"
+          },
+          "cc": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The list of email addresses to include in the CC field. If `null`, no email addresses are included.",
+            "title": "Cc"
+          },
+          "bcc": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The list of email addresses to include in the BCC field. If `null`, no email addresses are included.",
+            "title": "Bcc"
+          }
+        },
+        "required": [
+          "recipients",
+          "subject",
+          "body"
+        ],
+        "title": "Input schema for `send_email`",
+        "type": "object"
+      },
+      "schema_sha256": "4e88d3d7757e2caf355a4687c2c6245445a42058333eece1e31877d5272f0661",
+      "action_class": "network",
+      "result_provenance": "untrusted",
+      "egress": [
+        {
+          "pointer": "/recipients",
+          "kind": "email_domain",
+          "optional": false
+        },
+        {
+          "pointer": "/cc",
+          "kind": "email_domain",
+          "optional": true
+        },
+        {
+          "pointer": "/bcc",
+          "kind": "email_domain",
+          "optional": true
+        }
+      ],
+      "supported": true,
+      "unsupported_reason": null,
+      "resources": [
+        {
+          "kind": "mailbox_collection",
+          "access": "create_sent"
+        }
+      ],
+      "basis": "src/agentdojo/default_suites/v1/tools/email_client.py#send_email",
+      "notes": "Original validated arguments and defaults; collections are dynamic query scopes, never OS paths or grants. File attachments are logical references; event/ambiguous attachments are explicitly unsupported before execution. All recipients, cc and bcc are inspected."
+    },
+    {
+      "name": "delete_email",
+      "schema": {
+        "properties": {
+          "email_id": {
+            "description": "The id of the email to delete.",
+            "title": "Email Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email_id"
+        ],
+        "title": "Input schema for `delete_email`",
+        "type": "object"
+      },
+      "schema_sha256": "7f8933033c765ad85e0d17e5cde355f9b37e1c067036477add6c7ade37b0f1e4",
+      "action_class": "destructive",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "supported": true,
+      "unsupported_reason": null,
+      "resources": [
+        {
+          "kind": "email",
+          "access": "move_to_trash",
+          "pointer": "/email_id"
+        }
+      ],
+      "basis": "src/agentdojo/default_suites/v1/tools/email_client.py#delete_email",
+      "notes": "Original validated arguments and defaults; collections are dynamic query scopes, never OS paths or grants."
+    },
+    {
+      "name": "get_unread_emails",
+      "schema": {
+        "properties": {},
+        "title": "Input schema for `get_unread_emails`",
+        "type": "object"
+      },
+      "schema_sha256": "30e556049a372344c22d5c36e5c690a1887b925ec79f4d7ee69215b1cf442cf1",
+      "action_class": "side_effecting",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "supported": true,
+      "unsupported_reason": null,
+      "resources": [
+        {
+          "kind": "mailbox_collection",
+          "access": "mark_read"
+        }
+      ],
+      "basis": "src/agentdojo/default_suites/v1/tools/email_client.py#get_unread_emails",
+      "notes": "Original validated arguments and defaults; collections are dynamic query scopes, never OS paths or grants."
+    },
+    {
+      "name": "get_sent_emails",
+      "schema": {
+        "properties": {},
+        "title": "Input schema for `get_sent_emails`",
+        "type": "object"
+      },
+      "schema_sha256": "197068f8c260ed7f330f122722c073e88479648cea0f1ccb134d1497d24dca47",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "supported": true,
+      "unsupported_reason": null,
+      "resources": [
+        {
+          "kind": "mailbox_collection",
+          "access": "read"
+        }
+      ],
+      "basis": "src/agentdojo/default_suites/v1/tools/email_client.py#get_sent_emails",
+      "notes": "Original validated arguments and defaults; collections are dynamic query scopes, never OS paths or grants."
+    },
+    {
+      "name": "get_received_emails",
+      "schema": {
+        "properties": {},
+        "title": "Input schema for `get_received_emails`",
+        "type": "object"
+      },
+      "schema_sha256": "d32bb9cb65d50d39871cee90b0356f13cb2a04b577a10aea0e84655f37d57c99",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "supported": true,
+      "unsupported_reason": null,
+      "resources": [
+        {
+          "kind": "mailbox_collection",
+          "access": "read"
+        }
+      ],
+      "basis": "src/agentdojo/default_suites/v1/tools/email_client.py#get_received_emails",
+      "notes": "Original validated arguments and defaults; collections are dynamic query scopes, never OS paths or grants."
+    },
+    {
+      "name": "get_draft_emails",
+      "schema": {
+        "properties": {},
+        "title": "Input schema for `get_draft_emails`",
+        "type": "object"
+      },
+      "schema_sha256": "e620bae8b2d91420aa21175863097d2ab5aed9369cc38682be4fce167d941636",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "supported": true,
+      "unsupported_reason": null,
+      "resources": [
+        {
+          "kind": "mailbox_collection",
+          "access": "read"
+        }
+      ],
+      "basis": "src/agentdojo/default_suites/v1/tools/email_client.py#get_draft_emails",
+      "notes": "Original validated arguments and defaults; collections are dynamic query scopes, never OS paths or grants."
+    },
+    {
+      "name": "search_emails",
+      "schema": {
+        "properties": {
+          "query": {
+            "description": "The query to search for in the email subject or body. If empty, all emails are returned.",
+            "title": "Query",
+            "type": "string"
+          },
+          "sender": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The email address of the sender. If `null`, all emails are searched. Use `search_contacts_by_name`\nif the email address is unknown.",
+            "title": "Sender"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "Input schema for `search_emails`",
+        "type": "object"
+      },
+      "schema_sha256": "58ca988447e6925725c3c814d69fb2127940514ac258c80c71efcfa07be2f1cd",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "supported": true,
+      "unsupported_reason": null,
+      "resources": [
+        {
+          "kind": "mailbox_collection",
+          "access": "read"
+        }
+      ],
+      "basis": "src/agentdojo/default_suites/v1/tools/email_client.py#search_emails",
+      "notes": "Original validated arguments and defaults; collections are dynamic query scopes, never OS paths or grants."
+    },
+    {
+      "name": "search_contacts_by_name",
+      "schema": {
+        "properties": {
+          "query": {
+            "description": "The name of the contacts to search for.",
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "Input schema for `search_contacts_by_name`",
+        "type": "object"
+      },
+      "schema_sha256": "2df906796b619835668ccae43855b9383e99fce4856348ddb402f2043a17a2fc",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "supported": true,
+      "unsupported_reason": null,
+      "resources": [
+        {
+          "kind": "contact_collection",
+          "access": "read"
+        }
+      ],
+      "basis": "src/agentdojo/default_suites/v1/tools/email_client.py#search_contacts_by_name",
+      "notes": "Original validated arguments and defaults; collections are dynamic query scopes, never OS paths or grants."
+    },
+    {
+      "name": "search_contacts_by_email",
+      "schema": {
+        "properties": {
+          "query": {
+            "description": "The email of the contacts to search for.",
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "Input schema for `search_contacts_by_email`",
+        "type": "object"
+      },
+      "schema_sha256": "1b26858705a4b005618f09b2e64cbc4021187b02c3bdc8f38289404c8a77f375",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "supported": true,
+      "unsupported_reason": null,
+      "resources": [
+        {
+          "kind": "contact_collection",
+          "access": "read"
+        }
+      ],
+      "basis": "src/agentdojo/default_suites/v1/tools/email_client.py#search_contacts_by_email",
+      "notes": "Original validated arguments and defaults; collections are dynamic query scopes, never OS paths or grants."
+    },
+    {
+      "name": "get_current_day",
+      "schema": {
+        "properties": {},
+        "title": "Input schema for `get_current_day`",
+        "type": "object"
+      },
+      "schema_sha256": "371b9be91e6048401c9eb6338dbf94ba1250c2a4c9342a0a876bb84576a741cf",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "supported": true,
+      "unsupported_reason": null,
+      "resources": [
+        {
+          "kind": "calendar_collection",
+          "access": "read"
+        }
+      ],
+      "basis": "src/agentdojo/default_suites/v1/tools/calendar_client.py#get_current_day",
+      "notes": "Original validated arguments and defaults; collections are dynamic query scopes, never OS paths or grants."
+    },
+    {
+      "name": "search_calendar_events",
+      "schema": {
+        "properties": {
+          "query": {
+            "description": "The query string to search for in event titles and descriptions.",
+            "title": "Query",
+            "type": "string"
+          },
+          "date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The date for which to search events. Must be in format YYYY-MM-DD. If `null`, searches all events.",
+            "title": "Date"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "Input schema for `search_calendar_events`",
+        "type": "object"
+      },
+      "schema_sha256": "e5993d69e9025403c6a9364bbc7f098fb6a0e71d90a2941427bfe53de6ae8772",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "supported": true,
+      "unsupported_reason": null,
+      "resources": [
+        {
+          "kind": "calendar_collection",
+          "access": "read"
+        }
+      ],
+      "basis": "src/agentdojo/default_suites/v1/tools/calendar_client.py#search_calendar_events",
+      "notes": "Original validated arguments and defaults; collections are dynamic query scopes, never OS paths or grants."
+    },
+    {
+      "name": "get_day_calendar_events",
+      "schema": {
+        "properties": {
+          "day": {
+            "description": "The day for which to return the appointments. Must be in format YYYY-MM-DD.",
+            "title": "Day",
+            "type": "string"
+          }
+        },
+        "required": [
+          "day"
+        ],
+        "title": "Input schema for `get_day_calendar_events`",
+        "type": "object"
+      },
+      "schema_sha256": "5ced3e077acc995a50489e71cefdd221bda4b6adac93692c57af64aaf3b47b46",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "supported": true,
+      "unsupported_reason": null,
+      "resources": [
+        {
+          "kind": "calendar_collection",
+          "access": "read"
+        }
+      ],
+      "basis": "src/agentdojo/default_suites/v1/tools/calendar_client.py#get_day_calendar_events",
+      "notes": "Original validated arguments and defaults; collections are dynamic query scopes, never OS paths or grants."
+    },
+    {
+      "name": "create_calendar_event",
+      "schema": {
+        "properties": {
+          "title": {
+            "description": "The title of the event.",
+            "title": "Title",
+            "type": "string"
+          },
+          "start_time": {
+            "description": "The start time of the event. Must be in format YYYY-MM-DD HH:MM.",
+            "title": "Start Time",
+            "type": "string"
+          },
+          "end_time": {
+            "description": "The end time of the event. Must be in format YYYY-MM-DD HH:MM.",
+            "title": "End Time",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "description": "The description of the event.",
+            "title": "Description",
+            "type": "string"
+          },
+          "participants": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The list of participants' email addresses. If `null`, no participants are set. The calendar owner's email address is always included..",
+            "title": "Participants"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The location of the event. If `null`, no location is set.",
+            "title": "Location"
+          }
+        },
+        "required": [
+          "title",
+          "start_time",
+          "end_time"
+        ],
+        "title": "Input schema for `create_calendar_event`",
+        "type": "object"
+      },
+      "schema_sha256": "aea539a2ad6293f539d73cafe47eb19c1168ca75065ecf7f9eefe547eb9d9e5a",
+      "action_class": "network",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "supported": false,
+      "unsupported_reason": "Implicit calendar owner recipient is environment-derived, absent from validated arguments.",
+      "resources": [
+        {
+          "kind": "calendar_collection",
+          "access": "read"
+        }
+      ],
+      "basis": "src/agentdojo/default_suites/v1/tools/calendar_client.py#create_calendar_event",
+      "notes": "Original validated arguments and defaults; collections are dynamic query scopes, never OS paths or grants."
+    },
+    {
+      "name": "cancel_calendar_event",
+      "schema": {
+        "properties": {
+          "event_id": {
+            "description": "The ID of the event to cancel.",
+            "title": "Event Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id"
+        ],
+        "title": "Input schema for `cancel_calendar_event`",
+        "type": "object"
+      },
+      "schema_sha256": "fc5cb2bcbee2e86f904c6f380429f32d9813b5a95c1744bbcaa96b1f1d43f598",
+      "action_class": "destructive",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "supported": false,
+      "unsupported_reason": "Notification recipients come from the existing event in the environment.",
+      "resources": [
+        {
+          "kind": "calendar_event",
+          "access": "read",
+          "pointer": "/event_id"
+        }
+      ],
+      "basis": "src/agentdojo/default_suites/v1/tools/calendar_client.py#cancel_calendar_event",
+      "notes": "Original validated arguments and defaults; collections are dynamic query scopes, never OS paths or grants."
+    },
+    {
+      "name": "reschedule_calendar_event",
+      "schema": {
+        "properties": {
+          "event_id": {
+            "description": "The ID of the event to reschedule.",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "new_start_time": {
+            "description": "The new start time of the event. Must be in format YYYY-MM-DD HH:MM.",
+            "title": "New Start Time",
+            "type": "string"
+          },
+          "new_end_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The new end time of the event. Must be in format YYYY-MM-DD HH:MM.\nIf `null`, the end time will be computed based on the new start time to keep the event duration the same.",
+            "title": "New End Time"
+          }
+        },
+        "required": [
+          "event_id",
+          "new_start_time"
+        ],
+        "title": "Input schema for `reschedule_calendar_event`",
+        "type": "object"
+      },
+      "schema_sha256": "54c5d5d18304b701e280b23d9766c33dd6442359fc82630da465b8aa11e056e1",
+      "action_class": "network",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "supported": false,
+      "unsupported_reason": "Notification recipients come from the existing event in the environment.",
+      "resources": [
+        {
+          "kind": "calendar_event",
+          "access": "read",
+          "pointer": "/event_id"
+        }
+      ],
+      "basis": "src/agentdojo/default_suites/v1/tools/calendar_client.py#reschedule_calendar_event",
+      "notes": "Original validated arguments and defaults; collections are dynamic query scopes, never OS paths or grants."
+    },
+    {
+      "name": "add_calendar_event_participants",
+      "schema": {
+        "properties": {
+          "event_id": {
+            "description": "The ID of the event to add participants to.",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "participants": {
+            "description": "The list of participants' email addresses to add to the event.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Participants",
+            "type": "array"
+          }
+        },
+        "required": [
+          "event_id",
+          "participants"
+        ],
+        "title": "Input schema for `add_calendar_event_participants`",
+        "type": "object"
+      },
+      "schema_sha256": "23f0c8e76b1c089d6e55db4864f5a49b0347f7deae846abd984043b7a7263477",
+      "action_class": "privilege_changing",
+      "result_provenance": "untrusted",
+      "egress": [
+        {
+          "pointer": "/participants",
+          "kind": "email_domain",
+          "optional": false
+        }
+      ],
+      "supported": true,
+      "unsupported_reason": null,
+      "resources": [
+        {
+          "kind": "calendar_event",
+          "access": "add_participants",
+          "pointer": "/event_id"
+        }
+      ],
+      "basis": "src/agentdojo/default_suites/v1/tools/calendar_client.py#add_calendar_event_participants",
+      "notes": "Original validated arguments and defaults; collections are dynamic query scopes, never OS paths or grants. Original implementation modifies participants but does not send email despite the docstring; participants remain authorization destinations."
+    },
+    {
+      "name": "append_to_file",
+      "schema": {
+        "properties": {
+          "file_id": {
+            "description": "The ID of the file to append content to.",
+            "title": "File Id",
+            "type": "string"
+          },
+          "content": {
+            "description": "The content to append to the file.",
+            "title": "Content",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_id",
+          "content"
+        ],
+        "title": "Input schema for `append_to_file`",
+        "type": "object"
+      },
+      "schema_sha256": "718c87eff2595b152bcff145cf13e54dfa66209d42a6d9577a78ff33c5359d14",
+      "action_class": "side_effecting",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "supported": true,
+      "unsupported_reason": null,
+      "resources": [
+        {
+          "kind": "cloud_drive_file",
+          "access": "append",
+          "pointer": "/file_id"
+        }
+      ],
+      "basis": "src/agentdojo/default_suites/v1/tools/cloud_drive_client.py#append_to_file",
+      "notes": "Original validated arguments and defaults; collections are dynamic query scopes, never OS paths or grants."
+    },
+    {
+      "name": "search_files_by_filename",
+      "schema": {
+        "properties": {
+          "filename": {
+            "description": "The name of the file to retrieve.",
+            "title": "Filename",
+            "type": "string"
+          }
+        },
+        "required": [
+          "filename"
+        ],
+        "title": "Input schema for `search_files_by_filename`",
+        "type": "object"
+      },
+      "schema_sha256": "ae7190790a405bc9b7224b48b1338f19767d738dbf7c37f52efb74bdd98641ed",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "supported": true,
+      "unsupported_reason": null,
+      "resources": [
+        {
+          "kind": "cloud_drive_collection",
+          "access": "read"
+        }
+      ],
+      "basis": "src/agentdojo/default_suites/v1/tools/cloud_drive_client.py#search_files_by_filename",
+      "notes": "Original validated arguments and defaults; collections are dynamic query scopes, never OS paths or grants."
+    },
+    {
+      "name": "create_file",
+      "schema": {
+        "properties": {
+          "filename": {
+            "description": "The name of the file to create.",
+            "title": "Filename",
+            "type": "string"
+          },
+          "content": {
+            "description": "The content of the file to create.",
+            "title": "Content",
+            "type": "string"
+          }
+        },
+        "required": [
+          "filename",
+          "content"
+        ],
+        "title": "Input schema for `create_file`",
+        "type": "object"
+      },
+      "schema_sha256": "ec56137c07be96eff3e66d0fde49f1882526a603fe3171d1a2c46dbc14b5a0f1",
+      "action_class": "side_effecting",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "supported": true,
+      "unsupported_reason": null,
+      "resources": [
+        {
+          "kind": "cloud_drive_collection",
+          "access": "create"
+        },
+        {
+          "kind": "cloud_drive_filename",
+          "access": "create",
+          "pointer": "/filename"
+        }
+      ],
+      "basis": "src/agentdojo/default_suites/v1/tools/cloud_drive_client.py#create_file",
+      "notes": "Original validated arguments and defaults; collections are dynamic query scopes, never OS paths or grants."
+    },
+    {
+      "name": "delete_file",
+      "schema": {
+        "properties": {
+          "file_id": {
+            "description": "The name of the file to delete.",
+            "title": "File Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_id"
+        ],
+        "title": "Input schema for `delete_file`",
+        "type": "object"
+      },
+      "schema_sha256": "341e95bc6ee736ec3905f1d9218757fa368f7efa7616ba5e367abc990cd2a07c",
+      "action_class": "destructive",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "supported": true,
+      "unsupported_reason": null,
+      "resources": [
+        {
+          "kind": "cloud_drive_file",
+          "access": "delete",
+          "pointer": "/file_id"
+        }
+      ],
+      "basis": "src/agentdojo/default_suites/v1/tools/cloud_drive_client.py#delete_file",
+      "notes": "Original validated arguments and defaults; collections are dynamic query scopes, never OS paths or grants."
+    },
+    {
+      "name": "get_file_by_id",
+      "schema": {
+        "properties": {
+          "file_id": {
+            "description": "The ID of the file to retrieve.",
+            "title": "File Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_id"
+        ],
+        "title": "Input schema for `get_file_by_id`",
+        "type": "object"
+      },
+      "schema_sha256": "90eca1176bb2c204abbe73ebc1883009d1c40e8c9bf0dda5968605f91fd025f3",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "supported": true,
+      "unsupported_reason": null,
+      "resources": [
+        {
+          "kind": "cloud_drive_file",
+          "access": "read",
+          "pointer": "/file_id"
+        }
+      ],
+      "basis": "src/agentdojo/default_suites/v1/tools/cloud_drive_client.py#get_file_by_id",
+      "notes": "Original validated arguments and defaults; collections are dynamic query scopes, never OS paths or grants."
+    },
+    {
+      "name": "list_files",
+      "schema": {
+        "properties": {},
+        "title": "Input schema for `list_files`",
+        "type": "object"
+      },
+      "schema_sha256": "1d2ed6dcf1e1b5c379c86199f6e2345909672088de24ef3edd288737c1f018f4",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "supported": true,
+      "unsupported_reason": null,
+      "resources": [
+        {
+          "kind": "cloud_drive_collection",
+          "access": "read"
+        }
+      ],
+      "basis": "src/agentdojo/default_suites/v1/tools/cloud_drive_client.py#list_files",
+      "notes": "Original validated arguments and defaults; collections are dynamic query scopes, never OS paths or grants."
+    },
+    {
+      "name": "share_file",
+      "schema": {
+        "$defs": {
+          "SharingPermission": {
+            "enum": [
+              "r",
+              "rw"
+            ],
+            "title": "SharingPermission",
+            "type": "string"
+          }
+        },
+        "properties": {
+          "file_id": {
+            "description": "The ID of the file to share.",
+            "title": "File Id",
+            "type": "string"
+          },
+          "email": {
+            "description": "The email of the user to share the file with.",
+            "title": "Email",
+            "type": "string"
+          },
+          "permission": {
+            "$ref": "#/$defs/SharingPermission",
+            "description": "The permission level to grant the user."
+          }
+        },
+        "required": [
+          "file_id",
+          "email",
+          "permission"
+        ],
+        "title": "Input schema for `share_file`",
+        "type": "object"
+      },
+      "schema_sha256": "ac56806cb64d65120125de64acdd7c363d570ca7111a253d4dc03fea83f20363",
+      "action_class": "privilege_changing",
+      "result_provenance": "untrusted",
+      "egress": [
+        {
+          "pointer": "/email",
+          "kind": "email_domain",
+          "optional": false
+        }
+      ],
+      "supported": true,
+      "unsupported_reason": null,
+      "resources": [
+        {
+          "kind": "cloud_drive_file",
+          "access": "share",
+          "pointer": "/file_id"
+        },
+        {
+          "kind": "sharing_permission",
+          "access": "grant",
+          "pointer": "/permission"
+        }
+      ],
+      "basis": "src/agentdojo/default_suites/v1/tools/cloud_drive_client.py#share_file",
+      "notes": "Original validated arguments and defaults; collections are dynamic query scopes, never OS paths or grants."
+    },
+    {
+      "name": "search_files",
+      "schema": {
+        "properties": {
+          "query": {
+            "description": "The string to search for in the files.",
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "Input schema for `search_files`",
+        "type": "object"
+      },
+      "schema_sha256": "56bd2b7c5694941a321a1f0a3d2560009b5e6218dfdef409dd0fc167489c136b",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "supported": true,
+      "unsupported_reason": null,
+      "resources": [
+        {
+          "kind": "cloud_drive_collection",
+          "access": "read"
+        }
+      ],
+      "basis": "src/agentdojo/default_suites/v1/tools/cloud_drive_client.py#search_files",
+      "notes": "Original validated arguments and defaults; collections are dynamic query scopes, never OS paths or grants."
+    }
+  ]
+}

@@ -12,3 +12,9 @@ project is https://github.com/kushaldas/kryptering.
 See vendor/kryptering/LICENSE in source distributions and
 third-party/kryptering/LICENSE in binary distributions.
 
+The AgentDojo workspace profile contains schemas generated from AgentDojo at
+revision 089ed468cf3ed0322acc66b0211f26d9d90dbf60, by Edoardo Debenedetti,
+Jie Zhang, Mislav Balunovic, Luca Beurer-Kellner, Marc Fischer, and Florian
+Tramèr, licensed under MIT. The original project is
+https://github.com/ethz-spylab/agentdojo.
+See crates/agentfw/profiles/upstream-notices/agentdojo-LICENSE.

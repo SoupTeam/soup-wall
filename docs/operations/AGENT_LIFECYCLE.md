@@ -141,8 +141,9 @@ The Windows script creates a disposable profile and uses an unused loopback
 port. It checks install, start, upgrade, rollback, failed startup restoration,
 stop, restart and removal. No service registration or host settings are
 required. The Linux integration test runs the same lifecycle in a temporary
-profile. macOS behavior needs a native run on a macOS host before it can be
-claimed as verified.
+profile. The [macOS launchd guide](AGENT_LAUNCHD.md) describes the separate
+opt-in user service and its native ARM64 acceptance driver. macOS runtime claims
+require evidence from that platform.
 
 ## Opt-in Linux user service
 
