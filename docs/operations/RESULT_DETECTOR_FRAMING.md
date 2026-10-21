@@ -38,8 +38,13 @@ The newer exact-head artifact `12330512159` at
 hashes, including the distinct zero-dispatch B20/B38 outcomes.
 The local text fixtures reconstruct that documented shape; they are not labeled
 as captured responses. The extended existing filesystem acceptance driver
-executes both the original unwrapped server and protected server for all four
-counts and retains both responses. Comparison normalizes only the host workspace
+executes the original unwrapped server for all four counts and attempts all four
+through the protected path, retaining both responses. The accepted classifier
+supports arrays only through 200 elements: 201/256 remain explicit `unsupported`
+pre-dispatch `classifier_ask` outcomes with zero repository opens. They are not
+successful protected reads and are not fixed by this detector change. The
+unchanged-policy detector tests cover all four result shapes independently.
+For 50/200, comparison normalizes only the host workspace
 prefix to `/workspace`; production responses are never changed.
 Both original and protected JSON-RPC byte frames are retained separately. Kernel
 OPEN observations independently witness each bulk read. Matched original-server
@@ -66,3 +71,10 @@ As a local before/after control, replacing only `heuristics.rs` with accepted
 main `7af550291782cf3c11cffc8d7b30bb071f4bf5e9` makes all three benign regression
 tests fail with Deny while the attack test passes. Restoring this correction
 makes all four pass. This control does not claim an original-server execution.
+
+Failed first Linux filesystem run `39629133139` (source `e7dddb2`) retained the
+successful 50/200 releases, then failed because the driver expected 201 to be
+supported. Artifact `12358468030`, SHA-256
+`126a5ccbafc36e81b577dcff1e0b47f6e45adf7a7c569d80379b7670b3c2e10e`,
+shows the distinct classifier refusal before dispatch. The subsequent driver
+records that existing limit explicitly; it does not weaken or bypass Ask.

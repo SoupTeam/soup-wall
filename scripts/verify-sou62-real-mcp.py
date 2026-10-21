@@ -390,10 +390,17 @@ def run_stdio(stack, report):
                 try:
                     response, raw = client.exchange(call(500 + count, args, "read_multiple_files"))
                     opens = witness.drain()
-                    require(opens >= count, "independent multi-read execution witness missing")
                 finally:
                     witness.close()
                 (stack.root / f"multiread-{count}-protected.jsonl").write_bytes(raw)
+                if count > 200:
+                    require(refused(response) and "classifier_ask" in json.dumps(response) and opens == 0,
+                            "accepted classifier array limit or zero-dispatch boundary changed")
+                    report["result_detector_multiread"].append({"count": count, "original": original,
+                        "protected": response, "repository_opens": opens, "status": "unsupported",
+                        "reason": "accepted classifier array limit 200; no result was dispatched/released"})
+                    continue
+                require(opens >= count, "independent multi-read execution witness missing")
                 require(not refused(response), "protected multi-read withheld")
                 # The unwrapped server uses the host path; only its workspace prefix
                 # differs. Normalize that prefix in the comparison, never in delivery.
