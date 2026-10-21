@@ -468,7 +468,8 @@ jobs:
     name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'Deferred - all-features' || 'all-features' }}
     needs: impact
     if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'all-features')
-    runs-on: ubuntu-latest
+    # Match the frozen qualification platform used by the default test lane.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7

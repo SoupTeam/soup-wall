@@ -10,5 +10,5 @@
     "SOU-13 synthetic shell model: deferred shlex import collections rejected by existing import guard",
     "Linux connection boundary test: system /usr/bin/env no longer satisfies existing executable safety assumptions"
   ],
-  "resolution": "Pin only test and python-classifier jobs to ubuntu-24.04, the last approved platform. Preserve all assertions, frozen fixtures, executable checks, skipped-test counts and required jobs."
+  "resolution": "Pin test, all-features and python-classifier jobs to ubuntu-24.04, the last approved platform. Preserve all assertions, frozen fixtures, executable checks, skipped-test counts and required jobs."
 }
