@@ -19,6 +19,139 @@ use wiremock::{
 type Reader = BufReader<ReadHalf<DuplexStream>>;
 type Writer = WriteHalf<DuplexStream>;
 
+// Only unit-test builds have this task-local producer/completion seam. The
+// real relay, native receipt transport, policy boundary and Linux publisher
+// run unchanged; this is deterministic phase coverage, not upstream evidence.
+#[cfg(target_os = "linux")]
+struct CreateDriver {
+    phase: &'static str,
+    paused: AtomicBool,
+    reached: tokio::sync::Notify,
+    resume: tokio::sync::Notify,
+}
+
+#[cfg(target_os = "linux")]
+tokio::task_local! { static CREATE_DRIVER: Arc<CreateDriver>; }
+
+#[cfg(target_os = "linux")]
+pub(super) fn controlled_create_output(
+    args: &Value,
+) -> Option<anyhow::Result<(Vec<u8>, Option<VerifiedOutput>)>> {
+    CREATE_DRIVER
+        .try_with(|_| {
+            let output = crate::mcp::original_create::verified_test_output(args)?;
+            let text = format!("Successfully wrote to {}", args["path"].as_str().unwrap());
+            Ok((
+                frame(&json!({"jsonrpc":"2.0","id":3,"result":{
+            "content":[{"type":"text","text":text}],"structuredContent":{"content":text}}})),
+                Some(output),
+            ))
+        })
+        .ok()
+}
+
+#[cfg(target_os = "linux")]
+pub(super) async fn pause_create_completion(phase: &str) {
+    if let Ok(driver) = CREATE_DRIVER.try_with(Arc::clone) {
+        if driver.phase == phase && !driver.paused.swap(true, Ordering::SeqCst) {
+            driver.reached.notify_one();
+            driver.resume.notified().await;
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+async fn create_phase_fixture(phase: &'static str) -> (Harness, Arc<CreateDriver>) {
+    let driver = Arc::new(CreateDriver {
+        phase,
+        paused: AtomicBool::new(false),
+        reached: tokio::sync::Notify::new(),
+        resume: tokio::sync::Notify::new(),
+    });
+    let fixture = CREATE_DRIVER
+        .scope(
+            driver.clone(),
+            Harness::for_format("normal", server_profile::filesystem_create::FORMAT),
+        )
+        .await;
+    (fixture, driver)
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn original_create_cancel_after_inspection_or_staging_never_publishes_and_continues() {
+    for phase in ["inspected", "staged"] {
+        let (mut fixture, driver) = create_phase_fixture(phase).await;
+        fixture.ready().await;
+        fixture.host(json!({"jsonrpc":"2.0","id":"cancel-write","method":"tools/call",
+            "params":{"name":"write_file","arguments":{"path":"/workspace/cancelled.txt","content":"private"}}})).await;
+        tokio::time::timeout(Duration::from_secs(5), driver.reached.notified())
+            .await
+            .unwrap();
+        let workspace = fixture.boundary_home.path().join("workspace");
+        let barrier = crate::policy_transition::Barrier::new(fixture.boundary_home.path()).unwrap();
+        assert!(
+            barrier.try_activation().unwrap().is_none(),
+            "policy activation overtook the original-create {phase} boundary"
+        );
+        assert_eq!(std::fs::read_dir(&workspace).unwrap().count(), 0);
+        fixture
+            .host(json!({"jsonrpc":"2.0","method":"notifications/cancelled",
+            "params":{"requestId":"cancel-write"}}))
+            .await;
+        assert_eq!(fixture.host_reply().await["error"]["code"], -32800);
+        driver.resume.notify_one();
+        fixture.useful(json!("useful-after-cancel")).await;
+        // A spent ID cannot regain publication authority even for a different
+        // leaf after the cancelled result has already spent its native grant.
+        fixture.host(json!({"jsonrpc":"2.0","id":"cancel-write","method":"tools/call",
+            "params":{"name":"write_file","arguments":{"path":"/workspace/replayed.txt","content":"private"}}})).await;
+        assert_eq!(fixture.host_reply().await["error"]["code"], -32600);
+        fixture.host(json!({"jsonrpc":"2.0","id":"fresh-write","method":"tools/call",
+            "params":{"name":"write_file","arguments":{"path":"/workspace/fresh.txt","content":"continued"}}})).await;
+        let reply = fixture.host_reply().await;
+        assert!(reply.get("result").is_some(), "{phase}: {reply}");
+        assert_eq!(
+            std::fs::read_to_string(workspace.join("fresh.txt")).unwrap(),
+            "continued"
+        );
+        assert!(!workspace.join("cancelled.txt").exists());
+        assert!(!workspace.join("replayed.txt").exists());
+        assert_eq!(std::fs::read_dir(workspace).unwrap().count(), 1);
+        assert!(
+            barrier.try_activation().unwrap().is_some(),
+            "completed original creates leaked their policy boundary"
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn original_create_eof_after_inspection_or_staging_discards_output() {
+    for phase in ["inspected", "staged"] {
+        let (mut fixture, driver) = create_phase_fixture(phase).await;
+        fixture.ready().await;
+        fixture.host(json!({"jsonrpc":"2.0","id":"eof-write","method":"tools/call",
+            "params":{"name":"write_file","arguments":{"path":"/workspace/eof.txt","content":"private"}}})).await;
+        tokio::time::timeout(Duration::from_secs(5), driver.reached.notified())
+            .await
+            .unwrap();
+        fixture.host_input.shutdown().await.unwrap();
+        driver.resume.notify_one();
+        tokio::time::timeout(Duration::from_secs(5), &mut fixture.task)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            std::fs::read_dir(fixture.boundary_home.path().join("workspace"))
+                .unwrap()
+                .count(),
+            0
+        );
+    }
+}
+
 fn installed_registry_entries(format: &str) -> Vec<Value> {
     let manifest = server_profile::original_manifest_for(format).unwrap();
     let profiles = server_profile::classify_manifest_for(format, &manifest).unwrap();
@@ -321,13 +454,21 @@ impl Harness {
             if !unsupported {entry["mcp_result_profile"]=json!(server_profile::FORMAT);}
             entry
         }).collect::<Vec<_>>();
-        if format == server_profile::git::FORMAT {
+        if format == server_profile::git::FORMAT
+            || format == server_profile::filesystem_create::FORMAT
+        {
             tools = installed_registry_entries(format);
         }
         if fault == "shared-registry" {
             tools.extend(installed_registry_entries(server_profile::git::FORMAT));
         }
-        let registry=json!({"contract_version":CONTRACT,"registry_id":"selected-relay-faults","tools":tools}).to_string();
+        let registry_id = if format == server_profile::filesystem_create::FORMAT {
+            "filesystem-create-only-v1"
+        } else {
+            "selected-relay-faults"
+        };
+        let registry = json!({"contract_version":CONTRACT,"registry_id":registry_id,"tools":tools})
+            .to_string();
         let native = NativeState::from_bytes(
             registry.as_bytes(),
             &sha(registry.as_bytes()),
@@ -346,7 +487,11 @@ impl Harness {
             native,
             command: "never-spawned".into(),
             args: vec![],
-            classifier: Some(Arc::new(ReadTestDouble)),
+            classifier: Some(if format == server_profile::filesystem_create::FORMAT {
+                Arc::new(crate::mcp::admission::FixtureTestDouble)
+            } else {
+                Arc::new(ReadTestDouble)
+            }),
             resource_profiles: BTreeMap::new(),
             approval: None,
             liveness_url: None,
@@ -362,7 +507,11 @@ impl Harness {
         let release_gate = Arc::new(WriteGate::default());
         let mut relay_child = GatedWriter(relay_child, dispatch_gate.clone());
         let mut relay_host = GatedWriter(relay_host, release_gate.clone());
-        let task = tokio::spawn(async move {
+        let workspace = boundary_home.path().join("workspace");
+        std::fs::create_dir(&workspace).unwrap();
+        #[cfg(target_os = "linux")]
+        let create_driver = CREATE_DRIVER.try_with(Arc::clone).ok();
+        let run = async move {
             let collector = Collector::new(&config)?;
             relay(
                 &collector,
@@ -372,7 +521,7 @@ impl Harness {
                 &mut relay_child,
                 &server_profile::ProfileConfig {
                     format: format.to_owned(),
-                    workspace: std::path::PathBuf::from("/tmp"),
+                    workspace,
                     runtime_path: std::path::PathBuf::from("/tmp/node"),
                     runtime_sha256: String::new(),
                     package_root: std::path::PathBuf::from("/tmp"),
@@ -385,7 +534,16 @@ impl Harness {
                 },
             )
             .await
+        };
+        #[cfg(target_os = "linux")]
+        let task = tokio::spawn(async move {
+            if let Some(driver) = create_driver {
+                return CREATE_DRIVER.scope(driver, run).await;
+            }
+            run.await
         });
+        #[cfg(not(target_os = "linux"))]
+        let task = tokio::spawn(run);
         Self {
             format,
             host_input,

@@ -32,11 +32,15 @@ def complete_report():
     return {"source_before": {"commit": "1" * 40, "dirty": False}, "source_after": {"commit": "1" * 40, "dirty": False},
             "checks":[{"case":name, "passed":True} for name in VERIFY.SOU83_CASES],
             "sou83_native_protected_create":{"status":"pass", "original_upstream":True,
-                "result_correlated_to_host":True, "permitted_effects":4, "denied_effects":0,
+                "result_correlated_to_host":True, "permitted_effects":6, "denied_effects":0,
                 "same_session_read_verified":True, "outside_marker_unchanged":True,
                 "native_registry_sha256":"b"*64, "published_sha256":"c"*64},
             "sou83_original_create_positive":{"status":"pass", "exit_code":0, "log_sha256":"a"*64},
             "sou83_create_boundary_probe":{"status":"pass", "exit_code":0, "log_sha256":"a"*64},
+            **{field:{"pidfd_pinned":True, "signal":"SIGKILL", "pid":123, "start_time_ticks":456}
+               for field in ("sou83_worker_fault", "sou83_collector_fault")},
+            **{field:{"forced_cleanup":False, "process_cleanup":{"all_stopped":True, "descendant_count":2}}
+               for field in ("sou83_host_eof_client", "sou83_collector_loss_client")},
             "sou83_create_latency":{"clock":"monotonic_ns", "samples":3, "payload_bytes":40,
                 "unwrapped_ns":[10,20,30], "protected_ns":[100,200,300],
                 "unwrapped_median_ns":20, "protected_median_ns":200, "median_ratio":10},
@@ -139,6 +143,10 @@ class EvidenceControls(unittest.TestCase):
             lambda r: r["sou83_create_boundary_probe"].update(status="skipped"),
             lambda r: r["sou83_create_latency"].update(protected_ns=[]),
             lambda r: r["sou83_create_latency"].update(median_ratio=1),
+            lambda r: r["sou83_worker_fault"].update(pidfd_pinned=False),
+            lambda r: r["sou83_collector_fault"].update(start_time_ticks=0),
+            lambda r: r["sou83_host_eof_client"].update(forced_cleanup=True),
+            lambda r: r["sou83_collector_loss_client"]["process_cleanup"].update(all_stopped=False),
         ]
         for mutation in mutations:
             report = complete_report()

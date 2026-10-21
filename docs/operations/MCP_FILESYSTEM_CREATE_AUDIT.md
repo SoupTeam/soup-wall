@@ -1,5 +1,48 @@
 # SOU-83 requirements and review audit
 
+## October 21 continuation
+
+The October 20 matrix below is a historical evidence snapshot. PR #196 remains
+the only delivery PR; SOU-83 remains In Progress. Main `8aa0482` is already
+included. At starting head `6a8bc718`, current CI had 69 successful checks,
+two failures and two expected skips. Required original filesystem acceptance
+passed; Windows aggregate budgets passed. The failures were Windows lifecycle
+recovery (`baseline daemon is not running before clearing journal`) and a
+Keycloak SAML/Postgres browser logout timeout. Neither is established as an
+original-create defect; SOU-103 source is unchanged by this continuation.
+
+This continuation fixes a concrete create-only scheduling gap: native grant
+reclamation could remove a cancelled call while its original producer still
+ran cleanup, allowing a second writer to enter. An owned lease now spans the
+logical call, detached reclaim/result work, original producer and blocking
+anonymous staging worker. Two local regressions cover early logical removal
+and an aborted async staging waiter. The result-inspection boundary also
+rejects expired calls before preparing a stage.
+
+New required upstream acceptance covers ephemeral worker SIGKILL, host EOF,
+collector SIGKILL, zero fault publications, owned-process cleanup and fresh
+create continuation. Signals use observed process start times plus pidfds.
+The grader requires the signal identity and cleanup evidence, and six exact
+successful publications. Existing cancellation/daemon-loss/replay/egress/
+performance controls are retained. Successful-RPC latency samples exclude
+bounded busy refusals while an earlier cancelled worker cleans up.
+
+New Linux controlled relay tests pause completion at CreateInspected and
+CreateStaged, inject cancellation/EOF, check no publication, reject spent IDs,
+and complete a new create. They also check that policy activation cannot
+overtake the held create boundary. Their synthetic stage producer and mock
+native receipts are compile-time test seams; they do not qualify actual
+upstream containment or a complete managed policy-epoch transition.
+
+Current continuation qualification is pending its own hosted Linux run.
+Do not transfer `6a8bc718` or `2b7c7e28` evidence to the changed source.
+Ask continuation, separately retained typed-resource evidence, full managed
+epoch transitions, broader crash/race/adversarial-upstream injection and
+actual upstream error injection remain full-task limitations. Private staging
+cleanup after abrupt collector death is not an exhaustive crash-durability
+claim. No merge, Done transition or review-ready claim is authorized by this
+document.
+
 Audit date: 2026-10-20. This is an evidence map, not task acceptance.
 Baseline inspected: PR #196 `dcb048b871fa184612b4d09019f2e19d5ba8cd5e`,
 including accepted main `d49efa5aec1d47a1471e4e67b343c85a8a392353`.

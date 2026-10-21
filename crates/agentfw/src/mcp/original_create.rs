@@ -202,6 +202,17 @@ mod linux {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn verified_test_output(args: &serde_json::Value) -> anyhow::Result<VerifiedOutput> {
+        let selected = crate::mcp::server_profile::filesystem_create::validate_request(args)?;
+        let stage = OwnedStage::new()?;
+        fs::write(
+            stage.path().join(&selected.leaf),
+            args["content"].as_str().unwrap(),
+        )?;
+        stage.verify(&selected)
+    }
+
     /// A valid original error can be released after native inspection, but
     /// must never carry verified bytes into the publication branch. Partial
     /// stage artifacts left by a failed upstream operation are discarded.
@@ -290,6 +301,13 @@ mod linux {
         let stage = OwnedStage::new()?;
         let prepared = server_sandbox::prepare_create_stage(profile, stage.path())?;
         let (mut process, mut budget, mut owner, sandbox_pid) = prepared.spawn().await?;
+        // A bounded diagnostic identifies only this owned ephemeral worker.
+        // Acceptance pins its kernel identity before injecting a worker fault.
+        eprintln!(
+            "{}",
+            json!({"event":"mcp_original_create_worker",
+            "sandbox_pid":sandbox_pid})
+        );
         let attached = if let Some(budget) = budget.as_mut() {
             budget.verify_attached(sandbox_pid)
         } else {
@@ -646,3 +664,6 @@ mod linux {
 
 #[cfg(target_os = "linux")]
 pub(crate) use linux::{run_original_upstream, VerifiedOutput};
+
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) use linux::verified_test_output;

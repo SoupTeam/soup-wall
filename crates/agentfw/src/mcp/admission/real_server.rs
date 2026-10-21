@@ -4,7 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use anyhow::{bail, ensure, Context};
 use futures_util::stream::{FuturesUnordered, StreamExt};
@@ -64,10 +64,45 @@ struct Call {
     progress: Option<Value>,
     progress_count: usize,
     last_progress: f64,
+    // Cancellation spends native authority before the producer necessarily
+    // finishes cleanup. Workers retain this lease independently of the call.
+    create_lease: Option<Arc<()>>,
     // Pin the exact operator workspace *before* native admission.
     // Never reopen a substituted root after native result Allow.
     #[cfg(target_os = "linux")]
     pinned_workspace: Option<Arc<crate::sandbox::PinnedWorkspace>>,
+}
+
+#[derive(Default)]
+struct CreateSlot(Weak<()>);
+
+impl CreateSlot {
+    fn reserve(&mut self) -> Option<Arc<()>> {
+        if self.0.upgrade().is_some() {
+            return None;
+        }
+        let lease = Arc::new(());
+        self.0 = Arc::downgrade(&lease);
+        Some(lease)
+    }
+}
+
+#[cfg(any(test, target_os = "linux"))]
+async fn retain_create_slot<T>(lease: Option<Arc<()>>, work: impl Future<Output = T>) -> T {
+    let _lease = lease;
+    work.await
+}
+
+#[cfg(target_os = "linux")]
+async fn produce_original_create(
+    profile: &server_profile::ProfileConfig,
+    args: &Value,
+) -> anyhow::Result<(Vec<u8>, Option<VerifiedOutput>)> {
+    #[cfg(test)]
+    if let Some(result) = fault_tests::controlled_create_output(args) {
+        return result;
+    }
+    run_original_upstream(profile, args).await
 }
 
 enum Decision {
@@ -318,6 +353,7 @@ fn detached(call: &Call) -> Call {
         progress: call.progress.clone(),
         progress_count: 0,
         last_progress: 0.0,
+        create_lease: call.create_lease.clone(),
         #[cfg(target_os = "linux")]
         pinned_workspace: call.pinned_workspace.clone(),
     }
@@ -450,6 +486,7 @@ where
     let mut ready = false;
     let mut control: Option<Control> = None;
     let mut calls: BTreeMap<String, Call> = BTreeMap::new();
+    let mut create_slot = CreateSlot::default();
     let mut queue = VecDeque::new();
     let mut used = BTreeSet::new();
     let mut wire: BTreeMap<String, (Instant, bool)> = BTreeMap::new();
@@ -767,14 +804,17 @@ where
                         // One original mutator at a time. Each selected
                         // create receives a new heavy isolated Node/owner
                         // process; native read-only calls stay concurrent.
-                        if format == server_profile::filesystem_create::FORMAT
-                            && name == "write_file"
-                            && calls.values().any(|live| live.tool == "write_file")
-                        {
-                            write(host, &error(request_id, -32003,
-                                "An original create operation is already active")).await?;
-                            continue;
-                        }
+                        let create_lease = if format == server_profile::filesystem_create::FORMAT
+                            && name == "write_file" {
+                            match create_slot.reserve() {
+                                Some(lease) => Some(lease),
+                                None => {
+                                    write(host, &error(request_id, -32003,
+                                        "An original create operation is already active")).await?;
+                                    continue;
+                                }
+                            }
+                        } else { None };
                         let (active, queued) = counts(&calls);
                         if active >= ACTIVE_LIMIT && queued >= QUEUE_LIMIT {
                             write(
@@ -805,6 +845,7 @@ where
                             tool: name.into(),
                             args,
                             raw,
+                            create_lease,
                             phase: Phase::Queued,
                             cancelled: false,
                             dispatched: false,
@@ -885,6 +926,7 @@ where
                                         let worker_key = key.clone();
                                         let args = call.args.clone();
                                         let runner = profile.clone();
+                                        let lease = call.create_lease.clone();
                                         call.phase = Phase::Creating(grant);
                                         call.dispatched = true;
                                         // The external Linux acceptance can
@@ -897,7 +939,8 @@ where
                                         }));
                                         workers.push(Box::pin(async move {
                                             WorkEvent::Created(worker_key,
-                                                run_original_upstream(&runner, &args).await)
+                                                retain_create_slot(lease,
+                                                    produce_original_create(&runner, &args)).await)
                                         }));
                                         continue;
                                     }
@@ -950,9 +993,11 @@ where
                                 let raw = frame(&decoded);
                                 if let Some(verified) = verified {
                                     workers.push(Box::pin(async move {
+                                        let receipt = inspect(collector, &input, grant, raw, "value").await;
+                                        #[cfg(test)]
+                                        fault_tests::pause_create_completion("inspected").await;
                                         WorkEvent::CreateInspected(worker_key,
-                                            inspect(collector, &input, grant, raw, "value").await,
-                                            verified)
+                                            receipt, verified)
                                     }));
                                 } else {
                                     // Preserve the valid ORIGINAL error. It
@@ -976,7 +1021,7 @@ where
                     #[cfg(target_os = "linux")]
                     WorkEvent::CreateInspected(key, receipt, output) => {
                         let Some(call) = calls.get_mut(&key) else { continue; };
-                        if call.cancelled || client_closed {
+                        if call.cancelled || client_closed || call.deadline <= Instant::now() {
                             calls.remove(&key);
                             continue;
                         }
@@ -1005,10 +1050,16 @@ where
                             }
                         };
                         call.phase = Phase::Staging;
+                        let lease = call.create_lease.clone();
                         workers.push(Box::pin(async move {
-                            let stage = tokio::task::spawn_blocking(move || prepared.stage())
+                            let stage = tokio::task::spawn_blocking(move || {
+                                let _lease = lease;
+                                prepared.stage()
+                            })
                                 .await.map_err(anyhow::Error::from)
                                 .and_then(|value| value.map_err(anyhow::Error::from));
+                            #[cfg(test)]
+                            fault_tests::pause_create_completion("staged").await;
                             WorkEvent::CreateStaged(key, stage, release)
                         }));
                     }
@@ -1745,6 +1796,53 @@ pub(super) async fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn original_create_cancelled_call_keeps_slot_until_producer_cleanup() {
+        let mut slot = CreateSlot::default();
+        let call = slot.reserve().unwrap();
+        let reclaim = call.clone();
+        let (finish, cleanup) = tokio::sync::oneshot::channel::<()>();
+        let worker = tokio::spawn(retain_create_slot(Some(call.clone()), async move {
+            cleanup.await.unwrap();
+        }));
+        // Native reclamation and logical removal do not stop the isolated
+        // producer. A fresh writer must wait for its real cleanup completion.
+        drop(call);
+        drop(reclaim);
+        assert!(slot.reserve().is_none());
+        finish.send(()).unwrap();
+        worker.await.unwrap();
+        assert!(slot.reserve().is_some());
+    }
+
+    #[tokio::test]
+    async fn original_create_blocking_stage_keeps_slot_after_waiter_is_aborted() {
+        let mut slot = CreateSlot::default();
+        let call = slot.reserve().unwrap();
+        let stage_lease = call.clone();
+        let (started, ready) = tokio::sync::oneshot::channel();
+        let (finish, cleanup) = std::sync::mpsc::channel();
+        let worker = tokio::task::spawn_blocking(move || {
+            let _lease = stage_lease;
+            started.send(()).unwrap();
+            cleanup.recv().unwrap();
+        });
+        let waiter = tokio::spawn(async move { worker.await.unwrap() });
+        ready.await.unwrap();
+        waiter.abort();
+        let _ = waiter.await;
+        drop(call);
+        assert!(slot.reserve().is_none());
+        finish.send(()).unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while slot.reserve().is_none() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+    }
+
     #[test]
     fn relay_failure_metadata_does_not_echo_untrusted_context_or_suffixes() {
         let error = anyhow::anyhow!("unknown or duplicate MCP response ID")

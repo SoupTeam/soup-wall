@@ -21,6 +21,7 @@ import platform
 import queue
 import re
 import shutil
+import signal
 import stat
 import statistics
 import subprocess
@@ -56,6 +57,10 @@ SOU83_CASES = (
     "sou83-real-creating-cancellation-no-publication",
     "sou83-real-creating-daemon-loss-no-publication", "sou83-restart-useful-read-continuation",
     "sou83-fresh-create-after-cancellation", "sou83-fresh-create-after-daemon-restart",
+    "sou83-real-worker-loss-no-publication", "sou83-fresh-create-after-worker-loss",
+    "sou83-real-creating-host-eof-no-publication",
+    "sou83-real-creating-collector-loss-no-publication",
+    "sou83-fresh-create-after-collector-loss",
 )
 
 
@@ -314,6 +319,23 @@ def wait_create_dispatch(log_path, identifier, timeout=12):
                     return record
         time.sleep(0.01)
     raise ValueError("original create did not enter Phase::Creating after Native Allow")
+
+
+def signal_owned_create_process(client, pid):
+    """Pin a sampled descendant's identity; never signal a recycled PID/group."""
+    require(hasattr(os, "pidfd_open") and hasattr(signal, "pidfd_send_signal"),
+            "original-create fault witness requires pidfd")
+    client.process_witness.sample()
+    start = ProcessWitness.identity(pid)
+    require(start is not None and (pid, start) in client.process_witness.observed,
+            "original-create fault target is not an observed owned process")
+    descriptor = os.pidfd_open(pid, 0)
+    try:
+        require(ProcessWitness.identity(pid) == start, "original-create fault identity changed")
+        signal.pidfd_send_signal(descriptor, signal.SIGKILL, None, 0)
+    finally:
+        os.close(descriptor)
+    return {"pid":pid, "start_time_ticks":start, "signal":"SIGKILL", "pidfd_pinned":True}
 
 
 class FIFOWitness:
@@ -715,12 +737,24 @@ def protected_original_create(stack, root, bwrap, npm, report):
             report["sou83_unwrapped_create_client"] = control.transcript()
         require(control.process_witness.final["all_stopped"], "unwrapped calibration process leaked")
 
-    def fresh_write(client, index):
+    def fresh_write(client, index, measure=True):
         target = stack.workspace / f"sou83-continuation-{index}.txt"
-        start = time.monotonic_ns()
-        response, _ = client.exchange(call(f"sou83-fresh-{index}", {
-            "path":"/workspace/" + target.name, "content":expected}, "write_file"))
-        protected_ns.append(time.monotonic_ns() - start)
+        deadline = time.monotonic() + 30
+        attempt = 0
+        while True:
+            start = time.monotonic_ns()
+            response, _ = client.exchange(call(f"sou83-fresh-{index}-{attempt}", {
+                "path":"/workspace/" + target.name, "content":expected}, "write_file"))
+            elapsed = time.monotonic_ns() - start
+            if response.get("error", {}).get("code") != -32003:
+                break
+            require(response["error"].get("message") == "An original create operation is already active"
+                    and not target.exists() and time.monotonic() < deadline,
+                    "original create cleanup did not release its exclusive slot within its bound")
+            attempt += 1
+            time.sleep(0.05)
+        if measure:
+            protected_ns.append(elapsed)
         require(not refused(response) and target.read_text(encoding="utf-8") == expected,
                 "fresh original create continuation failed")
         published.append(target)
@@ -879,6 +913,61 @@ def protected_original_create(stack, root, bwrap, npm, report):
             fresh_write(client, 1)
             fresh_write(client, 2)
             report["checks"].append({"case":"sou83-fresh-create-after-daemon-restart", "passed":True})
+
+            collector_log = stack.root / "sou83-create-collector.log"
+            # Kill a real ephemeral worker after native Allow. Only a newly
+            # observed worker marker may identify the target, and a pidfd pins
+            # it to the independently sampled owned process identity.
+            offset = len(events(collector_log))
+            worker_target = stack.workspace / "sou83-worker-loss-unpublished.txt"
+            client.send(call("sou83-worker-loss", {"path":"/workspace/" + worker_target.name,
+                             "content":"worker death must not publish"}, "write_file"))
+            wait_create_dispatch(collector_log, "sou83-worker-loss")
+            observed = wait_event(collector_log, lambda rows: any(
+                row.get("event") == "mcp_original_create_worker" for row in rows[offset:]),
+                "original create worker did not start")
+            worker_pid = next(row["sandbox_pid"] for row in reversed(observed[offset:])
+                              if row.get("event") == "mcp_original_create_worker")
+            report["sou83_worker_fault"] = signal_owned_create_process(client, worker_pid)
+            response, _ = client.receive(timeout=30)
+            require(response.get("id") == "sou83-worker-loss" and refused(response)
+                    and not worker_target.exists(), "worker loss published or released a successful create")
+            report["checks"].append({"case":"sou83-real-worker-loss-no-publication", "passed":True})
+            fresh_write(client, 3, measure=False)
+            report["checks"].append({"case":"sou83-fresh-create-after-worker-loss", "passed":True})
+
+            # EOF is distinct from cancellation; no host remains to receive a
+            # result release. Let the real runner finish and require cleanup.
+            eof_target = stack.workspace / "sou83-eof-unpublished.txt"
+            client.send(call("sou83-host-eof", {"path":"/workspace/" + eof_target.name,
+                             "content":"EOF must not publish"}, "write_file"))
+            wait_create_dispatch(collector_log, "sou83-host-eof")
+            client.close()
+            require(not client.forced_cleanup and client.process_witness.final["all_stopped"]
+                    and not eof_target.exists(), "host EOF leaked a create or owned worker")
+            report["sou83_host_eof_client"] = client.transcript()
+            report["checks"].append({"case":"sou83-real-creating-host-eof-no-publication", "passed":True})
+
+            client = Client(command, create_env, stack.workspace, client_log,
+                            "protected create collector crash")
+            client.initialize()
+            crash_target = stack.workspace / "sou83-collector-loss-unpublished.txt"
+            client.send(call("sou83-collector-loss", {"path":"/workspace/" + crash_target.name,
+                             "content":"collector death must not publish"}, "write_file"))
+            wait_create_dispatch(collector_log, "sou83-collector-loss")
+            report["sou83_collector_fault"] = signal_owned_create_process(client, client.process.pid)
+            client.close()
+            require(not client.forced_cleanup and client.process_witness.final["all_stopped"]
+                    and not crash_target.exists(), "collector loss leaked a create or owned worker")
+            report["sou83_collector_loss_client"] = client.transcript()
+            report["checks"].append({"case":"sou83-real-creating-collector-loss-no-publication", "passed":True})
+            client = Client(command, create_env, stack.workspace, client_log,
+                            "protected create continuation after collector crash")
+            client.initialize()
+            fresh_write(client, 4, measure=False)
+            require(all(not path.exists() for path in (worker_target, eof_target, crash_target)),
+                    "an interrupted original create became visible during continuation")
+            report["checks"].append({"case":"sou83-fresh-create-after-collector-loss", "passed":True})
             report["sou83_create_latency"] = {
                 "clock":"monotonic_ns", "samples":3, "payload_bytes":len(expected.encode("utf-8")),
                 "unwrapped_ns":direct_ns, "protected_ns":protected_ns,
@@ -1025,11 +1114,23 @@ def grade(report):
     create = report["sou83_native_protected_create"]
     require(create["status"] == "pass" and create["original_upstream"] is True
             and create["result_correlated_to_host"] is True
-            and create["permitted_effects"] == 4 and create["denied_effects"] == 0
+            and create["permitted_effects"] == 6 and create["denied_effects"] == 0
             and create["same_session_read_verified"] is True and create["outside_marker_unchanged"] is True,
             "original-create effect witness incomplete")
     for field in ("native_registry_sha256", "published_sha256"):
         require(re.fullmatch(r"[a-f0-9]{64}", create[field]) is not None, "original-create identity missing")
+    for field in ("sou83_worker_fault", "sou83_collector_fault"):
+        fault = report[field]
+        require(fault["pidfd_pinned"] is True and fault["signal"] == "SIGKILL"
+                and type(fault["pid"]) is int and fault["pid"] > 0
+                and type(fault["start_time_ticks"]) is int and fault["start_time_ticks"] > 0,
+                "original-create fault has no pinned owned-process identity")
+    for field in ("sou83_host_eof_client", "sou83_collector_loss_client"):
+        stopped = report[field]
+        require(stopped["forced_cleanup"] is False
+                and stopped["process_cleanup"]["all_stopped"] is True
+                and stopped["process_cleanup"]["descendant_count"] > 0,
+                "interrupted original-create worker cleanup is incomplete")
     for name in ("sou83_original_create_positive", "sou83_create_boundary_probe"):
         probe = report[name]
         require(probe["status"] == "pass" and probe["exit_code"] == 0

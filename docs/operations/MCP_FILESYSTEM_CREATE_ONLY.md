@@ -16,6 +16,12 @@ untrusted result provenance and no egress. Read-only tools keep read-only
 authority. No classifier means fail closed; classifier Ask, Deny, unknown
 semantics and unsafe/missing native receipts do **not** publish files.
 
+The exclusive create slot also covers a cancelled producer's bounded cleanup
+and an anonymous staging worker whose async waiter has ended. Spending a
+native grant or removing its logical call cannot free that slot early. A new
+create receives the existing busy refusal until cleanup finishes; read-only
+continuation remains available.
+
 ## Actual create path (opt-in only)
 
 1. Before admission, the collector pins the *actual* owned workspace directory
@@ -79,6 +85,24 @@ actively attempts TCP and Unix-socket egress against calibrated receivers and
 tries runtime/package/outside writes. This tests the writable-stage seccomp
 branch, separately from the read-only boundary. The evidence grader requires
 these controls; adding them is not a claim they passed on an untested source.
+
+Required controls additionally kill a newly observed ephemeral original worker
+and the collector during Creating, and close host input during Creating. Signal
+injection requires an independently sampled owned PID/start time and a pidfd;
+it never searches for or kills an arbitrary PID/group. Filesystem snapshots,
+absent fault targets, owned-process cleanup and fresh successful creates after
+worker/collector loss are mandatory. Six deliberately published files are
+expected across the complete create scenario. Busy refusals while a cancelled
+worker finishes cleanup are bounded and use fresh host IDs; they are excluded
+from the three successful write-RPC latency samples.
+
+Linux unit tests also pause the real relay's completion after native result
+inspection and after anonymous staging. Cancellation/EOF must discard output;
+cancelled IDs remain spent, fresh creates succeed, and managed activation
+cannot overtake the held publication boundary. These tests use a task-local
+test producer and mock native receipts, with the real Linux publisher. They
+are deterministic phase regressions, not original-server acceptance. The
+substitution and pause seams do not exist in production builds.
 
 The driver also records three matched-payload unwrapped and protected write
 RPC latencies using `monotonic_ns`, their medians and ratio. Initialization and
