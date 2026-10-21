@@ -422,8 +422,10 @@ def run_stdio(stack, report):
                     finally:
                         witness.close()
                     require(opens >= 50, "attack result was not independently witnessed after execution")
-                    require(refused(response) and "filesystem-profile-refuse-result-injection" in json.dumps(response)
-                            and attack not in json.dumps(response), "matched attack escaped result inspection")
+                    expected_refusal = {"jsonrpc": "2.0", "id": 800 + index, "result": {
+                        "content": [{"type": "text", "text": "Soup Wall withheld MCP result (filesystem-profile-refuse-result-injection)"}],
+                        "isError": True}}
+                    require(response == expected_refusal, "matched attack escaped result inspection")
                     (stack.root / f"multiread-attack-{index}-protected.json").write_bytes(raw)
                     report["result_detector_matched_attacks"].append({"index": index, "original": original,
                         "protected": response, "repository_opens": opens, "passed": True})
