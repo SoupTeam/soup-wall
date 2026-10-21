@@ -83,13 +83,17 @@ python3 -m unittest scripts/tests/test_pilot_launch.py
 
 ### End-to-End Acceptance
 
-The acceptance driver validates the full four-phase sequence (benign read -> untrusted input -> refused destructive Git action -> benign continuation) along with cleanup and interruption handling using an owned scripted provider:
+The portable driver checks the four-phase sequence against Python fixture servers, plus stub-profile previews and cleanup controls. It does not qualify the installed original servers:
 
 ```sh
 python3 scripts/claude_pilot_acceptance.py --binary target/debug/agentfw
 ```
 
 Evidence is published to `docs/operations/evidence/sou-99-pilot-launcher/qualification.json`.
+
+`scripts/qualify-pilot-launcher.py` is the separate required Linux x86-64 full-launch check. It reuses the original locked filesystem/Git installers, pinned Node/Git/bubblewrap and genuine Claude Code. It invokes `pilot-launch` without mock, fixture or dry-run flags against the selected enforcing policy and an owned loopback provider. The sequence includes useful filesystem and Git calls, untrusted input, an actual correlated destructive refusal and useful continuation. A syscall observer calibrates original-server dispatch and verifies no forbidden dispatch; independent workspace/index/HEAD snapshots and process identities verify effects and cleanup. Raw syscall traces remain private because they can contain authority.
+
+The real-filesystem CI lane supplies those assets and retains a separate `sou99-original-launcher/qualification.json`, including executable/profile/package identities and failure status. Missing assets or an unexecuted host cannot produce a passing original-server report. Its owned provider makes no paid model calls; it measures host wiring, not live-model efficacy.
 
 ## Related Documents
 

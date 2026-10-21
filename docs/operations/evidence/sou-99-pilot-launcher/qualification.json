@@ -5,7 +5,7 @@
   "real_model_evaluation": false,
   "scripted_owned_provider": true,
   "zero_paid_api_calls_verified": true,
-  "scenario_type": "composite_pilot_acceptance",
+  "scenario_type": "fixture_and_preview_controls",
   "binary_identity": {
     "path": "/Users/sidzuya/.gemini/antigravity-ide/scratch/soup-wall/target/debug/agentfw",
     "sha256": "d0406dea543cc24990bd7fe45adc1a8c7510f2558bb777d165dbc4c598773a9e"
@@ -308,8 +308,18 @@
       "zero_paid_api_calls": true
     }
   },
-  "installed_profile_acceptance": {
-    "scenario_type": "installed_profile_acceptance",
+  "cleanup_witness": {
+    "private_config_dir_removed": true,
+    "zero_orphaned_processes": true,
+    "process_group_reaping_witness": {
+      "descendant_pid": 46372,
+      "all_descendants_terminated": true,
+      "verification_method": "os_kill_probe_after_exit_0"
+    }
+  },
+  "original_server_full_launch_qualified": false,
+  "profile_validation_preview": {
+    "scenario_type": "profile_validation_preview",
     "report": {
       "contract_version": "sw-pilot-launcher/1",
       "status": "preview_ready",
@@ -421,7 +431,7 @@
       ]
     },
     "audit": {
-      "scenario_type": "installed_profile_acceptance",
+      "scenario_type": "profile_validation_preview",
       "validated_profiles": {
         "filesystem": "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-82m3_k6e/installed_qual/fs_profile/profile.json",
         "git": "/private/var/folders/vw/wy0ns15j4t353jpd9d_0kf8c0000gn/T/sou99-acceptance-ws-82m3_k6e/installed_qual/git_profile/profile.json"
@@ -437,15 +447,8 @@
         "workspace_argv_contract_enforced",
         "live_daemon_enforcing_verified"
       ]
-    }
-  },
-  "cleanup_witness": {
-    "private_config_dir_removed": true,
-    "zero_orphaned_processes": true,
-    "process_group_reaping_witness": {
-      "descendant_pid": 46372,
-      "all_descendants_terminated": true,
-      "verification_method": "os_kill_probe_after_exit_0"
-    }
+    },
+    "host_executed": false,
+    "uses_stub_executables": true
   }
 }

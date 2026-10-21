@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""End-to-end acceptance driver for trusted Claude Code pilot launcher (SOU-99).
+"""Portable fixture/preview controls for the Claude Code launcher (SOU-99).
+
+The live scenario uses command-based Python fixture servers; the profile
+preview uses stub executables and never starts Claude. Neither qualifies the
+installed original filesystem/Git servers. Run qualify-pilot-launcher.py on
+Linux for that separate, mandatory full-launch execution witness.
 
 Verifies that:
 1. `agentfw pilot-launch` prepares a private configuration directory outside the workspace (mode 0700).
-2. It mints distinct scoped HMAC child authority grants for pinned filesystem and Git MCP servers.
+2. It mints distinct scoped HMAC child authority grants for the fixture servers.
 3. Host execution boundary is strictly configured:
    - Built-in shell and unmediated tools disabled (`--tools ""` and explicit `--allowedTools`).
    - Session persistence disabled (`--no-session-persistence`).
@@ -523,12 +528,12 @@ native:
             except Exception:
                 daemon.kill()
 
-    def test_installed_profile_scenario(
+    def test_profile_validation_preview(
         self,
         workspace: Path,
         base_dir: Path,
     ) -> dict:
-        """Qualify the full launcher with installed, validated original profiles and selected daemon policy."""
+        """Unit/preview controls only: these stub assets never execute a host."""
         workspace = workspace.resolve()
         base_dir = base_dir.resolve()
         installed_base = base_dir / "installed_qual"
@@ -741,7 +746,7 @@ native:
             check("/workspace" in git_args, "installed_profile_git_workspace_argv_enforced")
 
             audit = {
-                "scenario_type": "installed_profile_acceptance",
+                "scenario_type": "profile_validation_preview",
                 "validated_profiles": {
                     "filesystem": str(fs_dir / "profile.json"),
                     "git": str(git_dir / "profile.json"),
@@ -871,7 +876,7 @@ exit 0
             "real_model_evaluation": False,
             "scripted_owned_provider": True,
             "zero_paid_api_calls_verified": True,
-            "scenario_type": "composite_pilot_acceptance",
+            "scenario_type": "fixture_and_preview_controls",
             "binary_identity": {
                 "path": str(self.binary),
                 "sha256": sha256_file(self.binary),
@@ -898,8 +903,8 @@ exit 0
                 "report": fixture_data["report"],
                 "audit": fixture_data["audit"],
             },
-            "installed_profile_acceptance": {
-                "scenario_type": "installed_profile_acceptance",
+            "profile_validation_preview": {
+                "scenario_type": "profile_validation_preview",
                 "report": installed_data["report"],
                 "audit": installed_data["audit"],
             },
@@ -960,9 +965,9 @@ def main() -> int:
         fixture_data = harness.test_end_to_end_four_step_scenario(ws, base)
         print("  ✓ Genuine 4-step sequence completed with verified refusal and zero side-effects.")
 
-        print("\n[Phase 3] Testing installed, validated ProfileConfig launch with live daemon policy...")
-        installed_data = harness.test_installed_profile_scenario(ws, base)
-        print("  ✓ Installed profile path validated: commands outside mock mode strictly validated.")
+        print("\n[Phase 3] Testing ProfileConfig validation preview with stub executables...")
+        installed_data = harness.test_profile_validation_preview(ws, base)
+        print("  ✓ Preview validation passed; original-server full execution is qualified separately.")
 
         print("\n[Phase 4] Testing abort and interruption cleanup...")
         harness.test_interruption_cleanup(ws, mock_secret)
@@ -980,7 +985,7 @@ def main() -> int:
     evidence = harness.generate_qualification_report(dry_run_report, fixture_data, installed_data, process_witness)
     print(f"  ✓ Evidence written to: {harness.evidence_path}")
     print(f"  ✓ Total acceptance checks passed: {evidence['checks_total']}/{evidence['checks_total']}")
-    print("\nSUCCESS: All SOU-99 pilot launcher acceptance criteria passed 100%.")
+    print("\nSUCCESS: Fixture/preview controls passed. Original-server full launch requires qualify-pilot-launcher.py.")
     return 0
 
 
