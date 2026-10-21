@@ -196,3 +196,60 @@ fn generic_native_read_baseline_keeps_real_and_split_command_scanning() {
         assert!(!response.release, "generic command admitted");
     }
 }
+
+#[test]
+fn literal_fields_keep_taint_overlap_and_incomplete_history() {
+    for incomplete in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let mut st = literal_fixture(dir.path());
+        let policy = soup_wall_agent::AgentPolicySet::from_yaml(
+            "agent_policies:\n  - name: retained-data-taint\n    when: { taint: [native] }\n    action: ask\ndefault: allow\n",
+        ).unwrap();
+        Arc::get_mut(&mut st).unwrap().firewall = Mutex::new(AgentFirewall::new(
+            policy,
+            soup_wall_agent::DEFAULT_TAINT_CAP,
+        ));
+        start(&st, "sou110");
+        let epoch = st.native.as_ref().unwrap().sessions.lock().unwrap().entries["sou110"]
+            .epoch
+            .clone();
+        let literal = "/workspace/private/.ssh/rm.sh-owned-synthetic-history";
+        {
+            let mut firewall = st.firewall.lock().unwrap();
+            if incomplete {
+                firewall.mark_provenance_incomplete(&epoch);
+            } else {
+                let value = event(
+                    &epoch,
+                    1,
+                    EventKind::ToolResult {
+                        tool: "read_text_file".into(),
+                        content: literal.into(),
+                        source: Provenance::Native {
+                            registry: "sou110-public".into(),
+                            tool: "read_text_file".into(),
+                        },
+                    },
+                );
+                firewall.try_admit_native_result(&value).unwrap();
+            }
+        }
+        let response = literal_call(&st, "read_text_file", json!({"path":literal})).unwrap();
+        assert_eq!(
+            response.verdict, "ask",
+            "incomplete={incomplete}, reasons={:?}",
+            response.reason_codes
+        );
+        assert!(!response.release);
+        assert!(
+            response.reason_codes.iter().any(|code| code
+                == if incomplete {
+                    "taint-history-incomplete"
+                } else {
+                    "retained-data-taint"
+                }),
+            "{:?}",
+            response.reason_codes
+        );
+    }
+}
