@@ -30,6 +30,39 @@ const MANIFEST: &str = "lifecycle.json";
 const MAX_CANDIDATE_BYTES: u64 = 512 * 1024 * 1024;
 const START_TIMEOUT: Duration = Duration::from_secs(30);
 
+// Test-only, phase-level observation. Never records the token, endpoint,
+// response body, process identity or filesystem path.
+#[cfg(test)]
+thread_local! {
+    static LAST_HEALTH_PROBE_OUTCOME: std::cell::Cell<&'static str> = const {
+        std::cell::Cell::new("not_probed")
+    };
+    static HEALTH_PROBE_TRACE: std::cell::RefCell<Vec<&'static str>> = const {
+        std::cell::RefCell::new(Vec::new())
+    };
+}
+
+#[cfg(test)]
+fn record_health_probe_outcome(outcome: &'static str) {
+    LAST_HEALTH_PROBE_OUTCOME.with(|last| last.set(outcome));
+    HEALTH_PROBE_TRACE.with(|trace| {
+        let mut trace = trace.borrow_mut();
+        if trace.len() < 16 {
+            trace.push(outcome);
+        }
+    });
+}
+
+#[cfg(test)]
+pub(crate) fn last_health_probe_outcome() -> &'static str {
+    LAST_HEALTH_PROBE_OUTCOME.with(|last| last.get())
+}
+
+#[cfg(test)]
+pub(crate) fn health_probe_trace() -> String {
+    HEALTH_PROBE_TRACE.with(|trace| trace.borrow().join(","))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Record {
@@ -735,21 +768,31 @@ impl Manager {
             return Ok(None);
         };
         if !process.matches(&response) {
+            #[cfg(test)]
+            record_health_probe_outcome("identity_mismatch");
             return Ok(None);
         }
+        #[cfg(test)]
+        record_health_probe_outcome("healthy_owned");
         Ok(Some(response))
     }
 
     fn request(&self, process: &ProcessRecord, stop: bool) -> Result<Option<ManagedHealth>> {
         let token_path = self.home.join("token");
         if !token_path.exists() {
+            #[cfg(test)]
+            record_health_probe_outcome("token_missing");
             return Ok(None);
         }
         ensure_regular(&token_path)?;
         crate::token::restrict(&token_path)?;
         let token = match fs::read_to_string(token_path) {
             Ok(value) => value.trim().to_owned(),
-            Err(_) => return Ok(None),
+            Err(_) => {
+                #[cfg(test)]
+                record_health_probe_outcome("token_unreadable");
+                return Ok(None);
+            }
         };
         let host = if process.bind == "::1" {
             "[::1]"
@@ -777,7 +820,22 @@ impl Manager {
                 .await
             {
                 Ok(response) if response.status().is_success() => response,
-                _ => return Ok(None),
+                Ok(_) => {
+                    #[cfg(test)]
+                    record_health_probe_outcome("http_non_success");
+                    return Ok(None);
+                }
+                Err(error) => {
+                    #[cfg(test)]
+                    record_health_probe_outcome(if error.is_timeout() {
+                        "http_timeout"
+                    } else {
+                        "http_transport_error"
+                    });
+                    #[cfg(not(test))]
+                    let _ = error;
+                    return Ok(None);
+                }
             };
             if stop {
                 return Ok(Some(ManagedHealth {
@@ -787,7 +845,14 @@ impl Manager {
                     config_digest: process.config_digest.clone(),
                 }));
             }
-            Ok(response.json::<ManagedHealth>().await.ok())
+            let health = response.json::<ManagedHealth>().await.ok();
+            #[cfg(test)]
+            record_health_probe_outcome(if health.is_some() {
+                "http_complete"
+            } else {
+                "http_invalid_body"
+            });
+            Ok(health)
         })
     }
 

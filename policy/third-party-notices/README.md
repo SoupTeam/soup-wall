@@ -1,6 +1,8 @@
 # Reviewed crate license notice sources (SOU-27)
 
-These texts are copied **byte-for-byte** from the exact 20 crate cache archives inspected on 2026-10-12.
+The original texts were copied **byte-for-byte** from 20 crate cache archives inspected on 2026-10-12.
+The `webpki-roots 1.0.10` notice was copied from its checksum-verified crate archive on
+2026-10-21; its bytes match the previously reviewed `1.0.9` notice.
 The Cargo.lock archive checksum and SHA256 of each copied notice are pinned in `policy/license-policy.toml`.
 This repository copy is not a new license grant; review the upstream crate and redistributable artifact before release.
 

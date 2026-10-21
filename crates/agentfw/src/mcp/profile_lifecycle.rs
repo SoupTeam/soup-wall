@@ -4449,18 +4449,117 @@ mod tests {
         );
     }
 
+    #[derive(Clone, Copy)]
+    enum RecoveryHealthMode {
+        Healthy,
+        HealthyWithStalledRequest,
+        PartialResponse,
+        UnhealthyStatus,
+        WrongIdentity,
+    }
+
+    // A health reply is only authoritative after a complete, bounded HTTP request.
+    // In particular, TCP's first read need not contain the final header delimiter.
+    fn read_health_request(stream: &mut std::net::TcpStream) -> (&'static str, usize) {
+        const MAX_REQUEST_BYTES: usize = 4096;
+        // A stream accepted from a nonblocking Windows listener can itself be
+        // nonblocking. Wait for framed bytes instead of treating WouldBlock as
+        // a completed request or replying before the client finishes writing.
+        stream.set_nonblocking(false).unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_millis(400)))
+            .unwrap();
+        let mut request = Vec::with_capacity(512);
+        let mut chunk = [0u8; 512];
+        loop {
+            match stream.read(&mut chunk) {
+                Ok(0) => return ("closed_before_headers", request.len()),
+                Ok(n) => {
+                    if request.len() + n > MAX_REQUEST_BYTES {
+                        return ("oversized_http", request.len() + n);
+                    }
+                    request.extend_from_slice(&chunk[..n]);
+                    if let Some(end) = request.windows(4).position(|bytes| bytes == b"\r\n\r\n") {
+                        let headers = &request[..end + 4];
+                        if !headers.starts_with(b"GET /lifecycle/v1 HTTP/1.1\r\n") {
+                            if headers.starts_with(b"POST /lifecycle/v1 HTTP/1.1\r\n") {
+                                return ("unexpected_stop_method", request.len());
+                            }
+                            if headers.starts_with(b"GET /lifecycle/v1 HTTP/1.0\r\n") {
+                                return ("unexpected_http10", request.len());
+                            }
+                            return ("unexpected_method", request.len());
+                        }
+                        return ("complete_http", request.len());
+                    }
+                }
+                Err(_) => return ("read_timeout_or_error", request.len()),
+            }
+        }
+    }
+
     #[test]
-    fn recovery_resumes_when_interrupted_with_compensated_reservation_and_original_baseline_healthy(
-    ) {
+    fn health_fixture_waits_for_complete_bounded_request() {
+        use std::net::Shutdown;
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let (phase_tx, phase_rx) = std::sync::mpsc::channel();
+        let server = std::thread::spawn(move || {
+            for _ in 0..3 {
+                let (mut stream, _) = listener.accept().unwrap();
+                phase_tx.send(read_health_request(&mut stream).0).unwrap();
+            }
+        });
+
+        let mut split = std::net::TcpStream::connect(address).unwrap();
+        split
+            .write_all(b"GET /lifecycle/v1 HTTP/1.1\r\nHost: local\r\n")
+            .unwrap();
+        assert!(
+            phase_rx
+                .recv_timeout(std::time::Duration::from_millis(30))
+                .is_err(),
+            "phase=http_request reason=partial_headers_accepted"
+        );
+        split.write_all(b"\r\n").unwrap();
+        assert_eq!(
+            phase_rx
+                .recv_timeout(std::time::Duration::from_secs(1))
+                .unwrap(),
+            "complete_http"
+        );
+        drop(split);
+
+        let mut truncated = std::net::TcpStream::connect(address).unwrap();
+        truncated
+            .write_all(b"GET /lifecycle/v1 HTTP/1.1\r\n")
+            .unwrap();
+        truncated.shutdown(Shutdown::Write).unwrap();
+        assert_eq!(
+            phase_rx
+                .recv_timeout(std::time::Duration::from_secs(1))
+                .unwrap(),
+            "closed_before_headers"
+        );
+
+        let mut oversized = std::net::TcpStream::connect(address).unwrap();
+        oversized.write_all(&vec![b'x'; 4608]).unwrap();
+        assert_eq!(
+            phase_rx
+                .recv_timeout(std::time::Duration::from_secs(1))
+                .unwrap(),
+            "oversized_http"
+        );
+        server.join().unwrap();
+    }
+
+    fn check_interrupted_recovery(mode: RecoveryHealthMode) {
         let home_temp = tempdir().unwrap();
         let home = home_temp.path().canonicalize().unwrap();
         let mgr = ProfileManager::new(&home);
 
-        let listener = match std::net::TcpListener::bind(("127.0.0.1", 0)) {
-            Ok(l) => l,
-            Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => return,
-            Err(e) => panic!("failed to bind test listener: {e}"),
-        };
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0))
+            .expect("health fixture must bind for this acceptance control");
         let port = listener.local_addr().unwrap().port();
 
         // Write token
@@ -4507,31 +4606,99 @@ mod tests {
         let baseline_digest_clone = baseline_digest.clone();
         let original_inst_clone = original_instance.clone();
         let (stop_tx, stop_rx) = std::sync::mpsc::channel();
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let fixture_started = std::time::Instant::now();
+        let ready_ms = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(u64::MAX));
+        let accepted = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let complete_requests = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let incomplete_requests = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let last_request_rejection = std::sync::Arc::new(std::sync::Mutex::new("none"));
+        let last_rejected_bytes = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let completed_responses = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let (
+            thread_ready_ms,
+            thread_accepted,
+            thread_complete_requests,
+            thread_incomplete_requests,
+            thread_last_request_rejection,
+            thread_last_rejected_bytes,
+            thread_completed_responses,
+        ) = (
+            ready_ms.clone(),
+            accepted.clone(),
+            complete_requests.clone(),
+            incomplete_requests.clone(),
+            last_request_rejection.clone(),
+            last_rejected_bytes.clone(),
+            completed_responses.clone(),
+        );
         let handle = std::thread::spawn(move || {
-            use std::io::{Read, Write};
             listener.set_nonblocking(true).unwrap();
+            thread_ready_ms.store(
+                fixture_started.elapsed().as_millis() as u64,
+                std::sync::atomic::Ordering::Release,
+            );
+            ready_tx.send(()).unwrap();
             let health_json = serde_json::json!({
                 "pid": std::process::id(),
-                "instance": original_inst_clone,
+                "instance": if matches!(mode, RecoveryHealthMode::WrongIdentity) {
+                    "other-instance".to_owned()
+                } else {
+                    original_inst_clone
+                },
                 "binary_digest": "0".repeat(64),
                 "config_digest": baseline_digest_clone
             })
             .to_string();
-            let response = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+            let response = std::sync::Arc::new(format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                 health_json.len(),
                 health_json
-            );
+            ));
+            let mut workers = Vec::new();
             while stop_rx.try_recv().is_err() {
                 if let Ok((mut stream, _)) = listener.accept() {
-                    let mut buf = [0u8; 1024];
-                    let _ = stream.read(&mut buf);
-                    let _ = stream.write_all(response.as_bytes());
-                    let _ = stream.flush();
+                    thread_accepted.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let response = response.clone();
+                    let complete_requests = thread_complete_requests.clone();
+                    let incomplete_requests = thread_incomplete_requests.clone();
+                    let last_request_rejection = thread_last_request_rejection.clone();
+                    let last_rejected_bytes = thread_last_rejected_bytes.clone();
+                    let completed_responses = thread_completed_responses.clone();
+                    workers.push(std::thread::spawn(move || {
+                        let (request_outcome, bytes_read) = read_health_request(&mut stream);
+                        if request_outcome != "complete_http" {
+                            incomplete_requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            *last_request_rejection.lock().unwrap() = request_outcome;
+                            last_rejected_bytes.store(bytes_read, std::sync::atomic::Ordering::Relaxed);
+                            return;
+                        }
+                        complete_requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        let bytes = match mode {
+                            RecoveryHealthMode::Healthy
+                            | RecoveryHealthMode::HealthyWithStalledRequest
+                            | RecoveryHealthMode::WrongIdentity => response.as_bytes(),
+                            RecoveryHealthMode::PartialResponse => &response.as_bytes()[..response.len() / 2],
+                            RecoveryHealthMode::UnhealthyStatus => b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                        };
+                        let _ = stream.set_write_timeout(Some(std::time::Duration::from_millis(400)));
+                        if stream.write_all(bytes).is_ok()
+                            && !matches!(mode, RecoveryHealthMode::PartialResponse)
+                        {
+                            completed_responses.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        }
+                        let _ = stream.flush();
+                    }));
                 }
-                std::thread::sleep(std::time::Duration::from_millis(10));
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            for worker in workers {
+                worker.join().unwrap();
             }
         });
+        ready_rx
+            .recv_timeout(std::time::Duration::from_secs(1))
+            .expect("health fixture readiness timeout");
 
         // Setup journal where previous recovery died after reserving compensated_daemon_instance
         let mut state = mgr.load_state().unwrap();
@@ -4557,18 +4724,117 @@ mod tests {
         });
         mgr.save_state(&state).unwrap();
 
-        // Recovery must resume, clear unexecuted reservation, accept original baseline daemon, and succeed!
+        // A stalled partial request must not block subsequent real health probes.
+        let mut stalled = if matches!(mode, RecoveryHealthMode::HealthyWithStalledRequest) {
+            let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+            stream
+                .write_all(b"GET /lifecycle/v1 HTTP/1.1\r\nHost: local\r\n")
+                .unwrap();
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
+            while accepted.load(std::sync::atomic::Ordering::Relaxed) == 0
+                && std::time::Instant::now() < deadline
+            {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            assert!(
+                accepted.load(std::sync::atomic::Ordering::Relaxed) > 0,
+                "phase=fixture reason=stalled_request_not_accepted"
+            );
+            Some(stream)
+        } else {
+            None
+        };
+
+        // The actual recovery guard decides whether the original baseline is healthy.
         let rec_res = mgr.recover();
+        if let Some(ref mut stream) = stalled {
+            let _ = stream.set_read_timeout(Some(std::time::Duration::from_millis(500)));
+            let mut one = [0u8; 1];
+            assert!(
+                stream.read(&mut one).is_ok_and(|count| count == 0),
+                "phase=fixture reason=partial_request_received_response"
+            );
+        }
         let _ = stop_tx.send(());
         let _ = handle.join();
 
-        assert!(rec_res.is_ok(), "recovery failed: {:?}", rec_res.err());
-        let final_state = mgr.load_state().unwrap();
-        assert!(final_state.in_progress.is_none());
-        assert_eq!(
-            final_state.history.last().unwrap().status,
-            "failed (recovered)"
+        let positive = matches!(
+            mode,
+            RecoveryHealthMode::Healthy | RecoveryHealthMode::HealthyWithStalledRequest
         );
+        if rec_res.is_err() == positive {
+            eprintln!("phase=recovery_before_assert reason=unexpected_outcome probe={} probe_trace={} request_rejection={} rejected_bytes={} ready_ms={} accepted={} complete_requests={} incomplete_requests={} completed_responses={} elapsed_ms={}",
+                crate::lifecycle::last_health_probe_outcome(),
+                crate::lifecycle::health_probe_trace(),
+                *last_request_rejection.lock().unwrap(),
+                last_rejected_bytes.load(std::sync::atomic::Ordering::Relaxed),
+                ready_ms.load(std::sync::atomic::Ordering::Acquire),
+                accepted.load(std::sync::atomic::Ordering::Relaxed),
+                complete_requests.load(std::sync::atomic::Ordering::Relaxed),
+                incomplete_requests.load(std::sync::atomic::Ordering::Relaxed),
+                completed_responses.load(std::sync::atomic::Ordering::Relaxed),
+                fixture_started.elapsed().as_millis());
+        }
+
+        assert!(
+            accepted.load(std::sync::atomic::Ordering::Relaxed) > 0,
+            "phase=fixture reason=no_health_request"
+        );
+        assert!(
+            complete_requests.load(std::sync::atomic::Ordering::Relaxed) > 0,
+            "phase=fixture reason=no_complete_http_request"
+        );
+        let final_state = mgr.load_state().unwrap();
+        if positive {
+            assert!(
+                completed_responses.load(std::sync::atomic::Ordering::Relaxed) > 0,
+                "phase=fixture reason=no_complete_health_response"
+            );
+            assert!(
+                rec_res.is_ok(),
+                "phase=recovery reason=healthy_baseline_rejected probe={}",
+                crate::lifecycle::last_health_probe_outcome()
+            );
+            assert!(
+                final_state.in_progress.is_none(),
+                "phase=recovery reason=healthy_journal_retained"
+            );
+            assert_eq!(
+                final_state.history.last().unwrap().status,
+                "failed (recovered)"
+            );
+        } else {
+            assert!(
+                rec_res.is_err(),
+                "phase=recovery reason=unhealthy_baseline_accepted"
+            );
+            assert!(
+                final_state.in_progress.is_some(),
+                "phase=recovery reason=unhealthy_journal_cleared"
+            );
+        }
+    }
+
+    #[test]
+    fn recovery_resumes_when_interrupted_with_compensated_reservation_and_original_baseline_healthy(
+    ) {
+        check_interrupted_recovery(RecoveryHealthMode::Healthy);
+    }
+
+    #[test]
+    fn recovery_healthy_baseline_survives_stalled_partial_http_request() {
+        check_interrupted_recovery(RecoveryHealthMode::HealthyWithStalledRequest);
+    }
+
+    #[test]
+    fn recovery_retains_journal_for_partial_or_unhealthy_or_unowned_health() {
+        for mode in [
+            RecoveryHealthMode::PartialResponse,
+            RecoveryHealthMode::UnhealthyStatus,
+            RecoveryHealthMode::WrongIdentity,
+        ] {
+            check_interrupted_recovery(mode);
+        }
     }
 
     #[test]
