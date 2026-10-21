@@ -19,12 +19,13 @@ class EvidenceControls(unittest.TestCase):
         for index, (label, tool, arguments, fragment, _) in enumerate(M.POSITIVES, 100):
             rows.append({"case": label, "id": index, "passed": True, "classifier": {"actions": ["read"], "unknown": False},
                          "response": {"id": index, "result": {"content": [{"type": "text", "text": fragment}], "structuredContent": {"content": fragment}}},
-                         "target_reads_before": 0, "target_reads_after": 1, "dispatch_events": [{"execution_dispatched": True}]})
+                         "target_reads_before": 0, "target_reads_after": 1, "dispatch_events": [{"execution_dispatched": True}],
+                         "native_invocation": [{"tool":tool, "verdict":"allow", "released":True, "registry_sha256":"e" * 64}]})
         for index, (label, _, _) in enumerate(M.NEGATIVES, 200):
             rows.append({"case": label, "id": index, "passed": True, "response": {"id": index, "error": {"code": -1}},
                          "target_reads_before": 0, "target_reads_after": 0, "dispatch_events": []})
         return {"source_before": source, "source_after": source.copy(), "source_files_before": {"owned": "c" * 64},
-                "source_files_after": {"owned": "c" * 64}, "skipped": 0, "cases": rows,
+                "source_files_after": {"owned": "c" * 64}, "skipped": 0, "cases": rows, "registry_sha256":"e" * 64,
                 "workspace_before": {"owned": "d" * 64}, "workspace_after": {"owned": "d" * 64}, "receiver_bodies": [],
                 "receiver_calibration": {"passed": True}, "policy_controls": [{"passed": True, "verdict": "deny"}],
                 "classifier_limit": {"preserved": True, "response": {"error": {"code": -1}}},
@@ -37,6 +38,8 @@ class EvidenceControls(unittest.TestCase):
         mutations = [
             lambda r: r["cases"][0].update(target_reads_after=0),
             lambda r: r["cases"][0].update(dispatch_events=[]),
+            lambda r: r["cases"][0].update(native_invocation=[]),
+            lambda r: r["cases"][0]["native_invocation"][0].update(verdict="ask"),
             lambda r: r["cases"][0]["response"].update(id="100"),
             lambda r: r["cases"][0]["response"]["result"].update(structuredContent={"content": "forged"}),
             lambda r: r["cases"][0]["classifier"].update(unknown=True),

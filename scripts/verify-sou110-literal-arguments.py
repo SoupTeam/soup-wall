@@ -71,6 +71,12 @@ def validate_result(response, identifier, fragment):
     return text
 
 
+def native_calls(path):
+    raw = path.read_bytes()
+    require(len(raw) <= 8 * 1024 * 1024, "native audit exceeded bound")
+    return [row for line in raw.splitlines() if (row := json.loads(line)).get("event") == "native_call"]
+
+
 def grade(report):
     require(report["source_before"] == report["source_after"] and not report["source_before"]["dirty"], "source changed or dirty")
     require(report["source_files_before"] == report["source_files_after"], "implementation/config/classifier bytes changed")
@@ -83,6 +89,9 @@ def grade(report):
         validate_result(row["response"], row["id"], positive[3])
         require(row["target_reads_after"] > row["target_reads_before"], "independent useful execution absent")
         require(row["dispatch_events"] and all(e["execution_dispatched"] is True for e in row["dispatch_events"]), "collector dispatch absent")
+        receipts = row["native_invocation"]
+        require(len(receipts) == 1 and receipts[0]["tool"] == positive[1] and receipts[0]["verdict"] == "allow"
+                and receipts[0]["released"] is True and receipts[0]["registry_sha256"] == report["registry_sha256"], "native policy admission absent")
     for row in rows[len(POSITIVES):]:
         require(row["passed"] and BASE.refused(row["response"]) and not row["dispatch_events"], "unsafe call dispatched")
         require(row["target_reads_after"] == row["target_reads_before"], "refused target executed")
@@ -166,7 +175,9 @@ def run(args, report):
                    "schema_sha256": next(t["schema_sha256"] for t in registry["tools"] if t["name"] == tool),
                    "target_reads_before": reads(target, label, "before"), "passed": False}
             report["cases"].append(row)
+            audit_before = len(native_calls(output / "native-audit.jsonl"))
             row["response"], raw = client.exchange(BASE.call(index, arguments, tool))
+            row["native_invocation"] = native_calls(output / "native-audit.jsonl")[audit_before:]
             row["response_sha256"] = BASE.hashlib.sha256(raw).hexdigest()
             row["target_reads_after"] = reads(target, label, "after")
             row["dispatch_events"] = [e for e in BASE.events(stderr) if e.get("host_call_id") == index and e.get("state") == "inflight"]
