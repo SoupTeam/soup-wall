@@ -239,13 +239,13 @@ sha256 = "01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f"
 
 [[package_exceptions]]
 name = "webpki-roots"
-version = "1.0.9"
+version = "1.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 license = "CDLA-Permissive-2.0"
 selected_license = "CDLA-Permissive-2.0"
-cargo_lock_checksum = "7dcd9d09a39985f5344844e66b0c530a33843579125f23e21e9f0f220850f22a"
+cargo_lock_checksum = "1c1c8e20c8a38fc7d65abfe74eb7280e4aa667e8eec8bc84996d2874810748d9"
 reason = "CDLA-Permissive-2.0 governs the included CCADB-derived root certificate data; the exact full license is preserved and its section 2.1 requires sharing the license text with shared data. Technical, package-scoped review only; maintainer must confirm redistribution and release notices."
-notice_path = "policy/third-party-notices/webpki-roots-1.0.9/LICENSE"
+notice_path = "policy/third-party-notices/webpki-roots-1.0.10/LICENSE"
 notice_sha256 = "e271993808fec50ab29350b39539cdec611a9103f827e0aa26d61da70e2d33f8"
 
 [[package_exceptions]]

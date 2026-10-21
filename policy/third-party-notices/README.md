@@ -1,6 +1,8 @@
 # Reviewed crate license notice sources (SOU-27)
 
-These texts are copied **byte-for-byte** from the exact 20 crate cache archives inspected on 2026-10-12.
+The initial inventory contains **byte-for-byte** notices from 20 crate cache archives inspected on 2026-10-12.
+The 2026-10-21 TLS security update replaces the selected `webpki-roots` pin with 1.0.10.
+Its verified crate archive contains the identical CDLA license bytes; the original 1.0.9 notice remains as historical evidence.
 The Cargo.lock archive checksum and SHA256 of each copied notice are pinned in `policy/license-policy.toml`.
 This repository copy is not a new license grant; review the upstream crate and redistributable artifact before release.
 
@@ -14,7 +16,7 @@ attribution and disclaimer for Go-derived code used with its `compact` feature.
 That original file is preserved as a supplemental notice, regardless of feature selection.
 The upstream `COPYRIGHT`, `COPYING` and `copyright.txt` notices are likewise retained where collected.
 
-**`webpki-roots 1.0.9` is a separate, version-pinned data license exception, not part of**
+**`webpki-roots 1.0.10` is a separate, version-pinned data license exception, not part of**
 **the permissive software license allowlist.** Its original `LICENSE` is CDLA-Permissive-2.0;
 its README describes the root-certificate material as derived from CCADB data.
 CDLA section 2.1 requires making the complete agreement text available with shared data.
@@ -45,5 +47,5 @@ remains **false** while optional models, datasets and Python packages are unreso
 | `vcpkg` | `0.2.15` | `MIT` | `vcpkg-0.2.15/LICENSE-MIT` | 0 |
 | `version_check` | `0.9.5` | `MIT` | `version_check-0.9.5/LICENSE-MIT` | 0 |
 | `walkdir` | `2.5.0` | `MIT` | `walkdir-2.5.0/LICENSE-MIT` | 1 |
-| `webpki-roots` | `1.0.9` | `CDLA-Permissive-2.0` | `webpki-roots-1.0.9/LICENSE` | 0 |
+| `webpki-roots` | `1.0.10` | `CDLA-Permissive-2.0` | `webpki-roots-1.0.10/LICENSE` | 0 |
 | `wiremock` | `0.6.5` | `MIT` | `wiremock-0.6.5/LICENSE-MIT` | 0 |
