@@ -111,7 +111,13 @@ impl ManifestStore {
     }
 
     fn path(&self, server: &str) -> PathBuf {
-        self.dir.join(format!("{}.json", Self::safe_name(server)))
+        self.dir.join(Self::record_name(server))
+    }
+
+    /// The exact file name of one server's record, so a component that created a
+    /// connection can identify that server's record without listing others.
+    pub(crate) fn record_name(server: &str) -> String {
+        format!("{}.json", Self::safe_name(server))
     }
 
     /// Record location from before `safe_name` gained its discriminator. Read,

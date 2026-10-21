@@ -134,6 +134,14 @@ pub(crate) fn prepare(profile: &ProfileConfig) -> anyhow::Result<PreparedServerS
     }
 }
 
+/// Open and verify every pin of a selected profile (workspace, package tree,
+/// runtime, bubblewrap, Git binaries, libraries and repository rules) without
+/// starting anything. Used by setup previews before a launch is persisted.
+#[cfg(target_os = "linux")]
+pub(crate) fn verify(profile: &ProfileConfig) -> anyhow::Result<()> {
+    prepare(profile).map(drop)
+}
+
 /// Kill and reap the outside owner's process group after attempting its private
 /// cleanup acknowledgement. The trusted PID 1 lease and bubblewrap parent-death
 /// chain stop descendants even if they create their own session/process group.

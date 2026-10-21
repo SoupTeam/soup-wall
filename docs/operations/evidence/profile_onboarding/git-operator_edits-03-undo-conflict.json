@@ -1,0 +1,29 @@
+{
+  "agentfw_version": "0.3.0",
+  "exit_code": 4,
+  "explanation": "Undo stopped at a conflict; nothing that changed outside onboarding was removed.",
+  "next_steps": [
+    "review the conflicting item, then run undo again"
+  ],
+  "operation": "undo",
+  "profile": {
+    "arch": "x86_64",
+    "id": "linux-local-user-mcp-v1",
+    "os": "linux",
+    "supported": true
+  },
+  "result": "incomplete",
+  "retained": {
+    "audit_log": false,
+    "connection_recovery_files": "kept beside the host config by mcp-connection by design; remove only after review"
+  },
+  "rollback": [
+    {
+      "detail": "mcp-connection refused to restore the entry (changed or pending); nothing was overwritten",
+      "outcome": "conflict",
+      "step": "connect_server"
+    }
+  ],
+  "schema_version": "sw-onboarding/1",
+  "started_at_unix_ms": 1792565295596
+}
