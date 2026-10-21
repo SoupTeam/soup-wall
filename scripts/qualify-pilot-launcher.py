@@ -133,12 +133,15 @@ def qualify(args, private, report):
     env = BASE.environment(private / "home")
     Path(env["HOME"]).mkdir(mode=0o700)
     env.update(PATH=str(selected["node"].parent) + os.pathsep + os.defpath,
-               GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1", GIT_OPTIONAL_LOCKS="0")
+               GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1", GIT_OPTIONAL_LOCKS="0",
+               GIT_AUTHOR_NAME="Owned launcher witness", GIT_COMMITTER_NAME="Owned launcher witness",
+               GIT_AUTHOR_EMAIL="owned@example.invalid", GIT_COMMITTER_EMAIL="owned@example.invalid")
     def git(*cmd):
         return subprocess.check_output([str(selected["git"]), *cmd], cwd=workspace, env=env, timeout=15).decode().strip()
-    git("init")
-    git("config", "user.name", "Owned launcher witness")
-    git("config", "user.email", "owned@example.invalid")
+    # The accepted read-only profile deliberately supports only bounded [core]
+    # repository config. Commit identity belongs to this owned command's env,
+    # not an unsupported persistent [user] section in the installed workspace.
+    git("init", "--initial-branch=main", "--template=")
     (workspace / "tracked.txt").write_text("committed baseline\n")
     git("add", "tracked.txt")
     git("commit", "-m", "Owned baseline")
