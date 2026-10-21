@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 import shutil
+import struct
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -89,16 +90,37 @@ class SelectionTests(unittest.TestCase):
 
     def test_fresh_v1_installation_is_converted_without_exclusive_write_collision(self):
         destination = self.root / "fresh"
-        def upstream(target, *_args):
+        def upstream(target, *_args, **kwargs):
+            self.assertEqual(kwargs, {"static_git": True})
             target.mkdir()
             for source in self.install.iterdir():
                 shutil.copyfile(source, target / source.name)
-        with patch.object(PROFILE.V1, "install", side_effect=upstream):
+        with patch.object(PROFILE.V1, "install", side_effect=upstream), patch.object(PROFILE, "require_static_git"):
             result = PROFILE.install(destination, self.profile["workspace"], "git", "a" * 64, "bwrap", "launcher")
         self.assertEqual(result["status"], "prepared-not-active")
         self.assertEqual(json.loads((destination / "profile.json").read_text())["format"], PROFILE.FORMAT)
         self.assertFalse(list(destination.glob("*.sou107-new")))
         self.assertEqual(json.loads((destination / "installation.json").read_text())["profile_sha256"], PROFILE.sha(destination / "profile.json"))
+
+    def test_dynamic_git_is_rejected_without_allowing_the_loader(self):
+        header = bytearray(64)
+        header[:6] = b"\x7fELF\x02\x01"
+        struct.pack_into("<H", header, 18, 62)
+        struct.pack_into("<Q", header, 32, 64)
+        struct.pack_into("<HH", header, 54, 56, 2)
+        table = bytearray(112)
+        struct.pack_into("<I", table, 0, 1)
+        struct.pack_into("<I", table, 56, 3)
+        path = self.root / "owned-elf"
+        path.write_bytes(header + table)
+        with self.assertRaisesRegex(ValueError, "no ELF interpreter"):
+            PROFILE.require_static_git(path)
+        struct.pack_into("<I", table, 56, 4)
+        path.write_bytes(header + table)
+        PROFILE.require_static_git(path)
+        path.write_bytes(header + table[:20])
+        with self.assertRaisesRegex(ValueError, "truncated"):
+            PROFILE.require_static_git(path)
 
 
 if __name__ == "__main__":

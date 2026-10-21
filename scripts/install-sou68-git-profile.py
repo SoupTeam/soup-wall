@@ -79,7 +79,7 @@ def registry(manifest):
         for tool in manifest["result"]["tools"]]}
 
 
-def install(destination, workspace, git, git_sha256, bwrap, git_launcher):
+def install(destination, workspace, git, git_sha256, bwrap, git_launcher, *, static_git=False):
     if platform.system() != "Linux" or platform.machine() != "x86_64":
         raise ValueError("Git profile requires Linux x86-64; no isolation fallback")
     workspace, git, bwrap, git_launcher = [Path(p).resolve(strict=True) for p in (workspace, git, bwrap, git_launcher)]
@@ -122,7 +122,9 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher):
                     "--only-binary=:all:", "--no-compile", "--no-cache-dir", "--disable-pip-version-check",
                     "-r", str(ASSETS / "requirements.lock")], env=env, check=True, timeout=300)
     # Python extension modules may depend on libraries not used by its launcher.
-    elf_files = [python, git, git_launcher]
+    # The separate opt-in clone installer validates an interpreter-free ELF Git.
+    # Default v1 dependency discovery and all v1 CLI behavior remain unchanged.
+    elf_files = [python, git_launcher] if static_git else [python, git, git_launcher]
     elf_files.extend(path for path in (package / "python/lib").rglob("*.so") if path.is_file())
     profile = {"format": FORMAT, "workspace": str(workspace), "runtimePath": str(python),
                "runtimeSha256": sha(python), "packageRoot": str(package), "packageTreeSha256": tree_sha(package),

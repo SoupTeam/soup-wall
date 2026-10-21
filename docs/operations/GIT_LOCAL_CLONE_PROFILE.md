@@ -51,7 +51,12 @@ Use the accepted fd-pinned read-only workspace/runtime mounts, no-network seccom
 clean credential/environment boundary, Landlock mutation restrictions, owner
 liveness, resource budgets and native result inspection. Add per-Git-invocation
 inspection inside the actual mounted workspace and an execution restriction
-permitting only the pinned Git image for its children. An external helper must
+permitting only the pinned Git image for its children. This new profile requires
+an interpreter-free, statically linked build of the same pinned upstream Git.
+Granting execute permission to a dynamic ELF loader would also let that loader
+load forbidden helper images; it is deliberately not allowed. See the
+[Landlock access-rights interface](https://docs.kernel.org/userspace-api/landlock.html).
+An external helper must
 not run even if unsafe settings are introduced after inspection. The original
 Python MCP server, Git arguments, results and errors are preserved for supported
 repositories; wrapper refusals are explicitly profile errors.
@@ -76,7 +81,10 @@ new Ask path, onboarding or shared host launcher is added here.
 
 Use Linux x86-64 with the existing supported bubblewrap/seccomp/Landlock ABI 3
 floor. Build `agentfw` and `agentfw-git-sandbox` from the reviewed source. Supply
-the Git binary and its independently verified SHA-256. Installation downloads
+the static Git binary and its independently verified SHA-256. The installer
+checks the bounded ELF program headers and refuses `PT_INTERP`. The existing
+v1 installer keeps its default dynamic-library handling; only this new caller
+explicitly selects static Git dependency handling. Installation downloads
 the existing hash-pinned original Python/server assets; it does not contact the
 repository remote. Both destination directories must be new, private paths.
 

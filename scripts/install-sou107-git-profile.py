@@ -12,6 +12,7 @@ import os
 import platform
 from pathlib import Path
 import shutil
+import struct
 
 ROOT = Path(__file__).resolve().parents[1]
 FORMAT = "sw-mcp/git-local-clone-readonly/1"
@@ -48,9 +49,30 @@ def registry(manifest):
     return value
 
 
+def require_static_git(path):
+    # Landlock must not grant EXECUTE to the ELF loader: executing a loader
+    # directly could load an otherwise forbidden helper image as ordinary data.
+    with Path(path).open("rb") as stream:
+        header = stream.read(64)
+        if len(header) != 64 or header[:6] != b"\x7fELF\x02\x01" or struct.unpack_from("<H", header, 18)[0] != 62:
+            raise ValueError("local clone Git requires a static Linux x86-64 ELF")
+        offset = struct.unpack_from("<Q", header, 32)[0]
+        size, count = struct.unpack_from("<HH", header, 54)
+        if not 64 <= offset <= 4096 or size != 56 or not 1 <= count <= 64:
+            raise ValueError("local clone Git ELF program headers unsupported")
+        stream.seek(offset)
+        table = stream.read(size * count)
+        if len(table) != size * count:
+            raise ValueError("local clone Git ELF program headers truncated")
+        types = [struct.unpack_from("<I", table, n * size)[0] for n in range(count)]
+        if 3 in types or 1 not in types:
+            raise ValueError("local clone Git must have no ELF interpreter; build pinned Git with LDFLAGS=-static")
+
+
 def install(destination, workspace, git, git_sha256, bwrap, git_launcher):
     selected = identity()
-    V1.install(destination, workspace, git, git_sha256, bwrap, git_launcher)
+    require_static_git(git)
+    V1.install(destination, workspace, git, git_sha256, bwrap, git_launcher, static_git=True)
     destination = Path(destination).absolute()
     profile = json.loads((destination / "profile.json").read_text())
     profile["format"] = FORMAT

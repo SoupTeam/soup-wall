@@ -1479,6 +1479,10 @@ jobs:
           printf '%s  %s\n' 233d7143a2d58e60755eee9b76f559ec73ea2b3c297f5b503162ace95966b4e3 "$RUNNER_TEMP/sou68-git.tar.xz" | sha256sum --check
           tar -xJf "$RUNNER_TEMP/sou68-git.tar.xz" -C "$RUNNER_TEMP/sou68-git-source" --strip-components=1 --no-same-owner --no-same-permissions
           make -C "$RUNNER_TEMP/sou68-git-source" -j2 NO_CURL=YesPlease NO_EXPAT=YesPlease NO_TCLTK=YesPlease NO_GETTEXT=YesPlease NO_OPENSSL=YesPlease git
+          mkdir "$RUNNER_TEMP/sou107-git-source"
+          tar -xJf "$RUNNER_TEMP/sou68-git.tar.xz" -C "$RUNNER_TEMP/sou107-git-source" --strip-components=1 --no-same-owner --no-same-permissions
+          make -C "$RUNNER_TEMP/sou107-git-source" -j2 LDFLAGS=-static NO_CURL=YesPlease NO_EXPAT=YesPlease NO_TCLTK=YesPlease NO_GETTEXT=YesPlease NO_OPENSSL=YesPlease git
+          sha256sum "$RUNNER_TEMP/sou107-git-source/git" > "$RUNNER_TEMP/sou107-runtime-hashes.txt"
           curl --fail --location --retry 3 https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz --output "$RUNNER_TEMP/sou68-bwrap.tar.xz"
           printf '%s  %s\n' 0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d "$RUNNER_TEMP/sou68-bwrap.tar.xz" | sha256sum --check
           tar -xJf "$RUNNER_TEMP/sou68-bwrap.tar.xz" -C "$RUNNER_TEMP/sou68-bwrap-source" --strip-components=1 --no-same-owner --no-same-permissions
@@ -1542,7 +1546,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -B scripts/verify-sou107-real-git.py --run --agentfw "$PWD/target/debug/agentfw" \
-            --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
+            --git "$RUNNER_TEMP/sou107-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou107-git-source/git" | cut -d' ' -f1)" \
             --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --sandbox-test-binary "$SOU68_TEST_BINARY" \
             --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou107-git" \
@@ -1555,6 +1559,7 @@ jobs:
           path: |
             ${{ runner.temp }}/sou107-git/**
             ${{ runner.temp }}/sou107-git.log
+            ${{ runner.temp }}/sou107-runtime-hashes.txt
             ${{ runner.temp }}/sou98-git/**
             ${{ runner.temp }}/sou98-git.log
             ${{ runner.temp }}/sou98-development.json

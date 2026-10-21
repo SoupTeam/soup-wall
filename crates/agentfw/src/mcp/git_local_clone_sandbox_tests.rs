@@ -50,6 +50,8 @@ async fn selected_local_clone_denies_actual_helper_execution_and_network() {
     let script = format!(
         r#"
 import json,os,pathlib,socket,subprocess
+version=subprocess.run(['/mcp-runtime/git','--version'],cwd='/workspace',capture_output=True,timeout=20)
+assert version.returncode == 0 and version.stdout.startswith(b'git version '), (version.returncode,version.stdout,version.stderr)
 env=dict(os.environ,GIT_CONFIG_COUNT='4',GIT_CONFIG_KEY_3='diff.external',GIT_CONFIG_VALUE_3='/mcp-server/python/bin/python3.11')
 p=subprocess.run(['/mcp-runtime/git','diff','--no-index','--ext-diff','/workspace/owned-helper.py','/workspace/owned-helper-other.py'],cwd='/workspace',env=env,capture_output=True,timeout=20)
 assert p.returncode != 0 and b'Permission denied' in p.stderr, (p.returncode,p.stdout,p.stderr)
