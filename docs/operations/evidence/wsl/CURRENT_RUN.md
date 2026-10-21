@@ -1,5 +1,9 @@
 # Refreshed installed WSL2 qualification
 
+[A newer run after the latest main integration](MAIN_REFRESH.md) qualifies
+source `97729f0602516e6d6478e5498de444f4cce2546f`. This file preserves the
+earlier refreshed checkpoint.
+
 [installed-wsl2-d4aa63f.zip](installed-wsl2-d4aa63f.zip) contains the fresh actual
 WSL2 run on clean source `d4aa63f297c7b1189c062577c712a093533b8b2e`, after
 integrating the updated main branch. Opening observation:
