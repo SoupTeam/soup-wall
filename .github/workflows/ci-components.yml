@@ -1231,7 +1231,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends meson ninja-build libcap-dev pkg-config ripgrep zlib1g-dev
+          sudo apt-get install -y --no-install-recommends meson ninja-build libcap-dev pkg-config ripgrep zlib1g-dev strace
           mkdir -p "$RUNNER_TEMP/sou62-runtime" "$RUNNER_TEMP/sou62-bwrap-source"
           curl --fail --location --retry 3 https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz --output "$RUNNER_TEMP/sou62-node.tar.xz"
           printf '%s  %s\n' 9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37 "$RUNNER_TEMP/sou62-node.tar.xz" | sha256sum --check
@@ -1280,6 +1280,17 @@ jobs:
               stream.write('SOU62_SANDBOX_TEST_BINARY=' + binaries[0] + '\n')
           PY
           sha256sum target/debug/agentfw > "$RUNNER_TEMP/sou62-binary-hashes.txt"
+      - name: SOU-99 full launcher with installed original profiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_launcher_witness.py -v
+          python3 -B scripts/qualify-pilot-launcher.py \
+            --agentfw "$PWD/target/debug/agentfw" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
+            --node "$RUNNER_TEMP/sou62-runtime/bin/node" --npm "$RUNNER_TEMP/sou62-runtime/bin/npm" \
+            --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" --git "$RUNNER_TEMP/sou100-git-source/git" \
+            --claude "$RUNNER_TEMP/sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --strace /usr/bin/strace --output "$RUNNER_TEMP/sou99-original-launcher"
       - name: Profile and evidence controls, safe archive runtime compatibility
         run: |
           python3 -B -m unittest discover -s scripts/tests -p test_sou62_real_mcp.py -v
@@ -1368,6 +1379,17 @@ jobs:
           python3 -B scripts/qualify-installed-pilot.py --run \
             --selection "$RUNNER_TEMP/sou100-selection.json" --expected-commit "$(git rev-parse HEAD)" \
             --output "$RUNNER_TEMP/sou100-pilot" 2>&1 | tee "$RUNNER_TEMP/sou100-pilot.log"
+      - name: Required exact single-use Ask through original filesystem and Git servers
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s scripts/tests -p test_sou105_selected_approval.py -v
+          python3 -B scripts/verify-sou105-selected-approval.py --run \
+            --agentfw "$PWD/target/debug/agentfw" --node "$RUNNER_TEMP/sou62-runtime/bin/node" \
+            --npm "$RUNNER_TEMP/sou62-runtime/bin/npm" --git "$RUNNER_TEMP/sou100-git-source/git" \
+            --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
+            --strace "$(command -v strace)" --expected-commit "$(git rev-parse HEAD)" \
+            --output "$RUNNER_TEMP/sou105-approval" 2>&1 | tee "$RUNNER_TEMP/sou105-approval.log"
       - name: Publish bounded installed-pilot outcome
         if: always()
         shell: bash
@@ -1435,6 +1457,10 @@ jobs:
         with:
           name: sou62-real-filesystem-mcp-evidence
           path: |
+            ${{ runner.temp }}/sou105-approval.log
+            ${{ runner.temp }}/sou105-approval/report.json
+            ${{ runner.temp }}/sou105-approval/**/*.log
+            ${{ runner.temp }}/sou105-approval/**/*.witness.json
             ${{ runner.temp }}/sou98-filesystem/**
             ${{ runner.temp }}/sou98-filesystem.log
             ${{ runner.temp }}/sou100-selection.json
@@ -1442,6 +1468,7 @@ jobs:
             ${{ runner.temp }}/sou100-registry-regressions.log
             ${{ runner.temp }}/sou100-pilot.log
             ${{ runner.temp }}/sou100-pilot/**
+            ${{ runner.temp }}/sou99-original-launcher/**
             ${{ runner.temp }}/sou62-*.txt
             ${{ runner.temp }}/sou62-*.jsonl
             ${{ runner.temp }}/sou62-*.log
