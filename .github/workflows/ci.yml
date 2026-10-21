@@ -130,7 +130,8 @@ jobs:
     name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'Deferred - test' || 'test' }}
     needs: impact
     if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'test')
-    runs-on: ubuntu-latest
+    # Keep the accepted qualification environment; ubuntu-latest moved to 26.04.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
@@ -271,7 +272,8 @@ jobs:
     name: Python classifier and evaluation
     needs: impact
     if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'python-classifier')
-    runs-on: ubuntu-latest
+    # Keep the accepted qualification environment; ubuntu-latest moved to 26.04.
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
