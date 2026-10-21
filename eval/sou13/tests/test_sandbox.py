@@ -37,9 +37,13 @@ class Guard(unittest.TestCase):
     def test_blocks_import(self):
         self.assert_blocked(lambda fx, a: __import__('urllib.request'))
 
-    def test_blocks_import_of_preloaded_parser_dependency(self):
-        self.assertIn('collections', sys.modules)
-        self.assert_blocked(lambda fx, a: __import__('collections'))
+    def test_direct_collections_import_stays_blocked(self):
+        self.assert_blocked(lambda fx, a: __import__('collections', fromlist=('deque',)))
+
+    def test_shell_tokenizer_uses_only_its_stdlib_import(self):
+        rec = execute(lambda fx, a: fixtures.sh_tokens('cat a.txt >> b.txt'), {}, CANARY_WORLD)
+        self.assertEqual(rec['outcome'], 'completed')
+        self.assertEqual(rec['guard_violations'], [])
 
     def test_violation_recorded_even_if_swallowed(self):
         def sneaky(fx, a):

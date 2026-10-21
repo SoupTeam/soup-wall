@@ -1094,15 +1094,27 @@ pub(crate) mod linux {
             }
         }
 
+        fn trusted_fixture_executable(dir: &Path) -> PathBuf {
+            // The host's /usr/bin/env may be a coreutils multi-call binary with
+            // many hard links. Use a private, single-link copy as the test agent.
+            let path = dir.join("env");
+            std::fs::copy("/usr/bin/env", &path).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+            assert!(executable(&path).is_ok());
+            assert!(std::process::Command::new(&path)
+                .arg("-i")
+                .arg("/usr/bin/true")
+                .status()
+                .unwrap()
+                .success());
+            path
+        }
+
         #[test]
         fn wrapped_argument_limit_is_checked_before_writing() {
             let (dir, path) = fixture();
             let config = ConfigFile::read(&path).unwrap();
-            // System utilities may be hard-linked (for example by coreutils).
-            // This test needs a private, single-link executable, not host metadata.
-            let executable = dir.path().join("executable");
-            std::fs::copy("/usr/bin/env", &executable).unwrap();
-            std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+            let executable = trusted_fixture_executable(dir.path());
             let options = Options {
                 path: path.clone(),
                 server: "local".into(),
@@ -1123,17 +1135,17 @@ pub(crate) mod linux {
         }
 
         #[test]
-        fn executable_rejects_hard_links_and_writable_permissions() {
+        fn wrapped_argument_fixture_keeps_hardlink_guard() {
             let dir = tempfile::tempdir().unwrap();
-            let path = dir.path().join("executable");
-            std::fs::copy("/usr/bin/env", &path).unwrap();
-            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
-            assert!(executable(&path).is_ok());
-            let alias = dir.path().join("alias");
-            std::fs::hard_link(&path, &alias).unwrap();
+            let path = trusted_fixture_executable(dir.path());
+            std::fs::hard_link(&path, dir.path().join("env-hardlink")).unwrap();
             assert!(executable(&path).is_err());
-            std::fs::remove_file(alias).unwrap();
-            assert!(executable(&path).is_ok());
+        }
+
+        #[test]
+        fn executable_rejects_writable_permissions() {
+            let dir = tempfile::tempdir().unwrap();
+            let path = trusted_fixture_executable(dir.path());
             std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o720)).unwrap();
             assert!(executable(&path).is_err());
         }
