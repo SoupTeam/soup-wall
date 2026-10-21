@@ -13,8 +13,37 @@ rev2 and `git_readonly_v1` artifacts are unchanged byte for byte.
 - Explicit selection, with the digest verified by the caller:
   `AGENTFW_CLASSIFIER=rule-baseline AGENTFW_RULE_BASELINE=<abs path to this file>`. Offline:
   `python3 eval/eval_runner.py <fixtures> --classifier-path rule_baseline/pilot_readonly_v1 --out-dir <out>`.
-  Nothing in the runtime, drivers, CI or profiles selects it.
+  No default, profile, package or required CI step selects it. Only an explicit operator
+  environment (below), the drivers' opt-in `--classifier-script`/`--classifier-sha256` flags, or the
+  `sou97_candidate` workflow dispatch input does.
 - Regressions: `rule_baseline/test_pilot_readonly.py`. Current evidence: `eval/evidence/sou97/v1.1/`.
+
+## Selection and rollback
+
+The collector reads `AGENTFW_CLASSIFIER`, `AGENTFW_RULE_BASELINE` and the script's bytes once, when it
+starts. Changes therefore apply to newly started collector processes, not to running ones.
+
+**Select** (operator, explicit):
+
+1. Verify the bytes: `sha256sum rule_baseline/pilot_readonly_v1/rule_baseline.py` must print
+   `9f4a532b5d1b1f6d375eba1e9a2ffca1164bfab038bdc6fa3532cbd9584eef1e`. Do not select it otherwise.
+2. Start the collector with `AGENTFW_CLASSIFIER=rule-baseline` and
+   `AGENTFW_RULE_BASELINE=<absolute path to that file>`.
+3. Acceptance runs use the same check: `--classifier-script <path> --classifier-sha256 <sha256>`
+   (both or neither), and the drivers refuse to start on a mismatch.
+
+**Roll back** to the profile's previously selected classifier:
+
+1. Point `AGENTFW_RULE_BASELINE` back at it, after the same digest check:
+   - filesystem: `rule_baseline/rule_baseline.py`, sha256
+     `d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd`;
+   - Git: `rule_baseline/git_readonly_v1/rule_baseline.py`, sha256
+     `8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474`.
+2. Restart the collector processes that had the candidate selected.
+3. For acceptance runs, omit both flags (or leave `sou97_candidate` unset); default mode is unchanged.
+
+Rollback changes no policy, registry, profile or stored state, because the candidate never owns any.
+It cannot undo calls the candidate already admitted.
 
 ## Revision history
 

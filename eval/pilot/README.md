@@ -65,8 +65,9 @@ values, so identical inputs give byte-identical results.
 
 ## Runtime evidence format `sou97-runtime-evidence/1`
 
-No such evidence exists yet. Since Increment 4B the drivers can select the candidate (`--classifier-script` and
-`--classifier-sha256`) and write this file; a real Linux run must emit one file per profile with these fields:
+No evidence file has yet qualified at runtime. Since Increment 4B the drivers can select the candidate
+(`--classifier-script` and `--classifier-sha256`) and write this file; a real Linux run must emit one file per
+profile with these fields:
 
 - `format`, `profile` (`filesystem` or `git`), `status: "pass"`, and `platform` starting with
   `Linux`.
@@ -118,6 +119,22 @@ runs have completed and their artifacts have been checked.
    claim. Retain the artifacts and the gate output together.
 
 The default steps of both workflows still run and must pass. Candidate mode never replaces them.
+
+## Opt-in Git diagnostics (never acceptance evidence)
+
+`mcp-real-git.yml` also has two diagnostic dispatch inputs. They are off by default. Their steps use
+`continue-on-error`, upload separate artifacts and never write `sou97-runtime-evidence/1`. This gate
+does not read them, and no result from them supports or waives a runtime claim.
+
+| Input | Script | Report format |
+| --- | --- | --- |
+| `sou97_git_diagnostic` | `scripts/diagnose-sou97-git-cancellation.py` (unwrapped original server) | `sou97-git-cancellation-diagnostic/1` |
+| `sou97_git_protected_diagnostic` | `scripts/diagnose-sou97-git-protected-overlap.py` (protected chain) | `sou97-git-protected-overlap-diagnostic/1` |
+
+They were written to investigate an intermittent protected Git overlap failure. Since then the Git
+relay withdraws cancellations locally instead of forwarding them to the server (see
+[the Git profile](../../docs/operations/GIT_MCP_PROFILE.md)). Results from before that change describe
+the earlier relay only.
 
 ## Reproduce
 
