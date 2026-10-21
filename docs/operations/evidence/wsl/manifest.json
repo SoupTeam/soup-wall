@@ -1,0 +1,16 @@
+{
+  "format": "sw-wsl-evidence/1",
+  "scope": "actual-wsl2-x86_64-scripted-provider",
+  "archives": {
+    "missing-elf-prerequisites.zip": {
+      "bytes": 3836,
+      "sha256": "5d38cf476124138bd9103ed2219aabcdd10e3ca965bd57d17ae6030205db7d9f",
+      "files": 3
+    },
+    "installed-wsl2-controls.zip": {
+      "bytes": 129262,
+      "sha256": "afdde4b42dace2458eb0a839864a8f854a86c3b58a6dba0eddcba5542bae88ff",
+      "files": 70
+    }
+  }
+}

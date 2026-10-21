@@ -92,6 +92,7 @@ the actual installed run; this increment does not certify those behaviors.
 
 ## Current evidence boundary
 
-No WSL acceptance archive accompanies this diagnostic increment. Code-level
-diagnostic controls are independent of the outstanding native run. Do not treat
-the presence of this entry point as a claim that WSL runtime qualification passed.
+The [retained actual WSL2 qualification](evidence/wsl/QUALIFICATION.md) records
+the first missing-library failure and a complete 12/12 useful/refusal/recovery
+run, including the independent port control and unchanged settings. Its source
+and scope are explicit; rerun later candidates rather than inheriting that pass.
